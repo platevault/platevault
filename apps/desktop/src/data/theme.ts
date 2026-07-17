@@ -271,6 +271,21 @@ const DENSITY_SPACING_SCALE: Record<string, number> = {
   spacious: 1.25,
 };
 
+/**
+ * `--alm-row-height` px per density choice (tokens.css `:root` base + the
+ * `.density-compact`/`.density-spacious` overrides) — duplicated here for the
+ * same reason as SPACING_BASE_PX/TEXT_SCALE_BASE_PX (jsdom can't reliably
+ * resolve stylesheet custom properties). Row-driven virtualizers (e.g.
+ * TargetsTable) read this instead of a hardcoded estimate so the initial
+ * `estimateSize` tracks the active density; `theme.tokens-drift.test.ts`
+ * keeps it in sync with tokens.css.
+ */
+export const ROW_HEIGHT_PX: Record<string, number> = {
+  compact: 24,
+  comfortable: 32,
+  spacious: 40,
+};
+
 export function applyDensity(density?: string): void {
   if (typeof document === 'undefined') return;
   const d = density ?? getPreferences().density;
