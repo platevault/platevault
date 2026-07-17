@@ -184,7 +184,10 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface InboxDetailProps {
-  item: InboxItemSummary;
+  // #768: `organizationState` isn't on the base `InboxItemSummary` (it's an
+  // `InboxListItem` extension) — widened here so the picker-gate below can
+  // read it without every other InboxDetail caller needing a full InboxListItem.
+  item: InboxItemSummary & { organizationState?: string };
   rootAbsolutePath: string;
   classification: InboxClassifyResponse | null;
   /**
@@ -330,6 +333,12 @@ export function InboxDetail({
   // can receive this item's frame type. Only meaningful for a single-type item
   // (or a master); mixed/unknown → show all roots. The picker is shown only when
   // MORE THAN ONE applicable root exists (otherwise there's nothing to choose).
+  //
+  // #768: an item sourced from an ORGANIZED root is always catalogued in
+  // place — confirm ignores any chosen destination and reuses the source
+  // root server-side — so there is never a real destination choice to make.
+  // No applicable roots means no picker, regardless of how many other
+  // library roots are registered.
   const itemFrameType =
     classType === 'single_type'
       ? (classification?.frameType ?? null)
@@ -338,9 +347,11 @@ export function InboxDetail({
         : null;
   const applicableCategory = applicableRootCategory(itemFrameType);
   const applicableRoots =
-    applicableCategory && destinationRoots
-      ? destinationRoots.filter((r) => r.category === applicableCategory)
-      : (destinationRoots ?? []);
+    item.organizationState === 'organized'
+      ? []
+      : applicableCategory && destinationRoots
+        ? destinationRoots.filter((r) => r.category === applicableCategory)
+        : (destinationRoots ?? []);
 
   // ── Unclassified ("Needs review") table ───────────────────────────────────
 
