@@ -31,7 +31,13 @@
  * CONTENT column scrolls (overflow-y:auto, scrollbar-gutter:stable). Remove
  * any overflow on the outer detail-body to avoid double scrollbars.
  *
- * The close ✕ lives in ListPageLayout (onCloseDetail), NOT here.
+ * The close ✕ lives in ListPageLayout (onCloseDetail), NOT here — as does
+ * Escape-to-close (#771/#906): ListPageLayout owns a document-level Escape
+ * listener that calls onCloseDetail/onCloseBottomDetail, and explicitly
+ * checks the DOM for an open Base UI overlay (Dialog/Select/Combobox/Menu)
+ * before firing — `stopPropagation()` on a same-target sibling `document`
+ * listener does NOT block this one, so Base UI's own Escape dismissal can't
+ * be relied on alone to keep this listener from also closing the panel.
  * Per-item contextual actions (Review / Assign / …) go in the `actions` slot.
  *
  * Row-data de-duplication contract (#100):

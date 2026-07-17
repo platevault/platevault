@@ -217,6 +217,7 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id: None,
+            chosen_attribution: None,
         },
     )
     .await
@@ -290,6 +291,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id: None,
+            chosen_attribution: None,
         },
     )
     .await
@@ -377,6 +379,7 @@ async fn non_master_item_still_creates_plan() {
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id: None,
+            chosen_attribution: None,
         },
     )
     .await

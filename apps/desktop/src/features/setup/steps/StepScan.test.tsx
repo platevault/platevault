@@ -121,6 +121,41 @@ const SCAN_RESPONSE_EMPTY = {
   items: [],
 };
 
+// A folder with an unclassified file alongside a light/flat mix (issue #513
+// evidence: headerless darks land in unclassifiedFiles, not the breakdown).
+const SCAN_RESPONSE_WITH_UNCLASSIFIED = {
+  rootId: 'root-004',
+  items: [
+    {
+      inboxItemId: 'item-002',
+      relativePath: '',
+      fileCount: 3,
+      lane: 'fits',
+      format: 'fits',
+      state: 'classified',
+      contentSignature: 'sig-def',
+      isMaster: false,
+      masterFrameType: null,
+      masterFilter: null,
+      masterExposureS: null,
+    },
+  ],
+};
+
+const CLASSIFY_RESPONSE_WITH_UNCLASSIFIED = {
+  inboxItemId: 'item-002',
+  type: 'mixed',
+  frameType: null,
+  contentSignature: 'sig-def',
+  breakdown: [
+    { kind: 'flat', count: 1, sampleFiles: [] },
+    { kind: 'light', count: 1, sampleFiles: [] },
+  ],
+  unclassifiedFiles: ['stack_9.fits'],
+  sampleFiles: [],
+  computedAt: '2025-10-10T22:00:00Z',
+};
+
 // A single detected calibration master file (spec 040 FR-005/FR-006): the item
 // carries its own frame type / exposure rather than relying on the breakdown.
 const SCAN_RESPONSE_WITH_MASTER = {
@@ -416,6 +451,100 @@ describe('StepScan', () => {
       expect(within(row).getByText('Master')).toBeInTheDocument();
       // Frame type + exposure in the Detected types cell (filter null → omitted)
       expect(within(row).getByText('Master Dark · 300s')).toBeInTheDocument();
+    });
+
+    it('reconciles the file count by surfacing unclassified files (issue #513)', async () => {
+      mockInboxScanFolder.mockResolvedValue({
+        status: 'ok',
+        data: SCAN_RESPONSE_WITH_UNCLASSIFIED,
+      });
+      mockInboxClassify.mockResolvedValue({
+        status: 'ok',
+        data: CLASSIFY_RESPONSE_WITH_UNCLASSIFIED,
+      });
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('scan-source-/astro/lights')).getByText(
+            /1 folder/,
+          ),
+        ).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+
+      const row = screen.getByTestId('scan-item-item-002');
+      // 1 flat + 1 light + 1 unknown = 3, matching fileCount.
+      expect(
+        within(row).getByText('1 flat, 1 light, 1 unknown'),
+      ).toBeInTheDocument();
+      expect(within(row).getByText('3')).toBeInTheDocument();
+    });
+
+    it('labels the root row instead of leaving the Folder/File cell blank (issue #513)', async () => {
+      mockInboxScanFolder.mockResolvedValue({
+        status: 'ok',
+        data: SCAN_RESPONSE_WITH_UNCLASSIFIED,
+      });
+      mockInboxClassify.mockResolvedValue({
+        status: 'ok',
+        data: CLASSIFY_RESPONSE_WITH_UNCLASSIFIED,
+      });
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('scan-source-/astro/lights')).getByText(
+            /1 folder/,
+          ),
+        ).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+
+      const row = screen.getByTestId('scan-item-item-002');
+      expect(within(row).getByText('(root)')).toBeInTheDocument();
+    });
+
+    it('surfaces masters and unclassified counts in the source header chips (issue #513)', async () => {
+      mockInboxScanFolder.mockResolvedValue({
+        status: 'ok',
+        data: {
+          rootId: 'root-005',
+          items: [
+            ...SCAN_RESPONSE_WITH_MASTER.items,
+            ...SCAN_RESPONSE_WITH_UNCLASSIFIED.items,
+          ],
+        },
+      });
+      mockInboxClassify.mockImplementation(({ inboxItemId }) =>
+        Promise.resolve({
+          status: 'ok',
+          data:
+            inboxItemId === 'item-002'
+              ? CLASSIFY_RESPONSE_WITH_UNCLASSIFIED
+              : CLASSIFY_RESPONSE,
+        }),
+      );
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('scan-source-/astro/lights')).getByText(
+            /2 folders/,
+          ),
+        ).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+
+      const sourceEl = screen.getByTestId('scan-source-/astro/lights');
+      expect(within(sourceEl).getByText('1 master')).toBeInTheDocument();
+      expect(within(sourceEl).getByText('1 unclassified')).toBeInTheDocument();
     });
 
     it('shows the scan summary when all sources are done', async () => {

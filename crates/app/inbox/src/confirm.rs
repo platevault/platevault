@@ -33,6 +33,9 @@ use app_core_targets::metadata_cache::cached_extract;
 use audit::bus::EventBus;
 use audit::event_bus::{InventoryConfirmed, Source, TOPIC_INVENTORY_CONFIRMED};
 use contracts_core::first_run::{OrganizationState, SourceKind};
+use contracts_core::framing::{
+    AttributionAppliedDto, ChosenAttributionDto, IngestionAttributionCandidateDto,
+};
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
@@ -47,6 +50,8 @@ use uuid::Uuid;
 use app_core_errors::db_internal_ctx;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
+
+use crate::attribution;
 
 // ── Request / Response ────────────────────────────────────────────────────────
 
@@ -64,6 +69,12 @@ pub struct ConfirmRequest {
     /// consulted for inbox sources whose frame-type category has >1 candidate
     /// root; ignored otherwise.
     pub root_id: Option<String>,
+    /// Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+    /// The user's pick from a prior `attribution_candidates` list. Only
+    /// meaningful for light-frame items (`attribution.not_light_frame`
+    /// otherwise); omitting it leaves the confirmed session's framing
+    /// membership unset.
+    pub chosen_attribution: Option<ChosenAttributionDto>,
 }
 
 #[derive(Clone, Debug)]
@@ -84,6 +95,14 @@ pub struct ConfirmResponse {
     pub catalogue_count: usize,
     /// Per-action absolute destination previews (spec 041 US8/FR-031).
     pub destinations: Vec<ResolvedDestination>,
+    /// Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+    /// Ranked suggestions for where this item's light session belongs — a
+    /// suggestion surface only, never auto-applied. Empty for non-light items
+    /// or when no candidate matched.
+    pub attribution_candidates: Vec<IngestionAttributionCandidateDto>,
+    /// Present when the request carried a `chosen_attribution` that was
+    /// successfully applied (F-Framing-10/6).
+    pub attribution_applied: Option<AttributionAppliedDto>,
 }
 
 /// One resolved per-file destination (spec 041 US8/FR-031). The absolute path
@@ -109,6 +128,10 @@ pub struct ResolvedDestination {
 /// - `classification.ambiguous` — action/classification mismatch or no classified files.
 /// - `classification.stale` — signature drift detected.
 /// - `pattern.unset` — naming pattern is unset or fails to resolve required tokens.
+/// - `attribution.not_light_frame` — `chosen_attribution` was supplied for a
+///   non-light item (spec 008 Q27 F-Framing-10).
+/// - `attribution.geometry_unavailable` — `chosen_attribution` requires
+///   creating a new framing, but this item has no staged pointing/rotation.
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
@@ -215,6 +238,62 @@ pub async fn confirm(
             false,
         ));
     }
+
+    // 9b. Attribution pass (spec 008 Q27, F-Framing-5, FR-019) — the first
+    // pre-ingest pass at the confirm gate (composition point for the Q22
+    // duplicate sweep once it lands, see `crate::attribution` module docs).
+    // A confirmable item is single-type (FR-050), so the first file's
+    // effective frame type determines the whole item's class.
+    let first_file_class = plan_files
+        .first()
+        .and_then(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
+        .and_then(|(ft, is_master)| classify_frame(ft, is_master));
+    let is_light_item = first_file_class == Some(FrameTypeClass::Light);
+
+    if req.chosen_attribution.is_some() && !is_light_item {
+        return Err(ContractError::new(
+            ErrorCode::AttributionNotLightFrame,
+            "chosen_attribution only applies to light-frame items.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    // `item_geometry` is also consumed by the apply-path below once the plan
+    // (and its id) exists — computed once here rather than twice. The
+    // attribution pass is a suggestion surface (FR-019/FR-020): a query
+    // failure here must degrade to "no candidates" rather than abort
+    // confirm() — missing/absent geometry is the ordinary, expected case
+    // (Q16 NULL-geometry exclusion), never a reason to block plan creation,
+    // and an unexpected transient failure computing suggestions is not a
+    // reason to lose the user's confirm either. Only an explicit
+    // `chosenAttribution` pick that itself requires geometry (the apply-path
+    // below) is allowed to fail the request.
+    let item_geometry = if is_light_item {
+        match attribution::compute_item_geometry(pool, &req.inbox_item_id).await {
+            Ok(geometry) => Some(geometry),
+            Err(e) => {
+                tracing::warn!(
+                    inbox_item_id = %req.inbox_item_id,
+                    "confirm: attribution geometry computation failed, degrading to no \
+                     candidates: {e:?}"
+                );
+                Some(attribution::ItemGeometry::default())
+            }
+        }
+    } else {
+        None
+    };
+    let attribution_candidates = match &item_geometry {
+        Some(geometry) => attribution::compute_candidates(pool, geometry).await.unwrap_or_else(|e| {
+            tracing::warn!(
+                inbox_item_id = %req.inbox_item_id,
+                "confirm: attribution candidate ranking failed, degrading to no candidates: {e:?}"
+            );
+            Vec::new()
+        }),
+        None => Vec::new(),
+    };
 
     // Spec 041 FR-050/T071: per-type action grouping is retired along with the
     // "split" action — a confirmable item is single-type (classification.result
@@ -529,7 +608,19 @@ pub async fn confirm(
 
     inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
 
-    // 14. Publish `inventory.confirmed` so the guided flow's `inbox.confirm_first`
+    // 14. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
+    // plan now exists, so the pick can be persisted (`plans.chosen_framing_id`)
+    // for `ingest_sessions` to bind once the real session is created. Creates
+    // the framing/project the kind requires and honors the F-Framing-6
+    // completed-project reopen.
+    let attribution_applied = match (&item_geometry, &req.chosen_attribution) {
+        (Some(geometry), Some(chosen)) => {
+            attribution::apply_chosen_attribution(pool, bus, &plan_id, geometry, chosen).await?
+        }
+        _ => None,
+    };
+
+    // 15. Publish `inventory.confirmed` so the guided flow's `inbox.confirm_first`
     // step can auto-advance (spec 010; discovered by the guided-events lane #722
     // — this use case previously took no EventBus at all).
     //
@@ -538,6 +629,9 @@ pub async fn confirm(
     // point — a transient bus publish failure must not surface as a Fatal error
     // for a confirm that already landed (mirrors plan_apply.rs's item-progress
     // publish and the write_audit failure-semantics doc in audit/src/bus.rs).
+    // Ordered after the step-14 attribution apply-path (spec 008): if that path
+    // fails, the request errors from the caller's view, so no confirmed event
+    // should fire.
     let confirmed_at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
@@ -572,6 +666,8 @@ pub async fn confirm(
         move_count,
         catalogue_count,
         destinations,
+        attribution_candidates,
+        attribution_applied,
     })
 }
 
@@ -823,14 +919,14 @@ mod tests {
     use persistence_db::Database;
     use std::io::Write;
 
-    fn make_bus(db: &Database) -> EventBus {
-        EventBus::with_pool(db.pool().clone())
-    }
-
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
+    }
+
+    fn test_bus(db: &Database) -> EventBus {
+        EventBus::with_pool(db.pool().clone())
     }
 
     /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
@@ -1048,7 +1144,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         setup_classified_item(
             &db,
             "item-c1",
@@ -1068,6 +1164,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1111,7 +1208,7 @@ mod tests {
             // Fresh DB per case: setup_classified_item hardcodes the
             // (root_id, relative_path) key, so it supports one item per DB.
             let db = test_db().await;
-            let bus = make_bus(&db);
+            let bus = test_bus(&db);
             setup_classified_item(
                 &db,
                 "item-dd",
@@ -1131,6 +1228,7 @@ mod tests {
                     destructive_destination: dest.map(str::to_owned),
                     root_absolute_path: tmp.path().to_owned(),
                     root_id: None,
+                    chosen_attribution: None,
                 },
             )
             .await
@@ -1197,7 +1295,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         let item_id = "item-mixed-split";
         let sig = "sig-mixed";
 
@@ -1263,6 +1361,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1360,7 +1459,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         setup_typed_item(
             &db,
             "item-single",
@@ -1382,6 +1481,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1401,7 +1501,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         setup_classified_item(
             &db,
             "item-stale",
@@ -1421,6 +1521,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1443,7 +1544,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         setup_classified_item(
             &db,
             "item-ambig",
@@ -1463,6 +1564,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1493,7 +1595,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         setup_classified_item(
             &db,
             "item-dup",
@@ -1514,6 +1616,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1529,6 +1632,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1569,7 +1673,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_org_state(&db, "root-1", "light_frames", "organized").await;
         setup_classified_item(
             &db,
@@ -1590,6 +1694,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1627,7 +1732,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         // Non-inbox unorganized source → in-place move under its own root (no
         // destination-root selection). Inbox-source routing is covered by the
         // dedicated US8 tests below.
@@ -1651,6 +1756,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1690,7 +1796,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         // No registered_sources row inserted for root-1.
         setup_classified_item(
             &db,
@@ -1711,6 +1817,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1761,7 +1868,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib/lights", "unorganized").await;
         setup_classified_item(
             &db,
@@ -1782,6 +1889,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1814,7 +1922,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         register_source_full(&db, "root-lights", "light_frames", "/lib/lights", "unorganized")
             .await;
@@ -1838,6 +1946,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1872,7 +1981,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         register_source_full(&db, "root-lib-a", "light_frames", "/a", "unorganized").await;
         register_source_full(&db, "root-lib-b", "light_frames", "/b", "unorganized").await;
@@ -1892,6 +2001,7 @@ mod tests {
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id,
+            chosen_attribution: None,
         };
 
         // Absent selection → blocking error listing both candidates.
@@ -1926,7 +2036,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         // Only a calibration root exists; a light has no light_frames destination.
         register_source_full(&db, "root-cal", "calibration", "/cal", "unorganized").await;
@@ -1949,6 +2059,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1971,7 +2082,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-1", "calibration", "/cal", "unorganized").await;
         setup_classified_item(
             &db,
@@ -1992,6 +2103,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2015,7 +2127,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-2", "calibration", "/cal", "unorganized").await;
         inbox_repo::insert_inbox_item(
             db.pool(),
@@ -2069,6 +2181,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2092,7 +2205,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
         setup_classified_item(
             &db,
@@ -2113,6 +2226,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2140,7 +2254,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
 
         // Insert the inbox item with group_key = SENTINEL_NEEDS_REVIEW directly.
@@ -2191,6 +2305,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2226,7 +2341,7 @@ mod tests {
 
         let db = test_db().await;
 
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
         setup_classified_item(
             &db,
@@ -2249,6 +2364,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await;
@@ -2268,6 +2384,184 @@ mod tests {
         // If it succeeds, the plan was created — also valid.
     }
 
+    // ── Attribution wiring (spec 008 Q27, F-Framing-5/10) ────────────────────
+
+    #[tokio::test]
+    async fn confirm_returns_new_project_fallback_candidate_for_a_light_item_with_no_geometry() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-attr1",
+            "classified",
+            Some("light"),
+            "sig-attr1",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            &test_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-attr1".to_owned(),
+                content_signature: "sig-attr1".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // `write_fits` in this test module does not carry TELESCOP/INSTRUME/
+        // FOCALLEN/RA/DEC — the item has no staged geometry, so the pass
+        // yields only the trailing new_project fallback (never an error: an
+        // ungeometried light item still confirms normally).
+        assert_eq!(resp.attribution_candidates.len(), 1);
+        assert_eq!(
+            resp.attribution_candidates[0].kind,
+            contracts_core::framing::IngestionAttributionKind::NewProject
+        );
+        assert!(resp.attribution_applied.is_none());
+    }
+
+    #[tokio::test]
+    async fn confirm_rejects_chosen_attribution_for_a_non_light_item() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(tmp.path(), "dark_001.fits", "Dark Frame", None, None, None);
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-attr-dark",
+            "classified",
+            Some("dark"),
+            "sig-attr-dark",
+            &["dark_001.fits"],
+        )
+        .await;
+
+        let err = confirm(
+            db.pool(),
+            &test_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-attr-dark".to_owned(),
+                content_signature: "sig-attr-dark".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: Some(contracts_core::framing::ChosenAttributionDto {
+                    kind: contracts_core::framing::ChosenAttributionKind::Unassigned,
+                    project_id: None,
+                    framing_id: None,
+                }),
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.code, ErrorCode::AttributionNotLightFrame);
+    }
+
+    /// F-Framing-10 (FR-022): a `chosen_attribution` picking an existing
+    /// framing is applied and persisted on the plan `confirm` itself created —
+    /// the apply-path's whole point (the response's `attribution_applied` and
+    /// the durable `plans.chosen_framing_id` must agree).
+    #[tokio::test]
+    async fn confirm_applies_add_to_framing_and_persists_the_pick_on_its_own_plan() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-attr2",
+            "classified",
+            Some("light"),
+            "sig-attr2",
+            &["light_001.fits"],
+        )
+        .await;
+
+        persistence_db::repositories::projects::insert_project(
+            db.pool(),
+            &persistence_db::repositories::projects::InsertProject {
+                id: "proj-attr2",
+                name: "M42 project",
+                tool: "PixInsight",
+                lifecycle: "ready",
+                path: "projects/proj-attr2",
+                notes: None,
+                canonical_target_id: None,
+                is_mosaic: false,
+            },
+        )
+        .await
+        .unwrap();
+        persistence_db::repositories::framing::insert_framing(
+            db.pool(),
+            &persistence_db::repositories::framing::InsertFraming {
+                id: "framing-attr2",
+                project_id: "proj-attr2",
+                target_id: None,
+                optic_train_key: "scope|cam|400",
+                pointing_ra_deg: 10.0,
+                pointing_dec_deg: 20.0,
+                rotation_deg: 0.0,
+                tolerance_pointing: 0.1,
+                tolerance_rotation_deg: 3.0,
+                clustering: "suggested",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = confirm(
+            db.pool(),
+            &test_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-attr2".to_owned(),
+                content_signature: "sig-attr2".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: Some(contracts_core::framing::ChosenAttributionDto {
+                    kind: contracts_core::framing::ChosenAttributionKind::AddToFraming,
+                    project_id: None,
+                    framing_id: Some("framing-attr2".to_owned()),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        let applied = resp.attribution_applied.expect("chosen_attribution must apply");
+        assert_eq!(applied.project_id, "proj-attr2");
+        assert_eq!(applied.framing_id.as_deref(), Some("framing-attr2"));
+        assert!(!applied.reopened);
+
+        assert_eq!(
+            plans_repo::get_chosen_framing_id(db.pool(), &resp.plan_id).await.unwrap().as_deref(),
+            Some("framing-attr2"),
+            "the apply-path must persist the pick on the plan confirm() itself created"
+        );
+    }
+
     // ── inventory.confirmed publish (review fix: swallow-on-failure) ─────────
 
     #[tokio::test]
@@ -2283,7 +2577,7 @@ mod tests {
         );
 
         let db = test_db().await;
-        let bus = make_bus(&db);
+        let bus = test_bus(&db);
         let mut rx = bus.subscribe();
 
         setup_classified_item(
@@ -2305,6 +2599,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2356,6 +2651,7 @@ mod tests {
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await

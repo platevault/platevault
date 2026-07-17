@@ -120,6 +120,8 @@ pub async fn inbox_confirm(
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
         // Spec 041 US8/US9: caller-selected destination root (optional).
         root_id: req.root_id,
+        // Spec 008 Q27 F-Framing-10 (FR-022) attribution apply-path.
+        chosen_attribution: req.chosen_attribution,
     };
 
     // Spec 041 US8/US9: confirm can block on a destination-root choice
@@ -158,6 +160,8 @@ pub async fn inbox_confirm(
         }),
         organization_state: Some(organization_state.to_owned()),
         destinations,
+        attribution_candidates: resp.attribution_candidates,
+        attribution_applied: resp.attribution_applied,
     })
 }
 

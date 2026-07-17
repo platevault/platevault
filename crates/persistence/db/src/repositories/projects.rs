@@ -349,6 +349,62 @@ pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
         .collect())
 }
 
+/// List every project whose `canonical_target_id` matches (spec 008 Q27,
+/// F-Framing-5 attribution — the `flag_optic_difference` candidate detection:
+/// same target, different optic-train).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_projects_by_canonical_target_id(
+    pool: &SqlitePool,
+    canonical_target_id: &str,
+) -> DbResult<Vec<ProjectRow>> {
+    let rows: Vec<ProjectRowTuple> = sqlx::query_as(
+        "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
+                blocked_reason_kind, blocked_reason_note, is_mosaic
+         FROM projects WHERE canonical_target_id = ? ORDER BY updated_at DESC",
+    )
+    .bind(canonical_target_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                name,
+                tool,
+                lifecycle,
+                path,
+                notes,
+                channel_drift,
+                created_at,
+                updated_at,
+                blocked_reason_kind,
+                blocked_reason_note,
+                is_mosaic,
+            )| {
+                ProjectRow {
+                    id,
+                    name,
+                    tool,
+                    lifecycle,
+                    path,
+                    notes,
+                    channel_drift: channel_drift != 0,
+                    created_at,
+                    updated_at,
+                    blocked_reason_kind,
+                    blocked_reason_note,
+                    is_mosaic: is_mosaic != 0,
+                }
+            },
+        )
+        .collect())
+}
+
 /// Check whether a project with the given name already exists (excluding a
 /// specific id — used by update to allow rename to same value).
 ///
@@ -635,6 +691,44 @@ pub async fn list_project_ids_for_session(
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
+/// Whether any of this project's linked sessions has had a raw-frame archived
+/// via an applied cleanup plan (spec 008 Q27 F-Framing-6, Q25 "raw-subs-archived"
+/// reopen warning).
+///
+/// Reuses the real raw-frame cleanup mechanism
+/// (`app_core::cleanup_generator::generate_raw_frame_plan`, `category =
+/// "raw_frames"`, `action = "archive"`): a succeeded archive item under an
+/// applied plan, whose `source_id` is one of this project's linked sessions,
+/// is durable evidence the project's raw subs are no longer all on disk under
+/// original custody — the reopen path degrades to a warning rather than a
+/// silent no-op (Q19 "raw kept & protected by default" is what the warning
+/// protects).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn has_archived_raw_frames_for_project(
+    pool: &SqlitePool,
+    project_id: &str,
+) -> DbResult<bool> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        "SELECT 1 FROM plan_items pi
+         JOIN plans p ON p.id = pi.plan_id
+         WHERE pi.category = 'raw_frames'
+           AND pi.action = 'archive'
+           AND pi.item_state = 'succeeded'
+           AND p.state = 'applied'
+           AND pi.source_id IN (
+               SELECT inventory_session_id FROM project_sources WHERE project_id = ?
+           )
+         LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
 }
 
 /// Insert a project source link row.
@@ -987,6 +1081,49 @@ mod tests {
         assert!(!row.channel_drift);
     }
 
+    // ── list_projects_by_canonical_target_id (F-Framing-5) ────────────────────
+
+    async fn seed_canonical_target(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES (?, NULL, 'M 31', 'galaxy', 10.68, 41.27, 'resolved', '2026-01-01T00:00:00Z')",
+        )
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn list_projects_by_canonical_target_id_returns_only_matching() {
+        let db = setup().await;
+        seed_canonical_target(db.pool(), "target-1").await;
+        seed_canonical_target(db.pool(), "target-2").await;
+        insert_project(
+            db.pool(),
+            &InsertProject { canonical_target_id: Some("target-1"), ..project_a("p1") },
+        )
+        .await
+        .unwrap();
+        insert_project(
+            db.pool(),
+            &InsertProject {
+                id: "p2",
+                name: "M31 LRGB",
+                path: "projects/p2",
+                canonical_target_id: Some("target-2"),
+                ..project_a("p2")
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_projects_by_canonical_target_id(db.pool(), "target-1").await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "p1");
+    }
+
     #[tokio::test]
     async fn list_projects_returns_all() {
         let db = setup().await;
@@ -1083,6 +1220,158 @@ mod tests {
         let result =
             insert_project_source(db.pool(), &InsertProjectSource { id: "src-2", ..src }).await;
         assert!(result.is_err());
+    }
+
+    // ── has_archived_raw_frames_for_project (F-Framing-6, Q25 warning) ────────
+
+    async fn insert_applied_raw_frame_archive_item(
+        pool: &SqlitePool,
+        plan_id: &str,
+        source_id: &str,
+    ) {
+        plans::insert_plan(
+            pool,
+            &plans::InsertPlan {
+                id: plan_id,
+                title: "Raw sub-frame cleanup",
+                origin: "cleanup",
+                origin_path: None,
+                plan_type: "cleanup",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        plans::insert_plan_item(
+            pool,
+            &plans::InsertPlanItem {
+                id: &format!("{plan_id}-item-0"),
+                plan_id,
+                item_index: 0,
+                name: "light_001.fits",
+                action: "archive",
+                from_root_id: Some("root-1"),
+                from_relative_path: "lights/light_001.fits",
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "raw_frame_cleanup",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: Some(source_id),
+                category: Some("raw_frames"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE plans SET state = 'applied' WHERE id = ?")
+            .bind(plan_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE plan_items SET item_state = 'succeeded' WHERE id = ?")
+            .bind(format!("{plan_id}-item-0"))
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn has_archived_raw_frames_is_false_with_no_cleanup_history() {
+        let db = setup().await;
+        insert_project(db.pool(), &project_a("p1")).await.unwrap();
+        assert!(!has_archived_raw_frames_for_project(db.pool(), "p1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn has_archived_raw_frames_is_true_after_an_applied_raw_frame_archive() {
+        let db = setup().await;
+        insert_project(db.pool(), &project_a("p1")).await.unwrap();
+        insert_project_source(
+            db.pool(),
+            &InsertProjectSource {
+                id: "src-1",
+                project_id: "p1",
+                inventory_session_id: "sess-1",
+                name_snapshot: "Ha",
+                frames_snapshot: 10,
+                filter_snapshot: "Ha",
+                exposure_snapshot: "60s",
+                linked_at: "2026-06-01T00:00:00Z",
+            },
+        )
+        .await
+        .unwrap();
+
+        insert_applied_raw_frame_archive_item(db.pool(), "cleanup-plan-1", "sess-1").await;
+
+        assert!(has_archived_raw_frames_for_project(db.pool(), "p1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn has_archived_raw_frames_ignores_a_plan_that_is_not_yet_applied() {
+        let db = setup().await;
+        insert_project(db.pool(), &project_a("p1")).await.unwrap();
+        insert_project_source(
+            db.pool(),
+            &InsertProjectSource {
+                id: "src-1",
+                project_id: "p1",
+                inventory_session_id: "sess-1",
+                name_snapshot: "Ha",
+                frames_snapshot: 10,
+                filter_snapshot: "Ha",
+                exposure_snapshot: "60s",
+                linked_at: "2026-06-01T00:00:00Z",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Draft (never applied) plan — must not count as archived.
+        plans::insert_plan(
+            db.pool(),
+            &plans::InsertPlan {
+                id: "cleanup-plan-2",
+                title: "Raw sub-frame cleanup",
+                origin: "cleanup",
+                origin_path: None,
+                plan_type: "cleanup",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        plans::insert_plan_item(
+            db.pool(),
+            &plans::InsertPlanItem {
+                id: "cleanup-plan-2-item-0",
+                plan_id: "cleanup-plan-2",
+                item_index: 0,
+                name: "light_001.fits",
+                action: "archive",
+                from_root_id: Some("root-1"),
+                from_relative_path: "lights/light_001.fits",
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "raw_frame_cleanup",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: Some("sess-1"),
+                category: Some("raw_frames"),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(!has_archived_raw_frames_for_project(db.pool(), "p1").await.unwrap());
     }
 
     #[tokio::test]

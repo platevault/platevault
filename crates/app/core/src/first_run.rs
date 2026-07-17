@@ -129,6 +129,35 @@ async fn check_duplicate(
     Ok(())
 }
 
+/// Path-overlap relationship between `candidate` and `other`, or `None` if
+/// they don't overlap. Case-folds both sides on Windows (nJ01a review carry-
+/// over): NTFS/ReFS/FAT are case-insensitive/case-preserving, so `C:\Foo` and
+/// `c:\foo` name the same root and a lexical `starts_with` alone would miss
+/// the overlap. Unix filesystems default to case-sensitive, so the exact
+/// bytes are compared there — folding unconditionally would falsely reject
+/// distinct same-name-different-case Linux/macOS(HFS+ case-sensitive) roots,
+/// which is not the failure mode we're guarding against.
+fn path_overlap_relationship(
+    candidate: &std::path::Path,
+    other: &std::path::Path,
+) -> Option<&'static str> {
+    #[cfg(windows)]
+    let (candidate, other): (std::path::PathBuf, std::path::PathBuf) = (
+        candidate.to_string_lossy().to_lowercase().into(),
+        other.to_string_lossy().to_lowercase().into(),
+    );
+    #[cfg(windows)]
+    let (candidate, other) = (candidate.as_path(), other.as_path());
+
+    if other.starts_with(candidate) {
+        Some("parent")
+    } else if candidate.starts_with(other) {
+        Some("child")
+    } else {
+        None
+    }
+}
+
 /// Check whether a candidate root path overlaps (is a parent of, or is nested
 /// within) any already-registered root, or any path already accepted earlier
 /// in the same batch request (`extra_paths`, still unpersisted). Cross-cutting
@@ -150,21 +179,17 @@ async fn check_overlap(
             continue;
         }
         let other_path = std::path::Path::new(other);
-        let (relationship, conflicting) = if other_path.starts_with(candidate) {
-            ("parent", other)
-        } else if candidate.starts_with(other_path) {
-            ("child", other)
-        } else {
+        let Some(relationship) = path_overlap_relationship(candidate, other_path) else {
             continue;
         };
         return Err(ContractError::new(
             ErrorCode::PathOverlapsExisting,
-            format!("Path overlaps an already-registered root ({relationship}): {conflicting}"),
+            format!("Path overlaps an already-registered root ({relationship}): {other}"),
             ErrorSeverity::Blocking,
             false,
         )
         .with_details(
-            serde_json::json!({"conflictingPath": conflicting, "relationship": relationship}),
+            serde_json::json!({"conflictingPath": other, "relationship": relationship}),
         ));
     }
 
@@ -688,6 +713,29 @@ pub async fn remap_root(
 
     validate_path(new_path).map_err(|e| *e)?;
 
+    let (samples, all_verified) = compute_remap_verification(pool, root_id, new_path).await?;
+
+    Ok(RemapVerification {
+        root_id: root_id.to_owned(),
+        original_path,
+        new_path: new_path.to_owned(),
+        samples,
+        all_verified,
+    })
+}
+
+/// Compute remap verification samples for `root_id` against `new_path`:
+/// every relative path previously recorded for the root (see
+/// [`repo::relative_paths_for_root`]), and whether each resolves under
+/// `new_path`. Shared by [`remap_root`] (preview) and [`apply_root_remap`]
+/// (independent re-verification — nJ01a review carry-over: `apply_root_remap`
+/// used to trust the caller-supplied `verified` flag outright, so a stale
+/// preview or a directly-called IPC command could apply an unverified remap).
+async fn compute_remap_verification(
+    pool: &SqlitePool,
+    root_id: &str,
+    new_path: &str,
+) -> Result<(Vec<RemapSample>, bool), ContractError> {
     let relative_paths =
         repo::relative_paths_for_root(pool, root_id).await.map_err(db_to_contract)?;
 
@@ -700,14 +748,64 @@ pub async fn remap_root(
         })
         .collect();
     let all_verified = samples.iter().all(|s| s.found);
+    Ok((samples, all_verified))
+}
 
-    Ok(RemapVerification {
-        root_id: root_id.to_owned(),
-        original_path,
-        new_path: new_path.to_owned(),
-        samples,
-        all_verified,
-    })
+/// Gate a remap apply on verification, refusing (and auditing) when either
+/// the caller-supplied `verified` flag is `false`, or a freshly recomputed
+/// [`compute_remap_verification`] disagrees with a `verified: true` claim.
+/// Extracted from [`apply_root_remap`] to keep it under clippy's line budget
+/// (nJ01a review carry-over — see that function's doc comment for why the
+/// flag alone isn't trusted).
+async fn ensure_remap_verified(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    root_id: &str,
+    new_path: &str,
+    verified: bool,
+) -> Result<(), ContractError> {
+    // Issue #707: `verified` must actually gate the mutation, not just ride
+    // along as audit metadata — the whole point of the two-step Verify →
+    // Apply flow (constitution §II) is that Apply is refused without a prior
+    // successful Verify. Checked independently of any UI-side disabled state
+    // since this is reachable directly over IPC.
+    let recomputed_verified = if verified {
+        match compute_remap_verification(pool, root_id, new_path).await {
+            Ok((_, recomputed)) => recomputed,
+            Err(e) => {
+                write_root_op_refusal(
+                    bus,
+                    root_id,
+                    "root.remap.apply",
+                    Outcome::Failed,
+                    &error_code_str(e.code),
+                )
+                .await?;
+                return Err(e);
+            }
+        }
+    } else {
+        false
+    };
+
+    if !recomputed_verified {
+        write_root_op_refusal(
+            bus,
+            root_id,
+            "root.remap.apply",
+            Outcome::Refused,
+            "remap.not_verified",
+        )
+        .await?;
+        return Err(ContractError::new(
+            ErrorCode::RemapNotVerified,
+            "remap must be verified before it can be applied",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    Ok(())
 }
 
 /// Apply a previously previewed root remap (`roots.remap.apply`, P6a).
@@ -720,12 +818,18 @@ pub async fn remap_root(
 ///
 /// Re-validates `new_path` so an apply cannot silently succeed against a path
 /// that no longer exists between preview and apply (e.g. an unmounted drive).
+/// Also re-derives verification itself via [`compute_remap_verification`]
+/// rather than trusting the caller-supplied `verified` flag: both the flag
+/// AND the freshly recomputed state must agree the remap is verified, so a
+/// stale preview or a direct IPC call can't bypass the gate.
 ///
 /// # Errors
 ///
 /// - `source.not_found` — no root with `root_id`.
 /// - `path.not_exists` / `path.not_directory` / `path.permission_denied` —
 ///   `new_path` fails validation.
+/// - `remap.not_verified` — `verified` is `false`, or the current state no
+///   longer backs a `verified: true` claim.
 /// - `internal.database` — persistence failure.
 pub async fn apply_root_remap(
     pool: &SqlitePool,
@@ -761,27 +865,7 @@ pub async fn apply_root_remap(
         return Err(*e);
     }
 
-    // Issue #707: `verified` must actually gate the mutation, not just ride
-    // along as audit metadata — the whole point of the two-step Verify →
-    // Apply flow (constitution §II) is that Apply is refused without a prior
-    // successful Verify. Checked independently of any UI-side disabled state
-    // since this is reachable directly over IPC.
-    if !verified {
-        write_root_op_refusal(
-            bus,
-            root_id,
-            "root.remap.apply",
-            Outcome::Refused,
-            "remap.not_verified",
-        )
-        .await?;
-        return Err(ContractError::new(
-            ErrorCode::RemapNotVerified,
-            "remap must be verified before it can be applied",
-            ErrorSeverity::Blocking,
-            false,
-        ));
-    }
+    ensure_remap_verified(pool, bus, root_id, new_path, verified).await?;
 
     if let Err(e) = repo::set_source_path(pool, root_id, new_path).await {
         // FIX (review round 1 #2): the write was attempted (root exists,
@@ -1236,6 +1320,45 @@ mod tests {
         assert_eq!(resp.items[1].error.as_deref(), Some("path.overlaps_existing"));
     }
 
+    /// nJ01a review carry-over: Windows filesystems (NTFS/ReFS/FAT) are
+    /// case-insensitive/case-preserving, so a case-only variant of an
+    /// already-registered root names the SAME real directory and must still
+    /// be caught as an overlap.
+    #[tokio::test]
+    async fn register_source_rejects_windows_case_variant_of_existing_root() {
+        if !cfg!(windows) {
+            return;
+        }
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().to_str().expect("utf8 path").to_owned();
+        // Windows resolves this to the same real directory as `path`.
+        let path_upper = path.to_uppercase();
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path,
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        register_source(&pool, &bus, &req).await.unwrap();
+
+        let variant_req = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: path_upper,
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Unorganized,
+        };
+        let err = register_source(&pool, &bus, &variant_req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathOverlapsExisting);
+    }
+
     /// T1-c: `db_to_contract`'s fallback arm now delegates to the canonical
     /// `db_err` mapper, so a `NotFound` (missing row) is `Blocking`/
     /// non-retryable rather than the hand-rolled `Fatal`/`retryable=true`
@@ -1523,6 +1646,68 @@ mod tests {
         .expect("refused apply_root_remap must write a durable audit row");
         assert_eq!(row.0, "refused");
         assert_eq!(row.1, "remap.not_verified");
+    }
+
+    /// nJ01a review carry-over: a caller passing `verified: true` must not
+    /// bypass server-side re-verification. A recorded relative path that
+    /// does NOT resolve under `new_path` means the true state disagrees with
+    /// the caller's claim (stale preview, or a direct IPC bypass attempt) —
+    /// apply must still be refused.
+    #[tokio::test]
+    async fn apply_root_remap_rejects_stale_verified_true_claim() {
+        if !cfg!(unix) {
+            return;
+        }
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        // Mirror the registered_sources row into library_root so the
+        // file_record FK holds — see persistence_db's
+        // `relative_paths_for_root_is_exhaustive_and_ordered`.
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES (?, ?, ?, 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&resp.source_id)
+        .bind(&resp.source_id)
+        .bind(&resp.path)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO file_record \
+             (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES (?, ?, 'nonexistent/light_001.fits', 0, '2026-01-01T00:00:00Z', 'observed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .bind("fr-stale")
+        .bind(&resp.source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // "/var/tmp" does not contain "nonexistent/light_001.fits" — the
+        // caller's `verified: true` claim is stale/wrong, so the recompute
+        // inside `apply_root_remap` must refuse regardless.
+        let err = apply_root_remap(&pool, &bus, &resp.source_id, "/var/tmp", true)
+            .await
+            .expect_err("stale verified:true claim must be refused after server-side recompute");
+        assert_eq!(err.code, ErrorCode::RemapNotVerified);
+
+        let (_, path) =
+            repo::get_source_kind_and_path(&pool, &resp.source_id).await.unwrap().unwrap();
+        assert_eq!(path, "/tmp");
     }
 
     /// Issue #560: a root only scanned into the Inbox (no `file_record` rows,

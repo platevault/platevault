@@ -9,8 +9,8 @@
 
 use domain_core::equipment::{
     Camera, CreateCamera, CreateFilter, CreateOpticalTrain, CreateTelescope, Filter,
-    FilterCategory, OpticalTrain, Telescope, UpdateCamera, UpdateFilter, UpdateOpticalTrain,
-    UpdateTelescope,
+    FilterCategory, OpticalTrain, SensorType, Telescope, UpdateCamera, UpdateFilter,
+    UpdateOpticalTrain, UpdateTelescope,
 };
 use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
@@ -41,6 +41,30 @@ fn str_to_category(s: &str) -> FilterCategory {
     }
 }
 
+// Camera sensor type (spec 044 iteration 2026-07-15, FR-035/migration 0067):
+// stored as TEXT 'mono'|'osc'; NULL/unknown values read back as None so
+// unknown always behaves as mono downstream (FR-038).
+fn sensor_type_to_str(sensor: SensorType) -> &'static str {
+    match sensor {
+        SensorType::Mono => "mono",
+        SensorType::Osc => "osc",
+    }
+}
+
+fn str_to_sensor_type(s: &str) -> Option<SensorType> {
+    match s {
+        "mono" => Some(SensorType::Mono),
+        "osc" => Some(SensorType::Osc),
+        _ => None,
+    }
+}
+
+/// Passband is stored like `aliases`: a JSON string array (`["Ha","OIII"]`);
+/// NULL = plain color camera ('rgb' default, FR-035).
+fn parse_passband(json_str: Option<&str>) -> Option<Vec<String>> {
+    json_str.and_then(|s| serde_json::from_str(s).ok())
+}
+
 fn parse_aliases(json_str: &str) -> Vec<String> {
     serde_json::from_str(json_str).unwrap_or_default()
 }
@@ -67,18 +91,21 @@ fn ensure_row_affected(rows_affected: u64, entity: &str, id: &str) -> DbResult<(
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn list_cameras(pool: &SqlitePool) -> DbResult<Vec<Camera>> {
-    let rows: Vec<(String, String, String, i32)> =
-        sqlx::query_as("SELECT id, name, aliases, auto_detected FROM cameras ORDER BY name ASC")
-            .fetch_all(pool)
-            .await?;
+    let rows: Vec<(String, String, String, i32, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, name, aliases, auto_detected, sensor_type, passband FROM cameras ORDER BY name ASC",
+    )
+    .fetch_all(pool)
+    .await?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, name, aliases, auto_detected)| Camera {
+        .map(|(id, name, aliases, auto_detected, sensor_type, passband)| Camera {
             id,
             name,
             aliases: parse_aliases(&aliases),
             auto_detected: auto_detected != 0,
+            sensor_type: sensor_type.as_deref().and_then(str_to_sensor_type),
+            passband: parse_passband(passband.as_deref()),
         })
         .collect())
 }
@@ -92,18 +119,29 @@ pub async fn create_camera(pool: &SqlitePool, req: &CreateCamera) -> DbResult<Ca
     let id = Uuid::new_v4().to_string();
     let aliases_json = encode_aliases(&req.aliases);
     let created_at = Timestamp::now_iso();
+    let sensor_type_str = req.sensor_type.map(sensor_type_to_str);
+    let passband_json = req.passband.as_deref().map(encode_aliases);
 
     sqlx::query(
-        "INSERT INTO cameras (id, name, aliases, auto_detected, created_at) VALUES (?, ?, ?, 0, ?)",
+        "INSERT INTO cameras (id, name, aliases, auto_detected, created_at, sensor_type, passband) VALUES (?, ?, ?, 0, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&req.name)
     .bind(&aliases_json)
     .bind(&created_at)
+    .bind(sensor_type_str)
+    .bind(&passband_json)
     .execute(pool)
     .await?;
 
-    Ok(Camera { id, name: req.name.clone(), aliases: req.aliases.clone(), auto_detected: false })
+    Ok(Camera {
+        id,
+        name: req.name.clone(),
+        aliases: req.aliases.clone(),
+        auto_detected: false,
+        sensor_type: req.sensor_type,
+        passband: req.passband.clone(),
+    })
 }
 
 /// Update an existing camera.
@@ -113,13 +151,19 @@ pub async fn create_camera(pool: &SqlitePool, req: &CreateCamera) -> DbResult<Ca
 /// Returns [`DbError::NotFound`] if the ID does not exist.
 pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> DbResult<Camera> {
     let aliases_json = encode_aliases(&req.aliases);
+    let sensor_type_str = req.sensor_type.map(sensor_type_to_str);
+    let passband_json = req.passband.as_deref().map(encode_aliases);
 
-    let result = sqlx::query("UPDATE cameras SET name = ?, aliases = ? WHERE id = ?")
-        .bind(&req.name)
-        .bind(&aliases_json)
-        .bind(&req.id)
-        .execute(pool)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE cameras SET name = ?, aliases = ?, sensor_type = ?, passband = ? WHERE id = ?",
+    )
+    .bind(&req.name)
+    .bind(&aliases_json)
+    .bind(sensor_type_str)
+    .bind(&passband_json)
+    .bind(&req.id)
+    .execute(pool)
+    .await?;
 
     ensure_row_affected(result.rows_affected(), "camera", &req.id)?;
 
@@ -134,6 +178,8 @@ pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> DbResult<Ca
         name: req.name.clone(),
         aliases: req.aliases.clone(),
         auto_detected: row.0 != 0,
+        sensor_type: req.sensor_type,
+        passband: req.passband.clone(),
     })
 }
 
@@ -156,21 +202,24 @@ pub async fn delete_camera(pool: &SqlitePool, id: &str) -> DbResult<()> {
 pub async fn find_camera_by_alias(pool: &SqlitePool, alias: &str) -> DbResult<Option<Camera>> {
     // SQLite JSON: search for the alias string within the aliases JSON array.
     // We use json_each to properly match exact alias values.
-    let row: Option<(String, String, String, i32)> = sqlx::query_as(
-        "SELECT c.id, c.name, c.aliases, c.auto_detected \
-         FROM cameras c, json_each(c.aliases) j \
-         WHERE j.value = ? \
-         LIMIT 1",
-    )
-    .bind(alias)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<(String, String, String, i32, Option<String>, Option<String>)> =
+        sqlx::query_as(
+            "SELECT c.id, c.name, c.aliases, c.auto_detected, c.sensor_type, c.passband \
+             FROM cameras c, json_each(c.aliases) j \
+             WHERE j.value = ? \
+             LIMIT 1",
+        )
+        .bind(alias)
+        .fetch_optional(pool)
+        .await?;
 
-    Ok(row.map(|(id, name, aliases, auto_detected)| Camera {
+    Ok(row.map(|(id, name, aliases, auto_detected, sensor_type, passband)| Camera {
         id,
         name,
         aliases: parse_aliases(&aliases),
         auto_detected: auto_detected != 0,
+        sensor_type: sensor_type.as_deref().and_then(str_to_sensor_type),
+        passband: parse_passband(passband.as_deref()),
     }))
 }
 
@@ -524,28 +573,46 @@ mod tests {
 
         let camera = create_camera(
             &pool,
-            &CreateCamera { name: "ASI2600MM".to_owned(), aliases: vec!["ZWO 2600".to_owned()] },
+            &CreateCamera {
+                name: "ASI2600MM".to_owned(),
+                aliases: vec!["ZWO 2600".to_owned()],
+                sensor_type: None,
+                passband: None,
+            },
         )
         .await
         .unwrap();
         assert_eq!(camera.name, "ASI2600MM");
         assert!(!camera.auto_detected);
+        // FR-038: sensor type is unknown until the user sets it.
+        assert_eq!(camera.sensor_type, None);
+        assert_eq!(camera.passband, None);
 
         let all = list_cameras(&pool).await.unwrap();
         assert_eq!(all.len(), 1);
 
+        // FR-035 round-trip: set OSC + a dual-band passband on update.
         let updated = update_camera(
             &pool,
             &UpdateCamera {
                 id: camera.id.clone(),
                 name: "ASI2600MM Pro".to_owned(),
                 aliases: vec!["ZWO 2600".to_owned(), "ASI2600".to_owned()],
+                sensor_type: Some(SensorType::Osc),
+                passband: Some(vec!["Ha".to_owned(), "OIII".to_owned()]),
             },
         )
         .await
         .unwrap();
         assert_eq!(updated.name, "ASI2600MM Pro");
         assert_eq!(updated.aliases.len(), 2);
+        assert_eq!(updated.sensor_type, Some(SensorType::Osc));
+        assert_eq!(updated.passband, Some(vec!["Ha".to_owned(), "OIII".to_owned()]));
+
+        // The persisted row (not just the returned DTO) carries the fields.
+        let listed = list_cameras(&pool).await.unwrap();
+        assert_eq!(listed[0].sensor_type, Some(SensorType::Osc));
+        assert_eq!(listed[0].passband, Some(vec!["Ha".to_owned(), "OIII".to_owned()]));
 
         delete_camera(&pool, &camera.id).await.unwrap();
         assert!(list_cameras(&pool).await.unwrap().is_empty());
@@ -560,6 +627,8 @@ mod tests {
             &CreateCamera {
                 name: "ASI2600MM".to_owned(),
                 aliases: vec!["ZWO 2600".to_owned(), "ASI2600".to_owned()],
+                sensor_type: None,
+                passband: None,
             },
         )
         .await

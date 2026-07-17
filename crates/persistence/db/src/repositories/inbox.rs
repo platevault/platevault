@@ -1258,6 +1258,50 @@ pub async fn list_inbox_file_metadata(
     .await?)
 }
 
+// ── Attribution geometry (spec 008 Q27, F-Framing-5) ────────────────────────
+
+/// Per-file staged geometry read for the Inbox-confirm attribution pass.
+///
+/// A superset of [`InboxPointingRow`] with `telescop`/`instrume` added (the
+/// F-Framing-5 optic-train composite needs them; target-resolution's
+/// `InboxPointingRow` does not). Sourced from `inbox_file_metadata` — the
+/// "non-durable inbox staging" pointing/rotation referenced by F-Framing-1
+/// before it is copied onto the durable `acquisition_session` row at ingest.
+#[derive(Clone, Debug, Default, sqlx::FromRow)]
+pub struct InboxAttributionGeometryRow {
+    pub relative_file_path: String,
+    pub telescop: Option<String>,
+    pub instrume: Option<String>,
+    pub focal_length_mm: Option<f64>,
+    pub ra_deg: Option<f64>,
+    pub dec_deg: Option<f64>,
+    pub rotator_angle_deg: Option<f64>,
+    pub pixel_size_um: Option<f64>,
+    pub naxis1: Option<i64>,
+    pub naxis2: Option<i64>,
+    pub object: Option<String>,
+}
+
+/// Read per-file attribution geometry for an inbox item (F-Framing-5).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_attribution_geometry(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> DbResult<Vec<InboxAttributionGeometryRow>> {
+    Ok(sqlx::query_as::<_, InboxAttributionGeometryRow>(
+        "SELECT relative_file_path, telescop, instrume, focal_length_mm,
+                ra_deg, dec_deg, rotator_angle_deg, pixel_size_um, naxis1, naxis2, object
+         FROM inbox_file_metadata
+         WHERE inbox_item_id = ?
+         ORDER BY relative_file_path",
+    )
+    .bind(inbox_item_id)
+    .fetch_all(pool)
+    .await?)
+}
+
 // ── Pointing / optics for target resolution (spec 041 R-17, T074) ─────────────
 
 /// Per-file pointing + optics, read for coordinate-based target resolution.
@@ -2829,5 +2873,67 @@ mod tests {
         let map = last_scanned_by_root(pool).await.unwrap();
         assert!(map.contains_key("root-x"));
         assert!(map.contains_key("root-y"));
+    }
+
+    // ── list_inbox_attribution_geometry (spec 008 Q27, F-Framing-5) ──────────
+
+    #[tokio::test]
+    async fn list_inbox_attribution_geometry_round_trips_staged_fields() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, group_key, \
+              discovered_at, last_scanned_at, state, lane) \
+             VALUES ('item-geo', 'root-1', '2025-10-10/lights', '', \
+                     '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', \
+                     'pending_classification', 'fits')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        upsert_inbox_file_metadata(
+            pool,
+            &UpsertFileMetadata {
+                inbox_item_id: "item-geo",
+                relative_file_path: "light_001.fits",
+                telescop: Some("RASA 8"),
+                instrume: Some("ASI2600MM"),
+                focal_length_mm: Some(400.0),
+                ra_deg: Some(83.633),
+                dec_deg: Some(22.0145),
+                rotator_angle_deg: Some(1.5),
+                pixel_size_um: Some(3.76),
+                naxis1: Some(6248),
+                naxis2: Some(4176),
+                object: Some("M 42"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_inbox_attribution_geometry(pool, "item-geo").await.unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.telescop.as_deref(), Some("RASA 8"));
+        assert_eq!(row.instrume.as_deref(), Some("ASI2600MM"));
+        assert_eq!(row.focal_length_mm, Some(400.0));
+        assert_eq!(row.ra_deg, Some(83.633));
+        assert_eq!(row.dec_deg, Some(22.0145));
+        assert_eq!(row.rotator_angle_deg, Some(1.5));
+        assert_eq!(row.pixel_size_um, Some(3.76));
+        assert_eq!(row.naxis1, Some(6248));
+        assert_eq!(row.naxis2, Some(4176));
+        assert_eq!(row.object.as_deref(), Some("M 42"));
+    }
+
+    #[tokio::test]
+    async fn list_inbox_attribution_geometry_empty_for_unknown_item() {
+        let db = test_db().await;
+        let rows = list_inbox_attribution_geometry(db.pool(), "no-such-item").await.unwrap();
+        assert!(rows.is_empty());
     }
 }

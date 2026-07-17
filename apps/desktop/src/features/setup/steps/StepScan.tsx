@@ -128,13 +128,31 @@ function SourceSummary({ state }: SourceSummaryProps) {
   const totalItems = items.length;
   const totalFiles = items.reduce((acc, it) => acc + it.fileCount, 0);
 
-  // Aggregate breakdown counts across all classified items
+  // Aggregate breakdown counts across all items, reconciled against the file
+  // count (issue #513): masters and unclassified files were previously
+  // dropped from this summary because they don't appear in a classify
+  // breakdown entry, so the chip counts silently undercounted totalFiles.
   const kindCounts = new Map<string, number>();
-  for (const [, cls] of classifications) {
-    for (const entry of cls.breakdown ?? []) {
+  for (const item of items) {
+    if (item.isMaster) {
+      kindCounts.set(
+        'master',
+        (kindCounts.get('master') ?? 0) + item.fileCount,
+      );
+      continue;
+    }
+    const cls = classifications.get(item.inboxItemId);
+    for (const entry of cls?.breakdown ?? []) {
       kindCounts.set(
         entry.kind,
         (kindCounts.get(entry.kind) ?? 0) + entry.count,
+      );
+    }
+    const unclassifiedCount = cls?.unclassifiedFiles.length ?? 0;
+    if (unclassifiedCount > 0) {
+      kindCounts.set(
+        'unclassified',
+        (kindCounts.get('unclassified') ?? 0) + unclassifiedCount,
       );
     }
   }
@@ -272,17 +290,35 @@ function SourceSummary({ state }: SourceSummaryProps) {
               </thead>
               <tbody>
                 {sortedItems.map((item) => {
-                  const breakdown =
-                    classifications.get(item.inboxItemId)?.breakdown ?? [];
-                  const types = breakdown
-                    .map((b) => `${b.count} ${b.kind}`)
-                    .join(', ');
+                  const cls = classifications.get(item.inboxItemId);
+                  const breakdown = cls?.breakdown ?? [];
+                  const typeParts = breakdown.map(
+                    (b) => `${b.count} ${b.kind}`,
+                  );
+                  // Reconcile against fileCount (issue #513): files with no
+                  // IMAGETYP (or an unmapped one) don't appear in the classify
+                  // breakdown at all, so the type list previously undercounted
+                  // the row's file total with no indication why.
+                  const unclassifiedCount = cls?.unclassifiedFiles.length ?? 0;
+                  if (unclassifiedCount > 0) {
+                    typeParts.push(
+                      m.setup_scan_unclassified_count({
+                        count: unclassifiedCount,
+                      }),
+                    );
+                  }
+                  const types = typeParts.join(', ');
                   // Individual calibration masters carry their frame type on the
                   // item itself (spec 040 FR-006); grouped sub-frame folders rely
                   // on the classify breakdown instead.
                   const detectedTypes = item.isMaster
                     ? masterLabel(item)
                     : types || '—';
+                  // The root/top-level row of an expanded folder carries an
+                  // empty relativePath; label it instead of leaving it blank
+                  // (issue #513).
+                  const rowLabel =
+                    item.relativePath || m.setup_scan_root_label();
                   return (
                     <tr
                       key={item.inboxItemId}
@@ -294,7 +330,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
                           {item.isMaster && (
                             <Pill variant="info">{m.setup_scan_master()}</Pill>
                           )}
-                          {item.relativePath}
+                          {rowLabel}
                         </span>
                       </td>
                       <td className="alm-setup-scan__cell">{item.fileCount}</td>
