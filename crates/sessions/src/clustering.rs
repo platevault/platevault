@@ -888,6 +888,30 @@ mod tests {
         assert!((rotation_circular_distance_deg(0.0, 180.0) - 180.0).abs() < 1e-9);
     }
 
+    #[test]
+    fn rotation_distance_shortest_arc_not_naive_diff() {
+        // 45 and 295 degrees are 110deg apart circularly (via the 350deg/0deg
+        // seam); a naive |a-b| would wrongly give 250.
+        assert!((rotation_circular_distance_deg(45.0, 295.0) - 110.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rotation_distance_property_bounded_and_correct() {
+        // Same shortest-arc formula the flat calibration rule relies on
+        // (calibration_core issue #921) — any pair of angles must land in
+        // [0, 180], never the naive `(a - b).abs()` this delegates away from.
+        let angles: [f32; 9] = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
+        for &a in &angles {
+            for &b in &angles {
+                let d = rotation_circular_distance_deg(a, b);
+                assert!((0.0..=180.0).contains(&d), "distance {d} out of [0,180] for ({a}, {b})");
+                let raw = (f64::from(a) - f64::from(b)).abs().rem_euclid(360.0);
+                let expected = raw.min(360.0 - raw);
+                assert!((d - expected).abs() < 1e-9, "({a}, {b}): got {d}, expected {expected}");
+            }
+        }
+    }
+
     // ── FOV fallback path ────────────────────────────────────────────────────
 
     #[test]

@@ -283,6 +283,66 @@ mod tests {
     }
 
     #[test]
+    fn rotation_far_apart_delta_is_shortest_arc_not_naive_diff() {
+        // 45° vs 295°: circularly 110° apart (the short way, through 0/360°
+        // seam via 350°); a naive |a-b| would wrongly give 250°.
+        let s = SessionInfo { rotation_deg: Some(45.0), ..session() };
+        let r = evaluate(
+            &s,
+            &master_flat("Ha", "1x1", "train-a", 100.0, 295.0, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        let delta = r
+            .dimensions_mismatched
+            .iter()
+            .find(|d| d.dimension == "rotation")
+            .and_then(|d| d.delta)
+            .expect("rotation should be out of tolerance with a delta");
+        assert!((delta - 110.0).abs() < 1e-9, "expected 110.0, got {delta}");
+    }
+
+    #[test]
+    fn rotation_antipodal_boundary_delta_is_180() {
+        // 0° vs 180°: maximally distant on the circle either direction.
+        let r = evaluate(
+            &session(),
+            &master_flat("Ha", "1x1", "train-a", 100.0, 180.0, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        let delta = r
+            .dimensions_mismatched
+            .iter()
+            .find(|d| d.dimension == "rotation")
+            .and_then(|d| d.delta)
+            .expect("rotation should be out of tolerance with a delta");
+        assert!((delta - 180.0).abs() < 1e-9, "expected 180.0, got {delta}");
+    }
+
+    #[test]
+    fn rotation_circular_distance_property_bounded_and_correct() {
+        // The exact function `evaluate` calls for the rotation delta: any
+        // pair of angles must be within [0, 180], and match the textbook
+        // shortest-arc formula — the naive `(a - b).abs()` this replaces
+        // (issue #921) can exceed 180 and blow past 360 near the seam.
+        let angles = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
+        for &a in &angles {
+            for &b in &angles {
+                let d = skymath::circular_distance(
+                    skymath::Angle::from_degrees(a),
+                    skymath::Angle::from_degrees(b),
+                )
+                .degrees();
+                assert!((0.0..=180.0).contains(&d), "distance {d} out of [0,180] for ({a}, {b})");
+                let raw = (a - b).abs().rem_euclid(360.0);
+                let expected = raw.min(360.0 - raw);
+                assert!((d - expected).abs() < 1e-9, "({a}, {b}): got {d}, expected {expected}");
+            }
+        }
+    }
+
+    #[test]
     fn different_night_fallback_reason() {
         let r = evaluate(
             &session(),
