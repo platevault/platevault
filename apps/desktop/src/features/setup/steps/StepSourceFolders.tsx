@@ -116,7 +116,6 @@ export function StepSourceFolders({
   entries,
   onAdd,
   onRemove,
-  onScanDepthChange,
   onOrganizationStateChange,
   errors,
 }: StepSourceFoldersProps) {
@@ -150,7 +149,6 @@ export function StepSourceFolders({
                 errors={errors}
                 onAdd={onAdd}
                 onRemove={onRemove}
-                onScanDepthChange={onScanDepthChange}
                 onOrganizationStateChange={onOrganizationStateChange}
               />
             </Fragment>
@@ -169,7 +167,6 @@ function SourceGroup({
   errors,
   onAdd,
   onRemove,
-  onScanDepthChange,
   onOrganizationStateChange,
 }: {
   kind: SourceKind;
@@ -178,7 +175,6 @@ function SourceGroup({
   errors: Record<number, string>;
   onAdd: (path: string, kind: SourceKind) => void;
   onRemove: (index: number) => void;
-  onScanDepthChange: (index: number, depth: ScanDepth) => void;
   onOrganizationStateChange: (index: number, state: OrganizationState) => void;
 }) {
   const isRequired = REQUIRED_KINDS.includes(kind);
@@ -252,7 +248,6 @@ function SourceGroup({
               error={errors[index]}
               isLast={i === rows.length - 1}
               onRemove={() => onRemove(index)}
-              onScanDepthChange={(depth) => onScanDepthChange(index, depth)}
               onOrganizationStateChange={(state) =>
                 onOrganizationStateChange(index, state)
               }
@@ -276,7 +271,6 @@ function SourceRow({
   error?: string;
   isLast: boolean;
   onRemove: () => void;
-  onScanDepthChange: (depth: ScanDepth) => void;
   onOrganizationStateChange: (state: OrganizationState) => void;
 }) {
   const isInbox = entry.kind === 'inbox';
