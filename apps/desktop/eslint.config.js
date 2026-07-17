@@ -2,11 +2,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // @ts-check
-import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import alm from './eslint-rules/no-user-string.js';
+
+// ESLint is the SECOND lint layer, after Biome (`pnpm lint` runs
+// `biome check` first). Biome owns the syntactic layer (core JS recommended +
+// non-type-aware TS rules — see biome.json); ESLint keeps ONLY the gates Biome
+// cannot replicate:
+//
+//   1. `alm/*` custom rules (the spec-046 i18n catalog gate) — Biome has no
+//      custom JS plugin rules.
+//   2. Type-aware @typescript-eslint rules (recommendedTypeCheckedOnly) —
+//      Biome has no type-aware linting.
+//   3. eslint-plugin-react-hooks v7 — its React-compiler-derived rules
+//      (set-state-in-effect/-render, purity checks) have no Biome equivalent,
+//      so the whole plugin stays here and Biome's two hook rules are disabled.
+//   4. eslint-plugin-jsx-a11y recommended-at-error — Biome's a11y group is not
+//      rule-for-rule equivalent (it both misses jsx-a11y checks and adds
+//      different ones), so swapping would silently shift the a11y gate.
+//   5. The `no-restricted-syntax` inline-style ban — Biome has no AST-selector
+//      rule, and the existing opt-outs are eslint-disable comments.
 
 // The i18n catalog migration is complete: the `alm/no-user-string` gate is
 // enforced across ALL of src (spec 046, FR-001 / SC-001 met). Non-user-facing
@@ -15,11 +32,9 @@ import alm from './eslint-rules/no-user-string.js';
 const I18N_MIGRATED = ['src/**/*.{ts,tsx}'];
 
 export default tseslint.config(
-  // Base JS recommended rules
-  js.configs.recommended,
-
-  // TypeScript type-checked rules for our source
-  ...tseslint.configs.recommendedTypeChecked,
+  // TypeScript type-aware rules ONLY (the non-type-aware recommended set is
+  // covered by Biome).
+  ...tseslint.configs.recommendedTypeCheckedOnly,
 
   {
     languageOptions: {
@@ -111,16 +126,8 @@ export default tseslint.config(
         message:
           'Inline style props are forbidden. Use a shared `alm-` class in styles/components.css (token-only). For a genuinely-dynamic value, add `// eslint-disable-next-line no-restricted-syntax -- dynamic: <reason>`.',
       }],
-      // TypeScript: allow explicit `any` in generated bindings and adapter layers
-      '@typescript-eslint/no-explicit-any': 'warn',
-      // Allow unused vars prefixed with _ (convention for intentionally unused)
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      // Allow non-null assertions — common in Tauri/DOM interop
-      '@typescript-eslint/no-non-null-assertion': 'warn',
       // Allow floating promises in event handlers (we use void keyword consistently)
       '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: true }],
-      // Allow require() in config files (none in src but belt+suspenders)
-      '@typescript-eslint/no-require-imports': 'error',
       // Relax noisy type-safety rules — unsafe patterns are caught by TypeScript
       // strict mode; the eslint-level rules create too many false positives with
       // the Tauri command return type narrowing pattern.
@@ -129,8 +136,6 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'warn',
       '@typescript-eslint/no-unsafe-return': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
-      // Allow empty interfaces for DTO-like types
-      '@typescript-eslint/no-empty-object-type': 'warn',
       // Unnecessary type assertions are style issues, not bugs
       '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
       // TanStack Router uses `throw redirect()` — this is a framework convention
