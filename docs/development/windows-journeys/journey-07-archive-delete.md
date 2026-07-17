@@ -35,6 +35,8 @@
 
 ## Windows environment mechanics (read once, applies to every Test below)
 
+> Canonical mechanics: `docs/development/windows-native-rust-dev.md` §"Validation driving (MCP bridge, reset, recompile trap)". The steps below are the self-contained per-journey copy; reconcile to that doc if they drift.
+
 - Windows checkout: `C:\dev\astro-plan`. Deploy: `git fetch origin`, then
   `git reset --hard origin/main` as its OWN command.
 - **Recompile trap**: touch changed `.rs` files after a reset if Rust

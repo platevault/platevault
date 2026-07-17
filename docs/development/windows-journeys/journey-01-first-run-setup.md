@@ -27,6 +27,8 @@
 
 ## Windows environment mechanics (read once, applies to every Test below)
 
+> Canonical mechanics: `docs/development/windows-native-rust-dev.md` §"Validation driving (MCP bridge, reset, recompile trap)". The steps below are the self-contained per-journey copy; reconcile to that doc if they drift.
+
 - Windows checkout: `C:\dev\astro-plan` (separate from any WSL/Linux checkout
   — the app serves from THIS checkout only).
 - Deploy: `cd C:\dev\astro-plan`, `git fetch origin`, then
