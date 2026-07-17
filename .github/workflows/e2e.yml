@@ -233,8 +233,17 @@ jobs:
 
       # Run the Layer-2 harness (real journeys, serial per .config/nextest.toml).
       # Linux wraps in xvfb-run for a headless display; Windows/macOS run natively.
+      #
+      # WEBKIT_DISABLE_DMABUF_RENDERER / WEBKIT_DISABLE_COMPOSITING_MODE:
+      # experiment (issue tracked in PR that introduced this) — Ubuntu's
+      # WebKitGTK under Xvfb has no GPU, so its default DMA-BUF/compositing
+      # render paths were suspected of adding ~25-30s of per-test overhead vs
+      # Windows. Linux-only; harmless no-op if the hypothesis is wrong.
       - name: Run E2E (Linux — xvfb)
         if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
         run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
 
       # Also covers macOS when it joins the matrix via workflow_dispatch
