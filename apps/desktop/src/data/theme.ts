@@ -222,7 +222,7 @@ export async function hydrateThemeFromSettings(): Promise<void> {
 }
 
 function prefersDark(): boolean {
-  return typeof window !== 'undefined' && !!window.matchMedia
+  return typeof window !== 'undefined' && window.matchMedia
     ? window.matchMedia('(prefers-color-scheme: dark)').matches
     : false;
 }
@@ -269,6 +269,21 @@ const DENSITY_SPACING_SCALE: Record<string, number> = {
   compact: 0.75,
   comfortable: 1,
   spacious: 1.25,
+};
+
+/**
+ * `--alm-row-height` px per density choice (tokens.css `:root` base + the
+ * `.density-compact`/`.density-spacious` overrides) — duplicated here for the
+ * same reason as SPACING_BASE_PX/TEXT_SCALE_BASE_PX (jsdom can't reliably
+ * resolve stylesheet custom properties). Row-driven virtualizers (e.g.
+ * TargetsTable) read this instead of a hardcoded estimate so the initial
+ * `estimateSize` tracks the active density; `theme.tokens-drift.test.ts`
+ * keeps it in sync with tokens.css.
+ */
+export const ROW_HEIGHT_PX: Record<string, number> = {
+  compact: 24,
+  comfortable: 32,
+  spacious: 40,
 };
 
 export function applyDensity(density?: string): void {

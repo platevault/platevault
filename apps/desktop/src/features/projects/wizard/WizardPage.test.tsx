@@ -165,7 +165,7 @@ vi.mock('@/ui', async (importOriginal) => {
   };
 });
 
-import React from 'react';
+import type React from 'react';
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

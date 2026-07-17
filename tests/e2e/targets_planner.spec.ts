@@ -536,4 +536,53 @@ test.describe("Planner observability iteration (spec 044 Phase 10, 2026-07-15)",
       await imgTime.evaluate((el) => el.scrollWidth <= el.clientWidth),
     ).toBe(true);
   });
+
+  /**
+   * FR-009 amendment (iteration 2026-07-17, the #792 naming half): the LIST
+   * "Opposition" column stays the pure geometric transit-at-midnight date,
+   * while the DETAIL "Best date" is the nearest Moon-viable night to it and
+   * always explains itself with one of three Moon-state tooltips (mirrored
+   * into aria-label, the InfoTip pattern). The Moon state at the run date
+   * decides which branch fires, so both sides of the list-vs-detail
+   * relationship are asserted: diverged → detail date ≠ list date and the
+   * tooltip names the list's opposition date; coincides / none-found →
+   * detail date = list date.
+   */
+  test("9.5c · FR-009 2026-07-17: detail Best date is Moon-aware and explains itself; list Opposition stays pure", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    const m31 = targetRow(page, "M 31");
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+
+    // List surface unchanged: the pure "MMM D · in N ..." opposition cell.
+    const opposition = m31.locator("td").nth(COL.opposition);
+    await expect(opposition).toContainText(/in \d+ (day|days|month|months)/);
+    const listOppositionDate = (await opposition.innerText())
+      .split("·")[0]
+      .trim();
+
+    await m31.click();
+
+    const bestDateTrigger = page.getByLabel(
+      /Matches opposition — the Moon is favourable|falls near full Moon|No Moon-favourable night within/,
+    );
+    await expect(bestDateTrigger).toBeVisible();
+    // aria-label = "<detail date> · in N ... — <explanation>" (InfoTip mirror).
+    const label = (await bestDateTrigger.getAttribute("aria-label"))!;
+
+    if (/falls near full Moon/.test(label)) {
+      // Diverged: list ≠ detail, and the skipped opposition the tooltip
+      // names IS the list column's date.
+      expect(label).toContain(`Opposition ${listOppositionDate} falls`);
+      expect(label.startsWith(`${listOppositionDate} ·`)).toBe(false);
+    } else {
+      // Coincides / none-found: the detail date equals the list opposition.
+      expect(label.startsWith(`${listOppositionDate} ·`)).toBe(true);
+    }
+  });
 });

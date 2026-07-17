@@ -287,6 +287,11 @@ by soonest-next-opposition.
   consolidated planner table and MUST be sized to its real content
   ("14 Apr · in 9 months") per spec 044's content-driven sizing requirement
   (closes #792); soonest-next sort semantics (SC-003) are unchanged.
+  *(Iteration 2026-07-17)*: the LIST opposition column remains this pure
+  geometric transit-at-midnight date. Spec 044's detail-panel Moon-aware
+  best date (044 FR-009 amendment) consumes this opposition search and the
+  shared Lorentzian rule (FR-009) as-is — it never redefines the rule, the
+  parameters, or this column's value/sort.
 
 **Boundary and placeholder integrity**
 

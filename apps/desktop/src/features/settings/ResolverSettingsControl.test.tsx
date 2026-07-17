@@ -135,8 +135,10 @@ describe('ResolverSettingsControl', () => {
   it('hides endpoint/debounce/timeout fields in compact mode', async () => {
     render(<ResolverSettingsControl compact />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // findBy: `loaded` flips in a .finally() after mockGet resolves, so a
+    // sync getBy races the skeleton on slow CI runners (macOS/Windows).
     expect(
-      screen.getByLabelText('Enable online SIMBAD resolution'),
+      await screen.findByLabelText('Enable online SIMBAD resolution'),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('SIMBAD endpoint')).toBeNull();
     expect(screen.queryByLabelText('Typeahead debounce (ms)')).toBeNull();

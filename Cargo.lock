@@ -5474,6 +5474,7 @@ name = "sessions"
 version = "0.1.0"
 dependencies = [
  "domain_core",
+ "skymath 0.3.0",
  "thiserror 2.0.18",
  "time",
  "uuid",

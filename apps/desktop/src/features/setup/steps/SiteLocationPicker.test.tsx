@@ -29,7 +29,8 @@ const { MockMap, MockMarker, MockNavigationControl } = vi.hoisted(() => {
       MockMap.instances.push(this);
     }
     on(event: string, cb: (...args: unknown[]) => void) {
-      (this.listeners[event] ??= []).push(cb);
+      this.listeners[event] ??= [];
+      this.listeners[event].push(cb);
     }
     addControl() {}
     remove() {

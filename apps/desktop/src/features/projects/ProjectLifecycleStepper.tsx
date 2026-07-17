@@ -44,8 +44,6 @@ function nextActionText(state: string): string {
       return m.projects_stepper_next_completed();
     case 'archived':
       return m.projects_stepper_next_archived();
-    case 'setup_incomplete':
-    case 'blocked':
     default:
       return m.projects_stepper_next_default();
   }

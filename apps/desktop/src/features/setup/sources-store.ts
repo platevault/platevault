@@ -230,7 +230,7 @@ export function validatePath(
   path: string,
   kind: SourceKind,
 ): ValidationError | null {
-  if (!path || !path.trim()) {
+  if (!path?.trim()) {
     return { code: 'path.empty', message: m.setup_validate_path_empty() };
   }
 
