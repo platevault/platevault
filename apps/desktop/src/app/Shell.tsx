@@ -10,6 +10,8 @@
 import { useEffect } from 'react';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import { usePreferences } from '@/data/preferences';
+import { stepZoomIn, stepZoomOut, resetZoom } from '@/data/theme';
+import { useHotkeys } from '@/lib/useHotkeys';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { LogPanel } from './LogPanel';
@@ -51,6 +53,45 @@ function ShellInner() {
     if (!prefs.setupCompleted) return;
     void loadObservingState();
   }, [prefs.setupCompleted]);
+
+  // Spec 055 T030: app-owned whole-app zoom shortcuts (VS Code-style,
+  // stacks with the font-size dial). Window-local tinykeys bindings, NOT
+  // Tauri global shortcuts — WebView2 exposes no zoom-change event, so the
+  // app must own every write path; there is no listener to keep in sync.
+  useHotkeys(
+    {
+      '$mod+Equal': (e) => {
+        e.preventDefault();
+        stepZoomIn();
+      },
+      '$mod+Shift+Equal': (e) => {
+        e.preventDefault();
+        stepZoomIn();
+      },
+      '$mod+NumpadAdd': (e) => {
+        e.preventDefault();
+        stepZoomIn();
+      },
+      '$mod+Minus': (e) => {
+        e.preventDefault();
+        stepZoomOut();
+      },
+      '$mod+NumpadSubtract': (e) => {
+        e.preventDefault();
+        stepZoomOut();
+      },
+      '$mod+Digit0': (e) => {
+        e.preventDefault();
+        resetZoom();
+      },
+      '$mod+Numpad0': (e) => {
+        e.preventDefault();
+        resetZoom();
+      },
+    },
+    [],
+    { ignoreFormFields: false },
+  );
 
   // Guided first-project-flow coach (spec 010).
   const guided = useGuidedFlow(prefs.setupCompleted);
