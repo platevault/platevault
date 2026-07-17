@@ -17,25 +17,35 @@
 # journeys no longer race each other over shared :4444/:4445 ports or a
 # shared DB file.
 #
-# `test-threads` stays at 1 DESPITE that isolation, pending a product-code
-# fix outside this crate: `tauri_plugin_single_instance::init()`
-# (`apps/desktop/src-tauri/src/lib.rs`) registers a Linux D-Bus well-known
-# name derived only from the app identifier + version — no per-process
-# override. Two concurrent `desktop_shell` instances collide on that name;
-# the loser is silently redirected to the winner and never opens its own
-# window, so its WebDriver plugin server never comes up (observed
-# deterministically on ubuntu, CI runs 29593925067/29592400990 — the SAME
-# journey slot failed `WebDriver session not created` on both nextest
-# retries, at both a 120s and a 240s `LAUNCH_TIMEOUT`, while sibling
-# journeys booted normally in the same run). Windows did not reproduce this
-# in the same runs, but the harness makes no OS-specific claim either way.
-# Raising `test-threads` above 1 again requires parameterizing the
-# single-instance dbus id (e.g. `Builder::new(..).dbus_id(..)` with an
-# env-derived per-instance id under the `e2e` feature) in
-# `apps/desktop/src-tauri/src/lib.rs` first.
+# `test-threads` was pinned at 1 despite that isolation because of a second,
+# product-code collision: `tauri_plugin_single_instance::init()`
+# (`apps/desktop/src-tauri/src/lib.rs`) registers ONE identity derived from
+# the app identifier + version, with a per-instance override available only on
+# Linux (`dbus_id`) — not Windows (named mutex) or macOS. Two concurrent
+# `desktop_shell` instances collide on that identity; the loser is silently
+# redirected to the winner and never opens its own window, so its WebDriver
+# plugin server never comes up (observed deterministically as
+# `WebDriver session not created` on the SAME journey slot across both nextest
+# retries — on ubuntu, CI runs 29593925067/29592400990, and on the windows
+# shard, run 29603000039 — while sibling journeys booted normally).
+#
+# Fixed by skipping the single-instance plugin entirely under e2e (the only
+# cross-platform fix, since Windows/macOS have no per-instance override, and no
+# journey exercises single-instance behaviour): the harness sets
+# `ALM_E2E_INSTANCE_ID` per test process (`crates/e2e-tests/tests/common/
+# mod.rs::spawn_tauri_webdriver`), and `apps/desktop/src-tauri/src/lib.rs`
+# omits the plugin when that env var is present — a no-op for real users/non-e2e
+# builds, where the var is never set and the guard stays registered.
+#
+# `test-threads = 2` (not higher): CI runners are 4-core, and each journey
+# boots a debug-build WebKitGTK/WebView2 app + SQLite migrate + ~13k-row
+# target-seed load (see `LAUNCH_TIMEOUT`'s docs) — 2 concurrent boots is the
+# contention CI was already tuned for (the 240s `LAUNCH_TIMEOUT` bump in
+# PR #951 assumed exactly this), and this fix's own verification run is the
+# first real evidence for going further.
 
 [profile.e2e]
-test-threads = 1
+test-threads = 2
 
 # Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
 # harness's LAUNCH_TIMEOUT (240 s — slow/contended debug-build app boot on CI

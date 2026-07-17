@@ -785,36 +785,56 @@ fn build_native_menu(app: &tauri::App<tauri::Wry>) -> tauri::Result<tauri::menu:
 pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
-    #[allow(unused_mut)]
-    let mut tb = tauri::Builder::default()
-        // Spec 051 US1: single-instance guard MUST be the first plugin
-        // registered so a redirected second launch is intercepted during
-        // `.build()` below — before any other plugin/state/window setup, and
-        // therefore before `main()` ever reaches `Database::connect`/
-        // `db.migrate()` (FR-003: the second launch performs no database
-        // migration, seed, or write of its own).
-        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-            tracing::info!(
-                ?argv,
-                %cwd,
-                "second launch attempt redirected to existing instance"
-            );
-            // FR-002: focus/foreground the existing main window, restoring it
-            // if minimized, instead of opening a new window or connection.
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(e) = window.unminimize() {
-                    tracing::warn!("failed to unminimize main window: {e:?}");
-                }
-                if let Err(e) = window.show() {
-                    tracing::warn!("failed to show main window: {e:?}");
-                }
-                if let Err(e) = window.set_focus() {
-                    tracing::warn!("failed to focus main window: {e:?}");
-                }
-            } else {
-                tracing::warn!("single-instance redirect: no `main` window found to focus");
-            }
-        }))
+    let mut tb = tauri::Builder::default();
+
+    // Spec 051 US1: the single-instance guard MUST be the first plugin
+    // registered so a redirected second launch is intercepted during
+    // `.build()` — before any other plugin/state/window setup, and therefore
+    // before `main()` ever reaches `Database::connect` / `db.migrate()`
+    // (FR-003: the second launch performs no migration, seed, or write).
+    //
+    // E2E escape hatch (crates/e2e-tests): the harness sets
+    // `ALM_E2E_INSTANCE_ID` (unique per test process) and launches several
+    // `desktop_shell` instances concurrently (`test-threads > 1`). The plugin
+    // enforces ONE well-known identity derived from the app identifier, and a
+    // per-instance override exists only on Linux (`dbus_id`) — NOT on Windows
+    // (named mutex) or macOS. So concurrent instances collide and the loser is
+    // silently redirected/exited without ever opening a window, timing out the
+    // WebDriver session (observed on the Windows shard). No journey exercises
+    // single-instance behaviour, so when the var is set we skip the plugin
+    // entirely on every platform. Unset (real users, non-e2e builds), the
+    // guard is registered unchanged.
+    if std::env::var_os("ALM_E2E_INSTANCE_ID").is_none() {
+        tb = tb.plugin(
+            tauri_plugin_single_instance::Builder::new()
+                .callback(|app, argv, cwd| {
+                    tracing::info!(
+                        ?argv,
+                        %cwd,
+                        "second launch attempt redirected to existing instance"
+                    );
+                    // FR-002: focus/foreground the existing main window,
+                    // restoring it if minimized, instead of opening a new
+                    // window or connection.
+                    if let Some(window) = app.get_webview_window("main") {
+                        if let Err(e) = window.unminimize() {
+                            tracing::warn!("failed to unminimize main window: {e:?}");
+                        }
+                        if let Err(e) = window.show() {
+                            tracing::warn!("failed to show main window: {e:?}");
+                        }
+                        if let Err(e) = window.set_focus() {
+                            tracing::warn!("failed to focus main window: {e:?}");
+                        }
+                    } else {
+                        tracing::warn!("single-instance redirect: no `main` window found to focus");
+                    }
+                })
+                .build(),
+        );
+    }
+
+    tb = tb
         // Spec 051 US4 (T027): window-state persistence. Registered right
         // after single-instance so a redirected second launch (which never
         // creates a window of its own) never touches this plugin's store
