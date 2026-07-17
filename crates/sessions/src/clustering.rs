@@ -459,7 +459,11 @@ fn best_matching_group(
             }
             let rotation_distance =
                 rotation_circular_distance_deg(rotation_deg, group.representative_rotation_deg());
-            if rotation_distance > f64::from(params.rotation_tolerance_deg) {
+            // Epsilon guards the inclusive boundary: skymath's circular
+            // distance round-trips through radians, so a degree input exactly
+            // at tolerance can come back ~1e-14° over (far below any real
+            // rotator precision) and spuriously fail this check.
+            if rotation_distance > f64::from(params.rotation_tolerance_deg) + 1e-9 {
                 return None;
             }
             Some((idx, pointing_distance))
@@ -489,8 +493,7 @@ struct GroupAccumulator {
     sum_sin_ra: f64,
     sum_cos_ra: f64,
     sum_dec: f64,
-    sum_sin_rot: f64,
-    sum_cos_rot: f64,
+    rotation_mean: skymath::CircularMean,
     count: u32,
     seed_used_fallback: bool,
     session_ids: Vec<EntityId>,
@@ -504,8 +507,7 @@ impl GroupAccumulator {
             sum_sin_ra: 0.0,
             sum_cos_ra: 0.0,
             sum_dec: 0.0,
-            sum_sin_rot: 0.0,
-            sum_cos_rot: 0.0,
+            rotation_mean: skymath::CircularMean::new(),
             count: 0,
             seed_used_fallback: false,
             session_ids: Vec::new(),
@@ -526,9 +528,7 @@ impl GroupAccumulator {
         self.sum_sin_ra += ra_rad.sin();
         self.sum_cos_ra += ra_rad.cos();
         self.sum_dec += pointing.dec_deg;
-        let rot_rad = f64::from(rotation_deg).to_radians();
-        self.sum_sin_rot += rot_rad.sin();
-        self.sum_cos_rot += rot_rad.cos();
+        self.rotation_mean.push(skymath::Angle::from_degrees(f64::from(rotation_deg)));
         self.count += 1;
         self.session_ids.push(session_id);
     }
@@ -545,11 +545,13 @@ impl GroupAccumulator {
         }
     }
 
-    // Angles live in [-180, 180] degrees; an f64->f32 rotation angle never
-    // approaches f32's magnitude limits, so this narrows precision, not range.
+    // `CircularMean::mean` normalizes to [0, 360); an f64->f32 rotation angle
+    // never approaches f32's magnitude limits, so this narrows precision, not
+    // range. `None` only when nothing was pushed — callers only call this
+    // once `count > 0` (see `representative_pointing`'s doc comment).
     #[allow(clippy::cast_possible_truncation)]
     fn representative_rotation_deg(&self) -> f32 {
-        self.sum_sin_rot.atan2(self.sum_cos_rot).to_degrees() as f32
+        self.rotation_mean.mean().map_or(0.0, |a| a.degrees() as f32)
     }
 }
 
@@ -596,8 +598,11 @@ fn to_equatorial(p: Pointing) -> skymath::Equatorial {
 /// modulo 360° (range `[0, 180]`). See module docs for why 360°, not 180°.
 #[must_use]
 pub fn rotation_circular_distance_deg(a: f32, b: f32) -> f64 {
-    let diff = (f64::from(a) - f64::from(b)).rem_euclid(360.0);
-    diff.min(360.0 - diff)
+    skymath::circular_distance(
+        skymath::Angle::from_degrees(f64::from(a)),
+        skymath::Angle::from_degrees(f64::from(b)),
+    )
+    .degrees()
 }
 
 /// Circular mean of a set of degree angles (mod 360°), for standalone testing
@@ -881,6 +886,30 @@ mod tests {
         assert!((rotation_circular_distance_deg(359.0, 1.0) - 2.0).abs() < 1e-9);
         // A deliberate ~180deg re-framing must NOT be treated as equivalent.
         assert!((rotation_circular_distance_deg(0.0, 180.0) - 180.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rotation_distance_shortest_arc_not_naive_diff() {
+        // 45 and 295 degrees are 110deg apart circularly (via the 350deg/0deg
+        // seam); a naive |a-b| would wrongly give 250.
+        assert!((rotation_circular_distance_deg(45.0, 295.0) - 110.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rotation_distance_property_bounded_and_correct() {
+        // Same shortest-arc formula the flat calibration rule relies on
+        // (calibration_core issue #921) — any pair of angles must land in
+        // [0, 180], never the naive `(a - b).abs()` this delegates away from.
+        let angles: [f32; 9] = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
+        for &a in &angles {
+            for &b in &angles {
+                let d = rotation_circular_distance_deg(a, b);
+                assert!((0.0..=180.0).contains(&d), "distance {d} out of [0,180] for ({a}, {b})");
+                let raw = (f64::from(a) - f64::from(b)).abs().rem_euclid(360.0);
+                let expected = raw.min(360.0 - raw);
+                assert!((d - expected).abs() < 1e-9, "({a}, {b}): got {d}, expected {expected}");
+            }
+        }
     }
 
     // ── FOV fallback path ────────────────────────────────────────────────────

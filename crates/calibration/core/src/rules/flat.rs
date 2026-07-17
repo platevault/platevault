@@ -69,7 +69,13 @@ pub fn evaluate(
     let rot_cfg = config.flat_rotation_config();
     match (session.rotation_deg, master.rotation_deg) {
         (Some(sr), Some(mr)) => {
-            let delta = (sr - mr).abs();
+            // Issue #921: rotator angles are circular — plain `.abs()` scored
+            // 359.9° vs 0.1° as 359.8° instead of the true 0.2° apart.
+            let delta = skymath::circular_distance(
+                skymath::Angle::from_degrees(sr),
+                skymath::Angle::from_degrees(mr),
+            )
+            .degrees();
             match rot_cfg.penalty(delta) {
                 Some(penalty) => {
                     matched.push(MatchedDim::soft(Dimension::Rotation, sr, mr, delta));
@@ -255,6 +261,85 @@ mod tests {
         );
         let r = r.unwrap();
         assert!(r.dimensions_mismatched.iter().any(|d| d.dimension == "rotation"));
+    }
+
+    #[test]
+    fn rotation_wraparound_across_0_360_seam_matched() {
+        // Issue #921: 359.9° vs 0.1° is truly 0.2° apart, not 359.8° — must
+        // match within the default ±0.5° tolerance, not be max-penalized.
+        let s = SessionInfo { rotation_deg: Some(359.9), ..session() };
+        let r = evaluate(
+            &s,
+            &master_flat("Ha", "1x1", "train-a", 100.0, 0.1, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        assert!(
+            r.dimensions_matched.iter().any(|d| d.dimension == "rotation"),
+            "359.9 vs 0.1 should match within tolerance, got mismatched={:?}",
+            r.dimensions_mismatched
+        );
+        assert!(!r.dimensions_mismatched.iter().any(|d| d.dimension == "rotation"));
+    }
+
+    #[test]
+    fn rotation_far_apart_delta_is_shortest_arc_not_naive_diff() {
+        // 45° vs 295°: circularly 110° apart (the short way, through 0/360°
+        // seam via 350°); a naive |a-b| would wrongly give 250°.
+        let s = SessionInfo { rotation_deg: Some(45.0), ..session() };
+        let r = evaluate(
+            &s,
+            &master_flat("Ha", "1x1", "train-a", 100.0, 295.0, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        let delta = r
+            .dimensions_mismatched
+            .iter()
+            .find(|d| d.dimension == "rotation")
+            .and_then(|d| d.delta)
+            .expect("rotation should be out of tolerance with a delta");
+        assert!((delta - 110.0).abs() < 1e-9, "expected 110.0, got {delta}");
+    }
+
+    #[test]
+    fn rotation_antipodal_boundary_delta_is_180() {
+        // 0° vs 180°: maximally distant on the circle either direction.
+        let r = evaluate(
+            &session(),
+            &master_flat("Ha", "1x1", "train-a", 100.0, 180.0, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        let delta = r
+            .dimensions_mismatched
+            .iter()
+            .find(|d| d.dimension == "rotation")
+            .and_then(|d| d.delta)
+            .expect("rotation should be out of tolerance with a delta");
+        assert!((delta - 180.0).abs() < 1e-9, "expected 180.0, got {delta}");
+    }
+
+    #[test]
+    fn rotation_circular_distance_property_bounded_and_correct() {
+        // The exact function `evaluate` calls for the rotation delta: any
+        // pair of angles must be within [0, 180], and match the textbook
+        // shortest-arc formula — the naive `(a - b).abs()` this replaces
+        // (issue #921) can exceed 180 and blow past 360 near the seam.
+        let angles = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
+        for &a in &angles {
+            for &b in &angles {
+                let d = skymath::circular_distance(
+                    skymath::Angle::from_degrees(a),
+                    skymath::Angle::from_degrees(b),
+                )
+                .degrees();
+                assert!((0.0..=180.0).contains(&d), "distance {d} out of [0,180] for ({a}, {b})");
+                let raw = (a - b).abs().rem_euclid(360.0);
+                let expected = raw.min(360.0 - raw);
+                assert!((d - expected).abs() < 1e-9, "({a}, {b}): got {d}, expected {expected}");
+            }
+        }
     }
 
     #[test]
