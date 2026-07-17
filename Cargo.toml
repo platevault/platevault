@@ -135,3 +135,11 @@ pedantic = { level = "warn", priority = -1 }
 #   cargo clippy -- -W clippy::disallowed_methods
 # See docs/development/persistence-layer-hardening.md.
 disallowed_methods = "allow"
+
+# TEMPORARY: target-match's v0.4.0 tag predates its own skymath 0.3->0.4 bump
+# (nightwatch-astro/target-match#19, merged after that release) and its
+# crates.io publish never ran anyway — release-please's own action step
+# failed on a "PR is locked" bug before reaching `cargo publish`. Track main
+# (has the skymath 0.4 bump) until a real release lands on crates.io.
+[patch.crates-io]
+target-match = { git = "https://github.com/nightwatch-astro/target-match" }

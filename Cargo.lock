@@ -5617,16 +5617,6 @@ dependencies = [
 
 [[package]]
 name = "skymath"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98d582775f713520fed98cc8fd1ecaac9ca87f11447b557c0ab3892bf9af9cbe"
-dependencies = [
- "thiserror 2.0.18",
- "time",
-]
-
-[[package]]
-name = "skymath"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a10b1f9678d1f8e2aaa7f9f3af28e0c5d0bbb9c544ae563e08b5dc1d9fbc2bfb"
@@ -6229,11 +6219,10 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "target-match"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e2e3f70f5c67c7a6fc75a2b0afd4bf22c27228d0e08a76af481a25b8b2e2ec9"
+version = "0.4.0"
+source = "git+https://github.com/nightwatch-astro/target-match#8dbc0758cd51fd08f0aab67871a87f585fcf1029"
 dependencies = [
- "skymath 0.3.0",
+ "skymath 0.4.0",
  "thiserror 2.0.18",
 ]
 
