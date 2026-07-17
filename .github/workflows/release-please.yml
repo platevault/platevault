@@ -135,6 +135,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS Developer ID signing + notarization (see
+          # docs/development/code-signing.md). tauri-action reads these
+          # directly; an empty string is treated as unset, so gating each
+          # value on vars.ENABLE_MACOS_SIGNING keeps this inert until an
+          # Apple Developer account exists and the secrets are populated —
+          # no separate disabled job needed, unlike Windows/SignPath.
+          APPLE_CERTIFICATE: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && vars.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ vars.ENABLE_MACOS_SIGNING == 'true' && vars.APPLE_TEAM_ID || '' }}
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
@@ -167,7 +179,7 @@ jobs:
 
   # Authenticode-signs the Windows NSIS/MSI bundles via the SignPath
   # Foundation free OSS code-signing program (see
-  # docs/development/windows-code-signing.md for the research, eligibility
+  # docs/development/code-signing.md for the research, eligibility
   # verdict, and application checklist). Disabled by default: SignPath
   # Foundation approval + the SIGNPATH_* secrets/vars below are required
   # before this can run, so it is gated on a repo Actions variable that is

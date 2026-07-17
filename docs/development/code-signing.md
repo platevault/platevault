@@ -1,14 +1,17 @@
-# Windows code signing (Authenticode) — research and disabled infrastructure
+# Code signing (Windows Authenticode + macOS Developer ID) — research and infrastructure
 
-PlateVault's Windows release artifacts (NSIS `.exe`, `.msi`) are unsigned. They
-already carry a minisign signature consumed by `tauri-plugin-updater`
+PlateVault's Windows and macOS release artifacts are unsigned by their
+platform's native code-signing mechanism. Both already carry a minisign
+signature consumed by `tauri-plugin-updater`
 (`TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]`), but that signature is invisible to
-Windows itself — SmartScreen and the installer UAC prompt still show "Unknown
-Publisher" because there is no Authenticode signature. This doc records the
-free/OSS option research and the (currently disabled) CI wiring to close that
-gap.
+the OS itself — Windows SmartScreen/UAC and macOS Gatekeeper still flag the
+app as untrusted because there is no Authenticode or Developer ID signature.
+This doc covers both platforms: Windows has a free path (SignPath Foundation)
+with disabled-but-ready CI infrastructure below; macOS has no free path (see
+the dedicated section near the end) and is a fast-follow once a maintainer
+holds a paid Apple Developer account.
 
-## Provider comparison
+## Windows: provider comparison
 
 | Provider | Cost | Fit for this repo |
 |---|---|---|
@@ -61,8 +64,9 @@ Flow, once enabled (`.github/workflows/release-please.yml`):
 
 1. `build` job (Windows leg only) uploads the unsigned `.exe`/`.msi` as a
    workflow artifact (`windows-unsigned-bundles`) after `tauri-action`
-   publishes the unsigned release — this step is unconditional and inert
-   (an upload-artifact call) so it doesn't change today's release output.
+   publishes the unsigned release. This step is itself gated on
+   `vars.ENABLE_WINDOWS_SIGNING == 'true'`, so with the variable unset it is
+   skipped and today's release output is unchanged.
 2. `sign-windows` job downloads that artifact, re-uploads it under a fresh
    artifact ID (SignPath's action needs a `github-artifact-id` from an
    `upload-artifact` step in the *same* job), then submits it via
@@ -106,3 +110,74 @@ touch the other:
 5. Verify on the next tagged release: the `sign-windows` job should run after
    `build`, and the release's `.exe`/`.msi` assets should carry a valid
    Authenticode signature (`signtool verify /pa`) from SignPath Foundation.
+
+## macOS signing (state and path)
+
+Unlike Windows, **no free OSS code-signing path exists for macOS.** Apple does
+not delegate Developer ID certificate issuance the way public CAs do for
+Authenticode, so a SignPath-Foundation-style nonprofit intermediary is not
+possible — there is no equivalent program to apply to.
+
+- **Apple Developer Program ($99/yr) is the only route** to a Developer ID
+  Application certificate and notarization. A free Apple ID can build and
+  locally run an app, but cannot notarize, and Gatekeeper treats an
+  unnotarized app as untrusted on any machine other than the one that built
+  it.
+- **Fee waivers exist but don't apply here**: Apple waives the $99 fee for
+  nonprofit organizations, accredited educational institutions, and
+  government entities — not for informal open-source projects run by an
+  individual. This repo does not qualify. Source:
+  [Apple Developer Program Fee Waivers](https://developer.apple.com/help/account/membership/fee-waivers/).
+
+### Current state
+
+- Tauri applies **ad-hoc signing** to the arm64 (Apple Silicon) build
+  automatically — this is mandatory for the binary to execute at all on
+  Apple Silicon, but it is not a Developer ID signature and does nothing for
+  Gatekeeper/notarization trust.
+- The **minisign updater chain already verifies updates** independent of
+  Authenticode/Developer-ID status (same mechanism described above for
+  Windows) — in-app auto-update integrity is not affected by the absence of
+  macOS code signing.
+- **Gatekeeper friction is first-install only.** A user who downloads the
+  unsigned/unnotarized `.dmg`/`.app` sees "app is damaged" or "unidentified
+  developer" on first open. The documented bypass: right-click (or
+  Control-click) the app in Finder → Open → confirm in the dialog that
+  appears, which whitelists that specific app going forward; equivalently,
+  clear the quarantine attribute directly with
+  `xattr -d com.apple.quarantine /Applications/PlateVault.app`. Subsequent
+  launches are unaffected.
+
+### Recommended path: Apple Developer account as a fast-follow
+
+Once a maintainer enrolls in the $99/yr Apple Developer Program, wiring up
+signing follows the same disabled-by-default pattern as Windows above rather
+than a new mechanism:
+
+- **Tauri config point**: `bundle.macOS.signingIdentity` in
+  `apps/desktop/src-tauri/tauri.conf.json` (or the `APPLE_SIGNING_IDENTITY`
+  env var, which overrides it — used here to avoid a config change gated
+  only by env var presence).
+- **CI env vars**, added to the macOS leg of the `build` job's
+  `tauri-apps/tauri-action` step in `.github/workflows/release-please.yml`,
+  each gated behind `vars.ENABLE_MACOS_SIGNING == 'true'` (empty string when
+  the var is unset — `tauri-action` treats an empty value as not set, so this
+  is provably inert today, the same guarantee as the Windows job):
+  - Secret `APPLE_CERTIFICATE` (base64 `.p12`)
+  - Secret `APPLE_CERTIFICATE_PASSWORD`
+  - Actions variable `APPLE_SIGNING_IDENTITY`
+  - Secret `APPLE_ID` + Secret `APPLE_PASSWORD` (app-specific password) for
+    notarization, or the `APPLE_API_KEY`/`APPLE_API_ISSUER` App Store Connect
+    API key alternative
+  - Actions variable `APPLE_TEAM_ID`
+
+  Source: [Tauri v2 macOS code signing](https://v2.tauri.app/distribute/sign/macos/),
+  [Tauri v2 environment variables reference](https://v2.tauri.app/reference/environment-variables/).
+
+### Free distribution channel: Homebrew cask
+
+Independent of Developer ID signing, a **Homebrew cask** is a free
+distribution channel worth adding post-release — `brew install --cask` users
+get a documented, scriptable install path and Homebrew's cask audit gives
+some baseline trust signal even before notarization exists. This is a
+backlog item, not part of this PR's disabled infrastructure.
