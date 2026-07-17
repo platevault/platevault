@@ -20,45 +20,45 @@ Dependency graph: P1 → P2 → P3; P4 after spec 054 (or capped 125%).
 
 ## Phase 2 — Token layer + dial (FR-002/003; SC-003/004)
 
-- [ ] T010 Re-derive scale in rem: 14px base, even-px preference, 11px floor,
+- [x] T010 Re-derive scale in rem: 14px base, even-px preference, 11px floor,
       top ~24px; retire 10px token; map every existing token.
-- [ ] T011 [depends T010] theme.ts: delete 0.9/1.0/1.15 per-token scaler;
+- [x] T011 [depends T010] theme.ts: delete 0.9/1.0/1.15 per-token scaler;
       setting writes integer `html{font-size:12|14|16px}`; per-token rounding
       guard so no dial stop computes fractional or sub-11px.
-- [ ] T012 Tokenize the 11 hardcoded px sizes (sidebar/settings labels 9.5px,
+- [x] T012 Tokenize the 11 hardcoded px sizes (sidebar/settings labels 9.5px,
       wizard titles/fine print, planner SVG axis 9px, toast glyph).
-- [ ] T013 Consolidate uppercase micro-label sizes to one token; add
+- [x] T013 Consolidate uppercase micro-label sizes to one token; add
       letter-spacing tokens replacing the 8 divergent values.
-- [ ] T014 [depends T011] CI computed-style sweep: integer root at all stops,
+- [x] T014 [depends T011] CI computed-style sweep: integer root at all stops,
       nothing fractional, nothing below 11px (SC-003); all text scales with the
       dial (SC-004).
-- [ ] T015 J10 journey delta for the new dial semantics.
+- [x] T015 J10 journey delta for the new dial semantics.
 
 ## Phase 3 — Semantic base layer + mono (FR-004/005; SC-005/006)
 
-- [ ] T020 Semantic base layer: `strong,b`→semibold token; `em,i`→real italic
+- [x] T020 Semantic base layer: `strong,b`→semibold token; `em,i`→real italic
       faces; `code,pre,kbd`→mono stack; define-or-delete `font-mono`.
-- [ ] T021 [depends T020] Replace the `* { font-family !important }` blanket
+- [x] T021 [depends T020] Replace the `* { font-family !important }` blanket
       with base layer + explicit stacks; re-add stripped mono declarations by
       hand (template: feature-lists.css:783).
-- [ ] T022 [depends T021] Mono restoration surfaces: filesystem paths,
+- [x] T022 [depends T021] Mono restoration surfaces: filesystem paths,
       source-view IDs, manifest paths, dev-tools contract names, RA/Dec
       coordinate values. Default `ui-monospace,'Cascadia Code',monospace`.
-- [ ] T023 [depends T022] Windows pass: verify mono stack acceptability
+- [x] T023 [depends T022] Windows pass: verify mono stack acceptability
       (escalate to bundled JetBrains Mono only on failure); evaluate
       `'zero' 1`/`'case' 1` on coordinate surfaces.
-- [ ] T024 E2E: no synthetic bold/italic (loaded-face check, SC-005); mono
+- [x] T024 E2E: no synthetic bold/italic (loaded-face check, SC-005); mono
       surfaces computed-family assertion (SC-006).
 
 ## Phase 4 — Engine zoom (FR-006; SC-007) — max 150% (054 orphaned; see spec FR-006 envelope)
 
-- [ ] T030 Capability `core:webview:allow-set-webview-zoom`; `setZoom` wired to
+- [x] T030 Capability `core:webview:allow-set-webview-zoom`; `setZoom` wired to
       app-owned Ctrl+=/−/0; persistence mirrors fontSize setting.
 - [x] T031 ~~One-line clarification into spec 054~~ DROPPED 2026-07-17: user chose to leave spec 054 orphaned (PR #937 untouched); Phase 4 ships capped at 125%, so the CSS-px
       viewport measurements, never Tauri window size.
-- [ ] T032 [depends T030] CI pin: min window 1100×720 × max zoom — layout
+- [x] T032 [depends T030] CI pin: min window 1100×720 × max zoom — layout
       intact (with 054: dock bottom mode) (SC-007).
-- [ ] T033 [depends T030] J10 journey delta amendment (zoom);
+- [x] T033 [depends T030] J10 journey delta amendment (zoom);
       `verify-on-windows` zoom scenario.
 
 > **Phase 1 verification record (2026-07-17)**: T001–T003 merged via PR #947
@@ -69,3 +69,13 @@ Dependency graph: P1 → P2 → P3; P4 after spec 054 (or capped 125%).
 > faces at 11–16px incl. coordinates/Greek glyphs confirmed good; runtime
 > probes: 6 bundled faces registered, 0 CDN requests, only weights
 > 400/500/600 in use. **Phase 2 gate: OPEN.**
+
+> **Completion record (2026-07-17)**: Phase 2 merged via PR #957 (integer dial
+> 12/14/16, all hardcoded sizes tokenized, letter-spacing tokens, J10 Δ6);
+> Phase 3 via PR #956 (semantic base layer, blanket removal, mono restoration
+> incl. RA/Dec split on user request, `.alm-mono` resurrection); Phase 4 via
+> PR #958 (`532f11d6` — zoom 90–150%, Ctrl+=/−/0, FR-006 envelope pins, J10
+> Δ7). T023 executed live on Windows 2026-07-17: mono surfaces + RA/Dec
+> confirmed by the user ("amazing" on zoom); system mono stack accepted, no
+> JetBrains Mono bundle needed. Follow-ups: PR #963 (pills stay sans in mono
+> cells), issue #962 (title-bar truncation, spec:043). Spec 055: COMPLETE.
