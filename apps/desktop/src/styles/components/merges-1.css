@@ -210,7 +210,7 @@
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
 }
 
 /* ── Cleanup: protected-category block ────────────────────────────────────── */
@@ -218,7 +218,7 @@
   font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
   padding: var(--alm-sp-2) 0 var(--alm-sp-1);
 }
@@ -404,7 +404,7 @@
   align-items: center;
   gap: var(--alm-sp-0);
   margin-left: var(--alm-sp-1);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-normal);
   color: var(--alm-warn);
 }
@@ -517,10 +517,10 @@
   padding: 0 var(--alm-sp-3) var(--alm-sp-2);
 }
 .alm-project-detail__target-label {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
 }
 

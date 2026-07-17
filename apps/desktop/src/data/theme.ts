@@ -109,18 +109,23 @@ export const SPACING_BASE_PX: Record<string, number> = {
   '--alm-sp-7': 48,
 };
 
+/**
+ * Text-scale token values (px) at the 14px default root — the same numbers
+ * tokens.css encodes as rem (`11/14`, `12/14`, ...). Kept here, rather than
+ * only in rem, so `applyFontSize`'s per-token rounding guard (spec 055 T011)
+ * has an integer starting point to scale from.
+ */
 export const TEXT_SCALE_BASE_PX: Record<string, number> = {
-  '--alm-text-2xs': 10,
   '--alm-text-xs': 11,
   '--alm-text-sm': 12,
-  '--alm-text-base': 13,
-  '--alm-text-md': 14,
-  '--alm-text-lg': 16,
-  '--alm-text-xl': 18,
-  '--alm-text-2xl': 22,
+  '--alm-text-base': 14,
+  '--alm-text-md': 16,
+  '--alm-text-lg': 18,
+  '--alm-text-xl': 20,
+  '--alm-text-2xl': 24,
 };
 
-/** Rescales a base token table onto <html> inline styles; `scale === 1` clears the override (back to tokens.css defaults). */
+/** Rescales the spacing token table onto <html> inline styles; `scale === 1` clears the override (back to tokens.css defaults). */
 function applyTokenScale(base: Record<string, number>, scale: number): void {
   const style = document.documentElement.style;
   for (const [token, px] of Object.entries(base)) {
@@ -300,11 +305,62 @@ export type FontSizeChoice = 'small' | 'default' | 'large';
 
 const FONT_SIZE_KEY = 'alm.fontSize';
 const FONT_SIZE_SETTINGS_KEY = 'fontSize';
-const FONT_SIZE_SCALE: Record<FontSizeChoice, number> = {
-  small: 0.9,
-  default: 1,
-  large: 1.15,
+
+/**
+ * Root `<html>` font-size per dial stop (spec 055 FR-002) — three integer
+ * px values, replacing the old 0.9/1.0/1.15 fractional multiplier. `default`
+ * matches reset.css's `html { font-size: 14px }`, so it is also the value
+ * `applyFontSize('default')` clears back to.
+ */
+const FONT_SIZE_ROOT_PX: Record<FontSizeChoice, number> = {
+  small: 12,
+  default: 14,
+  large: 16,
 };
+
+/**
+ * Per-token rounding guard (spec 055 T011, plan.md "mandatory, not
+ * optional"): tokens.css expresses `--alm-text-*` as rem against the 14px
+ * root, so at the 12px/16px stops every token computes fractional
+ * (`× 12/14` / `× 16/14`) — e.g. `--alm-text-md` at 16px root is
+ * `18.2857...px`. Browsers don't reliably sub-pixel-snap fractional
+ * `font-size` the same way across platforms, and spec 055's whole premise is
+ * eliminating fractional/sub-floor text, so each token is independently
+ * rounded to the nearest integer px and written as an inline override —
+ * exactly mirroring the retired `applyTokenScale` px-with-scale approach,
+ * but per dial stop instead of a continuous multiplier.
+ *
+ * At the `default` (14px) stop the ratio is 1, so every rounded value is
+ * already the exact TEXT_SCALE_BASE_PX integer (11/12/14/16/18/20/24) — no
+ * override needed there; `applyFontSize('default')` clears the props and
+ * lets tokens.css's rem values (which resolve to those same integers at the
+ * 14px root) take over.
+ *
+ * The 11px floor (FR-003/SC-003) is guaranteed at `default` only, per the
+ * spec's own note: at `small`, the floor token (`--alm-text-xs`) rounds to
+ * 9px — a documented, accepted exception, not a bug. Computed values per
+ * stop (verified in theme.tokens-drift.test.ts / typography_dial.spec.ts):
+ *   small (12px root):   xs=9  sm=10 base=12 md=14 lg=15 xl=17 2xl=21
+ *   default (14px root): xs=11 sm=12 base=14 md=16 lg=18 xl=20 2xl=24
+ *   large (16px root):   xs=13 sm=14 base=16 md=18 lg=21 xl=23 2xl=27
+ *
+ * `applyFontSize` writes this rounded table at EVERY stop, including
+ * `default` — not only 12px/16px. tokens.css's rem values (e.g.
+ * `0.7857rem`) are truncated decimal approximations of repeating fractions
+ * (11/14 has no terminating decimal), so at a 14px root they resolve to
+ * `10.9998px`, not exactly `11px`. Falling back to the untouched rem tokens
+ * at `default` therefore reintroduces fractional computed sizes — the exact
+ * defect this rework removes. The inline px override is the only path that
+ * is exact at every stop; tokens.css's rem values only matter pre-JS-boot.
+ */
+function roundedTextScalePx(rootPx: number): Record<string, number> {
+  const scale = rootPx / FONT_SIZE_ROOT_PX.default;
+  const result: Record<string, number> = {};
+  for (const [token, basePx] of Object.entries(TEXT_SCALE_BASE_PX)) {
+    result[token] = Math.round(basePx * scale);
+  }
+  return result;
+}
 
 function isFontSizeChoice(v: unknown): v is FontSizeChoice {
   return v === 'small' || v === 'default' || v === 'large';
@@ -345,7 +401,17 @@ export function applyFontSize(
   choice: FontSizeChoice = getFontSizeChoice(),
 ): void {
   if (typeof document === 'undefined') return;
-  applyTokenScale(TEXT_SCALE_BASE_PX, FONT_SIZE_SCALE[choice]);
+  const style = document.documentElement.style;
+  const rootPx = FONT_SIZE_ROOT_PX[choice];
+
+  // Always writes an explicit integer px for every stop, including
+  // `default` — see roundedTextScalePx's docstring for why the rem tokens
+  // alone can't be trusted to land on an exact integer at any stop.
+  style.setProperty('font-size', `${rootPx}px`);
+  const rounded = roundedTextScalePx(rootPx);
+  for (const [token, px] of Object.entries(rounded)) {
+    style.setProperty(token, `${px}px`);
+  }
 }
 
 export function setFontSizeChoice(choice: FontSizeChoice): void {

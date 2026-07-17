@@ -169,6 +169,86 @@ terminal:
   ```
   Then read `/mnt/c/dev/astro-plan/tauri-dev.log` for progress.
 
+### Validation driving (MCP bridge, reset, recompile trap)
+
+Canonical mechanics for driving the **real running app** during validation —
+manual computer-use ("cowork") scenarios and automated journeys alike. Each
+block below is self-contained: copy the relevant one verbatim into a scenario or
+run doc, since a zero-context agent must be able to execute it without following
+a link.
+
+**Launch with a throwaway database (bridge on).** For validation, point the app
+at a disposable DB inside the checkout so a reset never touches a real library,
+and launch with the dev overlay that enables the MCP bridge:
+
+```powershell
+cd C:\dev\astro-plan\apps\desktop
+$env:VITE_USE_MOCKS = 'false'                                        # real backend
+$env:ALM_DB_URL     = 'sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc'
+pnpm tauri dev --config src-tauri\tauri.dev.conf.json               # overlay = bridge on
+```
+
+`scripts\win-native-dev.ps1` launches the same overlay with the real backend;
+add the `ALM_DB_URL` line above when you need a disposable DB. Any `run-dev*.bat`
+referenced elsewhere is an optional local convenience wrapper — **not** tracked
+in the repo, so the tracked launcher above is the source of truth. App process is
+`desktop_shell.exe`; Vite on `http://127.0.0.1:5173`.
+
+**Reset to a clean first-run.** The DB is the first-run source of truth —
+clearing `localStorage` alone triggers a `/`↔`/setup` redirect loop, not a
+reset. Delete the throwaway DB and relaunch:
+
+```powershell
+Remove-Item 'C:\dev\astro-plan\wizard-test.db*' -Force
+```
+
+**Recompile (mtime) trap.** Deploy a branch as its own command, then force a
+rebuild when any Rust changed — `git reset --hard` restores file content but
+keeps the old mtime, so cargo thinks the binary is current and runs a **stale**
+build (symptom: a command that IS in the code returns "not found"):
+
+```powershell
+cd C:\dev\astro-plan
+git fetch origin
+git reset --hard origin/<branch>        # its OWN command (a guard rejects it bundled)
+Get-ChildItem <changed>.rs | ForEach-Object { $_.LastWriteTime = Get-Date }
+```
+
+Then relaunch (`tauri dev` recompiles). A frontend-only change needs only a hard
+refresh (Ctrl+R). Confirm the binary mtime is newer than the source.
+
+**Connect the MCP bridge.** The bridge is `#[cfg(debug_assertions)]`, WebSocket
+on `0.0.0.0:9223`. This host runs WSL in mirrored networking, so `localhost`
+reaches Windows directly — connect with `driver_session host=localhost
+port=9223`. The old NAT gateway-IP lookup (`ip route show default`) is
+**obsolete**. Invoke a command directly with `webview_execute_js` →
+`window.__TAURI__.core.invoke('<snake_command>', {args})` (`ipc_execute_command`
+rejects many real commands but is fine for scripted backend probes).
+
+**Native pickers can't be driven.** Relaunch with `VITE_E2E=1` to expose
+`data-testid="e2e-path-input-<kind>"` / `e2e-add-path-btn-<kind>` stand-ins
+(kinds: `light_frames`, `calibration`, `project`, `inbox`). Set the
+React-controlled input via the native value setter + dispatch `input`, then click
+the button in a **separate** call so React state commits.
+
+**Driving quirks.** JS eval has a ~2 s timeout (avoid zombie loops); navigate in
+two steps (nav, then probe); **never** send modifier-key combos (renderer
+freeze). Recovery: kill `desktop_shell`, relaunch.
+
+**Blank screen (empty `#root`).** Two Vite causes: a mid-session `pnpm install`
+re-optimized deps → restart the dev server; or a cold start hit the
+`@rollup/rollup-win32-x64-msvc` optional-native bug → `pnpm install` with
+`$env:CI='true'`, then relaunch.
+
+**Fidelity honesty.** Backend-only IPC probes do not substitute for UI-level
+checks: anything visually or interactively observable must be validated in the
+real webview, not IPC-only. State which fidelity you actually drove.
+
+The test-layer and coverage story (Layer-1 integration, Layer-2 `tauri-driver`,
+the coverage matrix) lives in `docs/development/testing.md` and
+`specs/037-e2e-integration-testing/contracts/coverage-matrix.md` — it is not
+restated here.
+
 ## Stop / cleanup
 
 ```powershell

@@ -39,7 +39,7 @@
   padding: var(--alm-sp-1) var(--alm-sp-2);
   font-family: var(--alm-font-mono);
   color: var(--alm-text-muted);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
 }
 
 /* Cell — contract name: monospace */
@@ -346,7 +346,7 @@
   border-radius: 50%;
   border: 1px solid var(--alm-text-faint);
   color: var(--alm-text-muted);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   font-style: normal;
   line-height: 1;

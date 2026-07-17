@@ -23,16 +23,17 @@ the `release-please` skill.
 ## Authentication — the `nightwatch-astro-ci` GitHub App (not a PAT)
 
 release-please authenticates with a **GitHub App installation token**, minted in
-the workflow from the org secrets `NIGHTWATCH_APP_ID` /
-`NIGHTWATCH_APP_PRIVATE_KEY` (app slug `nightwatch-astro-ci`, permissions
-`contents: write` + `pull_requests: write`):
+the workflow from the org-wide (visibility=all) credentials
+`RELEASE_APP_CLIENT_ID` (Actions variable) / `RELEASE_APP_PRIVATE_KEY` (Actions
+secret) (app slug `nightwatch-astro-ci`, permissions `contents: write` +
+`pull_requests: write`):
 
 ```yaml
 - uses: actions/create-github-app-token@v1
   id: app-token
   with:
-    app-id: ${{ secrets.NIGHTWATCH_APP_ID }}
-    private-key: ${{ secrets.NIGHTWATCH_APP_PRIVATE_KEY }}
+    app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+    private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 - uses: googleapis/release-please-action@v5
   with:
     token: ${{ steps.app-token.outputs.token }}
@@ -100,6 +101,19 @@ rsign verify -p /tmp/pub -x /tmp/m.minisig /tmp/m.txt   # "Signature ... verifie
 If they don't pair, CI ships `.sig` files the embedded pubkey can't verify — a
 silently-broken updater. Always verify before the first signed release after a
 key change.
+
+## OS code signing — not yet in place
+
+Today only the minisign updater signing above exists. There is **no Windows
+Authenticode signing and no macOS notarization** — released bundles trigger
+SmartScreen ("unrecognized publisher") on Windows and a Gatekeeper
+"unidentified developer" refusal on macOS. This is expected until an OS-level
+signing certificate is wired into the release workflow.
+
+Disabled SignPath-style infrastructure for Windows signing is being added on a
+separate branch, `ci/windows-oss-signing`; it is not wired into
+`release-please.yml` yet. Do not assume Windows builds are Authenticode-signed
+until that lands and this section is updated.
 
 ## Versioning — pre-1.0 (0.x) policy
 

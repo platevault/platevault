@@ -93,27 +93,50 @@ describe('applyDensity — spacing tokens (app-wide, not just row height)', () =
   });
 });
 
-describe('applyFontSize — type-scale tokens (app-wide)', () => {
-  it('scales --alm-text-* down for small and up for large', async () => {
+describe('applyFontSize — root font-size + per-token rounding guard (spec 055 T011)', () => {
+  it('writes an integer html font-size per dial stop', async () => {
     const { applyFontSize } = await import('./theme');
     const style = document.documentElement.style;
 
     applyFontSize('small');
-    expect(style.getPropertyValue('--alm-text-base')).toBe('11.70px'); // 13 * 0.9
+    expect(style.getPropertyValue('font-size')).toBe('12px');
 
     applyFontSize('large');
-    expect(style.getPropertyValue('--alm-text-base')).toBe('14.95px'); // 13 * 1.15
+    expect(style.getPropertyValue('font-size')).toBe('16px');
   });
 
-  it('clears the override for default', async () => {
+  it('rounds --alm-text-* tokens to integer px per stop (no fractional px, floor may drop below 11 only at small)', async () => {
     const { applyFontSize } = await import('./theme');
     const style = document.documentElement.style;
 
+    applyFontSize('small');
+    expect(style.getPropertyValue('--alm-text-xs')).toBe('9px'); // floor exception at small
+    expect(style.getPropertyValue('--alm-text-sm')).toBe('10px');
+    expect(style.getPropertyValue('--alm-text-base')).toBe('12px');
+    expect(style.getPropertyValue('--alm-text-md')).toBe('14px');
+    expect(style.getPropertyValue('--alm-text-lg')).toBe('15px');
+    expect(style.getPropertyValue('--alm-text-xl')).toBe('17px');
+    expect(style.getPropertyValue('--alm-text-2xl')).toBe('21px');
+
     applyFontSize('large');
-    expect(style.getPropertyValue('--alm-text-base')).not.toBe('');
+    expect(style.getPropertyValue('--alm-text-xs')).toBe('13px');
+    expect(style.getPropertyValue('--alm-text-sm')).toBe('14px');
+    expect(style.getPropertyValue('--alm-text-base')).toBe('16px');
+    expect(style.getPropertyValue('--alm-text-md')).toBe('18px');
+    expect(style.getPropertyValue('--alm-text-lg')).toBe('21px');
+    expect(style.getPropertyValue('--alm-text-xl')).toBe('23px');
+    expect(style.getPropertyValue('--alm-text-2xl')).toBe('27px');
+  });
+
+  it('writes explicit integer px at default too (rem tokens alone are not exact — see roundedTextScalePx docstring)', async () => {
+    const { applyFontSize } = await import('./theme');
+    const style = document.documentElement.style;
 
     applyFontSize('default');
-    expect(style.getPropertyValue('--alm-text-base')).toBe('');
+    expect(style.getPropertyValue('font-size')).toBe('14px');
+    expect(style.getPropertyValue('--alm-text-xs')).toBe('11px');
+    expect(style.getPropertyValue('--alm-text-base')).toBe('14px');
+    expect(style.getPropertyValue('--alm-text-2xl')).toBe('24px');
   });
 });
 
@@ -174,7 +197,7 @@ describe('hydrateThemeFromSettings — reconciles font size alongside theme', ()
     expect(getFontSizeChoice()).toBe('large');
     expect(
       document.documentElement.style.getPropertyValue('--alm-text-base'),
-    ).toBe('14.95px');
+    ).toBe('16px');
   });
 
   it('ignores a malformed fontSize value and keeps the current choice', async () => {
