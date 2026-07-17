@@ -406,8 +406,8 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (browser dev server, vitest, Playwright mock mode) the engine call is a
   guarded no-op — the setting still persists and the control still reflects
   the chosen step. Max zoom is capped at 150% (user decision 2026-07-17);
-  spec 054 (adaptive detail dock) is tracked separately (PR #937), not a
-  dependency here, and the resulting layout
+  spec 054 (adaptive detail dock) is a separate feature — since shipped, see
+  Δ8/S11 — not a dependency here, and the resulting layout
   degradation at min-window (1100×720) × 150% is documented and accepted,
   not guarded. Two CI pins cover the accepted envelope: 1100×720×125% and
   1320×864×150%, both emulated in mock mode as an 880×576 viewport (no
