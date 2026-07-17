@@ -1757,3 +1757,14 @@ button.alm-wizard__steps-card:disabled {
   align-items: center;
   gap: var(--alm-sp-4);
 }
+
+/* #719: zero-source create hint on the Sources step */
+.alm-wizard-sources__zero-hint {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  background: var(--alm-surface-muted, var(--alm-surface));
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm, 4px);
+  padding: var(--alm-sp-3);
+  margin-bottom: var(--alm-sp-3);
+}

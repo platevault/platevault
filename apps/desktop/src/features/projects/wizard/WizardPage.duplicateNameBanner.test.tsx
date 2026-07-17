@@ -28,9 +28,11 @@ import {
   act,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn().mockReturnValue(undefined),
+  useSearch: () => ({}),
 }));
 
 vi.mock('@/features/projects/store', () => ({
@@ -41,7 +43,10 @@ vi.mock('@/shared/toast', () => ({
   addToast: vi.fn(),
 }));
 
-const { mockListProjects } = vi.hoisted(() => ({ mockListProjects: vi.fn() }));
+const { mockListProjects, mockSessionsList } = vi.hoisted(() => ({
+  mockListProjects: vi.fn(),
+  mockSessionsList: vi.fn(),
+}));
 vi.mock('@/bindings/index', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/bindings/index')>();
   return {
@@ -49,6 +54,7 @@ vi.mock('@/bindings/index', async (importOriginal) => {
     commands: {
       ...original.commands,
       projectsList: mockListProjects,
+      sessionsList: mockSessionsList,
     },
   };
 });
@@ -145,7 +151,19 @@ beforeEach(() => {
     status: 'ok',
     data: [EXISTING_PROJECT],
   });
+  mockSessionsList.mockResolvedValue({ status: 'ok', data: [] });
 });
+
+function renderWizard() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <WizardPage />
+    </QueryClientProvider>,
+  );
+}
 
 async function advanceToReview(nameValue: string) {
   const nameInput = screen.getByLabelText('Project name');
@@ -180,7 +198,7 @@ async function advanceToReview(nameValue: string) {
 
 describe('WizardPage duplicate-name banner persistence (backlog defect)', () => {
   it('keeps the duplicate-name banner visible after StepName remounts on step 0, and only clears it once the name actually changes', async () => {
-    render(<WizardPage />);
+    renderWizard();
     // Same name, different case — the pre-check is case-insensitive.
     await advanceToReview('existing project');
 

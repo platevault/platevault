@@ -133,3 +133,61 @@ test.describe("project lifecycle · creation wizard (spec 008 US1 / Journey 5)",
     await expect(createBtn).toBeDisabled();
   });
 });
+
+// #887/#719/#586/#612/#783/#795 (2026-07-17): wizard-only convergence —
+// CreateProjectDialog retired, its target picker + validation folded into
+// the wizard, zero-source creation reachable, "From target context" no
+// longer fabricated, redundant "Save draft" button removed.
+test.describe("project creation wizard convergence (#887/#719/#586/#783/#795)", () => {
+  test("#719: zero-source creation is reachable — Create succeeds without selecting any session", async ({
+    page,
+  }) => {
+    await openWizard(page);
+    await page.locator("#project-name").fill("Zero Source Project");
+
+    // Advance past Sources (step 1) WITHOUT selecting any session.
+    for (const label of NEXT_LABELS) {
+      await page.getByRole("button", { name: label }).click();
+    }
+
+    const createBtn = page.getByTestId("wizard-create-btn");
+    await expect(createBtn).toBeEnabled();
+    await createBtn.click();
+
+    await expect(
+      page.getByText(/created — project folders created on disk/i),
+    ).toBeVisible({ timeout: 5_000 });
+  });
+
+  test("#795: the redundant 'Save draft' button is gone from the wizard toolbar", async ({
+    page,
+  }) => {
+    await openWizard(page);
+    await expect(
+      page.getByRole("button", { name: "Save draft" }),
+    ).toHaveCount(0);
+  });
+
+  test("#783/#887/#612: 'From target context' is absent until a real target is picked, then reflects it", async ({
+    page,
+  }) => {
+    await openWizard(page);
+
+    // Typed name alone must never fabricate a "From target context" line.
+    await page.locator("#project-name").fill("Andromeda Wide Field");
+    await expect(page.getByText(/From target context:/)).toHaveCount(0);
+
+    // The folded-in target picker (from the retired CreateProjectDialog) —
+    // pick a real target via the mock target.search fixture.
+    const targetCombobox = page.getByRole("combobox", {
+      name: "Target (optional)",
+    });
+    await targetCombobox.fill("Andromeda");
+    await page.getByRole("option", { name: /M 31/ }).click();
+
+    // Now the sub-toolbar reflects the REAL picked target, not typed text.
+    await expect(
+      page.getByText(/From target context:.*Andromeda Galaxy/),
+    ).toBeVisible({ timeout: 5_000 });
+  });
+});

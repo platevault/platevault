@@ -1,79 +1,49 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * #599 (Constitution-II): this step used to render a static `NGC7000_HOO/`
+ * fixture plan + disk tree regardless of the project actually being created
+ * — "reviewing the plan" meant reviewing fiction. The backend has no
+ * plan-preview endpoint (the scaffolding plan is generated and, for
+ * mkdir-only plans, auto-applied at `projects.create` time), so this step
+ * now shows only facts the wizard actually knows pre-create — the real
+ * selections from steps 1-5 — plus the fixed, always-identical top-level
+ * layout every project gets. The itemized junction/copy plan itself remains
+ * reviewable after creation via the project's audit trail, per Constitution
+ * II ("every filesystem plan MUST be represented as a reviewable plan").
+ */
+
 import { m } from '@/lib/i18n';
 import { Pill, Box } from '@/ui';
 
+export interface StepReviewState {
+  name: string;
+  path: string;
+  profileLabel: string;
+  targetLabel: string | null;
+  sessionCount: number;
+  frameCount: number;
+  masterCount: number;
+  viewStrategy: string;
+}
+
 export interface StepReviewProps {
-  wizardState: Record<string, unknown>;
+  wizardState: StepReviewState;
 }
 
-// ── Mock plan items (matches wireframe exactly) ─────────────────────────────
+export function StepReview({ wizardState }: StepReviewProps) {
+  const {
+    name,
+    path,
+    profileLabel,
+    targetLabel,
+    sessionCount,
+    frameCount,
+    masterCount,
+    viewStrategy,
+  } = wizardState;
 
-interface PlanRowItem {
-  action: 'mkdir' | 'write' | 'junction';
-  destination: string;
-  source: string | null; // null = no source (mkdir), string = source path or "generated"
-}
-
-const PLAN_ITEMS: PlanRowItem[] = [
-  { action: 'mkdir', destination: 'NGC7000_HOO/', source: null },
-  { action: 'mkdir', destination: 'NGC7000_HOO/.alm/', source: null },
-  {
-    action: 'mkdir',
-    destination: 'NGC7000_HOO/sources/views/wbpp_input/',
-    source: null,
-  },
-  {
-    action: 'write',
-    destination: 'NGC7000_HOO/.alm/project.json',
-    source: 'generated',
-  },
-  {
-    action: 'junction',
-    destination: '…/wbpp_input/lights/Ha_300s_0001.fit',
-    source: 'D:\\…\\Raw\\…\\Ha_300s_0001.fit',
-  },
-  {
-    action: 'junction',
-    destination: '…/wbpp_input/lights/Ha_300s_0002.fit',
-    source: 'D:\\…\\Raw\\…\\Ha_300s_0002.fit',
-  },
-];
-
-// eslint-disable-next-line alm/no-user-string -- illustrative wireframe preview (mock plan data), not real UI copy; see issue #327
-const TRUNCATION_LABEL = '… 120 more junctions (118 lights + 4 masters)';
-
-const FINAL_ITEM: PlanRowItem = {
-  action: 'write',
-  destination: 'NGC7000_HOO/sources/manifests/manifest.json',
-  source: 'generated',
-};
-
-// ── Disk tree (matches wireframe <pre>) ─────────────────────────────────────
-
-// eslint-disable-next-line alm/no-user-string -- illustrative ASCII directory-tree wireframe (mock), not translatable copy; see issue #327
-const DISK_TREE = `NGC7000_HOO/
-├── .alm/
-│   ├── project.json
-│   └── manifests/
-├── sources/
-│   ├── manifests/
-│   │   └── manifest.json
-│   └── views/
-│       └── wbpp_input/
-│           ├── lights/  (122 junctions)
-│           ├── darks/   (1)
-│           ├── flats/   (2)
-│           └── bias/    (1)
-├── processing/
-│   └── pixinsight/
-├── outputs/
-└── notes/`;
-
-// ── Component ───────────────────────────────────────────────────────────────
-
-export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
   return (
     <div className="alm-wizard-review">
       {/* ── Green success banner ── */}
@@ -87,60 +57,52 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
         </div>
       </div>
 
-      {/* ── 2-column grid: plan items (2fr) + disk tree / after creating (1fr) ── */}
       <div className="alm-wizard-review__grid">
-        {/* Left: Plan items */}
-        <Box title={m.projects_wizard_plan_items_title()}>
+        {/* Left: real selections summary */}
+        <Box title={m.projects_wizard_review_summary_title()}>
           <table className="alm-simple-table">
-            <thead>
-              <tr>
-                <th className="alm-wizard-review__col-action">
-                  {m.projects_wizard_col_action()}
-                </th>
-                <th>{m.projects_wizard_col_destination()}</th>
-                <th>{m.projects_wizard_col_source()}</th>
-              </tr>
-            </thead>
             <tbody>
-              {PLAN_ITEMS.map((item, i) => (
-                <tr key={i}>
-                  <td>
-                    <Pill variant="info">{item.action}</Pill>
-                  </td>
-                  <td className="alm-mono alm-wizard-review__cell-path">
-                    {item.destination}
-                  </td>
-                  <td>
-                    {item.source === null ? (
-                      <span className="alm-wizard-review__source-none">
-                        &mdash;
-                      </span>
-                    ) : (
-                      <span className="alm-mono alm-wizard-review__source-path">
-                        {item.source}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {/* Truncation row */}
               <tr>
-                <td colSpan={3} className="alm-wizard-review__truncation">
-                  {TRUNCATION_LABEL}
+                <td>{m.projects_name_label()}</td>
+                <td className="alm-mono">{name}</td>
+              </tr>
+              <tr>
+                <td>{m.projects_wizard_col_destination()}</td>
+                <td className="alm-mono">{path}</td>
+              </tr>
+              <tr>
+                <td>{m.projects_wizard_workflow_label()}</td>
+                <td>{profileLabel}</td>
+              </tr>
+              <tr>
+                <td>{m.projects_create_target_label()}</td>
+                <td>
+                  {targetLabel ?? (
+                    <span className="alm-wizard-review__source-none">
+                      &mdash;
+                    </span>
+                  )}
                 </td>
               </tr>
-              {/* Final manifest write */}
               <tr>
+                <td>{m.projects_wizard_summary_lights_label()}</td>
                 <td>
-                  <Pill variant="info">{FINAL_ITEM.action}</Pill>
+                  {m.projects_wizard_review_sources_summary({
+                    sessions: sessionCount,
+                    frames: frameCount,
+                  })}
                 </td>
-                <td className="alm-mono alm-wizard-review__cell-path">
-                  {FINAL_ITEM.destination}
-                </td>
+              </tr>
+              <tr>
+                <td>{m.projects_wizard_shared_calib_title()}</td>
                 <td>
-                  <span className="alm-mono alm-wizard-review__source-path">
-                    {FINAL_ITEM.source}
-                  </span>
+                  {m.projects_wizard_views_item_count({ count: masterCount })}
+                </td>
+              </tr>
+              <tr>
+                <td>{m.projects_wizard_strategy_title()}</td>
+                <td>
+                  <Pill variant="ok">{viewStrategy}</Pill>
                 </td>
               </tr>
             </tbody>
@@ -149,11 +111,25 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
 
         {/* Right column */}
         <div className="alm-wizard-review__right">
-          {/* Disk tree */}
+          {/* Always-identical top-level layout every project gets. */}
           <Box title={m.projects_wizard_disk_title()}>
             <pre className="alm-mono alm-wizard-review__disk-tree">
-              {DISK_TREE}
+              {
+                // eslint-disable-next-line alm/no-user-string -- ASCII directory-tree preview (folder names, not translatable prose); `path` is the real derived project path (#599)
+                `${path}/
+├── .alm/
+│   └── project.json
+├── sources/
+│   ├── manifests/
+│   └── views/
+├── processing/
+├── outputs/
+└── notes/`
+              }
             </pre>
+            <div className="alm-wizard-review__disk-tree-note">
+              {m.projects_wizard_review_plan_note()}
+            </div>
           </Box>
 
           {/* After creating */}
@@ -172,7 +148,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
               <li>
                 {m.projects_wizard_open_in_wbpp()}{' '}
                 <span className="alm-mono">
-                  {m.projects_wizard_open_in_wbpp_target()}
+                  {m.projects_wizard_open_in_wbpp_target({ path })}
                 </span>{' '}
                 {m.projects_wizard_open_in_wbpp_app()}
               </li>
