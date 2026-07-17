@@ -5,17 +5,17 @@ Dependency graph: P1 → P2 → P3; P4 after spec 054 (or capped 125%).
 
 ## Phase 1 — Font assets (FR-001; SC-001/002/005/008)
 
-- [ ] T001 Download Inter-4.1.zip (pinned release), extract the six hinted
+- [x] T001 Download Inter-4.1.zip (pinned release), extract the six hinted
       woff2s (`extras/woff-hinted/Inter-{Regular,Italic,Medium,MediumItalic,SemiBold,SemiBoldItalic}.woff2`)
       into `apps/desktop/src/assets/fonts/` with `LICENSE.txt` and a `FONTS.md`
       recording release URL + per-file SHA-256.
-- [ ] T002 Replace the CDN `@import` (tokens.css:1) with six `@font-face`
+- [x] T002 Replace the CDN `@import` (tokens.css:1) with six `@font-face`
       blocks (`font-display: swap`); removes the JetBrains Mono CDN load too.
       `--alm-font-sans` unchanged; keep `'tnum' 1`, add `'calt' 1` (reset.css).
-- [ ] T003 [depends T002] E2E assertions: zero requests to
+- [x] T003 [depends T002] E2E assertions: zero requests to
       fonts.googleapis.com/fonts.gstatic.com; `document.fonts` has the six
       faces; computed body family = Inter (SC-001/002).
-- [ ] T004 [depends T002] `verify-on-windows` A/B scenario (DPR 1.5, dark,
+- [x] T004 [depends T002] `verify-on-windows` A/B scenario (DPR 1.5, dark,
       Targets page) — gates Phase 2 (SC-008).
 
 ## Phase 2 — Token layer + dial (FR-002/003; SC-003/004)
@@ -60,3 +60,12 @@ Dependency graph: P1 → P2 → P3; P4 after spec 054 (or capped 125%).
       intact (with 054: dock bottom mode) (SC-007).
 - [ ] T033 [depends T030] J10 journey delta amendment (zoom);
       `verify-on-windows` zoom scenario.
+
+> **Phase 1 verification record (2026-07-17)**: T001–T003 merged via PR #947
+> (`f19eb1ad`). T004/SC-008 executed live on the user's Windows machine (DPR
+> 1.5, dark theme) via the Tauri MCP bridge instead of a written scenario:
+> all 7 pages (Targets, Sessions, Calibration, Inbox, Projects, Archive,
+> Settings) confirmed **crisper** by the user; specimen overlay of all six
+> faces at 11–16px incl. coordinates/Greek glyphs confirmed good; runtime
+> probes: 6 bundled faces registered, 0 CDN requests, only weights
+> 400/500/600 in use. **Phase 2 gate: OPEN.**
