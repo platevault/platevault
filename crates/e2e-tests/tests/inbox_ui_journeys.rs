@@ -468,6 +468,38 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or(serde_json::Value::Null);
         eprintln!("DEBUG DUMP on confirm-never-enabled: {dump:#}");
+
+        // Backend ground truth, bypassing the UI: what did the re-split
+        // actually leave in the DB, and does a SECOND, quiescent
+        // reclassify_v2 with the same overrides resolve the item? If the
+        // retry resolves it, the first (UI-triggered) apply raced concurrent
+        // DB work — materialize_sub_items swallows its write errors — rather
+        // than hitting a deterministic gate.
+        let list: serde_json::Value =
+            app.invoke("inbox_list", json!({})).await.unwrap_or(serde_json::Value::Null);
+        eprintln!("DEBUG backend inbox_list after failed apply: {list:#}");
+        if let Some(live_id) = list["items"][0]["inboxItemId"].as_str() {
+            let meta: serde_json::Value = app
+                .invoke("inbox_item_metadata", json!({"req": {"inboxItemId": live_id}}))
+                .await
+                .unwrap_or(serde_json::Value::Null);
+            eprintln!("DEBUG backend inbox_item_metadata: {meta:#}");
+            let retry: serde_json::Value = app
+                .invoke(
+                    "inbox_reclassify_v2",
+                    json!({"req": {
+                        "inboxItemId": live_id,
+                        "overrides": [],
+                        "bulk": [
+                            {"property": "frameType", "value": "light", "filePaths": null},
+                            {"property": "exposureS", "value": 300.0, "filePaths": null}
+                        ]
+                    }}),
+                )
+                .await
+                .unwrap_or(serde_json::Value::Null);
+            eprintln!("DEBUG direct reclassify_v2 retry response: {retry:#}");
+        }
         return Err(anyhow::anyhow!(
             "expected bulk reclassify to unblock Confirm (single_type, no missing attrs): {e}"
         ));
