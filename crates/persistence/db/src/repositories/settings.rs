@@ -545,9 +545,10 @@ mod tests {
         let db = setup().await;
         let defaults = SettingsState::default();
         let state = load_settings(db.pool()).await.unwrap();
-        assert_eq!(
-            state.framing_pointing_fraction_of_fov,
-            defaults.framing_pointing_fraction_of_fov
+        assert!(
+            (state.framing_pointing_fraction_of_fov - defaults.framing_pointing_fraction_of_fov)
+                .abs()
+                < f64::EPSILON
         );
 
         set_raw(db.pool(), "framingPointingFractionOfFov", &serde_json::json!(0.33)).await.unwrap();
