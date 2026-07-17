@@ -38,7 +38,12 @@ import type {
   TargetProjectItem,
   TargetAstroFormat,
 } from '@/bindings';
-import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
+import {
+  DetailPane,
+  DetailPanel,
+  PropertyTable,
+  type PropertyDef,
+} from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import {
@@ -895,142 +900,147 @@ export function TargetDetailV2({
     : [];
 
   return (
-    <DetailPane fill>
-      {/* ── Planner header ──────────────────────────────────────────────── */}
-      <div className="alm-planner__header">
-        <div className="alm-planner__header-left">
-          {/* Title + actions inline-left (matches Sessions); pills below. */}
-          <div className="alm-planner__titlebar">
-            <h2 className="alm-planner__title">
-              {detail.effectiveLabel}
-              {commonName && commonName !== detail.effectiveLabel && (
-                <span className="alm-planner__subtitle"> — {commonName}</span>
-              )}
-            </h2>
-            <div className="alm-planner__actions">
-              {/* Primary/contextual action FIRST (Sessions convention: the
-                  highlight action leads the inline-left group). */}
-              <Btn
-                size="sm"
-                variant="primary"
-                onClick={() => {
-                  setNewProjectOpen(true);
-                  void navigate({ to: '/projects/new' });
-                }}
-              >
-                {m.targets_detail_new_project()}
-              </Btn>
-              <Btn size="sm" variant="ghost" disabled>
-                {m.targets_detail_add_to_plan()}
-              </Btn>
-            </div>
-          </div>
-          <div className="alm-planner__pill-row">
-            <Pill variant="neutral">
-              {detail.objectType.replace(/_/g, ' ')}
+    // Migrated onto the shared `DetailPanel` (spec 054 T011, D5 "completely
+    // shared components" mandate): the hand-rolled `.alm-planner__header` +
+    // `.alm-planner__cols` wrapper is gone — title/pills/actions now fill the
+    // DetailPanel header slots, and the identity tables fill `facts` (a
+    // bounded left rail) instead of being two ad-hoc flex columns. The
+    // altitude graph + tonight stats remain as `children` — the ONE scroll
+    // region inside the panel (FR-009), same container-containment guarantee
+    // every other migrated detail gets.
+    <DetailPanel
+      fill
+      title={
+        <>
+          {detail.effectiveLabel}
+          {commonName && commonName !== detail.effectiveLabel && (
+            <span className="alm-planner__subtitle"> — {commonName}</span>
+          )}
+        </>
+      }
+      titleExtra={
+        <div className="alm-planner__pill-row">
+          <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
+          {catalogPills.map((a) => (
+            <Pill key={a.id} variant="ghost">
+              {a.alias}
             </Pill>
-            {catalogPills.map((a) => (
-              <Pill key={a.id} variant="ghost">
-                {a.alias}
-              </Pill>
-            ))}
+          ))}
+        </div>
+      }
+      actions={
+        <>
+          {/* Primary/contextual action FIRST (Sessions convention: the
+              highlight action leads the inline-left group). */}
+          <Btn
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              setNewProjectOpen(true);
+              void navigate({ to: '/projects/new' });
+            }}
+          >
+            {m.targets_detail_new_project()}
+          </Btn>
+          <Btn size="sm" variant="ghost" disabled>
+            {m.targets_detail_add_to_plan()}
+          </Btn>
+        </>
+      }
+      facts={
+        <div className="alm-planner__cols">
+          <div className="alm-planner__col">
+            <PropertyTable mode="view" properties={identityA} />
+          </div>
+          <div className="alm-planner__col">
+            <PropertyTable mode="view" properties={identityB} />
           </div>
         </div>
-      </div>
-
+      }
+    >
       {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
       {newProjectOpen && null}
 
-      {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
-      <div className="alm-planner__cols">
-        <div className="alm-planner__col">
-          <PropertyTable mode="view" properties={identityA} />
+      {/* Tonight column: a small transit graph + the planner stats. */}
+      <div className="alm-planner__tonight">
+        <div className="alm-planner__graph-title">
+          {site
+            ? m.targets_detail_tonight_title({
+                lat: Math.round(site.latitudeDeg),
+              })
+            : m.targets_detail_tonight_title_no_site()}
         </div>
-        <div className="alm-planner__col">
-          <PropertyTable mode="view" properties={identityB} />
-        </div>
-
-        {/* Tonight column: a small transit graph + the planner stats. */}
-        <div className="alm-planner__tonight">
-          <div className="alm-planner__graph-title">
-            {site
-              ? m.targets_detail_tonight_title({
-                  lat: Math.round(site.latitudeDeg),
-                })
-              : m.targets_detail_tonight_title_no_site()}
-          </div>
-          {rowAlt.needsSite ? (
-            <Banner variant="info">
-              {m.targets_planner_no_site_banner()}{' '}
-              <Link
-                to="/settings/$pane"
-                params={{ pane: 'planner' }}
-                className="alm-banner__action-link"
-              >
-                {m.targets_planner_no_site_banner_action()}
-              </Link>
-            </Banner>
-          ) : rowAlt.needsCoordinates ? (
-            // #757: a site is active but this target has no catalogued
-            // coordinates (unresolved manual target) — `rowAlt.points` is
-            // `[]` here (DEGRADE_ROW), so the altitude graph MUST NOT render
-            // (its transit-marker peak computation assumes a non-empty
-            // curve). Render the same "un-plannable" degrade state as the
-            // no-site case, distinctly worded, instead of crashing.
-            <Banner variant="info">
-              {m.targets_detail_needs_coordinates_banner()}
-            </Banner>
-          ) : (
-            <>
-              <AltitudeGraph
-                points={tonightPoints}
-                usableAltDeg={usableAltDeg}
-                darkWindowHours={rowAlt.darkWindowHours}
-                moonSpans={moonSpans}
-              />
-              {/* FR-029/SC-015: zero imaging time is always explained with a
+        {rowAlt.needsSite ? (
+          <Banner variant="info">
+            {m.targets_planner_no_site_banner()}{' '}
+            <Link
+              to="/settings/$pane"
+              params={{ pane: 'planner' }}
+              className="alm-banner__action-link"
+            >
+              {m.targets_planner_no_site_banner_action()}
+            </Link>
+          </Banner>
+        ) : rowAlt.needsCoordinates ? (
+          // #757: a site is active but this target has no catalogued
+          // coordinates (unresolved manual target) — `rowAlt.points` is
+          // `[]` here (DEGRADE_ROW), so the altitude graph MUST NOT render
+          // (its transit-marker peak computation assumes a non-empty
+          // curve). Render the same "un-plannable" degrade state as the
+          // no-site case, distinctly worded, instead of crashing.
+          <Banner variant="info">
+            {m.targets_detail_needs_coordinates_banner()}
+          </Banner>
+        ) : (
+          <>
+            <AltitudeGraph
+              points={tonightPoints}
+              usableAltDeg={usableAltDeg}
+              darkWindowHours={rowAlt.darkWindowHours}
+              moonSpans={moonSpans}
+            />
+            {/* FR-029/SC-015: zero imaging time is always explained with a
                   stated sentence — darkness (FR-017's no-dark-window case),
                   altitude, or moon, same precedence as the table glyph. */}
-              {tonightAvailable && rowAlt.zeroImagingReason !== null && (
-                <Banner variant="info">
-                  {rowAlt.zeroImagingReason === 'darkness'
-                    ? m.targets_imgtime_zero_darkness_title()
-                    : rowAlt.zeroImagingReason === 'altitude'
-                      ? m.targets_imgtime_zero_altitude_title({
-                          threshold: usableAltDeg,
-                        })
-                      : m.targets_imgtime_zero_moon_title()}
-                </Banner>
-              )}
-              {tonightAvailable && (
-                <>
-                  <PropertyTable mode="view" properties={tonightStats} />
-                  {/* #758/FR-020: the transit/min-over-dark/dark-midpoint
+            {tonightAvailable && rowAlt.zeroImagingReason !== null && (
+              <Banner variant="info">
+                {rowAlt.zeroImagingReason === 'darkness'
+                  ? m.targets_imgtime_zero_darkness_title()
+                  : rowAlt.zeroImagingReason === 'altitude'
+                    ? m.targets_imgtime_zero_altitude_title({
+                        threshold: usableAltDeg,
+                      })
+                    : m.targets_imgtime_zero_moon_title()}
+              </Banner>
+            )}
+            {tonightAvailable && (
+              <>
+                <PropertyTable mode="view" properties={tonightStats} />
+                {/* #758/FR-020: the transit/min-over-dark/dark-midpoint
                       Moon-separation trio — computed since spec 044 T028 but
                       never rendered anywhere in the app until now. */}
-                  <div className="alm-planner__tonight-filters">
-                    <span className="alm-planner__tonight-filters-label">
-                      {m.targets_detail_moon_trio_title()}
-                    </span>
-                    <PropertyTable mode="view" properties={moonTrio} />
-                  </div>
-                  <div className="alm-planner__tonight-filters">
-                    <span className="alm-planner__tonight-filters-label">
-                      {m.common_filters()}
-                    </span>
-                    <GuidanceCell
-                      night={night}
-                      moon={moon}
-                      params={guidanceParams}
-                      targetLabel={detail.effectiveLabel}
-                      moonFreeMinutesByBand={rowAlt.moonFreeMinutesByBand}
-                    />
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
+                <div className="alm-planner__tonight-filters">
+                  <span className="alm-planner__tonight-filters-label">
+                    {m.targets_detail_moon_trio_title()}
+                  </span>
+                  <PropertyTable mode="view" properties={moonTrio} />
+                </div>
+                <div className="alm-planner__tonight-filters">
+                  <span className="alm-planner__tonight-filters-label">
+                    {m.common_filters()}
+                  </span>
+                  <GuidanceCell
+                    night={night}
+                    moon={moon}
+                    params={guidanceParams}
+                    targetLabel={detail.effectiveLabel}
+                    moonFreeMinutesByBand={rowAlt.moonFreeMinutesByBand}
+                  />
+                </div>
+              </>
+            )}
+          </>
+        )}
       </div>
 
       {/* ── Coverage bars ────────────────────────────────────────────────── */}
@@ -1370,6 +1380,6 @@ export function TargetDetailV2({
       >
         {m.targets_detail_back()}
       </button>
-    </DetailPane>
+    </DetailPanel>
   );
 }

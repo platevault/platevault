@@ -295,8 +295,34 @@
   padding: var(--alm-sp-4);
 }
 
-/* === DETAIL PANE === */
-.alm-detail { padding: var(--alm-sp-4); }
+/* === DETAIL PANE ===
+ * spec 054 FR-009/#816: `.alm-detail` is unconditionally a flex column with
+ * `overflow:hidden` (not only in `--fill` mode) so it is ALWAYS the guaranteed
+ * scroll boundary, in every ListPageLayout placement (bottom/side/split),
+ * independent of what a consumer renders as children. It only stretches to a
+ * bounded, scrollable box when an ancestor provides a definite height (a flex
+ * item with `flex:1`/`align-self:stretch`, as every list-page detail region
+ * does) — a free-standing raw `<DetailPane>` with no such ancestor keeps its
+ * old auto/shrink-to-content sizing, so this is safe for non-list-page use. */
+.alm-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--alm-sp-4);
+}
+/* The header never shrinks to make room for the scrolling body below it. */
+.alm-detail > .alm-detail__header { flex-shrink: 0; }
+/* The body (DetailPanel's `.alm-detailpanel__cols` grid, or its content-only
+ * `.alm-detailpanel__content` wrapper) is the ONE flexible region that takes
+ * the remaining height and may shrink below its content's natural size —
+ * `min-height:0` is what lets the descendant's `overflow-y:auto` actually
+ * produce a scrollbar instead of growing the box (tables-lists.css). */
+.alm-detail > .alm-detailpanel__cols,
+.alm-detail > .alm-detailpanel__content {
+  flex: 1;
+  min-height: 0;
+}
 .alm-detail__header {
   display: flex; align-items: flex-start; gap: var(--alm-sp-3);
   margin-bottom: var(--alm-sp-4);

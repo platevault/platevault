@@ -153,6 +153,7 @@
   "cmdk_placeholder": "Search sessions, targets, projects…",
   "cmp_listpage_close_session_details_aria": "Close session details",
   "list_page_layout_bottom_detail_label": "Session details",
+  "list_page_layout_resize_handle_aria": "Resize detail panel",
   "lifecycle_state_setup": "Setup",
   "lifecycle_state_ready": "Ready",
   "lifecycle_state_prepared": "Prepared",

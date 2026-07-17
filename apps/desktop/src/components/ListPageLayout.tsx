@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * ListPageLayout — standard list-page scaffold (spec 043, tasks #62/#73/#86/#89/#104).
+ * ListPageLayout — standard list-page scaffold (spec 043, tasks #62/#73/#86/#89;
+ * spec 054 T009/T010 adaptive dock).
  *
  * The shared layout system generalized from the Sessions page. Composition:
  *
@@ -25,26 +26,32 @@
  * horizontal room, so its rail/cards read side-by-side cleanly (we do NOT force
  * the single-column rail-collapse the old narrow side-panel needed).
  *
- * The bottom panel is NON-resizable (task #89, revising #86): it AUTO-SIZES to
- * its content (`height: fit-content`) with a `max-height` cap so large content
- * scrolls WITHIN the panel rather than pushing the table off-screen. There is no
- * splitter, no drag, and no persisted height. A close (✕) affordance hides the
- * detail and returns the table to full height. The panel mounts only when
- * `detail` is non-null (so we never show an empty centered dashboard).
+ * The bottom panel is NON-resizable (task #89): it AUTO-SIZES to its content
+ * (`height: fit-content`) with a `max-height` cap so large content scrolls
+ * WITHIN the panel rather than pushing the table off-screen. There is no
+ * splitter, no drag, and no persisted height in this placement. A close (✕)
+ * affordance hides the detail and returns the table to full height. The panel
+ * mounts only when `detail` is non-null (so we never show an empty centered
+ * dashboard).
  *
- * `detailPlacement` (DEFAULT `'bottom'`) chooses the dock. `'bottom'` is the
- * Sessions/Calibration/Targets reference above. `'side'` instead docks the
- * detail as a full-height RIGHT side panel (fixed ~420px width, own scroll,
- * keeps the close ✕) BESIDE the full-width primary content — suited to detail
- * that reads as a tall narrow column (Projects). The side variant simply
- * switches `.alm-listpage__body` from a column to a row and pins the detail
- * width; the primary content stays full-width to the left of it.
+ * `detailPlacement` (DEFAULT `'bottom'`) chooses the STATIC dock when `dockPage`
+ * is NOT provided: `'bottom'` is the Sessions/Calibration/Targets reference
+ * above; `'side'` docks the detail as a full-height RIGHT side panel (fixed
+ * ~420px width, own scroll, keeps the close ✕) BESIDE the full-width primary
+ * content — suited to detail that reads as a tall narrow column (Projects).
+ * This static mode is UNCHANGED behaviour — existing pages that don't pass
+ * `dockPage` keep their exact current layout (backward compatibility, spec 054
+ * "no per-page work begins until this phase is merged").
  *
- * `'side-and-bottom'` (task #104) — dual variant: renders BOTH a right side
- * panel AND a bottom strip simultaneously. Uses the additive `sideDetail` and
- * `bottomDetail` props. The existing `detail` prop is used as the side panel
- * content in this mode; `bottomDetail` provides the bottom strip. Callers that
- * already pass `detailPlacement="side"` with a `detail` prop are unaffected.
+ * `dockPage` (spec 054, US1 foundation) opts a page into the ADAPTIVE shared
+ * mechanism: `useDetailDock` resolves `'side' | 'bottom' | 'split'` from the
+ * measured window/page width + the persisted per-page pin (`data/preferences`),
+ * and a pointer-drag resize handle appears between the main content and the
+ * detail region whenever the resolved placement isn't `'bottom'`, persisting
+ * the dragged width via `setDetailDockWidth`. `'split'` is the Inbox
+ * detail-dominant shape (permanent, list-narrow/detail-wide) — its full page
+ * wiring lands in a later phase (US3); this component only needs to be able to
+ * RENDER it today so the shared mechanism is complete.
  *
  * Pass the top bar either as a ready `topBar` node (e.g. `<PageTopBar .../>`)
  * or via the convenience `topBarProps` slots, which this component forwards to
@@ -52,9 +59,25 @@
  * it must be the page's outermost element (do not nest it inside PageShell).
  */
 
-import { type ReactNode, useEffect } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
 import { m } from '@/lib/i18n';
+import {
+  useDetailDock,
+  MIN_SIDE_WIDTH,
+  type EffectivePlacement,
+} from './useDetailDock';
+import {
+  setDetailDockWidth,
+  useDetailDockPref,
+  type DetailDockPageKey,
+} from '@/data/preferences';
 
 export interface ListPageLayoutProps {
   /** A ready top-bar node. Mutually exclusive with `topBarProps`. */
@@ -63,37 +86,41 @@ export interface ListPageLayoutProps {
   topBarProps?: PageTopBarProps;
   /** Primary full-width content (table / list). */
   children: ReactNode;
-  /**
-   * Detail content. For `'bottom'` and `'side'` placements this is the single
-   * detail panel. For `'side-and-bottom'` this becomes the SIDE panel content;
-   * pair it with `bottomDetail` for the bottom strip.
-   * The panel is shown only when this is non-null.
-   */
+  /** Detail content. The panel is shown only when this is non-null. */
   detail?: ReactNode;
   /** Invoked when the panel's close affordance is used. Omit to hide it. */
   onCloseDetail?: () => void;
   /** Accessible label for the detail panel region. Default "Details". */
   detailLabel?: string;
   /**
-   * Where the detail panel docks. DEFAULT `'bottom'` (the Sessions/Calibration/
-   * Targets reference: a horizontal split BELOW the full-width primary content;
-   * see the module header). `'side'` docks the detail as a full-height RIGHT
-   * side panel (fixed width, own scroll) BESIDE the full-width primary content
-   * instead — suited to detail that reads as a tall narrow column (Projects).
-   * `'side-and-bottom'` (task #104) renders BOTH a right side panel (from
-   * `detail`) AND a bottom strip (from `bottomDetail`) simultaneously.
+   * STATIC placement, used only when `dockPage` is omitted. DEFAULT `'bottom'`
+   * (the Sessions/Calibration/Targets reference: a horizontal split BELOW the
+   * full-width primary content; see the module header). `'side'` docks the
+   * detail as a full-height RIGHT side panel (fixed width, own scroll) BESIDE
+   * the full-width primary content instead.
    */
-  detailPlacement?: 'bottom' | 'side' | 'side-and-bottom';
+  detailPlacement?: 'bottom' | 'side';
   /**
-   * Bottom strip content for the `'side-and-bottom'` dual layout (task #104).
-   * Rendered only when `detailPlacement="side-and-bottom"`. Ignored for other
-   * placements. The strip is shown only when this prop is non-null.
+   * Adopts the spec 054 shared adaptive mechanism: `useDetailDock` resolves
+   * the effective placement from the measured widths + the page's persisted
+   * pin, and a drag-resize handle + width persistence become active whenever
+   * the resolved placement is `'side'` or `'split'`. Omit to keep the exact
+   * legacy `detailPlacement`-only behaviour (no adaptive resolution, no
+   * resize handle) — existing pages are unaffected until they opt in.
    */
-  bottomDetail?: ReactNode;
-  /** Invoked when the bottom strip's close affordance is used. Omit to hide it. */
-  onCloseBottomDetail?: () => void;
-  /** Accessible label for the bottom strip region. Default "Session details". */
-  bottomDetailLabel?: string;
+  dockPage?: DetailDockPageKey;
+  /**
+   * Page-level HARD override of the resolved placement — wins over both the
+   * user's persisted pin and the adaptive heuristic (precedence: forced >
+   * user pin > adaptive; see `useDetailDock`). Only meaningful together with
+   * `dockPage`. Use for a page whose shape is never user-adjustable — e.g.
+   * Inbox's permanent detail-dominant split (`forcedPlacement="split"`,
+   * spec S3/FR-014) — rather than special-casing the page key inside the
+   * shared hook. A page that simply always wants the bottom dock and never
+   * needs adaptive/resize behaviour can instead omit `dockPage` entirely and
+   * keep the static `detailPlacement="bottom"` (the default).
+   */
+  forcedPlacement?: EffectivePlacement;
 }
 
 /**
@@ -118,6 +145,75 @@ function hasOpenOverlay(): boolean {
   return false;
 }
 
+/** The stable placeholder page key used when `dockPage` is omitted, purely
+ * to satisfy the Rules of Hooks (useDetailDock/useDetailDockPref must always
+ * be called) — its result is discarded in the static-placement branch. */
+const NO_DOCK_PAGE: DetailDockPageKey = 'sessions';
+
+/**
+ * Pointer-drag resize handle between the main content and the detail region
+ * (spec 054 T010). `grow` says which direction dragging increases the
+ * persisted width: `'left'` for a side panel anchored to the right edge
+ * (dragging the handle left grows it), `'right'` for a split's narrow list
+ * anchored to the left edge (dragging right grows it).
+ */
+function DockResizeHandle({
+  page,
+  grow,
+  width,
+  onLiveWidth,
+}: {
+  page: DetailDockPageKey;
+  grow: 'left' | 'right';
+  width: number;
+  onLiveWidth: (width: number | null) => void;
+}) {
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    function resolveWidth(clientX: number): number {
+      const drag = dragRef.current;
+      if (!drag) return width;
+      const delta = clientX - drag.startX;
+      const signed = grow === 'right' ? delta : -delta;
+      const max = Math.max(window.innerWidth * 0.5, MIN_SIDE_WIDTH);
+      return Math.min(Math.max(drag.startWidth + signed, MIN_SIDE_WIDTH), max);
+    }
+    function handleMove(event: PointerEvent): void {
+      if (!dragRef.current) return;
+      onLiveWidth(resolveWidth(event.clientX));
+    }
+    function handleUp(event: PointerEvent): void {
+      if (!dragRef.current) return;
+      setDetailDockWidth(page, resolveWidth(event.clientX));
+      dragRef.current = null;
+      onLiveWidth(null);
+    }
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+    // `width` intentionally excluded — it's read fresh via `dragRef` at drag
+    // start (`onPointerDown`), not on every render while dragging.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grow, page, onLiveWidth]);
+
+  return (
+    <div
+      className="alm-listpage__resize-handle"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={m.list_page_layout_resize_handle_aria()}
+      tabIndex={0}
+      onPointerDown={(event) => {
+        dragRef.current = { startX: event.clientX, startWidth: width };
+      }}
+    />
+  );
+}
+
 export function ListPageLayout({
   topBar,
   topBarProps,
@@ -126,14 +222,31 @@ export function ListPageLayout({
   onCloseDetail,
   detailLabel = m.common_details(),
   detailPlacement = 'bottom',
-  bottomDetail,
-  onCloseBottomDetail,
-  bottomDetailLabel = m.list_page_layout_bottom_detail_label(),
+  dockPage,
+  forcedPlacement,
 }: ListPageLayoutProps) {
   const hasDetail = detail != null;
-  const hasBottom = bottomDetail != null;
+  const pageRef = useRef<HTMLDivElement>(null);
 
-  // Escape closes the open detail panel(s), matching the ✕ affordance (#771).
+  // Hooks are always called (Rules of Hooks) — when `dockPage` is omitted we
+  // pass a stable placeholder key and ignore both results below.
+  const dock = useDetailDock(
+    dockPage ?? NO_DOCK_PAGE,
+    pageRef,
+    forcedPlacement,
+  );
+  const dockPref = useDetailDockPref(dockPage ?? NO_DOCK_PAGE);
+  const [liveWidth, setLiveWidth] = useState<number | null>(null);
+
+  const placement: EffectivePlacement = dockPage
+    ? dock.effectivePlacement
+    : detailPlacement === 'side'
+      ? 'side'
+      : 'bottom';
+  const width = liveWidth ?? dockPref.width;
+  const resizable = dockPage != null && placement !== 'bottom';
+
+  // Escape closes the open detail panel, matching the ✕ affordance (#771).
   // A `document`-level listener also catches the common case where nothing
   // inside the panel has focus (e.g. focus stayed on the row that opened it,
   // or on <body>). `stopPropagation()` does NOT stop a sibling listener
@@ -146,83 +259,62 @@ export function ListPageLayout({
   // styling-hook attribute plus an overlay ARIA role) and skip closing the
   // panel while one is open, deferring to its own dismissal.
   useEffect(() => {
-    if (!hasDetail && !hasBottom) return;
+    if (!hasDetail) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (hasOpenOverlay()) return;
-      if (hasDetail) onCloseDetail?.();
-      if (detailPlacement === 'side-and-bottom' && hasBottom) {
-        onCloseBottomDetail?.();
-      }
+      onCloseDetail?.();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [
-    hasDetail,
-    hasBottom,
-    detailPlacement,
-    onCloseDetail,
-    onCloseBottomDetail,
-  ]);
+  }, [hasDetail, onCloseDetail]);
 
-  // ── Dual side-and-bottom layout (task #104) ──────────────────────────────
-  //
-  // Structure: the bottom strip sits ONLY under the main content column, NOT
-  // under the side panel. A wrapper column (.alm-listpage__main-col) groups
-  // main + bottom so the side panel is flush to full height on the right.
-  //
-  //   .alm-listpage__body--dual (row)
-  //     .alm-listpage__main-col (column, flex:1)
-  //       .alm-listpage__main   (flex:1, scrolls)
-  //       .alm-listpage__bottom (fit-content, max-height cap)
-  //     .alm-listpage__side     (fixed 420px, own scroll)
-  //
-  if (detailPlacement === 'side-and-bottom') {
+  if (placement === 'side' || placement === 'split') {
+    const isSplit = placement === 'split';
+    const bodyClass = `alm-listpage__body ${isSplit ? 'alm-listpage__body--split' : 'alm-listpage__body--side'}`;
+    const mainClass = isSplit
+      ? 'alm-listpage__main alm-listpage__main--split'
+      : 'alm-listpage__main';
+    const detailClass = `alm-listpage__detail ${isSplit ? 'alm-listpage__detail--split' : 'alm-listpage__detail--side'}`;
+    // Split's narrow region is the LIST (left); side's narrow region is the
+    // DETAIL (right) — each variant sizes the region it pins via its own CSS
+    // custom property (tables-lists.css / merges-2.css), defaulting to the
+    // static ~420px/~360px when the page hasn't adopted resizing (`dockPage`
+    // omitted or `resizable` false).
+    const bodyStyle: CSSProperties | undefined = resizable
+      ? {
+          [isSplit ? '--alm-split-list-w' : '--alm-side-detail-w']:
+            `${width}px`,
+        }
+      : undefined;
+
     return (
-      <div className="alm-page">
+      <div className="alm-page" ref={pageRef}>
         {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
-        <div className="alm-listpage__body alm-listpage__body--dual">
-          {/* Left column: main table + bottom strip stacked */}
-          <div className="alm-listpage__main-col">
-            <div className="alm-listpage__main">{children}</div>
+        <div className={bodyClass} style={bodyStyle}>
+          <div className={mainClass}>{children}</div>
 
-            {/* Bottom strip constrained to the content column */}
-            {hasBottom && (
-              <section
-                className="alm-listpage__bottom"
-                role="complementary"
-                aria-label={bottomDetailLabel}
-              >
-                {onCloseBottomDetail && (
-                  <div className="alm-listpage__panel-bar">
-                    <button
-                      type="button"
-                      className="alm-listpage__panel-close"
-                      onClick={onCloseBottomDetail}
-                      aria-label={m.cmp_listpage_close_session_details_aria()}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-                <div className="alm-listpage__panel-body">{bottomDetail}</div>
-              </section>
-            )}
-          </div>
+          {resizable && (
+            <DockResizeHandle
+              page={dockPage as DetailDockPageKey}
+              grow={isSplit ? 'right' : 'left'}
+              width={width}
+              onLiveWidth={setLiveWidth}
+            />
+          )}
 
-          {/* Right: side detail panel, full height of the body */}
           {hasDetail && (
             <section
-              className="alm-listpage__side"
+              className={detailClass}
               role="complementary"
               aria-label={detailLabel}
             >
               {onCloseDetail && (
-                <div className="alm-listpage__panel-bar">
+                <div className="alm-listpage__detail-bar">
                   <button
                     type="button"
-                    className="alm-listpage__panel-close"
+                    className="alm-listpage__detail-close"
                     onClick={onCloseDetail}
                     aria-label={m.inbox_close_details_aria()}
                   >
@@ -230,7 +322,7 @@ export function ListPageLayout({
                   </button>
                 </div>
               )}
-              <div className="alm-listpage__panel-body">{detail}</div>
+              <div className="alm-listpage__detail-body">{detail}</div>
             </section>
           )}
         </div>
@@ -238,25 +330,17 @@ export function ListPageLayout({
     );
   }
 
-  // ── Original bottom / side layouts (unchanged) ───────────────────────────
-  const isSide = detailPlacement === 'side';
-  const bodyClass = isSide
-    ? 'alm-listpage__body alm-listpage__body--side'
-    : 'alm-listpage__body';
-  const detailClass = isSide
-    ? 'alm-listpage__detail alm-listpage__detail--side'
-    : 'alm-listpage__detail';
-
+  // ── Bottom dock (default) ────────────────────────────────────────────────
   return (
-    <div className="alm-page">
+    <div className="alm-page" ref={pageRef}>
       {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
-      <div className={bodyClass}>
+      <div className="alm-listpage__body">
         <div className="alm-listpage__main">{children}</div>
 
         {hasDetail && (
           <section
-            className={detailClass}
+            className="alm-listpage__detail"
             role="complementary"
             aria-label={detailLabel}
           >

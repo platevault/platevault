@@ -377,9 +377,63 @@
   border-left: 1px solid var(--alm-border);
 }
 
-/* Fixed side-panel width token (kept local to this block). */
+/* Fixed side-panel width token (kept local to this block). Spec 054 T009/T010:
+ * overridden inline (`style`) by ListPageLayout when a page adopts `dockPage`
+ * and has a persisted/dragged width; this default only applies to a static
+ * `detailPlacement="side"` page that hasn't opted into the adaptive dock. */
 .alm-listpage__body--side {
   --alm-side-detail-w: 420px;
+}
+
+/* ── ListPageLayout split variant (spec 054, Inbox detail-dominant shape) ─────
+ * Mirrors `--side` but with the width pin on the OPPOSITE region: the LIST
+ * (main) is the narrow, fixed-width column and the DETAIL is the wide flex
+ * region. Full per-page geometry (list ~360px, name truncation, etc.) is
+ * Inbox's own adoption in a later phase (US3) — this is the generic shape the
+ * shared mechanism needs to be able to render today. */
+.alm-listpage__body--split {
+  flex-direction: row;
+  --alm-split-list-w: 360px;
+}
+
+.alm-listpage__main--split {
+  flex: 0 0 var(--alm-split-list-w);
+  width: var(--alm-split-list-w);
+  min-width: 0;
+  border-right: 1px solid var(--alm-border);
+}
+
+.alm-listpage__detail--split {
+  /* Wide flex region, full height, own scroll — same bounding strategy as
+   * `--side` (align-self:stretch resolves a definite height from the row). */
+  flex: 1 1 auto;
+  width: auto;
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+  border-top: none;
+}
+
+/* ── Drag-resize handle (spec 054 T010) ───────────────────────────────────────
+ * Sits between the main content and the detail region in `--side`/`--split`.
+ * A thin hit target widened via a transparent hover/focus halo so it's easy
+ * to grab without visually thickening the border. Pointer-drag logic + width
+ * persistence live in ListPageLayout/data/preferences.ts; this is presentation
+ * + the focus-visible affordance only (no focus trap — plain tab stop). */
+.alm-listpage__resize-handle {
+  flex: 0 0 4px;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+}
+.alm-listpage__resize-handle:hover,
+.alm-listpage__resize-handle:focus-visible {
+  background: var(--alm-accent);
+}
+.alm-listpage__resize-handle:focus-visible {
+  outline: 2px solid var(--alm-focus-ring);
+  outline-offset: 2px;
 }
 
 /* ── Projects-detail structure for the side column ───────────────────────────
@@ -641,6 +695,11 @@
 .alm-detailpanel__cols {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  /* spec 054 FR-009: `minmax(0, 1fr)` (not the default `auto`) lets the single
+   * row shrink below the content column's natural height so `.alm-detail`'s
+   * `flex:1;min-height:0` (app-shell.css) actually bounds it — mirrors the
+   * `.alm-dash` fill-mode pattern (primitives.css). */
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--alm-sp-5);
   align-items: start;
   padding: var(--alm-sp-3) var(--alm-sp-4);
@@ -673,9 +732,16 @@
 }
 
 /* Content column (center): THE ONLY scroll region inside the body.
- * scrollbar-gutter:stable prevents dropdown-open layout shift. */
+ * scrollbar-gutter:stable prevents dropdown-open layout shift.
+ * `align-self:stretch` overrides the grid's `align-items:start` (which keeps
+ * facts/aux sized to their own content, spec 054 FR-009) so THIS column takes
+ * the full row height; `min-height:0` lets it then shrink for the scrollbar
+ * instead of growing past its row (both needed for the container-level
+ * containment guarantee — #816). */
 .alm-detailpanel__content {
   min-width: 0;
+  min-height: 0;
+  align-self: stretch;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }

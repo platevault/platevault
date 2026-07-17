@@ -159,7 +159,12 @@ export function DetailPanel({
     : 'alm-detailpanel__cols';
 
   return (
-    <DetailPane fill={fill}>
+    // `data-shared-detail` (spec 054 T012a guard) marks every DetailPanel
+    // root so a lint-time/test-time sweep can assert no list page bypasses
+    // this component with a hand-rolled panel. Set via DetailPane's attr
+    // passthrough (not baked into the base `.alm-detail` class) so raw
+    // DetailPane consumers that haven't migrated don't spuriously pass.
+    <DetailPane fill={fill} data-shared-detail="">
       <DetailHeader
         title={title}
         titleExtra={titleExtra}
@@ -175,7 +180,13 @@ export function DetailPanel({
           {hasAux && <aside className="alm-detailpanel__aux">{aux}</aside>}
         </div>
       ) : (
-        children
+        // Content-only mode now ALSO routes through `.alm-detailpanel__content`
+        // (spec 054 FR-009/#816 fix): previously bare children had no scroll
+        // surface of their own, so a plain overflowing block was silently
+        // clipped by the ancestor's `overflow:hidden` rather than scrolling.
+        // This wrapper + its `.alm-detail` parent (tables-lists.css) are now
+        // the guaranteed scroll boundary regardless of consumer markup.
+        <div className="alm-detailpanel__content">{children}</div>
       )}
     </DetailPane>
   );

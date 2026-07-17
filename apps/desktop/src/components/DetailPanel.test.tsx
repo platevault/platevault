@@ -282,6 +282,26 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(true);
     expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
   });
+
+  // ── Spec 054 T008/T012a ─────────────────────────────────────────────────
+
+  it('20. stamps the data-shared-detail marker on the root (T012a shared-component guard)', () => {
+    const { container } = render(<DetailPanel title="X">body</DetailPanel>);
+    expect(container.querySelector('[data-shared-detail]')).toBeTruthy();
+  });
+
+  it('20b. content-only mode still wraps children in .alm-detailpanel__content (T008/#816)', () => {
+    // Before T008 this mode rendered bare children with NO wrapper at all —
+    // no CSS-guaranteed scroll surface regardless of what the consumer passed.
+    render(
+      <DetailPanel title="X">
+        <div data-testid="plain">tall content</div>
+      </DetailPanel>,
+    );
+    const scroller = document.querySelector('.alm-detailpanel__content');
+    expect(scroller).toBeTruthy();
+    expect(scroller?.contains(screen.getByTestId('plain'))).toBe(true);
+  });
 });
 
 describe('FactsKV', () => {
