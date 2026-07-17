@@ -110,10 +110,20 @@ owns bespoke panel markup.
   `DetailPane`+`DetailHeader` to the shared `DetailPanel` (data-only fill), so
   Archive is inside the container-containment guarantee like the others
   (D5, owner "completely shared" mandate).
+- [ ] T012a [US1] **Shared-component guard** (owner mandate): add an automated
+  check that EVERY list page's detail renders through the shared `DetailPanel`
+  and every list page's layout through the shared `ListPageLayout` — no bespoke
+  panel/layout markup survives. Prefer a Vitest assertion that renders each page
+  and asserts a `DetailPanel` marker (e.g. a stable `data-shared-detail`
+  attribute or the `.alm-detailpanel` root) is present, plus a static guard
+  script (in the `scripts/css-dup-sniff.mjs` spirit) that greps for direct
+  `DetailPane`/hand-rolled `.alm-planner__header` panel usage outside
+  `DetailPanel.tsx` and fails if any list page reintroduces one. Wire it into
+  the lint/test gate so regressions are caught in CI.
 
 **Checkpoint**: #816 repro passes in every placement; the shared mechanism +
-persistence + resize exist; no page owns bespoke panel markup; dead dual path
-gone. Merge the foundation before starting the fan-out.
+persistence + resize exist; no page owns bespoke panel markup (T012a guard is
+green); dead dual path gone. Merge the foundation before starting the fan-out.
 
 ---
 
@@ -176,10 +186,13 @@ SC-008 geometry (list ~360 + detail ~540 at minimum) met.
 **Independent Test**: spec US4 Independent Test. **Depends on US1 (store +
 resize) and US2 (side dock exists to pin).**
 
-- [ ] T021 [US4] Surface the per-page placement control (pin side / pin bottom /
-  auto) in the page top bar or the detail header — one shared control used by
-  every adopting page (not per-page clones); writes `setDetailDockMode`
-  (FR-003).
+- [ ] T021 [US4] Surface the per-page placement control as an **easy
+  auto/bottom/right toggle in the app configuration** (owner mandate): a
+  first-class Settings control (per adopting page, or a clear per-page section)
+  offering **Auto / Bottom / Right** — plus the same one shared control in the
+  page top bar / detail header (not per-page clones). Both write
+  `setDetailDockMode` (`'adaptive'`→Auto, `'bottom'`→Bottom, `'side'`→Right)
+  (FR-003, data-model.md). Labels use "Right" (not "Side") per owner wording.
 - [ ] T022 [US4] Enforce the pin→bottom safety fallback in the resolver path: a
   pinned `'side'` on a window too narrow for min-side + a usable table renders
   bottom instead of an unusable squeeze (FR-003 last clause, spec US4 scenario 4).
@@ -303,14 +316,22 @@ T001 ─▶ US1(T002–T012) ─┬─▶ US2(T013–T017) ─┬─▶ US4(T021
                         └────────────────────────────────────▶ Phase 8(T029–T032) ─▶ Phase 9(T033–T035)
 ```
 
+## Execution model (owner directive)
+
+**One coding agent at a time (session-limit-safe).** Despite the `[P]` markers,
+this feature is executed by a **single** coding lane, phase by phase, not a
+parallel fleet. The orchestrator (main session) spawns one coder per phase in
+its own worktree, reviews the pushed branch, merges, then spawns the next. The
+`[P]` markers therefore indicate tasks that are *independent in principle*
+(safe to reorder within a phase), not a licence to run concurrent agents. The
+dependency graph still governs phase order.
+
 ## Parallelization notes
 
-- **Do NOT parallelise US1** — it is the shared mechanism; concurrent writers
-  would collide on `ListPageLayout`/`DetailPanel`/`preferences.ts`.
-- After US1 merges, fan out one lane per page: US2 pages (T013–T016) are
-  independent files; Projects (T017), Inbox (T018–T019), and Targets columns
-  (T024–T025) are larger single-file efforts that can run concurrently with the
-  simple adoptions.
+- **US1 is a single sequential node** — the shared mechanism; its tasks touch
+  `ListPageLayout`/`DetailPanel`/`preferences.ts` and must be done in one lane.
+- US2–US6 run as **successive single lanes** off the merged US1 foundation
+  (not concurrently). Within a lane, `[P]` tasks may be reordered freely.
 - `[P]` test tasks are independent of each other within a phase.
-- Journey deltas (T031) can be authored in parallel with the e2e work but must
-  reflect the shipped behaviour.
+- Journey deltas (T031) reflect the shipped behaviour and are authored with the
+  e2e work in the same validation lane.

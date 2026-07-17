@@ -185,10 +185,21 @@ wiring, then colliding when the shared mechanism lands. So:
    the FR-017 journey deltas (J02/J03/J04/J05/J07/J08/J09/J16). Existing pins
    kept or migrated with explicit rationale, never silently broken.
 
-**Orchestration timing.** Steps 1 (foundation) is a single lane — do **not**
-fan out a fleet onto it; the pages all depend on it and would collide. Fan out
-only at step 2, one lane per page (or per small cluster of related pages), each
-on its own branch/worktree off the merged foundation.
+**Orchestration timing (owner directive: one coding agent at a time).** This
+feature is executed by a **single** coding lane, phase by phase, to stay within
+session limits — not a parallel fleet. The main session spawns one coder per
+phase in its own worktree, reviews the pushed branch, merges, then spawns the
+next. Step 1 (foundation) must be a single lane regardless (the pages all
+depend on it); steps 2–3 also run as successive single lanes off the merged
+foundation. The per-page `[P]` independence in tasks.md means safe-to-reorder,
+not run-concurrently.
+
+**Two owner mandates folded in:** (a) a **shared-component guard** (tasks.md
+T012a) — an automated check that every list page renders through the shared
+`DetailPanel`/`ListPageLayout`, failing CI if any page reintroduces bespoke
+panel markup; (b) an **easy Auto/Bottom/Right toggle in the app configuration**
+(tasks.md T021) — the placement override is a first-class Settings control, not
+only an in-page affordance.
 
 ## Phased delivery
 
