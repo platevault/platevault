@@ -74,7 +74,9 @@ import { computeObservingNight, type ObservingNight } from './astro/moon-state';
 import { useObserverSiteExists } from './site-gate';
 import { MoonSummary } from './MoonSummary';
 import { PlannerDatePicker } from './PlannerDatePicker';
+import { PlannerComputedFor } from './PlannerComputedFor';
 import { useGuidanceParams, loadGuidanceParams } from './guidance-settings';
+import { usePlannerSensorConfig } from './planner-sensor';
 import { deriveRowMoonPlanning } from './astro/row-planning';
 import { recommendationLabel } from './FilterBadges';
 import type { Recommendation } from './astro/moon-avoidance';
@@ -258,6 +260,9 @@ export function TargetsPage() {
    * recompute immediately on a settings change (SC-008).
    */
   const guidanceParams = useGuidanceParams();
+  // FR-036/T046: OSC single-pass model when equipment is unambiguously OSC;
+  // null (mono/unknown) keeps the per-filter model unchanged (FR-038).
+  const sensorConfig = usePlannerSensorConfig();
 
   /**
    * task #18: client-side favourite set.
@@ -493,6 +498,9 @@ export function TargetsPage() {
         // action, gated behind a default observing site (D7). Until a site
         // exists the slot shows the set-up-your-site prompt.
         <>
+          {/* FR-033/T043: always-visible computation-context label — the one
+              place disclosing site/twilight/threshold behind every number. */}
+          <PlannerComputedFor usableAltDeg={usableAltDeg} />
           {/* US2/T024: plan an arbitrary future night — every table/detail
               computation reads this chosen date (SC-004). */}
           <PlannerDatePicker />
@@ -539,6 +547,7 @@ export function TargetsPage() {
               item={plannerTargets.find((t) => t.id === selected) ?? null}
               usableAltDeg={usableAltDeg}
               night={night}
+              sensorConfig={sensorConfig}
             />
           ) : undefined
         }
@@ -567,6 +576,8 @@ export function TargetsPage() {
             // Settings → Target Planner recompute pills/recommendation here
             // without a restart.
             guidanceParams={guidanceParams}
+            // FR-036: OSC single-pass headline when equipment is OSC.
+            sensorConfig={sensorConfig}
             // task #18: pass the local favourite set down so the star column renders correctly.
             // STUB: localStorage only until task #54 backend linkage lands.
             favouriteIds={favouriteIds}

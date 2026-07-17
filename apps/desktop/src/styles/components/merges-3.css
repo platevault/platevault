@@ -313,29 +313,31 @@
   /* Floor so every column stays at least as wide as its content. Below this the
      scroll container (.alm-targets-table__scroll, overflow-x:auto) scrolls
      horizontally instead of squeezing/clipping the last columns. The column
-     percentages below are tuned so each fits its content at this width. */
-  min-width: 1180px;
+     percentages below are tuned so each fits its content at this width.
+     Iteration 2026-07-15 (FR-032/SC-016): with the sparkline and visible
+     columns removed the surviving set fits without horizontal scroll in a
+     1100×720 window. */
+  min-width: 1000px;
 }
 
 /* Designation: widest column, but not so wide it starves the Filters column
-   (which holds up to 7 band badges). Tuned down from 50% so filter badges fit
-   on a single line and rows stay one row tall. */
-.alm-targets-col--designation { width: 16%; }
+   (which holds up to 7 band badges). Widened after the sparkline/visible
+   column removal (iteration 2026-07-15). */
+.alm-targets-col--designation { width: 20%; }
 
 /* Type pill: "open cluster" is the longest label at ~10ch; header is "Type". */
-.alm-targets-col--type { width: 11.5%; }
+.alm-targets-col--type { width: 10.5%; }
 
 /* Max alt: "Max alt" header + "90°" value — short numeric. */
 .alm-targets-col--maxalt { width: 7%; }
 
-/* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
-.alm-targets-col--spark { width: 9%; } /* #580: widened for the enlarged sparkline */
+/* Sparkline + Visible columns removed (iteration 2026-07-15, FR-007): the
+   detail panel's altitude graph is the canonical altitude view and the
+   visible-tonight state folded into the imaging-time why-glyph. */
 
-/* Visible: "●tonight" / "○low" indicator. */
-.alm-targets-col--visible { width: 8.5%; }
-
-/* Opposition: date stub "—" for now; leave room for "Jan 2026" once live. */
-.alm-targets-col--opposition { width: 9%; }
+/* Opposition: widest real value is "14 Apr · in 9 months" — sized to render
+   it unclipped (FR-032, fixes the stub-width clipping). */
+.alm-targets-col--opposition { width: 15%; }
 
 /* Sessions: numeric stub "—". */
 .alm-targets-col--sessions { width: 8%; }
@@ -349,10 +351,46 @@
 
 /* === spec 044: Lunar dist, Filters, Imaging time columns + filter badges === */
 
-/* Column widths (task 044) — fixed layout prevents per-page shift. */
+/* Column widths (task 044; re-sized iteration 2026-07-15 FR-032) — fixed
+   layout prevents per-page shift. Imaging time fits "2h10m" + why-glyph. */
 .alm-targets-col--lunardist { width: 6%; }
-.alm-targets-col--filters   { width: 15%; }
-.alm-targets-col--imagingtime { width: 7.5%; }
+.alm-targets-col--filters   { width: 18%; }
+.alm-targets-col--imagingtime { width: 10%; }
+
+/* Imaging-time why-glyph (iteration 2026-07-15): warning tint for the
+   zero-reason glyph (FR-030), faint tint for the actionable-Moon marker on
+   non-zero values (FR-031). */
+.alm-imgtime-glyph--warn { color: var(--alm-warn); }
+.alm-imgtime-glyph--muted { color: var(--alm-text-faint); }
+
+/* Computation-context label (iteration 2026-07-15, FR-033): one compact
+   always-visible line in the planner toolbar; must stay single-line even in
+   the crowded 1100×720 layout, so the site name is allowed to ellipsize. */
+.alm-planner-computed-for {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+.alm-planner-computed-for__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+.alm-planner-computed-for__change {
+  color: var(--alm-accent);
+}
+
+/* Detail altitude graph: Moon-excluded spans for the displayed band
+   (iteration 2026-07-15, FR-007 overlay) — a bottom-anchored exclusion band
+   so it reads as a time range without hiding the curve. */
+.alm-planner__graph-moon {
+  fill: var(--alm-warn);
+  opacity: 0.35;
+}
 
 /* Lunar dist cell: tabular numeric, muted (mock value). */
 .alm-targets-cell--lunardist {
@@ -745,90 +783,7 @@
 /* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
 .alm-filter-badges { gap: var(--alm-sp-2); }
 
-/* ── task 19 / #580: sparkline size + time-axis ────────────────────────────
- * #580: the row sparkline was too small to read. Enlarged from 72×22 → 96px
- * wide with a density-capped height, twilight shading, an area fill, and a
- * transit/max-altitude marker. The SVG viewBox (96×28) is set in
- * AltitudeSparkline.tsx; preserveAspectRatio=none stretches it to this box.
- *
- * HEIGHT INVARIANT (virtualizer, TargetsTable.tsx ROW_ESTIMATE): the sparkline
- * must NEVER be the row-height driver. Rows are border-box
- * `height: var(--alm-row-height)` minimums (24/32/40 per density) and this
- * cell carries 1px vertical padding + 1px border-bottom, so the height budget
- * is `--alm-row-height - 3px`. `min()` grows the curve to 28px where the
- * density allows (comfortable: 28+2+1 = 31 ≤ 32; spacious: 31 ≤ 40) and caps
- * it to exactly fill compact (21+2+1 = 24). A fixed height taller than that
- * budget would inflate EVERY row past the fixed-estimate windowing math and
- * override the user's density choice. */
-
-.alm-targets-spark {
-  width: 96px;
-  height: min(28px, calc(var(--alm-row-height) - 3px));
-}
-
-/* #580: tighter vertical padding than the 4px table default so the enlarged
- * curve fits the comfortable (32px) row budget — see the invariant above. */
-.alm-targets-table td.alm-targets-cell--spark {
-  padding-top: 1px;
-  padding-bottom: 1px;
-}
-
-/* #579 review nit: persistent "twilight" visibility state — the target clears
- * the usable altitude tonight but there is NO astronomical dark window
- * (high-lat summer), so a plain "tonight" dot would overpromise. Amber to
- * read as a caveat, distinct from --yes (ok) and --no (muted). */
-.alm-targets-vis--twilight { color: var(--alm-warn); }
-
-/* #580: soft area fill under the curve — usable/low tinted via the state
- * modifier classes below. */
-.alm-targets-spark__area {
-  fill: var(--alm-text-muted);
-  opacity: 0.1;
-  stroke: none;
-}
-.alm-targets-spark--usable .alm-targets-spark__area {
-  fill: var(--alm-accent);
-  opacity: 0.14;
-}
-
-/* #580: twilight (not-dark) shading either side of the astronomical dark
- * window — the same twilight the detail-pane graph marks. */
-.alm-targets-spark__twilight {
-  fill: var(--alm-text-faint);
-  opacity: 0.12;
-  stroke: none;
-}
-
-/* #580: transit / max-altitude dot marker. */
-.alm-targets-spark__peak {
-  fill: var(--alm-text-muted);
-  stroke: none;
-}
-.alm-targets-spark--usable .alm-targets-spark__peak {
-  fill: var(--alm-accent);
-}
-
-/* task 19: axis tick lines (bottom of sparkline viewBox). */
-.alm-targets-spark__axis-tick {
-  stroke: var(--alm-border);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-/* task 19: axis tick labels (hour marks below the curve). */
-.alm-targets-spark__axis-label {
-  font-size: var(--alm-text-2xs);
-  fill: var(--alm-text-faint);
-
-}
-
-/* task 19: hover tooltip title — pointer-events on the SVG so browser shows
- * the native <title> tooltip. The SVG itself was pointer-events:none before;
- * we enable it here so hovering works without JS. */
-.alm-targets-spark {
-  pointer-events: auto;
-  cursor: default;
-}
+/* task 19 sparkline CSS removed (iteration 2026-07-15, FR-007 hard removal). */
 
 /* ── task 18: favourite star button in Planner rows ───────────────────────
  * A 16×16 toggle button that appears in each Planner row.

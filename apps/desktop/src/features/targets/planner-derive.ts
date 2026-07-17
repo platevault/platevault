@@ -39,6 +39,7 @@ import {
 import type { ObserverSite } from './observing-sites/observer-site';
 import {
   BANDS,
+  BROADBAND_BANDS,
   DEFAULT_MOON_AVOIDANCE,
   minSeparationDeg,
   type Band,
@@ -62,6 +63,32 @@ export interface BestImagingDate {
   inDays: number;
 }
 
+/**
+ * Why imaging time is zero (iteration 2026-07-15, FR-029). Precedence when
+ * several blockers hold at once: darkness > altitude > moon — the most
+ * upstream structural blocker is reported.
+ *   - 'darkness': no qualifying dark window tonight (FR-017).
+ *   - 'altitude': a dark window exists but the target never clears the
+ *     usable-altitude threshold inside it.
+ *   - 'moon': dark ∩ uptime is non-empty but every band's moon-viable window
+ *     is empty (only reported when Moon geometry was actually computed —
+ *     never inferred from the not-computed zero degrade).
+ */
+export type ZeroImagingReason = 'darkness' | 'altitude' | 'moon';
+
+/**
+ * OSC passband (iteration 2026-07-15, FR-035): `'rgb'` = plain color camera;
+ * a band subset (e.g. `['Ha','OIII']`) = dual/tri-band narrowband filter.
+ */
+export type OscPassband = 'rgb' | Band[];
+
+/** Camera sensor configuration driving FR-036/FR-038; `null`/absent = unknown → mono behavior. */
+export interface SensorConfig {
+  sensorType: 'mono' | 'osc';
+  /** Only meaningful for `'osc'`; defaults to `'rgb'` when unset. */
+  passband?: OscPassband | null;
+}
+
 /** Threshold-derived, per-target observability scalars. */
 export interface DerivedObservability {
   /** Peak altitude across the night (= transit altitude), degrees. */
@@ -81,6 +108,27 @@ export interface DerivedObservability {
   separationScalars: SeparationScalars;
   /** Per-band moon-free imaging minutes (US5, FR-022); zero for every band with no dark window. */
   moonFreeMinutesByBand: Record<Band, number>;
+  /**
+   * Minutes the target sits above the usable altitude across the WHOLE night
+   * (the D1 "target uptime window" length — NOT gated by the dark window).
+   * Distinguishable from `totalImagingMinutes` (= dark ∩ uptime) per FR-005.
+   */
+  uptimeMinutes: number;
+  /** The stated blocker when imaging time is (effectively) zero (FR-029); `null` otherwise. */
+  zeroImagingReason: ZeroImagingReason | null;
+  /**
+   * Bands whose moon-viable window is strictly smaller than dark ∩ uptime
+   * (FR-031's "Moon is the actionable limiter" facts). Empty when Moon
+   * geometry wasn't computed — "not computed" never reads as "limited".
+   */
+  moonLimitedBands: Band[];
+  /**
+   * OSC single-pass imaging minutes (FR-036): dark ∩ uptime ∩ moon-viable
+   * under the strictest required separation across the passband's bands.
+   * `null` when the sensor is mono/unknown OR Moon geometry wasn't computed
+   * (never fabricated).
+   */
+  oscSinglePassMinutes: number | null;
 }
 
 /** Options for the Moon/best-date integration layered onto `deriveObservability`. */
@@ -93,6 +141,12 @@ export interface DeriveOptions {
   moonAvoidanceParams?: MoonAvoidanceParams;
   /** Search-start instant for `bestDate` (typically the planned night's start); default `night.nightStartMs`. */
   bestDateFromMs?: number;
+  /**
+   * Camera sensor configuration (FR-035/FR-038). `'osc'` computes
+   * `oscSinglePassMinutes` (FR-036); mono/unknown/absent keeps today's
+   * per-filter model unchanged.
+   */
+  sensorConfig?: SensorConfig | null;
 }
 
 const ZERO_BY_BAND: Record<Band, number> = Object.fromEntries(
@@ -188,6 +242,87 @@ function moonFreeMinutesByBand(
   return out;
 }
 
+/**
+ * OSC single-pass imaging minutes (iteration 2026-07-15, FR-036): one
+ * exposure captures every band in the passband simultaneously, so viability
+ * must satisfy the strictest band — the required separation is
+ * `max over band in passband of minSeparationDeg(band, age, params)`
+ * (Track A's rule consumed verbatim, aggregated on this Track-B side; spec
+ * 047 FR-020). Returns `null` (unknown, never fabricated) when Moon geometry
+ * wasn't computed; 0 when there's no dark window.
+ */
+function oscSinglePassMinutesFor(
+  night: NightObservability,
+  usableAltitudeDeg: number,
+  minHorizonAltDeg: number,
+  params: MoonAvoidanceParams,
+  passband: OscPassband,
+): number | null {
+  if (night.moonSamples.length === 0) return null;
+  const dark = night.darkWindow;
+  if (!dark) return 0;
+
+  // A plain color camera captures broadband; LRGB share params so the max is
+  // well-defined either way (FR-035's 'rgb' passband).
+  const bands: readonly Band[] =
+    passband === 'rgb' ? BROADBAND_BANDS : passband;
+  if (bands.length === 0) return null;
+  let effectiveMinSepDeg = 0;
+  for (const band of bands) {
+    const sep = minSeparationDeg(band, night.moonAgeFromFullDays, params);
+    if (sep > effectiveMinSepDeg) effectiveMinSepDeg = sep;
+  }
+
+  let minutes = 0;
+  for (const s of night.samples) {
+    if (s.tMs < dark.startMs || s.tMs > dark.endMs) continue;
+    if (s.altDeg < usableAltitudeDeg) continue;
+    const moon = nearestMoonSample(night.moonSamples, s.tMs);
+    const interfering =
+      moon !== null &&
+      moon.moonAltDeg >= minHorizonAltDeg &&
+      moon.separationDeg < effectiveMinSepDeg;
+    if (!interfering) minutes += GRID_STEP_MINUTES;
+  }
+  return minutes;
+}
+
+/**
+ * Moon-excluded spans for ONE band across the whole night (iteration
+ * 2026-07-15, FR-007's detail-graph overlay): contiguous sample runs where
+ * the Moon is up (≥ `minHorizonAltDeg`) AND its separation is below the
+ * band's Lorentzian minimum for the night's Moon age. Empty when Moon
+ * geometry wasn't computed (`night.moonSamples` empty) — "not computed"
+ * must render as no overlay, never as a fabricated exclusion.
+ */
+export function moonExcludedSpans(
+  night: NightObservability,
+  band: Band,
+  minHorizonAltDeg: number,
+  params: MoonAvoidanceParams,
+): Array<{ startMs: number; endMs: number }> {
+  if (night.moonSamples.length === 0) return [];
+  const spans: Array<{ startMs: number; endMs: number }> = [];
+  let open: { startMs: number; endMs: number } | null = null;
+  for (const s of night.samples) {
+    const moon = nearestMoonSample(night.moonSamples, s.tMs);
+    const excluded =
+      moon !== null &&
+      moon.moonAltDeg >= minHorizonAltDeg &&
+      moon.separationDeg <
+        minSeparationDeg(band, night.moonAgeFromFullDays, params);
+    if (excluded) {
+      if (open) open.endMs = s.tMs;
+      else open = { startMs: s.tMs, endMs: s.tMs };
+    } else if (open) {
+      spans.push(open);
+      open = null;
+    }
+  }
+  if (open) spans.push(open);
+  return spans;
+}
+
 /** Best-imaging date (US2, FR-009) — thin wrapper reusing Track A's `nextOpposition` (no second search). */
 function deriveBestDate(
   raDegJ2000: number | null | undefined,
@@ -218,35 +353,32 @@ export function deriveObservability(
 
   // Imaging time counts only samples inside the dark window that clear the
   // usable altitude. No dark window (high-lat summer) → zero imaging (FR-017).
+  // Uptime (D1) counts the WHOLE night's above-threshold samples — the two
+  // quantities must stay distinguishable (FR-005).
   let usableSamples = 0;
+  let uptimeSamples = 0;
   const dark = night.darkWindow;
-  if (dark) {
-    for (const s of night.samples) {
-      if (s.tMs < dark.startMs || s.tMs > dark.endMs) continue;
-      if (s.altDeg >= usableAltitudeDeg) usableSamples += 1;
-    }
-  }
-
   // Visibility (#579) discriminates by ALTITUDE over the observable window,
   // which is the astronomical dark window when one exists, else the whole
   // night. At high latitude there is no astronomical darkness for months
   // (e.g. lat 52 in summer), but a high/circumpolar target is still observable
-  // in twilight and MUST NOT read identically to a target that never rises —
-  // gating visibility solely on the dark window collapsed the whole "Visible"
-  // column to a single non-discriminating value. Winter behaviour is
-  // unchanged: the dark window is present, so the observable window is the
-  // same span the prior dark-only loop used. Imaging time above stays
-  // dark-gated (FR-017); only the visibility flag falls back.
+  // in twilight and MUST NOT read identically to a target that never rises.
+  // Imaging time stays dark-gated (FR-017); only the visibility flag falls
+  // back. Uptime (FR-005/D1) counts the whole night's above-threshold samples
+  // either way.
   const observable = dark ?? {
     startMs: night.nightStartMs,
     endMs: night.nightEndMs,
   };
   let visibleTonight = false;
   for (const s of night.samples) {
-    if (s.tMs < observable.startMs || s.tMs > observable.endMs) continue;
-    if (s.altDeg >= usableAltitudeDeg) {
+    if (s.altDeg < usableAltitudeDeg) continue;
+    uptimeSamples += 1;
+    if (dark && s.tMs >= dark.startMs && s.tMs <= dark.endMs) {
+      usableSamples += 1;
+    }
+    if (s.tMs >= observable.startMs && s.tMs <= observable.endMs) {
       visibleTonight = true;
-      break;
     }
   }
 
@@ -271,21 +403,58 @@ export function deriveObservability(
       : 'moon-not-up',
   };
 
+  const totalImagingMinutes = usableSamples * GRID_STEP_MINUTES;
+  const moonFree = moonFreeMinutesByBand(
+    night,
+    usableAltitudeDeg,
+    minHorizonAltDeg,
+    params,
+  );
+
+  // FR-031: bands whose moon-viable window is strictly smaller than
+  // dark ∩ uptime. Guarded on Moon geometry actually having been computed —
+  // the not-computed all-zero degrade must not read as "every band limited".
+  const moonComputed = night.moonSamples.length > 0;
+  const moonLimitedBands = moonComputed
+    ? BANDS.filter((b) => moonFree[b] < totalImagingMinutes)
+    : [];
+
+  // FR-029 reason-for-zero, precedence darkness > altitude > moon.
+  let zeroImagingReason: ZeroImagingReason | null = null;
+  if (!dark) {
+    zeroImagingReason = 'darkness';
+  } else if (totalImagingMinutes === 0) {
+    zeroImagingReason = 'altitude';
+  } else if (moonComputed && BANDS.every((b) => moonFree[b] === 0)) {
+    zeroImagingReason = 'moon';
+  }
+
+  const sensor = options.sensorConfig;
+  const oscSinglePassMinutes =
+    sensor?.sensorType === 'osc'
+      ? oscSinglePassMinutesFor(
+          night,
+          usableAltitudeDeg,
+          minHorizonAltDeg,
+          params,
+          sensor.passband ?? 'rgb',
+        )
+      : null;
+
   return {
     maxAltDeg,
     visibleTonight,
-    totalImagingMinutes: usableSamples * GRID_STEP_MINUTES,
+    totalImagingMinutes,
     bestDate: deriveBestDate(
       options.raDegJ2000,
       options.bestDateFromMs ?? night.nightStartMs,
     ),
     separationScalars,
-    moonFreeMinutesByBand: moonFreeMinutesByBand(
-      night,
-      usableAltitudeDeg,
-      minHorizonAltDeg,
-      params,
-    ),
+    moonFreeMinutesByBand: moonFree,
+    uptimeMinutes: uptimeSamples * GRID_STEP_MINUTES,
+    zeroImagingReason,
+    moonLimitedBands,
+    oscSinglePassMinutes,
   };
 }
 
