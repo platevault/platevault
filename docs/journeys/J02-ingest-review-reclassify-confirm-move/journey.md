@@ -1,7 +1,7 @@
 ---
 id: J02
 title: Move newly-arrived frames from an inbox drop folder into the library
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -10,6 +10,13 @@ interfaces: [desktop-ui]
 trace:
   - pre-migration journey.md @ git 42c596d6
   - deltas/2026-07-14-jval-docdrift.md
+  - PR #898 (framing-attribution backend: ranked attribution candidates +
+    chosenAttribution apply-path at Inbox confirm)
+  - docs/product/journeys/J02-ingest-review-reclassify-confirm-move/deltas/2026-07-14-q27-f5.md,
+    2026-07-14-q27-f6.md, 2026-07-14-q27-f10.md (legacy pre-merge drafts;
+    superseded by S5 below — the shipped feature has no Inbox UI surface,
+    unlike what those drafts anticipated)
+  - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
   - e2e-agentic-test/041-inbox-plan-surface/mixed-folder-single-type-subitems/scenario.md
   - e2e-agentic-test/041-inbox-plan-surface/missing-mandatory-gate/scenario.md
   - e2e-agentic-test/041-inbox-plan-surface/reclassify-field-agnostic/scenario.md
@@ -137,6 +144,25 @@ explicit, reviewed plan, and the action is visible in the audit history.
   now marked "planned" — it does not disappear from the list.
 - **Expect (negative):** No file on disk changes as a result of Confirm
   alone.
+- **Expect (negative — backend-only capability):** For a light-frame item,
+  the confirm call now also computes and returns ranked attribution
+  candidates matching the item against existing framings/projects (add to
+  a framing, start a new framing — including a mosaic project's first new
+  panel, flag an optic-train mismatch, or start a new project; a
+  completed-project candidate carries a reopen flag with the raw-subs-
+  archived warning) and accepts an optional per-item `chosenAttribution`
+  pick that persists framing/project membership at confirm time — but
+  today this is reachable only by calling the IPC command directly. No
+  control in the Inbox UI displays a candidate list or lets the user make
+  a pick, so this step's on-screen behavior is unchanged: Confirm still
+  just turns the item into a plan with no attribution UI shown.
+- **Trace:** `crates/app/inbox/src/attribution.rs`,
+  `crates/app/inbox/src/confirm.rs` (`attribution_candidates`,
+  `chosenAttribution`); no reference to `attribution`/`Attribution` exists
+  under `apps/desktop/src/features/inbox/` — confirmed by repo-wide search
+  and by `docs/development/windows-journeys/journey-11-framing-clustering-
+  attribution.md`, which states this explicitly as "a real, currently-
+  accurate product gap, not a testing gap."
 
 ### S6 — Review the plan before anything touches disk {#S6}
 - **Do:** Open the plan review surface (e.g. via a "Review plans (N)"
@@ -214,3 +240,11 @@ explicit, reviewed plan, and the action is visible in the audit history.
 - G1: (dissolved 2026-07-15) — tracked as issue #880; registry editor UI exposes only common fields.
 
 ## Delta log
+
+- **Δ2** 2026-07-17 · S5 · behavior-change
+  Confirm's backend now computes ranked framing/project attribution
+  candidates for light-frame items and accepts a `chosenAttribution` pick
+  that persists membership at confirm time — but no Inbox UI surfaces
+  either the candidates or the pick, so nothing changes on screen for this
+  step yet.
+  Evidence: PR #898 · by: journey-scribe (intent-gated)

@@ -1,19 +1,21 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
-surfaces: [settings, shell, audit]
+surfaces: [settings, shell, audit, framing]
 interfaces: [desktop-ui]
 trace:
   - pre-migration journey.md @ git 66026463
   - deltas/2026-07-14-q15-t122.md (folded — PR #826 / commit 0cdc81cc)
   - deltas/2026-07-14-q15-t126.md (not folded — still blocked, see Known gaps)
-  - deltas/2026-07-14-q27-f11.md (not folded — R11a clustering tunables exist
-    in the backend, crates/sessions/src/clustering.rs, but are not yet
-    surfaced in any Settings pane; flagged in report for user confirmation)
+  - deltas/2026-07-14-q27-f11.md (folded 2026-07-17 — the R11a clustering
+    tunables now ship in a real Settings → Framing pane, PR #927; see S10)
+  - PR #927 (Settings → Framing pane: pointing/rotation/mosaic-envelope
+    tunables)
+  - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
   - spec 018 (settings configuration model)
   - spec 019 (bottom log viewer)
   - spec 021 (developer contract diagnostics)
@@ -46,10 +48,11 @@ Note: Release builds lack the /dev/contracts palette entry by design
 
 ### S1 — Open Settings and find a pane {#S1}
 - **Do:** Navigate to Settings from the pinned sidebar entry.
-- **Expect:** 13 panes are grouped into three sections — Library (Data
+- **Expect:** 14 panes are grouped into three sections — Library (Data
   Sources, Equipment, Ingestion, Naming & Structure, Target Resolution,
-  Target Planner), Processing (Processing Tools, Calibration Matching,
-  Cleanup, Source Views), and Application (Appearance, Advanced, Audit Log).
+  Target Planner, Framing), Processing (Processing Tools, Calibration
+  Matching, Cleanup, Source Views), and Application (Appearance, Advanced,
+  Audit Log).
   ("Target Resolution" and "Appearance" are the displayed pane titles for
   the `catalogs` and `general` pane ids respectively — not "Catalogs"/
   "General".)
@@ -193,10 +196,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   defaults", use it.
 - **Expect:** "Restart first-run setup" is confirm-gated (inline
   confirm/cancel) before it reopens the source-registration wizard.
-  "Restore defaults" (7 adopting panes: Data Sources, Ingestion, Naming &
-  Structure, Calibration Matching, Target Planner, Cleanup, Advanced)
-  actually calls `settings.restore-defaults` or the pane's own reset and
-  refetches, so the visible fields do change.
+  "Restore defaults" (8 adopting panes: Data Sources, Ingestion, Naming &
+  Structure, Calibration Matching, Target Planner, Framing, Cleanup,
+  Advanced) actually calls `settings.restore-defaults` or the pane's own
+  reset and refetches, so the visible fields do change.
 - **Expect (negative):** As of this audit, "Export database" and "Reset
   preferences" are `console.log` no-ops — no backend call, no file, no
   confirmation (issue #601, open,
@@ -211,9 +214,37 @@ Note: Release builds lack the /dev/contracts palette entry by design
   apps/desktop/src/features/settings/SettingsKit.tsx, issue #601,
   issue #802, issue #827, issue #837
 
+### S10 — Tune framing clustering tolerances in the Framing pane {#S10}
+- **Do:** In Library → Framing, change the pointing tolerance fraction, the
+  no-equipment pointing fallback, the rotation tolerance, and the mosaic
+  panel-matching envelope; commit each with blur or Enter; use its Restore
+  Defaults control.
+- **Expect:** On a fresh install the four fields read the R11a shipped
+  defaults (0.1 fraction-of-FOV pointing tolerance, 0.2° no-equipment
+  fallback, 3° rotation tolerance, 1.0 fraction-of-FOV mosaic envelope) with
+  no global Save button, matching every other auto-save pane. Each committed
+  value is clamped to its documented range (pointing fraction 0.01–2.0,
+  fallback 0.01–10°, rotation 0.1–45°, mosaic envelope 0.1–5.0) and survives
+  a pane switch and an app restart through the real settings store. Restore
+  Defaults resets all four fields and re-fetches. These tunables drive the
+  framing clustering used by a project's light-session grouping (J05) and
+  the Inbox-confirm attribution ranking (J02/S5, J03/S2) — changing them
+  here changes clustering/ranking outcomes on the next derivation, not
+  retroactively for framings already marked `user_adjusted`.
+- **Expect (negative):** This pane is the *only* real frontend UI this
+  framing feature has — the framing list/merge/split/reassign surface and
+  the Inbox-confirm attribution-candidate picker referenced by J02/S5 and
+  J03/S2 do not exist in any page; editing these tunables has no visible
+  effect anywhere else in the app within this same session.
+- **Trace:** apps/desktop/src/features/settings/Framing.tsx,
+  crates/app/settings/src/descriptors.rs (bounds),
+  crates/sessions/src/clustering.rs, crates/app/inbox/src/attribution.rs
+  (`tolerance_params`), tests/e2e/settings_framing.spec.ts,
+  docs/development/windows-journeys/journey-11-framing-clustering-attribution.md.
+
 ## Success criteria
-- SC1: Every control across all 13 panes does something observable,
-  persists, and round-trips a pane switch (S1–S5, S9).
+- SC1: Every control across all 14 panes does something observable,
+  persists, and round-trips a pane switch (S1–S5, S9, S10).
 - SC2: Durable-data settings/protection/equipment/source mutations each
   produce exactly one audit row per committed change, with none for
   UI-state-only keys (S3).
@@ -246,3 +277,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   focus-ownership race previously could leave it dead). The 3 dead
   Pages-group routes remain unfixed.
   Evidence: PR #884 (fixes #581) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S1, S9, +S10 · behavior-change
+  A new Library → Framing pane (14th pane) surfaces the four R11a
+  clustering-tolerance tunables (pointing fraction, no-equipment fallback,
+  rotation tolerance, mosaic envelope) with auto-save and Restore Defaults —
+  the only real UI the framing feature has today.
+  Evidence: PR #927 · by: journey-scribe (intent-gated)
