@@ -8,7 +8,7 @@
  * opt-in padding-spacer windowing (the inbox is capped at 500 rows but can
  * still be large), so it stays windowed without a bespoke list.
  *
- * Columns: Detection (path, primary) · Type (frame type / state) · Files ·
+ * Columns: Path (relative path, primary) · Type (frame type / state) · Files ·
  * Format. When grouping is active, the chosen ordered dimensions render
  * collapsible group sub-header rows (shared `groupByDimensions` engine); leaf
  * rows indent under their group. Selection + grouping controls are owned by the
@@ -73,10 +73,19 @@ function isNeedsReview(item: InboxListItem): boolean {
  * no dominant frame type by definition — it must show a distinct
  * "needs review" label, never the raw item `state` (which is otherwise
  * `classified` at this point and would misleadingly read as fully resolved).
+ *
+ * `frameType` is checked before `groupFrameType`: it is the authoritative,
+ * singular post-materialization value (spec 041 T066 — items are single-type
+ * after materialization), while `groupFrameType` is the legacy
+ * aggregate-with-"Mixed"-fallback field. A single-file materialized sub-item
+ * can carry a stale/aggregate `groupFrameType` of `"Mixed"` even though it is
+ * definitionally never a mix of types (#550) — preferring `frameType` avoids
+ * that mislabel.
  */
 function classificationLabel(item: InboxListItem): string {
   if (item.isMaster)
     return item.masterFrameType ?? m.inbox_state_master_fallback();
+  if (item.frameType) return item.frameType;
   if (item.groupFrameType) return item.groupFrameType;
   if (isNeedsReview(item)) return m.inbox_state_needs_review();
   switch (item.state) {
@@ -118,10 +127,34 @@ function formatTag(item: InboxListItem): string {
   return 'FITS';
 }
 
+/**
+ * Trailing path segment of an absolute path, tolerating both `/` and `\`
+ * (Windows roots) separators. Falls back to the whole string when there is
+ * no separator (e.g. a bare drive letter).
+ */
+function pathBasename(absolutePath: string): string {
+  const trimmed = absolutePath.replace(/[/\\]+$/, '');
+  const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  return idx === -1 ? trimmed : trimmed.slice(idx + 1);
+}
+
+/**
+ * Label for the Path column when `relativePath` is empty (the item sits
+ * directly in a source root). Every root-level item previously rendered the
+ * literal constant `"(root)"`, so ~100+ rows across different roots were
+ * visually and semantically indistinguishable (#556). The root's own
+ * basename is a meaningful, distinguishing label per source instead.
+ */
+function detectionLabel(item: InboxListItem): string {
+  if (item.relativePath) return item.relativePath;
+  const base = pathBasename(item.rootAbsolutePath);
+  return base || m.inbox_list_root_label();
+}
+
 /** Dominant frame-type key for kind-filtering (matches the Kind filter options). */
 function itemKind(item: InboxListItem): string {
   if (item.isMaster) return item.masterFrameType ?? 'master';
-  return item.groupFrameType ?? '';
+  return item.frameType ?? item.groupFrameType ?? '';
 }
 
 /** Sort comparator for inbox items. */
@@ -327,6 +360,7 @@ export function InboxList({
         m.inbox_sort_detection_aria(),
       ),
       ariaSort: thSort('detection'),
+      style: { width: '20rem' },
     },
     {
       key: 'type',
@@ -417,11 +451,8 @@ export function InboxList({
           _selected: selected,
           _indent: indent || undefined,
           detection: (
-            <span
-              className="alm-inbox-cell__path"
-              title={item.relativePath || m.inbox_list_root_label()}
-            >
-              {item.relativePath || m.inbox_list_root_label()}
+            <span className="alm-inbox-cell__path" title={detectionLabel(item)}>
+              {detectionLabel(item)}
             </span>
           ),
           type: (
