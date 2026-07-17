@@ -57,7 +57,8 @@ function parseSelectorRowHeightPx(selector: string): number {
   const css = readFileSync(tokensCssPath, 'utf-8');
   const escaped = selector.replace(/[.]/g, '\\.');
   const block = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
-  if (block === undefined) throw new Error(`no ${selector} block in tokens.css`);
+  if (block === undefined)
+    throw new Error(`no ${selector} block in tokens.css`);
   return parseRowHeightPx(block, selector);
 }
 
@@ -77,7 +78,8 @@ describe('theme.ts token-scale base tables match tokens.css :root', () => {
   it('ROW_HEIGHT_PX matches --alm-row-height across density selectors', () => {
     const css = readFileSync(tokensCssPath, 'utf-8');
     const rootBlock = /:root\s*\{([^}]*)\}/.exec(css)?.[1];
-    if (rootBlock === undefined) throw new Error('no :root block in tokens.css');
+    if (rootBlock === undefined)
+      throw new Error('no :root block in tokens.css');
     const fromCss = {
       comfortable: parseRowHeightPx(rootBlock, ':root'),
       compact: parseSelectorRowHeightPx('.density-compact'),
