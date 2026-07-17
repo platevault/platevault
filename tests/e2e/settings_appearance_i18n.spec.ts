@@ -169,6 +169,27 @@ test.describe("Journey 10 · Appearance / 4 themes (spec 043)", () => {
     }
   });
 
+  test("theme choice survives navigating away from Settings (#794)", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/settings/general");
+    await page.getByRole("button", { name: "Warm Clay" }).click();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      "warm-clay",
+    );
+
+    // #794 repro: switch theme, then navigate away — the choice must not
+    // silently revert to the resolved-system dark default.
+    await page.goto("/#/targets");
+    await expect(page.locator(".alm-sidebar")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      "warm-clay",
+    );
+  });
+
   test("theme choice survives a full reload (applied at boot via initAppearance)", async ({
     page,
   }) => {
@@ -402,5 +423,54 @@ test.describe("Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)", ()
     await expect(page.locator(".alm-sidebar")).toBeVisible();
 
     await assertShellIntactNoHorizontalOverflow(page);
+  });
+});
+
+// ── Scenario 7 — Appearance "Restore defaults" adoption (#802) ──────────────
+
+test.describe("Journey 10 · Appearance Restore defaults (#802)", () => {
+  test("Restore defaults resets a changed theme back to System", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/settings/general");
+    await expect(page.getByText("Theme", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Espresso" }).click();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      "espresso-dark",
+    );
+
+    await page
+      .getByRole("button", { name: "Restore defaults", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "System" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// ── Scenario 8 — Advanced > Guided Tour restart confirm gate (#827) ─────────
+
+test.describe("Journey 10 · Advanced Guided Tour restart gate (#827)", () => {
+  test("'Restart guided flow' requires confirmation and shows success feedback, matching 'Restart first-run setup'", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/settings/advanced");
+
+    const restartBtn = page.getByTestId("guided-restart-btn");
+    await expect(restartBtn).toBeVisible();
+
+    // Clicking must not fire the restart directly — a confirm step gates it,
+    // symmetric with the "Restart first-run setup" control below it.
+    await restartBtn.click();
+    const confirmBtn = page.getByTestId("guided-restart-confirm-btn");
+    await expect(confirmBtn).toBeVisible();
+    await expect(page.getByTestId("guided-restart-done")).toHaveCount(0);
+
+    await confirmBtn.click();
+    await expect(page.getByTestId("guided-restart-done")).toBeVisible();
   });
 });

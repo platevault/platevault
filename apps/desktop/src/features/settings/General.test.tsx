@@ -12,10 +12,21 @@
  * (called at app boot in main.tsx), so the test boots it the same way.
  */
 
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { initAppearance } from '@/data/theme';
+import {
+  initAppearance,
+  getThemeChoice,
+  getFontSizeChoice,
+} from '@/data/theme';
 import { General } from './General';
 
 beforeEach(() => {
@@ -69,5 +80,44 @@ describe('General — font size', () => {
 
     render(<General />);
     expect(screen.getByDisplayValue('Large (16px)')).toBeInTheDocument();
+  });
+});
+
+describe('General — restore defaults (#802)', () => {
+  it('renders a Restore defaults control for the Appearance pane', () => {
+    render(<General />);
+    expect(
+      screen.getByRole('button', { name: /restore defaults/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('resets theme, font size, and density to their in-code defaults', async () => {
+    render(<General />);
+
+    // Density's underlying preference store is shared module state (not
+    // localStorage-synchronous like theme/font size), so an earlier test in
+    // this file may have left it non-default — query the combobox by its row
+    // rather than assuming a starting display value.
+    const densityRow = screen
+      .getByText('Density')
+      .closest('.alm-settings__row') as HTMLElement;
+    const densitySelect = within(densityRow).getByRole('combobox');
+
+    fireEvent.click(screen.getByRole('button', { name: /espresso/i }));
+    fireEvent.change(screen.getByDisplayValue('Default (14px)'), {
+      target: { value: 'large' },
+    });
+    fireEvent.change(densitySelect, { target: { value: 'compact' } });
+    expect(getThemeChoice()).toBe('espresso-dark');
+    expect(getFontSizeChoice()).toBe('large');
+    expect(densitySelect).toHaveValue('compact');
+
+    fireEvent.click(screen.getByRole('button', { name: /restore defaults/i }));
+
+    await waitFor(() => {
+      expect(getThemeChoice()).toBe('system');
+    });
+    expect(getFontSizeChoice()).toBe('default');
+    expect(densitySelect).toHaveValue('comfortable');
   });
 });
