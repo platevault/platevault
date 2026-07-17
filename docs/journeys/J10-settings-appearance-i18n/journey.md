@@ -117,8 +117,8 @@ Note: Release builds lack the /dev/contracts palette entry by design
   desktop build. At the documented envelope edge (a min-size 1100×720
   window at 150% zoom, which is above the shipped 125% CI-pinned floor), the
   spec records the resulting ~733px CSS viewport as accepted layout
-  degradation, not guarded — spec 054 (adaptive detail dock) remains
-  orphaned and was not required for this phase.
+  degradation, not guarded — spec 054 (adaptive detail dock) is tracked
+  separately (PR #937) and is not a dependency of this phase.
 - **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
   `applyDensity`, `applyFontSize`/`FontSizeChoice`/`FONT_SIZE_ROOT_PX`/
   `roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/`setZoomChoice`/
@@ -378,7 +378,8 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (browser dev server, vitest, Playwright mock mode) the engine call is a
   guarded no-op — the setting still persists and the control still reflects
   the chosen step. Max zoom is capped at 150% (user decision 2026-07-17);
-  spec 054 (adaptive detail dock) stays orphaned, and the resulting layout
+  spec 054 (adaptive detail dock) is tracked separately (PR #937), not a
+  dependency here, and the resulting layout
   degradation at min-window (1100×720) × 150% is documented and accepted,
   not guarded. Two CI pins cover the accepted envelope: 1100×720×125% and
   1320×864×150%, both emulated in mock mode as an 880×576 viewport (no

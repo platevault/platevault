@@ -50,12 +50,14 @@ Dependency graph: P1 → P2 → P3; P4 after spec 054 (or capped 125%).
 - [x] T024 E2E: no synthetic bold/italic (loaded-face check, SC-005); mono
       surfaces computed-family assertion (SC-006).
 
-## Phase 4 — Engine zoom (FR-006; SC-007) — max 150% (054 orphaned; see spec FR-006 envelope)
+## Phase 4 — Engine zoom (FR-006; SC-007) — max 150% (054 tracked separately, PR #937; see spec FR-006 envelope)
 
 - [x] T030 Capability `core:webview:allow-set-webview-zoom`; `setZoom` wired to
       app-owned Ctrl+=/−/0; persistence mirrors fontSize setting.
-- [x] T031 ~~One-line clarification into spec 054~~ DROPPED 2026-07-17: user chose to leave spec 054 orphaned (PR #937 untouched); Phase 4 ships capped at 125%, so the CSS-px
-      viewport measurements, never Tauri window size.
+- [x] T031 ~~One-line clarification into spec 054~~ DROPPED 2026-07-17: spec 054
+      is tracked separately (PR #937) and was not adopted into this spec's
+      pipeline, so no cross-edit was made; Phase 4 ships at 150% with the
+      FR-006 degradation envelope documented in this spec instead.
 - [x] T032 [depends T030] CI pin: min window 1100×720 × max zoom — layout
       intact (with 054: dock bottom mode) (SC-007).
 - [x] T033 [depends T030] J10 journey delta amendment (zoom);
