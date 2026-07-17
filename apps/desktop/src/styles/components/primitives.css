@@ -15,6 +15,10 @@
   font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
   line-height: 1.6; white-space: nowrap;
   border: 1px solid transparent;
+  /* Pills are labels/placeholders, never data values: stay sans even when
+     rendered inside a mono value cell (e.g. UnresolvedChip in PropertyTable
+     or calibration list columns). */
+  font-family: var(--alm-font-sans);
 }
 .alm-pill--neutral { background: var(--alm-chip); color: var(--alm-text-secondary); border-color: var(--alm-rule); }
 .alm-pill--ghost { background: transparent; color: var(--alm-text-muted); border-color: var(--alm-rule); }
