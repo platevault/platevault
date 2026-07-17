@@ -1,9 +1,9 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 6
+version: 7
 status: draft
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 actors: [astrophotographer]
 surfaces: [settings, shell, audit, framing]
 interfaces: [desktop-ui]
@@ -22,6 +22,7 @@ trace:
   - spec 030 (UI audit revision, Q15 durable-audit unification)
   - spec 043 (UI redesign — shell, sort announcements)
   - spec 046 (i18n error codes)
+  - spec 055 Phase 4 (whole-app engine zoom, T030/T032/T033)
   - PR #388 (Audit Log screen), PR #410 (audit detail localization),
     PR #415 (aria-sort), PR #826 (durable audit rows for settings/protection/
     equipment/source changes), commit 1f4ba13f (accessibility/theming pass)
@@ -71,8 +72,9 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (apps/desktop/src/features/settings/ResolverSettingsControl.tsx).
 
 ### S2 — Change an appearance setting {#S2}
-- **Do:** In Appearance, pick a different theme, change density, and change
-  font size.
+- **Do:** In Appearance, pick a different theme, change density, change font
+  size, and change the whole-app Zoom setting (or use Ctrl+= / Ctrl+- / Ctrl+0
+  anywhere in the app, outside a text field).
 - **Expect:** One of four named themes (Warm Clay, Warm Slate, Observatory,
   Espresso) or "System" (follows OS) applies live with no reload; the choice
   survives a full app restart (confirmed by a live Windows kill+relaunch
@@ -87,7 +89,13 @@ Note: Release builds lack the /dev/contracts palette entry by design
   glyph — previously-hardcoded sizes included) scales together, not just the
   Targets table and wizard rows. Font size persists through the settings DB
   (with a localStorage boot cache) and survives a restart; it previously
-  reset to default on every remount.
+  reset to default on every remount. Zoom is a separate, VS Code-style whole-app engine zoom that
+  stacks with font size rather than replacing it: five steps (90/100/110/
+  125/150%), default 100%. The Zoom select in Appearance and the Ctrl+=
+  (also Ctrl+Shift+= and the numpad +) / Ctrl+- / Ctrl+0 shortcuts drive the
+  same persisted choice; Ctrl+0 always resets to 100%. Zoom persists the
+  same way as font size (settings DB + localStorage boot cache) and is
+  re-applied once at startup.
 - **Expect (negative):** The `--alm-row-height` token itself — the actual
   row *height* — is still consumed only by the Targets table, the
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
@@ -101,17 +109,31 @@ Note: Release builds lack the /dev/contracts palette entry by design
   another auto-saved toggle (the SIMBAD-resolution toggle in Target
   Resolution) is now fixed — see S1's Target Resolution pane, PR #909 fixes
   #584 (the toggle now shows a loading skeleton, never its in-code default,
-  before the persisted value resolves).
+  before the persisted value resolves). Zoom's engine call
+  (`getCurrentWebview().setZoom`) is a Tauri-only API: in the browser dev
+  server, vitest, and Playwright mock mode the call is a guarded no-op — the
+  Zoom setting still persists and the control still reflects the chosen
+  step, but the webview itself does not visually rescale outside a real
+  desktop build. At the documented envelope edge (a min-size 1100×720
+  window at 150% zoom, which is above the shipped 125% CI-pinned floor), the
+  spec records the resulting ~733px CSS viewport as accepted layout
+  degradation, not guarded — spec 054 (adaptive detail dock) remains
+  orphaned and was not required for this phase.
 - **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
   `applyDensity`, `applyFontSize`/`FontSizeChoice`/`FONT_SIZE_ROOT_PX`/
-  `roundedTextScalePx`), apps/desktop/src/features/settings/General.tsx,
+  `roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/`setZoomChoice`/
+  `applyZoom`/`stepZoomIn`/`stepZoomOut`/`resetZoom`),
+  apps/desktop/src/app/Shell.tsx (Ctrl+=/-/0 `useHotkeys` bindings),
+  apps/desktop/src/features/settings/General.tsx,
+  apps/desktop/src-tauri/capabilities/default.json
+  (`core:webview:allow-set-webview-zoom`),
   apps/desktop/src/styles/tokens.css (`--alm-text-*` rem scale),
   apps/desktop/src/styles/reset.css (`html { font-size: 14px }`),
   apps/desktop/src/styles/components/merges-1.css:556. PR #882 fixes #587:
   density previously only ever touched `--alm-row-height`; font size was
   fully inert local state with no layout effect at all. Spec 055 Phase 2
   (T010–T012) replaced the 0.9/1.0/1.15 fractional-px multiplier with the
-  integer dial described above.
+  integer dial described above; Phase 4 (T030) adds Zoom.
 
 ### S3 — Change a durable-data setting and find it in the Audit Log {#S3}
 - **Do:** Change a durable-data setting (e.g. add/remove an Equipment item),
@@ -284,6 +306,11 @@ Note: Release builds lack the /dev/contracts palette entry by design
   `aria-sort` (S8).
 - SC4: All panes remain usable at a window size of 1100×720 with the header/
   action bar pinned (S7).
+- SC5: The app shell stays intact (sidebar, page bar, content all visible)
+  with no horizontal overflow at the shipped zoom envelope's 125%/150%
+  window×zoom pairs (S2); CI-pinned in
+  tests/e2e/settings_appearance_i18n.spec.ts ("Whole-app zoom envelope
+  pins").
 
 ## Known gaps
 - G1: (dissolved 2026-07-15, resolved 2026-07-15) — tracked as issue #587;
@@ -336,3 +363,27 @@ Note: Release builds lack the /dev/contracts palette entry by design
   titles/fine print, Planner SVG axis text, toast glyph) now scale with the
   dial too.
   Evidence: spec 055 Phase 2 (T010–T012) · by: journey-scribe (intent-gated)
+- **Δ7** 2026-07-17 · S2, +SC5 · behavior-change
+  Appearance gains a whole-app engine Zoom control (VS Code-style, stacks
+  with Font Size rather than replacing it): five steps (90/100/110/125/
+  150%), default 100%, driven by a new Zoom select and by app-owned
+  Ctrl+= (+ Ctrl+Shift+= / numpad +) / Ctrl+- / Ctrl+0 keyboard shortcuts
+  (window-local `tinykeys` bindings, not Tauri global shortcuts). Zoom
+  persists the same way as font size (settings DB write-through + a
+  localStorage boot cache) and is re-applied once at startup, right after
+  font size. The engine write uses Tauri's `setZoom` (true WebView2/
+  WKWebView/WebKitGTK layout zoom, not CSS `zoom`); since WebView2 exposes
+  no zoom-change event, the app always writes the value from its own state
+  and never reads it back from the engine. Outside a real desktop build
+  (browser dev server, vitest, Playwright mock mode) the engine call is a
+  guarded no-op — the setting still persists and the control still reflects
+  the chosen step. Max zoom is capped at 150% (user decision 2026-07-17);
+  spec 054 (adaptive detail dock) stays orphaned, and the resulting layout
+  degradation at min-window (1100×720) × 150% is documented and accepted,
+  not guarded. Two CI pins cover the accepted envelope: 1100×720×125% and
+  1320×864×150%, both emulated in mock mode as an 880×576 viewport (no
+  engine zoom in mock mode, so a pre-shrunk viewport stands in for the
+  zoomed CSS viewport) — shell (sidebar, page bar, content) stays intact
+  with no horizontal overflow at either pin.
+  Evidence: spec 055 Phase 4 (T030/T032), branch feat/app-zoom (PR not yet
+  merged at authoring time) · by: journey-scribe (intent-gated)

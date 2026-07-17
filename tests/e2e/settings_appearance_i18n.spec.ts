@@ -351,3 +351,56 @@ test.describe("Journey 10 · Bottom log viewer (spec 019)", () => {
     await expect(logRegion).toHaveCount(0);
   });
 });
+
+// ── Scenario 6 — Whole-app zoom envelope pins (spec 055 FR-006, T032) ───────
+//
+// Mock-mode Playwright has no Tauri engine to drive real `setZoom` (T030's
+// `getCurrentWebview().setZoom` no-ops outside Tauri — see data/theme.ts
+// `applyEngineZoom`). Engine zoom shrinks the *reported* CSS viewport by the
+// zoom factor without CSS reflow bugs, so a viewport pre-shrunk by the same
+// factor is a faithful CI-reachable proxy for "does the layout survive at
+// this zoom level" (the actual multiply-by-webview-zoom mechanism is
+// Tauri-native and covered by the `verify-on-windows` scenario instead).
+//
+// Both pins below emulate the same 880x576 CSS viewport by construction
+// (1100/1.25 = 880x576; 1320/1.5 = 880x576) — the min-window x125% pin and
+// the enlarged-window x150% pin are deliberately chosen so they still land
+// inside the accepted envelope; min-window x150% (733px) is documented in
+// the spec as accepted degradation, not guarded here.
+test.describe("Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)", () => {
+  const OVERFLOW_TOLERANCE_PX = 2;
+
+  async function assertShellIntactNoHorizontalOverflow(page: Page): Promise<void> {
+    await expect(page.locator(".alm-sidebar")).toBeVisible();
+    await expect(page.locator(".alm-page__bar").first()).toBeVisible();
+    await expect(page.locator(".alm-frame__main")).toBeVisible();
+
+    const overflow = await page.evaluate(() => {
+      const doc = document.scrollingElement!;
+      return doc.scrollWidth - window.innerWidth;
+    });
+    expect(overflow).toBeLessThanOrEqual(OVERFLOW_TOLERANCE_PX);
+  }
+
+  test("1100x720 min window at 125% zoom equivalent (880x576) — shell intact, no horizontal overflow", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.setViewportSize({ width: 880, height: 576 });
+    await page.goto("/#/settings/general");
+    await expect(page.getByText("Theme", { exact: true })).toBeVisible();
+
+    await assertShellIntactNoHorizontalOverflow(page);
+  });
+
+  test("1320x864 window at 150% zoom equivalent (880x576) — shell intact, no horizontal overflow", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.setViewportSize({ width: 880, height: 576 });
+    await page.goto("/#/targets");
+    await expect(page.locator(".alm-sidebar")).toBeVisible();
+
+    await assertShellIntactNoHorizontalOverflow(page);
+  });
+});

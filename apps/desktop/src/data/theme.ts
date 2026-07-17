@@ -28,6 +28,26 @@
 import { useSyncExternalStore } from 'react';
 import { getPreferences, subscribePreferences } from '@/data/preferences';
 
+/**
+ * Memoized dynamic import of the Tauri core API (`isTauri()`). Several
+ * independent fire-and-forget helpers below (theme/font-size/zoom settings
+ * persistence, native window theme sync, engine zoom) each gate on
+ * `isTauri()`; `initAppearance()` and `setZoomChoice()` can trigger more than
+ * one of them in the same synchronous tick. A real bundled ES module import
+ * is already cached per specifier, so this memoization changes nothing in
+ * production — it only guards against a Vite/Vitest dev-mode dynamic-import
+ * mock race observed when two callers both perform the *first* `import()` of
+ * the same mocked specifier concurrently.
+ */
+let tauriCorePromise: Promise<typeof import('@tauri-apps/api/core')> | null =
+  null;
+function importTauriCore(): Promise<typeof import('@tauri-apps/api/core')> {
+  if (!tauriCorePromise) {
+    tauriCorePromise = import('@tauri-apps/api/core');
+  }
+  return tauriCorePromise;
+}
+
 export type ThemeId =
   | 'warm-clay'
   | 'warm-slate'
@@ -158,7 +178,7 @@ export function getThemeChoice(): ThemeChoice {
 function persistThemeToSettings(choice: ThemeChoice): void {
   void (async () => {
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
+      const { isTauri } = await importTauriCore();
       if (!isTauri()) return;
 
       const [{ commands }, { unwrap }] = await Promise.all([
@@ -199,7 +219,7 @@ export function setThemeChoice(choice: ThemeChoice): void {
  */
 export async function hydrateThemeFromSettings(): Promise<void> {
   try {
-    const { isTauri } = await import('@tauri-apps/api/core');
+    const { isTauri } = await importTauriCore();
     if (!isTauri()) return;
 
     const [{ commands }, { unwrap }] = await Promise.all([
@@ -220,6 +240,11 @@ export async function hydrateThemeFromSettings(): Promise<void> {
       storedFontSize !== getFontSizeChoice()
     ) {
       setFontSizeChoice(storedFontSize);
+    }
+
+    const storedZoom = values[ZOOM_SETTINGS_KEY];
+    if (isZoomPercent(storedZoom) && storedZoom !== getZoomChoice()) {
+      setZoomChoice(storedZoom);
     }
   } catch {
     // Best-effort — keep the current localStorage-cached choices.
@@ -250,7 +275,7 @@ function syncNativeWindowTheme(themeId: ThemeId): void {
 
   void (async () => {
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
+      const { isTauri } = await importTauriCore();
       if (!isTauri()) return;
 
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -379,7 +404,7 @@ export function getFontSizeChoice(): FontSizeChoice {
 function persistFontSizeToSettings(choice: FontSizeChoice): void {
   void (async () => {
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
+      const { isTauri } = await importTauriCore();
       if (!isTauri()) return;
 
       const [{ commands }, { unwrap }] = await Promise.all([
@@ -435,6 +460,7 @@ export function initAppearance(): void {
   applyTheme();
   applyDensity();
   applyFontSize();
+  applyZoom();
   let lastDensity = getPreferences().density;
   subscribePreferences(() => {
     const d = getPreferences().density;
@@ -453,6 +479,124 @@ export function initAppearance(): void {
     };
     mq.addEventListener?.('change', onChange);
   }
+}
+
+/**
+ * Whole-app engine zoom (spec 055 FR-006, T030) — VS Code-style, stacks with
+ * the font-size dial rather than replacing it. Steps are percent values
+ * applied via Tauri's `WebviewWindow.setZoom` (true layout zoom on
+ * WebView2/WKWebView/WebKitGTK, unlike CSS `zoom` which the spec rejects for
+ * contaminating viewport measurement). User decision 2026-07-17: max 150%
+ * (spec 054 stays orphaned; degradation at min-window × 150% is documented
+ * and accepted, not guarded — see spec FR-006 envelope).
+ */
+export const ZOOM_STEPS = [90, 100, 110, 125, 150] as const;
+export type ZoomPercent = (typeof ZOOM_STEPS)[number];
+const DEFAULT_ZOOM: ZoomPercent = 100;
+
+const ZOOM_KEY = 'alm.zoom';
+const ZOOM_SETTINGS_KEY = 'zoom';
+
+function isZoomPercent(v: unknown): v is ZoomPercent {
+  return (ZOOM_STEPS as readonly number[]).includes(v as number);
+}
+
+export function getZoomChoice(): ZoomPercent {
+  try {
+    const v = Number(localStorage.getItem(ZOOM_KEY));
+    return isZoomPercent(v) ? v : DEFAULT_ZOOM;
+  } catch {
+    return DEFAULT_ZOOM;
+  }
+}
+
+/** Best-effort write-through to the settings DB — mirrors `persistFontSizeToSettings`. */
+function persistZoomToSettings(percent: ZoomPercent): void {
+  void (async () => {
+    try {
+      const { isTauri } = await importTauriCore();
+      if (!isTauri()) return;
+
+      const [{ commands }, { unwrap }] = await Promise.all([
+        import('@/bindings/index'),
+        import('@/api/ipc'),
+      ]);
+      unwrap(
+        await commands.settingsUpdate(SETTINGS_SCOPE, {
+          [ZOOM_SETTINGS_KEY]: percent,
+        }),
+      );
+    } catch {
+      // Best-effort — a DB write failure never blocks or reverts the UI change.
+    }
+  })();
+}
+
+/**
+ * Writes the engine zoom level via `getCurrentWebview().setZoom()`.
+ * WebView2 exposes no zoom-change event, so the app owns this value and
+ * always writes it from app state — it is never read back from the engine.
+ * Outside Tauri (browser dev server, vitest, Playwright mock mode) the API
+ * is absent; this silently no-ops there (zoom is a no-op in mock mode, but
+ * the setting still persists) — same fire-and-forget shape as
+ * `syncNativeWindowTheme`.
+ */
+function applyEngineZoom(percent: ZoomPercent): void {
+  void (async () => {
+    try {
+      const { isTauri } = await importTauriCore();
+      if (!isTauri()) return;
+
+      const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+      await getCurrentWebview().setZoom(percent / 100);
+    } catch {
+      // Silently degrade — engine zoom is best-effort and must never block
+      // or revert the persisted setting.
+    }
+  })();
+}
+
+/**
+ * Applies the persisted zoom level. Called once at startup (`initAppearance`)
+ * right after `applyFontSize`, and again on every `setZoomChoice`. The engine
+ * call is inherently async (an IPC round-trip to the webview), so unlike the
+ * CSS token overrides it cannot be fully synchronous pre-paint; calling it as
+ * early as possible in the boot sequence keeps the at-100%-then-jump window
+ * as short as achievable without a native zoom-on-create hook.
+ */
+export function applyZoom(percent: ZoomPercent = getZoomChoice()): void {
+  applyEngineZoom(percent);
+}
+
+export function setZoomChoice(percent: ZoomPercent): void {
+  try {
+    localStorage.setItem(ZOOM_KEY, String(percent));
+  } catch {
+    /* localStorage may be unavailable */
+  }
+  persistZoomToSettings(percent);
+  applyZoom(percent);
+  notify();
+}
+
+/** Steps to the next larger zoom level; no-op at the top of `ZOOM_STEPS`. */
+export function stepZoomIn(): void {
+  const current = getZoomChoice();
+  const idx = ZOOM_STEPS.indexOf(current);
+  const next = ZOOM_STEPS[Math.min(idx + 1, ZOOM_STEPS.length - 1)];
+  if (next !== current) setZoomChoice(next);
+}
+
+/** Steps to the next smaller zoom level; no-op at the bottom of `ZOOM_STEPS`. */
+export function stepZoomOut(): void {
+  const current = getZoomChoice();
+  const idx = ZOOM_STEPS.indexOf(current);
+  const next = ZOOM_STEPS[Math.max(idx - 1, 0)];
+  if (next !== current) setZoomChoice(next);
+}
+
+export function resetZoom(): void {
+  if (getZoomChoice() !== DEFAULT_ZOOM) setZoomChoice(DEFAULT_ZOOM);
 }
 
 function subscribe(l: () => void): () => void {
@@ -480,4 +624,10 @@ export function useFontSizeChoice(): [
 ] {
   const choice = useSyncExternalStore(subscribe, getFontSizeChoice);
   return [choice, setFontSizeChoice];
+}
+
+/** Hook: [choice, setChoice] for the whole-app engine zoom (spec 055 T030). */
+export function useZoomChoice(): [ZoomPercent, (p: ZoomPercent) => void] {
+  const choice = useSyncExternalStore(subscribe, getZoomChoice);
+  return [choice, setZoomChoice];
 }
