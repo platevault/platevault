@@ -8385,6 +8385,12 @@ export type SessionCalibrationMatch = {
 	kind: CalibrationKind,
 	score: number | null,
 	softMismatches: string[],
+	/**
+	 *  Whether this assignment was made via the hard-rule override path
+	 *  (spec 007 SC-003) — persisted so the UI can distinguish an override
+	 *  from a normal match on reopen instead of losing the distinction.
+	 */
+	wasOverride: boolean,
 };
 
 /**  Extended detail view of an acquisition session. */

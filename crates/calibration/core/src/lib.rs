@@ -188,9 +188,10 @@ pub struct MasterInfo {
 
 /// Suggest ranked calibration masters for a single light session.
 ///
-/// Returns an error string for hard-guard failures (`session.mixed_state`,
-/// `match.observer_location_missing`). Returns an empty vec when no masters
-/// match; callers map that to `"no_match"` status.
+/// Returns an error string for hard-guard failures (`session.mixed_state`
+/// only — #867 removed the `match.observer_location_missing` hard guard, see
+/// the doc comment below). Returns an empty vec when no masters match;
+/// callers map that to `"no_match"` status.
 ///
 /// # Errors
 /// Returns `Err` with a contract error code string on hard-guard violations.

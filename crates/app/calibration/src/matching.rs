@@ -549,8 +549,10 @@ async fn load_session(pool: &SqlitePool, session_id: &str) -> Result<Option<Sess
             has_observer_location: r.has_observer_location.unwrap_or(0) != 0,
             has_exposure_start_utc: r.has_exposure_start_utc.unwrap_or(0) != 0,
         },
-        // No fingerprint row → session exists but has no metadata.
-        // Guard A6 will reject with observer_location_missing.
+        // No fingerprint row → session exists but has no metadata yet.
+        // #867: this no longer hard-rejects; suggest degrades gracefully
+        // (missing observing_night_date becomes a metadata_missing soft
+        // mismatch instead of excluding every candidate).
         None => SessionInfo {
             id: session_id.to_owned(),
             session_type: "light".to_owned(),
@@ -788,6 +790,8 @@ pub async fn masters_get(
 
     let missing_flag = compute_missing_flag(pool, &r.id).await?;
 
+    let compatible_sessions = compute_compatible_sessions(pool, &r.id).await?;
+
     Ok(contracts_core::calibration::MasterDetail {
         id: r.id.clone(),
         kind: cal_kind,
@@ -808,10 +812,66 @@ pub async fn masters_get(
         size_bytes: r.size_bytes.and_then(|b| u64::try_from(b).ok()),
         used_by_session_ids,
         used_by_project_ids,
-        compatible_sessions: vec![],
+        compatible_sessions,
         usage_stats: contracts_core::calibration::MasterUsageStats { session_count, project_count },
         missing_flag,
     })
+}
+
+/// #868: compute the real "compatible sessions" list for a master — every
+/// light session the domain matcher would surface this master as a candidate
+/// for, scored via the same `calibration_core::suggest` path used by
+/// `calibration.match.suggest` (single master, so at most one match per
+/// session).
+async fn compute_compatible_sessions(
+    pool: &SqlitePool,
+    master_id: &str,
+) -> Result<Vec<contracts_core::calibration::CompatibleSessionEntry>, String> {
+    let Some(master) = load_master_by_id(pool, master_id).await? else {
+        return Ok(vec![]);
+    };
+
+    let config = load_config(pool).await;
+    let sessions = q_calibration::list_light_acquisition_fingerprints(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut entries = Vec::new();
+    for row in sessions {
+        let session = SessionInfo {
+            id: row.id.clone(),
+            session_type: row.session_type.unwrap_or_else(|| "light".to_owned()),
+            gain: row.gain,
+            offset: row.offset_val,
+            exposure_s: row.exposure_s,
+            temp_c: row.temp_c,
+            filter: row.filter_name,
+            rotation_deg: row.rotation_deg,
+            binning: row.binning,
+            optic_train: row.optic_train,
+            observing_night_date: row.observing_night_date,
+            has_observer_location: row.has_observer_location.unwrap_or(0) != 0,
+            has_exposure_start_utc: row.has_exposure_start_utc.unwrap_or(0) != 0,
+        };
+
+        // Single-master suggest: guard errors (mixed-state) just exclude the
+        // session, matching how `suggest()` filters unusable candidates.
+        if let Ok(matches) =
+            domain_suggest(&session, std::slice::from_ref(&master), &[master.kind], &config)
+        {
+            if let Some(m) = matches.into_iter().next() {
+                let soft_mismatches =
+                    m.dimensions_mismatched.iter().map(|d| d.dimension.clone()).collect();
+                entries.push(contracts_core::calibration::CompatibleSessionEntry {
+                    session_id: row.id,
+                    score: m.confidence,
+                    soft_mismatches,
+                });
+            }
+        }
+    }
+
+    Ok(entries)
 }
 
 /// spec 048 US5 (FR-024/025): compute a master's derived "missing" flag from
@@ -996,6 +1056,70 @@ mod masters_tests {
         let db = test_db().await;
         let err = masters_get(db.pool(), "nonexistent").await.unwrap_err();
         assert!(err.contains("master.not_found"), "expected master.not_found error, got: {err}");
+    }
+
+    /// #868: masters_get.compatible_sessions is populated from a real
+    /// domain-matcher pass over light sessions, not hardcoded to empty.
+    #[tokio::test]
+    async fn masters_get_populates_compatible_sessions() {
+        let db = test_db().await;
+
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t3', 'dark-300s', 'dark', '2026-05-15T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO calibration_fingerprint \
+             (id, calibration_type, gain, offset_val, exposure_s, temp_c, binning) \
+             VALUES ('cal-t3', 'dark', 100.0, 50.0, 300.0, -10.0, '1x1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Compatible light session: matches every hard-rule dimension.
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, created_at) \
+             VALUES ('acq-t3', 'M31/L/2026-05-15/300/1x1', '2026-05-15T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_fingerprint \
+             (id, session_type, gain, offset_val, exposure_s, temp_c, binning, \
+              has_observer_location, has_exposure_start_utc) \
+             VALUES ('acq-t3', 'light', 100.0, 50.0, 300.0, -10.0, '1x1', 1, 1)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Incompatible light session: gain hard-rule mismatch (dark's hard
+        // dimensions are gain + offset, so this must exclude the candidate).
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, created_at) \
+             VALUES ('acq-t4', 'M31/L/2026-05-16/300/1x1', '2026-05-16T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_fingerprint \
+             (id, session_type, gain, offset_val, exposure_s, temp_c, binning) \
+             VALUES ('acq-t4', 'light', 200.0, 50.0, 300.0, -10.0, '1x1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let detail = masters_get(db.pool(), "cal-t3").await.unwrap();
+        let ids: Vec<&str> =
+            detail.compatible_sessions.iter().map(|e| e.session_id.as_str()).collect();
+        assert_eq!(ids, vec!["acq-t3"], "only the matching light session should be compatible");
     }
 
     /// T032 / T037: calibration suggest finds real masters from populated fingerprints.

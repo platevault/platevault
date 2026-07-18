@@ -58,6 +58,7 @@ describe('SessionDetail calibration linkage', () => {
               kind: 'dark',
               score: 0.9,
               softMismatches: ['gain'],
+              wasOverride: false,
             },
           ],
         })}

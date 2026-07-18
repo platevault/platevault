@@ -328,6 +328,7 @@ async fn load_calibration_matches(
                 kind,
                 score: r.confidence,
                 soft_mismatches,
+                was_override: r.was_override,
             }
         })
         .collect())

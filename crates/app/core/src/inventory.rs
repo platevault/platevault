@@ -299,6 +299,7 @@ fn calibration_link_to_match(row: SessionCalibrationLinkRow) -> SessionCalibrati
         kind,
         score: row.confidence,
         soft_mismatches,
+        was_override: row.was_override,
     }
 }
 
