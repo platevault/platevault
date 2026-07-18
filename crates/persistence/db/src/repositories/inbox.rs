@@ -2457,6 +2457,7 @@ mod tests {
     /// about. This test writes evidence (which the list-only tests omit) so it
     /// actually exercises the evidence-join stat path.
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // full setup: source, group, placeholder+evidence, sub-item+evidence
     async fn stats_and_list_agree_on_split_single_type_folder_711() {
         use domain_core::first_run::{
             OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
