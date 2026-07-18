@@ -930,7 +930,16 @@ pub(crate) async fn materialize_sub_items(
             lane,
         };
 
-        repo::upsert_inbox_sub_item(pool, &sub_item).await.ok();
+        // Seed against the id that ACTUALLY persisted, not the freshly-generated
+        // `sub_id`: on a re-materialization of an existing group the ON CONFLICT
+        // DO UPDATE keeps the pre-existing row's id and discards `sub_id`.
+        // Seeding the discarded id FK-fails (evidence/metadata/classification
+        // reference inbox_items(id)) and strands the real row without evidence,
+        // so a later reclassify finds empty file records and never resolves the
+        // group to a confirmable single-type item (issue #854).
+        let Ok(persisted_id) = repo::upsert_inbox_sub_item(pool, &sub_item).await else {
+            continue;
+        };
 
         // Seed this sub-item's OWN evidence/metadata/breakdown + a matching
         // `inbox_classifications` cache row (content_signature == sub_sig, the
@@ -943,7 +952,7 @@ pub(crate) async fn materialize_sub_items(
         // source group, never copied to a freshly materialized sub-item id
         // otherwise), re-classifying it back to unclassified and leaving
         // Confirm permanently disabled (issue #755 CI fix, R-14).
-        seed_sub_item_cache(pool, &sub_id, group_key, frame_type_str, &sub_sig, files).await;
+        seed_sub_item_cache(pool, &persisted_id, group_key, frame_type_str, &sub_sig, files).await;
     }
 
     // Purge sub-item rows for groups that no longer exist: when a file's metadata

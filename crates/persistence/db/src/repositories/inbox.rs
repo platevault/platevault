@@ -504,12 +504,19 @@ pub struct UpsertInboxSubItem<'a> {
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on constraint or connection failure.
+///
+/// Returns the id of the persisted row. On an `ON CONFLICT` update this is the
+/// PRE-EXISTING row's id, NOT `item.id`: SQLite keeps the conflicting row's
+/// primary key. Callers MUST seed dependent rows (evidence/metadata/
+/// classification, which FK-reference `inbox_items(id)`) against the returned
+/// id — seeding against a discarded `item.id` FK-fails and strands the real row
+/// without evidence, breaking a later reclassify (issue #854).
 pub async fn upsert_inbox_sub_item(
     pool: &SqlitePool,
     item: &UpsertInboxSubItem<'_>,
-) -> DbResult<()> {
+) -> DbResult<String> {
     let now = Timestamp::now_iso();
-    sqlx::query(
+    let (id,): (String,) = sqlx::query_as(
         "INSERT INTO inbox_items
             (id, root_id, relative_path, source_group_id, group_key, group_label,
              frame_type, file_count, discovered_at, last_scanned_at,
@@ -521,7 +528,8 @@ pub async fn upsert_inbox_sub_item(
              file_count         = excluded.file_count,
              last_scanned_at    = excluded.last_scanned_at,
              content_signature  = excluded.content_signature,
-             state              = 'classified'",
+             state              = 'classified'
+         RETURNING id",
     )
     .bind(item.id)
     .bind(item.root_id)
@@ -535,9 +543,9 @@ pub async fn upsert_inbox_sub_item(
     .bind(&now)
     .bind(item.content_signature)
     .bind(item.lane)
-    .execute(pool)
+    .fetch_one(pool)
     .await?;
-    Ok(())
+    Ok(id)
 }
 
 /// Update `child_count` on a source group to reflect how many single-type
@@ -1904,6 +1912,89 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].relative_file_path, "2025-10-10/lights/frame_001.fits");
         assert_eq!(rows[0].frame_type, Some("light".to_owned()));
+    }
+
+    /// issue #854: on a re-materialization of an existing group, the ON CONFLICT
+    /// DO UPDATE keeps the PRE-EXISTING row's id and discards the caller's
+    /// freshly-generated id. The function must return the id that actually
+    /// persisted so `materialize_sub_items` can seed evidence/metadata against a
+    /// real `inbox_items` row — seeding the discarded id FK-fails and strands the
+    /// row without evidence, so a later reclassify never resolves the group.
+    #[tokio::test]
+    async fn upsert_sub_item_returns_persisted_id_on_conflict() {
+        let db = test_db().await;
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-854",
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("s"),
+                format: Some("fits"),
+                lane: Some("fits"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let mk = |id| UpsertInboxSubItem {
+            id,
+            root_id: "root-1",
+            relative_path: "",
+            source_group_id: "sg-854",
+            group_key: "type=light",
+            group_label: "Light",
+            frame_type: Some("light"),
+            content_signature: "s",
+            file_count: 1,
+            lane: "fits",
+        };
+
+        let first = upsert_inbox_sub_item(db.pool(), &mk("id-A")).await.unwrap();
+        assert_eq!(first, "id-A");
+
+        // Same (root_id, relative_path, group_key) → conflict; the discarded id
+        // must NOT be returned.
+        let second = upsert_inbox_sub_item(db.pool(), &mk("id-B-discarded")).await.unwrap();
+        assert_eq!(second, "id-A", "ON CONFLICT keeps the existing row id");
+
+        // Seeding under the returned id succeeds; seeding under the discarded id
+        // FK-fails (evidence FK-references inbox_items(id)) — the exact swallowed
+        // write that #854 stranded on.
+        insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-ok",
+                inbox_item_id: &second,
+                relative_file_path: "f.fits",
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: None,
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+        let orphan = insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-fk",
+                inbox_item_id: "id-B-discarded",
+                relative_file_path: "f.fits",
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: None,
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await;
+        assert!(orphan.is_err(), "the discarded id is not a real row; seeding it FK-fails");
     }
 
     #[tokio::test]
