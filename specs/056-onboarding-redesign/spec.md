@@ -149,9 +149,12 @@ restarts.
 
 **Acceptance Scenarios**:
 
-1. **Given** onboarding is active, **When** the user opens any workflow page,
-   **Then** that page's checklist group is expanded in the sidebar accordion
-   and all other groups show as one line with a completed/total count.
+1. **Given** onboarding is active, **When** the user opens any workflow page
+   whose group still has open items, **Then** that page's checklist group is
+   expanded in the sidebar accordion and all other groups show as one line
+   with a completed/total count. A complete group stays as its one-line done
+   header even on its own page (FR-031 precedence) and can still be expanded
+   manually.
 2. **Given** an item whose prerequisite milestone is missing, **When** the user
    views or focuses the item, **Then** it presents a prerequisite state with a
    human-readable reason and a jump link that navigates to the upstream page.
@@ -206,7 +209,8 @@ replaying historical records never produces a tick.
 6. **Given** a page group with one remaining open item, **When** that item is
    checked or dismissed (auto or manual), **Then** after the completion
    choreography the group collapses to its one-line header with a done
-   checkmark.
+   checkmark — even when it is the current page's group (precedence over
+   FR-007 auto-expand); a manual toggle can still reopen it.
 7. **Given** every group is complete or dismissed, **When** the last item
    settles, **Then** the entire Getting started section (and its progress-ring
    icon) auto-hides; the Settings → Advanced restore control brings it back.
@@ -347,8 +351,9 @@ checked/dismissed items keep their prior state.
 - **FR-007**: All checklists MUST be presented as one shared sidebar accordion
   section placed above the pinned Settings entry, with an overall progress
   line, per-page groups matching the sidebar's workflow stages, the current
-  page's group auto-expanded, and other groups rendered as one line with a
-  completed/total count.
+  page's group auto-expanded (unless that group is complete — FR-031 takes
+  precedence), and other groups rendered as one line with a completed/total
+  count.
 - **FR-008**: Item labels MUST be 3–5 words, with a fuller one-sentence
   description available in a tooltip on hover and on keyboard focus.
 - **FR-009**: The system MUST NOT create demo, sample, or placeholder library
@@ -441,7 +446,11 @@ checked/dismissed items keep their prior state.
   progress-ring icon) MUST auto-hide. The auto-hide is a transition triggered
   when the last open item settles; after a restore (FR-014) the section stays
   visible — even if still fully complete — until a new settling transition or
-  an explicit removal (FR-013) hides it again.
+  an explicit removal (FR-013) hides it again. Completion takes precedence
+  over FR-007's current-page auto-expand: a complete group renders as its
+  one-line done header even when it is the current page's group; the user can
+  still expand it manually as a normal accordion toggle (which does not
+  re-enable auto-expand).
 
 ### Key Entities
 
