@@ -661,8 +661,13 @@ export function useOpenInboxPlans() {
         if (!cancelled) setState({ data: resp, loading: false, error: null });
       })
       .catch((e: unknown) => {
+        // Issue #767: keep the last-known plans on a transient refetch error
+        // instead of clobbering `data` to null. The 1s poll while the review
+        // overlay is open (InboxPage) treats a null/empty `data` exactly like
+        // "every plan applied" and auto-closes — a single dropped poll tick
+        // must not be mistaken for that.
         if (!cancelled)
-          setState({ data: null, loading: false, error: String(e) });
+          setState((s) => ({ data: s.data, loading: false, error: String(e) }));
       });
     return () => {
       cancelled = true;

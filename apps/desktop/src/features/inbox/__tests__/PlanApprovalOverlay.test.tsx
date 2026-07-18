@@ -182,5 +182,41 @@ describe('PlanApprovalOverlay', () => {
       );
     });
     expect(onClose).toHaveBeenCalled();
+    // Issue #767: the dialog itself must not remain visible over an empty
+    // body even in this same render, regardless of whether the CALLER has
+    // yet reacted to `onClose` by flipping its own `open` prop back to
+    // false — `open` is deliberately left `true` above to reproduce that
+    // exact stuck window.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  // Issue #767: a caller passing a STATIC `open=true` with empty content
+  // (the precise "stuck open, empty body" report — Escape/✕/backdrop all
+  // re-invoke an `onClose` the caller never acts on in time) must never
+  // render a visible dialog. This is deliberately NOT a rerender: it checks
+  // the very first render, before any effect has a chance to run, so it
+  // cannot be masked by React/act() batching an effect-driven close into the
+  // same flush (which is what let a passing-but-vacuous mock-e2e test
+  // through previously).
+  it('issue #767: never shows a visible dialog when open=true but there is no content', () => {
+    renderOverlay({ plans: [], open: true, onClose });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Review plans')).toBeNull();
+  });
+
+  // A pending destination-root pick is real content (the picker itself) even
+  // though `plans` is still empty — the dialog must stay visible for it.
+  it('issue #767: stays visible for a pending root pick even with empty plans', () => {
+    renderOverlay({
+      plans: [],
+      open: true,
+      onClose,
+      pendingRootPick: {
+        category: 'light_frames',
+        candidates: [{ rootId: 'root-1', path: '/lights', kind: 'library' }],
+      },
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-root-picker')).toBeInTheDocument();
   });
 });

@@ -277,6 +277,31 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 	});
 
+	test("issue #767: Apply all empties the plan list and the overlay auto-closes (not stuck open with an empty body)", async ({
+		page,
+	}) => {
+		seedSetupComplete(page);
+		await page.goto("/#/inbox");
+		await disableGuidedTourOverlay(page);
+		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
+
+		const reviewBtn = page.getByTestId("inbox-review-plans-btn");
+		await expect(reviewBtn).toBeVisible({ timeout: 8_000 });
+		await reviewBtn.click();
+
+		const overlay = page.getByTestId("plan-approval-overlay");
+		await expect(overlay).toBeVisible({ timeout: 5_000 });
+
+		await overlay.getByTestId("plan-apply-all").click();
+
+		// The overlay auto-closes once every plan is applied — it must NOT be
+		// left open with an empty body (issue #767).
+		await expect(overlay).not.toBeVisible({ timeout: 5_000 });
+		await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+
+		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+	});
+
 	test("catalogue-in-place plan is distinguishable from a move plan in the review overlay (US4 FR-017/FR-018/SC-007)", async ({
 		page,
 	}) => {
