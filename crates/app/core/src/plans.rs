@@ -40,6 +40,7 @@ use contracts_core::plans::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, Timestamp};
 use fs_executor::failure::FailureCode;
+use fs_executor::ops::cas_check::snapshot_from_metadata;
 use fs_executor::ops::{delete_op, trash_op};
 use persistence_db::repositories::plans as repo;
 use sqlx::SqlitePool;
@@ -361,6 +362,38 @@ pub async fn approve_plan(
 
     // Persist state transition + token.
     repo::set_approved(pool, plan_id, &approved_at, &approval_token).await.map_err(db_err)?;
+
+    // Snapshot per-item FS metadata (R-FS-1), so `check_cas` at apply time has
+    // a real baseline instead of silently skipping in permissive mode (#829:
+    // this call was documented but never wired, leaving stale/modified
+    // sources undetected for every plan type). Best-effort: a stat failure
+    // (source already gone, or a destination-only item with no source) just
+    // leaves the snapshot columns NULL — apply-time `SourceMissing` is the
+    // real backstop for a genuinely absent file.
+    let item_rows = repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
+    let item_refs: Vec<&repo::PlanItemRow> = item_rows.iter().collect();
+    let root_map = build_root_map(pool, &item_refs).await;
+    for item in &item_rows {
+        if item.from_relative_path.is_empty() {
+            continue; // no source (e.g. mkdir) — nothing to snapshot
+        }
+        let abs_path = match item.from_root_id.as_deref().and_then(|rid| root_map.get(rid)) {
+            Some(root) => root.join(&item.from_relative_path),
+            None => Utf8PathBuf::from(&item.from_relative_path),
+        };
+        if let Some(snapshot) = snapshot_from_metadata(&abs_path) {
+            if let Err(e) = repo::update_item_fs_snapshot(
+                pool,
+                &item.id,
+                snapshot.approved_mtime.as_deref(),
+                snapshot.approved_size_bytes,
+            )
+            .await
+            {
+                tracing::error!(item_id = %item.id, error=%e, "failed to persist FS snapshot at approval");
+            }
+        }
+    }
 
     // Emit audit event (T026, A7).
     bus.publish(
@@ -1136,6 +1169,75 @@ mod tests {
 
         let row = repo::get_plan(db.pool(), "p1", false).await.unwrap();
         assert_eq!(row.state, "approved");
+    }
+
+    /// #829: `approve_plan` must snapshot per-item FS metadata
+    /// (`approved_mtime`/`approved_size_bytes`) for a real source file, so
+    /// `check_cas` at apply time has a baseline instead of silently skipping.
+    #[tokio::test]
+    async fn n829_approve_plan_snapshots_item_fs_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("m51.fits");
+        std::fs::write(&file_path, b"fits-data").unwrap();
+        let abs = file_path.to_str().unwrap();
+
+        let (db, bus) = setup().await;
+        insert_draft(&db, "p-fs-snap").await;
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "p-fs-snap-item-0",
+                plan_id: "p-fs-snap",
+                item_index: 1,
+                name: "m51.fits",
+                action: "move",
+                // No from_root_id: from_relative_path is used as-is, mirroring
+                // item_row_to_executor_item's "legacy" no-root resolution.
+                from_root_id: None,
+                from_relative_path: abs,
+                to_root_id: None,
+                to_relative_path: "archive/m51.fits",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+        repo::update_plan_state(db.pool(), "p-fs-snap", "ready_for_review").await.unwrap();
+
+        approve_plan(db.pool(), &bus, "p-fs-snap", "tester").await.unwrap();
+
+        let items = repo::list_plan_items(db.pool(), "p-fs-snap").await.unwrap();
+        let item = items.iter().find(|i| i.id == "p-fs-snap-item-0").unwrap();
+        assert!(item.approved_mtime.is_some(), "approved_mtime must be stamped");
+        assert_eq!(
+            item.approved_size_bytes,
+            Some(9),
+            "approved_size_bytes must match the real file size"
+        );
+    }
+
+    /// #829: an item whose source cannot be stat'd (destination-only, e.g.
+    /// `mkdir`, or already-gone) must not fail approval — the snapshot stays
+    /// `NULL` (permissive `check_cas` fallback), not an approval error.
+    #[tokio::test]
+    async fn n829_approve_plan_tolerates_unstattable_source() {
+        let (db, bus) = setup().await;
+        insert_draft(&db, "p-fs-snap-missing").await;
+        add_item(&db, "p-fs-snap-missing", "item-1", "move").await; // relative, non-existent path
+        repo::update_plan_state(db.pool(), "p-fs-snap-missing", "ready_for_review").await.unwrap();
+
+        let resp = approve_plan(db.pool(), &bus, "p-fs-snap-missing", "tester").await.unwrap();
+        assert_eq!(resp.new_state, "approved");
+
+        let items = repo::list_plan_items(db.pool(), "p-fs-snap-missing").await.unwrap();
+        assert_eq!(items[0].approved_mtime, None);
+        assert_eq!(items[0].approved_size_bytes, None);
     }
 
     // ── discard_plan ──────────────────────────────────────────────────────────

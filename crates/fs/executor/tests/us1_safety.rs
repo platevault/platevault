@@ -82,6 +82,7 @@ fn make_item(
         source_path,
         destination_path,
         library_root,
+        destination_root: None, // falls back to library_root (same-root tests)
         cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
         is_protected: false,
         requires_destructive_confirm,
@@ -282,6 +283,7 @@ async fn t010_destructive_unconfirmed_blocked_independent_of_protection() {
         source_path: Some(file.clone()),
         destination_path: None,
         library_root: None, // use path as-is
+        destination_root: None,
         cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
         is_protected: false,                // not protected
         requires_destructive_confirm: true, // derived from Delete action
@@ -330,6 +332,7 @@ async fn t010_destructive_confirmed_delete_proceeds() {
         source_path: Some(file.clone()),
         destination_path: None,
         library_root: None,
+        destination_root: None,
         cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
         is_protected: false,
         requires_destructive_confirm: true,
@@ -370,6 +373,7 @@ async fn t010_trash_requires_destructive_confirm() {
         source_path: Some(file.clone()),
         destination_path: None,
         library_root: None,
+        destination_root: None,
         cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
         is_protected: false,
         requires_destructive_confirm: true,
@@ -534,6 +538,7 @@ async fn t013_stale_item_refused_and_run_pauses() {
         source_path: Some(src.clone()),
         destination_path: Some(dst.clone()),
         library_root: None,
+        destination_root: None,
         cas_snapshot: CasSnapshot {
             approved_mtime: None,
             approved_size_bytes: Some(100), // wrong!
@@ -592,6 +597,7 @@ async fn t013_stale_mtime_mismatch_refused() {
         source_path: Some(src.clone()),
         destination_path: Some(dst),
         library_root: None,
+        destination_root: None,
         cas_snapshot: CasSnapshot {
             // Size matches, but mtime is from 1970 — will differ.
             approved_mtime: Some("1970-01-01T00:00:00Z".to_owned()),
@@ -782,6 +788,7 @@ async fn t014_trash_via_executor_with_archive_fallback() {
         source_path: Some(file.clone()),
         destination_path: None,
         library_root: None,
+        destination_root: None,
         cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
         is_protected: false,
         requires_destructive_confirm: true,
@@ -819,4 +826,66 @@ async fn t014_trash_via_executor_with_archive_fallback() {
         ApplyOutcome::Completed(_) => {}
         other => panic!("expected Completed, got {other:?}"),
     }
+}
+
+// ── #765: cross-root move must join destination_path against the PICKED
+// destination root, not the source root ────────────────────────────────────
+
+/// A move whose `library_root` (source root) differs from `destination_root`
+/// (the user-picked destination root) must land the file under
+/// `destination_root`, never under `library_root`. Regression for #765,
+/// where the executor only ever knew one root and joined both source and
+/// destination against it — silently misplacing every cross-root move.
+#[tokio::test]
+async fn t765_cross_root_move_lands_under_destination_root() {
+    let source_root_dir = tempfile::tempdir().unwrap();
+    let dest_root_dir = tempfile::tempdir().unwrap();
+    let source_root = utf8(source_root_dir.path());
+    let dest_root = utf8(dest_root_dir.path());
+
+    let rel_src = Utf8PathBuf::from("inbox/frame.fits");
+    let rel_dst = Utf8PathBuf::from("M51/LUM/frame.fits");
+    let abs_src = source_root.join(&rel_src);
+    std::fs::create_dir_all(abs_src.parent().unwrap()).unwrap();
+    std::fs::write(&abs_src, b"data").unwrap();
+
+    let item = ExecutorItem {
+        id: "cross-root-move".to_owned(),
+        plan_id: "plan-1".to_owned(),
+        action: ExecutorItemAction::Move,
+        source_path: Some(rel_src),
+        destination_path: Some(rel_dst.clone()),
+        library_root: Some(source_root.clone()),
+        destination_root: Some(dest_root.clone()),
+        cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
+        is_protected: false,
+        requires_destructive_confirm: false,
+        destructive_confirmed: false,
+        current_state: "pending".to_owned(),
+    };
+
+    let cb = RecordingCallbacks::default();
+    let outcome = execute_plan(
+        vec![item],
+        &cb,
+        &CancellationToken::new(),
+        &SkipSet::new(),
+        &RetryQueue::new(),
+    )
+    .await;
+
+    match outcome {
+        ApplyOutcome::Completed(counts) => assert_eq!(counts.succeeded, 1),
+        other => panic!("expected Completed, got {other:?}"),
+    }
+
+    let events = cb.events.lock().await;
+    assert_eq!(events[0].new_state, "succeeded");
+    drop(events);
+
+    let wrongly_placed = source_root.join(&rel_dst);
+    let correctly_placed = dest_root.join(&rel_dst);
+    assert!(!wrongly_placed.exists(), "file must NOT land under the source root");
+    assert!(correctly_placed.exists(), "file must land under the picked destination root");
+    assert!(!abs_src.exists(), "source file must be gone after move");
 }

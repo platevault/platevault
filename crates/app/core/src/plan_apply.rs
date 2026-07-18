@@ -34,6 +34,7 @@ use audit::event_bus::{
     PlanItemProgress, Source, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED,
     TOPIC_PLAN_APPLYING_RESUMED, TOPIC_PLAN_APPLYING_STARTED, TOPIC_PLAN_ITEM_PROGRESS,
 };
+use audit::{AuditLogEntry, Outcome, Severity};
 use camino::{Utf8Path, Utf8PathBuf};
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
@@ -44,6 +45,7 @@ use contracts_core::{
     OperationHandle, OperationId, OperationName, OperationStatus,
 };
 use domain_core::ids::{new_id, Timestamp};
+use domain_core::lifecycle::data_asset::EntityType;
 use fs_executor::ops::cas_check::CasSnapshot;
 use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
@@ -60,6 +62,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use crate::audit_ids::deterministic_entity_id;
 use crate::caches;
 use crate::errors::bus_err;
 use crate::path_set::PlanPathSet;
@@ -608,14 +611,20 @@ fn materialization_from_provenance(
         .unwrap_or(domain_core::source_view::Materialization::Symlink)
 }
 
-/// Convert a `PlanItemRow` into an `ExecutorItem`, resolving the library root
-/// from the provided root-id → absolute-path map (T023a).
+/// Convert a `PlanItemRow` into an `ExecutorItem`, resolving the source and
+/// destination roots from the provided root-id → absolute-path map (T023a).
 ///
 /// When `root_map` contains the `from_root_id` for this item, `library_root`
 /// is set to the absolute path so the path-escape/symlink/staleness gate in
 /// the executor fires on real items. When the root cannot be resolved (no
 /// `from_root_id` or id absent from the map), `library_root` is `None` and
 /// the gate is skipped (legacy/test mode).
+///
+/// `destination_root` is resolved independently from `to_root_id` (falling
+/// back to `library_root` when `to_root_id` is absent or unresolvable, same
+/// as `compute_plan_path_set`'s `to_root` fallback) so a cross-root move
+/// joins `to_relative_path` against the *picked* destination root instead of
+/// silently reusing the source root (#765).
 fn item_row_to_executor_item(
     row: &plans_repo::PlanItemRow,
     root_map: &HashMap<String, Utf8PathBuf>,
@@ -660,6 +669,17 @@ fn item_row_to_executor_item(
     let library_root: Option<Utf8PathBuf> =
         row.from_root_id.as_deref().and_then(|rid| root_map.get(rid)).cloned();
 
+    // #765: destination_root resolves independently from to_root_id, falling
+    // back to library_root — NOT reusing from_root_id's resolution outright —
+    // so a cross-root move/link/mkdir joins to_relative_path against the
+    // destination root the user actually picked.
+    let destination_root: Option<Utf8PathBuf> = row
+        .to_root_id
+        .as_deref()
+        .and_then(|rid| root_map.get(rid))
+        .cloned()
+        .or_else(|| library_root.clone());
+
     // Paths are stored as relative to the library root.
     let source_path = if row.from_relative_path.is_empty() {
         None
@@ -690,6 +710,7 @@ fn item_row_to_executor_item(
         source_path,
         destination_path,
         library_root,
+        destination_root,
         cas_snapshot: CasSnapshot {
             approved_mtime: row.approved_mtime.clone(),
             approved_size_bytes: row.approved_size_bytes,
@@ -808,7 +829,13 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
                 tracing::error!(%item_id, error=%e, "failed to append apply event");
             }
 
-            // Emit audit bus event (A7).
+            // Durable audit row + live bus event (#766). `append_event` above
+            // writes to the plan-apply run-history table, NOT `audit_log_entry` —
+            // this is the actual durable audit write the constitution (§II)
+            // and `audit::bus::EventBus::write_audit` cover; before this fix
+            // the item-progress path only ever called `bus.publish` (live-only,
+            // non-durable), so a succeeded plan apply left zero audit_log_entry
+            // rows despite every item transitioning to a terminal state.
             let bus_payload = PlanItemProgress {
                 plan_id: plan_id.clone(),
                 run_id: run_id.clone(),
@@ -821,9 +848,44 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
                 failure_recoverable: event.failure.as_ref().map(|f| f.recoverable),
             };
 
-            if let Err(e) = bus.publish(TOPIC_PLAN_ITEM_PROGRESS, Source::System, bus_payload).await
+            let outcome = match event.new_state.as_str() {
+                "succeeded" => Outcome::Applied,
+                "failed" => Outcome::Failed,
+                // stale / refused / skipped: the item never completed a
+                // mutation attempt — declined, not a failed attempt.
+                _ => Outcome::Refused,
+            };
+            let reason_code = event
+                .audit_reason
+                .clone()
+                .or_else(|| event.failure.as_ref().map(|f| f.code.as_str().to_owned()));
+
+            let mut audit_entry = AuditLogEntry::new(
+                EntityType::FilesystemPlan,
+                deterministic_entity_id("plan_apply.item", &item_id),
+                format!("plan_item.{}", event.new_state),
+                "user",
+                outcome,
+                Severity::Workflow,
+                domain_core::ids::EntityId::new(),
+            )
+            .with_transition(event.prior_state.clone(), event.new_state.clone())
+            .with_payload(json!({
+                "planId": plan_id,
+                "runId": run_id,
+                "itemId": item_id,
+                "failureCode": event.failure.as_ref().map(|f| f.code.as_str()),
+                "failureMessage": event.failure.as_ref().map(|f| f.message.clone()),
+            }));
+            if let Some(reason) = reason_code {
+                audit_entry = audit_entry.with_reason_code(reason);
+            }
+
+            if let Err(e) = bus
+                .write_audit(audit_entry, TOPIC_PLAN_ITEM_PROGRESS, Source::System, bus_payload)
+                .await
             {
-                tracing::warn!(%item_id, error=%e, "audit bus publish failed for item progress");
+                tracing::error!(%item_id, error=%e, "durable audit write failed for item progress");
             }
 
             // Live long-op projection (spec 042 US16, T240). Additive to the
@@ -849,6 +911,65 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
                 );
             }
         })
+    }
+}
+
+/// Emit both the run-events row and a durable `audit_log_entry` row for one
+/// item forced into `cancelled` by a bulk-cancel path (#750: `list_pending_items`
+/// happy path, its retry, and the orphaned-`applying` sweep). The forward
+/// executor loop's own terminal transitions go through `on_item_progress`
+/// instead — this helper only covers the bulk-cancel paths that bypass it.
+async fn audit_item_cancelled(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    run_id: &str,
+    plan_id: &str,
+    item_id: &str,
+    prior_state: &str,
+    at: &str,
+) {
+    let _ = apply_repo::append_event(
+        pool,
+        &new_id(),
+        run_id,
+        plan_id,
+        Some(item_id),
+        prior_state,
+        "cancelled",
+        at,
+        None,
+        None,
+    )
+    .await;
+
+    let entry = AuditLogEntry::new(
+        EntityType::FilesystemPlan,
+        deterministic_entity_id("plan_apply.item", item_id),
+        "plan_item.cancelled",
+        "user",
+        Outcome::Refused,
+        Severity::Workflow,
+        domain_core::ids::EntityId::new(),
+    )
+    .with_transition(prior_state.to_owned(), "cancelled".to_owned())
+    .with_payload(json!({ "planId": plan_id, "runId": run_id, "itemId": item_id }));
+
+    let bus_payload = PlanItemProgress {
+        plan_id: plan_id.to_owned(),
+        run_id: run_id.to_owned(),
+        item_id: item_id.to_owned(),
+        prior_state: prior_state.to_owned(),
+        new_state: "cancelled".to_owned(),
+        at: at.to_owned(),
+        failure_code: None,
+        failure_message: None,
+        failure_recoverable: None,
+    };
+
+    if let Err(e) =
+        bus.write_audit(entry, TOPIC_PLAN_ITEM_PROGRESS, Source::System, bus_payload).await
+    {
+        tracing::error!(%item_id, error=%e, "durable audit write failed for cancelled item");
     }
 }
 
@@ -1314,24 +1435,68 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                     Ok(pending_ids) => {
                         let _ = apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
                         for item_id in &pending_ids {
-                            let _ = apply_repo::append_event(
-                                &pool,
-                                &new_id(),
-                                &run_id,
-                                &plan_id,
-                                Some(item_id.as_str()),
-                                "pending",
-                                "cancelled",
-                                &at,
-                                None,
-                                None,
+                            audit_item_cancelled(
+                                &pool, &bus, &run_id, &plan_id, item_id, "pending", &at,
                             )
                             .await;
                         }
                     }
                     Err(e) => {
-                        tracing::error!(error=%e, "failed to list pending items for per-item cancel audit");
-                        let _ = apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
+                        // #750: `list_pending_items` failing here is assumed
+                        // transient (DB contention), not permanent — retry
+                        // once before degrading to a bulk-only cancel, so the
+                        // common case still gets full per-item audit rows.
+                        tracing::error!(error=%e, "failed to list pending items for per-item cancel audit; retrying once");
+                        match apply_repo::list_pending_items(&pool, &plan_id).await {
+                            Ok(pending_ids) => {
+                                let _ =
+                                    apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
+                                for item_id in &pending_ids {
+                                    audit_item_cancelled(
+                                        &pool, &bus, &run_id, &plan_id, item_id, "pending", &at,
+                                    )
+                                    .await;
+                                }
+                            }
+                            Err(e2) => {
+                                tracing::error!(error=%e2, "list_pending_items failed twice; falling back to a single aggregate cancel audit row");
+                                let cancelled_count =
+                                    apply_repo::batch_cancel_pending_items(&pool, &plan_id)
+                                        .await
+                                        .unwrap_or(0);
+                                // Degraded but non-silent: one aggregate durable
+                                // row instead of per-item rows, since item ids
+                                // are unavailable without changing
+                                // `batch_cancel_pending_items`'s return type
+                                // (persistence_db, out of this fix's scope).
+                                let entry = AuditLogEntry::new(
+                                    EntityType::FilesystemPlan,
+                                    deterministic_entity_id("plan_apply.bulk_cancel", &plan_id),
+                                    "plan.bulk_cancel_degraded",
+                                    "user",
+                                    Outcome::Refused,
+                                    Severity::Workflow,
+                                    domain_core::ids::EntityId::new(),
+                                )
+                                .with_reason_code("list_pending_items_unavailable")
+                                .with_payload(json!({
+                                    "planId": plan_id,
+                                    "runId": run_id,
+                                    "cancelledCount": cancelled_count,
+                                }));
+                                if let Err(e3) = bus
+                                    .write_audit(
+                                        entry,
+                                        TOPIC_PLAN_APPLYING_COMPLETED,
+                                        Source::System,
+                                        json!({"planId": plan_id, "cancelledCount": cancelled_count}),
+                                    )
+                                    .await
+                                {
+                                    tracing::error!(error=%e3, "durable fallback audit write failed for degraded bulk cancel");
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1345,17 +1510,8 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                 match apply_repo::cancel_orphaned_applying_items(&pool, &plan_id).await {
                     Ok(orphaned_ids) => {
                         for item_id in &orphaned_ids {
-                            let _ = apply_repo::append_event(
-                                &pool,
-                                &new_id(),
-                                &run_id,
-                                &plan_id,
-                                Some(item_id.as_str()),
-                                "applying",
-                                "cancelled",
-                                &at,
-                                None,
-                                None,
+                            audit_item_cancelled(
+                                &pool, &bus, &run_id, &plan_id, item_id, "applying", &at,
                             )
                             .await;
                         }
@@ -2183,6 +2339,9 @@ pub async fn get_apply_status(
 mod tests {
     use super::*;
     use audit::EventBus;
+    use persistence_db::repositories::audit::{
+        count_audit_entries, list_audit_entries, AuditLogFilter,
+    };
     use persistence_db::repositories::plans as repo;
     use persistence_db::Database;
     use uuid::Uuid;
@@ -2777,6 +2936,81 @@ mod tests {
         assert!(!file_path.exists(), "confirmed delete item must actually execute");
         let plan = repo::get_plan(db.pool(), "p-e2e", false).await.unwrap();
         assert_eq!(plan.state, "applied");
+
+        // #766: a real, successful plan apply must write a durable
+        // audit_log_entry row per succeeded plan_item — not just the
+        // separate plan-apply run-events table.
+        let audit_count = count_audit_entries(db.pool(), &AuditLogFilter::default()).await.unwrap();
+        assert!(audit_count > 0, "apply_plan must write at least one durable audit_log_entry row");
+    }
+
+    /// #766: one durable `audit_log_entry` row per succeeded plan_item
+    /// (query DB, not the live EventBus) — the exact SUCCESS criterion from
+    /// the issue repro.
+    #[tokio::test]
+    async fn n766_apply_writes_one_durable_audit_row_per_succeeded_item() {
+        let (db, bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-audit", 2).await;
+
+        apply_plan(db.pool(), &bus, "p-audit", "test-token", None).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+
+        let plan = repo::get_plan(db.pool(), "p-audit", false).await.unwrap();
+        // Items have no real file on disk (from_root_id: None, relative path
+        // used as-is) so they resolve to a terminal `failed` state — still a
+        // real "attempted action and outcome" that must be audited (§II).
+        assert_eq!(plan.items_total, 2);
+
+        let audit_count = count_audit_entries(db.pool(), &AuditLogFilter::default()).await.unwrap();
+        assert!(
+            i64::from(audit_count) >= plan.items_total,
+            "expected at least one audit_log_entry row per plan item ({} items), got {audit_count}",
+            plan.items_total
+        );
+
+        let entries = list_audit_entries(
+            db.pool(),
+            &AuditLogFilter {
+                entity_type: Some("filesystem_plan".to_owned()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            entries.iter().any(|e| e.trigger.starts_with("plan_item.")),
+            "expected a plan_item.* durable audit trigger"
+        );
+    }
+
+    /// #750: `audit_item_cancelled` (the per-item write both bulk-cancel
+    /// paths — happy-path pending list and orphaned-`applying` sweep — funnel
+    /// through) must write a durable `audit_log_entry` row, not just a
+    /// run-events row, for each cancelled item.
+    #[tokio::test]
+    async fn n750_audit_item_cancelled_writes_durable_audit_row() {
+        let (db, bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-cancel", 1).await;
+        repo::update_plan_state(db.pool(), "p-cancel", "applying").await.unwrap();
+
+        audit_item_cancelled(
+            db.pool(),
+            &bus,
+            "run-cancel",
+            "p-cancel",
+            "p-cancel-item-0",
+            "pending",
+            "2026-06-01T00:00:00Z",
+        )
+        .await;
+
+        let audit_count = count_audit_entries(db.pool(), &AuditLogFilter::default()).await.unwrap();
+        assert_eq!(audit_count, 1, "one durable audit_log_entry row per cancelled item");
+
+        let entries = list_audit_entries(db.pool(), &AuditLogFilter::default()).await.unwrap();
+        assert_eq!(entries[0].trigger, "plan_item.cancelled");
+        assert_eq!(entries[0].outcome, "refused");
+        assert_eq!(entries[0].to_state.as_deref(), Some("cancelled"));
     }
 
     #[tokio::test]
@@ -2888,6 +3122,96 @@ mod tests {
         let root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
         let item = item_row_to_executor_item(&row, &root_map);
         assert_eq!(item.library_root, None);
+    }
+
+    /// #765: a cross-root item (`to_root_id != from_root_id`) must resolve
+    /// `destination_root` from `to_root_id`, independent of `library_root`
+    /// (which stays resolved from `from_root_id`) — otherwise the executor
+    /// joins the destination path against the wrong (source) root.
+    #[test]
+    fn n765_destination_root_resolves_independently_from_to_root_id() {
+        let row = plans_repo::PlanItemRow {
+            id: "item-cross-root".to_owned(),
+            plan_id: "plan-1".to_owned(),
+            item_index: 1,
+            name: "file.fits".to_owned(),
+            action: "move".to_owned(),
+            from_root_id: Some("inbox-root".to_owned()),
+            from_relative_path: "M51/LUM/file.fits".to_owned(),
+            to_root_id: Some("lights-root".to_owned()),
+            to_relative_path: "M51/LUM/file.fits".to_owned(),
+            reason: "test".to_owned(),
+            protection: "normal".to_owned(),
+            linked_entity: None,
+            item_state: "pending".to_owned(),
+            failure_reason: None,
+            provenance: None,
+            approved_mtime: None,
+            approved_size_bytes: None,
+            archive_path: None,
+            created_at: "2026-06-17T00:00:00Z".to_owned(),
+            source_id: None,
+            category: None,
+            requires_destructive_confirm: Some(0),
+            resolved_pattern: None,
+            destructive_confirmed: 0,
+        };
+
+        let mut root_map = HashMap::new();
+        root_map.insert("inbox-root".to_owned(), Utf8PathBuf::from("/mnt/inbox"));
+        root_map.insert("lights-root".to_owned(), Utf8PathBuf::from("/mnt/lights/1"));
+
+        let item = item_row_to_executor_item(&row, &root_map);
+        assert_eq!(
+            item.library_root,
+            Some(Utf8PathBuf::from("/mnt/inbox")),
+            "library_root (source) must resolve from from_root_id"
+        );
+        assert_eq!(
+            item.destination_root,
+            Some(Utf8PathBuf::from("/mnt/lights/1")),
+            "destination_root must resolve from to_root_id, not from_root_id"
+        );
+    }
+
+    /// #765: when `to_root_id` is absent or unresolvable, `destination_root`
+    /// falls back to `library_root` (same-root actions: archive/trash/
+    /// catalogue, or legacy rows without a recorded destination root).
+    #[test]
+    fn n765_destination_root_falls_back_to_library_root_when_to_root_id_absent() {
+        let row = plans_repo::PlanItemRow {
+            id: "item-same-root".to_owned(),
+            plan_id: "plan-1".to_owned(),
+            item_index: 1,
+            name: "file.fits".to_owned(),
+            action: "archive".to_owned(),
+            from_root_id: Some("root-001".to_owned()),
+            from_relative_path: "raw/file.fits".to_owned(),
+            to_root_id: None,
+            to_relative_path: "archive/file.fits".to_owned(),
+            reason: "test".to_owned(),
+            protection: "normal".to_owned(),
+            linked_entity: None,
+            item_state: "pending".to_owned(),
+            failure_reason: None,
+            provenance: None,
+            approved_mtime: None,
+            approved_size_bytes: None,
+            archive_path: None,
+            created_at: "2026-06-17T00:00:00Z".to_owned(),
+            source_id: None,
+            category: None,
+            requires_destructive_confirm: Some(0),
+            resolved_pattern: None,
+            destructive_confirmed: 0,
+        };
+
+        let mut root_map = HashMap::new();
+        root_map.insert("root-001".to_owned(), Utf8PathBuf::from("/mnt/library"));
+
+        let item = item_row_to_executor_item(&row, &root_map);
+        assert_eq!(item.destination_root, item.library_root);
+        assert_eq!(item.destination_root, Some(Utf8PathBuf::from("/mnt/library")));
     }
 
     /// T023a: root-escaping relative path is refused by the gate when library_root is set.

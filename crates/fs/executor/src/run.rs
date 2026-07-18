@@ -157,14 +157,21 @@ pub struct ExecutorItem {
     ///
     /// Set to `None` for actions that have no source (e.g. `NoOp`, `Mkdir`).
     pub source_path: Option<Utf8PathBuf>,
-    /// **Relative** destination path (executor resolves against `library_root` via the path gate).
+    /// **Relative** destination path (executor resolves against `destination_root`,
+    /// falling back to `library_root`, via the path gate).
     ///
     /// Set to `None` when the destination is implicit (e.g. `Trash`).
     pub destination_path: Option<Utf8PathBuf>,
-    /// Absolute library root — all relative paths are joined against this.
+    /// Absolute source library root — `source_path` is joined against this.
     ///
     /// `None` means "use the path as-is" (legacy / test items with pre-resolved paths).
     pub library_root: Option<Utf8PathBuf>,
+    /// Absolute destination library root — `destination_path` is joined against
+    /// this instead of `library_root` when set (#765: a cross-root move/link/
+    /// mkdir must land under the *picked* destination root, not the source
+    /// root). `None` falls back to `library_root`, which preserves same-root
+    /// behavior (archive/trash/catalogue, or move within one root) unchanged.
+    pub destination_root: Option<Utf8PathBuf>,
     /// Approval-time CAS snapshot (R-FS-1).
     pub cas_snapshot: CasSnapshot,
     /// Protection status from spec-016 (FR-008).
@@ -659,8 +666,14 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
     // absolute-path computation for the actual filesystem operation.
     let resolved_src: Option<Utf8PathBuf> =
         resolve_item_path(item.source_path.as_deref(), item.library_root.as_deref());
-    let resolved_dst: Option<Utf8PathBuf> =
-        resolve_item_path(item.destination_path.as_deref(), item.library_root.as_deref());
+    // #765: destination_root (picked destination root) takes precedence over
+    // library_root (source root) for the destination join. Falls back to
+    // library_root when destination_root is unset, preserving same-root
+    // behavior for archive/trash/catalogue/legacy items.
+    let resolved_dst: Option<Utf8PathBuf> = resolve_item_path(
+        item.destination_path.as_deref(),
+        item.destination_root.as_deref().or(item.library_root.as_deref()),
+    );
 
     match &item.action {
         ExecutorItemAction::NoOp => Ok(()),
@@ -793,6 +806,7 @@ mod tests {
             source_path: Some(src.to_path_buf()),
             destination_path: Some(dst.to_path_buf()),
             library_root: None,
+            destination_root: None,
             cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
             is_protected: false,
             requires_destructive_confirm: false,
@@ -842,6 +856,7 @@ mod tests {
             source_path: None,
             destination_path: None,
             library_root: None,
+            destination_root: None,
             cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
             is_protected: false,
             requires_destructive_confirm: false,
@@ -946,6 +961,7 @@ mod tests {
             source_path: Some(src.clone()),
             destination_path: Some(dst),
             library_root: None,
+            destination_root: None,
             cas_snapshot: CasSnapshot {
                 approved_mtime: None,
                 approved_size_bytes: Some(999), // wrong size → stale
