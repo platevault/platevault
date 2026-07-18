@@ -45,6 +45,30 @@ reflects what actually happened in the library — a completed item means the
 underlying work truly exists on disk and in the database. No demo or sample
 data is ever created (carried forward from spec 010 FR-009).
 
+## Clarifications
+
+### Session 2026-07-18
+
+Run unattended against the approved decision record (grill 2026-07-18). Answers
+that go beyond the literal record are provisional and are also logged in
+[PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md).
+
+- Q: Does the initial seeding of automatic items (first activation, not just
+  restore) derive from actual recorded library state? → A: Yes — one seeding
+  routine for both first activation and restore; automatic items reflect
+  already-met milestones from the moment the section first appears
+  (provisional).
+- Q: Can an individual manually-checked or dismissed item be reverted? → A: No
+  per-item undo in v1; the single Settings → Advanced restore/reset is the only
+  revert path (provisional).
+- Q: What does the find affordance do when the item's control lives on a
+  different page than the current one? → A: It navigates to the item's page
+  first, then renders the spotlight; the route-change dismissal rule applies to
+  navigations occurring after the spotlight renders (provisional).
+- Q: Does the Getting started section auto-hide once every item is complete? →
+  A: No — it shows a 100% complete state and only the explicit "Remove getting
+  started" action hides it (provisional).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - First-Run Orientation Walk (Priority: P1)
@@ -314,7 +338,8 @@ return pre-ticked while unmet items return unchecked.
   Restore MUST re-seed automatic items from the actual recorded library state:
   milestones that already exist (confirmed inventory, projects, tool launches)
   come back pre-ticked; milestones that never happened come back unchecked.
-  Restore MUST be idempotent.
+  Restore MUST be idempotent. The initial seeding of automatic items on first
+  activation MUST use the same recorded-state derivation as restore.
 
 #### Completion semantics
 
@@ -327,7 +352,8 @@ return pre-ticked while unmet items return unchecked.
 - **FR-016**: Records processed during a restore or replay of history MUST
   never produce a tick.
 - **FR-017**: Every item that is not auto-ticked MUST be manually checkable and
-  dismissable by the user.
+  dismissable by the user. No per-item undo is provided in v1; the Settings →
+  Advanced restore/reset is the only revert path.
 - **FR-018**: On completion (auto or manual) an item MUST NOT simply disappear:
   it MUST play a check animation with brief row emphasis in place, then move to
   a completed (greyed, checked) area at the bottom of its page group.
@@ -345,6 +371,9 @@ return pre-ticked while unmet items return unchecked.
 
 - **FR-022**: Every checklist item MUST offer a find/magnify affordance that
   renders a non-modal spotlight on the item's real control on the real page.
+  If the item's page is not the current page, activating find MUST navigate to
+  that page first and then spotlight; the route-change dismissal (FR-023)
+  applies to navigations after the spotlight renders.
 - **FR-023**: The spotlight MUST dismiss on: clicking the spotlighted target,
   clicking anywhere else, pressing Escape, toggling the find affordance, or a
   page/route change. It MUST NOT be dismissed on a timer.
@@ -369,6 +398,9 @@ return pre-ticked while unmet items return unchecked.
   meet WCAG 2.2 AA.
 - **FR-030**: Automated tests of unrelated features MUST have a deterministic
   way to suppress all onboarding surfaces.
+- **FR-031**: The Getting started section MUST NOT auto-hide on 100%
+  completion; it shows a complete state and only the explicit "Remove getting
+  started" action (FR-013) hides it.
 
 ### Key Entities
 
