@@ -26,15 +26,20 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
     to,
+    search,
     ...rest
   }: {
     children?: import('react').ReactNode;
     to: string;
-  }) => (
-    <a href={to} {...rest}>
-      {children}
-    </a>
-  ),
+    search?: Record<string, string>;
+  }) => {
+    const query = search ? `?${new URLSearchParams(search).toString()}` : '';
+    return (
+      <a href={`${to}${query}`} {...rest}>
+        {children}
+      </a>
+    );
+  },
 }));
 
 vi.mock('./store', async (importOriginal) => {
@@ -147,6 +152,6 @@ describe('ProjectDetail — canonical target rail (spec 035)', () => {
     render(<ProjectDetailContent projectId="proj-m31" />);
     const card = screen.getByTestId('project-canonical-target');
     expect(card.tagName).toBe('A');
-    expect(card.getAttribute('href')).toBe('/targets');
+    expect(card.getAttribute('href')).toBe('/targets?selected=ct-3');
   });
 });
