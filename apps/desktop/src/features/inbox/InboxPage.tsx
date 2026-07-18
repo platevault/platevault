@@ -115,7 +115,7 @@ export function pickReclassifyTarget(
 /** Outcome of {@link resolveReclassifyHandoff}: keep waiting, navigate, or give up. */
 export type ReclassifyHandoffDecision =
   | { action: 'wait' }
-  | { action: 'navigate'; idx: number }
+  | { action: 'navigate'; id: string }
   | { action: 'giveUp' };
 
 /**
@@ -130,8 +130,9 @@ export type ReclassifyHandoffDecision =
  * refetch already in flight isn't mistaken for "never arriving"). Once
  * settled: absent from `items` entirely → give up (nothing will ever
  * appear); present in `items` but absent from `filteredItems` → give up too
- * (it exists, but the user's own filter hides it — there is no index to
- * navigate to); present in both → navigate to its filtered-list index.
+ * (it exists, but the user's own filter hides it — selecting it would show
+ * nothing); present in both → navigate to it (issue #644: selection is the
+ * item's own id, so the target IS `pendingId`, no index lookup needed).
  */
 export function resolveReclassifyHandoff(
   pendingId: string,
@@ -143,8 +144,8 @@ export function resolveReclassifyHandoff(
   if (!items.some((it) => it.inboxItemId === pendingId)) {
     return { action: 'giveUp' };
   }
-  const idx = filteredItems.findIndex((it) => it.inboxItemId === pendingId);
-  return idx === -1 ? { action: 'giveUp' } : { action: 'navigate', idx };
+  const visible = filteredItems.some((it) => it.inboxItemId === pendingId);
+  return visible ? { action: 'navigate', id: pendingId } : { action: 'giveUp' };
 }
 
 /** Type-guard for the destination-root-required details payload. */
@@ -280,10 +281,13 @@ export function InboxPage() {
     return result;
   }, [items, search]);
 
-  // URL-backed selection is by index into the FILTERED list so it stays stable
-  // across re-fetches and tracks what the user actually sees.
-  const selectedItem =
-    selected !== undefined ? filteredItems[selected] : undefined;
+  // URL-backed selection is by item id (issue #644), not list position — an
+  // index silently points at whatever item now occupies that slot once
+  // search/lane/kind filters reshape the array. Sessions and Calibration
+  // already use this id-based `?selected=<id>` pattern.
+  const selectedItem = selected
+    ? filteredItems.find((it) => it.inboxItemId === selected)
+    : undefined;
 
   // `reclassify_v2` operates at source-group scope and re-splits the group
   // into new single-type sub-items (R-14, issue #755) — the currently
@@ -306,8 +310,8 @@ export function InboxPage() {
       }),
   );
 
-  const onSelect = (idx: number) =>
-    navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+  const onSelect = (id: string) =>
+    navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   const clearSelection = useCallback(
     () =>
@@ -342,9 +346,9 @@ export function InboxPage() {
     );
     if (decision.action === 'wait') return;
     setPendingReclassifySelectionId(null);
-    if (decision.action === 'navigate' && decision.idx !== selected) {
+    if (decision.action === 'navigate' && decision.id !== selected) {
       void navigate({
-        search: (prev) => ({ ...prev, selected: decision.idx }),
+        search: (prev) => ({ ...prev, selected: decision.id }),
       });
     }
   }, [
@@ -1093,7 +1097,7 @@ export function InboxPage() {
       >
         <InboxList
           items={filteredItems}
-          selectedIdx={selected ?? null}
+          selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}
           dims={dims}

@@ -61,7 +61,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -74,7 +74,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     render(
       <InboxList
         items={[makeItem({ inboxItemId: 'a' })]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -96,7 +96,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -121,7 +121,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -144,7 +144,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,

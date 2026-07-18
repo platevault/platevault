@@ -186,8 +186,11 @@ function compareItems(
 
 export interface InboxListProps {
   items: InboxListItem[];
-  selectedIdx: number | null;
-  onSelect: (idx: number) => void;
+  /** Issue #644: selection is by item identity, not list position — an index
+   * silently points at whatever item now occupies that slot after search/lane/
+   * kind filters change the array shape. */
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   /** Lane filter ('all' | 'fits' | 'video'). Owned by the page (URL state). */
   filterType: string;
   /** Active ordered grouping dimensions (owned by the page / top-bar controls). */
@@ -276,7 +279,7 @@ export function flattenVisibleTree(
 
 export function InboxList({
   items,
-  selectedIdx,
+  selectedId,
   onSelect,
   filterType,
   dims = [],
@@ -438,8 +441,8 @@ export function InboxList({
             format: '',
           };
         }
-        const { item, originalIdx, indent } = row;
-        const selected = selectedIdx === originalIdx;
+        const { item, indent } = row;
+        const selected = selectedId === item.inboxItemId;
         const mod = classificationMod(item);
         return {
           _testid: `inbox-item-${item.inboxItemId}`,
@@ -450,7 +453,7 @@ export function InboxList({
           ]
             .filter(Boolean)
             .join(' '),
-          _onClick: () => onSelect(originalIdx),
+          _onClick: () => onSelect(item.inboxItemId),
           _selected: selected,
           _indent: indent || undefined,
           detection: (
@@ -493,7 +496,7 @@ export function InboxList({
             : formatTag(item),
         };
       }),
-    [visualRows, selectedIdx, onSelect, toggle],
+    [visualRows, selectedId, onSelect, toggle],
   );
 
   const groupingHint = grouped

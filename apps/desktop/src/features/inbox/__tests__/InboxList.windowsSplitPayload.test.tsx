@@ -75,7 +75,7 @@ describe('InboxList — Windows CI split-payload regression', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,

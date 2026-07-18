@@ -113,7 +113,7 @@ describe('T039-1: InboxList cross-root rendering (SC-001)', () => {
     render(
       <InboxList
         items={multiRootResponse.items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
@@ -137,7 +137,7 @@ describe('T039-2: confirmed items absent — empty list (FR-003)', () => {
     render(
       <InboxList
         items={[]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}

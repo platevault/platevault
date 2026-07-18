@@ -15,7 +15,6 @@ import { Shell } from './Shell';
 import { checkFirstRunComplete } from './first-run';
 import {
   makeValidateSearch,
-  parseNumber,
   parseString,
   parseEnum,
   parseCsvEnum,
@@ -77,7 +76,11 @@ const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/inbox',
   validateSearch: makeValidateSearch({
-    selected: parseNumber,
+    // Issue #644: `selected` is the item's own id, not a list-position index —
+    // an index silently points at whatever item now occupies that slot once
+    // search/filters change the array shape (Sessions/Calibration already use
+    // this id-based pattern).
+    selected: parseString,
     type: parseEnum(FRAME_TYPES),
     group: parseEnum(INBOX_GROUPS),
   }),

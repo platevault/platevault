@@ -54,12 +54,11 @@ vi.mock('@/bindings/index', () => ({
   },
 }));
 
-// This repo's main selection is index-based (`?selected=<idx>` into the
-// filtered list), unlike the abandoned #644 id-based refactor — the fixture
-// list below has exactly one item, so index 0 always resolves to it.
+// Selection is by item id (issue #644) — the fixture list below has exactly
+// one item, so its id always resolves to it.
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  useSearch: () => ({ selected: 0, type: undefined }),
+  useSearch: () => ({ selected: 'item-001', type: undefined }),
 }));
 
 const ok = <T,>(data: T) => ({ status: 'ok' as const, data });

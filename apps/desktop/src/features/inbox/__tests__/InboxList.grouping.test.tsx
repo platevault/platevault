@@ -14,7 +14,7 @@
  *    with per-group item counts.
  * 2. Picking a SECOND dimension nests groups under the first ("then by").
  * 3. Selecting a row inside a group still calls onSelect with the row's
- *    ORIGINAL index in the unfiltered items array.
+ *    item id (issue #644 — selection is by identity, not list position).
  * 4. The chosen ordered dimensions are persisted to localStorage and restored
  *    on a fresh mount.
  */
@@ -41,7 +41,7 @@ function Harness({
   onSelect = vi.fn(),
 }: {
   items: InboxListItem[];
-  onSelect?: (idx: number) => void;
+  onSelect?: (id: string) => void;
 }) {
   const { dims, setSlot } = useGrouping({
     storageKey: GROUPING_STORAGE_KEY,
@@ -62,7 +62,7 @@ function Harness({
       />
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={onSelect}
         filterType="all"
         dims={dims}
@@ -166,7 +166,7 @@ describe('InboxList — configurable grouping', () => {
     expect(screen.getByTestId('inbox-item-b')).toBeInTheDocument();
   });
 
-  it('(3) selecting a row inside a group reports the original item index', () => {
+  it('(3) selecting a row inside a group reports the item id', () => {
     const onSelect = vi.fn();
     render(<Harness items={items} onSelect={onSelect} />);
 
@@ -175,10 +175,10 @@ describe('InboxList — configurable grouping', () => {
     });
 
     fireEvent.click(screen.getByTestId('inbox-item-c'));
-    expect(onSelect).toHaveBeenCalledWith(2);
+    expect(onSelect).toHaveBeenCalledWith('c');
 
     fireEvent.click(screen.getByTestId('inbox-item-a'));
-    expect(onSelect).toHaveBeenLastCalledWith(0);
+    expect(onSelect).toHaveBeenLastCalledWith('a');
   });
 
   it('(3b) collapsing a group hides its leaf rows', () => {
