@@ -16,6 +16,7 @@ use contracts_core::calibration::{CalibrationMaster, MasterDetail, MatchCandidat
 use contracts_core::calibration_match::{
     CalibrationMatchAssignRequest, CalibrationMatchAssignResponse, CalibrationMatchBatchRequest,
     CalibrationMatchBatchResponse, CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse,
+    CalibrationMatchUnassignRequest, CalibrationMatchUnassignResponse,
 };
 use tauri::State;
 
@@ -124,4 +125,24 @@ pub async fn calibration_match_suggest_batch(
 ) -> Result<CalibrationMatchBatchResponse, ContractError> {
     tracing::debug!("calibration.match.suggest.batch session_count={}", req.session_ids.len());
     cal_uc::batch_suggest(state.repo.pool(), req).await.map_err(ContractError::internal)
+}
+
+/// `calibration.match.unassign` — remove a session's assignment for one
+/// calibration type (#875: previously there was no way back to "no master
+/// assigned"). Emits `calibration.assignment.removed` on success.
+///
+/// # Errors
+/// Returns `Err(String)` on database error.
+#[tauri::command]
+#[specta::specta]
+pub async fn calibration_match_unassign(
+    state: State<'_, AppState>,
+    req: CalibrationMatchUnassignRequest,
+) -> Result<CalibrationMatchUnassignResponse, ContractError> {
+    tracing::debug!(
+        "calibration.match.unassign session_id={} calibration_type={:?}",
+        req.session_id,
+        req.calibration_type
+    );
+    cal_uc::unassign(state.repo.pool(), &state.bus, req).await.map_err(ContractError::internal)
 }

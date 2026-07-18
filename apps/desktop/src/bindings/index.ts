@@ -136,6 +136,15 @@ export const commands = {
 	 */
 	calibrationMatchSuggestBatch: (req: CalibrationMatchBatchRequest_Deserialize) => typedError<CalibrationMatchBatchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_suggest_batch", { req })),
 	/**
+	 *  `calibration.match.unassign` — remove a session's assignment for one
+	 *  calibration type (#875: previously there was no way back to "no master
+	 *  assigned"). Emits `calibration.assignment.removed` on success.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database error.
+	 */
+	calibrationMatchUnassign: (req: CalibrationMatchUnassignRequest) => typedError<CalibrationMatchUnassignResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_unassign", { req })),
+	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
 	 * 
 	 *  # Errors
@@ -2812,6 +2821,37 @@ export type CalibrationMatchSuggestResponse_Serialize = {
 	suggestStatus?: SuggestStatus | null,
 	matches?: CalibrationMatchDto_Serialize[] | null,
 	error?: SuggestErrorDto | null,
+};
+
+/**
+ *  Request DTO for `calibration.match.unassign` — removes a session's
+ *  assignment for one calibration type, returning it to "no master
+ *  assigned" (#875: un-assign was previously impossible).
+ */
+export type CalibrationMatchUnassignRequest = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	calibrationType: CalibrationType,
+};
+
+/**  Response DTO for `calibration.match.unassign`. */
+export type CalibrationMatchUnassignResponse = CalibrationMatchUnassignResponse_Serialize | CalibrationMatchUnassignResponse_Deserialize;
+
+/**  Response DTO for `calibration.match.unassign`. */
+export type CalibrationMatchUnassignResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	error: UnassignErrorDto | null,
+};
+
+/**  Response DTO for `calibration.match.unassign`. */
+export type CalibrationMatchUnassignResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	error?: UnassignErrorDto | null,
 };
 
 export type CalibrationTolerances = {
@@ -9626,6 +9666,12 @@ export type TransitionResponse_Serialize = {
 };
 
 export type TransitionStatus = "success" | "noop" | "error";
+
+/**  Error envelope for unassign. */
+export type UnassignErrorDto = {
+	code: string,
+	message: string,
+};
 
 export type UpdateCalibrationTolerances = {
 	temperatureToleranceC: number | null,

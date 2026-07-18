@@ -217,6 +217,42 @@ pub struct AssignErrorDetails {
     pub dimensions: Vec<String>,
 }
 
+// ── calibration.match.unassign (#875) ────────────────────────────────────────
+
+/// Contract version for calibration.match.unassign.
+pub const UNASSIGN_CONTRACT_VERSION: &str = "1.0.0";
+
+/// Request DTO for `calibration.match.unassign` — removes a session's
+/// assignment for one calibration type, returning it to "no master
+/// assigned" (#875: un-assign was previously impossible).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationMatchUnassignRequest {
+    pub contract_version: String,
+    pub request_id: String,
+    pub session_id: String,
+    pub calibration_type: CalibrationType,
+}
+
+/// Response DTO for `calibration.match.unassign`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationMatchUnassignResponse {
+    pub status: String, // "success" | "error"
+    pub contract_version: String,
+    pub request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<UnassignErrorDto>,
+}
+
+/// Error envelope for unassign.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UnassignErrorDto {
+    pub code: String,
+    pub message: String,
+}
+
 // ── calibration.match.suggest.batch ──────────────────────────────────────────
 
 /// Contract version for calibration.match.suggest.batch.

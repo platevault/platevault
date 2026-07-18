@@ -113,6 +113,25 @@ pub async fn upsert(pool: &SqlitePool, params: UpsertParams<'_>) -> DbResult<()>
     Ok(())
 }
 
+/// Delete the assignment for a `(session_id, calibration_type)` pair (#875:
+/// un-assign — returns the session to "no master assigned" for that type).
+///
+/// Returns `true` when a row was deleted, `false` when none existed.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn delete(pool: &SqlitePool, session_id: &str, calibration_type: &str) -> DbResult<bool> {
+    let result = sqlx::query(
+        "DELETE FROM calibration_assignment WHERE session_id = ? AND calibration_type = ?",
+    )
+    .bind(session_id)
+    .bind(calibration_type)
+    .execute(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Get the current assignment for a `(session_id, calibration_type)` pair.
 ///
 /// Returns `None` when no assignment exists.

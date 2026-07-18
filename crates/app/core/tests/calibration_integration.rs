@@ -13,15 +13,17 @@
 //! - `suggest`: session without a fingerprint row degrades gracefully (#867)
 //!   instead of hard-blocking with observer_location_missing.
 //! - `assign`: happy-path → assignment persists and audit event emitted.
+//! - `unassign` (#875): removes a persisted assignment, returning the session
+//!   to "no master assigned" for that type.
 //! - `batch_suggest`: two sessions, one with matching master → results per session.
 
 mod support;
 
-use app_core::calibration::{assign, batch_suggest, suggest};
+use app_core::calibration::{assign, batch_suggest, suggest, unassign};
 use contracts_core::calibration_match::{
     CalibrationMatchAssignRequest, CalibrationMatchBatchRequest, CalibrationMatchSuggestRequest,
-    CalibrationType, SuggestStatus, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION,
-    SUGGEST_CONTRACT_VERSION,
+    CalibrationMatchUnassignRequest, CalibrationType, SuggestStatus, ASSIGN_CONTRACT_VERSION,
+    BATCH_CONTRACT_VERSION, SUGGEST_CONTRACT_VERSION, UNASSIGN_CONTRACT_VERSION,
 };
 use uuid::Uuid;
 
@@ -413,6 +415,60 @@ async fn assign_override_flag_is_distinguishable_on_reopen() {
         .find(|m| m.master_id == other_master_id)
         .expect("expected the normal assignment in calibration_matches");
     assert!(!bias_match.was_override, "normal assignment must reopen with was_override=false");
+}
+
+/// #875: `unassign` removes a persisted assignment, returning the session to
+/// "no master assigned" for that calibration type.
+#[tokio::test]
+async fn unassign_removes_persisted_assignment() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    insert_acq_fingerprint(pool, &session_id, 200.0, 20.0, -15.0, "2x2").await;
+    insert_cal_session(pool, &master_id, "dark").await;
+    insert_cal_fingerprint(pool, &master_id, "dark", 200.0, 20.0, -15.0, "2x2").await;
+
+    let assign_req = CalibrationMatchAssignRequest {
+        contract_version: ASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        master_id: master_id.clone(),
+        r#override: false,
+    };
+    let assign_resp = assign(pool, &bus, assign_req).await.expect("assign should not return Err");
+    assert_eq!(assign_resp.status, "success", "expected success, got: {:?}", assign_resp.error);
+
+    let unassign_req = CalibrationMatchUnassignRequest {
+        contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        calibration_type: CalibrationType::Dark,
+    };
+    let unassign_resp =
+        unassign(pool, &bus, unassign_req).await.expect("unassign should not return Err");
+    assert_eq!(unassign_resp.status, "success", "expected success, got: {:?}", unassign_resp.error);
+
+    let detail =
+        app_core::sessions::get_session(pool, &session_id).await.expect("session must exist");
+    assert!(
+        detail.calibration_matches.iter().all(|m| m.master_id != master_id),
+        "assignment must be gone from the session detail after unassign"
+    );
+
+    // Un-assigning again (nothing left to remove) surfaces a clear error, not a silent success.
+    let unassign_again_req = CalibrationMatchUnassignRequest {
+        contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id,
+        calibration_type: CalibrationType::Dark,
+    };
+    let again = unassign(pool, &bus, unassign_again_req).await.expect("should not return Err");
+    assert_eq!(again.status, "error");
+    assert_eq!(again.error.expect("expected error details").code, "assignment.not_found");
 }
 
 /// `batch_suggest` across two sessions: one with a matching master, one unknown.

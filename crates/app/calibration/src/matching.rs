@@ -48,8 +48,9 @@ use contracts_core::calibration_match::{
     AssignedDto, BatchErrorDto, BatchSessionResultDto, CalibrationMatchAssignRequest,
     CalibrationMatchAssignResponse, CalibrationMatchBatchRequest, CalibrationMatchBatchResponse,
     CalibrationMatchDto, CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse,
-    SuggestErrorDto, SuggestStatus, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION,
-    SUGGEST_CONTRACT_VERSION,
+    CalibrationMatchUnassignRequest, CalibrationMatchUnassignResponse, SuggestErrorDto,
+    SuggestStatus, UnassignErrorDto, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION,
+    SUGGEST_CONTRACT_VERSION, UNASSIGN_CONTRACT_VERSION,
 };
 use domain_core::ids::Timestamp;
 use persistence_db::repositories::calibration_assignment::{self as assign_repo, UpsertParams};
@@ -404,6 +405,59 @@ pub async fn assign(
             })
         }
     }
+}
+
+// ── Unassign (#875) ────────────────────────────────────────────────────────────
+
+/// `calibration.match.unassign` — remove a session's assignment for one
+/// calibration type, returning it to "no master assigned" for that type.
+///
+/// # Errors
+/// Returns `Err(String)` on database error.
+pub async fn unassign(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: CalibrationMatchUnassignRequest,
+) -> Result<CalibrationMatchUnassignResponse, String> {
+    let type_str = contract_to_kind(req.calibration_type).as_str();
+
+    let existing =
+        assign_repo::get(pool, &req.session_id, type_str).await.map_err(|e| e.to_string())?;
+
+    let Some(existing) = existing else {
+        return Ok(CalibrationMatchUnassignResponse {
+            status: "error".to_owned(),
+            contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+            request_id: req.request_id,
+            error: Some(UnassignErrorDto {
+                code: "assignment.not_found".to_owned(),
+                message: format!("No {type_str} assignment exists for session {}", req.session_id),
+            }),
+        });
+    };
+
+    assign_repo::delete(pool, &req.session_id, type_str).await.map_err(|e| e.to_string())?;
+
+    // Audit event mirrors "calibration.assignment.created" (T030).
+    let _ = bus
+        .publish(
+            "calibration.assignment.removed",
+            Source::User,
+            serde_json::json!({
+                "assignmentId": existing.id,
+                "sessionId": req.session_id,
+                "masterId": existing.master_id,
+                "calibrationType": type_str,
+            }),
+        )
+        .await;
+
+    Ok(CalibrationMatchUnassignResponse {
+        status: "success".to_owned(),
+        contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: req.request_id,
+        error: None,
+    })
 }
 
 // ── Response builders ─────────────────────────────────────────────────────────
