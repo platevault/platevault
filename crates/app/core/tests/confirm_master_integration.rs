@@ -32,7 +32,7 @@ use persistence_db::Database;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async fn test_db() -> Database {
+async fn test_db(dest_root: &Path) -> Database {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     // Override all per-type destination patterns with literal-only patterns so
@@ -47,15 +47,21 @@ async fn test_db() -> Database {
     .await
     .unwrap();
     // Register destination library roots so inbox → library routing succeeds.
-    // Using /tmp/dest-* as stable paths (tests do not actually write there).
+    // `dest_root` must be a real, writable directory (#765 fix: the executor
+    // now correctly joins the destination path against the picked
+    // *destination* root instead of silently falling back to the source
+    // root, so a fictional path here would make every real move fail).
+    std::fs::create_dir_all(dest_root).unwrap();
+    let dest_path = dest_root.to_str().unwrap();
     for (id, kind) in &[("dest-light", "light_frames"), ("dest-calib", "calibration")] {
         sqlx::query(
             "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
-             VALUES (?, ?, '/tmp/dest-shared', NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')
+             VALUES (?, ?, ?, NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')
              ON CONFLICT(id) DO NOTHING",
         )
         .bind(id)
         .bind(kind)
+        .bind(dest_path)
         .execute(db.pool())
         .await
         .unwrap();
@@ -188,7 +194,7 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterDark_300s.fits", "DARK");
 
-    let db = test_db().await;
+    let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
     app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
     let item_id = "master-item-001";
@@ -262,7 +268,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterFlat_Ha.fits", "FLAT");
 
-    let db = test_db().await;
+    let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
     app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
     let item_id = "master-item-flat";
@@ -320,7 +326,7 @@ async fn non_master_item_still_creates_plan() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "light_001.fits", "Light Frame");
 
-    let db = test_db().await;
+    let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
     let item_id = "non-master-item";
     let sig = "sig-non-master";
