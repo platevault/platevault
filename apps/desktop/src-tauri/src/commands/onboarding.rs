@@ -153,8 +153,8 @@ fn ticked_item_ids(topic: &str, payload: &serde_json::Value) -> Vec<&'static str
 /// events published before this task starts are not replayed here —
 /// `onboarding.state.get`'s seed derivation is the durable source of truth for
 /// pre-existing milestones (mirrors `start_log_forwarder`'s tradeoff).
-pub fn start_onboarding_subscriber(
-    app_handle: tauri::AppHandle,
+pub fn start_onboarding_subscriber<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
     pool: sqlx::SqlitePool,
     bus: &audit::bus::EventBus,
 ) {
