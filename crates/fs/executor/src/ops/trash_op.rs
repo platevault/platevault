@@ -53,6 +53,28 @@ pub fn trash_file(
     path: &Utf8Path,
     fallback_archive_dest: Option<&Utf8Path>,
 ) -> Result<TrashResult, (PlanItemFailure, TrashResult)> {
+    // E2E boundary double. The OS Shell trash needs an interactive
+    // window-station/desktop; on the headless CI runner `trash::delete`
+    // (`IFileOperation::PerformOperations` on Windows) blocks forever. A real
+    // Recycle-Bin move is unperformable there, so under the e2e harness env we
+    // remove the file deterministically — the observable side effect the
+    // real-UI journeys assert (the file leaves the archive subtree) is
+    // identical, and the real OS-trash primitive stays covered by the Layer-1
+    // unit tests below and by live use. Only the e2e harness sets this var
+    // (`crates/e2e-tests/tests/common/mod.rs`); production/release never does.
+    if std::env::var_os("ALM_E2E_OS_TRASH_FAKE").is_some() {
+        return match std::fs::remove_file(path) {
+            Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
+            Err(e) => Err((
+                PlanItemFailure::with_code(
+                    FailureCode::TrashUnavailable,
+                    format!("e2e fake-trash removal failed for '{path}': {e}"),
+                ),
+                TrashResult::default(),
+            )),
+        };
+    }
+
     match trash::delete(path) {
         Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
         Err(trash_err) => {
