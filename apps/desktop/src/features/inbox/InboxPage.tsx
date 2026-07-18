@@ -37,7 +37,7 @@
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { queryKeys } from '@/data/queryKeys';
@@ -65,6 +65,7 @@ import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
 import type { InboxBreakdownTarget, InboxListItem } from './store';
 import {
+  inboxClassifyQueryKey,
   mergeRescanRoots,
   normalizeConfirmError,
   useApplySelectedInboxPlans,
@@ -175,6 +176,7 @@ const EMPTY_ITEMS: InboxListItem[] = [];
 export function InboxPage() {
   const { selected, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
+  const queryClient = useQueryClient();
 
   // FR-001 / FR-002: cross-root aggregate list replaces the hardcoded scan.
   const {
@@ -324,13 +326,43 @@ export function InboxPage() {
     [navigate],
   );
 
-  /** `InboxDetail`'s reclassify_v2 callback: queue the post-split handoff. */
+  /**
+   * `InboxDetail`'s reclassify_v2 callback: queue the post-split handoff, OR
+   * — when there is nothing to hand off to — force-refetch the CURRENTLY
+   * selected item's own classification.
+   *
+   * `reclassify_v2` only emits `subItems` when it re-splits a source group
+   * into separate materialized rows (R-14); a group that resolves to exactly
+   * the item already selected (single-type, no missing attrs — nothing to
+   * split) can report an empty/unusable `subItems` list. Relying SOLELY on
+   * the handoff left the confirm gate + "frame types required" banner stuck
+   * on the pre-reclassify state forever in that case — nothing ever asked
+   * the CURRENT selection to re-derive (CI-red,
+   * `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`). The
+   * force-refetch is safe unconditionally: if a handoff ALSO starts and
+   * later moves selection to a new id, this just refetches a query for an
+   * item that's about to fall out of view anyway.
+   */
   const handleReclassified = useCallback(
     (response: InboxReclassifyV2Response) => {
       const targetId = pickReclassifyTarget(response.subItems);
-      if (targetId) setPendingReclassifySelectionId(targetId);
+      if (targetId) {
+        setPendingReclassifySelectionId(targetId);
+        return;
+      }
+      if (selectedItem) {
+        void queryClient.invalidateQueries({
+          queryKey: inboxClassifyQueryKey(
+            selectedItem.rootAbsolutePath,
+            selectedItem.inboxItemId,
+          ),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.metadata(selectedItem.inboxItemId),
+        });
+      }
     },
-    [],
+    [selectedItem, queryClient],
   );
 
   // Completes (or abandons) the handoff once the invalidated list query has

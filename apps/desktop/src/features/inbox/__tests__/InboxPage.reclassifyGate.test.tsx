@@ -59,11 +59,15 @@ const { getSearch, setSearch, resetSearch, subscribe } = vi.hoisted(() => {
     getSearch: () => state,
     setSearch: (updater: (prev: typeof state) => typeof state) => {
       state = updater(state);
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        l();
+      });
     },
     resetSearch: (next: typeof state) => {
       state = next;
-      listeners.forEach((l) => l());
+      listeners.forEach((l) => {
+        l();
+      });
     },
     subscribe: (l: () => void) => {
       listeners.add(l);
@@ -247,5 +251,67 @@ describe('InboxPage bulk-reclassify unblocks Confirm (#724/#755 CI-red)', () => 
     );
     expect(screen.queryByTestId('inbox-unclassified-alert')).toBeNull();
     expect(getSearch().selected).toBe(NEW_ID);
+  });
+
+  // Coordinator's root-cause hypothesis (a): `reclassify_v2` only emits
+  // `subItems` when it re-splits a group into SEPARATE materialized rows —
+  // a group that resolves to exactly the item already selected (single-type,
+  // no missing attrs, nothing to split) can report an empty `subItems` list.
+  // `pickReclassifyTarget([])` returns null, so the selection-handoff path
+  // never starts; the gate must still re-derive from a fresh classify of
+  // whatever is CURRENTLY selected.
+  it('re-enables Confirm when reclassify_v2 resolves the item IN PLACE (empty subItems)', async () => {
+    mockInboxReclassifyV2.mockResolvedValue(
+      ok({ sourceGroupId: 'sg-1', subItems: [], needsReviewCount: 0 }),
+    );
+    // The id never changes for an in-place resolve — same OLD_ID throughout,
+    // but its classify() result flips from unclassified to single_type once
+    // the reclassify's cache invalidation lands (call 2+).
+    let classifyCall = 0;
+    mockInboxClassify.mockImplementation(() => {
+      classifyCall += 1;
+      return Promise.resolve(
+        classifyCall === 1
+          ? ok({
+              type: 'unclassified',
+              frameType: null,
+              unclassifiedFiles: ['ambiguous_001.fits'],
+            })
+          : ok({
+              type: 'single_type',
+              frameType: 'light',
+              unclassifiedFiles: [],
+            }),
+      );
+    });
+    mockInboxList.mockReset();
+    mockInboxList.mockResolvedValue(
+      ok({ items: [oldItem], capped: false, limit: 500 }),
+    );
+
+    render(<InboxPage />);
+    await screen.findByTestId(`inbox-item-${OLD_ID}`);
+    screen.getByTestId(`inbox-item-${OLD_ID}`).click();
+
+    await waitFor(() => expect(mockInboxClassify).toHaveBeenCalled());
+    expect(await screen.findByTestId('inbox-confirm-btn')).toBeDisabled();
+
+    screen.getByTestId('reclassify-select-all').click();
+    const bulkFrameType = screen.getByTestId(
+      'bulk-frame-type',
+    ) as HTMLSelectElement;
+    bulkFrameType.value = 'light';
+    bulkFrameType.dispatchEvent(new Event('change', { bubbles: true }));
+    screen.getByTestId('bulk-apply-btn').click();
+
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
+
+    await waitFor(
+      () => expect(screen.getByTestId('inbox-confirm-btn')).not.toBeDisabled(),
+      { timeout: 5000 },
+    );
+    expect(screen.queryByTestId('inbox-unclassified-alert')).toBeNull();
+    // Selection never needed to move — no handoff, no id change.
+    expect(getSearch().selected).toBe(OLD_ID);
   });
 });

@@ -64,27 +64,41 @@ export type {
 
 // ── Query hooks ───────────────────────────────────────────────────────────────
 
+/**
+ * Shared `inbox.classify` TanStack Query key builder. Used by
+ * `useInboxClassification`/`useInboxPlanBreakdowns` (which fetch it) and by
+ * any caller that needs to directly invalidate one item's classify cache
+ * (e.g. `InboxPage`'s post-reclassify-in-place refetch) — keeping the key
+ * shape in ONE place means an invalidator can never drift out of sync with
+ * the query it's supposed to target.
+ */
+export function inboxClassifyQueryKey(
+  rootAbsolutePath: string,
+  inboxItemId: string,
+  forceRescan = false,
+) {
+  const key = forceRescan
+    ? `${rootAbsolutePath}|${inboxItemId}|force`
+    : `${rootAbsolutePath}|${inboxItemId}`;
+  return [queryKeys.inbox.list('all')[0], 'classify', key] as const;
+}
+
 /** Load and cache an inbox classification for the given item. */
 export function useInboxClassification(
   inboxItemId: string,
   rootAbsolutePath: string,
   forceRescan = false,
 ) {
-  const key = forceRescan
-    ? `${rootAbsolutePath}|${inboxItemId}|force`
-    : `${rootAbsolutePath}|${inboxItemId}`;
   const { data, isFetching, error } = useQuery<InboxClassifyResponse>({
-    queryKey: [queryKeys.inbox.list('all')[0], 'classify', key],
-    queryFn: async () => {
-      const [rootPath, itemId, forceStr] = key.split('|');
-      return unwrap(
+    queryKey: inboxClassifyQueryKey(rootAbsolutePath, inboxItemId, forceRescan),
+    queryFn: async () =>
+      unwrap(
         await commands.inboxClassify({
-          inboxItemId: itemId,
-          rootAbsolutePath: rootPath,
-          forceRescan: forceStr === 'force',
+          inboxItemId,
+          rootAbsolutePath,
+          forceRescan,
         }),
-      );
-    },
+      ),
     enabled: !!inboxItemId && !!rootAbsolutePath,
   });
   return { data, loading: isFetching, error: error ?? undefined };
@@ -120,23 +134,20 @@ export function useInboxPlanBreakdowns(
   targets: InboxBreakdownTarget[],
 ): Record<string, ReadonlyArray<{ kind: string; count: number }>> {
   const results = useQueries({
-    queries: targets.map((t) => {
-      const key = `${t.rootAbsolutePath}|${t.inboxItemId}`;
-      return {
-        queryKey: [queryKeys.inbox.list('all')[0], 'classify', key],
-        queryFn: async () =>
-          unwrap(
-            await commands.inboxClassify({
-              inboxItemId: t.inboxItemId,
-              rootAbsolutePath: t.rootAbsolutePath,
-              forceRescan: false,
-            }),
-          ),
-        enabled: !!t.inboxItemId && !!t.rootAbsolutePath,
-        // Breakdown is stable for an unchanged folder — avoid re-fetch churn.
-        staleTime: 30_000,
-      };
-    }),
+    queries: targets.map((t) => ({
+      queryKey: inboxClassifyQueryKey(t.rootAbsolutePath, t.inboxItemId),
+      queryFn: async () =>
+        unwrap(
+          await commands.inboxClassify({
+            inboxItemId: t.inboxItemId,
+            rootAbsolutePath: t.rootAbsolutePath,
+            forceRescan: false,
+          }),
+        ),
+      enabled: !!t.inboxItemId && !!t.rootAbsolutePath,
+      // Breakdown is stable for an unchanged folder — avoid re-fetch churn.
+      staleTime: 30_000,
+    })),
   });
 
   // Stable dependency signatures: recompute only when the set of target ids
