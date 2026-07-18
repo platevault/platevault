@@ -476,8 +476,7 @@ export function PlanReviewOverlay({
           {/* Live apply progress (D17 — spec 025 progress UI, absorbed here). */}
           {(progress.running ||
             progress.terminal !== null ||
-            progress.paused ||
-            progress.resumeStalled) && (
+            progress.paused) && (
             <div
               className="alm-plan-review__progress"
               role="status"
@@ -538,14 +537,6 @@ export function PlanReviewOverlay({
                       : m.plans_review_resume_btn()}
                   </Btn>
                 </>
-              )}
-              {progress.resumeStalled && (
-                <Pill
-                  variant="warn"
-                  data-testid="plan-review-resume-stalled-badge"
-                >
-                  {m.plans_review_resume_stalled()}
-                </Pill>
               )}
             </div>
           )}
