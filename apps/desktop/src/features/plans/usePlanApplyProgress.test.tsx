@@ -8,7 +8,7 @@
  * hook reduces the streamed Started → per-item → terminal events into a live
  * progress state (item counter + terminal outcome).
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Channel } from '@tauri-apps/api/core';
 import type { OperationEvent } from '@/bindings/types';
@@ -124,5 +124,109 @@ describe('usePlanApplyProgress', () => {
     expect(response).toBeNull();
     expect(result.current.progress.terminal).toBe('failed');
     expect(result.current.progress.running).toBe(false);
+  });
+
+  // Issue #744 FR-002: `plan.resume` returns no event channel (the run
+  // continues since #575, but nothing streams it), so this hook must POLL
+  // `plans.apply.status` to make a resumed run's progress visible instead of
+  // leaving it permanently invisible.
+  describe('resume (#744 FR-002 status polling)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('polls plans.apply.status after resume and reports live + terminal progress', async () => {
+      let statusCall = 0;
+      setInvokeOverride((cmd, args) => {
+        if (cmd === 'plans_apply_real') {
+          const channel = (args as { onEvent?: Channel<OperationEvent> })
+            .onEvent;
+          channel?.onmessage?.(
+            mk(0, 'item_started', { runId: 'run-9', itemsTotal: 5 }),
+          );
+          channel?.onmessage?.(
+            mk(1, 'warning', { runId: 'run-9', pauseReason: 'disk_full' }),
+          );
+          return Promise.resolve({
+            planId: 'plan-9',
+            runId: 'run-9',
+            newState: 'paused',
+          });
+        }
+        if (cmd === 'plans_resume') {
+          return Promise.resolve({ planId: 'plan-9', newState: 'applying' });
+        }
+        if (cmd === 'plans_apply_status') {
+          statusCall += 1;
+          // First tick: still applying, partial progress. Second tick: done.
+          if (statusCall === 1) {
+            return Promise.resolve({
+              planId: 'plan-9',
+              runId: 'run-9',
+              planState: 'applying',
+              itemsTotal: 5,
+              itemsApplied: 3,
+              itemsFailed: 0,
+              itemsSkipped: 0,
+              itemsCancelled: 0,
+              itemsPending: 2,
+            });
+          }
+          return Promise.resolve({
+            planId: 'plan-9',
+            runId: 'run-9',
+            planState: 'applied',
+            itemsTotal: 5,
+            itemsApplied: 5,
+            itemsFailed: 0,
+            itemsSkipped: 0,
+            itemsCancelled: 0,
+            itemsPending: 0,
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      const { result } = renderHook(() => usePlanApplyProgress());
+      await act(async () => {
+        await result.current.run({ id: 'plan-9', approvalToken: 'tok' });
+      });
+      expect(result.current.progress.paused).toBe(true);
+
+      let resumed = false;
+      await act(async () => {
+        resumed = await result.current.resume('plan-9');
+      });
+      expect(resumed).toBe(true);
+      // Resume itself carries no progress — running while the poll spins up.
+      expect(result.current.progress.running).toBe(true);
+      expect(result.current.progress.paused).toBe(false);
+
+      // First poll tick: partial progress, still running (not terminal).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(result.current.progress.applied).toBe(3);
+      expect(result.current.progress.running).toBe(true);
+      expect(result.current.progress.terminal).toBeNull();
+
+      // Second poll tick: plan reaches `applied` — terminal, polling stops.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(result.current.progress.applied).toBe(5);
+      expect(result.current.progress.running).toBe(false);
+      expect(result.current.progress.terminal).toBe('completed');
+      expect(statusCall).toBe(2);
+
+      // Polling has genuinely stopped — no further status calls accrue.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(statusCall).toBe(2);
+    });
   });
 });
