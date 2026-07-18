@@ -19,6 +19,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockAddToast } = vi.hoisted(() => ({ mockAddToast: vi.fn() }));
 
+// The canonical-target block links to /targets (#738), which needs a router
+// context this test doesn't provide — stub as a plain anchor, consistent with
+// TargetsTable.test.tsx's `@tanstack/react-router` mock.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    to,
+    ...rest
+  }: {
+    children?: import('react').ReactNode;
+    to: string;
+  }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {
@@ -116,5 +134,19 @@ describe('ProjectDetail — canonical target rail (spec 035)', () => {
     expect(
       screen.queryByTestId('project-canonical-target'),
     ).not.toBeInTheDocument();
+  });
+
+  it('4. links through to the Targets page (#738 — was a non-interactive span)', () => {
+    setupStore({
+      canonicalTarget: {
+        id: 'ct-3',
+        primaryDesignation: 'M 42',
+        commonName: 'Orion Nebula',
+      },
+    });
+    render(<ProjectDetailContent projectId="proj-m31" />);
+    const card = screen.getByTestId('project-canonical-target');
+    expect(card.tagName).toBe('A');
+    expect(card.getAttribute('href')).toBe('/targets');
   });
 });

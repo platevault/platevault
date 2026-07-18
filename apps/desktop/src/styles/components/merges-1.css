@@ -515,6 +515,10 @@
  * the leading uppercase label is new. */
 .alm-project-detail__target-info {
   padding: 0 var(--alm-sp-3) var(--alm-sp-2);
+  cursor: pointer;
+}
+.alm-project-detail__target-info:hover .alm-project-detail__target-name {
+  text-decoration: underline;
 }
 .alm-project-detail__target-label {
   font-size: var(--alm-text-xs);
