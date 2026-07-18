@@ -190,4 +190,25 @@ test.describe("project creation wizard convergence (#887/#719/#586/#783/#795)", 
       page.getByText(/From target context:.*Andromeda Galaxy/),
     ).toBeVisible({ timeout: 5_000 });
   });
+
+  // #612: the *other* entry point — "+ New project here" on a target's detail
+  // page navigates straight to `/#/projects/new?targetId=…` instead of the
+  // manual TargetSearch pick covered above. The wizard must resolve that id
+  // via `target.get` and prefill the name step from it, not require the user
+  // to re-pick the same target they started from.
+  test("#612: a real ?targetId= search param resolves and prefills the name step", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/projects/new?targetId=tgt-m31");
+    await expect(page.getByText(/New project —/)).toBeVisible({ timeout: 8_000 });
+
+    // Prefilled from the resolved target (mock target.get echoes 'M 31').
+    await expect(page.locator("#project-name")).toHaveValue("M 31", {
+      timeout: 5_000,
+    });
+    await expect(page.getByText(/From target context:.*M 31/)).toBeVisible({
+      timeout: 5_000,
+    });
+  });
 });
