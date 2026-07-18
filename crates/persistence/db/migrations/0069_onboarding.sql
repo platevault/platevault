@@ -6,11 +6,17 @@
 -- registry itself (page/topic/prerequisite/seed_query/anchor) is code, not a
 -- table (data-model.md "Item registry (code, not DB)").
 --
--- `guided_flow_state` (0030_guided_flow.sql) is dropped: FR-027 greenfield
--- removal, no data migrated. Migration 0030 itself stays shipped and
--- untouched (append-only history).
-
-DROP TABLE IF EXISTS guided_flow_state;
+-- `guided_flow_state` (0030_guided_flow.sql) is NOT dropped here, despite
+-- tasks.md T001's literal wording and research R6/R7. Orchestrator sequencing
+-- decision (run-onb-0718, FIX to backend-foundation): dropping it in this
+-- migration would ship ahead of the spec 056 deletion lane (T010, separate
+-- node) that removes the code still reading/writing that table
+-- (`crates/persistence/db/src/repositories/guided_flow.rs`,
+-- `crates/app/core/src/guided_flow.rs`), leaving main's workspace tests red
+-- between the two merges. The `DROP TABLE IF EXISTS guided_flow_state`
+-- instead ships as migration 0070 inside T010, atomically with the code
+-- deletion (FR-027 greenfield removal, no data migrated). Migration 0030
+-- itself stays shipped and untouched either way (append-only history).
 
 -- ── onboarding_state — per-item rows ─────────────────────────────────────────
 --
