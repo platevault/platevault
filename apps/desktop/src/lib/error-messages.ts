@@ -160,6 +160,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   // Inbox-confirm attribution (spec 008 Q27, F-Framing-5/10).
   'attribution.not_light_frame': m.err_attribution_not_light_frame,
   'attribution.geometry_unavailable': m.err_attribution_geometry_unavailable,
+  // Onboarding redesign (spec 056 contracts/onboarding-commands.md).
+  'onboarding.item.unknown': m.err_onboarding_item_unknown,
+  'onboarding.invalid_state': m.err_onboarding_invalid_state,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   'internal.error': m.err_generic_fallback,
