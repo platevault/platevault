@@ -44,13 +44,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		await expect(announcer).toHaveCount(1);
 	});
 
-	// TODO(consolidation): un-skip once the shared T007 mock reads request-wrapped
-	// args. `mocks.ts` `onboarding_item_set_state` reads `_args?.itemId`, but the
-	// binding invokes `{ request: { itemId, state } }`, so the check-off no-ops,
-	// the store never emits the unchecked→settled transition, and the row never
-	// enters the completing state. Fix is a one-line `_args?.request?.…` read in
-	// mocks.ts (orchestrator-owned). Assertion body below is complete and correct.
-	test.skip("manual check-off plays the in-place choreography then moves the item to the completed area", async ({
+	test("manual check-off plays the in-place choreography then moves the item to the completed area", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
@@ -69,10 +63,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		).toBeVisible();
 	});
 
-	// TODO(consolidation): same mocks.ts `_args?.request?.…` defect as above —
-	// dismiss (`onboarding_item_set_state` with state='dismissed') no-ops, so the
-	// dismiss choreography never plays. Body complete and correct.
-	test.skip("dismiss plays the same choreography and moves the item to the completed area", async ({
+	test("dismiss plays the same choreography and moves the item to the completed area", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
@@ -96,7 +87,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 	test.describe("reduced motion parity", () => {
 		test.use({ reducedMotion: "reduce" });
 
-		test.skip("completion applies the final state instantly with no animation (FR-020)", async ({
+		test("completion applies the final state instantly with no animation (FR-020)", async ({
 			page,
 		}) => {
 				await landOnMockRoute(page, "/#/sessions");

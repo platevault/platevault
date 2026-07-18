@@ -388,7 +388,72 @@ let mockOnboardingFlags: OnboardingFlagsDto = {
   sidebarCollapsed: false,
 };
 
+// Persist the onboarding flags + settled item states across a `page.reload()`
+// (module state alone re-initialises on reload). Mirrors the
+// `E2E_OBSERVING_SEED_STORE_ID` single-JSON-blob round-trip above: hydrate once
+// on first read, persist after every mutation. This is what makes the mock
+// faithful to the real backend's durable persistence, so the cross-restart
+// walk / collapse / removal specs (FR-004/FR-012/FR-013) are exercisable, and
+// lets a test seed a pre-settled state via `localStorage` before boot.
+const E2E_ONBOARDING_STORE_ID = 'alm-e2e-onboarding';
+
+interface OnboardingSeed {
+  flags?: Partial<OnboardingFlagsDto>;
+  items?: Record<
+    string,
+    { state: OnboardingItemDto['state']; source?: OnboardingItemDto['source'] }
+  >;
+}
+
+let onboardingHydrated = false;
+
+function hydrateOnboarding(): void {
+  if (onboardingHydrated) return;
+  onboardingHydrated = true;
+  try {
+    const raw =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(E2E_ONBOARDING_STORE_ID)
+        : null;
+    if (!raw) return;
+    const seed = JSON.parse(raw) as OnboardingSeed;
+    if (seed.flags) {
+      mockOnboardingFlags = { ...mockOnboardingFlags, ...seed.flags };
+    }
+    if (seed.items) {
+      mockOnboardingItems = mockOnboardingItems.map((i) => {
+        const s = seed.items?.[i.itemId];
+        return s ? { ...i, state: s.state, source: s.source ?? i.source } : i;
+      });
+    }
+  } catch {
+    // ignore malformed seed — fall back to the fresh defaults
+  }
+}
+
+function persistOnboarding(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const items: NonNullable<OnboardingSeed['items']> = {};
+    for (const i of mockOnboardingItems) {
+      if (i.state !== 'unchecked') {
+        items[i.itemId] = { state: i.state, source: i.source };
+      }
+    }
+    localStorage.setItem(
+      E2E_ONBOARDING_STORE_ID,
+      JSON.stringify({
+        flags: mockOnboardingFlags,
+        items,
+      } satisfies OnboardingSeed),
+    );
+  } catch {
+    // best-effort persistence; never throw from a mock handler
+  }
+}
+
 function mockOnboardingStateDto(): OnboardingStateDto {
+  hydrateOnboarding();
   const perPageMap = new Map<
     OnboardingItemDto['page'],
     { done: number; total: number }
@@ -1753,8 +1818,19 @@ export async function mockInvoke(
       return { state: mockOnboardingStateDto() };
     }
     case 'onboarding_item_set_state': {
-      const itemId = _args?.itemId as string;
-      const nextState = _args?.state as OnboardingItemDto['state'];
+      hydrateOnboarding();
+      // The generated binding invokes `{ request: { itemId, state } }`; the
+      // handler must read the request-wrapped args (mirrors
+      // `ingestion_settings_update` / `calibration_tolerances_update`).
+      const req = (
+        _args as
+          | {
+              request?: { itemId?: string; state?: OnboardingItemDto['state'] };
+            }
+          | undefined
+      )?.request;
+      const itemId = req?.itemId as string;
+      const nextState = req?.state as OnboardingItemDto['state'];
       const item = mockOnboardingItems.find((i) => i.itemId === itemId);
       if (!item) {
         return mockContractError(
@@ -1767,24 +1843,45 @@ export async function mockInvoke(
         item.state = nextState;
         item.source = 'user';
         item.at = new Date().toISOString();
+        // FR-031 completion auto-hide: once the last open item settles, the
+        // backend flips `sectionHidden`; mirror that so the whole-section
+        // auto-hide is exercisable in mock mode.
+        if (mockOnboardingItems.every((i) => i.state !== 'unchecked')) {
+          mockOnboardingFlags = { ...mockOnboardingFlags, sectionHidden: true };
+        }
+        persistOnboarding();
       }
       return { item: { ...item } };
     }
     case 'onboarding_orientation_complete': {
+      hydrateOnboarding();
+      // No request field is read here (the `outcome` in `{ request: { outcome
+      // } }` does not change the mock's done-forever effect), but the flip must
+      // persist so "no auto-run after restart" (FR-004) holds across a reload.
       if (!mockOnboardingFlags.orientationDone) {
         mockOnboardingFlags = {
           ...mockOnboardingFlags,
           orientationDone: true,
         };
+        persistOnboarding();
       }
       return { orientationDoneAt: new Date().toISOString() };
     }
     case 'onboarding_section_set': {
-      const hidden = _args?.hidden as boolean | null | undefined;
-      const sidebarCollapsed = _args?.sidebarCollapsed as
-        | boolean
-        | null
-        | undefined;
+      hydrateOnboarding();
+      // Request-wrapped args (see `onboarding_item_set_state` above).
+      const sectionReq = (
+        _args as
+          | {
+              request?: {
+                hidden?: boolean | null;
+                sidebarCollapsed?: boolean | null;
+              };
+            }
+          | undefined
+      )?.request;
+      const hidden = sectionReq?.hidden;
+      const sidebarCollapsed = sectionReq?.sidebarCollapsed;
       if (hidden == null && sidebarCollapsed == null) {
         return mockContractError(
           'onboarding.invalid_state',
@@ -1806,9 +1903,11 @@ export async function mockInvoke(
             ? mockOnboardingFlags.sidebarCollapsed
             : sidebarCollapsed,
       };
+      persistOnboarding();
       return { flags: { ...mockOnboardingFlags } };
     }
     case 'onboarding_restore': {
+      hydrateOnboarding();
       // Re-derive AUTOMATIC items only (mock: reset to unchecked); manual
       // states survive. Clears the hidden flag (FR-014).
       mockOnboardingItems = mockOnboardingItems.map((i) =>
@@ -1817,6 +1916,7 @@ export async function mockInvoke(
           : i,
       );
       mockOnboardingFlags = { ...mockOnboardingFlags, sectionHidden: false };
+      persistOnboarding();
       return { state: mockOnboardingStateDto() };
     }
 
