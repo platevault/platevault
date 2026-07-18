@@ -40,3 +40,17 @@ when every item is complete.
 
 **Provisional answer**: the section shows a 100% complete state and never
 auto-hides; only "Remove getting started" hides it. Encoded in spec.md FR-031.
+
+## PQ-005 — Recovery for missed milestone events (analysis finding U1)
+
+The record makes ticks backend-authoritative and restore-filtered, but does
+not say what happens if the subscriber misses a live event entirely (published
+before subscription during startup, or process killed between the action and
+the tick write). Seed/restore would self-heal, but only when the user runs
+restore.
+
+**Provisional answer**: accepted v1 limitation — the subscriber is started
+before the UI can invoke use cases (ordering obligation noted in tasks.md
+T006), and any residual miss is corrected by the next restore. No
+startup reconciliation pass in v1 (it would duplicate the seed derivation for
+marginal benefit). Documented in analysis.md U1.
