@@ -95,6 +95,21 @@
   font-weight: 500;
   color: var(--alm-text);
 }
+/* Issue #605: path + the "Plan pending review" chip on one line — the path
+   shrinks/ellipses first, the chip (fixed content) never wraps or clips. */
+.alm-inbox-cell__path-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+.alm-inbox-cell__path-wrap .alm-inbox-cell__path {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.alm-inbox-cell__path-wrap .alm-pill {
+  flex-shrink: 0;
+}
 .alm-inbox-table__row {
   cursor: pointer;
 }

@@ -104,4 +104,53 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     expect(screen.getByText('DetectionMatrix')).toBeInTheDocument();
     expect(screen.queryByText('(root)')).not.toBeInTheDocument();
   });
+
+  // #605: Confirm creates a plan but the row previously gave no visible sign
+  // of it — the Type column keeps showing the item's dominant frame type
+  // (frameType is checked before `state` in classificationLabel), so a
+  // plan_open item looked byte-for-byte identical to one still awaiting
+  // confirm. A "Plan pending review" chip on the row is the additive fix.
+  it('(#605) a plan_open item shows a "Plan pending review" chip alongside its frame type', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'has-plan',
+        state: 'plan_open',
+        frameType: 'dark',
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    // The Type column is unchanged (still "dark") — the chip is additive.
+    expect(screen.getByText('dark')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('inbox-item-plan-pending-has-plan'),
+    ).toHaveTextContent('Plan pending review');
+  });
+
+  it('(#605) a classified item with no open plan shows no chip', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'no-plan',
+        state: 'classified',
+        frameType: 'dark',
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(
+      screen.queryByTestId('inbox-item-plan-pending-no-plan'),
+    ).not.toBeInTheDocument();
+  });
 });

@@ -27,6 +27,7 @@ import {
   Table,
   tableIndent,
   Skeleton,
+  Pill,
   type TableColumn,
   type TableRow,
 } from '@/ui';
@@ -453,8 +454,28 @@ export function InboxList({
           _selected: selected,
           _indent: indent || undefined,
           detection: (
-            <span className="alm-inbox-cell__path" title={detectionLabel(item)}>
-              {detectionLabel(item)}
+            <span className="alm-inbox-cell__path-wrap">
+              <span
+                className="alm-inbox-cell__path"
+                title={detectionLabel(item)}
+              >
+                {detectionLabel(item)}
+              </span>
+              {/* Issue #605: an in-context hint that Confirm already created a
+                  reviewable plan — the Type column keeps showing the item's
+                  dominant frame type (classificationLabel checks frameType
+                  before state), so without this the row looks unchanged and
+                  reads as "my confirm did nothing". Additive: no action
+                  needed here, "Review plans" in the top bar remains the one
+                  place to act on it. */}
+              {item.state === 'plan_open' && (
+                <Pill
+                  variant="info"
+                  data-testid={`inbox-item-plan-pending-${item.inboxItemId}`}
+                >
+                  {m.inbox_row_plan_pending()}
+                </Pill>
+              )}
             </span>
           ),
           type: (
