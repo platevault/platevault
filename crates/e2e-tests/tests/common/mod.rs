@@ -1660,6 +1660,17 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
         // times out). Real users/non-e2e builds never set this, so the guard
         // stays active for them.
         .env("ALM_E2E_INSTANCE_ID", env.native_port.to_string())
+        // OS-trash boundary double for headless CI. The Windows Shell trash
+        // (`trash::delete` -> `IFileOperation`) needs an interactive
+        // window-station/desktop and blocks indefinitely in the non-interactive
+        // CI runner context — verified: a real interactive Windows desktop
+        // trashes on every volume (incl. external + no-Recycle-Bin) in <300ms,
+        // only the headless session hangs. A real Recycle-Bin move is
+        // unperformable here, so the app does a deterministic filesystem
+        // removal instead (see `fs_executor::ops::trash_op`), matching the
+        // FakeSpawner/FakeResolver boundary pattern. Production/live never sets
+        // this and always uses real OS trash.
+        .env("ALM_E2E_OS_TRASH_FAKE", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (key, value) in &env.vars {
