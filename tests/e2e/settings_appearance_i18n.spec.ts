@@ -467,27 +467,3 @@ test.describe("Journey 10 · Appearance Restore defaults (#802)", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 });
-
-// ── Scenario 8 — Advanced > Guided Tour restart confirm gate (#827) ─────────
-
-test.describe("Journey 10 · Advanced Guided Tour restart gate (#827)", () => {
-  test("'Restart guided flow' requires confirmation and shows success feedback, matching 'Restart first-run setup'", async ({
-    page,
-  }) => {
-    seedSetupComplete(page);
-    await page.goto("/#/settings/advanced");
-
-    const restartBtn = page.getByTestId("guided-restart-btn");
-    await expect(restartBtn).toBeVisible();
-
-    // Clicking must not fire the restart directly — a confirm step gates it,
-    // symmetric with the "Restart first-run setup" control below it.
-    await restartBtn.click();
-    const confirmBtn = page.getByTestId("guided-restart-confirm-btn");
-    await expect(confirmBtn).toBeVisible();
-    await expect(page.getByTestId("guided-restart-done")).toHaveCount(0);
-
-    await confirmBtn.click();
-    await expect(page.getByTestId("guided-restart-done")).toBeVisible();
-  });
-});

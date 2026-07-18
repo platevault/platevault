@@ -206,7 +206,7 @@ fn exports_typescript_bindings() {
         "source_protection_set",
         "plan_protection_check_cmd",
         "protection_plan_acknowledged",
-        // settings / preferences / search / tour
+        // settings / preferences / search
         "settings_get",
         "settings_update",
         "settings_restore_defaults",
@@ -214,13 +214,6 @@ fn exports_typescript_bindings() {
         "preferences_get",
         "preferences_set",
         "search_global",
-        "tour_complete_step",
-        // guided
-        "guided_state_get",
-        "guided_step_complete",
-        "guided_dismiss",
-        "guided_restart",
-        "guided_activate",
         // native
         "native_directory_pick",
         "native_file_pick",

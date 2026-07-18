@@ -171,7 +171,7 @@ export async function listRoots(): Promise<LibraryRoot[]> {
 
 /**
  * `firstrun.restart` — reopen the first-run source setup wizard (spec 003
- * US3). Distinct from the spec-010 guided first-project tour: this clears the
+ * US3). This clears the
  * `first_run_state.completed_at` flag and returns the currently registered
  * sources so the wizard's working buffer can be prefilled for editing (A7).
  * `confirm: true` is required by the backend to guard against accidental

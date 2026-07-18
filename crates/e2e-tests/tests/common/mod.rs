@@ -1194,13 +1194,9 @@ impl E2eApp {
     /// 1. `firstrun.complete` (backend gate — the CALLER must already have
     ///    registered at least one raw and one project source, its real
     ///    preconditions);
-    /// 2. `guided.dismiss` — the guided coach auto-activates on the first
-    ///    Shell mount after setup and its react-joyride overlay would sit
-    ///    over the page; activation is a no-op on a dismissed flow
-    ///    (`crates/app/core/src/guided_flow.rs::activate_after_setup`);
-    /// 3. set `setupCompleted: true` in the `alm-preferences` localStorage
+    /// 2. set `setupCompleted: true` in the `alm-preferences` localStorage
     ///    blob (what `SetupWizard` does via `setPreference`);
-    /// 4. reload the page — the preferences module caches its localStorage
+    /// 3. reload the page — the preferences module caches its localStorage
     ///    read in module state (`apps/desktop/src/data/preferences.ts`), so
     ///    a direct localStorage write is invisible until a fresh page load.
     pub async fn complete_first_run_gate(&self) -> Result<()> {
@@ -1208,7 +1204,6 @@ impl E2eApp {
             .invoke("firstrun_complete", json!({}))
             .await
             .context("firstrun.complete failed — were a raw AND a project source registered?")?;
-        let _: Value = self.invoke("guided_dismiss", json!({})).await?;
 
         let script = r#"
             var raw = localStorage.getItem('alm-preferences');

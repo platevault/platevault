@@ -50,9 +50,6 @@ export const queryKeys = {
     astroFormat: (id: string) => ['targets', id, 'astroFormat'] as const,
     favourites: () => ['targets', 'favourites'] as const,
   },
-  guided: {
-    state: () => ['guided'] as const,
-  },
   setup: {
     sources: () => ['setup', 'sources'] as const,
   },

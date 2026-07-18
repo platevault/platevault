@@ -975,7 +975,6 @@ export function InboxDetail({
           disabled={confirmDisabled || confirmBusy}
           aria-label={confirmLabel}
           data-testid="inbox-confirm-btn"
-          data-guide-anchor="inbox.confirm-row"
         >
           {confirmBusy ? m.common_working() : confirmLabel}
         </Btn>

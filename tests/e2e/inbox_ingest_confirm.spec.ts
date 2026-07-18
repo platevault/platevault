@@ -44,7 +44,7 @@ import {
 	test,
 	expect,
 	seedSetupComplete,
-	disableGuidedTourOverlay,
+	disableOnboarding,
 } from "./support/harness";
 
 test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () => {
@@ -53,7 +53,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 
 		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
@@ -90,7 +90,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		// Slot 0: group by "Source" (basename of the item's root path — the
@@ -130,7 +130,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		await page.getByTestId("inbox-item-item-001").click();
@@ -174,7 +174,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		// item-002: state=pending_classification, classify() resolves to
@@ -215,7 +215,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		// Only item-001 carries state="classified" in the fixture, so the bulk
@@ -237,7 +237,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		// The enriched `inbox_plan_list_open` mock seeds two open plans, so the
@@ -309,7 +309,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		await page.getByTestId("inbox-review-plans-btn").click();

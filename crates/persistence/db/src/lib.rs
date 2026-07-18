@@ -13,9 +13,8 @@
 //! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
 //! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
 //! Migration 0069 added `onboarding_state`/`onboarding_flags` (spec 056).
-//! The spec-010 `guided_flow_state` table it succeeds is dropped separately,
-//! by migration 0070 inside the spec 056 deletion lane (T010) — deferred
-//! from 0069 for CI-greenness (orchestrator sequencing decision, run-onb-0718).
+//! Migration 0070 dropped the legacy spec-010 `guided_flow_state` table
+//! (spec 056 deletion lane, T010).
 
 use std::str::FromStr;
 

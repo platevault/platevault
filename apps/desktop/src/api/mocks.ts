@@ -544,7 +544,6 @@ const mockPreferences: AppPreferences = {
   defaultProjectView: 'combined',
   sessionsGroupBy: 'none',
   sessionsView: 'list',
-  tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
 };
 
@@ -1744,9 +1743,6 @@ export async function mockInvoke(
       } satisfies IpcOperationHandle;
     }
     case 'preferences_set': {
-      return null;
-    }
-    case 'tour_complete_step': {
       return null;
     }
 

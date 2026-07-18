@@ -1132,64 +1132,6 @@ export const commands = {
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("search_global", { query })),
 	/**
-	 *  `tour.complete_step` — mark a tour step as completed.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	tourCompleteStep: (step: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("tour_complete_step", { step })),
-	/**
-	 *  `guided.state.get` — read current coach state for UI hydration.
-	 * 
-	 *  Returns the current `GuidedFlowStateDto`.  On the first call after a
-	 *  corruption reset, returns `Err` with code `state_corrupted`; the row has
-	 *  already been reset to Idle server-side.  Retry to get the fresh state.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on corruption (informational) or database failure.
-	 */
-	guidedStateGet: () => typedError<GuidedStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_state_get")),
-	/**
-	 *  `guided.step.complete` — mark a step complete and advance the coach.
-	 * 
-	 *  The step must be a known registry id (e.g. `inbox.confirm_first`).
-	 *  If the flow is dismissed, returns an error.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
-	 */
-	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_step_complete", { request })),
-	/**
-	 *  `guided.dismiss` — dismiss the coach, hiding all hints.
-	 * 
-	 *  Idempotent: calling again on an already-dismissed flow returns the
-	 *  original `dismissedAt` timestamp.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	guidedDismiss: () => typedError<GuidedDismissResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_dismiss")),
-	/**
-	 *  `guided.restart` — restart the coach from Settings.
-	 * 
-	 *  - `Dismissed → Active(lowest uncompleted step)`: retains completed steps.
-	 *  - `Completed → Idle`: resets all progress (A1 ratified 2026-05-22).
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	guidedRestart: () => typedError<GuidedRestartResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_restart")),
-	/**
-	 *  `guided.activate` — activate the flow after first-run setup completes.
-	 * 
-	 *  If the flow is Idle, transitions to `Active(first uncompleted step)`.
-	 *  Idempotent when already active or dismissed.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	guidedActivate: () => typedError<GuidedFlowStateDto, ContractError_Serialize>(__TAURI_INVOKE("guided_activate")),
-	/**
 	 *  `onboarding.state.get` — read the full projection for UI hydration.
 	 * 
 	 *  # Errors
@@ -2069,7 +2011,6 @@ export type AppPreferences = {
 	defaultProjectView: ViewMode,
 	sessionsGroupBy: SessionsGroupBy,
 	sessionsView: SessionsView,
-	tourCompleted: TourCompleted,
 	setupCompleted: boolean,
 };
 
@@ -3753,14 +3694,6 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 /**  Referenced `file_record` id does not exist. */
 "frame.not_found" | 
 /**
- *  `guided.state.get` detected a corrupt `guided_flow_state` row, reset it
- *  to Idle, and is returning this informational code on the one call that
- *  observed the corruption. Distinct from `internal.database` (unrelated
- *  generic persistence failures) per the contract's closed `code` enum
- *  (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
- */
-"state_corrupted" | 
-/**
  *  `onboarding.item.set_state` referenced an `item_id` not in the
  *  registry (contracts/onboarding-commands.md `unknown_item`).
  */
@@ -4196,64 +4129,6 @@ export type GenerationWarningCode =
 "capability_drift" | 
 /**  A destination path exceeds the Windows 260-char limit (FR-018). */
 "long_path";
-
-/**  Response from `guided.dismiss`. */
-export type GuidedDismissResponse = {
-	/**  RFC-3339 UTC timestamp the dismiss was recorded. */
-	dismissedAt: string,
-};
-
-/**  Current coach state returned by `guided.state.get` and after transitions. */
-export type GuidedFlowStateDto = {
-	/**  Id of the active step, or `null` when dismissed/idle/completed. */
-	currentStep: string | null,
-	/**  Ids of completed steps in order of completion. */
-	completedSteps: string[],
-	/**  True when the coach has been dismissed. */
-	dismissed: boolean,
-	/**  RFC-3339 UTC timestamp when dismissed, or `null`. */
-	dismissedAt: string | null,
-	/**  RFC-3339 UTC timestamp of the last transition. */
-	updatedAt: string,
-};
-
-/**
- *  Response from `guided.restart`.
- * 
- *  - If flow was `Dismissed`: resumes at the lowest uncompleted step; previously
- *    completed steps retained.
- *  - If flow was `Completed`: resets all progress to Idle (replay from step 1).
- */
-export type GuidedRestartResponse = {
-	/**  Updated state after restart. */
-	state: GuidedFlowStateDto,
-};
-
-/**
- *  Response from `guided.state.get`.
- * 
- *  On `state_corrupted` the row has already been reset to Idle server-side;
- *  the caller should display a non-blocking notice and retry.
- */
-export type GuidedStateGetResponse = {
-	state: GuidedFlowStateDto,
-};
-
-/**  Request for `guided.step.complete`. */
-export type GuidedStepCompleteRequest = {
-	/**  Stable id of the step to complete (e.g. `inbox.confirm_first`). */
-	stepId: string,
-};
-
-/**  Response from `guided.step.complete`. */
-export type GuidedStepCompleteResponse = {
-	/**  True when this call transitioned the step into `completedSteps`. */
-	completed: boolean,
-	/**  Id of the next uncompleted step, or `null` when the flow is complete. */
-	nextStep: string | null,
-	/**  Updated state after the transition. */
-	state: GuidedFlowStateDto,
-};
 
 /**  Response from `inbox.plan.apply_all` (spec 041, FR-003a). */
 export type InboxApplyAllResponse = {
@@ -9901,13 +9776,6 @@ export type ToolProfileSummary = {
 	 *  `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS`.
 	 */
 	watchExtensions: string[],
-};
-
-/**  Tour completion state tracking. */
-export type TourCompleted = {
-	step1: boolean,
-	step2: boolean,
-	step3: boolean,
 };
 
 export type TransitionActor = "user" | "system";

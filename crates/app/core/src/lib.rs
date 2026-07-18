@@ -78,15 +78,14 @@ pub mod frame_inventory;
 /// `framing.list` / `framing.merge` / `framing.split` / `framing.reassign`
 /// use cases (spec 008 Q27, F-Framing-3).
 pub mod framing;
-pub mod guided_flow;
 /// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
 /// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
 pub mod inbox_plan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;
-/// Onboarding use cases and item registry (spec 056) — successor to
-/// [`guided_flow`], which stays until the spec 056 deletion lane removes it.
+/// Onboarding use cases and item registry (spec 056) — successor to the
+/// removed spec-010 first-project coach.
 pub mod onboarding;
 /// Path-set overlap comparison for the cross-plan concurrency guard
 /// (spec 025 FR-017 / R-Concur-1). Pure, camino-only helper consumed by

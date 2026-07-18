@@ -24,7 +24,7 @@ import {
   test,
   expect,
   seedSetupComplete,
-  disableGuidedTourOverlay,
+  disableOnboarding,
 } from "./support/harness";
 import type { Page } from "@playwright/test";
 
@@ -144,7 +144,7 @@ test.describe("Spec 055 · semantic base layer + mono restoration (Phase 3)", ()
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto("/#/targets");
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, "M 31");
     await expect(m31).toBeVisible({ timeout: 8_000 });

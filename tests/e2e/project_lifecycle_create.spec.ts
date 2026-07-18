@@ -33,7 +33,7 @@
  * per-step advance gates so the walk-through does not need real session/
  * calibration selections.
  */
-import { test, expect, seedSetupComplete, disableGuidedTourOverlay } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 
 // The six wizard "Next" labels in order (StepName → … → Review). Clicking each
 // advances one step; the final step swaps in the Create button.
@@ -49,7 +49,7 @@ async function openWizard(page: import("@playwright/test").Page): Promise<void> 
   seedSetupComplete(page);
   await page.goto("/#/projects");
   await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
-  await disableGuidedTourOverlay(page);
+  await disableOnboarding(page);
   await page.getByRole("button", { name: "+ New project" }).click();
   // Wizard toolbar title confirms we landed on /#/projects/new.
   await expect(page.getByText(/New project —/)).toBeVisible({ timeout: 8_000 });
