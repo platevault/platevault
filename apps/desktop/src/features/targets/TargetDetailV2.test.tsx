@@ -727,8 +727,7 @@ describe('TargetDetailV2', () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(
-        screen.getAllByText('2MASX J13295269+4711429', { exact: false })
-          .length,
+        screen.getAllByText('2MASX J13295269+4711429', { exact: false }).length,
       ).toBeGreaterThanOrEqual(1),
     );
 
