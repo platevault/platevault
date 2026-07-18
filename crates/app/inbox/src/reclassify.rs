@@ -560,7 +560,20 @@ pub async fn reclassify_v2(
         )
     })?;
     let (root_id, relative_path) = (sg_row.root_id, sg_row.relative_path);
-    let lane = sg_row.lane.unwrap_or_else(|| "fits".to_owned());
+    // `inbox_source_groups.lane` is the move-vs-catalogue lane
+    // ('move'/'catalogue', set from the root's organization_state at scan
+    // time), NOT the fits/video lane that `inbox_items` requires
+    // (CHECK(lane IN ('fits','video'))). Deriving the item lane from the
+    // group's format mirrors scan's own assignment (video-only folders →
+    // 'video', everything else → 'fits'). Passing `sg_row.lane` here made
+    // every re-split of an unorganized ('move') group fail the CHECK inside
+    // `upsert_inbox_sub_item`, silently dropping the resolved sub-item so
+    // Confirm never re-enabled after a bulk reclassify (issue #854).
+    let lane = match sg_row.format.as_deref() {
+        Some("video") => "video",
+        _ => "fits",
+    }
+    .to_owned();
 
     // Build file_records from persisted metadata. We have no abs paths here
     // (reclassify carries no root path), so we pass an empty file_paths slice
@@ -1627,6 +1640,293 @@ mod tests {
             after.unclassified_files.is_empty(),
             "no needs-review files once the durable overrides are layered: {:?}",
             after.unclassified_files
+        );
+    }
+
+    /// Real-UI E2E `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`
+    /// regression: the user's FIRST bulk apply sets ONLY frameType=light (the
+    /// generic bulk editor's exposure field is left blank). A light frame is
+    /// missing its mandatory `exposureS` (the fixture header carries no
+    /// EXPTIME), so that first reclassify correctly re-splits the group into a
+    /// NEEDS-REVIEW sub-item. The user then supplies the exposure and applies
+    /// AGAIN — this SECOND reclassify_v2 must resolve the group to a `light`
+    /// sub-item so Confirm can enable. The single-call happy-path tests never
+    /// exercise a reclassify whose input is the DB state a PRIOR reclassify's
+    /// re-split left behind, which is where `materialize_sub_items`' swallowed
+    /// write errors surfaced as an empty `sub_items` (Confirm stuck disabled).
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // real-pipeline regression test: scan/classify/reclassify×2
+    async fn v2_second_reclassify_after_needs_review_resplit_resolves_single_type() {
+        let root = tempfile::tempdir().unwrap();
+        // Unmapped IMAGETYP + no EXPTIME — the real E2E fixture shape.
+        let fits_path = root.path().join("ambiguous_001.fits");
+        {
+            let mut data = vec![b' '; 2880];
+            let cards = ["IMAGETYP= 'Frame Unknown'", "OBJECT  = 'M42'", "FILTER  = 'Ha'"];
+            for (i, c) in cards.iter().enumerate() {
+                let card = format!("{c:<80}");
+                data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
+            }
+            data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+            std::fs::write(&fits_path, &data).unwrap();
+        }
+
+        let db = test_db().await;
+        let sg_id = "sg-two-apply";
+        let placeholder_id = "item-two-apply";
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: sg_id,
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("fits"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, group_label, \
+              frame_type, file_count, discovered_at, last_scanned_at, \
+              content_signature, state, lane) \
+             VALUES (?, 'root-1', '', ?, '', NULL, NULL, 1, \
+                     datetime('now'), datetime('now'), 'sig', 'pending_classification', 'fits')",
+        )
+        .bind(placeholder_id)
+        .bind(sg_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let first = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: placeholder_id.to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.classification_type, "unclassified");
+
+        // Apply #1 — ONLY frameType=light. Light is missing its mandatory
+        // exposureS, so this correctly routes to a needs-review sub-item.
+        let apply1 = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: Some(sg_id.to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "frameType".to_owned(),
+                    value: serde_json::json!("light").into(),
+                    file_paths: None,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            apply1.needs_review_count, 1,
+            "light without exposureS must be needs-review after apply #1: {apply1:?}"
+        );
+
+        // Apply #2 — frameType=light + exposureS=300. Mandatory now satisfied;
+        // the group must resolve to a single `light` sub-item.
+        let apply2 = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: Some(sg_id.to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("light").into(),
+                        file_paths: None,
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: None,
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            apply2.needs_review_count, 0,
+            "apply #2 supplies exposureS, so nothing is needs-review: {apply2:?}"
+        );
+        let light = apply2.sub_items.iter().find(|s| s.frame_type.as_deref() == Some("light"));
+        assert!(
+            light.is_some(),
+            "apply #2 must resolve the group to a light sub-item (Confirm gate): {:?}",
+            apply2.sub_items
+        );
+        assert!(
+            light.unwrap().missing_mandatory.is_empty(),
+            "resolved light sub-item must report no missing mandatory attrs: {light:?}"
+        );
+    }
+
+    /// Real-UI E2E `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`
+    /// faithful backend replay: the E2E does ONE bulk apply carrying BOTH
+    /// frameType=light AND exposureS=300 (two bulk entries, both filePaths:None),
+    /// identified by `inboxItemId` = the folder PLACEHOLDER (group_key=''),
+    /// after a real `classify()` left it unclassified. The failing CI dump shows
+    /// this returns `subItems:[] / needsReviewCount:0` — no light sub-item is
+    /// materialized, so Confirm never enables. This replays that exact shape.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // real-pipeline regression test: scan/classify/reclassify/refetch
+    async fn v2_single_combined_apply_on_placeholder_resolves_single_type() {
+        let root = tempfile::tempdir().unwrap();
+        let fits_path = root.path().join("ambiguous_001.fits");
+        {
+            let mut data = vec![b' '; 2880];
+            let cards = ["IMAGETYP= 'Frame Unknown'", "OBJECT  = 'M42'", "FILTER  = 'Ha'"];
+            for (i, c) in cards.iter().enumerate() {
+                let card = format!("{c:<80}");
+                data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
+            }
+            data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+            std::fs::write(&fits_path, &data).unwrap();
+        }
+
+        let db = test_db().await;
+        let sg_id = "sg-combined";
+        let placeholder_id = "item-combined";
+
+        // The source group carries the MOVE-vs-catalogue lane an unorganized
+        // root gets at scan time ('move'), NOT the fits/video lane inbox_items
+        // requires. reclassify_v2 must not propagate this into the sub-item
+        // upsert (issue #854 — 'move' fails CHECK(lane IN ('fits','video')),
+        // silently dropping the resolved sub-item so Confirm never re-enables).
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: sg_id,
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, group_label, \
+              frame_type, file_count, discovered_at, last_scanned_at, \
+              content_signature, state, lane) \
+             VALUES (?, 'root-1', '', ?, '', NULL, NULL, 1, \
+                     datetime('now'), datetime('now'), 'sig', 'pending_classification', 'fits')",
+        )
+        .bind(placeholder_id)
+        .bind(sg_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let first = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: placeholder_id.to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.classification_type, "unclassified");
+
+        // ONE apply, both properties, identified by inbox_item_id — the exact
+        // E2E shape.
+        let apply = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: None,
+                inbox_item_id: Some(placeholder_id.to_owned()),
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("light").into(),
+                        file_paths: None,
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: None,
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(apply.needs_review_count, 0, "first apply must resolve: {apply:?}");
+        assert!(
+            apply.sub_items.iter().any(|s| s.frame_type.as_deref() == Some("light")),
+            "first apply must resolve to a light sub-item: {:?}",
+            apply.sub_items
+        );
+
+        // The frontend refetches the placeholder's classification after the
+        // apply (store.ts invalidates the classify query). This re-runs
+        // `materialize_sub_items` for the (now light) group, which is the
+        // re-materialization that used to seed the discarded ON-CONFLICT id
+        // and strand the real sub-item without evidence (issue #854).
+        let _ = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: placeholder_id.to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await;
+
+        // Second apply — same overrides, still identified by the PLACEHOLDER id,
+        // now against the materialized light-sub-item state. This is what the
+        // E2E's UI-apply-then-refetch/retry actually exercises.
+        let apply2 = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: None,
+                inbox_item_id: Some(placeholder_id.to_owned()),
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("light").into(),
+                        file_paths: None,
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: None,
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(apply2.needs_review_count, 0, "second apply must stay resolved: {apply2:?}");
+        let light = apply2.sub_items.iter().find(|s| s.frame_type.as_deref() == Some("light"));
+        assert!(
+            light.is_some(),
+            "second apply must still resolve to a light sub-item: {:?}",
+            apply2.sub_items
         );
     }
 
