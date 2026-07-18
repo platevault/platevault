@@ -22,7 +22,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  MoreHorizontal,
+  Search,
+  X,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
 import type {
@@ -38,6 +45,13 @@ import {
   startOnboardingStateSync,
   useOnboardingState,
 } from './store';
+import { useCompletionChoreography } from './choreography';
+import {
+  FindSpotlight,
+  clearFind,
+  toggleFind,
+  useActiveFindItem,
+} from './FindSpotlight';
 
 /** Workflow-stage order (matches the sidebar nav); labels reuse existing nav
  * catalog keys so the checklist adds no new group strings. */
@@ -64,6 +78,11 @@ const PAGE_ORDER: OnboardingPage[] = [
   'projects',
 ];
 
+/** Route path per page — consumed by the find spotlight to navigate first. */
+export const ONBOARDING_PAGE_PATHS = Object.fromEntries(
+  PAGE_ORDER.map((p) => [p, PAGE_META[p].path]),
+) as Record<OnboardingPage, string>;
+
 /** Dynamic catalog access for registry-keyed item/prerequisite strings. The
  * keys are all present in `messages/en.json` (seeded T011); the itemId → key
  * mapping is `onboarding_item_<id-with-underscores>_<label|tooltip>`. */
@@ -71,9 +90,9 @@ const catalog = m as unknown as Record<
   string,
   (args?: Record<string, unknown>) => string
 >;
-const itemLabel = (id: string): string =>
+export const itemLabel = (id: string): string =>
   catalog[`onboarding_item_${id.replaceAll('.', '_')}_label`]();
-const itemTooltip = (id: string): string =>
+export const itemTooltip = (id: string): string =>
   catalog[`onboarding_item_${id.replaceAll('.', '_')}_tooltip`]();
 
 function pageForPath(pathname: string): OnboardingPage | null {
@@ -108,12 +127,20 @@ export function ChecklistSection({
   const state = useVisibleOnboardingState();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const choreo = useCompletionChoreography(state);
+  // While a find spotlight is up, keep the checklist (and its toggle-off find
+  // affordance) above the joyride overlay so the FR-023 toggle-dismiss stays
+  // clickable — the overlay still dims the rest of the app.
+  const spotlightActive = useActiveFindItem() != null;
 
   // Whole-section collapse (FR-012) is backend-persisted; per-group manual
   // toggles are session-local overrides on top of the route-driven default.
   const [groupOverrides, setGroupOverrides] = useState<
     Partial<Record<OnboardingPage, boolean>>
   >({});
+  // Section-header remove menu (T029): menu → one-line confirm → hide forever.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [removeConfirming, setRemoveConfirming] = useState(false);
 
   const itemsByPage = useMemo(() => {
     const map = new Map<OnboardingPage, OnboardingItemDto[]>();
@@ -160,9 +187,21 @@ export function ChecklistSection({
   const toggleGroup = (page: OnboardingPage) =>
     setGroupOverrides((prev) => ({ ...prev, [page]: !isGroupExpanded(page) }));
 
+  // Explicit removal (FR-013): hide the section (and its ring) forever, and
+  // drop any spotlight that was open over a now-hidden item (spec edge case).
+  const handleRemove = () => {
+    clearFind();
+    setMenuOpen(false);
+    setRemoveConfirming(false);
+    void setOnboardingSection({ hidden: true });
+  };
+
   return (
     <section
-      className="alm-onb-checklist"
+      className={clsx(
+        'alm-onb-checklist',
+        spotlightActive && 'alm-onb-checklist--spotlighting',
+      )}
       aria-label={m.onboarding_section_title()}
     >
       <div className="alm-onb-checklist__head">
@@ -182,7 +221,10 @@ export function ChecklistSection({
           </span>
         </button>
         <div
-          className="alm-onb-checklist__progress"
+          className={clsx(
+            'alm-onb-checklist__progress',
+            choreo.pulseActive && 'alm-onb-checklist__progress--pulse',
+          )}
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={total}
@@ -200,17 +242,98 @@ export function ChecklistSection({
             />
           </span>
         </div>
+
+        {/* Header overflow menu (T029): the single "Remove getting started"
+            action behind a one-line confirm (FR-013). */}
+        <div className="alm-onb-checklist__menu-wrap">
+          <button
+            type="button"
+            className="alm-onb-checklist__menu-btn"
+            aria-label={m.onboarding_section_menu_aria()}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            onClick={() => {
+              setMenuOpen((v) => !v);
+              setRemoveConfirming(false);
+            }}
+          >
+            <MoreHorizontal size={14} aria-hidden />
+          </button>
+          {menuOpen && (
+            <div className="alm-onb-checklist__menu" role="menu">
+              {removeConfirming ? (
+                <div className="alm-onb-checklist__menu-confirm">
+                  <p className="alm-onb-checklist__menu-confirm-text">
+                    {m.onboarding_section_remove_confirm()}
+                  </p>
+                  <div className="alm-onb-checklist__menu-confirm-actions">
+                    <button
+                      type="button"
+                      className="alm-onb-checklist__menu-confirm-yes"
+                      onClick={handleRemove}
+                    >
+                      {m.common_remove()}
+                    </button>
+                    <button
+                      type="button"
+                      className="alm-onb-checklist__menu-confirm-no"
+                      onClick={() => {
+                        setRemoveConfirming(false);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {m.common_cancel()}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="alm-onb-checklist__menu-item"
+                  onClick={() => setRemoveConfirming(true)}
+                >
+                  {m.onboarding_section_menu_remove()}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Polite per-tick announcement (T024, WCAG). Always rendered so AT reads
+          each completion; text changes when the choreography detector reports a
+          fresh unchecked→settled transition. */}
+      <div className="alm-visually-hidden" role="status" aria-live="polite">
+        {choreo.announceItemId
+          ? m.onboarding_announcer_tick({
+              item: itemLabel(choreo.announceItemId),
+            })
+          : ''}
       </div>
 
       {sectionExpanded && (
         <div className="alm-onb-checklist__groups">
           {PAGE_ORDER.filter((page) => itemsByPage.has(page)).map((page) => {
             const items = itemsByPage.get(page) ?? [];
-            const open = items.filter((i) => i.state === 'unchecked');
-            const completed = items.filter((i) => i.state !== 'unchecked');
+            const completingHere = items.some((i) =>
+              choreo.completingIds.has(i.itemId),
+            );
+            // A settling item stays in the OPEN list (animating in place) until
+            // its completing window ends, then drops to the completed area.
+            const open = items.filter(
+              (i) =>
+                i.state === 'unchecked' || choreo.completingIds.has(i.itemId),
+            );
+            const completed = items.filter(
+              (i) =>
+                i.state !== 'unchecked' && !choreo.completingIds.has(i.itemId),
+            );
             const g = groupProgress(page);
             const complete = isGroupComplete(page);
-            const expanded = isGroupExpanded(page);
+            // Keep the group open through the choreography before FR-031
+            // collapses it to its one-line done header (AS-6).
+            const expanded = isGroupExpanded(page) || completingHere;
             return (
               <div
                 key={page}
@@ -252,6 +375,7 @@ export function ChecklistSection({
                         key={item.itemId}
                         item={item}
                         idPrefix={idPrefix}
+                        completing={choreo.completingIds.has(item.itemId)}
                         onJump={(jumpPage) =>
                           void navigate({ to: PAGE_META[jumpPage].path })
                         }
@@ -286,6 +410,9 @@ export function ChecklistSection({
           })}
         </div>
       )}
+
+      {/* The single find-it spotlight for this (single) mounted checklist. */}
+      <FindSpotlight />
     </section>
   );
 }
@@ -293,6 +420,9 @@ export function ChecklistSection({
 interface ChecklistItemRowProps {
   item: OnboardingItemDto;
   idPrefix: string;
+  /** True while the row plays its completion choreography before it drops to
+   * the completed area (T024). */
+  completing: boolean;
   onJump: (page: OnboardingPage) => void;
 }
 
@@ -302,6 +432,7 @@ interface ChecklistItemRowProps {
 function ChecklistItemRow({
   item,
   idPrefix,
+  completing,
   onJump,
 }: ChecklistItemRowProps): React.ReactElement {
   const safeId = item.itemId.replaceAll('.', '_');
@@ -309,9 +440,32 @@ function ChecklistItemRow({
   const labelId = `${idPrefix}-lbl-${safeId}`;
   const blocked = item.prerequisite != null && !item.prerequisite.met;
   const label = itemLabel(item.itemId);
+  const findActive = useActiveFindItem()?.itemId === item.itemId;
 
   const check = () =>
     void setOnboardingItemState(item.itemId, 'manually_checked');
+  const dismiss = () => void setOnboardingItemState(item.itemId, 'dismissed');
+
+  // Settling in place (T024): a checked, emphasised row that has not yet
+  // dropped to the completed area. Non-interactive during the animation.
+  if (completing) {
+    return (
+      <li
+        className="alm-onb-checklist__item alm-onb-checklist__item--completing"
+        data-item-id={item.itemId}
+        data-completing="true"
+      >
+        <Check
+          size={14}
+          aria-hidden
+          className="alm-onb-checklist__check-icon"
+        />
+        <span className="alm-onb-checklist__item-main">
+          <span className="alm-onb-checklist__item-label">{label}</span>
+        </span>
+      </li>
+    );
+  }
 
   return (
     <li className="alm-onb-checklist__item" data-item-id={item.itemId}>
@@ -358,6 +512,27 @@ function ChecklistItemRow({
               {PAGE_META[item.prerequisite.jumpPage].label()}
             </button>
           </span>
+        )}
+      </span>
+      <span className="alm-onb-checklist__actions">
+        <button
+          type="button"
+          className="alm-onb-checklist__find"
+          aria-label={m.onboarding_find_label({ item: label })}
+          aria-pressed={findActive}
+          onClick={() => toggleFind(item)}
+        >
+          <Search size={13} aria-hidden />
+        </button>
+        {!item.hasAutoTick && (
+          <button
+            type="button"
+            className="alm-onb-checklist__dismiss"
+            aria-label={m.onboarding_item_dismiss_label({ item: label })}
+            onClick={dismiss}
+          >
+            <X size={13} aria-hidden />
+          </button>
         )}
       </span>
       <span

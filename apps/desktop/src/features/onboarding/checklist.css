@@ -17,6 +17,13 @@
   font-size: var(--alm-text-sm);
 }
 
+/* While a find spotlight is active, sit above the joyride overlay (z 100) so
+ * the toggle-off find affordance stays clickable (FR-023). */
+.alm-onb-checklist--spotlighting {
+  position: relative;
+  z-index: var(--alm-z-popover, 200);
+}
+
 .alm-onb-checklist__head {
   display: flex;
   flex-direction: column;
@@ -293,9 +300,204 @@
   border-top: none;
 }
 
+/* ── Header overflow menu (T029, remove getting started) ──────────────────── */
+.alm-onb-checklist__head {
+  position: relative;
+}
+
+.alm-onb-checklist__menu-wrap {
+  position: absolute;
+  top: var(--alm-sp-1);
+  right: var(--alm-sp-2);
+}
+
+.alm-onb-checklist__menu-btn {
+  display: flex;
+  align-items: center;
+  padding: var(--alm-sp-0);
+  color: var(--alm-text-faint);
+  border-radius: var(--alm-radius-sm);
+}
+
+.alm-onb-checklist__menu-btn:hover {
+  color: var(--alm-text-secondary);
+  background: var(--alm-hover-bg);
+}
+
+.alm-onb-checklist__menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: var(--alm-z-popover, 200);
+  min-width: 220px;
+  margin-top: var(--alm-sp-0);
+  padding: var(--alm-sp-1);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  box-shadow: var(--alm-shadow-sm);
+}
+
+.alm-onb-checklist__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-sm);
+}
+
+.alm-onb-checklist__menu-item:hover {
+  background: var(--alm-hover-bg);
+}
+
+.alm-onb-checklist__menu-confirm {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+.alm-onb-checklist__menu-confirm-text {
+  margin: 0 0 var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  line-height: 1.35;
+}
+
+.alm-onb-checklist__menu-confirm-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
+.alm-onb-checklist__menu-confirm-yes {
+  color: var(--alm-danger);
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+}
+
+.alm-onb-checklist__menu-confirm-no {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* ── Per-row actions: find spotlight + dismiss (T027) ─────────────────────── */
+.alm-onb-checklist__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--alm-sp-0);
+}
+
+.alm-onb-checklist__find,
+.alm-onb-checklist__dismiss {
+  display: flex;
+  align-items: center;
+  padding: var(--alm-sp-0);
+  color: var(--alm-text-faint);
+  border-radius: var(--alm-radius-sm);
+}
+
+.alm-onb-checklist__find:hover,
+.alm-onb-checklist__dismiss:hover {
+  color: var(--alm-text-secondary);
+  background: var(--alm-hover-bg);
+}
+
+.alm-onb-checklist__find[aria-pressed='true'] {
+  color: var(--alm-accent);
+  background: var(--alm-hover-bg);
+}
+
+/* ── Completion choreography (T024) ───────────────────────────────────────── */
+.alm-onb-checklist__item--completing {
+  color: var(--alm-accent);
+  font-weight: var(--alm-weight-medium);
+  animation: alm-onb-tick-pop var(--alm-transition-base) ease-out;
+}
+
+.alm-onb-checklist__progress--pulse .alm-onb-checklist__progress-fill,
+.alm-onb-ring--pulse .alm-onb-ring__fill {
+  animation: alm-onb-progress-pulse 0.6s ease-in-out 2;
+}
+
+@keyframes alm-onb-tick-pop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.4;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes alm-onb-progress-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ── Find spotlight (T026): static outline via inline styles.spotlight; the
+ * pulse-for-a-few-seconds animation is keyed off a root data-attribute the
+ * component toggles (portal-safe; suppressed under reduced motion). ─────────── */
+html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
+  animation: alm-onb-spotlight-pulse 1s ease-in-out infinite;
+}
+
+@keyframes alm-onb-spotlight-pulse {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.3;
+  }
+}
+
+/* Unavailable-target explanation when an item's real control is not on screen. */
+.alm-onb-spotlight-unavailable {
+  position: fixed;
+  left: 50%;
+  bottom: var(--alm-sp-6);
+  transform: translateX(-50%);
+  z-index: var(--alm-z-popover, 200);
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  max-width: 360px;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  box-shadow: var(--alm-shadow-sm);
+  color: var(--alm-text);
+  font-size: var(--alm-text-sm);
+  line-height: 1.35;
+}
+
+.alm-onb-spotlight-unavailable__close {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--alm-accent);
+  font-size: var(--alm-text-sm);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .alm-onb-checklist__progress-fill,
   .alm-onb-ring__fill {
     transition: none;
+  }
+  .alm-onb-checklist__item--completing,
+  .alm-onb-checklist__progress--pulse .alm-onb-checklist__progress-fill,
+  .alm-onb-ring--pulse .alm-onb-ring__fill,
+  html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
+    animation: none;
   }
 }
