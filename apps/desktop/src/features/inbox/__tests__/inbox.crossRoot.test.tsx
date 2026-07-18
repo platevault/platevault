@@ -124,10 +124,15 @@ describe('T039-1: InboxList cross-root rendering (SC-001)', () => {
     expect(screen.getByText('2025-11-01/Jupiter')).toBeInTheDocument();
   });
 
-  it('items span two distinct root ids', () => {
-    const rootIds = new Set(multiRootResponse.items.map((i) => i.rootId));
-    expect(rootIds.size).toBe(2);
-  });
+  // The former "items span two distinct root ids" test only checked
+  // `Set(multiRootResponse.items.map(i => i.rootId)).size === 2` — a
+  // property of the fixture literal above, not of InboxList. It couldn't
+  // fail unless the fixture itself changed, and the test above already
+  // renders InboxList with this exact fixture. No production logic in
+  // InboxList currently branches on `rootId` distinctness for rows that
+  // carry a `relativePath` (see `detectionLabel` in InboxList.tsx, which
+  // only falls back to the root's basename when `relativePath` is empty),
+  // so there's no additional real behavior here to assert against.
 });
 
 // ── T039-2: empty list ────────────────────────────────────────────────────────

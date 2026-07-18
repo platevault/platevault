@@ -350,18 +350,23 @@ describe('ProjectDetail — project notes section (spec 024)', () => {
   });
 
   it('8. shows existing notes body when notes are present', async () => {
-    // ProjectNotesSection uses initialContent prop. We need to test that
-    // the notes section fetches and displays content. Since ProjectNotesSection
-    // receives initialContent as a prop from ProjectDetail, and ProjectDetail
-    // currently passes undefined (the component fetches its own data internally),
-    // we test the section renders with empty state by default.
+    // ProjectNotesSection fetches its own data via getProjectNote({ projectId })
+    // (see ProjectNotesSection.tsx) rather than an initialContent prop from
+    // ProjectDetail, so a non-null mock response is enough to exercise the
+    // populated path — asserting on the real `notes-body` testid instead of
+    // `notes-empty` (the prior version mocked `content: null`, identical to
+    // test 7, so it only ever exercised the empty state despite its name).
     mockGetProjectNote.mockResolvedValue(
-      ok({ projectId: 'proj-m1', content: null }),
+      ok({ projectId: 'proj-m1', content: 'First light on NGC 7000.' }),
     );
     renderDetail();
     await waitFor(() => {
-      expect(screen.getByTestId('notes-empty')).toBeInTheDocument();
+      expect(screen.getByTestId('notes-body')).toBeInTheDocument();
     });
+    expect(screen.getByTestId('notes-body')).toHaveTextContent(
+      'First light on NGC 7000.',
+    );
+    expect(screen.queryByTestId('notes-empty')).not.toBeInTheDocument();
     // Edit button is present in notes section (non-archived project)
     const editButtons = screen.getAllByRole('button', { name: /edit/i });
     expect(editButtons.length).toBeGreaterThanOrEqual(1);

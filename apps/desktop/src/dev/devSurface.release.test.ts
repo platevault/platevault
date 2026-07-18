@@ -45,20 +45,34 @@ describe('T072: release build dev surface gate', () => {
     expect(wrapped).toBe(original);
   });
 
-  it('setInvokeOverride with null restores pass-through behaviour', async () => {
-    const { setInvokeOverride } = await import('@/api/ipc');
-    // Ensure no override is active (simulates release build state)
-    setInvokeOverride(null);
-    // No assertion needed beyond no throw — confirms the API accepts null safely
-    expect(true).toBe(true);
+  it('setInvokeOverride with null stops routing invoke() through the override', async () => {
+    const ipc = await import('@/api/ipc');
+    const overrideCall = vi.fn().mockResolvedValue('override-result');
+
+    // While an override is installed, invoke() routes through it.
+    ipc.setInvokeOverride(overrideCall);
+    await expect(ipc.invoke('some_command', {})).resolves.toBe(
+      'override-result',
+    );
+    expect(overrideCall).toHaveBeenCalledWith('some_command', {});
+
+    // Clearing it (release-build state) must stop dispatching through the
+    // override. There's no real Tauri runtime in jsdom, so invoke() rejects
+    // here — the assertion is that it did NOT go through overrideCall.
+    ipc.setInvokeOverride(null);
+    overrideCall.mockClear();
+    await ipc.invoke('some_command', {}).catch(() => {});
+    expect(overrideCall).not.toHaveBeenCalled();
   });
 
-  it('dev route is not registered when DEV_TOOLS_ENABLED=false', () => {
-    // VITE_DEV_TOOLS is "false" in tests (default vite.config.ts).
-    // The router.tsx condition: DEV_TOOLS_ENABLED = (import.meta.env.VITE_DEV_TOOLS === 'true')
-    // produces false, so devContractsRoute = null and the route is not in the tree.
-    const devToolsEnabled = import.meta.env.VITE_DEV_TOOLS === 'true';
-    expect(devToolsEnabled).toBe(false);
-    // This proves devContractsRoute = null in router.tsx (static branch).
+  it('dev route is not registered in the real router when DEV_TOOLS_ENABLED=false', async () => {
+    // VITE_DEV_TOOLS is "false" in tests (default vite.config.ts), so
+    // router.tsx's DEV_TOOLS_ENABLED gate evaluates false and devContractsRoute
+    // is never added to routeTree — verified here against the actual built
+    // `router` export, not just the env var the gate reads.
+    expect(import.meta.env.VITE_DEV_TOOLS).not.toBe('true');
+    const { router } = await import('@/app/router');
+    expect(Object.keys(router.routesById)).not.toContain('/dev/contracts');
+    expect(Object.keys(router.routesById)).not.toContain('/dev/settings');
   });
 });
