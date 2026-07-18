@@ -23,6 +23,7 @@ pub mod lifecycle;
 pub mod log;
 pub mod manifests;
 pub mod native;
+pub mod onboarding;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
