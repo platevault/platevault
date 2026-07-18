@@ -2390,7 +2390,7 @@
   "plans_review_resume_btn": "Resume",
   "plans_review_resuming": "Resuming…",
   "plans_review_resume_failed": "Could not resume the plan.",
-  "plans_review_resume_stalled": "Resume requested — execution has not restarted yet (known limitation). You can close this and check back later.",
+  "plans_review_resume_stalled": "Resume requested — reconnecting to the run…",
   "plans_review_retry_btn": "Generate retry plan",
   "plans_review_retrying": "Generating retry plan…",
   "plans_review_retry_created_toast": "Retry plan created — review it before applying.",

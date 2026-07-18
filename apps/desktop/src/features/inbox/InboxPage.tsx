@@ -120,19 +120,21 @@ export type ReclassifyHandoffDecision =
 
 /**
  * Decide what the post-split selection handoff should do THIS render (issue
- * #755 CI fix round 3). Bounded lifetime: `pendingId` must not stay set
- * forever just because the active search/kind filter happens to hide the
- * post-split item — that would gate `useStaleSelectionCleanup` open
- * indefinitely for everything else on the page.
+ * #755 CI fix round 3; adapted for issue #644's id-based `?selected=<id>`
+ * scheme — selection is no longer a list index, so there is no index to
+ * navigate to, only the id itself, once it's confirmed reachable). Bounded
+ * lifetime: `pendingId` must not stay set forever just because the active
+ * search/kind filter happens to hide the post-split item — that would gate
+ * `useStaleSelectionCleanup` open indefinitely for everything else on the
+ * page.
  *
  * Judges "arrived" vs "genuinely not coming back" against the UNFILTERED
  * `items` list (only once it has settled — `listLoading === false` — so a
  * refetch already in flight isn't mistaken for "never arriving"). Once
  * settled: absent from `items` entirely → give up (nothing will ever
  * appear); present in `items` but absent from `filteredItems` → give up too
- * (it exists, but the user's own filter hides it — selecting it would show
- * nothing); present in both → navigate to it (issue #644: selection is the
- * item's own id, so the target IS `pendingId`, no index lookup needed).
+ * (it exists, but the user's own filter hides it — there is nothing visible
+ * to select); present in both → navigate to it by id.
  */
 export function resolveReclassifyHandoff(
   pendingId: string,
