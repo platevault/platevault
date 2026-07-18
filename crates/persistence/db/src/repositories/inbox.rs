@@ -1512,6 +1512,20 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
          JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
            AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
+           -- #711: exclude the superseded folder placeholder (see
+           -- list_unacknowledged_across_roots) so the stats summary counts a
+           -- split folder once, matching the list. Without this the placeholder
+           -- (which keeps its own frame-typed evidence) and its sub-item both
+           -- count, desyncing the summary from the deduped list.
+           AND NOT (
+               i.group_key = ''
+               AND i.source_group_id IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM inbox_items sub
+                   WHERE sub.source_group_id = i.source_group_id
+                     AND sub.group_key <> ''
+               )
+           )
          GROUP BY eff_type
          ORDER BY eff_type",
     )
@@ -1546,7 +1560,18 @@ pub async fn count_distinct_inbox_folders(pool: &SqlitePool) -> DbResult<i64> {
          FROM inbox_items i
          JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
-           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL",
+           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
+           -- #711: exclude the superseded folder placeholder so a split folder
+           -- counts once, matching list_unacknowledged_across_roots.
+           AND NOT (
+               i.group_key = ''
+               AND i.source_group_id IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM inbox_items sub
+                   WHERE sub.source_group_id = i.source_group_id
+                     AND sub.group_key <> ''
+               )
+           )",
     )
     .fetch_one(pool)
     .await?;
@@ -2419,6 +2444,144 @@ mod tests {
             !ids.contains("ph-done"),
             "processed folder's placeholder must stay hidden even after its sub-item leaves the \
              list — a processed folder must not resurface as a lone aggregate placeholder: {ids:?}"
+        );
+    }
+
+    /// #711 (Instance A) list↔stats parity: a split single-type folder —
+    /// placeholder + one materialized sub-item, BOTH carrying frame-typed
+    /// classification evidence (the real post-classify state) — must count as
+    /// ONE folder in the list AND in the stats summary. Before the placeholder
+    /// dedup was extended to the stat queries, the list showed 1 while
+    /// `count_distinct_inbox_folders` / `inbox_stats` counted 2 (placeholder +
+    /// sub-item) — a fresh list-vs-summary mismatch of the same class #711 is
+    /// about. This test writes evidence (which the list-only tests omit) so it
+    /// actually exercises the evidence-join stat path.
+    #[tokio::test]
+    async fn stats_and_list_agree_on_split_single_type_folder_711() {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        let batch_resp = crate::repositories::first_run::register_source_batch(
+            pool,
+            &RegisterSourceBatchRequest {
+                sources: vec![RegisterSourceRequest {
+                    kind: SourceKind::Inbox,
+                    path: "/astro/inbox".to_owned(),
+                    kind_subtype: None,
+                    scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Unorganized,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-dk",
+                root_id: &source_id,
+                relative_path: "darks",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        // Placeholder, split and classified (state flipped by classify()),
+        // retaining its own frame-typed evidence — the real post-classify shape.
+        insert_inbox_folder_placeholder(
+            pool, "ph-dk", &source_id, "darks", "sg-dk", 2, "sig", "fits", "fits",
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET state = 'classified' WHERE id = 'ph-dk'")
+            .execute(pool)
+            .await
+            .unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-ph",
+                inbox_item_id: "ph-dk",
+                relative_file_path: "dark_001.fits",
+                frame_type: Some("dark"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Dark"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // The materialized single-type sub-item + its own evidence.
+        upsert_inbox_sub_item(
+            pool,
+            &UpsertInboxSubItem {
+                id: "sub-dk",
+                root_id: &source_id,
+                relative_path: "darks",
+                source_group_id: "sg-dk",
+                group_key: "type=dark",
+                group_label: "(root) · dark",
+                frame_type: Some("dark"),
+                content_signature: "sig-sub",
+                file_count: 2,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-sub",
+                inbox_item_id: "sub-dk",
+                relative_file_path: "dark_001.fits",
+                frame_type: Some("dark"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Dark"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // List: exactly the sub-item, placeholder hidden.
+        let list = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+        let list_ids: std::collections::HashSet<&str> =
+            list.iter().map(|r| r.id.as_str()).collect();
+        assert!(list_ids.contains("sub-dk"), "list must show the sub-item: {list_ids:?}");
+        assert!(!list_ids.contains("ph-dk"), "list must hide the placeholder: {list_ids:?}");
+
+        // Stats total must AGREE with the list: one folder, not two.
+        let total = count_distinct_inbox_folders(pool).await.unwrap();
+        assert_eq!(
+            total, 1,
+            "split folder must count once (placeholder + sub-item deduped), matching the list"
+        );
+
+        // Per-type stats: the dark row's folder_count is 1, not 2.
+        let stats = inbox_stats(pool).await.unwrap();
+        let dark = stats.iter().find(|r| r.frame_type == "dark");
+        assert_eq!(
+            dark.map(|r| r.folder_count),
+            Some(1),
+            "inbox_stats dark folder_count must be 1 (placeholder deduped): {stats:?}"
         );
     }
 
