@@ -6,12 +6,12 @@
  * Post-split selection handoff (issue #755 CI fix, PR #854).
  *
  * `reclassify_v2` operates at source-group scope and re-splits the group
- * into new single-type sub-items (R-14). Because InboxPage's selection is an
- * INDEX into the item list (not the item id itself), the previously-selected
- * item can silently stop existing after a bulk/per-file reclassify, leaving
- * the Confirm gate (`InboxPage.tsx` `canConfirm`) permanently disabled —
- * this is exactly what the Real-UI e2e
+ * into new single-type sub-items (R-14). The previously-selected item can
+ * silently stop existing after a bulk/per-file reclassify (the group it
+ * belonged to no longer exists), leaving the Confirm gate (`InboxPage.tsx`
+ * `canConfirm`) permanently disabled — this is exactly what the Real-UI e2e
  * `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm` caught.
+ * (Selection itself is by item id, not list index — issue #644.)
  *
  * Three cheap unit-level checks stand in for a full-router InboxPage render
  * (no full-router test harness exists in this codebase — InboxPage.classify
@@ -153,7 +153,7 @@ describe('resolveReclassifyHandoff (bounded pendingReclassifySelectionId lifetim
     ).toEqual({ action: 'wait' });
   });
 
-  it('navigates to the filtered-list index once settled and visible', async () => {
+  it('navigates to the item id once settled and visible (issue #644)', async () => {
     const { resolveReclassifyHandoff } = await import('../InboxPage');
 
     const items = [
@@ -164,7 +164,7 @@ describe('resolveReclassifyHandoff (bounded pendingReclassifySelectionId lifetim
       resolveReclassifyHandoff('item-target', items, items, false),
     ).toEqual({
       action: 'navigate',
-      idx: 1,
+      id: 'item-target',
     });
   });
 

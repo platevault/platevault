@@ -58,7 +58,7 @@ function Harness({ items }: { items: InboxListItem[] }) {
       />
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         dims={dims}
@@ -149,7 +149,7 @@ describe('InboxList — virtualization', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}

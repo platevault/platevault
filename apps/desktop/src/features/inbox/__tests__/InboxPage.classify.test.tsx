@@ -305,7 +305,7 @@ describe('InboxList', () => {
     render(
       <InboxList
         items={[fitsItem]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
@@ -319,7 +319,7 @@ describe('InboxList', () => {
     render(
       <InboxList
         items={[fitsItem, videoItem]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="video"
         onFilterTypeChange={vi.fn()}
@@ -331,19 +331,19 @@ describe('InboxList', () => {
     expect(screen.getByTestId('inbox-item-item-video')).toBeInTheDocument();
   });
 
-  it('calls onSelect with original index', () => {
+  it('calls onSelect with the item id (issue #644)', () => {
     const onSelect = vi.fn();
     render(
       <InboxList
         items={[fitsItem, videoItem]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={onSelect}
         filterType="all"
         onFilterTypeChange={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByTestId('inbox-item-item-video'));
-    expect(onSelect).toHaveBeenCalledWith(1);
+    expect(onSelect).toHaveBeenCalledWith('item-video');
   });
 
   it('renders folder + master rows without a duplicate search box or footer count (#83)', () => {
@@ -369,7 +369,7 @@ describe('InboxList', () => {
     render(
       <InboxList
         items={[fitsItem, masterItem]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}

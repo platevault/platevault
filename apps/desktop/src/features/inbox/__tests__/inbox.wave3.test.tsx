@@ -74,7 +74,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -90,7 +90,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -107,7 +107,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -121,7 +121,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -138,7 +138,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -153,7 +153,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={0}
+        selectedId="item-001"
         onSelect={vi.fn()}
         filterType="all"
       />,
@@ -167,7 +167,7 @@ describe('task 32: InboxRow classification-forward grid', () => {
     rtlRender(
       <InboxList
         items={[item]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
