@@ -9,24 +9,15 @@
  * `ChecklistPopover.tsx` and mounted by `Sidebar.tsx`. These specs deliberately
  * do NOT call `disableOnboarding` — the checklist itself is under test.
  *
- * ── Mock-mode coverage limits (VC-002), by design of the shared T007 mock ──
- *  1. Full-section auto-hide (FR-031): `sectionHidden` is backend-authored on
- *     the settle transition; the mock's `onboarding_item_set_state` never flips
- *     it, so the "all groups complete → whole section (and ring) hides" path is
- *     covered by the backend/Layer-2 lane, not here.
- *  2. Collapse-across-RESTART (FR-012): the mock's `mockOnboardingFlags` lives
- *     in module memory and re-initialises on `page.reload()`, so a cross-reload
- *     persistence assertion cannot pass until the mock gains a localStorage
- *     round-trip. Within-session persistence (across SPA navigation) IS covered.
- *  3. Prerequisite presentation (FR-010, T019): the mock always sends
- *     `prerequisite: null`, so the reason-string + jump-link UI is implemented
- *     but not exercisable in mock mode.
- * Items 1–2 are named T021 assertions; they are authored below as skipped with a
- * consolidation TODO so the orchestrator can un-skip them in one place once the
- * mock onboarding-flag persistence lands.
+ * ── Mock-mode coverage limit (VC-002), by design of the shared T007 mock ──
+ *  Prerequisite presentation (FR-010, T019): the mock always sends
+ *  `prerequisite: null`, so the reason-string + jump-link UI is implemented but
+ *  not exercisable in mock mode. (Full-section auto-hide FR-031 and
+ *  collapse-across-restart FR-012 ARE covered here now that the mock persists
+ *  its onboarding flags + item states to localStorage — consolidation lane.)
  */
 
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, seedOnboarding } from "./support/harness";
 import type { Page } from "@playwright/test";
 
 const SECTION = ".alm-onb-checklist";
@@ -37,6 +28,13 @@ function groupHeader(page: Page, label: string) {
 }
 
 test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
+	// US2 exercises the checklist, not the US1 walk. Seed orientation as already
+	// done so the walk never auto-launches its overlay over the checklist — but
+	// leave onboarding enabled (not `disableOnboarding`) so the section renders.
+	test.beforeEach(({ page }) => {
+		seedOnboarding(page, { flags: { orientationDone: true } });
+	});
+
 	test("current-route group auto-expands; others are one-line with counts", async ({
 		page,
 	}) => {
@@ -95,13 +93,7 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		await expect(inbox).toHaveAttribute("aria-expanded", "true");
 	});
 
-	// TODO(consolidation): un-skip once the shared T007 mock reads request-wrapped
-	// args. `mocks.ts` `onboarding_item_set_state` reads `_args?.itemId`, but the
-	// generated binding invokes `{ request: { itemId, state } }`, so every mock
-	// check-off no-ops (item "unknown") and the group never completes. Fix is a
-	// one-line-per-handler `_args?.request?.…` read in mocks.ts (out of this
-	// node's scope). The assertion body below is complete and correct.
-	test.skip("completing every item in a group collapses it to a one-line done header (FR-031)", async ({
+	test("completing every item in a group collapses it to a one-line done header (FR-031)", async ({
 		page,
 	}) => {
 		seedSetupComplete(page);
@@ -167,12 +159,7 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		await expect(page.locator(".alm-onb-popover")).toHaveCount(0);
 	});
 
-	// TODO(consolidation): un-skip alongside the mocks.ts request-arg fix above.
-	// `onboarding_section_set` reads `_args?.sidebarCollapsed`, but the binding
-	// invokes `{ request: { hidden, sidebarCollapsed } }`, so the collapse flag
-	// never persists in mock mode (the command errors `invalid_state`). The
-	// within-session assertion body below is complete and correct.
-	test.skip("section collapse persists across in-session navigation", async ({
+	test("section collapse persists across in-session navigation", async ({
 		page,
 	}) => {
 		seedSetupComplete(page);
@@ -193,20 +180,64 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		).toHaveAttribute("aria-expanded", "false");
 	});
 
-	// eslint-disable-next-line no-empty-pattern
-	test.skip("section collapse persists across an app RESTART (FR-012)", async ({}) => {
-		// TODO(consolidation): un-skip once mock onboarding-flag persistence lands.
-		// `mockOnboardingFlags` re-initialises on page.reload(), so the persisted
-		// `sidebarCollapsed` flag is lost across a reload in mock mode. The
-		// orchestrator adds the localStorage round-trip to mocks.ts at
-		// consolidation and un-skips this in one place.
+	test("section collapse persists across an app RESTART (FR-012)", async ({
+		page,
+	}) => {
+		seedSetupComplete(page);
+		await page.goto("/#/sessions");
+		const toggle = page.locator(".alm-onb-checklist__section-toggle");
+		await expect(toggle).toBeVisible({ timeout: 8_000 });
+
+		// Collapse the whole section; the mock persists `sidebarCollapsed` to
+		// localStorage, so it must survive a full page reload (app restart).
+		await toggle.click();
+		await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+		await page.reload();
+		await expect(
+			page.locator(".alm-onb-checklist__section-toggle"),
+		).toHaveAttribute("aria-expanded", "false");
 	});
 
-	// eslint-disable-next-line no-empty-pattern
-	test.skip("whole section auto-hides once the last open item settles (FR-031)", async ({}) => {
-		// TODO(consolidation): un-skip once mock onboarding-flag persistence lands.
-		// `sectionHidden` is backend-authored on the settle transition; the mock's
-		// onboarding_item_set_state never flips it, so full-section auto-hide (and
-		// the ring disappearing with it) is covered by the backend/Layer-2 lane.
+	test("whole section auto-hides once the last open item settles (FR-031)", async ({
+		page,
+	}) => {
+		// Seed every item settled EXCEPT one open manual item; settling it makes
+		// the mock flip `sectionHidden` (FR-031 completion auto-hide), so the whole
+		// section unmounts. Auto-tick items can't be checked via the UI in mock
+		// mode, so they must be pre-settled through the seed.
+		seedOnboarding(page, {
+			flags: { orientationDone: true },
+			items: {
+				"inbox.confirm_first": { state: "auto_checked", source: "event" },
+				"inbox.apply_first_plan": { state: "auto_checked", source: "event" },
+				"sessions.add_note": { state: "manually_checked", source: "user" },
+				"calibration.match_master": {
+					state: "manually_checked",
+					source: "user",
+				},
+				"calibration.review_masters": {
+					state: "manually_checked",
+					source: "user",
+				},
+				"targets.resolve_first": { state: "auto_checked", source: "event" },
+				"targets.add_favourite": { state: "manually_checked", source: "user" },
+				"projects.create_first": { state: "auto_checked", source: "event" },
+				"projects.launch_tool": { state: "auto_checked", source: "event" },
+				"projects.review_artifacts": {
+					state: "manually_checked",
+					source: "user",
+				},
+				// sessions.review_first left unchecked — the last open item.
+			},
+		});
+		seedSetupComplete(page);
+		await page.goto("/#/sessions");
+		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+
+		await page.getByRole("checkbox", { name: "Review a session" }).click();
+
+		// The last open item settled → the backend (mock) hides the whole section.
+		await expect(page.locator(SECTION)).toHaveCount(0);
 	});
 });

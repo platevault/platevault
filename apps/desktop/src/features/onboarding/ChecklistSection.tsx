@@ -388,6 +388,7 @@ export function ChecklistSection({
                             <li
                               key={item.itemId}
                               className="alm-onb-checklist__item alm-onb-checklist__item--done"
+                              data-item-id={item.itemId}
                               data-state={item.state}
                             >
                               <Check

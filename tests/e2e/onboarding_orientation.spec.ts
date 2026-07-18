@@ -169,10 +169,10 @@ test("replays from Settings → Advanced, ignoring the done flag", async ({
   await expectNoModalAria(page);
 });
 
-test.skip("does not auto-run after a restart (reload)", async ({ page }) => {
-  // TODO(consolidation): un-skip once mock onboarding-flag persistence lands.
-  // `mockOnboardingFlags` is module-level and resets on reload, so this asserts
-  // the wrong mechanism until the mocks.ts localStorage round-trip exists.
+test("does not auto-run after a restart (reload)", async ({ page }) => {
+  // The mock persists `orientationDone` to localStorage, so Skip's
+  // `orientation.complete` survives a full page reload (app restart) and the
+  // walk must not auto-run again.
   await page.goto("/#/inbox");
   await expectStop(page, 0);
   await page.locator(SKIP).click();

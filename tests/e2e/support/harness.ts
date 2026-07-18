@@ -64,6 +64,46 @@ export function seedSetupComplete(page: Page): void {
 }
 
 /**
+ * Seed onboarding flags and/or settled item states into the mock's
+ * `localStorage` persistence store before the app boots. Merges into any
+ * existing seed (spread-then-override) so successive calls compose and a
+ * mock-persisted flag survives an init-script re-run on reload.
+ *
+ * The mock (`apps/desktop/src/api/mocks.ts`, `E2E_ONBOARDING_STORE_ID`) hydrates
+ * this blob on first read and re-persists on every mutation. Seeding
+ * `orientationDone: true` lets a US2+ checklist spec run the checklist WITHOUT
+ * the US1 orientation walk auto-launching over it — onboarding stays enabled
+ * (unlike `disableOnboarding`, which suppresses the checklist itself).
+ */
+export function seedOnboarding(
+  page: Page,
+  seed: {
+    flags?: {
+      orientationDone?: boolean;
+      sectionHidden?: boolean;
+      sidebarCollapsed?: boolean;
+    };
+    items?: Record<string, { state: string; source?: string }>;
+  },
+): void {
+  page.addInitScript((s) => {
+    const KEY = "alm-e2e-onboarding";
+    const raw = window.localStorage.getItem(KEY);
+    const cur = (raw ? JSON.parse(raw) : {}) as {
+      flags?: Record<string, unknown>;
+      items?: Record<string, unknown>;
+    };
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        flags: { ...(cur.flags ?? {}), ...(s.flags ?? {}) },
+        items: { ...(cur.items ?? {}), ...(s.items ?? {}) },
+      }),
+    );
+  }, seed);
+}
+
+/**
  * Suppress all spec-056 onboarding surfaces (orientation walk, checklist
  * accordion auto-expand, find-it spotlights) so their overlays never intercept
  * clicks or steal focus from the surface under test.

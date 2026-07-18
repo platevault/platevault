@@ -68,12 +68,7 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 		await expect(page.getByTestId("onboarding-replay-btn")).toBeVisible();
 	});
 
-	// TODO(consolidation): un-skip once mocks.ts reads request-wrapped args AND
-	// gains localStorage persistence. `onboarding_section_set` reads
-	// `_args?.hidden` but the binding invokes `{ request: { hidden } }`, so remove
-	// never flips `sectionHidden`; and `mockOnboardingFlags` re-initialises on
-	// reload. Both orchestrator-owned. Body complete and correct.
-	test.skip("removing the section hides it (and the ring) permanently across a reload (FR-013)", async ({
+	test("removing the section hides it (and the ring) permanently across a reload (FR-013)", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
@@ -91,12 +86,7 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 		await expect(page.locator(".alm-onb-ring")).toHaveCount(0);
 	});
 
-	// TODO(consolidation): depends on the same mocks.ts request-arg fix — the
-	// section must be hidden (via remove) before restore has anything to bring
-	// back. `onboarding_restore` itself already round-trips in the mock, so once
-	// remove works this exercises the full remove→restore round-trip. Body
-	// complete and correct.
-	test.skip("restore brings the section back with re-derived pre-ticked state (FR-014)", async ({
+	test("restore brings the section back with re-derived pre-ticked state (FR-014)", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
