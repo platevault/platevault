@@ -383,13 +383,25 @@ pub async fn sessions_list(
             .map_err(db_err)?;
     Ok(rows
         .into_iter()
-        .map(|r| TargetSessionItem {
-            id: r.id,
-            session_key: r.session_key,
-            created_at: r.created_at,
-            frame_count: r.frame_count,
+        .map(|r| {
+            let filter = filter_from_session_key(&r.session_key);
+            TargetSessionItem {
+                id: r.id,
+                session_key: r.session_key,
+                created_at: r.created_at,
+                frame_count: r.frame_count,
+                filter,
+            }
         })
         .collect())
+}
+
+/// Extract the filter segment (2nd field) from a `session_key` of shape
+/// `target|filter|binning|gain|night` (`sessions::session_key`, #739
+/// FR-003/US2-AC1). Returns `""` for a malformed/legacy key rather than
+/// panicking — display-only derivation, never authoritative.
+fn filter_from_session_key(session_key: &str) -> String {
+    session_key.split('|').nth(1).unwrap_or("").to_owned()
 }
 
 /// `target.projects.list` — list projects linked to a target (spec 023 US3).
@@ -1024,6 +1036,41 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "s-001");
         assert_eq!(items[0].frame_count, 3);
+    }
+
+    /// FR-003/US2-AC1 (#739): the filter segment of a real (pipe-delimited,
+    /// `sessions::session_key`-shaped) `session_key` must surface on the DTO.
+    #[tokio::test]
+    async fn sessions_list_extracts_filter_from_session_key() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        sqlx::query(
+            r"INSERT INTO acquisition_session
+               (id, session_key, frame_ids, created_at, canonical_target_id)
+               VALUES ('s-002', 'M 31|Ha|1x1|100|2026-01-01', '[1]',
+                       '2026-01-01T00:00:00Z', ?)",
+        )
+        .bind(id.to_string())
+        .execute(db.pool())
+        .await
+        .expect("insert session failed");
+
+        let req = TargetSessionsListRequest { target_id: id.to_string() };
+        let items = sessions_list(db.pool(), &req).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].filter, "Ha");
+    }
+
+    /// A malformed/legacy `session_key` (no pipes) yields `""`, never a panic.
+    #[tokio::test]
+    async fn sessions_list_filter_empty_for_malformed_session_key() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        insert_session_linked_to(&db, "s-003", id).await;
+        let req = TargetSessionsListRequest { target_id: id.to_string() };
+        let items = sessions_list(db.pool(), &req).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].filter, "");
     }
 
     #[tokio::test]

@@ -578,6 +578,7 @@ describe('TargetDetailV2', () => {
           sessionKey: '{}',
           createdAt: '2026-03-15T22:00:00Z',
           frameCount: 42,
+          filter: '',
         },
       ]),
     );
@@ -589,6 +590,22 @@ describe('TargetDetailV2', () => {
     );
   });
 
+  it('21b. (#739) linked session row renders the filter alongside date and frame count', async () => {
+    mockListTargetSessions.mockResolvedValue(
+      ok([
+        {
+          id: 'sess-ha',
+          sessionKey: 'target|Ha|1x1|100|2026-03-15',
+          createdAt: '2026-03-15T22:00:00Z',
+          frameCount: 10,
+          filter: 'Ha',
+        },
+      ]),
+    );
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => expect(screen.getByText('Ha')).toBeInTheDocument());
+  });
+
   it('22. (US2) clicking session row navigates to /sessions with selected=id', async () => {
     mockListTargetSessions.mockResolvedValue(
       ok([
@@ -597,6 +614,7 @@ describe('TargetDetailV2', () => {
           sessionKey: '{}',
           createdAt: '2026-03-15T22:00:00Z',
           frameCount: 5,
+          filter: '',
         },
       ]),
     );
