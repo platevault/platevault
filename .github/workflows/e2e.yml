@@ -59,17 +59,25 @@
 #   docs/frontend-only change skips the Rust build entirely, and consumed by
 #   the shards via artifacts (`ALM_E2E_APP_BIN` + `--archive-file`).
 # - Every journey still runs on every OS (no OS-splitting of tests); sharding
-#   is `--partition count:N/M` WITHIN each OS. M is per-OS: Ubuntu runs 4
-#   shards, Windows/macOS run 2. Ubuntu was the critical path (~11.3m on 2
-#   shards, run 29587590762) with NO single dominating test — shard 1/2 ran
-#   16 journeys at 24-58s each (594s total) vs shard 2/2's 7 journeys (229s);
-#   nextest's `count:N/M` partitions the compiled test list round-robin by
-#   binary, not by measured duration, so 2-way landed uneven. This is a
-#   many-medium-tests profile (sharding scales it down), not a one-or-two-
-#   slow-test profile (where sharding caps out) — 4-way is expected to roughly
-#   halve Ubuntu's shard time again. Windows was already ~5.5m on 2 shards and
-#   macOS is best-effort (issue #489); raising either would just burn extra
-#   runners for no critical-path benefit.
+#   is `--partition count:N/M` WITHIN each OS for Ubuntu (4 shards). Ubuntu was
+#   the critical path (~11.3m on 2 shards, run 29587590762) with NO single
+#   dominating test — shard 1/2 ran 16 journeys at 24-58s each (594s total) vs
+#   shard 2/2's 7 journeys (229s); nextest's `count:N/M` partitions each test
+#   BINARY's own tests round-robin starting at index 0, so every single-test
+#   binary (6 of them in this suite) always lands in shard 1 regardless of M —
+#   going 3-way or 4-way does not fix that (verified: `cargo nextest list
+#   -p e2e_tests --partition count:1/3` still returns 13/23 tests, vs 16/23 at
+#   count:1/2). 4-way was chosen for Ubuntu's raw parallelism headroom, not
+#   because it rebalances the count split.
+# - Windows runs 2 shards via `--partition hash:N/2` instead of `count:N/2`:
+#   the same per-binary round-robin skew hit Windows identically (16 vs 7
+#   tests, run 29660954581/29587590762), and 2-way count partitioning can't be
+#   rebalanced by raising M alone (see above). Hash-based partitioning assigns
+#   each test independently by a stable hash of its identity, landing 14/9
+#   (verified: `cargo nextest list -p e2e_tests --partition hash:1/2` vs
+#   `hash:2/2`) — evener than count's 16/7 with no extra windows-latest
+#   runner. macOS stays on `count:N/2` (best-effort, issue #489; not worth
+#   touching).
 # - Builder/shard/gate are written out PER OS instead of as one os-matrix:
 #   GitHub `needs` can only target a whole job (never a single matrix leg),
 #   so a matrixed builder would let one OS's build failure skip the other
@@ -626,7 +634,7 @@ jobs:
         shell: bash
         env:
           ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition count:${{ matrix.shard }}/2
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/2
 
   # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
   # no xvfb (native display), longer timeout for the 120s-per-attempt
