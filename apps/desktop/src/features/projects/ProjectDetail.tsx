@@ -31,6 +31,7 @@
  */
 
 import { useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { revealInOs } from '@/shared/native/reveal';
@@ -636,9 +637,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       />
 
       {/* spec 035 US1 #2: associated canonical target (resolved on read path).
-          No longer a rail card — a compact inline block under the stepper. */}
+          No longer a rail card — a compact inline block under the stepper.
+          #738: links through to the Targets page with the target
+          pre-selected, matching the Cmd+K / TargetsTable entry point. */}
       {project.canonicalTarget && (
-        <div
+        <Link
+          to="/targets"
+          search={{ selected: project.canonicalTarget.id }}
           className="alm-project-detail__target-info"
           data-testid="project-canonical-target"
         >
@@ -653,7 +658,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               {project.canonicalTarget.commonName}
             </span>
           )}
-        </div>
+        </Link>
       )}
 
       <div className="alm-project-detail__sections">

@@ -75,7 +75,7 @@ function makeSuccessResponse(
       {
         sessionId: SESSION_1,
         calibrationType: 'bias',
-        status: 'observer_location_missing',
+        status: 'match.observer_location_missing',
       },
       {
         sessionId: SESSION_2,
@@ -210,5 +210,29 @@ describe('CalibrationMatchPanel (spec 007 T034)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cal-panel-empty')).toBeInTheDocument();
     });
+  });
+
+  it('8. unrecognized status code renders the localized fallback, never the raw code (#664)', async () => {
+    vi.mocked(calibrationMatchSuggestBatch).mockResolvedValue(
+      makeSuccessResponse({
+        results: [
+          {
+            sessionId: SESSION_1,
+            calibrationType: 'dark',
+            status: 'some.unhandled.code',
+            candidates: [],
+          },
+        ],
+      }),
+    );
+    render(<CalibrationMatchPanel sessionIds={[SESSION_1]} />, { wrapper });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`cal-type-dark-${SESSION_1}`),
+      ).toBeInTheDocument();
+    });
+    const pill = screen.getByTestId(`cal-type-dark-${SESSION_1}`);
+    expect(pill).toHaveTextContent('unknown status');
+    expect(pill).not.toHaveTextContent('some.unhandled.code');
   });
 });

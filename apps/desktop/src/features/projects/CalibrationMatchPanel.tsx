@@ -15,9 +15,10 @@
  * Respects `prefill_suggestion` setting for the Assign link, but defers the
  * actual assign action to the Calibration feature page — no assign call here.
  *
- * Note: until `acquisition_fingerprint` rows are populated by the metadata
- * extraction pipeline, all sessions will return `observer_location_missing`
- * status. The panel handles this gracefully.
+ * Note: sessions missing `acquisition_fingerprint` data return the
+ * `match.observer_location_missing` status. The panel handles this
+ * gracefully (issue #664 — status codes here are backend-prefixed, e.g.
+ * `match.*` / `session.*`, and must be matched as such, not bare).
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -40,7 +41,7 @@ function statusVariant(status: string): PillVariant {
       return 'warn';
     case 'no_match':
       return 'neutral';
-    case 'observer_location_missing':
+    case 'match.observer_location_missing':
       return 'neutral';
     case 'session.mixed_state':
       return 'warn';
@@ -57,12 +58,12 @@ function statusLabel(status: string): string {
       return m.projects_calib_status_ambiguous();
     case 'no_match':
       return m.projects_calib_status_no_match();
-    case 'observer_location_missing':
+    case 'match.observer_location_missing':
       return m.projects_calib_status_needs_location();
     case 'session.mixed_state':
       return m.projects_calib_status_mixed_session();
     default:
-      return status;
+      return m.projects_calib_status_unknown();
   }
 }
 

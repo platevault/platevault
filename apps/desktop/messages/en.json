@@ -2328,6 +2328,7 @@
   "projects_calib_status_no_match": "no match",
   "projects_calib_status_needs_location": "needs location",
   "projects_calib_status_mixed_session": "mixed session",
+  "projects_calib_status_unknown": "unknown status",
   "settings_cleanup_action_keep": "Keep",
   "settings_cleanup_action_archive": "Archive",
   "settings_cleanup_action_delete": "Delete",
