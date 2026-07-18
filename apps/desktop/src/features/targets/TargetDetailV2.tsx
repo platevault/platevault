@@ -1120,6 +1120,11 @@ export function TargetDetailV2({
                         <span className="alm-planner__link-date">
                           {dateStr}
                         </span>
+                        {s.filter !== '' && (
+                          <span className="alm-planner__link-meta">
+                            {s.filter}
+                          </span>
+                        )}
                         <span className="alm-planner__link-meta">
                           {m.targets_detail_session_frames({
                             count: s.frameCount,

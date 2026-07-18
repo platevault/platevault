@@ -183,13 +183,15 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, ContractErro
 
 /// `target.alias.add` — add a user alias to a target (gen-3).
 ///
-/// The alias is normalized before storage; a duplicate (same normalized form)
-/// is returned idempotently.
+/// The alias is normalized before storage; a same-target duplicate (same
+/// normalized form) is returned idempotently. A normalized form already owned
+/// by a *different* target is rejected (FR-008, #751) rather than silently
+/// creating an ambiguous cross-target alias.
 ///
 /// # Errors
 ///
 /// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
-/// `alias.blank`, or `internal.database`.
+/// `alias.blank`, `alias.duplicate`, or `internal.database`.
 pub async fn alias_add(
     pool: &SqlitePool,
     req: &TargetAliasAddRequest,
@@ -212,6 +214,31 @@ pub async fn alias_add(
             ErrorSeverity::Blocking,
             false,
         ));
+    }
+
+    // FR-008 (#751): guard against the same normalized alias already owned by
+    // a *different* canonical target. The DB constraint is per-target only
+    // (`UNIQUE(target_id, normalized)`), so a same-target duplicate stays the
+    // existing idempotent path below; only a cross-target collision errors.
+    let target_id_str = uuid.to_string();
+    let normalized = simbad_resolver::normalize::normalize(&req.alias);
+    if !normalized.is_empty() {
+        let owner = persistence_db::repositories::q_resolver::select_target_id_by_normalized_alias(
+            pool,
+            &normalized,
+        )
+        .await
+        .map_err(db_err)?;
+        if let Some(owner_id) = owner {
+            if owner_id != target_id_str {
+                return Err(ContractError::new(
+                    ErrorCode::AliasDuplicate,
+                    format!("Alias '{}' already belongs to another target.", req.alias),
+                    ErrorSeverity::Blocking,
+                    false,
+                ));
+            }
+        }
     }
 
     let result = cache::insert_user_alias(pool, uuid, &req.alias).await.map_err(db_err)?;
@@ -356,13 +383,25 @@ pub async fn sessions_list(
             .map_err(db_err)?;
     Ok(rows
         .into_iter()
-        .map(|r| TargetSessionItem {
-            id: r.id,
-            session_key: r.session_key,
-            created_at: r.created_at,
-            frame_count: r.frame_count,
+        .map(|r| {
+            let filter = filter_from_session_key(&r.session_key);
+            TargetSessionItem {
+                id: r.id,
+                session_key: r.session_key,
+                created_at: r.created_at,
+                frame_count: r.frame_count,
+                filter,
+            }
         })
         .collect())
+}
+
+/// Extract the filter segment (2nd field) from a `session_key` of shape
+/// `target|filter|binning|gain|night` (`sessions::session_key`, #739
+/// FR-003/US2-AC1). Returns `""` for a malformed/legacy key rather than
+/// panicking — display-only derivation, never authoritative.
+fn filter_from_session_key(session_key: &str) -> String {
+    session_key.split('|').nth(1).unwrap_or("").to_owned()
 }
 
 /// `target.projects.list` — list projects linked to a target (spec 023 US3).
@@ -810,6 +849,39 @@ mod tests {
         assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
+    /// FR-008 (#751): adding an alias to target B that's already an alias of
+    /// target A must return `alias.duplicate`, never silently succeed —
+    /// `UNIQUE(target_id, normalized)` alone does not stop cross-target reuse.
+    #[tokio::test]
+    async fn alias_add_cross_target_duplicate_returns_error() {
+        let db = setup().await;
+        let m31_id = seed_m31(&db).await;
+        let m42 = ResolvedIdentity {
+            simbad_oid: Some(1_575_545),
+            primary_designation: "M 42".to_owned(),
+            common_name: Some("Orion Nebula".to_owned()),
+            object_type: ObjectType::Other,
+            ra_deg: 83.822_08,
+            dec_deg: -5.391_11,
+            v_mag: None,
+            aliases: vec![ResolvedAlias::new("M 42", CacheKind::Designation)],
+            source: TargetSource::Resolved,
+        };
+        let (m42_id, _) = upsert_resolved(db.pool(), &m42).await.unwrap();
+
+        // "NGC 224" is already an M31 designation alias (seeded via m31()).
+        let req =
+            TargetAliasAddRequest { target_id: m42_id.to_string(), alias: "NGC 224".to_owned() };
+        let err = alias_add(db.pool(), &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::AliasDuplicate);
+
+        // Same-target re-add of an existing alias stays idempotent (FR-008
+        // first clause) — only the cross-target case above errors.
+        let same_target_req =
+            TargetAliasAddRequest { target_id: m31_id.to_string(), alias: "NGC 224".to_owned() };
+        assert!(alias_add(db.pool(), &same_target_req).await.is_ok());
+    }
+
     // ── target.alias.remove ───────────────────────────────────────────────────
 
     #[tokio::test]
@@ -964,6 +1036,41 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "s-001");
         assert_eq!(items[0].frame_count, 3);
+    }
+
+    /// FR-003/US2-AC1 (#739): the filter segment of a real (pipe-delimited,
+    /// `sessions::session_key`-shaped) `session_key` must surface on the DTO.
+    #[tokio::test]
+    async fn sessions_list_extracts_filter_from_session_key() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        sqlx::query(
+            r"INSERT INTO acquisition_session
+               (id, session_key, frame_ids, created_at, canonical_target_id)
+               VALUES ('s-002', 'M 31|Ha|1x1|100|2026-01-01', '[1]',
+                       '2026-01-01T00:00:00Z', ?)",
+        )
+        .bind(id.to_string())
+        .execute(db.pool())
+        .await
+        .expect("insert session failed");
+
+        let req = TargetSessionsListRequest { target_id: id.to_string() };
+        let items = sessions_list(db.pool(), &req).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].filter, "Ha");
+    }
+
+    /// A malformed/legacy `session_key` (no pipes) yields `""`, never a panic.
+    #[tokio::test]
+    async fn sessions_list_filter_empty_for_malformed_session_key() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        insert_session_linked_to(&db, "s-003", id).await;
+        let req = TargetSessionsListRequest { target_id: id.to_string() };
+        let items = sessions_list(db.pool(), &req).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].filter, "");
     }
 
     #[tokio::test]

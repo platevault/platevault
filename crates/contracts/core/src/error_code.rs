@@ -360,8 +360,9 @@ pub enum ErrorCode {
     PlanRequired,
 
     // ── Target / alias codes ───────────────────────────────────────────────────
-    /// Reserved: no current call site returns this — `target.alias.add`
-    /// resolves a duplicate idempotently rather than erroring.
+    /// `target.alias.add` (#751, FR-008): the normalized alias already belongs
+    /// to a *different* canonical target. A same-target duplicate stays
+    /// idempotent (no error) — only a cross-target collision returns this.
     #[serde(rename = "alias.duplicate")]
     AliasDuplicate,
     #[serde(rename = "alias.blank")]

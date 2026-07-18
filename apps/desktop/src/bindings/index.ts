@@ -3658,8 +3658,9 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 /**  `plan.required` appears in `ContractError` in `transition_use_case.rs`. */
 "plan.required" | 
 /**
- *  Reserved: no current call site returns this — `target.alias.add`
- *  resolves a duplicate idempotently rather than erroring.
+ *  `target.alias.add` (#751, FR-008): the normalized alias already belongs
+ *  to a *different* canonical target. A same-target duplicate stays
+ *  idempotent (no error) — only a cross-target collision returns this.
  */
 "alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" | 
 /**
@@ -9455,23 +9456,28 @@ export type TargetSearchResponse_Serialize = {
  * 
  *  Only columns reliably present in `acquisition_session` are surfaced:
  *  - `id` — row UUID.
- *  - `session_key` — raw JSON string (matches the `session_key` column, which
- *    stores the composite key as a JSON object — caller can parse it if needed).
+ *  - `session_key` — the composite grouping key (pipe-delimited
+ *    `target|filter|binning|gain|night`, per `sessions::session_key`) —
+ *    caller can parse it further if needed.
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
  *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
+ *  - `filter` — the filter segment of `session_key` (FR-003/US2-AC1, #739);
+ *    `""` when the session has no filter (e.g. an unfiltered OSC capture).
  * 
  *  Spec 041 FR-051 (T076): no `state` field — sessions are derived,
  *  already-confirmed inventory with no review lifecycle.
  */
 export type TargetSessionItem = {
 	id: string,
-	/**  Raw JSON object stored in `acquisition_session.session_key`. */
+	/**  The composite `session_key` grouping key (see struct docs for shape). */
 	sessionKey: string,
 	/**  RFC 3339 UTC creation timestamp. */
 	createdAt: string,
 	/**  Number of frames in `frame_ids` JSON array. */
 	frameCount: number,
+	/**  Filter segment of `session_key`; `""` when the session has no filter. */
+	filter: string,
 };
 
 /**  Request for `target.sessions.list` (spec 023 US2). */
