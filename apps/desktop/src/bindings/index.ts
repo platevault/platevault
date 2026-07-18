@@ -1190,6 +1190,47 @@ export const commands = {
 	 */
 	guidedActivate: () => typedError<GuidedFlowStateDto, ContractError_Serialize>(__TAURI_INVOKE("guided_activate")),
 	/**
+	 *  `onboarding.state.get` — read the full projection for UI hydration.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	onboardingStateGet: () => typedError<OnboardingStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_state_get")),
+	/**
+	 *  `onboarding.item.set_state` — manual check-off or dismiss (FR-017).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on unknown item id or database failure.
+	 */
+	onboardingItemSetState: (request: OnboardingItemSetStateRequest) => typedError<OnboardingItemSetStateResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_item_set_state", { request })),
+	/**
+	 *  `onboarding.orientation.complete` — mark the L1 walk finished/skipped
+	 *  (both set done-forever, FR-004). Idempotent.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	onboardingOrientationComplete: (request: OnboardingOrientationCompleteRequest) => typedError<OnboardingOrientationCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_orientation_complete", { request })),
+	/**
+	 *  `onboarding.section.set` — explicit remove (FR-013) + collapse persistence
+	 *  (FR-012). `hidden` accepts only `true`; unhiding is exclusively
+	 *  `onboarding.restore`.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on an empty/`hidden: false` request or database
+	 *  failure.
+	 */
+	onboardingSectionSet: (request: OnboardingSectionSetRequest_Deserialize) => typedError<OnboardingSectionSetResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_section_set", { request })),
+	/**
+	 *  `onboarding.restore` — the single Settings → Advanced restore/reset
+	 *  (FR-014). Re-derives AUTOMATIC items from recorded data; user progress is
+	 *  preserved. Idempotent.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	onboardingRestore: () => typedError<OnboardingRestoreResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_restore")),
+	/**
 	 *  `native.directory.pick` — open the OS directory picker.
 	 * 
 	 *  # Errors
@@ -6474,6 +6515,174 @@ export type NonBlockingSummary = {
 	normalCount: number,
 	unprotectedCount: number,
 };
+
+/**  Section-level flags (`onboarding_flags` singleton). */
+export type OnboardingFlagsDto = {
+	orientationDone: boolean,
+	/**
+	 *  Covers both explicit removal (FR-013) and completion auto-hide
+	 *  (FR-031).
+	 */
+	sectionHidden: boolean,
+	sidebarCollapsed: boolean,
+};
+
+/**  One onboarding item row for UI hydration. */
+export type OnboardingItemDto = {
+	itemId: string,
+	page: OnboardingPage,
+	state: OnboardingItemState,
+	/**  RFC-3339 UTC timestamp of the last state change. */
+	at: string,
+	source: OnboardingStateSource,
+	/**
+	 *  `None` when the item has no prerequisite in the registry. Present
+	 *  (with a live-computed `met`) whenever the item has one, regardless of
+	 *  current satisfaction — the UI decides what to render for `met: true`.
+	 */
+	prerequisite: OnboardingPrerequisiteDto | null,
+	/**
+	 *  True when this item has a `completion_topic` (auto-tick eligible) —
+	 *  lets the UI distinguish "will tick itself" from "check me manually".
+	 */
+	hasAutoTick: boolean,
+};
+
+/**  Request for `onboarding.item.set_state`. */
+export type OnboardingItemSetStateRequest = {
+	itemId: string,
+	state: OnboardingManualState,
+};
+
+/**  Response from `onboarding.item.set_state` — the updated item row. */
+export type OnboardingItemSetStateResponse = {
+	item: OnboardingItemDto,
+};
+
+/**
+ *  Per-item lifecycle state (data-model.md "State transitions").
+ * 
+ *  `AutoChecked`/`ManuallyChecked`/`Dismissed` are terminal: neither a live
+ *  event nor a repeat manual action ever downgrades a settled item.
+ */
+export type OnboardingItemState = "unchecked" | "auto_checked" | "manually_checked" | "dismissed";
+
+/**
+ *  Manual state a caller may request via `onboarding.item.set_state`
+ *  (FR-017). Auto states (`unchecked`/`auto_checked`) are rejected —
+ *  `invalid_state`.
+ */
+export type OnboardingManualState = "manually_checked" | "dismissed";
+
+/**  Request for `onboarding.orientation.complete`. */
+export type OnboardingOrientationCompleteRequest = {
+	outcome: OnboardingOrientationOutcome,
+};
+
+/**
+ *  Response from `onboarding.orientation.complete`. Idempotent — repeat
+ *  calls return the original timestamp.
+ */
+export type OnboardingOrientationCompleteResponse = {
+	orientationDoneAt: string,
+};
+
+/**  How the walk ended (both set done-forever, FR-004). */
+export type OnboardingOrientationOutcome = "finished" | "skipped";
+
+/**  The five FR-006 workflow pages that carry a Getting Started checklist. */
+export type OnboardingPage = "inbox" | "sessions" | "calibration" | "targets" | "projects";
+
+/**  Per-page item counts. */
+export type OnboardingPageProgressDto = {
+	page: OnboardingPage,
+	done: number,
+	total: number,
+};
+
+/**
+ *  Prerequisite presentation for an item whose upstream milestone is missing
+ *  (FR-010).
+ */
+export type OnboardingPrerequisiteDto = {
+	/**  Whether the upstream milestone is currently satisfied. */
+	met: boolean,
+	/**  Paraglide message key for the human-readable reason. */
+	reasonKey: string,
+	/**  Page to jump to in order to satisfy the prerequisite. */
+	jumpPage: OnboardingPage,
+};
+
+/**
+ *  Overall + per-page progress, derived from `onboarding_state` (never
+ *  stored).
+ */
+export type OnboardingProgressDto = {
+	done: number,
+	total: number,
+	perPage: OnboardingPageProgressDto[],
+};
+
+/**  Response from `onboarding.restore` — same shape as `onboarding.state.get`. */
+export type OnboardingRestoreResponse = {
+	state: OnboardingStateDto,
+};
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest = OnboardingSectionSetRequest_Serialize | OnboardingSectionSetRequest_Deserialize;
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest_Deserialize = {
+	hidden: boolean | null,
+	sidebarCollapsed: boolean | null,
+};
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest_Serialize = {
+	hidden?: boolean | null,
+	sidebarCollapsed?: boolean | null,
+};
+
+/**  Response from `onboarding.section.set` — the updated flags. */
+export type OnboardingSectionSetResponse = {
+	flags: OnboardingFlagsDto,
+};
+
+/**
+ *  Full onboarding projection — the response shape shared by
+ *  `onboarding.state.get` and `onboarding.restore`.
+ */
+export type OnboardingStateDto = {
+	items: OnboardingItemDto[],
+	flags: OnboardingFlagsDto,
+	progress: OnboardingProgressDto,
+};
+
+/**  Response from `onboarding.state.get`. */
+export type OnboardingStateGetResponse = {
+	state: OnboardingStateDto,
+};
+
+/**  What set the item's current state. */
+export type OnboardingStateSource = "seed" | "event" | "user";
 
 export type OperationEvent = {
 	contractVersion: string,
