@@ -647,12 +647,15 @@ mod tests {
         assert!(loaded.sidebar_collapsed);
     }
 
-    // ── guided_flow_state drop (T001) ────────────────────────────────────────
+    // ── guided_flow_state (deliberately NOT dropped by 0069) ────────────────
 
+    /// Orchestrator sequencing decision (run-onb-0718): the drop ships as
+    /// migration 0070 inside the T010 deletion lane, atomically with the
+    /// code that reads/writes this table — not here. See 0069's header.
     #[tokio::test]
-    async fn guided_flow_state_table_no_longer_exists() {
+    async fn guided_flow_state_table_still_exists() {
         let pool = setup().await;
-        let err = sqlx::query("SELECT 1 FROM guided_flow_state").fetch_optional(&pool).await;
-        assert!(err.is_err(), "guided_flow_state must be dropped by migration 0069");
+        let result = sqlx::query("SELECT 1 FROM guided_flow_state").fetch_optional(&pool).await;
+        assert!(result.is_ok(), "guided_flow_state must survive migration 0069");
     }
 }
