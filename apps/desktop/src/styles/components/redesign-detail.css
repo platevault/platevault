@@ -404,6 +404,17 @@
 
 /* === TARGETS PLANNER DETAIL === */
 
+/* #816: TargetDetailV2 is a flat-sibling consumer of DetailPane fill mode
+   (primitives.css .alm-detail--fill), not the .alm-dash/.alm-dash__primary
+   grid pattern — this wrapper is its own single scrollable region so content
+   below the altitude graph isn't silently clipped by the pane's own
+   overflow:hidden. */
+.alm-detail--fill > .alm-planner__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* ── Planner header row: title + catalog pills + action buttons ── */
 .alm-planner__header {
   display: flex;
