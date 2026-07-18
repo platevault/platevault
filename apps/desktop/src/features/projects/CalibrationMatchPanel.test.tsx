@@ -75,7 +75,7 @@ function makeSuccessResponse(
       {
         sessionId: SESSION_1,
         calibrationType: 'bias',
-        status: 'observer_location_missing',
+        status: 'match.observer_location_missing',
       },
       {
         sessionId: SESSION_2,
