@@ -100,6 +100,17 @@ export function Framing({ save }: FramingProps) {
     };
   }, []);
 
+  // Marks the mount-time fetch stale as soon as the user starts typing, not
+  // only once they blur/Enter to commit. Without this, the fetch can resolve
+  // in the gap between an onChange (uncommitted local state) and the later
+  // commit, clobbering the typed value back to the fetched one before
+  // `editedRef` was ever set — and the subsequent blur then persists that
+  // clobbered value, since it reads the (now-reset) DOM value.
+  function onFieldChange(raw: string, setter: (n: number) => void) {
+    editedRef.current = true;
+    setter(Number(raw));
+  }
+
   function commitNumber(
     raw: string,
     min: number,
@@ -139,7 +150,7 @@ export function Framing({ save }: FramingProps) {
           step={0.01}
           aria-label={m.settings_framing_pointing_fraction_label()}
           data-testid="framing-pointing-fraction-input"
-          onChange={(e) => setPointingFraction(Number(e.target.value))}
+          onChange={(e) => onFieldChange(e.target.value, setPointingFraction)}
           onBlur={(e) =>
             commitNumber(
               e.target.value,
@@ -178,7 +189,7 @@ export function Framing({ save }: FramingProps) {
           step={0.1}
           aria-label={m.settings_framing_pointing_fallback_label()}
           data-testid="framing-pointing-fallback-input"
-          onChange={(e) => setPointingFallback(Number(e.target.value))}
+          onChange={(e) => onFieldChange(e.target.value, setPointingFallback)}
           onBlur={(e) =>
             commitNumber(
               e.target.value,
@@ -217,7 +228,7 @@ export function Framing({ save }: FramingProps) {
           step={0.5}
           aria-label={m.settings_framing_rotation_label()}
           data-testid="framing-rotation-tolerance-input"
-          onChange={(e) => setRotationTolerance(Number(e.target.value))}
+          onChange={(e) => onFieldChange(e.target.value, setRotationTolerance)}
           onBlur={(e) =>
             commitNumber(
               e.target.value,
@@ -256,7 +267,7 @@ export function Framing({ save }: FramingProps) {
           step={0.1}
           aria-label={m.settings_framing_mosaic_envelope_label()}
           data-testid="framing-mosaic-envelope-input"
-          onChange={(e) => setMosaicEnvelope(Number(e.target.value))}
+          onChange={(e) => onFieldChange(e.target.value, setMosaicEnvelope)}
           onBlur={(e) =>
             commitNumber(
               e.target.value,
