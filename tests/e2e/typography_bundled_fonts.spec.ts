@@ -14,7 +14,11 @@
  * See apps/desktop/src/styles/tokens.css (@font-face blocks) and
  * apps/desktop/src/assets/fonts/FONTS.md (asset provenance).
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("Spec 055 · bundled hinted fonts (Phase 1)", () => {
   test("no network requests reach fonts.googleapis.com or fonts.gstatic.com during app load", async ({

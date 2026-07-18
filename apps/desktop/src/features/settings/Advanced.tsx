@@ -21,6 +21,7 @@ import {
   resetWizardStateWithSources,
   type SourceEntry,
 } from '@/features/setup/sources-store';
+import { requestOrientationReplay } from '@/features/onboarding/OrientationWalk';
 import {
   SettingsSection,
   SettingsRow,
@@ -327,6 +328,20 @@ export function Advanced({ save }: AdvancedProps) {
               </Btn>
             )}
           </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* Getting started (spec 056). Replay control (T015); the T030 restore
+          control lands beside it in this same section. */}
+      <SettingsSection title={m.onboarding_section_title()}>
+        <SettingsRow label={m.onboarding_settings_replay_label()}>
+          <Btn
+            size="sm"
+            onClick={() => requestOrientationReplay()}
+            data-testid="onboarding-replay-btn"
+          >
+            {m.onboarding_settings_replay_label()}
+          </Btn>
         </SettingsRow>
       </SettingsSection>
 

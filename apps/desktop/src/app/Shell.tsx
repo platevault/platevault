@@ -20,6 +20,7 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
+import { OrientationWalk } from '@/features/onboarding/OrientationWalk';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
@@ -138,6 +139,7 @@ function ShellInner() {
       <StatusBar />
       <CommandPalette />
       <ToastContainer />
+      <OrientationWalk />
     </div>
   );
 }

@@ -43,7 +43,7 @@
  * The Tauri `Channel` polyfill the approve-and-apply path needs is installed
  * globally by the shared harness `test` (tests/e2e/support/harness.ts).
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 
 async function selectProject(
   page: import("@playwright/test").Page,
@@ -57,6 +57,10 @@ async function selectProject(
   await row.click();
   await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("project lifecycle · full state machine (Journey 5)", () => {
   test("each state surfaces its correct contextual footer transitions", async ({

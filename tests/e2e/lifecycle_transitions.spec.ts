@@ -36,6 +36,7 @@
  *   Reads `alm-preferences.setupCompleted` from localStorage.
  */
 import { test, expect } from "@playwright/test";
+import { disableOnboarding } from "./support/harness";
 
 function seedSetupComplete(page: import("@playwright/test").Page): void {
   page.addInitScript(() => {
@@ -45,6 +46,10 @@ function seedSetupComplete(page: import("@playwright/test").Page): void {
     );
   });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)", () => {
   test("Projects page renders rows; transition button triggers mock success toast", async ({

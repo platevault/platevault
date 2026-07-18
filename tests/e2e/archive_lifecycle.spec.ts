@@ -50,6 +50,7 @@
  *   Reads `alm-preferences.setupCompleted` from localStorage.
  */
 import { test, expect } from "@playwright/test";
+import { disableOnboarding } from "./support/harness";
 
 function seedSetupComplete(page: import("@playwright/test").Page): void {
   page.addInitScript(() => {
@@ -59,6 +60,10 @@ function seedSetupComplete(page: import("@playwright/test").Page): void {
     );
   });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("archive lifecycle (spec 017 US6 / Journey 7)", () => {
   test("archive page lists entries; selecting one opens detail with canonical archive|trash actions", async ({
