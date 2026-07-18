@@ -365,39 +365,6 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
         "expected Confirm to be disabled while classification.type == 'unclassified'"
     );
 
-    // CI-red decisive instrumentation (coordinator ask, run 29638271121):
-    // wrap the real `window.__TAURI_INTERNALS__.invoke` (the transport
-    // `@tauri-apps/api/core`'s `invoke` — and so every generated
-    // `commands.*` call — actually dispatches over, per
-    // `apps/desktop/src/api/ipc.ts`) so the FIRST real, UI-triggered
-    // `inbox_reclassify_v2` call's request+response is captured, not the
-    // separate direct debug-retry call below (which runs on an
-    // ALREADY-resolved item and isn't representative of the first one).
-    app.driver
-        .execute(
-            r#"
-            if (!window.__e2eReclassifyCalls) {
-                window.__e2eReclassifyCalls = [];
-                var original = window.__TAURI_INTERNALS__.invoke;
-                window.__TAURI_INTERNALS__.invoke = function(cmd, args, options) {
-                    var callPromise = original.call(this, cmd, args, options);
-                    if (cmd === 'inbox_reclassify_v2') {
-                        var entry = { args: args, result: null, error: null };
-                        window.__e2eReclassifyCalls.push(entry);
-                        callPromise.then(
-                            function(res) { entry.result = res; },
-                            function(err) { entry.error = String(err); },
-                        );
-                    }
-                    return callPromise;
-                };
-            }
-            "#,
-            vec![],
-        )
-        .await
-        .context("install reclassify_v2 call recorder")?;
-
     // Bulk reclassify: select the one needs-review file, set frame type ->
     // light PLUS exposureS, apply. Real inputs, real `inbox.reclassify_v2`
     // round-trip.
@@ -465,87 +432,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     // The store invalidates the classify query cache on success (`store.ts`);
     // Confirm re-enabling is the real, observable proof the override landed
     // and reclassified the file to `single_type`.
-    if let Err(e) = app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await {
-        // Diagnosability: a still-disabled Confirm has several distinct causes
-        // (stale-id apply error in a banner, selection lost, alert still up,
-        // handoff never navigated) — dump the observable page state so a CI
-        // log alone identifies which gate stayed closed.
-        let dump: serde_json::Value = app
-            .driver
-            .execute(
-                r#"
-                var items = Array.from(document.querySelectorAll('[data-testid^="inbox-item-"]'))
-                    .map(function(el){ return el.getAttribute('data-testid'); });
-                var banners = Array.from(document.querySelectorAll('.alm-banner, [class*="banner"], [role="alert"]'))
-                    .map(function(el){ return el.textContent.slice(0, 300); });
-                var fieldset = document.querySelector('.alm-inbox-detail__bulk-controls');
-                var sel = document.querySelector('[data-testid="bulk-frame-type"]');
-                var exp = document.querySelector('[data-testid="bulk-exposure-s"]');
-                var alert = document.querySelector('[data-testid="inbox-unclassified-alert"]');
-                var confirmBtn = document.querySelector('[data-testid="inbox-confirm-btn"]');
-                // CI-red decisive facts (coordinator ask): the FIRST real,
-                // UI-triggered reclassify_v2 call (recorded above, BEFORE the
-                // retry loop below re-clicked bulk-apply — a retry would
-                // append MORE entries, so index [0] is always the first),
-                // and the `selected` URL search param at dump time.
-                var selMatch = window.location.hash.match(/[?&]selected=([^&]*)/);
-                return JSON.stringify({
-                    items: items,
-                    banners: banners,
-                    bulkFieldsetPresent: !!fieldset,
-                    frameTypeValue: sel ? sel.value : null,
-                    exposureValue: exp ? exp.value : null,
-                    unclassifiedAlertPresent: !!alert,
-                    confirmDisabled: confirmBtn ? confirmBtn.disabled : null,
-                    selectedUrlParam: selMatch ? decodeURIComponent(selMatch[1]) : null,
-                    firstReclassifyV2Call: (window.__e2eReclassifyCalls || [])[0] || null,
-                    allReclassifyV2CallCount: (window.__e2eReclassifyCalls || []).length,
-                });
-                "#,
-                vec![],
-            )
-            .await
-            .ok()
-            .and_then(|r| r.convert::<String>().ok())
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or(serde_json::Value::Null);
-        eprintln!("DEBUG DUMP on confirm-never-enabled: {dump:#}");
-
-        // Backend ground truth, bypassing the UI: what did the re-split
-        // actually leave in the DB, and does a SECOND, quiescent
-        // reclassify_v2 with the same overrides resolve the item? If the
-        // retry resolves it, the first (UI-triggered) apply raced concurrent
-        // DB work — materialize_sub_items swallows its write errors — rather
-        // than hitting a deterministic gate.
-        let list: serde_json::Value =
-            app.invoke("inbox_list", json!({})).await.unwrap_or(serde_json::Value::Null);
-        eprintln!("DEBUG backend inbox_list after failed apply: {list:#}");
-        if let Some(live_id) = list["items"][0]["inboxItemId"].as_str() {
-            let meta: serde_json::Value = app
-                .invoke("inbox_item_metadata", json!({"req": {"inboxItemId": live_id}}))
-                .await
-                .unwrap_or(serde_json::Value::Null);
-            eprintln!("DEBUG backend inbox_item_metadata: {meta:#}");
-            let retry: serde_json::Value = app
-                .invoke(
-                    "inbox_reclassify_v2",
-                    json!({"req": {
-                        "inboxItemId": live_id,
-                        "overrides": [],
-                        "bulk": [
-                            {"property": "frameType", "value": "light", "filePaths": null},
-                            {"property": "exposureS", "value": 300.0, "filePaths": null}
-                        ]
-                    }}),
-                )
-                .await
-                .unwrap_or(serde_json::Value::Null);
-            eprintln!("DEBUG direct reclassify_v2 retry response: {retry:#}");
-        }
-        return Err(anyhow::anyhow!(
-            "expected bulk reclassify to unblock Confirm (single_type, no missing attrs): {e}"
-        ));
-    }
+    app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await?;
     anyhow::ensure!(
         !app.testid_exists("inbox-unclassified-alert").await?,
         "expected the 'frame types required' banner to clear after reclassify"
