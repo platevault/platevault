@@ -134,7 +134,7 @@
   border: 1px solid var(--alm-border);
   background: var(--alm-surface);
   color: var(--alm-text-secondary);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   padding: 0 var(--alm-sp-1);
   border-radius: var(--alm-radius-sm);
   cursor: pointer;
@@ -225,7 +225,7 @@
   font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
 }
 
@@ -244,10 +244,10 @@
 
 .alm-palette__item-kind {
   flex-shrink: 0;
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--alm-tracking-tight);
   color: var(--alm-text-faint);
   min-width: 3.5em;
 }
@@ -322,7 +322,7 @@
 .alm-theme-swatch__surface { background: var(--alm-surface); }
 .alm-theme-swatch__accent { background: var(--alm-accent); }
 .alm-theme-swatch__name { font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold); color: var(--alm-text); }
-.alm-theme-swatch__mode { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); text-transform: capitalize; }
+.alm-theme-swatch__mode { font-size: var(--alm-text-xs); color: var(--alm-text-muted); text-transform: capitalize; }
 
 /* === PROPERTY TABLE (key-value detail; was unstyled → run-on text) ===
    Grid row: label | value | source | confirm. Used on Session / Calibration /
@@ -342,19 +342,21 @@
   padding-bottom: 6px; margin-bottom: var(--alm-sp-0);
 }
 .alm-property-table__header .alm-property-table__cell {
-  font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-semibold);
-  letter-spacing: 0.04em; text-transform: uppercase; color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-semibold);
+  letter-spacing: var(--alm-tracking-normal); text-transform: uppercase; color: var(--alm-text-muted);
 }
 .alm-property-table__row:last-child { border-bottom: none; }
 .alm-property-table__cell--label { color: var(--alm-text-muted); font-size: var(--alm-text-sm); }
 .alm-property-table__cell--value {
   color: var(--alm-text); font-size: var(--alm-text-sm);
   font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere;
+  /* Multi-line values (e.g. RA/Dec split across lines) keep their \n breaks. */
+  white-space: pre-line;
 }
 .alm-property-table__cell--source,
 .alm-property-table__cell--confirm { justify-self: start; }
 .alm-property-table__source-badge {
-  font-size: 9.5px; font-weight: var(--alm-weight-semibold); letter-spacing: 0.03em;
+  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-semibold); letter-spacing: var(--alm-tracking-tight);
   text-transform: uppercase; padding: 1px 7px; border-radius: 8px;
   background: var(--alm-bg3); color: var(--alm-text-muted);
   border: 1px solid transparent;

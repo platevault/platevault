@@ -7,8 +7,9 @@
  * Extracted from `CreateProjectDialog` (the original spec-008 US1 modal) so the
  * live wizard create path (`WizardPage`) can surface the same per-field error
  * mapping and live duplicate-name pre-check instead of one generic toast.
- * `CreateProjectDialog` remains a consumer of this module (its fate — restore
- * vs. delete — is a separate product decision, WP-008-A).
+ * `CreateProjectDialog` was retired by the #887/#719/#586 wizard-only
+ * convergence (2026-07-17); this module remains the sole `projects.create`
+ * error-handling implementation, now with one consumer.
  *
  * `EditProjectPane` has its own `mapUpdateError()` — the `projects.update`
  * error codes/messages differ (e.g. `project.not_found`, `tool.locked`,

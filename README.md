@@ -59,8 +59,6 @@ Builds are published on [GitHub Releases](https://github.com/nightwatch-astro/al
 | Linux | AppImage, `.deb`, or `.rpm` |
 | macOS (Apple Silicon only) | `.dmg` |
 
-Intel macOS is not currently supported.
-
 Bundles are signed for the built-in auto-updater (minisign), but **not**
 signed with an OS-level code-signing certificate yet, so:
 

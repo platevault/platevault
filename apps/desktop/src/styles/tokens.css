@@ -64,17 +64,35 @@
 
   /* Typography */
   --alm-font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --alm-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+  /* JetBrains Mono is no longer bundled/loaded (spec 055 Phase 1) — the
+     system mono stack is natively hinted on every OS at zero bytes. */
+  --alm-font-mono: ui-monospace, 'Cascadia Code', monospace;
 
-  /* Type scale */
-  --alm-text-2xs: 10px;
-  --alm-text-xs: 11px;
-  --alm-text-sm: 12px;
-  --alm-text-base: 13px;
-  --alm-text-md: 14px;
-  --alm-text-lg: 16px;
-  --alm-text-xl: 18px;
-  --alm-text-2xl: 22px;
+  /* Type scale (spec 055 T010) — rem, derived from a 14px root. `html`'s
+     font-size is written directly by the font-size setting (theme.ts
+     applyFontSize: 12/14/16px, an integer at every dial stop — see
+     reset.css), so these tokens scale automatically with the dial instead of
+     the old absolute-px + fractional-JS-multiplier scheme. Even-px
+     preference at the default (14px) stop; `--alm-text-xs` is the 11px
+     floor (the one value allowed to be odd); top is `--alm-text-2xl` at
+     ~24px. `--alm-text-2xs` (10px) is retired — its consumers now use
+     `--alm-text-xs`. `theme.ts` TEXT_SCALE_DEFAULT_PX documents the exact
+     px-at-14 values these rem numbers encode; keep both in sync (enforced by
+     theme.tokens-drift.test.ts). */
+  --alm-text-xs: 0.7857rem; /* 11px @14 (floor) */
+  --alm-text-sm: 0.8571rem; /* 12px @14 */
+  --alm-text-base: 1rem; /* 14px @14 */
+  --alm-text-md: 1.1429rem; /* 16px @14 */
+  --alm-text-lg: 1.2857rem; /* 18px @14 */
+  --alm-text-xl: 1.4286rem; /* 20px @14 */
+  --alm-text-2xl: 1.7143rem; /* 24px @14 */
+
+  /* Letter-spacing scale (spec 055 T013) — replaces divergent untokenized
+     `letter-spacing` values (0.02–0.08em) scattered across component
+     stylesheets. */
+  --alm-tracking-tight: 0.03em;
+  --alm-tracking-normal: 0.04em;
+  --alm-tracking-wide: 0.08em;
 
   --alm-weight-normal: 400;
   --alm-weight-medium: 500;

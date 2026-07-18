@@ -28,6 +28,26 @@
 import { useSyncExternalStore } from 'react';
 import { getPreferences, subscribePreferences } from '@/data/preferences';
 
+/**
+ * Memoized dynamic import of the Tauri core API (`isTauri()`). Several
+ * independent fire-and-forget helpers below (theme/font-size/zoom settings
+ * persistence, native window theme sync, engine zoom) each gate on
+ * `isTauri()`; `initAppearance()` and `setZoomChoice()` can trigger more than
+ * one of them in the same synchronous tick. A real bundled ES module import
+ * is already cached per specifier, so this memoization changes nothing in
+ * production — it only guards against a Vite/Vitest dev-mode dynamic-import
+ * mock race observed when two callers both perform the *first* `import()` of
+ * the same mocked specifier concurrently.
+ */
+let tauriCorePromise: Promise<typeof import('@tauri-apps/api/core')> | null =
+  null;
+function importTauriCore(): Promise<typeof import('@tauri-apps/api/core')> {
+  if (!tauriCorePromise) {
+    tauriCorePromise = import('@tauri-apps/api/core');
+  }
+  return tauriCorePromise;
+}
+
 export type ThemeId =
   | 'warm-clay'
   | 'warm-slate'
@@ -109,18 +129,23 @@ export const SPACING_BASE_PX: Record<string, number> = {
   '--alm-sp-7': 48,
 };
 
+/**
+ * Text-scale token values (px) at the 14px default root — the same numbers
+ * tokens.css encodes as rem (`11/14`, `12/14`, ...). Kept here, rather than
+ * only in rem, so `applyFontSize`'s per-token rounding guard (spec 055 T011)
+ * has an integer starting point to scale from.
+ */
 export const TEXT_SCALE_BASE_PX: Record<string, number> = {
-  '--alm-text-2xs': 10,
   '--alm-text-xs': 11,
   '--alm-text-sm': 12,
-  '--alm-text-base': 13,
-  '--alm-text-md': 14,
-  '--alm-text-lg': 16,
-  '--alm-text-xl': 18,
-  '--alm-text-2xl': 22,
+  '--alm-text-base': 14,
+  '--alm-text-md': 16,
+  '--alm-text-lg': 18,
+  '--alm-text-xl': 20,
+  '--alm-text-2xl': 24,
 };
 
-/** Rescales a base token table onto <html> inline styles; `scale === 1` clears the override (back to tokens.css defaults). */
+/** Rescales the spacing token table onto <html> inline styles; `scale === 1` clears the override (back to tokens.css defaults). */
 function applyTokenScale(base: Record<string, number>, scale: number): void {
   const style = document.documentElement.style;
   for (const [token, px] of Object.entries(base)) {
@@ -153,7 +178,7 @@ export function getThemeChoice(): ThemeChoice {
 function persistThemeToSettings(choice: ThemeChoice): void {
   void (async () => {
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
+      const { isTauri } = await importTauriCore();
       if (!isTauri()) return;
 
       const [{ commands }, { unwrap }] = await Promise.all([
@@ -194,7 +219,7 @@ export function setThemeChoice(choice: ThemeChoice): void {
  */
 export async function hydrateThemeFromSettings(): Promise<void> {
   try {
-    const { isTauri } = await import('@tauri-apps/api/core');
+    const { isTauri } = await importTauriCore();
     if (!isTauri()) return;
 
     const [{ commands }, { unwrap }] = await Promise.all([
@@ -215,6 +240,11 @@ export async function hydrateThemeFromSettings(): Promise<void> {
       storedFontSize !== getFontSizeChoice()
     ) {
       setFontSizeChoice(storedFontSize);
+    }
+
+    const storedZoom = values[ZOOM_SETTINGS_KEY];
+    if (isZoomPercent(storedZoom) && storedZoom !== getZoomChoice()) {
+      setZoomChoice(storedZoom);
     }
   } catch {
     // Best-effort — keep the current localStorage-cached choices.
@@ -245,7 +275,7 @@ function syncNativeWindowTheme(themeId: ThemeId): void {
 
   void (async () => {
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
+      const { isTauri } = await importTauriCore();
       if (!isTauri()) return;
 
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -300,11 +330,62 @@ export type FontSizeChoice = 'small' | 'default' | 'large';
 
 const FONT_SIZE_KEY = 'alm.fontSize';
 const FONT_SIZE_SETTINGS_KEY = 'fontSize';
-const FONT_SIZE_SCALE: Record<FontSizeChoice, number> = {
-  small: 0.9,
-  default: 1,
-  large: 1.15,
+
+/**
+ * Root `<html>` font-size per dial stop (spec 055 FR-002) — three integer
+ * px values, replacing the old 0.9/1.0/1.15 fractional multiplier. `default`
+ * matches reset.css's `html { font-size: 14px }`, so it is also the value
+ * `applyFontSize('default')` clears back to.
+ */
+const FONT_SIZE_ROOT_PX: Record<FontSizeChoice, number> = {
+  small: 12,
+  default: 14,
+  large: 16,
 };
+
+/**
+ * Per-token rounding guard (spec 055 T011, plan.md "mandatory, not
+ * optional"): tokens.css expresses `--alm-text-*` as rem against the 14px
+ * root, so at the 12px/16px stops every token computes fractional
+ * (`× 12/14` / `× 16/14`) — e.g. `--alm-text-md` at 16px root is
+ * `18.2857...px`. Browsers don't reliably sub-pixel-snap fractional
+ * `font-size` the same way across platforms, and spec 055's whole premise is
+ * eliminating fractional/sub-floor text, so each token is independently
+ * rounded to the nearest integer px and written as an inline override —
+ * exactly mirroring the retired `applyTokenScale` px-with-scale approach,
+ * but per dial stop instead of a continuous multiplier.
+ *
+ * At the `default` (14px) stop the ratio is 1, so every rounded value is
+ * already the exact TEXT_SCALE_BASE_PX integer (11/12/14/16/18/20/24) — no
+ * override needed there; `applyFontSize('default')` clears the props and
+ * lets tokens.css's rem values (which resolve to those same integers at the
+ * 14px root) take over.
+ *
+ * The 11px floor (FR-003/SC-003) is guaranteed at `default` only, per the
+ * spec's own note: at `small`, the floor token (`--alm-text-xs`) rounds to
+ * 9px — a documented, accepted exception, not a bug. Computed values per
+ * stop (verified in theme.tokens-drift.test.ts / typography_dial.spec.ts):
+ *   small (12px root):   xs=9  sm=10 base=12 md=14 lg=15 xl=17 2xl=21
+ *   default (14px root): xs=11 sm=12 base=14 md=16 lg=18 xl=20 2xl=24
+ *   large (16px root):   xs=13 sm=14 base=16 md=18 lg=21 xl=23 2xl=27
+ *
+ * `applyFontSize` writes this rounded table at EVERY stop, including
+ * `default` — not only 12px/16px. tokens.css's rem values (e.g.
+ * `0.7857rem`) are truncated decimal approximations of repeating fractions
+ * (11/14 has no terminating decimal), so at a 14px root they resolve to
+ * `10.9998px`, not exactly `11px`. Falling back to the untouched rem tokens
+ * at `default` therefore reintroduces fractional computed sizes — the exact
+ * defect this rework removes. The inline px override is the only path that
+ * is exact at every stop; tokens.css's rem values only matter pre-JS-boot.
+ */
+function roundedTextScalePx(rootPx: number): Record<string, number> {
+  const scale = rootPx / FONT_SIZE_ROOT_PX.default;
+  const result: Record<string, number> = {};
+  for (const [token, basePx] of Object.entries(TEXT_SCALE_BASE_PX)) {
+    result[token] = Math.round(basePx * scale);
+  }
+  return result;
+}
 
 function isFontSizeChoice(v: unknown): v is FontSizeChoice {
   return v === 'small' || v === 'default' || v === 'large';
@@ -323,7 +404,7 @@ export function getFontSizeChoice(): FontSizeChoice {
 function persistFontSizeToSettings(choice: FontSizeChoice): void {
   void (async () => {
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
+      const { isTauri } = await importTauriCore();
       if (!isTauri()) return;
 
       const [{ commands }, { unwrap }] = await Promise.all([
@@ -345,7 +426,17 @@ export function applyFontSize(
   choice: FontSizeChoice = getFontSizeChoice(),
 ): void {
   if (typeof document === 'undefined') return;
-  applyTokenScale(TEXT_SCALE_BASE_PX, FONT_SIZE_SCALE[choice]);
+  const style = document.documentElement.style;
+  const rootPx = FONT_SIZE_ROOT_PX[choice];
+
+  // Always writes an explicit integer px for every stop, including
+  // `default` — see roundedTextScalePx's docstring for why the rem tokens
+  // alone can't be trusted to land on an exact integer at any stop.
+  style.setProperty('font-size', `${rootPx}px`);
+  const rounded = roundedTextScalePx(rootPx);
+  for (const [token, px] of Object.entries(rounded)) {
+    style.setProperty(token, `${px}px`);
+  }
 }
 
 export function setFontSizeChoice(choice: FontSizeChoice): void {
@@ -369,6 +460,7 @@ export function initAppearance(): void {
   applyTheme();
   applyDensity();
   applyFontSize();
+  applyZoom();
   let lastDensity = getPreferences().density;
   subscribePreferences(() => {
     const d = getPreferences().density;
@@ -387,6 +479,124 @@ export function initAppearance(): void {
     };
     mq.addEventListener?.('change', onChange);
   }
+}
+
+/**
+ * Whole-app engine zoom (spec 055 FR-006, T030) — VS Code-style, stacks with
+ * the font-size dial rather than replacing it. Steps are percent values
+ * applied via Tauri's `WebviewWindow.setZoom` (true layout zoom on
+ * WebView2/WKWebView/WebKitGTK, unlike CSS `zoom` which the spec rejects for
+ * contaminating viewport measurement). User decision 2026-07-17: max 150%
+ * (spec 054 stays orphaned; degradation at min-window × 150% is documented
+ * and accepted, not guarded — see spec FR-006 envelope).
+ */
+export const ZOOM_STEPS = [90, 100, 110, 125, 150] as const;
+export type ZoomPercent = (typeof ZOOM_STEPS)[number];
+const DEFAULT_ZOOM: ZoomPercent = 100;
+
+const ZOOM_KEY = 'alm.zoom';
+const ZOOM_SETTINGS_KEY = 'zoom';
+
+function isZoomPercent(v: unknown): v is ZoomPercent {
+  return (ZOOM_STEPS as readonly number[]).includes(v as number);
+}
+
+export function getZoomChoice(): ZoomPercent {
+  try {
+    const v = Number(localStorage.getItem(ZOOM_KEY));
+    return isZoomPercent(v) ? v : DEFAULT_ZOOM;
+  } catch {
+    return DEFAULT_ZOOM;
+  }
+}
+
+/** Best-effort write-through to the settings DB — mirrors `persistFontSizeToSettings`. */
+function persistZoomToSettings(percent: ZoomPercent): void {
+  void (async () => {
+    try {
+      const { isTauri } = await importTauriCore();
+      if (!isTauri()) return;
+
+      const [{ commands }, { unwrap }] = await Promise.all([
+        import('@/bindings/index'),
+        import('@/api/ipc'),
+      ]);
+      unwrap(
+        await commands.settingsUpdate(SETTINGS_SCOPE, {
+          [ZOOM_SETTINGS_KEY]: percent,
+        }),
+      );
+    } catch {
+      // Best-effort — a DB write failure never blocks or reverts the UI change.
+    }
+  })();
+}
+
+/**
+ * Writes the engine zoom level via `getCurrentWebview().setZoom()`.
+ * WebView2 exposes no zoom-change event, so the app owns this value and
+ * always writes it from app state — it is never read back from the engine.
+ * Outside Tauri (browser dev server, vitest, Playwright mock mode) the API
+ * is absent; this silently no-ops there (zoom is a no-op in mock mode, but
+ * the setting still persists) — same fire-and-forget shape as
+ * `syncNativeWindowTheme`.
+ */
+function applyEngineZoom(percent: ZoomPercent): void {
+  void (async () => {
+    try {
+      const { isTauri } = await importTauriCore();
+      if (!isTauri()) return;
+
+      const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+      await getCurrentWebview().setZoom(percent / 100);
+    } catch {
+      // Silently degrade — engine zoom is best-effort and must never block
+      // or revert the persisted setting.
+    }
+  })();
+}
+
+/**
+ * Applies the persisted zoom level. Called once at startup (`initAppearance`)
+ * right after `applyFontSize`, and again on every `setZoomChoice`. The engine
+ * call is inherently async (an IPC round-trip to the webview), so unlike the
+ * CSS token overrides it cannot be fully synchronous pre-paint; calling it as
+ * early as possible in the boot sequence keeps the at-100%-then-jump window
+ * as short as achievable without a native zoom-on-create hook.
+ */
+export function applyZoom(percent: ZoomPercent = getZoomChoice()): void {
+  applyEngineZoom(percent);
+}
+
+export function setZoomChoice(percent: ZoomPercent): void {
+  try {
+    localStorage.setItem(ZOOM_KEY, String(percent));
+  } catch {
+    /* localStorage may be unavailable */
+  }
+  persistZoomToSettings(percent);
+  applyZoom(percent);
+  notify();
+}
+
+/** Steps to the next larger zoom level; no-op at the top of `ZOOM_STEPS`. */
+export function stepZoomIn(): void {
+  const current = getZoomChoice();
+  const idx = ZOOM_STEPS.indexOf(current);
+  const next = ZOOM_STEPS[Math.min(idx + 1, ZOOM_STEPS.length - 1)];
+  if (next !== current) setZoomChoice(next);
+}
+
+/** Steps to the next smaller zoom level; no-op at the bottom of `ZOOM_STEPS`. */
+export function stepZoomOut(): void {
+  const current = getZoomChoice();
+  const idx = ZOOM_STEPS.indexOf(current);
+  const next = ZOOM_STEPS[Math.max(idx - 1, 0)];
+  if (next !== current) setZoomChoice(next);
+}
+
+export function resetZoom(): void {
+  if (getZoomChoice() !== DEFAULT_ZOOM) setZoomChoice(DEFAULT_ZOOM);
 }
 
 function subscribe(l: () => void): () => void {
@@ -414,4 +624,10 @@ export function useFontSizeChoice(): [
 ] {
   const choice = useSyncExternalStore(subscribe, getFontSizeChoice);
   return [choice, setFontSizeChoice];
+}
+
+/** Hook: [choice, setChoice] for the whole-app engine zoom (spec 055 T030). */
+export function useZoomChoice(): [ZoomPercent, (p: ZoomPercent) => void] {
+  const choice = useSyncExternalStore(subscribe, getZoomChoice);
+  return [choice, setZoomChoice];
 }

@@ -181,7 +181,7 @@
 .alm-filterbar__multi-summary::marker { content: ''; }
 .alm-filterbar__multi-summary::after {
   content: '\25BE';
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 .alm-filterbar__multi[open] > .alm-filterbar__multi-summary {
@@ -253,11 +253,14 @@
 .alm-listpage__detail-bar {
   flex-shrink: 0;
   display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
   justify-content: flex-end;
   padding: var(--alm-sp-1) var(--alm-sp-2);
   border-bottom: 1px solid var(--alm-border-subtle);
 }
-.alm-listpage__detail-close {
+.alm-listpage__detail-close,
+.alm-listpage__detail-pin {
   background: none;
   border: none;
   cursor: pointer;
@@ -267,7 +270,29 @@
   padding: var(--alm-sp-1);
   border-radius: var(--alm-radius-sm);
 }
-.alm-listpage__detail-close:hover { color: var(--alm-text); }
+.alm-listpage__detail-close:hover,
+.alm-listpage__detail-pin:hover { color: var(--alm-text); }
+
+/* Adaptive dock (spec 054 / #936): drag handle on the side panel's left
+ * edge, and the pin-placement toggle in the detail bar (above). */
+.alm-listpage__detail--side {
+  position: relative;
+}
+.alm-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+  touch-action: none;
+}
+.alm-resize-handle:hover,
+.alm-resize-handle:active {
+  background: var(--alm-accent);
+  opacity: 0.4;
+}
 .alm-listpage__detail-body {
   flex: 1;
   min-height: 0;
@@ -324,7 +349,7 @@
 .alm-sorth:hover { color: var(--alm-text); }
 .alm-sorth--active { color: var(--alm-text); }
 .alm-sorth__arrow {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 
@@ -338,7 +363,7 @@
   font-weight: var(--alm-weight-semibold);
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
   border-bottom: 1px solid var(--alm-border-subtle);
   padding: var(--alm-sp-2) var(--alm-sp-3);
@@ -392,7 +417,7 @@
  * minting per-feature `*-cell--num/--mono/--muted` clones. */
 .alm-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-cell--mono {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
@@ -438,7 +463,7 @@
   flex-shrink: 0;
   padding: var(--alm-sp-1) var(--alm-sp-3);
   border-top: 1px solid var(--alm-border);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 .alm-listtable__empty {

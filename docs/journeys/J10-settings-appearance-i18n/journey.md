@@ -1,9 +1,9 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 5
+version: 8
 status: draft
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 actors: [astrophotographer]
 surfaces: [settings, shell, audit, framing]
 interfaces: [desktop-ui]
@@ -22,6 +22,7 @@ trace:
   - spec 030 (UI audit revision, Q15 durable-audit unification)
   - spec 043 (UI redesign — shell, sort announcements)
   - spec 046 (i18n error codes)
+  - spec 055 Phase 4 (whole-app engine zoom, T030/T032/T033)
   - PR #388 (Audit Log screen), PR #410 (audit detail localization),
     PR #415 (aria-sort), PR #826 (durable audit rows for settings/protection/
     equipment/source changes), commit 1f4ba13f (accessibility/theming pass)
@@ -29,6 +30,9 @@ trace:
   - PR #902 (merged, fixes #582, #583) · PR #909 (merged, fixes #584)
   - PR #914 (merged, carried nJ09c/nJ10a review nit: palette catalog
     caching)
+  - spec 055 (typography rework) Phase 2, T010–T015
+  - spec-054-adaptive-detail-dock (FR-003 — per-page Detail panel placement
+    control)
 ---
 
 ## Goal
@@ -70,39 +74,70 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (apps/desktop/src/features/settings/ResolverSettingsControl.tsx).
 
 ### S2 — Change an appearance setting {#S2}
-- **Do:** In Appearance, pick a different theme, change density, and change
-  font size.
+- **Do:** In Appearance, pick a different theme, change density, change font
+  size, and change the whole-app Zoom setting (or use Ctrl+= / Ctrl+- / Ctrl+0
+  anywhere in the app, outside a text field).
 - **Expect:** One of four named themes (Warm Clay, Warm Slate, Observatory,
   Espresso) or "System" (follows OS) applies live with no reload; the choice
   survives a full app restart (confirmed by a live Windows kill+relaunch
   test, docs/development/journey-run-2026-07-14.md). Density
-  (compact/comfortable/spacious) and font size both rescale the shared
-  design-token layer live — density rescales the `--alm-sp-*` spacing tokens
-  (plus `--alm-row-height`), font size rescales the `--alm-text-*` type-scale
-  tokens — consumed by component stylesheets app-wide, so both now have a
-  visible effect across surfaces (paddings, gaps, and text size on Sessions,
-  Inbox, Calibration, etc.), not just the Targets table and wizard rows.
-  Font size persists through the settings DB (with a localStorage boot
-  cache) and survives a restart; it previously reset to default on every
-  remount.
+  (compact/comfortable/spacious) rescales the `--alm-sp-*` spacing tokens
+  (plus `--alm-row-height`); font size is a three-stop dial — Small/Default/
+  Large writes a single integer `<html>` font-size of 12/14/16px (bumped
+  from a 13px default) that the `--alm-text-*` type-scale tokens (rem,
+  re-derived from the 14px default) resolve against app-wide, so every
+  consuming surface (Sessions, Inbox, Calibration, sidebar/settings group
+  labels, wizard fine print, the Planner SVG axis labels, the toast dismiss
+  glyph — previously-hardcoded sizes included) scales together, not just the
+  Targets table and wizard rows. Font size persists through the settings DB
+  (with a localStorage boot cache) and survives a restart; it previously
+  reset to default on every remount. Zoom is a separate, VS Code-style whole-app engine zoom that
+  stacks with font size rather than replacing it: five steps (90/100/110/
+  125/150%), default 100%. The Zoom select in Appearance and the Ctrl+=
+  (also Ctrl+Shift+= and the numpad +) / Ctrl+- / Ctrl+0 shortcuts drive the
+  same persisted choice; Ctrl+0 always resets to 100%. Zoom persists the
+  same way as font size (settings DB + localStorage boot cache) and is
+  re-applied once at startup.
 - **Expect (negative):** The `--alm-row-height` token itself — the actual
   row *height* — is still consumed only by the Targets table, the
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
   Inbox, and Calibration list rows do not get taller or shorter with
-  density, even though their internal spacing now does. No first-paint
-  flash of the previous theme on reload; not verified either way for
-  theme/density specifically by this audit, but the same flash-of-default
-  defect on another auto-saved toggle (the SIMBAD-resolution toggle in
-  Target Resolution) is now fixed — see S1's Target Resolution pane, PR
-  #909 fixes #584 (the toggle now shows a loading skeleton, never its
-  in-code default, before the persisted value resolves).
+  density, even though their internal spacing now does. No computed text
+  size is ever fractional or below the dial stop's documented floor (11px
+  at Default; the previous fractional multiplier — e.g. `11.70px` at Small —
+  and the 10px micro-size token are both gone). No first-paint flash of the
+  previous theme on reload; not verified either way for theme/density
+  specifically by this audit, but the same flash-of-default defect on
+  another auto-saved toggle (the SIMBAD-resolution toggle in Target
+  Resolution) is now fixed — see S1's Target Resolution pane, PR #909 fixes
+  #584 (the toggle now shows a loading skeleton, never its in-code default,
+  before the persisted value resolves). Zoom's engine call
+  (`getCurrentWebview().setZoom`) is a Tauri-only API: in the browser dev
+  server, vitest, and Playwright mock mode the call is a guarded no-op — the
+  Zoom setting still persists and the control still reflects the chosen
+  step, but the webview itself does not visually rescale outside a real
+  desktop build. At the documented envelope edge (a min-size 1100×720
+  window at 150% zoom, which is above the shipped 125% CI-pinned floor), the
+  spec records the resulting ~733px CSS viewport as accepted layout
+  degradation, not guarded (correction, 2026-07-17: spec 054, adaptive
+  detail dock, has since shipped — see S11 — but it addresses list-page
+  detail-panel placement specifically, not this shell/zoom viewport
+  degradation, which remains accepted as-is).
 - **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
-  `applyDensity`, `applyFontSize`/`FontSizeChoice`),
+  `applyDensity`, `applyFontSize`/`FontSizeChoice`/`FONT_SIZE_ROOT_PX`/
+  `roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/`setZoomChoice`/
+  `applyZoom`/`stepZoomIn`/`stepZoomOut`/`resetZoom`),
+  apps/desktop/src/app/Shell.tsx (Ctrl+=/-/0 `useHotkeys` bindings),
   apps/desktop/src/features/settings/General.tsx,
-  apps/desktop/src/styles/tokens.css:157-158,
+  apps/desktop/src-tauri/capabilities/default.json
+  (`core:webview:allow-set-webview-zoom`),
+  apps/desktop/src/styles/tokens.css (`--alm-text-*` rem scale),
+  apps/desktop/src/styles/reset.css (`html { font-size: 14px }`),
   apps/desktop/src/styles/components/merges-1.css:556. PR #882 fixes #587:
   density previously only ever touched `--alm-row-height`; font size was
-  fully inert local state with no layout effect at all.
+  fully inert local state with no layout effect at all. Spec 055 Phase 2
+  (T010–T012) replaced the 0.9/1.0/1.15 fractional-px multiplier with the
+  integer dial described above; Phase 4 (T030) adds Zoom.
 
 ### S3 — Change a durable-data setting and find it in the Audit Log {#S3}
 - **Do:** Change a durable-data setting (e.g. add/remove an Equipment item),
@@ -264,9 +299,33 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (`tolerance_params`), tests/e2e/settings_framing.spec.ts,
   docs/development/windows-journeys/journey-11-framing-clustering-attribution.md.
 
+### S11 — Choose the detail panel's placement per page {#S11}
+- **Do:** In Appearance, open the new "Detail panel placement" control and
+  set it to Auto / Bottom / Right for each of Sessions, Calibration,
+  Archive, Projects, and Targets; restart the app; open Inbox.
+- **Expect:** Each of the five adopting pages exposes its own Auto/Bottom/
+  Right choice; choosing Bottom or Right pins that page's detail-panel
+  placement regardless of window width, overriding the automatic
+  width-based placement (spec-054's default: side on a wide window, bottom
+  when narrow); Auto restores the automatic width-based behavior. The
+  choice persists per page across an app restart. Inbox is not offered
+  this control at all — its detail region is shown as fixed (not
+  user-adjustable) since it is a permanent split, not an adaptive dock
+  (see J02/S2, J03/S1).
+- **Expect (negative):** No placement control appears for Inbox; setting a
+  pinned placement (Bottom or Right) for one page never changes another
+  page's placement or its own automatic-vs-pinned state after restart.
+- **Trace:** apps/desktop/src/features/settings/General.tsx (placement
+  control); `ListPageLayout` per-page pin consumption (Sessions/
+  Calibration/Archive/Projects/Targets); spec-054/FR-003.
+
 ## Success criteria
 - SC1: Every control across all 14 panes does something observable,
   persists, and round-trips a pane switch (S1–S5, S9, S10).
+- SC6: Each of the 5 adopting pages' Detail panel placement choice
+  (Auto/Bottom/Right) persists across an app restart and overrides
+  width-based automatic placement when set to Bottom or Right; Inbox is
+  never offered the control (S11).
 - SC2: Durable-data settings/protection/equipment/source mutations each
   produce exactly one audit row per committed change, with none for
   UI-state-only keys (S3).
@@ -275,6 +334,11 @@ Note: Release builds lack the /dev/contracts palette entry by design
   `aria-sort` (S8).
 - SC4: All panes remain usable at a window size of 1100×720 with the header/
   action bar pinned (S7).
+- SC5: The app shell stays intact (sidebar, page bar, content all visible)
+  with no horizontal overflow at the shipped zoom envelope's 125%/150%
+  window×zoom pairs (S2); CI-pinned in
+  tests/e2e/settings_appearance_i18n.spec.ts ("Whole-app zoom envelope
+  pins").
 
 ## Known gaps
 - G1: (dissolved 2026-07-15, resolved 2026-07-15) — tracked as issue #587;
@@ -316,4 +380,52 @@ Note: Release builds lack the /dev/contracts palette entry by design
   across opens instead of re-fetching in full every time.
   Evidence: PR #909 (fixes #584), PR #902 (fixes #582, #583), PR #914
   (carried nJ10a review nit, no matching issue) · by: journey-scribe
+  (intent-gated)
+
+- **Δ6** 2026-07-17 · S2 · behavior-change
+  Font size is now a three-integer-stop dial (12/14/16px root, default
+  bumped from 13px) instead of a 0.9/1.0/1.15 fractional-px multiplier; the
+  `--alm-text-*` scale is rem-derived so every stop's computed size is
+  integer, never fractional, with an 11px floor guaranteed at Default. The
+  11 previously-hardcoded px sizes (sidebar/settings group labels, wizard
+  titles/fine print, Planner SVG axis text, toast glyph) now scale with the
+  dial too.
+  Evidence: spec 055 Phase 2 (T010–T012) · by: journey-scribe (intent-gated)
+- **Δ7** 2026-07-17 · S2, +SC5 · behavior-change
+  Appearance gains a whole-app engine Zoom control (VS Code-style, stacks
+  with Font Size rather than replacing it): five steps (90/100/110/125/
+  150%), default 100%, driven by a new Zoom select and by app-owned
+  Ctrl+= (+ Ctrl+Shift+= / numpad +) / Ctrl+- / Ctrl+0 keyboard shortcuts
+  (window-local `tinykeys` bindings, not Tauri global shortcuts). Zoom
+  persists the same way as font size (settings DB write-through + a
+  localStorage boot cache) and is re-applied once at startup, right after
+  font size. The engine write uses Tauri's `setZoom` (true WebView2/
+  WKWebView/WebKitGTK layout zoom, not CSS `zoom`); since WebView2 exposes
+  no zoom-change event, the app always writes the value from its own state
+  and never reads it back from the engine. Outside a real desktop build
+  (browser dev server, vitest, Playwright mock mode) the engine call is a
+  guarded no-op — the setting still persists and the control still reflects
+  the chosen step. Max zoom is capped at 150% (user decision 2026-07-17);
+  spec 054 (adaptive detail dock) is a separate feature — since shipped, see
+  Δ8/S11 — not a dependency here, and the resulting layout
+  degradation at min-window (1100×720) × 150% is documented and accepted,
+  not guarded. Two CI pins cover the accepted envelope: 1100×720×125% and
+  1320×864×150%, both emulated in mock mode as an 880×576 viewport (no
+  engine zoom in mock mode, so a pre-shrunk viewport stands in for the
+  zoomed CSS viewport) — shell (sidebar, page bar, content) stays intact
+  with no horizontal overflow at either pin.
+  Evidence: spec 055 Phase 4 (T030/T032), branch feat/app-zoom (PR not yet
+  merged at authoring time) · by: journey-scribe (intent-gated)
+
+- **Δ8** 2026-07-17 · +S11, +SC6 · behavior-change
+  Appearance gains a per-page "Detail panel placement" control
+  (Auto/Bottom/Right) for each of the 5 pages adopting the adaptive detail
+  dock (Sessions, Calibration, Archive, Projects, Targets); the choice
+  persists across restarts and takes precedence over automatic width-based
+  placement. Inbox is fixed to its permanent split and is not offered the
+  control. Also corrected S2's stale note that spec 054 (adaptive detail
+  dock) "remains orphaned" — it has since shipped (see S11), though it does
+  not by itself resolve the S2 zoom-envelope viewport degradation, which is
+  a shell/zoom concern rather than a detail-dock concern.
+  Evidence: spec-054-adaptive-detail-dock (FR-003) · by: journey-scribe
   (intent-gated)

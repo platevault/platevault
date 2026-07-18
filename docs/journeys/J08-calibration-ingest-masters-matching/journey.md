@@ -1,13 +1,13 @@
 ---
 id: J08
 title: Ingest calibration masters and match them to sessions
-version: 2
+version: 4
 status: draft
 last_reviewed: 2026-07-15
 actors: [astrophotographer]
 surfaces: [inbox-confirm, calibration]
 interfaces: [desktop-ui]
-trace: [docs/product/journeys/J08-calibration-ingest-masters-matching/journey.md @ 66026463, deltas/2026-07-14-jval-docdrift.md, deltas/2026-07-14-q15-t122.md, deltas/2026-07-14-q16-t128.md, deltas/2026-07-14-q16-t129.md, deltas/2026-07-14-q16-t131.md, deltas/2026-07-14-q16-t132.md, deltas/2026-07-14-q16-t133.md, docs/journeys/J08-calibration-ingest-masters-matching/journey.md pilot (PR #848), spec-040 MasterDetector, spec-030 FR-135-FR-140, issue-619, issue-620, PR #851, PR #849, PR #910]
+trace: [docs/product/journeys/J08-calibration-ingest-masters-matching/journey.md @ 66026463, deltas/2026-07-14-jval-docdrift.md, deltas/2026-07-14-q15-t122.md, deltas/2026-07-14-q16-t128.md, deltas/2026-07-14-q16-t129.md, deltas/2026-07-14-q16-t131.md, deltas/2026-07-14-q16-t132.md, deltas/2026-07-14-q16-t133.md, docs/journeys/J08-calibration-ingest-masters-matching/journey.md pilot (PR #848), spec-040 MasterDetector, spec-030 FR-135-FR-140, issue-619, issue-620, PR #851, PR #849, PR #910, PR #939 (fixes #551), spec-054-adaptive-detail-dock (FR-001, FR-004)]
 ---
 
 ## Goal
@@ -64,6 +64,22 @@ assigned through an explicit, confirmable action — never silently.
   leaf-folder rows are never retired once single-type sub-items are
   materialized).
 
+  A master item's own pre-confirm Inbox detail view never claims the
+  required-attribute gate is "all clear" when it has no per-file metadata
+  to evaluate: masters bypass `classify()`'s per-file metadata persistence
+  (`crates/app/inbox/src/metadata.rs`), so `fileMetadata` is always empty
+  for a master item, and the detail's "No file metadata" empty state now
+  appends an explicit caveat ("Required-attribute status is checked when
+  you confirm.") instead of silently implying nothing is missing — the
+  backend's own `inbox.missing_path_attributes` gate at confirm time is
+  independent and can still reject the item. The underlying gap (masters
+  never getting a real per-file metadata row) is a backend/data-model
+  change still open, overlapping PR #854's in-flight
+  `classify.rs`/`confirm.rs`/`reclassify.rs` work; this fix only stops the
+  detail view from implying certainty it doesn't have.
+  Evidence: PR #939 (fixes #551) — `apps/desktop/src/features/inbox/
+  InboxDetail.tsx`.
+
 ### S2 — Confirm and register masters {#S2}
 - **Do:** Confirm and apply the inbox item(s) covering the ingested masters.
 - **Expect:** Each master registers into the calibration store as its own
@@ -92,8 +108,12 @@ assigned through an explicit, confirmable action — never silently.
   `0 AS size_bytes` view column).
 
 ### S4 — Open master detail {#S4}
-- **Do:** Open a master's detail panel.
-- **Expect:** The panel leads with information not already on the list row
+- **Do:** Open a master's detail panel. Resize the window across the
+  wide-window threshold.
+- **Expect:** The master detail uses the same adaptive dock as other list
+  pages (see J04/S4): a full-height, drag-resizable side panel on a wide
+  window (width and a per-page pin both persist across restarts), a bottom
+  dock when narrow. The panel leads with information not already on the list row
   (full metadata, provenance, related entities, history, actions) and trims
   echoed list columns to a small identifying summary. A "Used by" list of
   the sessions the master is assigned to opens and navigates. Age/created
@@ -109,6 +129,8 @@ assigned through an explicit, confirmable action — never silently.
   `MasterDetail.tsx` file-header note), so it never has anything to
   navigate yet; dropped rather than claimed
   (`apps/desktop/src/features/calibration/MasterDetail.tsx:313-330`).
+  spec-054/FR-001, FR-004 (adaptive side/bottom dock, resizable+persistent
+  width, per-page pin).
 
 ### S5 — Use master actions {#S5}
 - **Do:** Trigger "Use in project", "Replace master", and the platform-native
@@ -175,3 +197,19 @@ assigned through an explicit, confirmable action — never silently.
   "(root)" placeholder.
   Evidence: PR #910 (fixes #550, #555, #556) · by: journey-scribe
   (intent-gated)
+
+- **Δ3** 2026-07-17 · S1 · behavior-change
+  A master item's pre-confirm Inbox detail view no longer implies "all
+  clear" for the required-attribute gate when it has no per-file metadata
+  to evaluate — masters bypass per-file metadata persistence entirely, so
+  the empty state now appends an explicit caveat that the gate is checked
+  at confirm time instead. The underlying per-file-metadata gap for masters
+  remains open.
+  Evidence: PR #939 (fixes #551) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S4 · behavior-change
+  Master detail now uses the shared adaptive dock: full-height resizable
+  side panel on a wide window (width + per-page pin persist), bottom dock
+  when narrow — same mechanism as Sessions/Projects/Archive/Targets.
+  Evidence: spec-054-adaptive-detail-dock (FR-001, FR-004) · by:
+  journey-scribe (intent-gated)

@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { m } from '@/lib/i18n';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { WizardShell, Btn } from '@/ui';
 import type { WizardStep } from '@/ui';
 import { StepName, type StepNameData } from './StepName';
@@ -12,8 +12,12 @@ import { StepCalibration, type CalibrationMapping } from './StepCalibration';
 import { StepViews, type StepViewsData } from './StepViews';
 import { StepLayout, type StepLayoutData } from './StepLayout';
 import { StepReview } from './StepReview';
+import { queryKeys } from '@/data/queryKeys';
+import { useQuery } from '@tanstack/react-query';
 import { callCreateProject } from '@/features/projects/store';
 import { addToast } from '@/shared/toast';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import {
   createProjectErrorCode,
   findDuplicateProjectName,
@@ -24,6 +28,68 @@ import {
 
 const STORAGE_KEY = 'alm-project-wizard-draft';
 
+/**
+ * #719 SC-004: the wizard collected per-filter flat mappings and shared
+ * dark/bias/dark-flat picks in step 3, then discarded them at create time
+ * (only `{name, tool, path, initialSources, notes}` was ever sent — no
+ * contract field exists for a batch of calibration assignments). Persist
+ * them the same way the post-create Calibration page does: one
+ * `calibration.match.assign` call per (session, master) pair. Best-effort —
+ * the project is already created by the time this runs, so a failure here
+ * is surfaced nowhere; the same assignment remains available from the
+ * Calibration page.
+ */
+async function assignWizardCalibrationSelections(
+  sessionIds: string[],
+  calibration: CalibrationMapping,
+): Promise<void> {
+  const hasSelection =
+    Boolean(calibration.sharedDarkId) ||
+    Boolean(calibration.sharedBiasId) ||
+    Boolean(calibration.sharedDarkFlatId) ||
+    Object.values(calibration.flatMappings).some(Boolean);
+  if (sessionIds.length === 0 || !hasSelection) return;
+
+  let sessions: Array<{ id: string; sessionKey: { filter: string } }> = [];
+  try {
+    sessions = unwrap(await commands.sessionsList()).filter((s) =>
+      sessionIds.includes(s.id),
+    );
+  } catch {
+    return;
+  }
+
+  async function assign(sessionId: string, masterId: string): Promise<void> {
+    try {
+      await commands.calibrationMatchAssign({
+        contractVersion: '1.0',
+        requestId: crypto.randomUUID(),
+        sessionId,
+        masterId,
+        override: false,
+      });
+    } catch {
+      // Non-fatal — see docstring above.
+    }
+  }
+
+  for (const session of sessions) {
+    if (calibration.sharedDarkId) {
+      await assign(session.id, calibration.sharedDarkId);
+    }
+    if (calibration.sharedBiasId) {
+      await assign(session.id, calibration.sharedBiasId);
+    }
+    if (calibration.sharedDarkFlatId) {
+      await assign(session.id, calibration.sharedDarkFlatId);
+    }
+    const flatMasterId = calibration.flatMappings[session.sessionKey.filter];
+    if (flatMasterId) {
+      await assign(session.id, flatMasterId);
+    }
+  }
+}
+
 interface WizardData {
   name: StepNameData;
   sources: StepSourcesData;
@@ -33,7 +99,7 @@ interface WizardData {
 }
 
 const INITIAL_DATA: WizardData = {
-  name: { name: '', workflowProfile: 'pixinsight' },
+  name: { name: '', workflowProfile: 'pixinsight', target: null },
   sources: { selectedSessionIds: [] },
   calibration: {
     flatMappings: {},
@@ -103,6 +169,22 @@ const PROFILE_TO_TOOL: Record<string, 'PixInsight' | 'Siril'> = {
   planetary: 'Siril',
 };
 
+/**
+ * Derive a safe folder name from the project name (kebab-case, no special
+ * chars). The backend anchors this relative name to the registered project
+ * folder (registered_sources.kind = 'project'), so no 'projects/' prefix
+ * here — that would nest a redundant level under the folder the user already
+ * chose during setup. Shared by `handleCreate` and the review step (#599) so
+ * both show the identical real path instead of a fixture.
+ */
+function deriveProjectPath(trimmedName: string): string {
+  const safeName = trimmedName
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return safeName || 'new-project';
+}
+
 export function WizardPage() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
@@ -122,6 +204,55 @@ export function WizardPage() {
 
   // In mock mode, allow skipping all validation to walk through the wizard quickly
   const devSkip = import.meta.env.VITE_USE_MOCKS === 'true';
+
+  // #612/#783: a caller (e.g. TargetDetailV2's "+ New project here") can pass
+  // a real target id via `?targetId=`. `strict: false` reads it without this
+  // route declaring its own search schema. Resolve it to a real target once
+  // and prefill the name-step target picker, instead of the prior behaviour
+  // of fabricating a "From target context" label from typed text (#783).
+  const search: { targetId?: string } = useSearch({ strict: false });
+  const incomingTargetId = search.targetId;
+
+  // #599: real frame count for the review step's sources summary, sharing
+  // the same `sessions.list` cache StepSources/StepViews already populate.
+  const { data: allSessions } = useQuery({
+    queryKey: queryKeys.sessions.all(),
+    queryFn: async () => unwrap(await commands.sessionsList()),
+  });
+  useEffect(() => {
+    if (!incomingTargetId || wizardData.name.target) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detail = unwrap(
+          await commands.targetGet({ targetId: incomingTargetId }),
+        );
+        if (cancelled) return;
+        setWizardData((prev) =>
+          prev.name.target
+            ? prev
+            : {
+                ...prev,
+                name: {
+                  ...prev.name,
+                  name: prev.name.name || detail.primaryDesignation,
+                  target: {
+                    targetId: detail.id,
+                    primaryDesignation: detail.primaryDesignation,
+                    commonName: detail.displayAlias ?? null,
+                  },
+                },
+              },
+        );
+      } catch {
+        // Non-fatal: the wizard still works with no prefilled target.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingTargetId]);
 
   // Save draft on step/data change
   useEffect(() => {
@@ -162,7 +293,10 @@ export function WizardPage() {
       case 0:
         return wizardData.name.name.trim().length > 0;
       case 1:
-        return wizardData.sources.selectedSessionIds.length > 0;
+        // #719 FR-004/SC-001: zero-source creation must be reachable — the
+        // backend already supports it (`initial_sources: []` → lifecycle
+        // `setup_incomplete`); the wizard no longer blocks leaving this step.
+        return true;
       case 2:
         return true; // Calibration is optional
       case 3:
@@ -214,16 +348,7 @@ export function WizardPage() {
 
       const tool =
         PROFILE_TO_TOOL[wizardData.name.workflowProfile] ?? 'PixInsight';
-      // Derive a safe folder name from the project name (kebab-case, no
-      // special chars). The backend anchors this relative name to the
-      // registered project folder (registered_sources.kind = 'project'), so
-      // no 'projects/' prefix here — that would nest a redundant level under
-      // the folder the user already chose during setup.
-      const safeName = trimmedName
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      const path = safeName || 'new-project';
+      const path = deriveProjectPath(trimmedName);
 
       const result = await callCreateProject({
         requestId: crypto.randomUUID(),
@@ -232,7 +357,15 @@ export function WizardPage() {
         path,
         initialSources: wizardData.sources.selectedSessionIds,
         notes: null,
+        // #719 SC-001/#612: carry the real target picked in StepName (or
+        // prefilled from `?targetId=`) instead of discarding it.
+        canonicalTargetId: wizardData.name.target?.targetId ?? null,
       });
+
+      await assignWizardCalibrationSelections(
+        wizardData.sources.selectedSessionIds,
+        wizardData.calibration,
+      );
 
       clearDraft();
 
@@ -283,16 +416,6 @@ export function WizardPage() {
     completed: i < currentStep,
   }));
 
-  // Build wizard state for the review step
-  const fullWizardState: Record<string, unknown> = {
-    name: wizardData.name.name,
-    workflow_profile: wizardData.name.workflowProfile,
-    session_ids: wizardData.sources.selectedSessionIds,
-    calibration: wizardData.calibration,
-    source_view_strategy: wizardData.views.strategy,
-    naming_pattern: wizardData.layout.namingPattern,
-  };
-
   const projectLabel = wizardData.name.name || m.projects_create_title();
   const profileLabel =
     profileLabelFor(wizardData.name.workflowProfile) ??
@@ -304,6 +427,10 @@ export function WizardPage() {
   ).length;
   const darkSelected = wizardData.calibration.sharedDarkId ? 1 : 0;
   const biasSelected = wizardData.calibration.sharedBiasId ? 1 : 0;
+  const darkFlatSelected = wizardData.calibration.sharedDarkFlatId ? 1 : 0;
+  // #776: real master count feeding StepViews' scope/items row.
+  const selectedMasterCount =
+    flatsMapped + darkSelected + biasSelected + darkFlatSelected;
 
   // Back / Next button labels per wireframe
   const backLabels = [
@@ -454,9 +581,6 @@ export function WizardPage() {
           {m.projects_wizard_toolbar_title()} {projectLabel}
         </span>
         <span className="alm-wizard-page__spacer" />
-        <Btn size="sm" onClick={() => saveDraft(wizardData)}>
-          {m.projects_wizard_save_draft_btn()}
-        </Btn>
         {devSkip && (
           <Btn
             size="sm"
@@ -480,10 +604,14 @@ export function WizardPage() {
           {m.projects_wizard_workflow_profile_label()} {profileLabel}
         </span>
         <span>&middot;</span>
-        {wizardData.name.name && (
+        {/* #783: only render when a real target was resolved (picked in
+            StepName or carried over via `?targetId=`) — never fabricated
+            from the typed project name. */}
+        {wizardData.name.target && (
           <span>
             {m.projects_wizard_from_target_label()}{' '}
-            {wizardData.name.name.split(/[\s·—]/)[0]}
+            {wizardData.name.target.commonName ??
+              wizardData.name.target.primaryDesignation}
           </span>
         )}
         <span className="alm-wizard-page__subbar-note">
@@ -543,6 +671,8 @@ export function WizardPage() {
           <StepViews
             data={wizardData.views}
             onChange={(views) => setWizardData({ ...wizardData, views })}
+            selectedSessionIds={wizardData.sources.selectedSessionIds}
+            selectedMasterCount={selectedMasterCount}
           />
         )}
         {currentStep === 4 && (
@@ -553,7 +683,27 @@ export function WizardPage() {
             onChange={(layout) => setWizardData({ ...wizardData, layout })}
           />
         )}
-        {currentStep === 5 && <StepReview wizardState={fullWizardState} />}
+        {currentStep === 5 && (
+          <StepReview
+            wizardState={{
+              name: wizardData.name.name.trim(),
+              path: deriveProjectPath(wizardData.name.name.trim()),
+              profileLabel,
+              targetLabel:
+                wizardData.name.target?.commonName ??
+                wizardData.name.target?.primaryDesignation ??
+                null,
+              sessionCount: wizardData.sources.selectedSessionIds.length,
+              frameCount: (allSessions ?? [])
+                .filter((s) =>
+                  wizardData.sources.selectedSessionIds.includes(s.id),
+                )
+                .reduce((acc, s) => acc + s.frameCount, 0),
+              masterCount: selectedMasterCount,
+              viewStrategy: wizardData.views.strategy,
+            }}
+          />
+        )}
       </WizardShell>
     </div>
   );

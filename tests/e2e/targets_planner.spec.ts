@@ -586,3 +586,61 @@ test.describe("Planner observability iteration (spec 044 Phase 10, 2026-07-15)",
     }
   });
 });
+
+test.describe("Design-review follow-ups (2026-07-11): #614 dead CTA, #618 header stack", () => {
+  /**
+   * #614: the permanently-disabled "Add to plan" placeholder CTA (no backing
+   * feature) is removed from the detail header entirely — never shipped as a
+   * disabled, unexplained primary-position control.
+   */
+  test("#614 · the detail header has no disabled 'Add to plan' placeholder button", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    const m31 = targetRow(page, "M 31");
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+    await m31.click();
+
+    await expect(
+      page.getByRole("button", { name: "Add to plan" }),
+    ).toHaveCount(0);
+    // The real primary action (New project) is still present.
+    await expect(
+      page.getByRole("button", { name: "New project" }),
+    ).toBeVisible();
+  });
+
+  /**
+   * #618: the Moon-phase widget (and its no-site prompt) moved out of the
+   * pinned top bar's actions row into the table's own header zone — the top
+   * bar itself no longer stacks a 3rd band, and "Add target" is the one
+   * primary CTA at the bar's right edge.
+   */
+  test("#618 · the pinned top bar holds only the filter row + primary Add target action", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    await expect(targetRow(page, "M 31")).toBeVisible({ timeout: 8_000 });
+
+    // The Moon summary / site-prompt no longer lives inside the pinned top
+    // bar — it renders in the table's own header zone instead.
+    const topBar = page.locator(".alm-topbar");
+    await expect(topBar.getByTestId("moon-summary")).toHaveCount(0);
+    await expect(
+      page.locator(".alm-targets-table__wrap").getByTestId("moon-summary"),
+    ).toBeVisible();
+
+    // "Add target" is the pinned bar's one primary CTA.
+    const addTarget = topBar.getByRole("button", { name: "Add target" });
+    await expect(addTarget).toBeVisible();
+    await expect(addTarget).toHaveClass(/alm-btn--primary/);
+  });
+});

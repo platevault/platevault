@@ -111,9 +111,10 @@ export function ViewAuditHistory({
               className="alm-source-views__refs-item flex items-center gap-2"
               data-testid={`view-history-row-${plan.id}`}
             >
-              <span className="font-mono">
-                {formatDateTime(plan.createdAt)}
-              </span>
+              {/* Timestamp, not a mono-restoration surface (spec 055 FR-005:
+                  paths/IDs/manifest paths/contract names/RA/Dec) — the dead
+                  `font-mono` class (defined nowhere) is dropped, not revived. */}
+              <span>{formatDateTime(plan.createdAt)}</span>
               <span>
                 {plan.origin === 'prepared_view_removal'
                   ? m.projects_source_views_history_row_removal()
