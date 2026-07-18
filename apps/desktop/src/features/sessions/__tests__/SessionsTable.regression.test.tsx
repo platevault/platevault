@@ -117,9 +117,9 @@ describe('SessionsTable — backing-source connectivity chip (#889)', () => {
       sessions: [makeSession({ id: 'm', target: 'M31' })],
     } as InventorySource;
     renderTable([source]);
-    expect(
-      screen.getByTestId('sessions-row-connectivity-m'),
-    ).toHaveTextContent('Source missing');
+    expect(screen.getByTestId('sessions-row-connectivity-m')).toHaveTextContent(
+      'Source missing',
+    );
   });
 
   it('renders no connectivity chip for a session on an active source', () => {

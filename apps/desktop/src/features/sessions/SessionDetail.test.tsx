@@ -69,9 +69,9 @@ describe('SessionDetail — backing-source connectivity (#889)', () => {
         revealVisible={false}
       />,
     );
-    expect(
-      screen.getByTestId('session-detail-connectivity'),
-    ).toHaveTextContent('Reconnect required');
+    expect(screen.getByTestId('session-detail-connectivity')).toHaveTextContent(
+      'Reconnect required',
+    );
     expect(
       screen.queryByRole('button', { name: /show in file manager/i }),
     ).toBeNull();
