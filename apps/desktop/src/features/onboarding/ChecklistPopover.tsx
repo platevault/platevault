@@ -11,11 +11,13 @@
  */
 
 import { useState } from 'react';
+import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
 import {
   ChecklistSection,
   useVisibleOnboardingState,
 } from './ChecklistSection';
+import { useCompletionChoreography } from './choreography';
 
 const RING_SIZE = 24;
 const RING_STROKE = 3;
@@ -24,6 +26,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function ChecklistPopover(): React.ReactElement | null {
   const state = useVisibleOnboardingState();
+  const choreo = useCompletionChoreography(state);
   const [open, setOpen] = useState(false);
 
   if (!state) return null;
@@ -36,7 +39,10 @@ export function ChecklistPopover(): React.ReactElement | null {
     <div className="alm-onb-ring-wrap">
       <button
         type="button"
-        className="alm-onb-ring"
+        className={clsx(
+          'alm-onb-ring',
+          choreo.pulseActive && 'alm-onb-ring--pulse',
+        )}
         aria-label={progressText}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}

@@ -98,6 +98,51 @@ export async function disableOnboarding(page: Page): Promise<void> {
 }
 
 /**
+ * Dismiss the first-run orientation walk (spec 056 US1) if it auto-launches.
+ *
+ * On this integrated branch the walk auto-runs whenever `setupCompleted` is true
+ * and the mock `orientationDone` flag is false (a fresh mock page), covering the
+ * viewport with its modal joyride overlay — which intercepts every click on the
+ * checklist / spotlight surfaces that the US2–US5 specs exercise. Escape closes
+ * the walk (`dismissKeyAction: 'close'`) and flips the mock `orientationDone`
+ * flag, so it stays gone for the rest of the session. No-op if the walk never
+ * appears. Callers that started on a non-Inbox route should re-navigate after,
+ * since the walk's first stop navigates to `/inbox` before it is dismissed.
+ */
+export async function dismissOrientationWalk(page: Page): Promise<void> {
+  const overlay = page.locator(".react-joyride__overlay");
+  try {
+    await overlay.waitFor({ state: "visible", timeout: 6_000 });
+  } catch {
+    return; // the walk never launched (e.g. onboarding suppressed)
+  }
+  await page.keyboard.press("Escape");
+  await overlay.waitFor({ state: "detached", timeout: 6_000 }).catch(() => {
+    /* best-effort: proceed even if teardown lags */
+  });
+}
+
+/**
+ * Seed first-run complete, navigate to `hash`, and clear the auto-launched
+ * orientation walk so the onboarding surfaces under test are interactable.
+ *
+ * The walk's first stop navigates to `/inbox`, so after dismissal we may be off
+ * the requested route; a second navigation returns there (and dismisses the walk
+ * again, since reloading resets the mock `orientationDone` flag). `hash` is a
+ * hash route like `/#/projects`.
+ */
+export async function landOnMockRoute(page: Page, hash: string): Promise<void> {
+  seedSetupComplete(page);
+  await page.goto(hash);
+  await dismissOrientationWalk(page);
+  const route = hash.replace(/^\/#/, "");
+  if (!page.url().includes(route)) {
+    await page.goto(hash);
+    await dismissOrientationWalk(page);
+  }
+}
+
+/**
  * Drop-in replacement for `@playwright/test`'s `test`: identical, except every
  * test's `page` has the Tauri `Channel` polyfill installed automatically.
  */

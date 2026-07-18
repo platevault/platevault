@@ -22,6 +22,7 @@ import {
   type SourceEntry,
 } from '@/features/setup/sources-store';
 import { requestOrientationReplay } from '@/features/onboarding/OrientationWalk';
+import { restoreOnboarding } from '@/features/onboarding/store';
 import {
   SettingsSection,
   SettingsRow,
@@ -331,8 +332,10 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Getting started (spec 056). Replay control (T015); the T030 restore
-          control lands beside it in this same section. */}
+      {/* Getting started (spec 056). Replay control (T015) + the single restore/
+          reset control (T030, FR-014): unhides the section after explicit
+          removal AND after completion auto-hide, re-derives automatic pre-ticks,
+          preserves manual/dismissed state; idempotent on repeat. */}
       <SettingsSection title={m.onboarding_section_title()}>
         <SettingsRow label={m.onboarding_settings_replay_label()}>
           <Btn
@@ -341,6 +344,18 @@ export function Advanced({ save }: AdvancedProps) {
             data-testid="onboarding-replay-btn"
           >
             {m.onboarding_settings_replay_label()}
+          </Btn>
+        </SettingsRow>
+        <SettingsRow
+          label={m.onboarding_settings_restore_label()}
+          info={m.onboarding_settings_restore_description()}
+        >
+          <Btn
+            size="sm"
+            onClick={() => void restoreOnboarding()}
+            data-testid="onboarding-restore-btn"
+          >
+            {m.onboarding_settings_restore_label()}
           </Btn>
         </SettingsRow>
       </SettingsSection>

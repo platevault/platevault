@@ -29,7 +29,12 @@
 
 import type { ReactNode } from 'react';
 import { Joyride } from 'react-joyride';
-import type { EventData, Step, TooltipRenderProps } from 'react-joyride';
+import type {
+  EventData,
+  Step,
+  Styles,
+  TooltipRenderProps,
+} from 'react-joyride';
 import { m } from '@/lib/i18n';
 
 /** A library-agnostic onboarding step. Consumers build these; the adapter maps
@@ -42,6 +47,12 @@ export interface OnboardingStep {
   /** Localized body — any React node (our chrome, not an HTML string). */
   content: ReactNode;
   placement?: Step['placement'];
+  /**
+   * Open the step immediately instead of showing joyride's click-to-open
+   * beacon (v3 `skipBeacon`). The L4 find spotlight is a single step and must
+   * appear on activation, so it sets this.
+   */
+  skipBeacon?: boolean;
 }
 
 function toJoyrideStep(step: OnboardingStep): Step {
@@ -50,6 +61,7 @@ function toJoyrideStep(step: OnboardingStep): Step {
     title: step.title,
     content: step.content,
     placement: step.placement,
+    ...(step.skipBeacon !== undefined && { skipBeacon: step.skipBeacon }),
   };
 }
 
@@ -140,6 +152,20 @@ export interface OnboardingJoyrideProps {
    * design); L3 spotlight = true (non-modal, never steals focus).
    */
   disableFocusTrap?: boolean;
+  /**
+   * What clicking the dimmed overlay does (v3 `options.overlayClickAction`).
+   * Undefined = joyride default (walk keeps it). The L4 find spotlight sets
+   * `'close'` so "click anywhere else" dismisses (FR-023).
+   */
+  overlayClickAction?: 'close' | 'next' | 'replay' | false;
+  /**
+   * Whether the spotlit control is click-blocked (v3
+   * `options.blockTargetInteraction`). The find spotlight leaves this false so
+   * the user can click the real control through the cutout (FR-022).
+   */
+  blockTargetInteraction?: boolean;
+  /** Spotlight outline styling (v3 `styles.spotlight`) — R11 static outline. */
+  spotlightStyle?: Styles['spotlight'];
   /** Joyride lifecycle events (step change, close, skip) — passthrough. */
   onEvent?: (data: EventData) => void;
 }
@@ -154,6 +180,9 @@ export function OnboardingJoyride({
   stepIndex,
   continuous = true,
   disableFocusTrap = false,
+  overlayClickAction,
+  blockTargetInteraction,
+  spotlightStyle,
   onEvent,
 }: OnboardingJoyrideProps): ReactNode {
   const joyrideSteps = steps.map(toJoyrideStep);
@@ -164,7 +193,14 @@ export function OnboardingJoyride({
       stepIndex={stepIndex}
       continuous={continuous}
       tooltipComponent={OnboardingTooltip}
-      options={{ disableFocusTrap }}
+      options={{
+        disableFocusTrap,
+        ...(overlayClickAction !== undefined && { overlayClickAction }),
+        ...(blockTargetInteraction !== undefined && {
+          blockTargetInteraction,
+        }),
+      }}
+      {...(spotlightStyle && { styles: { spotlight: spotlightStyle } })}
       onEvent={onEvent}
     />
   );
