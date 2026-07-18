@@ -41,6 +41,17 @@ const STOP_TITLES = [
   "Your getting-started checklist",
 ];
 
+// The real route each stop must navigate to (FR-002); the final section stop
+// stays on /projects. Hash routing, so match the URL fragment.
+const STOP_URLS = [
+  /#\/inbox$/,
+  /#\/sessions$/,
+  /#\/calibration$/,
+  /#\/targets$/,
+  /#\/projects$/,
+  /#\/projects$/,
+];
+
 /**
  * Stub the T018 Getting started section anchor so the final stop resolves on a
  * branch that doesn't yet carry the checklist section. Appended to <body> as a
@@ -80,9 +91,15 @@ test.beforeEach(async ({ page }) => {
   await injectSectionAnchor(page);
 });
 
-test("auto-runs on first launch and shows the first stop", async ({ page }) => {
+test("auto-runs on first launch and spotlights the first stop", async ({
+  page,
+}) => {
   await page.goto("/#/inbox");
   await expectStop(page, 0);
+  // FR-002 whole-page spotlight: the full-page dim overlay renders (the
+  // `center`-placement guard — an anchored placement fails to render on the
+  // viewport-filling target).
+  await expect(page.locator(".react-joyride__overlay")).toBeVisible();
   await expectNoModalAria(page);
 });
 
@@ -93,6 +110,7 @@ test("traverses all six stops with Next/Back and finishes", async ({
 
   for (let i = 0; i < STOP_TITLES.length; i++) {
     await expectStop(page, i);
+    await expect(page).toHaveURL(STOP_URLS[i]); // FR-002: real page navigation.
     await expectNoModalAria(page);
     if (i < STOP_TITLES.length - 1) await page.locator(PRIMARY).click();
   }
