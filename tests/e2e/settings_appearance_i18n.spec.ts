@@ -37,10 +37,14 @@
  *   - Locale switching is not user-reachable (046 FR-004); no product switcher
  *     exists to drive.
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 import type { Page } from "@playwright/test";
 
 // ── Scenario 1 — Settings config model persists (spec 018) ──────────────────
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
   test("Ingestion pane loads current values, edits, and PERSISTS via the settings mock round-trip", async ({

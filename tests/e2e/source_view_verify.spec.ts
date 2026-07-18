@@ -23,7 +23,7 @@
  *   sourceview_verify → `mock-sv-view-broken` reports one broken item
  *                        (state `moved`); every other view id reports clean.
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 
 async function selectProject(
   page: import("@playwright/test").Page,
@@ -37,6 +37,10 @@ async function selectProject(
   await row.click();
   await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("source view verify (spec 049 US4)", () => {
   test("clean view: verify reports safe-to-process with zero broken items", async ({

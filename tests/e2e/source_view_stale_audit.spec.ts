@@ -18,7 +18,7 @@
  *                        a synthetic removal + regeneration plan scoped to
  *                        `mock-sv-view-stale` via `originPath`.
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 
 async function selectProject(
   page: import("@playwright/test").Page,
@@ -32,6 +32,10 @@ async function selectProject(
   await row.click();
   await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("source view stale-detection sweep + audit history (spec 026)", () => {
   test("stale badge and broken-reference detail render without a Verify click", async ({

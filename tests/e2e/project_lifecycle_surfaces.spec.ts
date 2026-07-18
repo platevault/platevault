@@ -39,7 +39,7 @@
  *   projects_source_remove → returns `lifecycle.last_confirmed_source` unless
  *                            confirmLastSource is set, exercising the guard.
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 
 async function selectProject(
   page: import("@playwright/test").Page,
@@ -53,6 +53,10 @@ async function selectProject(
   await row.click();
   await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("project lifecycle · detail surfaces (Journey 5)", () => {
   test("notes surface: persisted body renders; editor shows a byte counter", async ({

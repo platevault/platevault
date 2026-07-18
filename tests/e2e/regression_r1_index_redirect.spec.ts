@@ -25,6 +25,7 @@
  *   - apps/desktop/src/app/router.tsx  indexRoute.beforeLoad
  */
 import { test, expect } from "@playwright/test";
+import { disableOnboarding } from "./support/harness";
 
 // The app uses createHashHistory — routes are in the URL hash (#/sessions).
 // Seed preferences via the `alm-preferences` localStorage key so the
@@ -43,6 +44,10 @@ function seedSetupIncomplete(page: import("@playwright/test").Page): void {
     window.localStorage.removeItem("alm-preferences");
   });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("Regression R-1 · index route redirect", () => {
   /**

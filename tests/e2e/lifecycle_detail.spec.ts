@@ -25,6 +25,7 @@
  *   Seed it before navigating so the index redirect lands on /sessions, not /setup.
  */
 import { test, expect } from "@playwright/test";
+import { disableOnboarding } from "./support/harness";
 
 function seedSetupComplete(page: import("@playwright/test").Page): void {
   page.addInitScript(() => {
@@ -34,6 +35,10 @@ function seedSetupComplete(page: import("@playwright/test").Page): void {
     );
   });
 }
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("lifecycle detail · sessions page + provenance UI (spec 006 / spec 043)", () => {
   test("session rows render; clicking opens detail with source-tagged facts", async ({

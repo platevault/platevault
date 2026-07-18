@@ -55,7 +55,11 @@
 // The Tauri `Channel` polyfill this journey's approve-and-apply path needs is
 // installed globally by the shared harness `test` (see
 // `tests/e2e/support/harness.ts`) — no per-spec shim required.
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe("cleanup review (spec 017 WP-E / Journey 6)", () => {
   test("scan → review candidates with confidence + protection → generate plan → protection gate → approve & apply", async ({
