@@ -156,3 +156,93 @@ test.describe("project lifecycle · detail surfaces (Journey 5)", () => {
     await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
   });
 });
+
+test.describe("project detail · source click-through (#720 FR-006/SC-002/SC-001)", () => {
+  test("a source row deep-links to its Inventory/Sessions entry", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/projects");
+    await selectProject(page, "NGC 7000 Narrowband");
+
+    // The source name renders as a real anchor, not inert text.
+    const link = page.getByTestId("project-source-link-inv-001");
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute(
+      "href",
+      "#/sessions?selected=inv-001",
+    );
+
+    // Clicking navigates to Sessions with the source pre-selected (deep link).
+    await link.click();
+    await expect(page).toHaveURL(/#\/sessions\?selected=inv-001/);
+  });
+
+  test("a blocked project row's warning icon carries the real blocked reason (SC-001)", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/projects");
+    const blockedRow = page
+      .locator(".alm-projects-table__row")
+      .filter({ hasText: "Cave Nebula attempt" });
+    await expect(blockedRow).toBeVisible({ timeout: 8_000 });
+    // Mock fixture: proj-007 is blocked with blockedReasonKind=calibration_unmatched.
+    await expect(
+      blockedRow.getByRole("img", { name: /Blocked: .+/ }),
+    ).toBeVisible();
+  });
+});
+
+test.describe("projects list · multiselect state filter (#721 009 SC-004 / 033 FR-022)", () => {
+  test("selecting multiple states filters the table; the URL round-trips as a CSV", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/projects");
+    await expect(
+      page.locator(".alm-projects-table__row").filter({ hasText: "NGC 7000 Narrowband" }),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // Open the State multiselect popover and check two states.
+    await page.locator("#filterbar-state summary").click();
+    await page.locator("#filterbar-state-processing").check();
+    await page.locator("#filterbar-state-blocked").check();
+
+    // URL reflects both selections (router search serializes the array as
+    // URL-encoded JSON: lifecycle=["processing","blocked"]).
+    await expect(page).toHaveURL(
+      /lifecycle=%5B%22processing%22%2C%22blocked%22%5D/,
+    );
+
+    // Table now shows only the processing + blocked projects.
+    await expect(
+      page.locator(".alm-projects-table__row").filter({ hasText: "NGC 7000 Narrowband" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".alm-projects-table__row").filter({ hasText: "Cave Nebula attempt" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".alm-projects-table__row").filter({ hasText: "M31 LRGB" }),
+    ).not.toBeVisible();
+  });
+
+  test("a deep-linked CSV lifecycle param pre-checks the matching states and filters the table", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/projects?lifecycle=ready,prepared");
+
+    await expect(
+      page.locator(".alm-projects-table__row").filter({ hasText: "M31 LRGB" }),
+    ).toBeVisible({ timeout: 8_000 });
+    await expect(
+      page.locator(".alm-projects-table__row").filter({ hasText: "NGC 7000 Narrowband" }),
+    ).not.toBeVisible();
+
+    // The popover reflects the deep-linked selection (2 selected).
+    await expect(page.locator("#filterbar-state summary")).toContainText(
+      "2 selected",
+    );
+  });
+});

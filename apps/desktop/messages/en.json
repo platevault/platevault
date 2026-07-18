@@ -524,7 +524,7 @@
   "projects_stepper_created": "Created",
   "projects_stepper_history_title": "History",
   "projects_stepper_updated": "Updated",
-  "projects_table_blocked_aria": "Blocked",
+  "projects_table_blocked_aria": "Blocked: {reason}",
   "projects_table_channel_drift_label": "channels",
   "projects_table_channel_drift_title": "Channel drift detected",
   "projects_table_empty": "No projects found.",
@@ -1334,7 +1334,6 @@
   "projects_schema_name_too_long": "Name must be {max} characters or fewer.",
   "projects_schema_tool_required": "Please select a processing tool.",
   "projects_schema_path_required": "Project folder path is required.",
-  "projects_schema_notes_too_long": "Notes must be {max} characters or fewer.",
   "projects_schema_edit_name_required": "Name is required.",
   "logpanel_follow_paused": "⏸ Follow",
   "logpanel_follow_active": "↓ Follow",
@@ -1756,12 +1755,29 @@
   "projects_col_format": "FORMAT",
   "projects_col_verification": "VERIFICATION",
   "projects_metric_integration": "integration",
-  "projects_metric_sources": "sources",
-  "projects_metric_channels": "channels",
+  "projects_metric_sources": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "source",
+        "pp=other": "sources"
+      }
+    }
+  ],
+  "projects_metric_channels": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "channel",
+        "pp=other": "channels"
+      }
+    }
+  ],
   "projects_metric_tool": "tool",
   "projects_search_placeholder": "Search name, tool…",
   "projects_search_aria": "Search projects",
-  "projects_filter_all_states": "All states",
   "projects_tool_configure_path": "Configure path",
   "projects_wizard_profile_pixinsight": "PixInsight / WBPP",
   "projects_wizard_profile_pixinsight_desc": "Deep-sky processing with WeightedBatchPreProcessing",

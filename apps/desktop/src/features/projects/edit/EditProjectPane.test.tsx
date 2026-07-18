@@ -50,6 +50,7 @@ vi.mock('@/features/projects/store', () => ({
   callRemoveProjectSource: mockRemoveSource,
   useProjects: () => ({ data: [], loading: false }),
   useProjectDetail: () => ({ data: undefined, loading: false }),
+  useSessionNames: () => new Map(),
   projectListStore: {
     subscribe: vi.fn(),
     getSnapshot: vi.fn(),

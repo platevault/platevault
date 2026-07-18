@@ -28,6 +28,7 @@ import { SortHeader, ariaSortFor } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import { ProjectStatusTag } from './ProjectStatusTag';
+import { blockedReasonMessage, deriveBlockedReason } from './BlockedBanner';
 import { compareDateDesc, formatDateTime } from '@/lib/datetime';
 import type { ProjectSummaryDto } from '@/bindings/index';
 import {
@@ -217,14 +218,26 @@ export function ProjectsTable({
       _testid: `project-row-${project.id}`,
       name: (
         <span className="alm-projects-table__name">
-          {project.lifecycle === 'blocked' && (
-            <AlertTriangle
-              size={13}
-              role="img"
-              aria-label={m.projects_table_blocked_aria()}
-              className="alm-projects-table__blocked-icon"
-            />
-          )}
+          {project.lifecycle === 'blocked' &&
+            (() => {
+              const reason = deriveBlockedReason(
+                project.blockedReasonKind,
+                project.blockedReasonNote,
+              );
+              const reasonText = blockedReasonMessage(reason);
+              return (
+                <span title={reasonText}>
+                  <AlertTriangle
+                    size={13}
+                    role="img"
+                    aria-label={m.projects_table_blocked_aria({
+                      reason: reasonText,
+                    })}
+                    className="alm-projects-table__blocked-icon"
+                  />
+                </span>
+              );
+            })()}
           {project.name}
           {project.channelDrift && (
             <span

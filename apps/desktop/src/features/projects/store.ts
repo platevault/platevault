@@ -15,6 +15,8 @@ import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { ipcArgs } from '@/lib/ipc-args';
+import { useMemo } from 'react';
+import { useInventorySources } from '@/features/sessions/store';
 import { applyProjectLifecycleTransition } from './lifecycleTransition';
 import type {
   ProjectLifecycleState,
@@ -123,6 +125,26 @@ export function useProjectDetail(id: string): QueryState<ProjectDetailDto> {
     loading: isFetching,
     error: error ?? undefined,
   };
+}
+
+/**
+ * Resolve project-source (Inventory session) ids to their human-readable
+ * names, the same names the Sessions page already computes server-side
+ * (#663 — project detail otherwise falls back to raw UUIDs because
+ * `ProjectSourceDto.name` is unpopulated). Sourced from the shared Inventory
+ * query, so it reuses the Sessions page's cache when both are warm.
+ */
+export function useSessionNames(): Map<string, string> {
+  const { data } = useInventorySources();
+  return useMemo(() => {
+    const map = new Map<string, string>();
+    for (const source of data?.sources ?? []) {
+      for (const session of source.sessions) {
+        map.set(session.id, session.name);
+      }
+    }
+    return map;
+  }, [data]);
 }
 
 // Mutation hooks

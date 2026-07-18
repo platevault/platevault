@@ -74,11 +74,18 @@ interface Props {
   sessionIds: string[];
   /** Whether the collapsible section starts open. Default true. */
   defaultOpen?: boolean;
+  /**
+   * Session id → human-readable name lookup (#663 — the panel previously
+   * always rendered a truncated raw UUID, unlike Sessions/the sources
+   * table which resolve real names).
+   */
+  sessionNames?: Map<string, string>;
 }
 
 export function CalibrationMatchPanel({
   sessionIds,
   defaultOpen = true,
+  sessionNames,
 }: Props) {
   // Batch key is the joined session-id list — matches the `matches(sid)` key
   // shape while distinguishing one panel's session set from another's.
@@ -180,7 +187,7 @@ export function CalibrationMatchPanel({
             data-testid={`cal-session-${sid}`}
           >
             <div className="alm-calib-match-panel__session-id">
-              {sid.slice(0, 12)}…
+              {sessionNames?.get(sid) ?? `${sid.slice(0, 12)}…`}
             </div>
             <div className="alm-calib-match-panel__type-row">
               {typeResults.map((r) => {

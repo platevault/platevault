@@ -29,7 +29,7 @@
 
 import { Banner, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
-import { useProjectDetail } from './store';
+import { useProjectDetail, useSessionNames } from './store';
 import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
@@ -47,6 +47,7 @@ export interface ProjectBottomDetailProps {
 
 export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
   const { data: project, loading, error } = useProjectDetail(projectId);
+  const sessionNames = useSessionNames();
 
   if (loading && !project) {
     return (
@@ -84,7 +85,11 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
         {/* ── Calibration match panel ───────────────────────────────────── */}
         {sourceIds.length > 0 && (
           <div className="alm-project-bottom__cell">
-            <CalibrationMatchPanel sessionIds={sourceIds} defaultOpen={true} />
+            <CalibrationMatchPanel
+              sessionIds={sourceIds}
+              defaultOpen={true}
+              sessionNames={sessionNames}
+            />
           </div>
         )}
 

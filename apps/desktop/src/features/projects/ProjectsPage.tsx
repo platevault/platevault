@@ -131,14 +131,15 @@ export function ProjectsPage() {
   );
 
   type ProjectLifecycleFilter = NonNullable<typeof lifecycle>;
-  // The top-bar State filter is single-select; map it onto the CSV `lifecycle`
-  // URL param (an empty value clears it).
-  const lifecycleValue = lifecycle?.length === 1 ? lifecycle[0] : '';
-  const onLifecycleChange = (value: string) =>
+  // #721 (009 SC-004 / 033 FR-022): multiselect state filter, backed by the
+  // shared MultiFilterField — the URL's `lifecycle` param is already CSV-shaped.
+  const lifecycleValues = lifecycle ?? [];
+  const onLifecycleChange = (values: string[]) =>
     navigate({
       search: (prev) => ({
         ...prev,
-        lifecycle: value ? ([value] as ProjectLifecycleFilter) : undefined,
+        lifecycle:
+          values.length > 0 ? (values as ProjectLifecycleFilter) : undefined,
       }),
     });
 
@@ -178,13 +179,12 @@ export function ProjectsPage() {
             placeholder: m.projects_search_placeholder(),
             ariaLabel: m.projects_search_aria(),
           }}
-          fields={[
+          multiFields={[
             {
               key: 'state',
               label: m.sessions_col_state(),
-              value: lifecycleValue,
+              value: lifecycleValues,
               options: LIFECYCLE_OPTIONS,
-              allLabel: m.projects_filter_all_states(),
               onChange: onLifecycleChange,
             },
           ]}
