@@ -684,9 +684,31 @@ export function InboxPage() {
   // Apply a single ingestion plan with live per-item progress streamed over
   // the long-operation OperationEvent channel (spec 042 US16 / FR-021). This is
   // the end-to-end consumer of the channel contract on the inbox plan surface.
+  //
+  // Issue #769: a freshly-confirmed plan is `ready_for_review` with no
+  // `approval_token` — `plans.apply` unconditionally rejects any plan that
+  // isn't `approved`. Approve it first (same precondition "Apply all" already
+  // satisfies via its own backend command) and thread the returned token
+  // through, otherwise this always fails with `plan.invalid_state` before any
+  // item is touched.
   const handleApplyOne = async (planId: string) => {
     setProgressPlanId(planId);
-    const response = await runPlanApply({ id: planId });
+    let approvalToken: string | undefined;
+    try {
+      approvalToken = unwrap(await commands.plansApprove(planId)).approvalToken;
+    } catch {
+      // runPlanApply (the success path below) resets progress to IDLE on its
+      // own; skipping it here means a stale progressPlanId from a previously
+      // applied plan would otherwise keep pointing a progress display at this
+      // now-failed row.
+      setProgressPlanId(null);
+      addToast({
+        message: m.inbox_plan_apply_failed_toast(),
+        variant: 'error',
+      });
+      return;
+    }
+    const response = await runPlanApply({ id: planId, approvalToken });
     if (response) {
       addToast({ message: m.inbox_plan_applied_toast(), variant: 'info' });
       refreshAll();
