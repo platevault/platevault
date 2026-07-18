@@ -63,6 +63,15 @@ fail-fast = false
 # Print failures immediately and again at the end for easy scanning.
 failure-output = "immediate-final"
 
+# Windows-latest CI runners are chronically the closest to the slow-timeout
+# edge (debug-build WebView2 boot + intermittent runner-level stalls; even
+# green CI runs there show 1-3 retried flakes recovering by luck). One extra
+# retry buys more margin without masking a real regression, since a genuinely
+# broken journey still fails all 3 attempts.
+[[profile.e2e.overrides]]
+platform = 'cfg(windows)'
+retries = 2
+
 # ---------------------------------------------------------------------------
 # CI profile for the Layer-1 workspace test run (spec: build/adopt-nextest).
 #
