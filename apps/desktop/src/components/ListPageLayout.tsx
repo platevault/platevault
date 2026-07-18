@@ -207,7 +207,6 @@ function DockResizeHandle({
       role="separator"
       aria-orientation="vertical"
       aria-label={m.list_page_layout_resize_handle_aria()}
-      tabIndex={0}
       onPointerDown={(event) => {
         dragRef.current = { startX: event.clientX, startWidth: width };
       }}
@@ -321,7 +320,11 @@ export function ListPageLayout({
       <div className="alm-page" ref={pageRef}>
         {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
-        <div className={bodyClass} style={bodyStyle}>
+        <div
+          className={bodyClass}
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: user-resizable side/split width persisted per page, not a static design token
+          style={bodyStyle}
+        >
           <div className={mainClass}>{children}</div>
 
           {resizable && (
