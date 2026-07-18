@@ -100,6 +100,8 @@ faking progress.
 - **Expect:** The section contains exactly five page groups, one each for
   Inbox, Sessions, Calibration, Targets, and Projects; each group lists
   between 2 and 4 short item labels.
+- **Expect:** Each item's inline label is 3–5 words long; the fuller
+  explanatory copy lives only in the item's tooltip, not inline.
 - **Expect:** Whichever page group matches the page currently open is
   auto-expanded; the others may be collapsed.
 - **Expect:** Hovering or focusing an item label surfaces its explanatory
@@ -127,6 +129,34 @@ faking progress.
   prerequisite as met (reason text and lock state clear).
 - **Expect (negative):** No demo or sample inventory record was created to
   produce this tick — only the user's own confirmed item exists.
+
+### S9a — A real project create auto-ticks its item {#S9a}
+- **Do:** With the S8/S9 prerequisite now met, create a real project through
+  the normal project-creation flow (any workflow profile, any name).
+- **Expect:** The Projects group's "create first project" item ticks
+  automatically, driven by the real `project.created` domain event — no
+  manual check action is needed.
+- **Expect:** The tick performs the same completion choreography as S9: brief
+  in-place emphasis, then move into the group's completed area; the overall
+  progress affordance pulses.
+- **Expect (negative):** No demo, sample, or placeholder project was created
+  to produce this tick — only the project the user just created for real
+  exists, and it carries the user-entered name and profile, not fixture
+  content.
+
+### S9b — A real tool launch auto-ticks its item {#S9b}
+- **Do:** Open the project created in S9a and launch it in its configured
+  external processing tool through the normal open-in-tool action, letting
+  the launch actually spawn the tool process.
+- **Expect:** The Projects group's item tied to opening a project in a tool
+  ticks automatically, driven by the real `tool.launch` domain event with
+  outcome `spawned` — no manual check action is needed.
+- **Expect:** The tick performs the same completion choreography as S9/S9a.
+- **Expect (negative):** A tool-launch attempt that does not reach outcome
+  `spawned` (e.g. the tool fails to start or the launch is cancelled) does
+  not tick the item — only the `spawned` outcome counts, matching the
+  restore-source exclusion pattern in S10 of filtering by real, specific
+  event shape rather than by event family.
 
 ### S10 — Restore-source events never tick {#S10}
 - **Do:** Perform a restore action that returns a previously archived or
@@ -235,10 +265,11 @@ faking progress.
   Targets, Projects) contains between 2 and 4 items at all times — a fixed,
   checkable count range.
 - SC4: The overall progress numerator changes only in response to a real
-  domain event (`inventory.confirmed`, `project.created`, `tool.launch`
-  outcome=spawned) or an explicit manual check (S9, S11) — restore-source
-  events (S10) produce zero ticks across at least one exercised restore
-  action.
+  domain event — `inventory.confirmed` (S9), `project.created` (S9a), or
+  `tool.launch` outcome=spawned (S9b) — or an explicit manual check (S11).
+  Restore-source events (S10) and non-spawned tool-launch outcomes (S9b
+  negative) each produce zero ticks across at least one exercised action of
+  their kind.
 - SC5: Zero demo, sample, or seeded-for-display records exist in inventory,
   sessions, projects, or targets at any point during or after this journey
   — every record present traces to a real user action taken during the
