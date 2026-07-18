@@ -30,6 +30,7 @@ import type { EventData } from 'react-joyride';
 import type { OnboardingItemDto } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import { OnboardingJoyride, type OnboardingStep } from './joyrideAdapter';
+import { prefersReducedMotion } from './choreography';
 import {
   ONBOARDING_PAGE_PATHS,
   itemLabel,
@@ -93,14 +94,6 @@ const RESOLVE_POLL_MS = 60;
 // react-joyride wire strings (enum imports stay in the adapter — mirrored here).
 const DISMISS_ACTIONS = new Set(['close', 'skip']);
 const DISMISS_STATUSES = new Set(['finished', 'skipped']);
-
-function reducedMotion(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  );
-}
 
 /** Mounted once by `ChecklistSection`; renders the active item's spotlight. */
 export function FindSpotlight(): React.ReactElement | null {
@@ -175,7 +168,7 @@ function SpotlightFor({
   // a root data-attribute the spotlight CSS keys off — portal-safe and
   // deterministic for tests. Reduced motion never pulses (VC-002 assertion).
   useEffect(() => {
-    if (status !== 'found' || reducedMotion()) return;
+    if (status !== 'found' || prefersReducedMotion()) return;
     const root = document.documentElement;
     root.dataset.onbSpotlightPulse = 'on';
     const t = setTimeout(() => {
