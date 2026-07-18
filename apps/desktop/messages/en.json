@@ -281,6 +281,8 @@
   "err_no_items_to_retry": "There are no items to retry.",
   "err_no_op": "Nothing to do.",
   "err_note_content_too_large": "This note is too long. Please shorten it.",
+  "err_onboarding_invalid_state": "That change to your getting-started progress isn't allowed.",
+  "err_onboarding_item_unknown": "That getting-started item is no longer available.",
   "err_operation_handler_duplicate": "This action is already registered.",
   "err_operation_not_found": "That action isn't available.",
   "err_os_command_failed": "The system command didn't complete.",
