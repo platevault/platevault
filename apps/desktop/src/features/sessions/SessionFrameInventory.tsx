@@ -14,7 +14,7 @@
  */
 
 import { useState } from 'react';
-import { Btn, Banner, Table, Pill } from '@/ui';
+import { Btn, Banner, Table, Pill, Section } from '@/ui';
 import type { TableColumn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { formatBytes } from '@/lib/format';
@@ -147,10 +147,10 @@ export function SessionFrameInventory({
   }));
 
   return (
-    <div className="alm-settings__group" data-testid="session-frame-inventory">
-      <div className="alm-settings__group-title">
-        {m.sessions_frame_inventory_title()}
-      </div>
+    <Section
+      title={m.sessions_frame_inventory_title()}
+      data-testid="session-frame-inventory"
+    >
       <div className="alm-cleanup-scan__controls">
         <Btn
           size="sm"
@@ -180,6 +180,6 @@ export function SessionFrameInventory({
       {result && result.frames.length > 0 && (
         <Table columns={columns()} rows={rows} />
       )}
-    </div>
+    </Section>
   );
 }
