@@ -76,6 +76,10 @@ use crate::commands::manifests::{
     manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
+use crate::commands::onboarding::{
+    onboarding_item_set_state, onboarding_orientation_complete, onboarding_restore,
+    onboarding_section_set, onboarding_state_get,
+};
 use crate::commands::patterns::{
     pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
 };
@@ -329,6 +333,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         guided_dismiss,
         guided_restart,
         guided_activate,
+        // onboarding (spec 056)
+        onboarding_state_get,
+        onboarding_item_set_state,
+        onboarding_orientation_complete,
+        onboarding_section_set,
+        onboarding_restore,
         // native filesystem controls (spec 004)
         native_directory_pick,
         native_file_pick,
@@ -576,6 +586,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         guided_dismiss,
         guided_restart,
         guided_activate,
+        // onboarding (spec 056)
+        onboarding_state_get,
+        onboarding_item_set_state,
+        onboarding_orientation_complete,
+        onboarding_section_set,
+        onboarding_restore,
         // native filesystem controls (spec 004)
         native_directory_pick,
         native_file_pick,
@@ -1059,6 +1075,15 @@ pub fn run_app(
     );
     crate::commands::guided::start_guided_event_forwarder(app.handle().clone(), &bus);
     drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
+    // spec 056 (R5): backend-authoritative onboarding tick subscriber →
+    // persists auto-ticks from domain-completion topics and emits
+    // `onboarding:state-changed`. Started here, before the webview can invoke,
+    // so no tick can be lost to a UI race (PQ-005 ordering).
+    crate::commands::onboarding::start_onboarding_subscriber(
+        app.handle().clone(),
+        pool.clone(),
+        &bus,
+    );
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
