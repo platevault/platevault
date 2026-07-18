@@ -293,7 +293,7 @@ async fn suggest_degrades_gracefully_when_no_fingerprint() {
     // No masters were seeded, so the degraded session still resolves to
     // NoMatch rather than the old ObserverLocationMissing hard guard.
     let status = resp.suggest_status;
-    assert!(matches!(status, Some(SuggestStatus::NoMatch)), "expected NoMatch, got {status:?}",);
+    assert!(matches!(status, Some(SuggestStatus::NoMatch)), "expected NoMatch, got {status:?}");
 }
 
 /// Happy-path `assign`: persists the assignment row and emits an audit event.
