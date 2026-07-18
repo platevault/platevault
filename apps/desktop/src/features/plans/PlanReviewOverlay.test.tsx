@@ -263,6 +263,14 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Deleted, not moved')).toBeInTheDocument();
+    // #606: From and To must render TOGETHER for the same row — the item's
+    // own row, not just somewhere in the table — so a reviewer can see both
+    // sides of the move without cross-referencing.
+    const row = screen.getByTestId('plan-review-item-0');
+    expect(row).toHaveTextContent('calibrated/light_001.xisf');
+    expect(row).toHaveTextContent(
+      '.astro-plan-archive/plan-1/item-0-light_001.xisf',
+    );
   });
 
   it('keeps Approve & apply disabled until protected items are acknowledged', async () => {

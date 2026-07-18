@@ -6,10 +6,11 @@
  * Post-split selection handoff (issue #755 CI fix, PR #854).
  *
  * `reclassify_v2` operates at source-group scope and re-splits the group
- * into new single-type sub-items (R-14). The previously-selected item can
- * silently stop existing after a bulk/per-file reclassify (the group it
- * belonged to no longer exists), leaving the Confirm gate (`InboxPage.tsx`
- * `canConfirm`) permanently disabled — this is exactly what the Real-UI e2e
+ * into new single-type sub-items (R-14), so the previously-selected item id
+ * (issue #644: selection is id-based, `?selected=<id>`, not a list index)
+ * can silently stop existing after a bulk/per-file reclassify, leaving the
+ * Confirm gate (`InboxPage.tsx` `canConfirm`) permanently disabled — this is
+ * exactly what the Real-UI e2e
  * `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm` caught.
  * (Selection itself is by item id, not list index — issue #644.)
  *
@@ -34,7 +35,7 @@
  *    InboxPage's handoff logic depends on. Proves the CONTRACT between the
  *    two components without needing a router.
  */
-import React from 'react';
+import type React from 'react';
 import {
   render as rtlRender,
   screen,
@@ -153,7 +154,7 @@ describe('resolveReclassifyHandoff (bounded pendingReclassifySelectionId lifetim
     ).toEqual({ action: 'wait' });
   });
 
-  it('navigates to the item id once settled and visible (issue #644)', async () => {
+  it('navigates to the item by id once settled and visible', async () => {
     const { resolveReclassifyHandoff } = await import('../InboxPage');
 
     const items = [

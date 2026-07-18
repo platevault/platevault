@@ -37,7 +37,7 @@
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { queryKeys } from '@/data/queryKeys';
@@ -65,6 +65,7 @@ import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
 import type { InboxBreakdownTarget, InboxListItem } from './store';
 import {
+  inboxClassifyQueryKey,
   mergeRescanRoots,
   normalizeConfirmError,
   useApplySelectedInboxPlans,
@@ -120,19 +121,21 @@ export type ReclassifyHandoffDecision =
 
 /**
  * Decide what the post-split selection handoff should do THIS render (issue
- * #755 CI fix round 3). Bounded lifetime: `pendingId` must not stay set
- * forever just because the active search/kind filter happens to hide the
- * post-split item — that would gate `useStaleSelectionCleanup` open
- * indefinitely for everything else on the page.
+ * #755 CI fix round 3; adapted for issue #644's id-based `?selected=<id>`
+ * scheme — selection is no longer a list index, so there is no index to
+ * navigate to, only the id itself, once it's confirmed reachable). Bounded
+ * lifetime: `pendingId` must not stay set forever just because the active
+ * search/kind filter happens to hide the post-split item — that would gate
+ * `useStaleSelectionCleanup` open indefinitely for everything else on the
+ * page.
  *
  * Judges "arrived" vs "genuinely not coming back" against the UNFILTERED
  * `items` list (only once it has settled — `listLoading === false` — so a
  * refetch already in flight isn't mistaken for "never arriving"). Once
  * settled: absent from `items` entirely → give up (nothing will ever
  * appear); present in `items` but absent from `filteredItems` → give up too
- * (it exists, but the user's own filter hides it — selecting it would show
- * nothing); present in both → navigate to it (issue #644: selection is the
- * item's own id, so the target IS `pendingId`, no index lookup needed).
+ * (it exists, but the user's own filter hides it — there is nothing visible
+ * to select); present in both → navigate to it by id.
  */
 export function resolveReclassifyHandoff(
   pendingId: string,
@@ -173,6 +176,7 @@ const EMPTY_ITEMS: InboxListItem[] = [];
 export function InboxPage() {
   const { selected, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
+  const queryClient = useQueryClient();
 
   // FR-001 / FR-002: cross-root aggregate list replaces the hardcoded scan.
   const {
@@ -322,13 +326,43 @@ export function InboxPage() {
     [navigate],
   );
 
-  /** `InboxDetail`'s reclassify_v2 callback: queue the post-split handoff. */
+  /**
+   * `InboxDetail`'s reclassify_v2 callback: queue the post-split handoff, OR
+   * — when there is nothing to hand off to — force-refetch the CURRENTLY
+   * selected item's own classification.
+   *
+   * `reclassify_v2` only emits `subItems` when it re-splits a source group
+   * into separate materialized rows (R-14); a group that resolves to exactly
+   * the item already selected (single-type, no missing attrs — nothing to
+   * split) can report an empty/unusable `subItems` list. Relying SOLELY on
+   * the handoff left the confirm gate + "frame types required" banner stuck
+   * on the pre-reclassify state forever in that case — nothing ever asked
+   * the CURRENT selection to re-derive (CI-red,
+   * `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`). The
+   * force-refetch is safe unconditionally: if a handoff ALSO starts and
+   * later moves selection to a new id, this just refetches a query for an
+   * item that's about to fall out of view anyway.
+   */
   const handleReclassified = useCallback(
     (response: InboxReclassifyV2Response) => {
       const targetId = pickReclassifyTarget(response.subItems);
-      if (targetId) setPendingReclassifySelectionId(targetId);
+      if (targetId) {
+        setPendingReclassifySelectionId(targetId);
+        return;
+      }
+      if (selectedItem) {
+        void queryClient.invalidateQueries({
+          queryKey: inboxClassifyQueryKey(
+            selectedItem.rootAbsolutePath,
+            selectedItem.inboxItemId,
+          ),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.metadata(selectedItem.inboxItemId),
+        });
+      }
     },
-    [],
+    [selectedItem, queryClient],
   );
 
   // Completes (or abandons) the handoff once the invalidated list query has
@@ -370,7 +404,6 @@ export function InboxPage() {
   );
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
-  //
   // Issue #643: `loading`/`error` used to be discarded here, so a metadata
   // fetch that never lands (or errors) left `fileMetadata` at its `[]`
   // default — `hasMissingRequiredMeta` below then saw no files at all and
@@ -1068,9 +1101,27 @@ export function InboxPage() {
         detail={
           selectedItem != null ? (
             <InboxDetail
-              // Remount per item so per-item state (pending type overrides)
-              // never leaks across selections.
-              key={selectedItem.inboxItemId}
+              // Remount per SOURCE GROUP (not per raw item id) so per-item
+              // state (pending overrides, the "Needs review" bulk-select /
+              // frame-type / exposure fields) never leaks across a genuinely
+              // different selection, but SURVIVES the involuntary id churn
+              // classify()'s own materialize_sub_items performs on the very
+              // FIRST classify of a freshly scanned item (placeholder row
+              // purged, replaced by a fresh-UUID needs-review sub-item —
+              // `useInboxReclassifyV2`'s docstring above, `classify.rs`'s
+              // `materialize_sub_items`). Keying on `inboxItemId` remounted
+              // InboxDetail — wiping `selectedFiles`/`bulkFrameType` — the
+              // instant that churn landed, mid-sequence, silently no-opping
+              // the bulk-reclassify Apply click (CI-red,
+              // `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`
+              // — `allReclassifyV2CallCount` in the CI dump proved the click
+              // never reached a real command). The materialized sub-item
+              // always carries the SAME `sourceGroupId` as the placeholder it
+              // replaced (`classify.rs`'s `sg_id_for_split`), so this key is
+              // stable across exactly that transition while still changing
+              // for an unrelated row (a different source group, or a legacy
+              // pre-source-group item, where it falls back to the item id).
+              key={selectedItem.sourceGroupId ?? selectedItem.inboxItemId}
               item={selectedItem}
               rootAbsolutePath={selectedRootPath}
               classification={classification ?? null}

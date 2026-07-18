@@ -63,6 +63,17 @@ export interface PlanApplyProgress {
   /** Run id needed to call `plan.resume`; set once a pause or the initial
    * apply response reports one. */
   runId: string | null;
+  /**
+   * `true` immediately after a successful `plan.resume` call, until the
+   * first `plans.apply.status` poll (below) lands. Issue #575 (backend
+   * `spawn_executor_run` shared by apply and resume) is fixed — the run DOES
+   * continue — but `plan.resume`'s response carries no event channel, so
+   * there is nothing to await for a "first real update" the way `run()` has.
+   * This is a brief, honest "reconnecting" placeholder, not a permanent
+   * dead-end: `running` flips true and polling starts in the same tick (see
+   * `resume` below).
+   */
+  resumeStalled: boolean;
 }
 
 const IDLE: PlanApplyProgress = {
@@ -75,6 +86,7 @@ const IDLE: PlanApplyProgress = {
   paused: false,
   pauseReason: null,
   runId: null,
+  resumeStalled: false,
 };
 
 /** Extract a numeric `itemsTotal` from an event payload when present. */
@@ -97,7 +109,6 @@ function readStringField(payload: unknown, field: string): string | null {
 
 export function usePlanApplyProgress() {
   const [progress, setProgress] = useState<PlanApplyProgress>(IDLE);
-
   // Issue #744 (FR-002): `plan.resume` returns no event channel, so a
   // resumed run's ongoing progress (which, since #575, genuinely continues)
   // is only observable by polling `plans.apply.status`. Ref (not state) so
@@ -210,6 +221,7 @@ export function usePlanApplyProgress() {
       failed: status.itemsFailed,
       total: status.itemsTotal,
       runId: status.runId ?? prev.runId,
+      resumeStalled: false,
       paused: status.planState === 'paused',
       pauseReason:
         status.planState === 'paused' ? (status.pauseReason ?? null) : null,
@@ -243,6 +255,7 @@ export function usePlanApplyProgress() {
           running: true,
           paused: false,
           pauseReason: null,
+          resumeStalled: true,
         }));
         stopResumePolling();
         pollTimerRef.current = setInterval(() => {
