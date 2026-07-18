@@ -21,7 +21,7 @@ casing — camelCase on the wire). The legacy `guided.*` operations and
 Read the full onboarding projection for UI hydration.
 
 - **Request**: empty.
-- **Response**: `{ items: [{ itemId, page, state, at, source, prerequisite: { met, reasonKey, jumpPage } | null, hasAutoTick }], flags: { orientationDone, sectionHidden, sidebarCollapsed }, progress: { done, total, perPage: [{ page, done, total }] } }` — `sectionHidden` covers both explicit removal (FR-013) and completion auto-hide (FR-031).
+- **Response**: `{ state: { items: [{ itemId, page, state, at, source, prerequisite: { met, reasonKey, jumpPage } | null, hasAutoTick }], flags: { orientationDone, sectionHidden, sidebarCollapsed }, progress: { done, total, perPage: [{ page, done, total }] } } }` — the payload is nested under a `state` envelope (`OnboardingStateGetResponse.state` / `OnboardingRestoreResponse.state`); `sectionHidden` covers both explicit removal (FR-013) and completion auto-hide (FR-031).
 - **Errors**: `db_failure`.
 
 ### `onboarding.item.set_state` (command `onboarding_item_set_state`)
