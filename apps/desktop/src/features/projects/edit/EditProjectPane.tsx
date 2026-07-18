@@ -118,7 +118,6 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     defaultValues: {
       name: project.name,
       tool: toToolValue(project.tool),
-      notes: project.notes ?? '',
     },
     mode: 'onSubmit',
   });
@@ -128,7 +127,6 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     reset({
       name: project.name,
       tool: toToolValue(project.tool),
-      notes: project.notes ?? '',
     });
     setChannels(project.channels ?? []);
     // Reset transient source-editing UI on a fresh project (e.g. after an

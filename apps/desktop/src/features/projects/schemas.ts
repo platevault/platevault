@@ -34,7 +34,6 @@ import { m } from '@/lib/i18n';
 // added, prefer asserting against it instead of this duplicated literal.
 // schemas.test.ts pins this value so a drift is caught on either side.
 export const MAX_NAME_LEN = 120;
-export const MAX_NOTES_LEN = 4096;
 
 /**
  * Processing-tool values the create/edit forms expose. The generated
@@ -72,10 +71,14 @@ export const projectNameSchema = z
 
 /**
  * Fields the user edits in EditProjectPane. The original manual validation only
- * enforced the name rule (required, ≤120); tool and notes had no inline error.
- * We preserve that exactly — tool/notes are present in the schema (so RHF tracks
- * them) but carry no failing constraint beyond the contract enum / notes length
- * that the prior form also implicitly allowed.
+ * enforced the name rule (required, ≤120); tool had no inline error. We
+ * preserve that exactly — tool is present in the schema (so RHF tracks it) but
+ * carries no failing constraint beyond the contract enum.
+ *
+ * `notes` was removed (#790 follow-up): it bound the orphaned
+ * `ProjectDetailDto.notes` field, which no surface displays (the one real
+ * project-notes UI is `ProjectNotesSection`, spec 024) — carrying it here just
+ * re-introduced the same dead field the pane's `notes` input removal fixed.
  */
 export const editProjectFormSchema = z.object({
   name: z
@@ -87,12 +90,6 @@ export const editProjectFormSchema = z.object({
       m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) }),
     ),
   tool: projectToolSchema,
-  notes: z
-    .string()
-    .max(
-      MAX_NOTES_LEN,
-      m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) }),
-    ),
 });
 
 export type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;

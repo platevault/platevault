@@ -138,4 +138,31 @@ describe('ProjectsTable', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Name' }));
     expect(onSort).toHaveBeenCalledWith('name');
   });
+
+  it('(#720 SC-001) a blocked row carries the real blocked reason as title + aria-label, not a bare icon', () => {
+    const blockedProjects: ProjectSummaryDto[] = [
+      {
+        id: 'proj-blocked',
+        name: 'Cave Nebula attempt',
+        tool: 'Siril',
+        lifecycle: 'blocked',
+        path: 'projects/Cave_attempt',
+        blockedReasonKind: 'calibration_unmatched',
+        blockedReasonNote: 'Missing calibration masters for SII filter',
+        channelDrift: false,
+        sourceCount: 1,
+        createdAt: '2026-06-01T00:00:00Z',
+        updatedAt: '2026-06-10T00:00:00Z',
+      },
+    ];
+    renderTable({ projects: blockedProjects });
+    const icon = screen.getByRole('img', {
+      name: 'Blocked: Calibration set missing',
+    });
+    expect(icon).toBeInTheDocument();
+    expect(icon.closest('span[title]')).toHaveAttribute(
+      'title',
+      'Calibration set missing',
+    );
+  });
 });
