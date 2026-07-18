@@ -45,23 +45,27 @@ describe('T072: release build dev surface gate', () => {
     expect(wrapped).toBe(original);
   });
 
-  it('setInvokeOverride with null stops routing invoke() through the override', async () => {
-    const ipc = await import('@/api/ipc');
-    const overrideCall = vi.fn().mockResolvedValue('override-result');
+  it('setInvokeOverride(null) stops routing generated commands through the override', async () => {
+    const { setInvokeOverride } = await import('@/api/ipc');
+    const { commands } = await import('@/bindings');
+    const seen: string[] = [];
+    const overrideCall = vi.fn((cmd: string) => {
+      seen.push(cmd);
+      return Promise.resolve([]);
+    });
 
-    // While an override is installed, invoke() routes through it.
-    ipc.setInvokeOverride(overrideCall);
-    await expect(ipc.invoke('some_command', {})).resolves.toBe(
-      'override-result',
-    );
-    expect(overrideCall).toHaveBeenCalledWith('some_command', {});
+    // While an override is installed, a generated command dispatches through it
+    // — the bindings route via the IPC switcher, not @tauri-apps/api/core.
+    setInvokeOverride(overrideCall);
+    await commands.sessionsList();
+    expect(seen).toContain('sessions_list');
 
     // Clearing it (release-build state) must stop dispatching through the
-    // override. There's no real Tauri runtime in jsdom, so invoke() rejects
-    // here — the assertion is that it did NOT go through overrideCall.
-    ipc.setInvokeOverride(null);
+    // override. There's no real Tauri runtime in jsdom, so the real invoke
+    // rejects here — the assertion is that it did NOT go through the override.
+    setInvokeOverride(null);
     overrideCall.mockClear();
-    await ipc.invoke('some_command', {}).catch(() => {});
+    await commands.sessionsList().catch(() => {});
     expect(overrideCall).not.toHaveBeenCalled();
   });
 
