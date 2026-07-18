@@ -12,6 +12,8 @@
 //! Migration 0061 added `target_favourite` (spec 051 US2).
 //! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
 //! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
+//! Migration 0069 replaced the spec-010 `guided_flow_state` table with
+//! `onboarding_state`/`onboarding_flags` (spec 056).
 
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
@@ -97,9 +99,10 @@ impl Database {
     /// database error if the reconciliation scan fails.
     // Touched for #773 (migration 0066), again for spec 008 Q27's migration
     // 0067 (renumbered from a 0066 collision with #773's own
-    // 0066_session_notes.sql), and again for its renumber to 0068 (a second
+    // 0066_session_notes.sql), again for its renumber to 0068 (a second
     // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
-    // main independently) — to force `sqlx::migrate!` re-embed each time
+    // main independently), and again for spec 056's migration 0069
+    // (onboarding redesign) — to force `sqlx::migrate!` re-embed each time
     // (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;

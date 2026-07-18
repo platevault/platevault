@@ -85,6 +85,9 @@ pub mod inbox_plan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;
+/// Onboarding use cases and item registry (spec 056) — successor to
+/// [`guided_flow`], which stays until the spec 056 deletion lane removes it.
+pub mod onboarding;
 /// Path-set overlap comparison for the cross-plan concurrency guard
 /// (spec 025 FR-017 / R-Concur-1). Pure, camino-only helper consumed by
 /// [`plan_apply`]; relocated here after the vestigial `fs/planner` crate was

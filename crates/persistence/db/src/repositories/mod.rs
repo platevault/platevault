@@ -14,6 +14,12 @@
 //! Spec 013/023 gen-2 target repository (`targets`) removed by spec 036.
 //! Spec 023 US2/US3/US4 target history + notes queries live in `targets`.
 //! Spec 051 US2 target favourites queries live in `target_favourites`.
+//!
+//! Spec 056 onboarding redesign lives in `onboarding` (per-item state +
+//! section flags, migration 0069). `guided_flow` (spec 010) stays until the
+//! spec 056 deletion lane removes it; its table was dropped by migration
+//! 0069, so its own tests fail at runtime until that lane lands (expected,
+//! atomic-landing risk documented in specs/056-onboarding-redesign/research.md R7).
 
 pub mod artifacts;
 pub mod audit;
@@ -28,6 +34,7 @@ pub mod inbox;
 pub mod inventory;
 pub mod lifecycle;
 pub mod manifests;
+pub mod onboarding;
 pub mod plan_apply;
 pub mod plans;
 pub mod prepared_source_views;
