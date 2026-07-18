@@ -13,7 +13,9 @@
 //! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
 //! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
 
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use std::str::FromStr;
+
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 
 pub mod operation_state;
 /// Reference pattern for the centralized typed persistence layer (sea-query +
@@ -67,11 +69,29 @@ impl Database {
     /// `connection_string` should be a `sqlite://`-prefixed path or the special
     /// value `sqlite::memory:` for an in-process ephemeral store.
     ///
+    /// Explicitly requests WAL journaling (#830): sqlx's default journal mode
+    /// is whatever the on-disk file already uses, which for a freshly created
+    /// file is SQLite's own default, rollback-journal (`DELETE`) mode. Under
+    /// rollback-journal, a writer holds an exclusive lock on the *whole file*
+    /// for the life of its transaction, so a background reader (e.g. the
+    /// desktop poller's `registered_sources`/`inbox_items` queries) sharing
+    /// this same pool blocks behind any concurrent writer (plan apply, audit,
+    /// `events` inserts) until `busy_timeout` elapses or the writer commits —
+    /// this is the slow-query pattern from #830, not a missing index or an
+    /// oversized transaction (`events` inserts are single-statement, see
+    /// `repositories::events::insert_event`). WAL lets readers proceed
+    /// concurrently with a single writer, removing that contention class.
+    /// `synchronous` is left at SQLite's default (`FULL`) — WAL commits are
+    /// already fsynced at that setting, so durability of the audit record
+    /// (constitution II/V) is unchanged; only the locking model differs.
+    ///
     /// # Errors
     ///
     /// Returns [`DbError::Database`] if the pool cannot connect to the given URL.
     pub async fn connect(connection_string: &str) -> DbResult<Self> {
-        let pool = SqlitePoolOptions::new().max_connections(8).connect(connection_string).await?;
+        let options =
+            SqliteConnectOptions::from_str(connection_string)?.journal_mode(SqliteJournalMode::Wal);
+        let pool = SqlitePoolOptions::new().max_connections(8).connect_with(options).await?;
         Ok(Self { pool })
     }
 
