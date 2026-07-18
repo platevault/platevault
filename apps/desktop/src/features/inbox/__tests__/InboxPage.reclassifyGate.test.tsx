@@ -378,7 +378,26 @@ describe('InboxDetail survives the involuntary id churn from the FIRST classify 
     await queryClient.invalidateQueries({ queryKey: ['inbox', 'all'] });
     setSearch((prev) => ({ ...prev, selected: NEW_ID }));
 
-    await waitFor(() => expect(getSearch().selected).toBe(NEW_ID));
+    // `getSearch().selected` flips synchronously inside `setSearch` above,
+    // but `useInboxClassification`'s query key is keyed on `inboxItemId`, so
+    // switching to NEW_ID starts a genuinely NEW (uncached) query — the
+    // classification prop InboxDetail receives briefly drops to `null` while
+    // it resolves, hiding the whole "needs review" section (including
+    // `reclassify-select-all`) for a real, non-flaky render tick. Waiting on
+    // `getSearch().selected` (or forcing a synchronous flush via `act`) can
+    // resolve/assert BEFORE that fetch lands, and — worse — the assertions
+    // below would ALSO trivially pass against the stale PRE-swap DOM (both
+    // items were driven through the identical select-all + frame-type
+    // interaction above, so "checked" + "value === light" don't by
+    // themselves distinguish old from new). Anchor on `mockInboxClassify`
+    // having actually been called for NEW_ID instead — that can only become
+    // true once InboxPage has genuinely re-rendered against the swapped
+    // selection, giving the DOM assertions after it an unambiguous target.
+    await waitFor(() =>
+      expect(mockInboxClassify).toHaveBeenCalledWith(
+        expect.objectContaining({ inboxItemId: NEW_ID }),
+      ),
+    );
 
     // The regression: with the pre-fix `key={inboxItemId}`, this id swap
     // remounts InboxDetail — resetting `selectedFiles`/`bulkFrameType` to
@@ -387,12 +406,12 @@ describe('InboxDetail survives the involuntary id churn from the FIRST classify 
     // (`key={sourceGroupId ?? inboxItemId}`, both items share 'sg-1'), the
     // SAME component instance survives, and the just-set values are still
     // there to submit.
-    const selectAllAfter = screen.getByTestId('reclassify-select-all');
-    const bulkFrameTypeAfter = screen.getByTestId(
-      'bulk-frame-type',
-    ) as HTMLSelectElement;
-    expect(selectAllAfter).toBeChecked();
-    expect(bulkFrameTypeAfter.value).toBe('light');
+    await waitFor(() => {
+      expect(screen.getByTestId('reclassify-select-all')).toBeChecked();
+      expect(
+        (screen.getByTestId('bulk-frame-type') as HTMLSelectElement).value,
+      ).toBe('light');
+    });
 
     screen.getByTestId('bulk-apply-btn').click();
     await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
