@@ -1097,9 +1097,9 @@ export function InboxPage() {
                 count: bulkEligibleItems.length,
               })}
               data-testid="inbox-bulk-confirm-btn"
-              // Guided-tour target (spec 010/041). The redesign moved the
-              // page-level confirm to this bulk-confirm action; keep the
-              // `inbox.confirm-row` anchor on it so the tour still resolves.
+              // Onboarding find-it spotlight anchor (spec 056 FR-026). The
+              // canonical `inbox.confirm-row` anchor lives on this page-level
+              // bulk-confirm action so the spotlight resolves it.
               data-guide-anchor="inbox.confirm-row"
             >
               {bulkConfirmLoading

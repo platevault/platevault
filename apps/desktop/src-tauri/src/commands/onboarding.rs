@@ -8,7 +8,7 @@
 //! so the generated invoke strings match the Tauri registration).
 //!
 //! Also hosts [`start_onboarding_subscriber`]: the bus→persistence tick bridge
-//! (research R5). Unlike the removed `start_guided_event_forwarder` (which only
+//! (research R5). Unlike the removed spec-010 forwarder (which only
 //! *re-emitted* topics for the webview to act on), this subscriber is
 //! backend-authoritative — it maps each domain-completion topic to its
 //! registry item, applies the item's payload filter, persists the tick

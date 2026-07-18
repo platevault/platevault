@@ -23,7 +23,7 @@ import {
 	test,
 	expect,
 	seedSetupComplete,
-	disableGuidedTourOverlay,
+	disableOnboarding,
 } from "./support/harness";
 
 test.describe("adaptive detail-panel dock (spec 054 / #936)", () => {
@@ -33,7 +33,7 @@ test.describe("adaptive detail-panel dock (spec 054 / #936)", () => {
 		seedSetupComplete(page);
 		await page.setViewportSize({ width: 1600, height: 900 });
 		await page.goto("/#/calibration");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.locator(".alm-calib-table")).toBeVisible({
 			timeout: 8_000,
 		});
@@ -62,7 +62,7 @@ test.describe("adaptive detail-panel dock (spec 054 / #936)", () => {
 		seedSetupComplete(page);
 		await page.setViewportSize({ width: 1024, height: 768 });
 		await page.goto("/#/calibration");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.locator(".alm-calib-table")).toBeVisible({
 			timeout: 8_000,
 		});
@@ -79,7 +79,7 @@ test.describe("adaptive detail-panel dock (spec 054 / #936)", () => {
 		await expect(detail).toHaveClass(/alm-listpage__detail--side/);
 
 		await page.reload();
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await page
 			.locator(".alm-calib-table__row")
 			.filter({ hasText: "Master Dark · 120s" })

@@ -3,11 +3,8 @@
 
 //! Onboarding use cases and item registry (spec 056).
 //!
-//! Successor to the spec-010 `guided_flow` state machine
-//! (`crates/app/core/src/guided_flow.rs`, scheduled for removal by the
-//! spec 056 deletion lane, T010 — left untouched here; that file and this
-//! one intentionally coexist until T010 lands). Three layers share this one
-//! backend:
+//! Successor to the removed spec-010 first-project coach state machine.
+//! Three layers share this one backend:
 //! - L1 orientation walk: [`orientation_complete`] sets
 //!   `onboarding_flags.orientation_done_at`.
 //! - L2 checklists: [`get_state`]/[`set_item_state`]/[`section_set`] over

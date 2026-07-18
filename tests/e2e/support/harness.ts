@@ -64,15 +64,37 @@ export function seedSetupComplete(page: Page): void {
 }
 
 /**
- * Hide the spec-010 guided-tour joyride portal. It is explicitly non-modal
- * (`blockTargetInteraction: false`), so hiding it does not change behavior under
- * test — it only removes an unrelated onboarding overlay whose backdrop can
- * intercept clicks aimed at elements sharing a `data-guide-anchor` selector.
+ * Suppress all spec-056 onboarding surfaces (orientation walk, checklist
+ * accordion auto-expand, find-it spotlights) so their overlays never intercept
+ * clicks or steal focus from the surface under test.
+ *
+ * Sets the deterministic suppression flag the onboarding store reads
+ * (`isOnboardingSuppressed()` in `apps/desktop/src/features/onboarding/store.ts`,
+ * exported as `ONBOARDING_SUPPRESSED_STORE_ID`). Installed as an init script so
+ * the flag is present in localStorage before any app module evaluates — the
+ * store reads it at launch, so an after-load style/DOM tweak would be too late.
  */
-export async function disableGuidedTourOverlay(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: "#react-joyride-portal { display: none !important; }",
+export async function disableOnboarding(page: Page): Promise<void> {
+  // Init script: present before the app boots on the next (and every future)
+  // navigation — the deterministic pre-boot path (mirrors seedSetupComplete).
+  await page.addInitScript(() => {
+    window.localStorage.setItem("alm-onboarding-suppressed", "true");
   });
+  // Also set it on the already-loaded origin: the existing call sites invoke
+  // this after `page.goto`, and the onboarding store reads the flag live
+  // (`isOnboardingSuppressed()`), so writing now suppresses the current page
+  // too. A no-op (opaque origin) when called before the first navigation.
+  await page
+    .evaluate(() => {
+      try {
+        window.localStorage.setItem("alm-onboarding-suppressed", "true");
+      } catch {
+        /* opaque origin (about:blank) — the init script covers this case */
+      }
+    })
+    .catch(() => {
+      /* no page context yet — the init script covers this case */
+    });
 }
 
 /**

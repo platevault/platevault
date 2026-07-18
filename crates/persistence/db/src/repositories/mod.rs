@@ -6,7 +6,7 @@
 //! spec 008 projects, spec 018 settings,
 //! spec 017 plans, spec 025 plan apply runs/events, spec 012 artifacts,
 //! spec 016 source protection, spec 024 manifests/notes,
-//! spec 026 prepared source views, and spec 010 guided flow.
+//! and spec 026 prepared source views.
 //!
 //! Spec 008 Q27 framing layer (`framing`/`framing_session` +
 //! `acquisition_session` clustering-key geometry) lives in `framing`.
@@ -16,13 +16,9 @@
 //! Spec 051 US2 target favourites queries live in `target_favourites`.
 //!
 //! Spec 056 onboarding redesign lives in `onboarding` (per-item state +
-//! section flags, migration 0069). `guided_flow` (spec 010) stays fully
-//! functional — table included — until the spec 056 deletion lane (T010)
-//! removes it and drops `guided_flow_state` in migration 0070, atomically
-//! with the code deletion (orchestrator sequencing decision, run-onb-0718:
-//! migration 0069 deliberately does NOT drop the table, deviating from
-//! tasks.md T001's literal wording, so this crate's tests stay green between
-//! the two merges — see migration 0069's own header comment).
+//! section flags, migration 0069). The legacy spec-010 coach and its
+//! `guided_flow_state` table were removed by the spec 056 deletion lane
+//! (T010); migration 0070 drops the table.
 
 pub mod artifacts;
 pub mod audit;
@@ -32,7 +28,6 @@ pub mod equipment;
 pub mod events;
 pub mod first_run;
 pub mod framing;
-pub mod guided_flow;
 pub mod inbox;
 pub mod inventory;
 pub mod lifecycle;

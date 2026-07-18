@@ -3,8 +3,8 @@
 
 //! Rust-side contract DTOs for onboarding commands (spec 056).
 //!
-//! Replaces the removed `guided.*` operations and `tour.complete_step`
-//! (spec 010) — see `contracts/onboarding-commands.md`. Five commands:
+//! Replaces the removed spec-010 coach and tour operations — see
+//! `contracts/onboarding-commands.md`. Five commands:
 //! - `onboarding.state.get`          — read the full projection for UI hydration.
 //! - `onboarding.item.set_state`     — manual check-off or dismiss (FR-017).
 //! - `onboarding.orientation.complete` — mark the L1 walk finished/skipped.

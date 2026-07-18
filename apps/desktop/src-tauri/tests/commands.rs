@@ -44,7 +44,6 @@ use desktop_shell::commands::sessions::{
 
 use contracts_core::error_code::ErrorCode;
 use desktop_shell::commands::targets::{targets_get, targets_list};
-use desktop_shell::commands::tour::tour_complete_step;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -811,14 +810,6 @@ async fn search_global_queries_real_db() {
         res.unwrap().is_empty(),
         "search_global must return empty on fresh DB (no fixture data injected)"
     );
-}
-
-// ─── Tour (1 command) ───────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn stub_tour_complete_step() {
-    let res = tour_complete_step("step1".to_owned()).await;
-    assert!(res.is_ok(), "tour_complete_step failed: {res:?}");
 }
 
 // ─── Lifecycle commands (4 commands) ─────────────────────────────────────────

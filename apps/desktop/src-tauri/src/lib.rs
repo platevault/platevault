@@ -52,9 +52,6 @@ use crate::commands::equipment::{
 use crate::commands::firstrun::{
     firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
 };
-use crate::commands::guided::{
-    guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
-};
 use crate::commands::inbox::{
     inbox_classify, inbox_confirm, inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply,
     inbox_plan_apply_all, inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open,
@@ -133,7 +130,6 @@ use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
 };
-use crate::commands::tour::tour_complete_step;
 
 pub const CRATE_NAME: &str = "desktop_shell";
 
@@ -325,14 +321,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preferences_set,
         // search
         search_global,
-        // tour
-        tour_complete_step,
-        // guided first-project-flow (spec 010)
-        guided_state_get,
-        guided_step_complete,
-        guided_dismiss,
-        guided_restart,
-        guided_activate,
         // onboarding (spec 056)
         onboarding_state_get,
         onboarding_item_set_state,
@@ -578,14 +566,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preferences_set,
         // search
         search_global,
-        // tour
-        tour_complete_step,
-        // guided first-project-flow (spec 010)
-        guided_state_get,
-        guided_step_complete,
-        guided_dismiss,
-        guided_restart,
-        guided_activate,
         // onboarding (spec 056)
         onboarding_state_get,
         onboarding_item_set_state,
@@ -1063,9 +1043,6 @@ pub fn run_app(
     //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
-    //  - spec 010 (#722): guided-flow event forwarder → re-emits
-    //    inventory.confirmed/project.created/tool.launch as named events so
-    //    `eventBridge.ts` can advance the coach on real domain completions.
     app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
     crate::commands::log::start_log_forwarder(
         app.handle().clone(),
@@ -1073,7 +1050,6 @@ pub fn run_app(
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
-    crate::commands::guided::start_guided_event_forwarder(app.handle().clone(), &bus);
     drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
     // spec 056 (R5): backend-authoritative onboarding tick subscriber →
     // persists auto-ticks from domain-completion topics and emits

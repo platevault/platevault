@@ -22,9 +22,9 @@
  * `seedSetupComplete`'s `alm-preferences` channel). When set, all onboarding
  * surfaces (walk, accordion auto-expand, spotlights) suppress themselves.
  *
- * INTER-NODE CONTRACT: the T010 deletion lane's `disableOnboarding` harness
- * helper (replacing `disableGuidedTourOverlay`) MUST set exactly this
- * localStorage key to `'true'`.
+ * INTER-NODE CONTRACT: the e2e harness's `disableOnboarding` helper
+ * (tests/e2e/support/harness.ts) MUST set exactly this localStorage key to
+ * `'true'`.
  */
 
 import { useSyncExternalStore } from 'react';

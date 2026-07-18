@@ -68,7 +68,7 @@ import {
 	test,
 	expect,
 	seedSetupComplete,
-	disableGuidedTourOverlay,
+	disableOnboarding,
 } from "./support/harness";
 
 test.describe("calibration · masters listing + matching (spec 040 / 007)", () => {
@@ -80,7 +80,7 @@ test.describe("calibration · masters listing + matching (spec 040 / 007)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/calibration");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 
 		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
@@ -135,7 +135,7 @@ test.describe("calibration · masters listing + matching (spec 040 / 007)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/calibration");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.locator(".alm-calib-table")).toBeVisible({ timeout: 8_000 });
 
 		// m-1 (ageDays 245 > 90-day threshold) is flagged as aging IN-ROW.
@@ -188,7 +188,7 @@ test.describe("calibration · masters listing + matching (spec 040 / 007)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/projects");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
 		// Open proj-001's detail — this mounts ProjectBottomDetail, which renders
@@ -231,7 +231,7 @@ test.describe("calibration · masters listing + matching (spec 040 / 007)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/settings/cal");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
 		// The "Matching criteria" pane loads the persisted tolerances singleton.
