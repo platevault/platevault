@@ -17,7 +17,7 @@ per-project configuration — frontmatter holds the settings, the sections
 below hold the guidance agents need to run journeys here.
 
 Findings filed to GitHub also carry the matching `journey-<n>` label
-(existing taxonomy: `journey-1` … `journey-17` correspond to J01…J17).
+(existing taxonomy: `journey-1` … `journey-18` correspond to J01…J18).
 
 Two product rules cut across nearly every journey and are stated once here
 instead of being repeated per journey:
@@ -77,7 +77,8 @@ validation. Agent judgment bridges anything unmapped.
 | `apps/desktop/src/features/inbox/**` | inbox-confirm |
 | `apps/desktop/src/features/sessions/**` | sessions |
 | `apps/desktop/src/features/projects/**` | projects |
-| `apps/desktop/src/features/guided/**` | projects |
+| `apps/desktop/src/features/guided/**` | onboarding |
+| `apps/desktop/src/features/onboarding/**` | onboarding |
 | `apps/desktop/src/features/targets/**` | targets |
 | `apps/desktop/src/features/targets/observing-sites/**` | observing-sites |
 | `apps/desktop/src/features/calibration/**` | calibration |
