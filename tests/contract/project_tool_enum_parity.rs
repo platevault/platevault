@@ -40,8 +40,25 @@ fn processing_tool_enum(schema: &Value) -> BTreeSet<String> {
         .collect()
 }
 
+/// Every `ProjectTool` variant.
+///
+/// `ProjectTool` has no `strum::EnumIter` (production change, out of scope
+/// for a test-only fix), so this list is hand-maintained — but the match
+/// below has no wildcard arm, so adding a variant to `ProjectTool` without
+/// adding it here fails to *compile* instead of silently leaving this list,
+/// and every test built on it, under-inclusive.
+fn all_project_tools() -> [ProjectTool; 3] {
+    let tools = [ProjectTool::PixInsight, ProjectTool::Siril, ProjectTool::PlanetarySuite];
+    for tool in tools {
+        match tool {
+            ProjectTool::PixInsight | ProjectTool::Siril | ProjectTool::PlanetarySuite => {}
+        }
+    }
+    tools
+}
+
 fn project_tool_serialized_values() -> BTreeSet<String> {
-    [ProjectTool::PixInsight, ProjectTool::Siril, ProjectTool::PlanetarySuite]
+    all_project_tools()
         .iter()
         .map(|t| {
             serde_json::to_value(t)
@@ -75,13 +92,8 @@ fn project_update_schema_tool_enum_matches_project_tool_dto() {
 
 #[test]
 fn project_tool_dto_matches_domain_validate_tools_list() {
-    let dto_values: BTreeSet<&str> = [
-        ProjectTool::PixInsight.as_db_str(),
-        ProjectTool::Siril.as_db_str(),
-        ProjectTool::PlanetarySuite.as_db_str(),
-    ]
-    .into_iter()
-    .collect();
+    let dto_values: BTreeSet<&str> =
+        all_project_tools().iter().map(|t| t.as_db_str()).collect();
     let domain_values: BTreeSet<&str> = VALID_TOOLS.iter().copied().collect();
 
     assert_eq!(
