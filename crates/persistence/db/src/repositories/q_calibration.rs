@@ -136,6 +136,28 @@ pub async fn get_acquisition_fingerprint(
     Ok(row)
 }
 
+/// List `acquisition_fingerprint` rows for `light` sessions (candidates for
+/// a calibration master's "compatible sessions" list — #868).
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn list_light_acquisition_fingerprints(
+    pool: &SqlitePool,
+) -> DbResult<Vec<AcquisitionFingerprintRow>> {
+    let rows = sqlx::query_as::<_, AcquisitionFingerprintRow>(
+        "
+        SELECT id, session_type, gain, offset_val, exposure_s,
+               temp_c, filter_name, rotation_deg, binning, optic_train,
+               observing_night_date, has_observer_location, has_exposure_start_utc
+        FROM acquisition_fingerprint
+        WHERE session_type = 'light'
+        ",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// List `calibration_fingerprint` rows restricted to dark/flat/bias kinds.
 ///
 /// Callers apply any requested-kind narrowing in-memory (mirrors prior

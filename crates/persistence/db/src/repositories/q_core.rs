@@ -529,6 +529,9 @@ pub struct CalibrationAssignmentRow {
     pub calibration_type: String,
     pub confidence: f64,
     pub mismatched_dimensions: String,
+    /// #718 (spec 007 SC-003): persisted so a reopened session detail can
+    /// still distinguish an override assignment from a normal match.
+    pub was_override: bool,
 }
 
 /// Calibration matches assigned to a session.
@@ -540,7 +543,7 @@ pub async fn calibration_matches_for_session(
     session_id: &str,
 ) -> DbResult<Vec<CalibrationAssignmentRow>> {
     let rows = sqlx::query_as::<_, CalibrationAssignmentRow>(
-        "SELECT master_id, calibration_type, confidence, mismatched_dimensions
+        "SELECT master_id, calibration_type, confidence, mismatched_dimensions, was_override
          FROM calibration_assignment
          WHERE session_id = ?",
     )

@@ -387,6 +387,9 @@ pub struct SessionCalibrationLinkRow {
     pub calibration_type: String,
     pub confidence: f64,
     pub mismatched_dimensions: String,
+    /// #718 (spec 007 SC-003): persisted so a reopened session detail can
+    /// still distinguish an override assignment from a normal match.
+    pub was_override: bool,
 }
 
 /// Load calibration assignments for a set of session IDs in one query.
@@ -408,7 +411,7 @@ pub async fn list_calibration_matches_for_sessions(
 
     let placeholders = vec!["?"; session_ids.len()].join(",");
     let sql = format!(
-        "SELECT session_id, master_id, calibration_type, confidence, mismatched_dimensions
+        "SELECT session_id, master_id, calibration_type, confidence, mismatched_dimensions, was_override
          FROM calibration_assignment
          WHERE session_id IN ({placeholders})"
     );

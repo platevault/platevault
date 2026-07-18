@@ -12,6 +12,11 @@
  * pattern as SessionDetail's actionButtons. No `actions` prop passed to
  * DetailPanel. No subtitle (kind is already in the title, size is redundant).
  *
+ * #642: all three header actions are disabled with an explanatory `title`,
+ * not wired to fake IPC — none has a backing flow yet (no project-picker, no
+ * replace-master use case, no master file path on the contract for Reveal).
+ * Same "disabled, no fake handler" precedent as ArchivePage's Reveal button.
+ *
  * Data wiring:
  *   - master.usedBySessionIds from the list endpoint is always empty.
  *   - We fetch getCalibrationMaster(master.id) → MasterDetail_Serialize whose
@@ -291,16 +296,42 @@ export function MasterDetail({
           {missingFlagLabel(detail.missingFlag)}
         </Pill>
       )}
-      <Btn size="sm" variant="primary">
+      {/* #642: "Use in project" and "Replace master" had no onClick and no
+          data path to drive one — there is no project-picker or
+          replace-master flow wired anywhere in the app yet. Per the codebase
+          convention for not-yet-backed actions (see ArchivePage's disabled
+          Reveal), disable with an explanatory title rather than ship a dead
+          "live" button. */}
+      <Btn
+        size="sm"
+        variant="primary"
+        disabled
+        title={m.calibration_action_use_in_project_unavailable_title()}
+      >
         {m.calibration_action_use_in_project()}
       </Btn>
       {(isAging1Year || isAgingWarn) && (
-        <Btn size="sm" variant="danger">
+        <Btn
+          size="sm"
+          variant="danger"
+          disabled
+          title={m.calibration_action_replace_master_unavailable_title()}
+        >
           {m.calibration_action_replace_master()}
         </Btn>
       )}
-      {/* Platform-native label via the shared revealLabel() helper. */}
-      <Btn size="sm">{revealLabel()}</Btn>
+      {/* Platform-native label via the shared revealLabel() helper.
+          #642: no master file path is exposed by the backend (no `path`
+          field on CalibrationMaster/MasterDetail) — disabled, no fake IPC,
+          matching the ArchivePage Reveal precedent. */}
+      <Btn
+        size="sm"
+        disabled
+        title={m.calibration_reveal_unavailable_title()}
+        data-testid="calibration-reveal-btn"
+      >
+        {revealLabel()}
+      </Btn>
     </span>
   );
 
