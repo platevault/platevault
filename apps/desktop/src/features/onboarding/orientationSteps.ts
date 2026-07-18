@@ -33,8 +33,12 @@ export interface OrientationStop {
    * Tooltip placement. REQUIRED and never undefined: react-joyride's
    * `getFallbackPlacements` calls `placement.startsWith(...)` and the adapter
    * forwards the key verbatim, so an undefined placement throws in a render
-   * loop. Whole-page stops use `center` (centered copy over the dimmed page);
-   * the section stop anchors to its `right`.
+   * loop. Whole-page stops use `center`: the target (`.alm-frame__main`) fills
+   * the viewport, so an anchored placement (`auto`/`bottom`) has no room and
+   * the floater fails to render — `center` positions the copy on the viewport
+   * and keeps the full-page dim overlay (its own whole-page spotlight, FR-002;
+   * a per-element cutout of the whole page would be pointless). The section
+   * stop anchors to its `right` with a real cutout on the small target.
    */
   placement: 'center' | 'right';
 }
