@@ -16,10 +16,13 @@
 //! Spec 051 US2 target favourites queries live in `target_favourites`.
 //!
 //! Spec 056 onboarding redesign lives in `onboarding` (per-item state +
-//! section flags, migration 0069). `guided_flow` (spec 010) stays until the
-//! spec 056 deletion lane removes it; its table was dropped by migration
-//! 0069, so its own tests fail at runtime until that lane lands (expected,
-//! atomic-landing risk documented in specs/056-onboarding-redesign/research.md R7).
+//! section flags, migration 0069). `guided_flow` (spec 010) stays fully
+//! functional — table included — until the spec 056 deletion lane (T010)
+//! removes it and drops `guided_flow_state` in migration 0070, atomically
+//! with the code deletion (orchestrator sequencing decision, run-onb-0718:
+//! migration 0069 deliberately does NOT drop the table, deviating from
+//! tasks.md T001's literal wording, so this crate's tests stay green between
+//! the two merges — see migration 0069's own header comment).
 
 pub mod artifacts;
 pub mod audit;
