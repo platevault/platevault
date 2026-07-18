@@ -1043,11 +1043,44 @@ impl E2eApp {
         Ok(())
     }
 
-    /// Clear then type into the `<input data-testid=..>`.
+    /// Clear then type into the `<input data-testid=..>`, verifying the typed
+    /// value actually landed in the live DOM `.value` before returning —
+    /// retrying through render churn if it didn't.
+    ///
+    /// Unlike `select_testid` (which already verifies its committed value,
+    /// PR #457) and the search-input fill in `targets_journeys.rs` (verify +
+    /// retry after #841's "typed into the wrong/stale element" garble), this
+    /// helper previously trusted `clear()` + `send_keys()` blindly. On a
+    /// CONTROLLED React input inside a pane that re-renders as async queries
+    /// land (e.g. the Inbox bulk-property fields, which mount only once
+    /// `inbox.property_registry` resolves), a re-render racing the keystrokes
+    /// can silently drop or truncate them, leaving React state empty even
+    /// though `send_keys` itself reported success — the caller (`handleBulkApply`)
+    /// then skips the property entirely since it treats `''` as "unchanged".
     pub async fn fill_testid(&self, testid: &str, value: &str) -> Result<()> {
-        let el = self.find_testid(testid).await?;
-        el.clear().await.with_context(|| format!("clear {testid} failed"))?;
-        el.send_keys(value).await.with_context(|| format!("send_keys {testid} failed"))
+        let deadline = Instant::now() + DEFAULT_FIND_TIMEOUT;
+        loop {
+            let el = self.find_testid(testid).await?;
+            el.clear().await.with_context(|| format!("clear {testid} failed"))?;
+            el.send_keys(value).await.with_context(|| format!("send_keys {testid} failed"))?;
+            let live_value: String = self
+                .driver
+                .execute("return arguments[0].value;", vec![el.to_json()?])
+                .await
+                .with_context(|| format!("reading live .value of {testid} failed"))?
+                .convert()
+                .with_context(|| format!("failed to deserialize live .value of {testid}"))?;
+            if live_value == value {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                anyhow::bail!(
+                    "fill {testid}: value {value:?} never stuck (last read: {live_value:?}) \
+                     after retrying for {DEFAULT_FIND_TIMEOUT:?}"
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
     }
 
     /// Poll `driver.find(by)` until it resolves an element or
