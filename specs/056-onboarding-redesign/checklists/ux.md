@@ -23,8 +23,8 @@ decision record)
 - [x] CHK010 - Are prerequisite-state requirements complete: reason text, jump link destination, live clearing without reload? [Completeness, Spec §FR-010; Edge Cases]
 - [x] CHK011 - Are icon-collapsed requirements (progress ring semantics, non-modal popover, same component) specified? [Completeness, Spec §FR-011; research R10]
 - [x] CHK012 - Are default-expanded vs persisted-collapse rules non-conflicting and tied to a storage decision? [Consistency, Spec §FR-012; data-model §onboarding_flags]
-- [x] CHK013 - Is the 100%-complete end state defined (no auto-hide)? [Edge Case, Spec §FR-031; PQ-004]
-- [x] CHK014 - Is remove/restore behavior fully specified: one-line confirm, permanence, single restore control, idempotence, re-seed from real state? [Completeness, Spec §FR-013/FR-014]
+- [x] CHK013 - Is the completion end state defined (per-group collapse to a done header, full-section auto-hide on the last settle, restore resurfacing incl. the still-complete case)? [Edge Case, Spec §FR-031; PQ-004 resolved]
+- [x] CHK014 - Is remove/restore behavior fully specified: one-line confirm, permanence, single restore control, idempotence, automatic-items-only re-derivation with manual states preserved? [Completeness, Spec §FR-013/FR-014]
 - [x] CHK015 - Is first-activation seeding explicitly aligned with restore seeding (one derivation)? [Consistency, Spec §FR-014; PQ-001]
 
 ## Completion Semantics (backend-authoritative)

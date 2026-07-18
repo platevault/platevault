@@ -8,11 +8,14 @@ Orient an implementing agent in ~2 minutes. Details: [plan.md](plan.md),
 
 Three-layer onboarding replacing the spec 010 coach:
 
-- **L1 Orientation walk** — modal joyride tour of the real pages, once, right
-  after first-run setup; replay in Settings → Advanced.
+- **L1 Orientation walk** — modal joyride tour, once, right after first-run
+  setup: 6 stops = the 5 workflow pages + a final stop on the sidebar Getting
+  started section (L1→L2 bridge); replay in Settings → Advanced.
 - **L2 Getting Started checklists** — one sidebar accordion (Inbox, Sessions,
   Calibration, Targets, Projects), backend-authoritative auto-ticks from real
-  bus events, manual check/dismiss for the rest, permanent remove + restore.
+  bus events, manual check/dismiss for the rest; completed groups collapse to
+  a done header, fully-complete section auto-hides; explicit remove + Settings
+  restore (restore re-derives automatic items only — manual states preserved).
 - **L3 Find spotlight** — non-modal single-step joyride spotlight on the real
   control, five dismissal paths, never timeboxed.
 

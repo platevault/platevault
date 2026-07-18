@@ -36,7 +36,7 @@ parameterised checklist component.
 
 **Constraints**: backend-authoritative state (UI is a pure view); no new bus events minted in v1; restore-sourced events inert server-side; no demo data ever; reduced-motion parity; every string via Paraglide; ONE checklist component + one CSS class family; `dev-tools` feature gating untouched.
 
-**Scale/Scope**: 5 checklist pages × 2–4 items (≈14 items), ~6 orientation stops, 1 subscriber, ~4 commands, 1 migration; deletion of ~10 legacy files/surfaces ([research R7](research.md)).
+**Scale/Scope**: 5 checklist pages × 2–4 items (≈14 items), 6 orientation stops (5 workflow pages + the Getting-started section bridge stop, spec FR-002), 1 subscriber, ~4 commands, 1 migration; deletion of ~10 legacy files/surfaces ([research R7](research.md)).
 
 ## Constitution Check
 
@@ -129,9 +129,11 @@ replacing `features/guided/`.
    `run={steps.length > 0}` (#1211).
 3. **State model**: per-item rows (`unchecked | auto_checked |
    manually_checked | dismissed`, timestamp, source) + singleton flags
-   (orientation done, section removed, sidebar-collapse state) — see
+   (orientation done, section hidden — explicit removal or FR-031 completion
+   auto-hide — and sidebar-collapse state) — see
    [data-model.md](data-model.md). Seed and restore share one derivation
-   routine reading actual DB state (spec FR-014).
+   routine reading actual DB state, scoped to AUTOMATIC items only;
+   manually_checked/dismissed rows are never discarded (spec FR-014).
 4. **Deletion, not adaptation** ([research R7](research.md)): the full legacy
    inventory is removed in one lane; `data-guide-anchor` convention kept;
    duplicate `inbox.confirm-row` resolved to the InboxPage bulk-confirm

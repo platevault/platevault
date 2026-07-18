@@ -15,7 +15,7 @@ polish + cross-feature validation.
 - [ ] T001 Create migration `crates/persistence/db/migrations/0069_onboarding.sql`: `onboarding_state` (item_id PK, state CHECK unchecked|auto_checked|manually_checked|dismissed, at, source CHECK seed|event|user), `onboarding_flags` singleton (orientation_done_at, section_removed_at, sidebar_collapsed), `DROP TABLE IF EXISTS guided_flow_state`; leave `0030_guided_flow.sql` untouched; renumber if 0069 is claimed by a parallel merge (research R6)
 - [ ] T002 [P] Add onboarding DTOs in `crates/contracts/core/src/onboarding.rs` per `contracts/onboarding-commands.md` (state.get / item.set_state / orientation.complete / section.set / restore + notification payload) and register `pub mod onboarding` in `crates/contracts/core/src/lib.rs`
 - [ ] T003 Add repository boundary `crates/persistence/db/src/repositories/onboarding.rs`: read projection, idempotent tick write (settled states never downgraded), flags upsert, seed/restore write path; unit tests against real migrations (touch `crates/persistence/db/src/lib.rs` for sqlx re-embed)
-- [ ] T004 Add `crates/app/core/src/onboarding.rs`: item registry (item_id, page, completion_topic per research R4 verified table, payload_filter `tool.launch → outcome=="spawned"`, prerequisite, seed_query, anchor) + use cases (get_state, set_item_state, orientation_complete, section_set, restore) with the SINGLE seed/restore derivation reading real tables (FR-014); registry unit tests assert only verified topics appear
+- [ ] T004 Add `crates/app/core/src/onboarding.rs`: item registry (item_id, page, completion_topic per research R4 verified table, payload_filter `tool.launch → outcome=="spawned"`, prerequisite, seed_query, anchor) + use cases (get_state, set_item_state, orientation_complete, section_set, restore) with the SINGLE seed/restore derivation reading real tables (FR-014 — re-derives AUTOMATIC items only; manually_checked/dismissed rows preserved) and the shared settle path that sets `section_hidden_at` when the last open item settles across all groups (FR-031 auto-hide); registry unit tests assert only verified topics appear
 
 ## Phase 2: Foundational (subscriber, commands, adapter, deletion lane)
 
@@ -38,7 +38,7 @@ Escape; done-forever; replay from Settings → Advanced (FR-001…FR-005).
 **Independent test**: fresh profile → wizard finish → walk runs → skip/finish
 never auto-runs again; replay works (spec US1 scenarios).
 
-- [ ] T012 [US1] Define walk stops (~6 real pages, workflow order) with whole-page spotlight targets + copy keys in `apps/desktop/src/features/onboarding/orientationSteps.ts`
+- [ ] T012 [US1] Define the 6 walk stops (the 5 FR-006 workflow pages in workflow order + the final stop anchored on the sidebar Getting started section introducing the checklists, FR-002 L1→L2 bridge) with spotlight targets + copy keys in `apps/desktop/src/features/onboarding/orientationSteps.ts`
 - [ ] T013 [US1] Implement `OrientationWalk.tsx` in `apps/desktop/src/features/onboarding/` on the T009 adapter: modal mode, real route navigation per stop, Next/Back/Skip on every stop, Escape=skip, focus trap kept, aria-live stop announcements
 - [ ] T014 [US1] Wire launch + completion: auto-run when first-run completed AND `orientationDone` false AND suppression flag absent; call `onboarding_orientation_complete` on finish/skip; mid-walk app close leaves it not-done (FR-004)
 - [ ] T015 [US1] Add replay control in Settings → Advanced (`apps/desktop/src/features/settings/`), adjacent to the T027 restore control placement
@@ -59,7 +59,7 @@ popover, persistence.
 - [ ] T018 [US2] Mount the section in the sidebar above the pinned Settings entry (`apps/desktop/src/` app shell/sidebar component): overall progress line, groups in workflow-stage order, current route's group auto-expanded, others one-line with done/total counts, expanded by default on first visit, collapse persisted via `onboarding_section_set`
 - [ ] T019 [US2] Implement prerequisite presentation: reason string (Paraglide) + jump link navigating to the upstream page; prerequisite satisfaction computed live from T004 data, clearing without reload (FR-010, spec edge case)
 - [ ] T020 [US2] Icon-collapsed mode: progress-ring icon (`role="progressbar"`, `aria-valuenow`) opening the SAME checklist component as a non-modal popover (FR-011)
-- [ ] T021 [P] [US2] Playwright mock specs: accordion semantics (expand-by-route, counts, tooltip on focus, `aria-expanded`), popover open/close + non-modality, collapse persistence, 100%-complete state never auto-hides (FR-031)
+- [ ] T021 [P] [US2] Playwright mock specs: accordion semantics (expand-by-route, counts, tooltip on focus, `aria-expanded`), popover open/close + non-modality, collapse persistence, completed-group collapse to one-line done header + full-section auto-hide when the last item settles (FR-031)
 
 ## Phase 5: User Story 3 — Automatic Completion from Real Work (P3)
 
@@ -71,7 +71,7 @@ inertness (FR-015…FR-021).
 scenarios).
 
 - [ ] T022 [US3] Layer-1 integration tests (first bus-subscribing Layer-1 tests, VC-003) in `crates/app/core/tests/onboarding_ticks_integration.rs`: real use cases publish `inventory.confirmed` / `project.created` / `tool.launch`; T005 subscriber persists the correct tick; `tool.launch` with outcome != `spawned` does NOT tick; envelope `source=="restore"` is inert; settled items are never downgraded
-- [ ] T023 [US3] Layer-1 tests for seed/restore derivation in `crates/app/core/tests/onboarding_seed_integration.rs`: pre-existing confirmed inventory/projects/launches pre-tick on seed AND restore; unmet milestones stay unchecked; restore idempotent (FR-014, SC-004)
+- [ ] T023 [US3] Layer-1 tests for seed/restore derivation in `crates/app/core/tests/onboarding_seed_integration.rs`: pre-existing confirmed inventory/projects/launches pre-tick on seed AND restore; unmet milestones stay unchecked; manually_checked/dismissed rows survive restore untouched; restore clears `section_hidden_at`; settle of the final open item sets `section_hidden_at` (FR-031); restore idempotent (FR-014, SC-004)
 - [ ] T024 [US3] Implement completion choreography in the T017 component: check animation + brief row emphasis in place, then move to the completed (greyed, checked) area at the bottom of the group; auto-ticks additionally pulse the progress line / progress ring; `prefers-reduced-motion` applies final state instantly with zero animation/pulse (FR-018…FR-020); aria-live polite announcement per tick
 - [ ] T025 [P] [US3] Playwright mock specs: manual check-off + dismiss choreography, completed-area move, reduced-motion parity (state identical, no motion); document in-spec that auto-tick event flow is NOT covered in mock mode (VC-002 limit)
 
@@ -95,7 +95,7 @@ re-seeds from DB state (FR-013, FR-014).
 **Independent test**: spec US5 scenarios.
 
 - [ ] T029 [US5] Section-header small menu with "Remove getting started" + one-line confirm calling `onboarding_section_set removed=true`; hides section AND progress-ring icon permanently; active spotlight dismisses with it (spec edge case)
-- [ ] T030 [US5] Settings → Advanced restore/reset control calling `onboarding_restore`; returns section, re-seeded pre-ticks visible; idempotent double-restore (PQ-004/FR-014); place beside the T015 replay control
+- [ ] T030 [US5] Settings → Advanced restore/reset control calling `onboarding_restore`; unhides after explicit removal AND after completion auto-hide, re-derived automatic pre-ticks visible, manual/dismissed states preserved, still-complete section stays visible until a new settle (FR-014/FR-031); idempotent double-restore; place beside the T015 replay control
 - [ ] T031 [P] [US5] Playwright mock specs: remove → hidden across reload; restore → section back with mock pre-ticked state; confirm copy from Paraglide keys
 
 ## Phase 8: Polish & Cross-Feature Validation

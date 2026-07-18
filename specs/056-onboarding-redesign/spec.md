@@ -59,15 +59,18 @@ that go beyond the literal record are provisional and are also logged in
   already-met milestones from the moment the section first appears
   (provisional).
 - Q: Can an individual manually-checked or dismissed item be reverted? → A: No
-  per-item undo in v1; the single Settings → Advanced restore/reset is the only
-  revert path (provisional).
+  per-item undo in v1; manual states are permanent — restore re-derives
+  automatic items only and never discards user progress (provisional; scope
+  narrowed by review fix 2026-07-18).
 - Q: What does the find affordance do when the item's control lives on a
   different page than the current one? → A: It navigates to the item's page
   first, then renders the spotlight; the route-change dismissal rule applies to
   navigations occurring after the spotlight renders (provisional).
 - Q: Does the Getting started section auto-hide once every item is complete? →
-  A: No — it shows a 100% complete state and only the explicit "Remove getting
-  started" action hides it (provisional).
+  A: Yes (RESOLVED by user directive 2026-07-18): a page group whose items are
+  all checked/dismissed collapses to its one-line header with a done checkmark;
+  when ALL groups are complete/dismissed the entire section auto-hides; the
+  Settings → Advanced restore control brings it back.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -76,8 +79,11 @@ that go beyond the literal record are provisional and are also logged in
 Immediately after the first-run setup wizard finishes, the app launches a
 guided orientation walk: a modal, page-by-page tour that navigates the real
 application pages in workflow order, spotlights each whole page, and shows one
-or two sentences of "this is where X happens" copy per stop. The user can move
-Next/Back on every stop, Skip at any time, or press Escape to end the walk.
+or two sentences of "this is where X happens" copy per stop. After the five
+workflow pages, a final stop spotlights the sidebar Getting started section and
+introduces the checklists — the bridge from orientation into ongoing guidance.
+The user can move Next/Back on every stop, Skip at any time, or press Escape to
+end the walk.
 Finishing or skipping marks orientation done forever; it never auto-runs a
 second time. It can be replayed on demand from Settings → Advanced.
 
@@ -87,9 +93,10 @@ confusion. It is self-contained and delivers value even if no other layer
 ships.
 
 **Independent Test**: Complete the first-run wizard in a fresh profile; the
-walk starts, visits each primary page in sequence with visible spotlight and
-copy, responds to Next/Back/Skip/Escape, and never reappears after finish or
-skip across app restarts. Replay works from Settings → Advanced.
+walk starts, visits each workflow page in sequence with visible spotlight and
+copy, ends on the sidebar Getting started section stop, responds to
+Next/Back/Skip/Escape, and never reappears after finish or skip across app
+restarts. Replay works from Settings → Advanced.
 
 **Acceptance Scenarios**:
 
@@ -107,6 +114,10 @@ skip across app restarts. Replay works from Settings → Advanced.
 5. **Given** orientation is done, **When** the user activates the replay
    control in Settings → Advanced, **Then** the walk runs again from the first
    stop, and finishing or skipping it again leaves orientation marked done.
+6. **Given** the walk is on the last workflow page, **When** the user activates
+   Next, **Then** the final stop spotlights the sidebar Getting started section
+   and introduces the checklists, and finishing from there marks orientation
+   done.
 
 ---
 
@@ -192,6 +203,13 @@ replaying historical records never produces a tick.
    a result.
 5. **Given** the user has reduced motion enabled, **When** any item completes,
    **Then** the state change is applied without animation or pulse.
+6. **Given** a page group with one remaining open item, **When** that item is
+   checked or dismissed (auto or manual), **Then** after the completion
+   choreography the group collapses to its one-line header with a done
+   checkmark.
+7. **Given** every group is complete or dismissed, **When** the last item
+   settles, **Then** the entire Getting started section (and its progress-ring
+   icon) auto-hides; the Settings → Advanced restore control brings it back.
 
 ---
 
@@ -232,9 +250,12 @@ the pulse.
 A small menu in the Getting started section header offers "Remove getting
 started" with a one-line confirmation; confirming hides the section
 permanently. Settings → Advanced carries the single restore/reset control for
-onboarding (alongside the orientation replay). Restoring re-seeds automatic
-items from the actual database state: if confirmed inventory, projects, or tool
-launches already exist, the corresponding items come back pre-ticked.
+onboarding (alongside the orientation replay). Restoring unhides the section
+(whether removed explicitly or auto-hidden on completion) and re-derives
+AUTOMATIC items from the actual database state: if confirmed inventory,
+projects, or tool launches already exist, the corresponding items come back
+pre-ticked. Manually checked and dismissed items keep their state — restore
+never discards real user progress.
 
 **Why this priority**: Experienced users must be able to opt out cleanly, and
 returning users must be able to bring the checklist back without it lying about
@@ -242,8 +263,9 @@ work already done.
 
 **Independent Test**: Remove the section via the header menu and verify it
 stays hidden across restarts; restore from Settings → Advanced in a library
-that already has confirmed inventory and a project, and verify those items
-return pre-ticked while unmet items return unchecked.
+that already has confirmed inventory and a project, and verify those automatic
+items return pre-ticked, unmet automatic items return unchecked, and manually
+checked/dismissed items keep their prior state.
 
 **Acceptance Scenarios**:
 
@@ -251,11 +273,15 @@ return pre-ticked while unmet items return unchecked.
    "Remove getting started" and confirms the one-line prompt, **Then** the
    section (and its collapsed progress-ring icon) disappears permanently,
    surviving restarts.
-2. **Given** onboarding was removed, **When** the user activates restore in
-   Settings → Advanced, **Then** the section returns and every automatic item
-   whose milestone already exists in the library is pre-ticked.
+2. **Given** onboarding was removed or auto-hidden on completion, **When** the
+   user activates restore in Settings → Advanced, **Then** the section returns
+   and every automatic item whose milestone already exists in the library is
+   pre-ticked.
 3. **Given** onboarding was restored, **When** milestones that never happened
-   are inspected, **Then** their items are unchecked (never falsely ticked).
+   are inspected, **Then** their automatic items are unchecked (never falsely
+   ticked).
+4. **Given** items were manually checked or dismissed before restore, **When**
+   restore completes, **Then** those items still carry their manual state.
 
 ---
 
@@ -279,8 +305,11 @@ return pre-ticked while unmet items return unchecked.
   clears without requiring a page reload.
 - User removes the section while a spotlight is active: the spotlight
   dismisses with the section.
-- Restore is activated twice in a row: idempotent — same re-seeded result, no
-  duplicate items.
+- Restore is activated twice in a row: idempotent — same re-derived result, no
+  duplicate items, manual states untouched both times.
+- Restore in a library where everything is still complete: the section returns
+  visible in its fully-complete state and does not immediately auto-hide again
+  (auto-hide fires only on a new settling transition, FR-031).
 - Automated end-to-end tests of unrelated features must be able to suppress
   onboarding surfaces deterministically (the old coach had such a suppression
   path; a replacement is required).
@@ -298,7 +327,10 @@ return pre-ticked while unmet items return unchecked.
 - **FR-002**: The walk MUST be modal (a documented, deliberate exception to the
   product's non-modal norm), MUST navigate the real pages in workflow
   sequence, and MUST present a whole-page spotlight with short "this is where X
-  happens" copy on every stop.
+  happens" copy on every stop. The walk MUST end with a final stop anchored on
+  the sidebar Getting started section that introduces the checklists (the
+  L1→L2 bridge): the five FR-006 workflow pages plus this section stop = six
+  stops.
 - **FR-003**: Every stop MUST offer Next, Back, and Skip controls, and Escape
   MUST end the walk from any stop.
 - **FR-004**: Finishing or skipping the walk MUST mark orientation done
@@ -335,11 +367,15 @@ return pre-ticked while unmet items return unchecked.
   started" behind a one-line confirmation; confirming MUST hide the section
   permanently (across restarts) until explicitly restored.
 - **FR-014**: Settings → Advanced MUST carry the single restore/reset control.
-  Restore MUST re-seed automatic items from the actual recorded library state:
-  milestones that already exist (confirmed inventory, projects, tool launches)
-  come back pre-ticked; milestones that never happened come back unchecked.
-  Restore MUST be idempotent. The initial seeding of automatic items on first
-  activation MUST use the same recorded-state derivation as restore.
+  Restore MUST unhide the section (whether hidden by explicit removal, FR-013,
+  or by completion auto-hide, FR-031) and MUST re-derive AUTOMATIC items only
+  from the actual recorded library state: milestones that already exist
+  (confirmed inventory, projects, tool launches) come back pre-ticked;
+  milestones that never happened come back unchecked. Manually checked and
+  dismissed items MUST keep their state across restore — restore never
+  discards real user progress. Restore MUST be idempotent. The initial seeding
+  of automatic items on first activation MUST use the same recorded-state
+  derivation as restore.
 
 #### Completion semantics
 
@@ -352,8 +388,8 @@ return pre-ticked while unmet items return unchecked.
 - **FR-016**: Records processed during a restore or replay of history MUST
   never produce a tick.
 - **FR-017**: Every item that is not auto-ticked MUST be manually checkable and
-  dismissable by the user. No per-item undo is provided in v1; the Settings →
-  Advanced restore/reset is the only revert path.
+  dismissable by the user. No per-item undo is provided in v1; manual states
+  persist across restore (FR-014 re-derives automatic items only).
 - **FR-018**: On completion (auto or manual) an item MUST NOT simply disappear:
   it MUST play a check animation with brief row emphasis in place, then move to
   a completed (greyed, checked) area at the bottom of its page group.
@@ -363,7 +399,8 @@ return pre-ticked while unmet items return unchecked.
 - **FR-020**: Under reduced motion, all completion choreography MUST degrade to
   an immediate state change without animation or pulse.
 - **FR-021**: All onboarding progress and flags (orientation done, item states,
-  section removed, applicable collapse state) MUST persist across app restarts
+  section hidden — removed or auto-hidden — and applicable collapse state) MUST
+  persist across app restarts
   and MUST reflect authoritative recorded state — identical regardless of which
   screen was open when the milestone happened.
 
@@ -398,9 +435,13 @@ return pre-ticked while unmet items return unchecked.
   meet WCAG 2.2 AA.
 - **FR-030**: Automated tests of unrelated features MUST have a deterministic
   way to suppress all onboarding surfaces.
-- **FR-031**: The Getting started section MUST NOT auto-hide on 100%
-  completion; it shows a complete state and only the explicit "Remove getting
-  started" action (FR-013) hides it.
+- **FR-031**: A page group whose items are all checked or dismissed MUST
+  collapse to its one-line header with a done checkmark. When ALL groups are
+  complete or dismissed, the entire Getting started section (including the
+  progress-ring icon) MUST auto-hide. The auto-hide is a transition triggered
+  when the last open item settles; after a restore (FR-014) the section stays
+  visible — even if still fully complete — until a new settling transition or
+  an explicit removal (FR-013) hides it again.
 
 ### Key Entities
 
@@ -413,8 +454,9 @@ return pre-ticked while unmet items return unchecked.
   set.
 - **Orientation state**: Whether the one-time walk has been finished or
   skipped (done forever) and replay availability.
-- **Section flags**: Whether the Getting started section has been permanently
-  removed, and the persisted collapse state.
+- **Section flags**: Whether the Getting started section is hidden (by
+  explicit removal or by completion auto-hide — both cleared by restore), and
+  the persisted collapse state.
 - **Domain milestone**: A real recorded library event (inventory confirmed,
   project created, tool launched, and other verified observable milestones)
   that can complete an item automatically and that seeds restore.
@@ -433,8 +475,9 @@ return pre-ticked while unmet items return unchecked.
   milestone; restoring or replaying history produces zero ticks; zero demo or
   sample data exists anywhere in the product.
 - **SC-004**: After remove + restore in a library with prior real work, every
-  already-met milestone item is pre-ticked and every unmet item is unchecked —
-  no false positives or negatives.
+  already-met automatic milestone item is pre-ticked, every unmet automatic
+  item is unchecked, and every manually checked or dismissed item keeps its
+  state — no false positives, no false negatives, no lost user progress.
 - **SC-005**: All onboarding flows are completable keyboard-only, and under
   reduced motion no onboarding animation or pulse plays.
 - **SC-006**: A user can locate the control for any checklist item via the

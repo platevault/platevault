@@ -21,7 +21,7 @@ casing — camelCase on the wire). The legacy `guided.*` operations and
 Read the full onboarding projection for UI hydration.
 
 - **Request**: empty.
-- **Response**: `{ items: [{ itemId, page, state, at, source, prerequisite: { met, reasonKey, jumpPage } | null, hasAutoTick }], flags: { orientationDone, sectionRemoved, sidebarCollapsed }, progress: { done, total, perPage: [{ page, done, total }] } }`
+- **Response**: `{ items: [{ itemId, page, state, at, source, prerequisite: { met, reasonKey, jumpPage } | null, hasAutoTick }], flags: { orientationDone, sectionHidden, sidebarCollapsed }, progress: { done, total, perPage: [{ page, done, total }] } }` — `sectionHidden` covers both explicit removal (FR-013) and completion auto-hide (FR-031).
 - **Errors**: `db_failure`.
 
 ### `onboarding.item.set_state` (command `onboarding_item_set_state`)
@@ -42,17 +42,23 @@ Mark the walk finished or skipped (both set done-forever, FR-004).
 
 ### `onboarding.section.set` (command `onboarding_section_set`)
 
-Section-level flags: permanent remove (FR-013) and collapse persistence (FR-012).
+Section-level flags: explicit remove (FR-013) and collapse persistence
+(FR-012).
 
-- **Request**: `{ removed?: bool, sidebarCollapsed?: bool }` (at least one field)
+- **Request**: `{ hidden?: true, sidebarCollapsed?: bool }` (at least one
+  field). `hidden` accepts only `true` (user remove); unhiding happens
+  exclusively via `onboarding.restore`. The completion auto-hide (FR-031) is
+  written by the backend settle path, never through this command.
 - **Response**: updated flags.
-- **Errors**: `db_failure`.
+- **Errors**: `db_failure`, `invalid_state` (`hidden: false` rejected).
 
 ### `onboarding.restore` (command `onboarding_restore`)
 
-The single Settings → Advanced restore/reset (FR-014). Clears removal, then
-re-derives every item from actual recorded state (same routine as first seed).
-Idempotent.
+The single Settings → Advanced restore/reset (FR-014). Clears the hidden flag
+(explicit removal or completion auto-hide), then re-derives AUTOMATIC items
+only from actual recorded state (same routine as first seed);
+`manually_checked` and `dismissed` items keep their state — restore never
+discards user progress. Idempotent.
 
 - **Request**: empty.
 - **Response**: full state (same shape as `onboarding.state.get`).
