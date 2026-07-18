@@ -32,11 +32,13 @@ import {
   act,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn().mockReturnValue(undefined),
+  useSearch: () => ({}),
 }));
 
 vi.mock('@/features/projects/store', () => ({
@@ -48,8 +50,12 @@ vi.mock('@/shared/toast', () => ({
 }));
 
 // The live duplicate-name pre-check (WP-008-B, ported from CreateProjectDialog)
-// calls commands.projectsList directly.
-const { mockListProjects } = vi.hoisted(() => ({ mockListProjects: vi.fn() }));
+// calls commands.projectsList directly; #776/#599 (real StepViews/StepReview
+// data) call commands.sessionsList directly.
+const { mockListProjects, mockSessionsList } = vi.hoisted(() => ({
+  mockListProjects: vi.fn(),
+  mockSessionsList: vi.fn(),
+}));
 vi.mock('@/bindings/index', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/bindings/index')>();
   return {
@@ -57,6 +63,7 @@ vi.mock('@/bindings/index', async (importOriginal) => {
     commands: {
       ...original.commands,
       projectsList: mockListProjects,
+      sessionsList: mockSessionsList,
     },
   };
 });
@@ -183,16 +190,28 @@ beforeEach(() => {
   // Default: no existing projects, so the live duplicate-name pre-check never
   // blocks a test that doesn't care about it.
   mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
+  mockSessionsList.mockResolvedValue({ status: 'ok', data: [] });
 });
+
+function renderWizard() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <WizardPage />
+    </QueryClientProvider>,
+  );
+}
 
 describe('T078c: WizardPage renders inside main window with correct layout', () => {
   it('renders step 1 (Name & profile) by default', () => {
-    render(<WizardPage />);
+    renderWizard();
     expect(screen.getByTestId('step-name')).toBeInTheDocument();
   });
 
   it('shows "New project" in the toolbar heading span', () => {
-    render(<WizardPage />);
+    renderWizard();
     // The toolbar span contains "New project —" + projectLabel.
     // Use getAllByText since the summary rail also mentions project name.
     const matches = screen.getAllByText(/New project/i);
@@ -200,7 +219,7 @@ describe('T078c: WizardPage renders inside main window with correct layout', () 
   });
 
   it('has the layout fix: outer div carries the alm-wizard-page class (min-height:0 via CSS)', () => {
-    const { container } = render(<WizardPage />);
+    const { container } = renderWizard();
     const outer = container.firstChild as HTMLElement;
     // The outer div must carry alm-wizard-page which sets min-height:0 to prevent flex overflow
     expect(outer.classList.contains('alm-wizard-page')).toBe(true);
@@ -209,7 +228,7 @@ describe('T078c: WizardPage renders inside main window with correct layout', () 
 
 describe('T078c: wizard step navigation with session+calibration selection', () => {
   it('navigates from step 1 to step 2 (Sources)', async () => {
-    render(<WizardPage />);
+    renderWizard();
 
     // Fill in project name to enable next
     const nameInput = screen.getByLabelText('Project name');
@@ -225,7 +244,7 @@ describe('T078c: wizard step navigation with session+calibration selection', () 
   });
 
   it('session selection is possible at step 2', async () => {
-    render(<WizardPage />);
+    renderWizard();
 
     // Step 0: fill name so canAdvance() returns true
     const nameInput = screen.getByLabelText('Project name');
@@ -250,7 +269,7 @@ describe('T078c: wizard step navigation with session+calibration selection', () 
   });
 
   it('calibration selection is possible at step 3', async () => {
-    render(<WizardPage />);
+    renderWizard();
 
     // Step 0: fill name
     const nameInput = screen.getByLabelText('Project name');
@@ -317,7 +336,7 @@ describe('T078c: create project end-to-end', () => {
   }
 
   it('shows "Create project" button at step 6 (Review)', async () => {
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview();
 
     // Create project button appears at step 6
@@ -337,7 +356,7 @@ describe('T078c: create project end-to-end', () => {
       createdAt: '2026-06-17T00:00:00Z',
     });
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('NGC 7000 HOO');
 
     await act(async () => {
@@ -366,7 +385,7 @@ describe('T078c: create project end-to-end', () => {
       createdAt: '2026-06-17T00:00:00Z',
     });
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('M31 LRGB');
 
     await act(async () => {
@@ -391,7 +410,7 @@ describe('T078c: create project end-to-end', () => {
       scaffoldApplied: true,
     });
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('NGC 891');
 
     await act(async () => {
@@ -419,7 +438,7 @@ describe('T078c: create project end-to-end', () => {
       scaffoldApplied: false,
     });
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('IC 1396');
 
     await act(async () => {
@@ -439,7 +458,7 @@ describe('T078c: create project end-to-end', () => {
   it('routes a name.* backend error back to the name step instead of a toast', async () => {
     mockCallCreateProject.mockRejectedValue(new Error('name.duplicate'));
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('Duplicate Project');
 
     await act(async () => {
@@ -457,7 +476,7 @@ describe('T078c: create project end-to-end', () => {
   it('routes a tool.* backend error back to the name step (workflow profile lives there)', async () => {
     mockCallCreateProject.mockRejectedValue(new Error('tool.unknown'));
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('Some Project');
 
     await act(async () => {
@@ -475,7 +494,7 @@ describe('T078c: create project end-to-end', () => {
   it('surfaces a path.* backend error inline on the review step (no dedicated path field)', async () => {
     mockCallCreateProject.mockRejectedValue(new Error('path.collision'));
 
-    render(<WizardPage />);
+    renderWizard();
     await advanceToReview('Some Project');
 
     await act(async () => {
@@ -513,7 +532,7 @@ describe('T078c: create project end-to-end', () => {
       ],
     });
 
-    render(<WizardPage />);
+    renderWizard();
     // Same name, different case — the pre-check is case-insensitive.
     await advanceToReview('existing project');
 

@@ -148,9 +148,9 @@
   font-style: italic;
 }
 .alm-plan-panel__file-flag {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--alm-tracking-tight);
   color: var(--alm-danger, var(--alm-warn));
   border: 1px solid currentColor;
   border-radius: var(--alm-radius-sm);
@@ -161,9 +161,9 @@
   padding: 0 0 var(--alm-sp-1);
   margin-bottom: var(--alm-sp-1);
   border-bottom: 1px solid var(--alm-border);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
 }
 
@@ -301,7 +301,7 @@
 .alm-plan-panel__kind {
   color: var(--alm-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   font-weight: 600;
 }
 

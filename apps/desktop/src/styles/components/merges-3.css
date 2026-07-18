@@ -301,7 +301,7 @@
   font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-medium);
   line-height: var(--alm-leading-tight);
-  letter-spacing: 0.03em;
+  letter-spacing: var(--alm-tracking-tight);
   border: 1px solid transparent;
   white-space: nowrap;
 }
@@ -463,7 +463,7 @@
 
 .alm-moon-summary__title {
   font-size: var(--alm-text-xs);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   text-transform: uppercase;
   color: var(--alm-text-muted);
 }
@@ -792,7 +792,7 @@
 .alm-session-detail2__head {
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
   margin-bottom: var(--alm-sp-2);
@@ -1002,7 +1002,7 @@
 .alm-planner__tonight-filters-label {
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
 }

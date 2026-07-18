@@ -43,13 +43,13 @@
 
 /* Timestamp cell — monospace, extra-small */
 .alm-audit-log__ts {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
 }
 
 /* Event cell — monospace, extra-small */
 .alm-audit-log__event {
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
-
 }
 
 /* Entity cell — muted, truncated */
@@ -261,9 +261,9 @@
 
 /* Uppercase group label (Raw / Calibration / Project / Inbox) */
 .alm-data-sources__group-label {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   text-transform: uppercase;
   color: var(--alm-text-muted);
   margin: 0 0 var(--alm-sp-2) 0;
@@ -466,7 +466,7 @@
 
 /* Status pill labels (auto-detected / available / missing) */
 .alm-proc-tools__pill {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
 }
 
 /* Path input + status span + toggle row */
@@ -744,7 +744,7 @@
 }
 
 .alm-tool-launches__count-badge {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   background: var(--alm-bg3);
   border-radius: 4px;
   padding: 1px 5px;
@@ -769,7 +769,7 @@
 }
 
 .alm-tool-launches__file-name {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-sm);
 }
 
@@ -782,12 +782,12 @@
 /* ── Status badges ───────────────────────────────────────────────────────── */
 
 .alm-tool-launches__badge-missing {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-danger);
 }
 
 .alm-tool-launches__badge-manual {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-info);
 }
 
@@ -879,5 +879,5 @@
 .alm-manifests__path {
   margin-top: var(--alm-sp-1);
   color: var(--alm-text-muted);
-
+  font-family: var(--alm-font-mono);
 }

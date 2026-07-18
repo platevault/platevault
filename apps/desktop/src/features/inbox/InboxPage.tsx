@@ -42,7 +42,10 @@ import { useQuery } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { queryKeys } from '@/data/queryKeys';
-import type { InboxConfirmDestination } from '@/bindings/index';
+import type {
+  InboxConfirmDestination,
+  InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
+} from '@/bindings/index';
 import { useSetPageStatus } from '@/app/PageStatusContext';
 import { FilterToolbar, ListPageLayout, PageTopBar } from '@/components';
 import { usePlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
@@ -81,6 +84,68 @@ import {
 interface DestinationRootRequiredDetails {
   category: string;
   candidates: Array<{ rootId: string; path: string; kind: string }>;
+}
+
+/**
+ * Pick which post-split sub-item selection should move to after a
+ * `reclassify_v2` call (issue #755 CI fix, R-14 re-split). Prefers the
+ * response's own resolved (single-type, no missing-mandatory) sub-items over
+ * re-deriving a target from list state — the response is authoritative for
+ * what the group split into; the item list is only an async projection of
+ * it. Ties (equal frameType groups) break on file count, since a bulk edit's
+ * largest resulting group is the one the user was most likely acting on.
+ * Returns `null` when every sub-item is still needs-review (no safe target).
+ */
+export function pickReclassifyTarget(
+  subItems: Array<{
+    inboxItemId: string;
+    frameType?: string | null;
+    fileCount: number;
+    missingMandatory?: string[] | null;
+  }>,
+): string | null {
+  const resolved = subItems.filter(
+    (si) => si.frameType != null && (si.missingMandatory?.length ?? 0) === 0,
+  );
+  if (resolved.length === 0) return null;
+  return resolved.reduce((best, si) =>
+    si.fileCount > best.fileCount ? si : best,
+  ).inboxItemId;
+}
+
+/** Outcome of {@link resolveReclassifyHandoff}: keep waiting, navigate, or give up. */
+export type ReclassifyHandoffDecision =
+  | { action: 'wait' }
+  | { action: 'navigate'; idx: number }
+  | { action: 'giveUp' };
+
+/**
+ * Decide what the post-split selection handoff should do THIS render (issue
+ * #755 CI fix round 3). Bounded lifetime: `pendingId` must not stay set
+ * forever just because the active search/kind filter happens to hide the
+ * post-split item — that would gate `useStaleSelectionCleanup` open
+ * indefinitely for everything else on the page.
+ *
+ * Judges "arrived" vs "genuinely not coming back" against the UNFILTERED
+ * `items` list (only once it has settled — `listLoading === false` — so a
+ * refetch already in flight isn't mistaken for "never arriving"). Once
+ * settled: absent from `items` entirely → give up (nothing will ever
+ * appear); present in `items` but absent from `filteredItems` → give up too
+ * (it exists, but the user's own filter hides it — there is no index to
+ * navigate to); present in both → navigate to its filtered-list index.
+ */
+export function resolveReclassifyHandoff(
+  pendingId: string,
+  items: Array<{ inboxItemId: string }>,
+  filteredItems: Array<{ inboxItemId: string }>,
+  listLoading: boolean,
+): ReclassifyHandoffDecision {
+  if (listLoading) return { action: 'wait' };
+  if (!items.some((it) => it.inboxItemId === pendingId)) {
+    return { action: 'giveUp' };
+  }
+  const idx = filteredItems.findIndex((it) => it.inboxItemId === pendingId);
+  return idx === -1 ? { action: 'giveUp' } : { action: 'navigate', idx };
 }
 
 /** Type-guard for the destination-root-required details payload. */
@@ -221,11 +286,25 @@ export function InboxPage() {
   const selectedItem =
     selected !== undefined ? filteredItems[selected] : undefined;
 
-  useStaleSelectionCleanup(selected, selectedItem !== undefined, () =>
-    navigate({
-      search: (prev) => ({ ...prev, selected: undefined }),
-      replace: true,
-    }),
+  // `reclassify_v2` operates at source-group scope and re-splits the group
+  // into new single-type sub-items (R-14, issue #755) — the currently
+  // selected item's id can stop existing mid-flight. Holds the post-split
+  // target id until the (already-invalidated, auto-refetching) item list
+  // contains it, at which point the effect below moves `selected` to its
+  // new index. `useStaleSelectionCleanup` must NOT treat the old index as
+  // stale while this handoff is in flight, or it races the handoff and
+  // clears the selection first (both fire from the same commit).
+  const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
+    useState<string | null>(null);
+
+  useStaleSelectionCleanup(
+    selected,
+    selectedItem !== undefined || pendingReclassifySelectionId !== null,
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
   );
 
   const onSelect = (idx: number) =>
@@ -239,6 +318,44 @@ export function InboxPage() {
       }),
     [navigate],
   );
+
+  /** `InboxDetail`'s reclassify_v2 callback: queue the post-split handoff. */
+  const handleReclassified = useCallback(
+    (response: InboxReclassifyV2Response) => {
+      const targetId = pickReclassifyTarget(response.subItems);
+      if (targetId) setPendingReclassifySelectionId(targetId);
+    },
+    [],
+  );
+
+  // Completes (or abandons) the handoff once the invalidated list query has
+  // settled (list.type invalidation is fired by InboxDetail's reclassify
+  // hook). Bounded via `resolveReclassifyHandoff` — see its doc comment for
+  // why the give-up path is required (an active search filter must not be
+  // able to gate `useStaleSelectionCleanup` open forever).
+  useEffect(() => {
+    if (!pendingReclassifySelectionId) return;
+    const decision = resolveReclassifyHandoff(
+      pendingReclassifySelectionId,
+      items,
+      filteredItems,
+      listLoading,
+    );
+    if (decision.action === 'wait') return;
+    setPendingReclassifySelectionId(null);
+    if (decision.action === 'navigate' && decision.idx !== selected) {
+      void navigate({
+        search: (prev) => ({ ...prev, selected: decision.idx }),
+      });
+    }
+  }, [
+    pendingReclassifySelectionId,
+    items,
+    filteredItems,
+    listLoading,
+    selected,
+    navigate,
+  ]);
 
   // Each item carries its own root path — use it for classify / confirm calls.
   const selectedRootPath = selectedItem?.rootAbsolutePath ?? '';
@@ -934,6 +1051,11 @@ export function InboxPage() {
               destinationRoots={destRoots}
               selectedRootId={selectedDestRootId}
               onSelectRoot={setSelectedDestRootId}
+              onReclassified={handleReclassified}
+              // Stable reclassify scope: sub-item ids are purged/recreated by
+              // re-splits; the source-group id survives them (see
+              // useInboxReclassifyV2 in InboxDetail).
+              sourceGroupId={selectedItem.sourceGroupId}
             />
           ) : undefined
         }

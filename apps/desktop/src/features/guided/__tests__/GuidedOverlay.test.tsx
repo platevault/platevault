@@ -10,11 +10,22 @@
  * - `onDismiss` is called on STATUS.FINISHED / STATUS.SKIPPED via `onEvent`.
  *
  * react-joyride is mocked so tests run in jsdom without a real layout engine.
+ *
+ * #585: GuidedOverlay now only mounts <Joyride> when the current step's
+ * anchor is actually present in the DOM (a stray beacon/spotlight was
+ * otherwise left rendered — see GuidedOverlay.anchor-absence.test.tsx), so
+ * every test that expects Joyride to mount seeds the matching anchor first.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import type { GuidedFlowStateDto } from '../store';
+import {
+  GUIDE_ANCHOR_ATTR,
+  ANCHOR_INBOX_CONFIRM_ROW,
+  ANCHOR_PROJECTS_CREATE_CTA,
+  ANCHOR_PROJECT_OPEN_IN_TOOL,
+} from '../anchors';
 
 // ── Mock react-joyride ────────────────────────────────────────────────────────
 
@@ -41,6 +52,9 @@ vi.mock('react-joyride', () => ({
     IDLE: 'idle',
     WAITING: 'waiting',
     READY: 'ready',
+  },
+  EVENTS: {
+    TARGET_NOT_FOUND: 'error:target_not_found',
   },
 }));
 
@@ -75,13 +89,31 @@ function fireOnEvent(status: string) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+/** Seed all three step anchors so GuidedOverlay's presence check passes. */
+function seedAnchors(): HTMLElement[] {
+  return [
+    ANCHOR_INBOX_CONFIRM_ROW,
+    ANCHOR_PROJECTS_CREATE_CTA,
+    ANCHOR_PROJECT_OPEN_IN_TOOL,
+  ].map((anchor) => {
+    const el = document.createElement('div');
+    el.setAttribute(GUIDE_ANCHOR_ATTR, anchor);
+    document.body.appendChild(el);
+    return el;
+  });
+}
+
 describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
+  let anchorEls: HTMLElement[] = [];
+
   beforeEach(() => {
     capturedProps = null;
+    anchorEls = seedAnchors();
   });
 
   afterEach(() => {
     cleanup();
+    for (const el of anchorEls) el.remove();
   });
 
   it('renders Joyride with run=true when state is active', async () => {

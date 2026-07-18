@@ -11,13 +11,16 @@ import type { DetailDockPageKey } from '@/data/preferences';
 import {
   useThemeChoice,
   useFontSizeChoice,
+  useZoomChoice,
   resolveTheme,
   THEMES,
+  ZOOM_STEPS,
 } from '@/data/theme';
-import type { FontSizeChoice } from '@/data/theme';
+import type { FontSizeChoice, ZoomPercent } from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 import { DetailDockPlacementControl } from '@/components';
+import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 
 // The adopting pages, in nav order — Inbox is intentionally excluded from the
 // loop (its placement is a forced permanent split, spec 054 FR-014) and gets
@@ -32,6 +35,12 @@ const DOCK_PAGES: { page: DetailDockPageKey; label: () => string }[] = [
   { page: 'projects', label: () => m.common_projects() },
   { page: 'targets', label: () => m.nav_targets() },
 ];
+
+/** In-code defaults (data/theme.ts + preferences.ts) — none of these are
+ *  settings-DB-backed panes, so restore is a local reset, not a backend call
+ *  (#802: Appearance was one of 3 default-backed panes missing the shared
+ *  RestoreDefaultsBtn control). */
+const DEFAULT_DENSITY: Density = 'comfortable';
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 // THEMES carry static brand names (not translatable) — wrap them as thunks so
@@ -48,15 +57,23 @@ const CHOICES = [
 export function General() {
   const [choice, setChoice] = useThemeChoice();
   const [fontSize, setFontSize] = useFontSizeChoice();
+  const [zoom, setZoom] = useZoomChoice();
   const [density, setDensity] = usePreference('density');
   const resolved = resolveTheme(choice);
 
+  const handleRestoreDefaults = async () => {
+    setChoice('system');
+    setFontSize('default');
+    setZoom(100);
+    setDensity(DEFAULT_DENSITY);
+  };
+
   return (
     <>
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">
-          {m.settings_general_theme()}
-        </div>
+      <SettingsSection
+        title={m.settings_general_theme()}
+        action={<RestoreDefaultsBtn onRestore={handleRestoreDefaults} />}
+      >
         <div className="alm-theme-swatches">
           {CHOICES.map((t) => {
             const isActive = choice === t.id;
@@ -95,7 +112,7 @@ export function General() {
             );
           })}
         </div>
-      </div>
+      </SettingsSection>
 
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">
@@ -123,6 +140,34 @@ export function General() {
             </select>
           </div>
         </div>
+      </div>
+
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">
+          {m.settings_general_zoom_title()}
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">
+            {m.settings_general_zoom_label()}
+          </div>
+          <div className="alm-settings__row-content">
+            <select
+              className="alm-select"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value) as ZoomPercent)}
+            >
+              {ZOOM_STEPS.map((step) => (
+                <option key={step} value={step}>
+                  {step}%
+                  {step === 100
+                    ? ` (${m.settings_general_zoom_default_suffix()})`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <p className="alm-calmatch__help">{m.settings_general_zoom_hint()}</p>
       </div>
 
       <div className="alm-settings__group">

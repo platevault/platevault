@@ -44,44 +44,26 @@ validator can hold the Windows checkout/app process at a time. The
 Vite/mockIPC runtime fakes backend responses and MUST NOT be used to
 validate journeys (see `docs/development/testing.md`).
 
-Launch/reset mechanics (full detail in `docs/development/windows-journeys/`
-per-journey docs):
-- Deploy on the Windows checkout (`C:\dev\astro-plan`), not WSL:
-  `git fetch origin` then `git reset --hard origin/main` as its own command.
-- **Recompile trap:** `git reset --hard` restores content but keeps old
-  mtimes, so cargo skips rebuilding and the app silently runs a stale
-  binary — touch changed `.rs` files to force a recompile before relaunch.
-  Frontend-only changes just need a hard refresh.
-- **Reset to fresh first-run:** delete `wizard-test.db*` in the Windows
-  checkout root; clearing `localStorage` alone is not a reset (causes a
-  `/`↔`/setup` redirect loop) — the DB is first-run source of truth.
-- **Launch:** `run-dev.bat` in the Windows checkout (`run-dev-mcp.bat` when
-  driving through the bridge), detached via
-  `powershell.exe -NoProfile -Command "Start-Process ..."`; app process is
-  `desktop_shell.exe`, Vite on `localhost:5173`, real backend
-  (`VITE_USE_MOCKS=false`).
-- **Driving quirks:** 2s JS eval timeout (avoid zombie loops), navigate in
-  two steps (nav then probe), NEVER send modifier-key combos (renderer
-  freeze). Recovery: kill `desktop_shell`, relaunch `run-dev-mcp.bat`.
-- Native OS pickers (folder choosers, etc.) cannot be driven by the bridge;
-  relaunch with `VITE_E2E=1` to expose `data-testid` stand-in inputs/buttons
-  for those steps.
-- Prefer `webview_execute_js` invoking `window.__TAURI__.core.invoke(...)`
-  for direct backend calls; `ipc_execute_command` rejects many real commands
-  but is useful for scripted backend probes. Backend-only IPC probes are not
-  a substitute for UI-level Expects — anything visually/interactively
-  observable must be validated in the real webview, not IPC-only. Validators
-  announce when a check is backend-only IPC and classify findings
-  backend-vs-UI.
-- **State leakage prevention:** validation runs only against the Windows
-  checkout's dev database and `tempfile`-style scratch folders — never
-  against real user libraries; this repo checkout is never the app's working
-  directory, so no fixture can land in it.
+Launch, reset, recompile-trap, bridge-connect, native-picker, and blank-screen
+mechanics are **canonical in `docs/development/windows-native-rust-dev.md`
+§"Validation driving (MCP bridge, reset, recompile trap)"** — treat that doc as
+authoritative rather than re-deriving the steps here. Profile-specific rules
+that layer on top of it:
+- Backend-only IPC probes are not a substitute for UI-level Expects — anything
+  visually/interactively observable must be validated in the real webview, not
+  IPC-only. Validators announce when a check is backend-only IPC and classify
+  findings backend-vs-UI.
+- **State-leakage prevention:** validation runs only against the Windows
+  checkout's disposable dev database (`wizard-test.db` via `ALM_DB_URL`) and
+  `tempfile`-style scratch folders — never against real user libraries; this
+  repo checkout is never the app's working directory, so no fixture can land in
+  it.
 
-Pointers: `docs/development/windows-journeys/` (per-journey Windows
-validation docs with exact click sequences and troubleshooting) and
-`.claude/rules/50-tauri-mcp.md` (Tauri MCP driving surface, points into the
-`mcp-tauri` APM context doc).
+Pointers: `docs/development/windows-native-rust-dev.md` §"Validation driving"
+(canonical launch/reset/recompile/bridge mechanics),
+`docs/development/windows-journeys/` (per-journey Windows validation docs with
+exact click sequences and troubleshooting), and `.claude/rules/50-tauri-mcp.md`
+(Tauri MCP driving surface, points into the `mcp-tauri` APM context doc).
 
 ## Surface map
 

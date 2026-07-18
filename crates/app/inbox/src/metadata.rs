@@ -69,9 +69,14 @@ pub async fn get_inbox_item_metadata(
     for m in &meta_rows {
         let ev = evidence_by_path.get(m.relative_file_path.as_str());
 
-        // frame_type_effective: override (if set) else extracted frame type.
-        let frame_type_effective =
-            ev.and_then(|e| e.manual_override.clone().or_else(|| e.frame_type.clone()));
+        // frame_type_effective: manual override → durable group-keyed
+        // frameType override (survives evidence rebuilds, #854) → extracted.
+        let frame_type_effective = ev.and_then(|e| {
+            e.manual_override
+                .clone()
+                .or_else(|| e.override_frame_type.clone())
+                .or_else(|| e.frame_type.clone())
+        });
 
         // image_typ: the raw IMAGETYP header value captured as evidence
         // raw_value (only header-sourced evidence carries it).

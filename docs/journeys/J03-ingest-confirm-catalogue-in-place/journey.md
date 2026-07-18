@@ -1,7 +1,7 @@
 ---
 id: J03
 title: Catalogue an already-organized folder without moving files
-version: 2
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -16,6 +16,9 @@ trace:
     2026-07-14-q27-f10.md (legacy pre-merge drafts; superseded by S2 below
     — no Inbox UI surface shipped)
   - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
+  - PR #938 (fixes #768 — destination-root picker was shown regardless of
+    the item's source-root organization state)
+  - spec-054-adaptive-detail-dock (FR-014, FR-015 — permanent Inbox split)
 ---
 
 ## Goal
@@ -55,9 +58,17 @@ hashes on disk are byte-for-byte unchanged from before confirm.
   a folder mixing frame types materializes as separate single-type items,
   and an item missing mandatory metadata (e.g. filter, target) shows the
   same needs-review gate with Confirm disabled until resolved, as in the
-  move-mode journey.
+  move-mode journey. Reviewing the item's detail uses the same permanent
+  Inbox split as move-mode (see J02/S2): a narrow item list on the left,
+  full-height detail on the right, at every window width — never a bottom
+  dock, and the detail's own file list scrolls within that right pane
+  rather than overflowing the window.
+- **Expect (negative):** The Inbox detail for an organized-root item never
+  renders as a bottom strip and its file list is never cut off below the
+  window — same layout guarantee as move-mode (J02/S2).
 - **Trace:** crates/app/inbox/src/confirm.rs (needs-review gate is
-  root-agnostic).
+  root-agnostic); spec-054/FR-014, FR-015 (see J02/S2 for the layout
+  detail, shared across both ingest modes).
 
 ### S2 — Confirm the item {#S2}
 - **Do:** The user clicks Confirm on the classified item.
@@ -68,7 +79,13 @@ hashes on disk are byte-for-byte unchanged from before confirm.
 - **Expect (negative):** No destination-root picker appears — there is
   nothing to pick, since the files are staying where they are.
 - **Trace:** crates/app/inbox/src/confirm.rs:293-303 (OrganizationState::
-  Organized routes every file to the `catalogue` action).
+  Organized routes every file to the `catalogue` action);
+  `apps/desktop/src/features/inbox/InboxDetail.tsx` `applicableRoots`
+  (filtered by the item's `organizationState`, not just frame-type
+  category, per PR #938 fixes #768 — previously the picker rendered
+  whenever more than one applicable root existed for the frame type, even
+  for an organized-source item, though any selection there was silently
+  ignored server-side).
 - **Expect (negative — backend-only capability):** For a light-frame item,
   the same server-side attribution pass described in J02/S5 runs here too
   — ranked framing/project candidates are computed identically regardless
@@ -150,3 +167,19 @@ provably closed — dropped rather than carried forward.
   (catalogue-mode) confirms as on move-mode confirms — but no Inbox UI
   surfaces it either way yet.
   Evidence: PR #898 · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-17 · S2 · behavior-change
+  The destination-root picker is now correctly suppressed for an item
+  sourced from an organized root even when more than one root would
+  otherwise be applicable to its frame type — previously it rendered
+  regardless of the item's organization state, and any selection there was
+  silently ignored server-side (catalogue-mode confirms always resolve to
+  the source root).
+  Evidence: PR #938 (fixes #768) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S1 · behavior-change
+  Reviewing an organized-root item now uses the same permanent Inbox
+  left/right split as move-mode (never a bottom dock at any width), with
+  the detail's file list scrolling within the full-height right pane.
+  Evidence: spec-054-adaptive-detail-dock (FR-014, FR-015) · by:
+  journey-scribe (intent-gated)

@@ -67,7 +67,7 @@ import type { SeparationFigure } from './planner-derive';
 import { Group } from '@visx/group';
 import { LinePath } from '@visx/shape';
 import { Threshold } from '@visx/threshold';
-import { altitudeScale, hourScale } from './altitude-scale';
+import { altitudeScale, hourScale, nightSpan } from './altitude-scale';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -90,6 +90,14 @@ interface Props {
    * `null`/absent keeps the per-filter model unchanged (FR-038).
    */
   sensorConfig?: SensorConfig | null;
+  /**
+   * #658: called after an alias add/remove or display-alias set/clear
+   * mutation succeeds, so the caller can refetch the list payload the
+   * Targets page filters/renders from — otherwise a fresh user alias stays
+   * unsearchable and a new display label never propagates to the list row
+   * until an unrelated remount refetches it.
+   */
+  onMutated?: () => void;
 }
 
 type LoadState =
@@ -185,7 +193,12 @@ function AltitudeGraph({
   if (points.length === 0) return null;
 
   const yScale = altitudeScale(PLOT_H, 0);
-  const xScale = hourScale(0, PLOT_W);
+  // #759: the X-axis domain follows the curve's real sunset→sunrise span
+  // instead of a fixed 12 h, so long nights don't flatten their last third
+  // onto the rightmost pixel (data values were always correct; only the
+  // axis/guide geometry was wrong).
+  const maxHour = nightSpan(points);
+  const xScale = hourScale(0, PLOT_W, maxHour);
 
   const usableYPx = yScale(usableAltDeg);
 
@@ -194,7 +207,7 @@ function AltitudeGraph({
   // fill renders grey instead of the usable green.
   const noDark = darkWindowHours === null;
 
-  const clampHour = (h: number) => Math.min(12, Math.max(0, h));
+  const clampHour = (h: number) => Math.min(maxHour, Math.max(0, h));
 
   // Transit marker: find point closest to peak altitude.
   const peak = points.reduce(
@@ -203,9 +216,10 @@ function AltitudeGraph({
   );
   const transitXPx = xScale(peak.tHour);
 
-  // X-axis tick labels (every 2 h from 18 to 06).
+  // X-axis tick labels, every 2 h from night start (clock = 18:00 + h,
+  // wrapping past midnight), through the real span rather than a fixed 12 h.
   const xTicks: Array<{ tHour: number; label: string }> = [];
-  for (let h = 0; h <= 12; h += 2) {
+  for (let h = 0; h <= maxHour; h += 2) {
     const clock = (18 + h) % 24;
     xTicks.push({ tHour: h, label: String(clock).padStart(2, '0') });
   }
@@ -410,6 +424,7 @@ export function TargetDetailV2({
   usableAltDeg = USABLE_ALT_DEG,
   night = null,
   sensorConfig = null,
+  onMutated,
 }: Props) {
   const guidanceParams = useGuidanceParams();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
@@ -558,11 +573,12 @@ export function TargetDetailV2({
       unwrap(await commands.targetAliasAdd({ targetId, alias }));
       setAliasInput('');
       load();
+      onMutated?.();
     } catch (err) {
       const e = err as ContractError;
       setAliasError(errorMessage(e, m.targets_detail_add_alias_failed()));
     }
-  }, [targetId, aliasInput, load]);
+  }, [targetId, aliasInput, load, onMutated]);
 
   // Remove user alias by id.
   const handleAliasRemove = useCallback(
@@ -571,12 +587,13 @@ export function TargetDetailV2({
       try {
         unwrap(await commands.targetAliasRemove({ targetId, aliasId }));
         load();
+        onMutated?.();
       } catch (err) {
         const e = err as ContractError;
         setActionError(errorMessage(e, m.targets_detail_remove_alias_failed()));
       }
     },
-    [targetId, load],
+    [targetId, load, onMutated],
   );
 
   // Set display alias.
@@ -592,13 +609,14 @@ export function TargetDetailV2({
       setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput(data.displayAlias ?? '');
       setDisplayAliasEditing(false);
+      onMutated?.();
     } catch (err) {
       const e = err as ContractError;
       setActionError(
         errorMessage(e, m.targets_detail_set_display_alias_failed()),
       );
     }
-  }, [targetId, displayAliasInput]);
+  }, [targetId, displayAliasInput, onMutated]);
 
   // Clear display alias.
   const handleDisplayAliasClear = useCallback(async () => {
@@ -608,13 +626,14 @@ export function TargetDetailV2({
       setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput('');
       setDisplayAliasEditing(false);
+      onMutated?.();
     } catch (err) {
       const e = err as ContractError;
       setActionError(
         errorMessage(e, m.targets_detail_clear_display_alias_failed()),
       );
     }
-  }, [targetId]);
+  }, [targetId, onMutated]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -703,8 +722,10 @@ export function TargetDetailV2({
     guidanceParams,
   );
 
+  // RA and Dec on separate lines (user decision 2026-07-17): the mono face is
+  // wider than the old sans, so the joined form wrapped mid-coordinate.
   const raDecStr = astroFormat
-    ? `${astroFormat.raSexagesimal} / ${astroFormat.decSexagesimal}`
+    ? `${astroFormat.raSexagesimal}\n${astroFormat.decSexagesimal}`
     : null;
 
   // Identity facts split across two tabular columns (left-packed).
@@ -724,7 +745,12 @@ export function TargetDetailV2({
       label: m.targets_prop_constellation(),
       value: item?.constellation ?? null,
     },
-    { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
+    {
+      key: 'radec',
+      label: m.targets_prop_ra_dec(),
+      value: raDecStr,
+      mono: true, // spec 055 FR-005: RA/Dec coordinate values render mono.
+    },
   ];
   const identityB: PropertyDef[] = [
     {
@@ -929,23 +955,19 @@ export function TargetDetailV2({
         </div>
       }
       actions={
-        <>
-          {/* Primary/contextual action FIRST (Sessions convention: the
-              highlight action leads the inline-left group). */}
-          <Btn
-            size="sm"
-            variant="primary"
-            onClick={() => {
-              setNewProjectOpen(true);
-              void navigate({ to: '/projects/new' });
-            }}
-          >
-            {m.targets_detail_new_project()}
-          </Btn>
-          <Btn size="sm" variant="ghost" disabled>
-            {m.targets_detail_add_to_plan()}
-          </Btn>
-        </>
+        // #614 (merged from main): the permanently-disabled "Add to plan"
+        // placeholder button was removed — only the primary "New project"
+        // action remains in the header.
+        <Btn
+          size="sm"
+          variant="primary"
+          onClick={() => {
+            setNewProjectOpen(true);
+            void navigate({ to: '/projects/new' });
+          }}
+        >
+          {m.targets_detail_new_project()}
+        </Btn>
       }
       facts={
         <div className="alm-planner__cols">

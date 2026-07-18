@@ -169,6 +169,27 @@ test.describe("Journey 10 · Appearance / 4 themes (spec 043)", () => {
     }
   });
 
+  test("theme choice survives navigating away from Settings (#794)", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/settings/general");
+    await page.getByRole("button", { name: "Warm Clay" }).click();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      "warm-clay",
+    );
+
+    // #794 repro: switch theme, then navigate away — the choice must not
+    // silently revert to the resolved-system dark default.
+    await page.goto("/#/targets");
+    await expect(page.locator(".alm-sidebar")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      "warm-clay",
+    );
+  });
+
   test("theme choice survives a full reload (applied at boot via initAppearance)", async ({
     page,
   }) => {
@@ -349,5 +370,107 @@ test.describe("Journey 10 · Bottom log viewer (spec 019)", () => {
     // Escape closes the panel (Shell unmounts it).
     await page.keyboard.press("Escape");
     await expect(logRegion).toHaveCount(0);
+  });
+});
+
+// ── Scenario 6 — Whole-app zoom envelope pins (spec 055 FR-006, T032) ───────
+//
+// Mock-mode Playwright has no Tauri engine to drive real `setZoom` (T030's
+// `getCurrentWebview().setZoom` no-ops outside Tauri — see data/theme.ts
+// `applyEngineZoom`). Engine zoom shrinks the *reported* CSS viewport by the
+// zoom factor without CSS reflow bugs, so a viewport pre-shrunk by the same
+// factor is a faithful CI-reachable proxy for "does the layout survive at
+// this zoom level" (the actual multiply-by-webview-zoom mechanism is
+// Tauri-native and covered by the `verify-on-windows` scenario instead).
+//
+// Both pins below emulate the same 880x576 CSS viewport by construction
+// (1100/1.25 = 880x576; 1320/1.5 = 880x576) — the min-window x125% pin and
+// the enlarged-window x150% pin are deliberately chosen so they still land
+// inside the accepted envelope; min-window x150% (733px) is documented in
+// the spec as accepted degradation, not guarded here.
+test.describe("Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)", () => {
+  const OVERFLOW_TOLERANCE_PX = 2;
+
+  async function assertShellIntactNoHorizontalOverflow(page: Page): Promise<void> {
+    await expect(page.locator(".alm-sidebar")).toBeVisible();
+    await expect(page.locator(".alm-page__bar").first()).toBeVisible();
+    await expect(page.locator(".alm-frame__main")).toBeVisible();
+
+    const overflow = await page.evaluate(() => {
+      const doc = document.scrollingElement!;
+      return doc.scrollWidth - window.innerWidth;
+    });
+    expect(overflow).toBeLessThanOrEqual(OVERFLOW_TOLERANCE_PX);
+  }
+
+  test("1100x720 min window at 125% zoom equivalent (880x576) — shell intact, no horizontal overflow", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.setViewportSize({ width: 880, height: 576 });
+    await page.goto("/#/settings/general");
+    await expect(page.getByText("Theme", { exact: true })).toBeVisible();
+
+    await assertShellIntactNoHorizontalOverflow(page);
+  });
+
+  test("1320x864 window at 150% zoom equivalent (880x576) — shell intact, no horizontal overflow", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.setViewportSize({ width: 880, height: 576 });
+    await page.goto("/#/targets");
+    await expect(page.locator(".alm-sidebar")).toBeVisible();
+
+    await assertShellIntactNoHorizontalOverflow(page);
+  });
+});
+
+// ── Scenario 7 — Appearance "Restore defaults" adoption (#802) ──────────────
+
+test.describe("Journey 10 · Appearance Restore defaults (#802)", () => {
+  test("Restore defaults resets a changed theme back to System", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/settings/general");
+    await expect(page.getByText("Theme", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Espresso" }).click();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-theme",
+      "espresso-dark",
+    );
+
+    await page
+      .getByRole("button", { name: "Restore defaults", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "System" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// ── Scenario 8 — Advanced > Guided Tour restart confirm gate (#827) ─────────
+
+test.describe("Journey 10 · Advanced Guided Tour restart gate (#827)", () => {
+  test("'Restart guided flow' requires confirmation and shows success feedback, matching 'Restart first-run setup'", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto("/#/settings/advanced");
+
+    const restartBtn = page.getByTestId("guided-restart-btn");
+    await expect(restartBtn).toBeVisible();
+
+    // Clicking must not fire the restart directly — a confirm step gates it,
+    // symmetric with the "Restart first-run setup" control below it.
+    await restartBtn.click();
+    const confirmBtn = page.getByTestId("guided-restart-confirm-btn");
+    await expect(confirmBtn).toBeVisible();
+    await expect(page.getByTestId("guided-restart-done")).toHaveCount(0);
+
+    await confirmBtn.click();
+    await expect(page.getByTestId("guided-restart-done")).toBeVisible();
   });
 });
