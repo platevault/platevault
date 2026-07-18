@@ -190,6 +190,28 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(screen.getByText('/dest/lights/ngc1234.fits')).toBeInTheDocument();
   });
 
+  // #606: the collapsed group header (the default view — no expand needed)
+  // must show source (the ingestion name) AND destination together in the
+  // SAME row, without requiring the reviewer to expand file rows.
+  it('#606: the collapsed group header shows source and destination together', () => {
+    const plans = [
+      makePlan({
+        inboxItemId: 'from-to',
+        itemName: '2026-06-01/NGC7000',
+        actions: [
+          makeAction({
+            fromPath: '/deep/path/ngc1234.fits',
+            destinationPreview: '/dest/lights/ngc1234.fits',
+          }),
+        ],
+      }),
+    ];
+    renderPanel(plans);
+    const group = screen.getByTestId('plan-group-from-to');
+    expect(group).toHaveTextContent('2026-06-01/NGC7000');
+    expect(group).toHaveTextContent('lights');
+  });
+
   it('collapses file rows by default and shows a per-group summary line', () => {
     const plans = [
       makePlan({
