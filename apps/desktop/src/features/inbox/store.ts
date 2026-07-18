@@ -89,18 +89,44 @@ export function useInboxClassification(
   rootAbsolutePath: string,
   forceRescan = false,
 ) {
-  const { data, isFetching, error } = useQuery<InboxClassifyResponse>({
-    queryKey: inboxClassifyQueryKey(rootAbsolutePath, inboxItemId, forceRescan),
-    queryFn: async () =>
-      unwrap(
-        await commands.inboxClassify({
-          inboxItemId,
-          rootAbsolutePath,
-          forceRescan,
-        }),
+  const queryClient = useQueryClient();
+  const { data, isFetching, error, dataUpdatedAt } =
+    useQuery<InboxClassifyResponse>({
+      queryKey: inboxClassifyQueryKey(
+        rootAbsolutePath,
+        inboxItemId,
+        forceRescan,
       ),
-    enabled: !!inboxItemId && !!rootAbsolutePath,
-  });
+      queryFn: async () =>
+        unwrap(
+          await commands.inboxClassify({
+            inboxItemId,
+            rootAbsolutePath,
+            forceRescan,
+          }),
+        ),
+      enabled: !!inboxItemId && !!rootAbsolutePath,
+    });
+
+  // `inbox.classify` persists per-file extracted metadata rows as a backend
+  // side effect (issue #1019). The `inbox.item.metadata` query only re-fetches
+  // when its itemId changes, so on FIRST selection it can resolve BEFORE
+  // classify has written those rows, cache an empty file list, and never
+  // recover — the FR-032 "required metadata missing" banner then fails to
+  // render until a manual re-open. Invalidate that item's metadata query once
+  // each time classify settles with fresh data, mirroring the reclassify
+  // mutation (which persists the same rows and invalidates the same key).
+  // Bounded: keyed on `dataUpdatedAt` (fires once per settle) and gated on a
+  // real itemId; invalidating metadata never re-triggers classify, so there is
+  // no loop. The error path leaves `dataUpdatedAt` at 0 — no persistence, no
+  // invalidation.
+  useEffect(() => {
+    if (!inboxItemId || dataUpdatedAt === 0) return;
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.inbox.metadata(inboxItemId),
+    });
+  }, [inboxItemId, dataUpdatedAt, queryClient]);
+
   return { data, loading: isFetching, error: error ?? undefined };
 }
 
