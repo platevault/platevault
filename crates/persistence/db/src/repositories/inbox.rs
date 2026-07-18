@@ -507,9 +507,17 @@ pub struct UpsertInboxSubItem<'a> {
 pub async fn upsert_inbox_sub_item(
     pool: &SqlitePool,
     item: &UpsertInboxSubItem<'_>,
-) -> DbResult<()> {
+) -> DbResult<String> {
     let now = Timestamp::now_iso();
-    sqlx::query(
+    // `RETURNING id` yields the id of the row that actually persists: the new
+    // `item.id` on INSERT, but the PRE-EXISTING row's id on ON CONFLICT DO
+    // UPDATE. Callers MUST seed evidence/metadata/classification against this
+    // returned id, never the caller-supplied `item.id` — on a conflicting
+    // re-materialization the two diverge and seeding the discarded fresh id
+    // FK-fails (inbox_classification_evidence/inbox_classifications reference
+    // inbox_items(id) ON DELETE CASCADE), silently orphaning the real row's
+    // cache rows and stranding it evidence-less (issue #854).
+    let (persisted_id,): (String,) = sqlx::query_as(
         "INSERT INTO inbox_items
             (id, root_id, relative_path, source_group_id, group_key, group_label,
              frame_type, file_count, discovered_at, last_scanned_at,
@@ -521,7 +529,8 @@ pub async fn upsert_inbox_sub_item(
              file_count         = excluded.file_count,
              last_scanned_at    = excluded.last_scanned_at,
              content_signature  = excluded.content_signature,
-             state              = 'classified'",
+             state              = 'classified'
+         RETURNING id",
     )
     .bind(item.id)
     .bind(item.root_id)
@@ -535,9 +544,9 @@ pub async fn upsert_inbox_sub_item(
     .bind(&now)
     .bind(item.content_signature)
     .bind(item.lane)
-    .execute(pool)
+    .fetch_one(pool)
     .await?;
-    Ok(())
+    Ok(persisted_id)
 }
 
 /// Update `child_count` on a source group to reflect how many single-type
