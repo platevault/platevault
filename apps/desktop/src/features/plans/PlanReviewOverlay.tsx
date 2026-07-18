@@ -21,7 +21,7 @@
  * inbox multi-plan PlanApprovalOverlay) predate it and remain separate.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components';
 import { Btn, Pill, Banner, Table } from '@/ui';
@@ -155,11 +155,27 @@ export function PlanReviewOverlay({
     }
   }, [planId, queryClient]);
 
+  // #744 FR-002: `handleResume` (below) doesn't await the resumed run's
+  // completion — `usePlanApplyProgress.resume` returns once the poll has
+  // STARTED, not once it reaches a terminal state (unlike `runApply`, which
+  // does await completion). This ref tracks "a resume is in flight" so the
+  // effect below can sync `finalState`/refetch the plan exactly once the
+  // NEXT terminal outcome arrives, without also firing for (and clobbering
+  // the more precise `newState` set by) `handleApproveAndApply`'s own path.
+  const resumeAwaitingTerminal = useRef(false);
+  useEffect(() => {
+    if (!resumeAwaitingTerminal.current || progress.terminal === null) return;
+    resumeAwaitingTerminal.current = false;
+    invalidatePlan();
+    setFinalState(progress.terminal === 'completed' ? 'applied' : 'failed');
+  }, [progress.terminal, invalidatePlan]);
+
   // The overlay must not silently disappear mid-run (constitution II — the
   // apply outcome stays on screen); ignore close requests while busy.
   const handleClose = useCallback(() => {
     if (busy) return;
     resetApply();
+    resumeAwaitingTerminal.current = false;
     setApplyError(null);
     setGateReady(false);
     setFinalState(null);
@@ -249,7 +265,11 @@ export function PlanReviewOverlay({
     setApplyError(null);
     const ok = await resumeApply(planId);
     setResuming(false);
-    if (!ok) setApplyError(m.plans_review_resume_failed());
+    if (ok) {
+      resumeAwaitingTerminal.current = true;
+    } else {
+      setApplyError(m.plans_review_resume_failed());
+    }
   }, [planId, resuming, resumeApply]);
 
   /** Generate a retry plan from this plan's failed items (US5, T037) — the
@@ -456,8 +476,7 @@ export function PlanReviewOverlay({
           {/* Live apply progress (D17 — spec 025 progress UI, absorbed here). */}
           {(progress.running ||
             progress.terminal !== null ||
-            progress.paused ||
-            progress.resumeStalled) && (
+            progress.paused) && (
             <div
               className="alm-plan-review__progress"
               role="status"
@@ -518,14 +537,6 @@ export function PlanReviewOverlay({
                       : m.plans_review_resume_btn()}
                   </Btn>
                 </>
-              )}
-              {progress.resumeStalled && (
-                <Pill
-                  variant="warn"
-                  data-testid="plan-review-resume-stalled-badge"
-                >
-                  {m.plans_review_resume_stalled()}
-                </Pill>
               )}
             </div>
           )}

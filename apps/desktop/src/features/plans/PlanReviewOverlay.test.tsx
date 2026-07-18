@@ -32,6 +32,7 @@ const {
   mockPlansDiscard,
   mockPlansRetry,
   mockPlansResume,
+  mockPlansApplyStatus,
   mockPlansCancel,
   mockPlansConfirmDestructive,
   mockProtectionCheck,
@@ -43,6 +44,7 @@ const {
   mockPlansDiscard: vi.fn(),
   mockPlansRetry: vi.fn(),
   mockPlansResume: vi.fn(),
+  mockPlansApplyStatus: vi.fn(),
   mockPlansCancel: vi.fn(),
   mockPlansConfirmDestructive: vi.fn(),
   mockProtectionCheck: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock('@/bindings/index', () => ({
     plansDiscard: mockPlansDiscard,
     plansRetry: mockPlansRetry,
     plansResume: mockPlansResume,
+    plansApplyStatus: mockPlansApplyStatus,
     plansCancel: mockPlansCancel,
     plansConfirmDestructive: mockPlansConfirmDestructive,
     planProtectionCheckCmd: mockProtectionCheck,
@@ -457,7 +460,42 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
         resumedAt: '2026-07-09T00:00:00Z',
       }),
     );
+    // Issue #575 fix + #744 FR-002: `plan.resume` re-spawns the executor but
+    // returns no event channel, so this hook polls `plans.apply.status`
+    // instead. First tick: still applying. Second: done.
+    let statusCall = 0;
+    mockPlansApplyStatus.mockImplementation(() => {
+      statusCall += 1;
+      return Promise.resolve(
+        ok(
+          statusCall === 1
+            ? {
+                planId: 'plan-1',
+                runId: 'run-1',
+                planState: 'applying',
+                itemsTotal: 2,
+                itemsApplied: 1,
+                itemsFailed: 0,
+                itemsSkipped: 0,
+                itemsCancelled: 0,
+                itemsPending: 1,
+              }
+            : {
+                planId: 'plan-1',
+                runId: 'run-1',
+                planState: 'applied',
+                itemsTotal: 2,
+                itemsApplied: 2,
+                itemsFailed: 0,
+                itemsSkipped: 0,
+                itemsCancelled: 0,
+                itemsPending: 0,
+              },
+        ),
+      );
+    });
 
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderOverlay();
     const approveBtn = await screen.findByTestId('plan-review-approve-apply');
     await waitFor(() => expect(approveBtn).not.toBeDisabled());
@@ -477,16 +515,27 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
       ).not.toBeInTheDocument(),
     );
 
-    // Regression: resume_plan doesn't re-spawn the executor (#575), so no
-    // further events ever arrive on this channel. The UI must not render as
-    // active progress (no "Applying X of Y…", no infinite-busy trap) and
-    // must keep an escape affordance available instead.
-    expect(
-      await screen.findByTestId('plan-review-resume-stalled-badge'),
-    ).toHaveTextContent(/not restarted yet/i);
-    expect(screen.queryByText(/Applying \d+ of \d+/)).not.toBeInTheDocument();
-    expect(screen.getByText('Discard plan')).not.toBeDisabled();
-    expect(screen.getByTestId('plan-review-approve-apply')).not.toBeDisabled();
+    // #744: the run genuinely continues (issue #575 is fixed) — the overlay
+    // now reflects that as real, busy progress instead of a permanent
+    // "stalled" dead end. Discard/Approve are disabled while it runs, same
+    // as any other in-flight apply; Cancel is the live escape hatch.
+    expect(screen.getByTestId('plan-review-cancel-run')).toBeInTheDocument();
+    expect(screen.getByText('Discard plan')).toBeDisabled();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Applying 1 of 2/)).toBeInTheDocument(),
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+    // Terminal: the footer syncs to the applied state (Close-only, matching
+    // the approve-and-apply path) instead of leaving a stale Discard/Approve
+    // pair around a plan that already finished applying.
+    await waitFor(() =>
+      expect(screen.getByText('2 items applied')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('plan-review-approve-apply')).toBeNull();
+    expect(screen.getByText('Close')).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('cannot approve a plan with zero items (FR-014)', async () => {
