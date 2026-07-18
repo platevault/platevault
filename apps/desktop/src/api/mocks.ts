@@ -86,6 +86,9 @@ import type {
   ProjectNoteUpdateResult,
   ManifestListResponse_Serialize,
   PlanSummary_Serialize,
+  OnboardingStateDto,
+  OnboardingItemDto,
+  OnboardingFlagsDto,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -336,6 +339,85 @@ let mockCalibrationTolerances: CalibrationTolerances = {
   requireSameBinning: true,
   requireSameOffset: true,
 };
+
+// ── Onboarding (spec 056) ─────────────────────────────────────────────────
+//
+// Static mock state mirroring the Rust ITEM_REGISTRY's shape (11 items, five
+// FR-006 pages). The backend-authoritative auto-tick event path (research R5)
+// is a documented no-op in mock mode (VC-002 limit): mock mode can never fake
+// an `auto_checked` item — only the real bus subscriber produces them. Manual
+// actions (`set_item_state`, `section_set`, `restore`) round-trip through this
+// in-memory cache so mock-mode checklist specs can exercise check-off, dismiss,
+// remove, and restore without a backend.
+type MockOnboardingItemSeed = [
+  itemId: string,
+  page: OnboardingItemDto['page'],
+  hasAutoTick: boolean,
+];
+
+const MOCK_ONBOARDING_ITEMS: MockOnboardingItemSeed[] = [
+  ['inbox.confirm_first', 'inbox', true],
+  ['inbox.apply_first_plan', 'inbox', true],
+  ['sessions.review_first', 'sessions', false],
+  ['sessions.add_note', 'sessions', false],
+  ['calibration.match_master', 'calibration', false],
+  ['calibration.review_masters', 'calibration', false],
+  ['targets.resolve_first', 'targets', true],
+  ['targets.add_favourite', 'targets', false],
+  ['projects.create_first', 'projects', true],
+  ['projects.launch_tool', 'projects', true],
+  ['projects.review_artifacts', 'projects', false],
+];
+
+function freshMockOnboardingItems(): OnboardingItemDto[] {
+  return MOCK_ONBOARDING_ITEMS.map(([itemId, page, hasAutoTick]) => ({
+    itemId,
+    page,
+    state: 'unchecked',
+    at: new Date().toISOString(),
+    source: 'seed',
+    prerequisite: null,
+    hasAutoTick,
+  }));
+}
+
+let mockOnboardingItems: OnboardingItemDto[] = freshMockOnboardingItems();
+let mockOnboardingFlags: OnboardingFlagsDto = {
+  orientationDone: false,
+  sectionHidden: false,
+  sidebarCollapsed: false,
+};
+
+function mockOnboardingStateDto(): OnboardingStateDto {
+  const perPageMap = new Map<
+    OnboardingItemDto['page'],
+    { done: number; total: number }
+  >();
+  for (const item of mockOnboardingItems) {
+    const entry = perPageMap.get(item.page) ?? { done: 0, total: 0 };
+    entry.total += 1;
+    if (item.state !== 'unchecked') entry.done += 1;
+    perPageMap.set(item.page, entry);
+  }
+  const pageOrder: OnboardingItemDto['page'][] = [
+    'inbox',
+    'sessions',
+    'calibration',
+    'targets',
+    'projects',
+  ];
+  const perPage = pageOrder.flatMap((page) => {
+    const entry = perPageMap.get(page);
+    return entry ? [{ page, ...entry }] : [];
+  });
+  const done = perPage.reduce((sum, p) => sum + p.done, 0);
+  const total = perPage.reduce((sum, p) => sum + p.total, 0);
+  return {
+    items: mockOnboardingItems.map((i) => ({ ...i })),
+    flags: { ...mockOnboardingFlags },
+    progress: { done, total, perPage },
+  };
+}
 
 let mockRoots: LibraryRoot[] = [
   {
@@ -1666,6 +1748,80 @@ export async function mockInvoke(
     }
     case 'tour_complete_step': {
       return null;
+    }
+
+    // ---------- Onboarding (spec 056) ----------
+    // Manual actions round-trip through the in-memory cache; the auto-tick
+    // event path is a documented no-op in mock mode (VC-002 limit).
+    case 'onboarding_state_get': {
+      return { state: mockOnboardingStateDto() };
+    }
+    case 'onboarding_item_set_state': {
+      const itemId = _args?.itemId as string;
+      const nextState = _args?.state as OnboardingItemDto['state'];
+      const item = mockOnboardingItems.find((i) => i.itemId === itemId);
+      if (!item) {
+        return mockContractError(
+          'onboarding.item.unknown',
+          `unknown onboarding item id: ${itemId}`,
+        );
+      }
+      // Manual states are permanent (PQ-002/FR-017); once settled, ignore.
+      if (item.state === 'unchecked') {
+        item.state = nextState;
+        item.source = 'user';
+        item.at = new Date().toISOString();
+      }
+      return { item: { ...item } };
+    }
+    case 'onboarding_orientation_complete': {
+      if (!mockOnboardingFlags.orientationDone) {
+        mockOnboardingFlags = {
+          ...mockOnboardingFlags,
+          orientationDone: true,
+        };
+      }
+      return { orientationDoneAt: new Date().toISOString() };
+    }
+    case 'onboarding_section_set': {
+      const hidden = _args?.hidden as boolean | null | undefined;
+      const sidebarCollapsed = _args?.sidebarCollapsed as
+        | boolean
+        | null
+        | undefined;
+      if (hidden == null && sidebarCollapsed == null) {
+        return mockContractError(
+          'onboarding.invalid_state',
+          'onboarding.section.set request must set hidden or sidebarCollapsed',
+        );
+      }
+      if (hidden === false) {
+        return mockContractError(
+          'onboarding.invalid_state',
+          'hidden may only be true; unhide via onboarding.restore',
+        );
+      }
+      mockOnboardingFlags = {
+        ...mockOnboardingFlags,
+        sectionHidden:
+          hidden === true ? true : mockOnboardingFlags.sectionHidden,
+        sidebarCollapsed:
+          sidebarCollapsed == null
+            ? mockOnboardingFlags.sidebarCollapsed
+            : sidebarCollapsed,
+      };
+      return { flags: { ...mockOnboardingFlags } };
+    }
+    case 'onboarding_restore': {
+      // Re-derive AUTOMATIC items only (mock: reset to unchecked); manual
+      // states survive. Clears the hidden flag (FR-014).
+      mockOnboardingItems = mockOnboardingItems.map((i) =>
+        i.hasAutoTick && (i.state === 'unchecked' || i.state === 'auto_checked')
+          ? { ...i, state: 'unchecked', source: 'seed' }
+          : i,
+      );
+      mockOnboardingFlags = { ...mockOnboardingFlags, sectionHidden: false };
+      return { state: mockOnboardingStateDto() };
     }
 
     // ---------- First-Run / Batch Commands ----------
