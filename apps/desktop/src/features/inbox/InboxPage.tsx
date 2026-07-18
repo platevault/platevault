@@ -1101,9 +1101,27 @@ export function InboxPage() {
         detail={
           selectedItem != null ? (
             <InboxDetail
-              // Remount per item so per-item state (pending type overrides)
-              // never leaks across selections.
-              key={selectedItem.inboxItemId}
+              // Remount per SOURCE GROUP (not per raw item id) so per-item
+              // state (pending overrides, the "Needs review" bulk-select /
+              // frame-type / exposure fields) never leaks across a genuinely
+              // different selection, but SURVIVES the involuntary id churn
+              // classify()'s own materialize_sub_items performs on the very
+              // FIRST classify of a freshly scanned item (placeholder row
+              // purged, replaced by a fresh-UUID needs-review sub-item —
+              // `useInboxReclassifyV2`'s docstring above, `classify.rs`'s
+              // `materialize_sub_items`). Keying on `inboxItemId` remounted
+              // InboxDetail — wiping `selectedFiles`/`bulkFrameType` — the
+              // instant that churn landed, mid-sequence, silently no-opping
+              // the bulk-reclassify Apply click (CI-red,
+              // `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`
+              // — `allReclassifyV2CallCount` in the CI dump proved the click
+              // never reached a real command). The materialized sub-item
+              // always carries the SAME `sourceGroupId` as the placeholder it
+              // replaced (`classify.rs`'s `sg_id_for_split`), so this key is
+              // stable across exactly that transition while still changing
+              // for an unrelated row (a different source group, or a legacy
+              // pre-source-group item, where it falls back to the item id).
+              key={selectedItem.sourceGroupId ?? selectedItem.inboxItemId}
               item={selectedItem}
               rootAbsolutePath={selectedRootPath}
               classification={classification ?? null}

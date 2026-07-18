@@ -5,30 +5,17 @@
 /**
  * Issue #724/#755 CI-red (Real-UI E2E `inbox_ui_unclassified_gate_bulk_
  * reclassify_unblocks_confirm`, run 29638271121/job 88064532716, commit
- * 1fa9cc70): after a bulk `reclassify_v2` resolves an unclassified item to
- * `single_type` (backend confirmed: state=classified, frameTypeEffective=
- * light, needsReviewCount=0), the UI's unclassified-gate banner and disabled
- * Confirm stayed stuck on the PRE-reclassify state — end-to-end, real
- * router, real selection handoff (unlike `InboxPage.metadataGate.test.tsx`/
- * `InboxPage.applyOne.test.tsx`, which stub `useSearch`/`useNavigate` as
- * static/no-op — this test needs `navigate()` to actually move `selected`,
- * since the bug is IN that handoff).
+ * 1fa9cc70). Three rounds of diagnosis on this file; the FINAL, CI-log-decided
+ * root cause is the last `describe` block below — see its docstring. The
+ * earlier rounds (empty-`subItems` handoff, selection-handoff ordering) were
+ * investigated and their fixes kept as defense-in-depth, but neither explained
+ * the actual CI dump (`allReclassifyV2CallCount: 0` — the real
+ * `inbox.reclassify_v2` command was NEVER invoked at all).
  *
- * Root cause: `reclassify_v2` re-splits the source group into a NEW sub-item
- * id (`materialize_sub_items` always mints a fresh UUID, `classify.rs`).
- * Two independent effects in `InboxPage` react to the ensuing list refetch on
- * the SAME render: `useStaleSelectionCleanup` (declared first) sees the OLD
- * selected id is no longer `found` and clears `selected` to `undefined`;
- * `resolveReclassifyHandoff`'s effect (declared later) tries to navigate
- * `selected` to the NEW post-split id. Both call `navigate()` in the same
- * commit — the stale-cleanup's `undefined` wins because `pendingReclassify
- * SelectionId` timing let it fire on an EARLIER render (as soon as the list
- * refetch lands) than the handoff's own effect, which additionally waits one
- * more render for `listLoading` to have settled. Once cleared, nothing is
- * selected — `InboxDetail` unmounts to the pre-reclassify OLD item having
- * already rendered its stale gate one paint before the clear takes effect
- * (E2E takes its DOM snapshot in that window), and the handoff can never
- * retry (it already consumed its one-shot `pendingReclassifySelectionId`).
+ * This suite needs a STATEFUL `useSearch`/`useNavigate` mock (unlike
+ * `InboxPage.metadataGate.test.tsx`/`InboxPage.applyOne.test.tsx`'s static/
+ * no-op ones) because the bugs under test live in how `InboxPage` reacts to
+ * `selected` actually changing.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -41,11 +28,12 @@ function render(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return rtlRender(
+  const result = rtlRender(
     <QueryClientProvider client={queryClient}>
       <PageStatusProvider>{ui}</PageStatusProvider>
     </QueryClientProvider>,
   );
+  return { ...result, queryClient };
 }
 
 // ── Stateful router mock ─────────────────────────────────────────────────────
@@ -313,5 +301,107 @@ describe('InboxPage bulk-reclassify unblocks Confirm (#724/#755 CI-red)', () => 
     expect(screen.queryByTestId('inbox-unclassified-alert')).toBeNull();
     // Selection never needed to move — no handoff, no id change.
     expect(getSearch().selected).toBe(OLD_ID);
+  });
+});
+
+// ── FINAL diagnosis (CI-log-decided, run 29638271121) ───────────────────────
+//
+// The CI dump was decisive and overturned both earlier hypotheses:
+// `allReclassifyV2CallCount: 0` — the real `inbox.reclassify_v2` command was
+// NEVER invoked — while `bulkFieldsetPresent: false` at dump time is a RED
+// HERRING for "the fieldset never renders": that testid is
+// `.alm-inbox-detail__bulk-controls`, gated on local `selectedFiles.size > 0`
+// (`InboxDetail.tsx:1011`) — a POST-interaction state, not a structural
+// render condition. The banner (`inbox-unclassified-alert`,
+// `InboxDetail.tsx:847`) is gated purely on `classification.type`, unrelated
+// to `unclassifiedFiles`/`selectedFiles` — so it staying present alongside an
+// absent fieldset does NOT mean the fieldset's condition evaluates wrong; it
+// means SOMETHING reset `selectedFiles` back to empty AFTER the retry loop
+// already interacted with it.
+//
+// `handleBulkApply`'s success path (`InboxDetail.tsx` ~440) is the only
+// in-component code that resets `selectedFiles` — ruled out, since that path
+// calls `reclassifyV2` first and the call count is 0. The other way local
+// state resets to empty is an INVOLUNTARY REMOUNT: `InboxPage.tsx` (pre-fix)
+// keyed `<InboxDetail key={selectedItem.inboxItemId}>` — and `classify()`'s
+// OWN materialize_sub_items (triggered by the FIRST classify of a freshly
+// scanned item, not by any reclassify) purges the placeholder row and mints
+// a fresh-UUID needs-review sub-item id (`classify.rs`'s `sg_id_for_split` /
+// `materialize_sub_items`). That id churn remounts `InboxDetail`, wiping
+// `selectedFiles`/`bulkFrameType` — if it lands in the (WebDriver-widened,
+// by #854's added exposureS-field requirement) window between the E2E
+// retry-loop's last DOM-value re-verification and the actual click event
+// being processed, `handleBulkApply` runs against the FRESH (reset, empty)
+// state and silently no-ops via its own `if (selectedFiles.size === 0)
+// return;` guard — matching `allReclassifyV2CallCount: 0` exactly.
+//
+// Fix: key `InboxDetail` on the STABLE `sourceGroupId` (which the freshly
+// materialized sub-item always shares with the placeholder it replaced),
+// falling back to `inboxItemId` for legacy pre-source-group rows — so the
+// component survives this involuntary churn while still remounting for a
+// genuinely different row.
+describe('InboxDetail survives the involuntary id churn from the FIRST classify (CI-red final diagnosis)', () => {
+  it('preserves in-progress bulk-select state across an id swap that keeps the same sourceGroupId', async () => {
+    const { queryClient } = render(<InboxPage />);
+
+    await screen.findByTestId(`inbox-item-${OLD_ID}`);
+    screen.getByTestId(`inbox-item-${OLD_ID}`).click();
+    await waitFor(() => expect(mockInboxClassify).toHaveBeenCalled());
+
+    // Start the bulk-reclassify interaction on the OLD (placeholder) id.
+    const selectAll = await screen.findByTestId('reclassify-select-all');
+    selectAll.click();
+    const bulkFrameType = screen.getByTestId(
+      'bulk-frame-type',
+    ) as HTMLSelectElement;
+    bulkFrameType.value = 'light';
+    bulkFrameType.dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor(() => expect(selectAll).toBeChecked());
+    expect(bulkFrameType.value).toBe('light');
+
+    // Simulate classify()'s OWN materialize_sub_items id churn landing MID
+    // interaction: the list now reports the SAME sourceGroupId under a
+    // DIFFERENT inboxItemId (still genuinely unclassified — nothing has been
+    // reclassified yet), and something moves `selected` to follow it (the
+    // exact mechanism is out of scope here; this test isolates ONLY whether
+    // InboxDetail's own local state survives the swap).
+    mockInboxList.mockResolvedValue(
+      ok({ items: [newItem], capped: false, limit: 500 }),
+    );
+    mockInboxClassify.mockResolvedValue(
+      ok({
+        type: 'unclassified',
+        frameType: null,
+        unclassifiedFiles: ['ambiguous_001.fits'],
+      }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['inbox', 'all'] });
+    setSearch((prev) => ({ ...prev, selected: NEW_ID }));
+
+    await waitFor(() => expect(getSearch().selected).toBe(NEW_ID));
+
+    // The regression: with the pre-fix `key={inboxItemId}`, this id swap
+    // remounts InboxDetail — resetting `selectedFiles`/`bulkFrameType` to
+    // empty — and the click below would silently no-op
+    // (`allReclassifyV2CallCount: 0`, the real CI symptom). With the fix
+    // (`key={sourceGroupId ?? inboxItemId}`, both items share 'sg-1'), the
+    // SAME component instance survives, and the just-set values are still
+    // there to submit.
+    const selectAllAfter = screen.getByTestId('reclassify-select-all');
+    const bulkFrameTypeAfter = screen.getByTestId(
+      'bulk-frame-type',
+    ) as HTMLSelectElement;
+    expect(selectAllAfter).toBeChecked();
+    expect(bulkFrameTypeAfter.value).toBe('light');
+
+    screen.getByTestId('bulk-apply-btn').click();
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
+    expect(mockInboxReclassifyV2).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bulk: expect.arrayContaining([
+          expect.objectContaining({ property: 'frameType', value: 'light' }),
+        ]),
+      }),
+    );
   });
 });
