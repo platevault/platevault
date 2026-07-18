@@ -488,9 +488,14 @@ mod tests {
 
     #[test]
     fn step_registry_completion_topics() {
-        assert_eq!(STEP_REGISTRY[0].completion_topic, "inventory.confirmed");
+        // Bind against the published wire-format constants where one exists
+        // (audit_types::event_bus), so a rename of the real topic constant —
+        // not just a hand-typed literal — is what this test tracks.
+        // "project.created" has no shared TOPIC_ constant (project_setup.rs
+        // publishes it as a bare literal); no binding is possible there.
+        assert_eq!(STEP_REGISTRY[0].completion_topic, audit::event_bus::TOPIC_INVENTORY_CONFIRMED);
         assert_eq!(STEP_REGISTRY[1].completion_topic, "project.created");
-        assert_eq!(STEP_REGISTRY[2].completion_topic, "tool.launch");
+        assert_eq!(STEP_REGISTRY[2].completion_topic, audit::event_bus::TOPIC_TOOL_LAUNCH);
     }
 
     #[test]

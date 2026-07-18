@@ -349,8 +349,11 @@ mod tests {
     #[tokio::test]
     async fn empty_query_returns_recent_suggestions() {
         let db = test_db().await;
-        // No data — should return empty without error.
+        // Fresh DB has no targets/sessions/projects, so the recent_* queries
+        // must return nothing — the old `|| score >= 0.0` fallback passed
+        // unconditionally (scores are always >= 0.0 by construction) and never
+        // actually distinguished "no data" from "data with a bug".
         let results = search_global(db.pool(), "").await.unwrap();
-        assert!(results.is_empty() || results.iter().all(|r| r.score >= 0.0));
+        assert!(results.is_empty(), "fresh DB must have no recent suggestions; got: {results:?}");
     }
 }

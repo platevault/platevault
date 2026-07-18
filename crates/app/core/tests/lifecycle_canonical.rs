@@ -216,20 +216,21 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
     let row = repo::get_project(&pool, &project_id).await.unwrap();
     assert_eq!(row.lifecycle, "processing", "canonical table updated");
 
-    // The legacy `project` table should NOT have `processing` for this id
-    // (it was never written by the new path — confirming no dual-write).
-    // After migration 0036, the `project` table no longer has a `state` column,
-    // so this query verifies that the column is absent.
+    // The legacy `project` table must have NO row for this id: the project
+    // was created via the `projects` table (spec-008 path), and no write
+    // surface inserts into legacy `project` for that path. A real dual-write
+    // regression (an accidental INSERT into `project` alongside `projects`)
+    // would surface here as `Some(_)`.
     let legacy_state: Option<(String,)> = sqlx::query_as("SELECT name FROM project WHERE id = ?")
         .bind(&project_id)
         .fetch_optional(&pool)
         .await
         .unwrap_or(None);
-    // The project was created via `projects` (spec-008 path) — it may not even
-    // have a row in the legacy `project` table (different tables for different specs).
-    // If it does exist, there is no `state` column after migration 0036.
-    // The important assertion is that `projects.lifecycle` is the only state source.
-    let _ = legacy_state; // just confirm no crash — table_for now points to `projects`
+    assert!(
+        legacy_state.is_none(),
+        "no row should exist in the legacy `project` table for a projects-table-path project; \
+         found: {legacy_state:?}"
+    );
 }
 
 // ── T048: auto-transitions write audit rows and emit project.unarchived ───────

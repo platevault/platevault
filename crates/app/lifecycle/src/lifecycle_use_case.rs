@@ -143,6 +143,7 @@ mod tests {
     async fn noop_returns_none_without_persisting() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
+        let mut rx = bus.subscribe();
 
         let result = transition_lifecycle(
             &repo,
@@ -161,6 +162,15 @@ mod tests {
         .unwrap();
 
         assert!(result.is_none());
+        // "Without persisting": the noop guard must short-circuit before the
+        // repository write AND before the event publish. InMemoryLifecycleRepository
+        // has no inspectable state (it would even return Err for from==to if
+        // record_transition were reached), so the bus is the only observable
+        // side channel proving the guard fired before any write.
+        assert!(
+            rx.try_recv().is_err(),
+            "noop transition must not publish lifecycle.transition.applied"
+        );
     }
 
     #[tokio::test]
