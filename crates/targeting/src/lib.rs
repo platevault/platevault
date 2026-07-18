@@ -47,6 +47,8 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "targeting");
+        // Source of truth is Cargo.toml's package name, not a second hand-typed
+        // literal in this file — catches CRATE_NAME drifting from the manifest.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 }

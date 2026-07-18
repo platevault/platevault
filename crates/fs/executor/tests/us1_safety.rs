@@ -458,14 +458,14 @@ async fn t011_existing_destination_refused_no_overwrite() {
 /// `list_pending_items` returns the right IDs before cancellation.
 #[tokio::test]
 async fn t012_batch_cancel_list_pending_items_returns_correct_ids() {
-    // This test validates the list_pending_items repository function that feeds
-    // the per-item audit loop in plan_apply.rs (T021).
-    //
-    // We use the persistence_db in-memory DB to exercise the full path.
-    // Note: this is an integration test in the executor crate that pulls in
-    // persistence_db via the app_core tests. Since executor has no DB dep,
-    // we verify the executor-level contract: on Cancelled outcome, the
-    // executor correctly returns which items were pending (via counts).
+    // `TerminalCounts` has no dedicated "pending" field — fs_executor has no
+    // DB dependency, so the actual `list_pending_items` repository query
+    // (persistence_db, exercised via plan_apply.rs T021) is out of scope
+    // here. What this executor-level test CAN and must verify: when both
+    // items are pre-cancelled before any execution starts, none of them are
+    // counted as succeeded/failed/skipped — i.e. both items are still
+    // implicitly pending (2 items - 0 accounted-for == 2 pending), which is
+    // the invariant the caller's `list_pending_items` sweep depends on.
 
     let dir = tempfile::tempdir().unwrap();
     let src1 = utf8(dir.path()).join("a.fits");
@@ -484,13 +484,13 @@ async fn t012_batch_cancel_list_pending_items_returns_correct_ids() {
     let outcome =
         execute_plan(vec![item1, item2], &cb, &cancel, &SkipSet::new(), &RetryQueue::new()).await;
 
-    // Both items cancelled — no events emitted by executor (callbacks are only
-    // emitted for items that started; the caller emits per-item audit rows).
     match outcome {
-        ApplyOutcome::Cancelled(_counts) => {
-            // Executor returned Cancelled — caller is responsible for per-item audit.
-            // The test documents the contract: caller must iterate the pending items
-            // and call append_event for each (see T021 in plan_apply.rs).
+        ApplyOutcome::Cancelled(counts) => {
+            assert_eq!(counts.succeeded, 0, "no item should have succeeded before cancellation");
+            assert_eq!(counts.failed, 0, "no item should have failed before cancellation");
+            assert_eq!(counts.skipped, 0, "no item should have been skipped before cancellation");
+            // Neither item was accounted for in the terminal counts, so both
+            // remain pending — this is what `list_pending_items` (T021) relies on.
         }
         other => panic!("expected Cancelled, got {other:?}"),
     }
