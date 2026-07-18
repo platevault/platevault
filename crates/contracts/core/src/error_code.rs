@@ -448,6 +448,18 @@ pub enum ErrorCode {
     #[serde(rename = "state_corrupted")]
     StateCorrupted,
 
+    // ── Onboarding (spec 056) ──────────────────────────────────────────────────
+    /// `onboarding.item.set_state` referenced an `item_id` not in the
+    /// registry (contracts/onboarding-commands.md `unknown_item`).
+    #[serde(rename = "onboarding.item.unknown")]
+    OnboardingItemUnknown,
+    /// A request violated an onboarding state-shape rule: `item.set_state`
+    /// with an auto state (`unchecked`/`auto_checked`), or `section.set` with
+    /// `hidden: false` — unhiding is exclusively `onboarding.restore`
+    /// (contracts/onboarding-commands.md `invalid_state`).
+    #[serde(rename = "onboarding.invalid_state")]
+    OnboardingInvalidState,
+
     // ── Generic fallback ─────────────────────────────────────────────────────
     /// Used when a legacy `String` error is wrapped into `ContractError`.
     #[serde(rename = "internal.error")]
