@@ -3747,6 +3747,18 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
  */
 "state_corrupted" | 
+/**
+ *  `onboarding.item.set_state` referenced an `item_id` not in the
+ *  registry (contracts/onboarding-commands.md `unknown_item`).
+ */
+"onboarding.item.unknown" | 
+/**
+ *  A request violated an onboarding state-shape rule: `item.set_state`
+ *  with an auto state (`unchecked`/`auto_checked`), or `section.set` with
+ *  `hidden: false` — unhiding is exclusively `onboarding.restore`
+ *  (contracts/onboarding-commands.md `invalid_state`).
+ */
+"onboarding.invalid_state" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
