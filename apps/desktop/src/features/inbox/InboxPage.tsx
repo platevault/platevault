@@ -366,9 +366,16 @@ export function InboxPage() {
   );
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
-  const { data: fileMetadata } = useInboxItemMetadata(
-    selectedItem?.inboxItemId ?? null,
-  );
+  //
+  // Issue #643: `loading`/`error` used to be discarded here, so a metadata
+  // fetch that never lands (or errors) left `fileMetadata` at its `[]`
+  // default — `hasMissingRequiredMeta` below then saw no files at all and
+  // silently left Confirm ENABLED on an item the backend would still refuse.
+  const {
+    data: fileMetadata,
+    loading: fileMetadataLoading,
+    error: fileMetadataError,
+  } = useInboxItemMetadata(selectedItem?.inboxItemId ?? null);
 
   // Destination library roots (non-inbox) for the per-detection "Source" picker.
   // When more than one exists, the user can choose where files land instead of
@@ -746,10 +753,15 @@ export function InboxPage() {
   // rows (including the sub-items T066 already materialized alongside it)
   // are confirmable, so confirm is disabled for both "unclassified" and
   // "mixed" here.
+  // Issue #643: while per-file metadata is loading or failed to load, we
+  // cannot know whether mandatory attributes are missing — fail safe by
+  // keeping Confirm disabled instead of judging over an empty array.
   const canConfirm =
     !!selectedItem &&
     !!classification &&
     classification.type === 'single_type' &&
+    !fileMetadataLoading &&
+    !fileMetadataError &&
     !hasMissingRequiredMeta &&
     !hasOpenPlan;
 
