@@ -14,13 +14,7 @@
  *   4. "Restore defaults" persists the in-code defaults and re-hydrates.
  */
 
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  act,
-} from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGet, mockUpdate } = vi.hoisted(() => ({
@@ -37,16 +31,22 @@ vi.mock('@/bindings/index', () => ({
 
 import { Ingestion } from './Ingestion';
 
+// Every field differs from Ingestion.tsx's in-code DEFAULTS. That is
+// load-bearing, not cosmetic: an identical fixture (the state before #1095's
+// follow-up) makes the assertions below indistinguishable from the component's
+// own defaults, so they pass whether or not the fetch ever resolves. Values are
+// plausible non-defaults — keep them differing from DEFAULTS when either side
+// changes.
 const SETTINGS = {
-  watcherEnabled: true,
-  scanOnStartup: true,
-  followSymlinks: false,
-  followJunctions: false,
-  hashingMode: 'lazy',
-  metadataExtraction: true,
-  exposureGroupingToleranceS: 2,
-  temperatureGroupingToleranceC: 5,
-  defaultFilter: null,
+  watcherEnabled: false,
+  scanOnStartup: false,
+  followSymlinks: true,
+  followJunctions: true,
+  hashingMode: 'eager',
+  metadataExtraction: false,
+  exposureGroupingToleranceS: 10,
+  temperatureGroupingToleranceC: 3,
+  defaultFilter: 'Ha',
 };
 
 beforeEach(() => {
@@ -61,19 +61,32 @@ beforeEach(() => {
 describe('Ingestion', () => {
   it('loads persisted settings and reflects them in the controls', async () => {
     render(<Ingestion save={vi.fn()} />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
-    expect(screen.getByLabelText('Scan on startup')).toBeChecked();
-    expect(screen.getByLabelText('Follow symbolic links')).not.toBeChecked();
-    expect(screen.getByLabelText('Follow NTFS junctions')).not.toBeChecked();
-    expect(screen.getByLabelText('Hashing mode')).toHaveValue('lazy');
+    // findBy on a hydrated *value*, not waitFor(mockGet called) + sync getBy —
+    // the call firing does not mean its promise resolved, and now that the
+    // fixture differs from DEFAULTS a sync assertion races hydration. The pane
+    // applies the whole document in one setSettings(loaded), so gating on this
+    // one control proves the other three have landed too.
+    await screen.findByRole('checkbox', {
+      name: 'Follow symbolic links',
+      checked: true,
+    });
+
+    expect(screen.getByLabelText('Scan on startup')).not.toBeChecked();
+    expect(screen.getByLabelText('Follow NTFS junctions')).toBeChecked();
+    expect(screen.getByLabelText('Hashing mode')).toHaveValue('eager');
   });
 
   it('persists a toggle change via ingestion.settings.update, preserving unrendered fields', async () => {
     render(<Ingestion save={vi.fn()} />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
-    const toggle = screen.getByLabelText('Follow symbolic links');
+    // Click only once the fetched state is in the control: clicking the
+    // pre-hydration default would toggle the wrong starting value and would
+    // persist DEFAULTS' unrendered fields, which the fixture no longer matches.
+    const toggle = await screen.findByRole('checkbox', {
+      name: 'Follow symbolic links',
+      checked: true,
+    });
     await act(async () => {
       fireEvent.click(toggle);
       await Promise.resolve();
@@ -81,7 +94,7 @@ describe('Ingestion', () => {
 
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
-        followSymlinks: true,
+        followSymlinks: false,
         // Unrendered fields must round-trip untouched.
         watcherEnabled: SETTINGS.watcherEnabled,
         metadataExtraction: SETTINGS.metadataExtraction,
@@ -94,16 +107,27 @@ describe('Ingestion', () => {
 
   it('persists "off" for the hashing mode selector', async () => {
     render(<Ingestion save={vi.fn()} />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
+    // Same hydration gate as above — the persisted payload is built from
+    // loaded state, so editing pre-hydration would send DEFAULTS' companions.
+    await screen.findByRole('checkbox', {
+      name: 'Follow symbolic links',
+      checked: true,
+    });
     const select = screen.getByLabelText('Hashing mode');
+    expect(select).toHaveValue('eager');
     await act(async () => {
       fireEvent.change(select, { target: { value: 'off' } });
       await Promise.resolve();
     });
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ hashingMode: 'off' }),
+      expect.objectContaining({
+        hashingMode: 'off',
+        // Proves the persisted document was built from the loaded settings,
+        // not from DEFAULTS.
+        defaultFilter: SETTINGS.defaultFilter,
+      }),
     );
   });
 
@@ -124,32 +148,30 @@ describe('Ingestion', () => {
     // Edit fires before the mount fetch has resolved.
     const select = screen.getByLabelText('Hashing mode');
     await act(async () => {
-      fireEvent.change(select, { target: { value: 'eager' } });
+      fireEvent.change(select, { target: { value: 'off' } });
       await Promise.resolve();
     });
-    expect(select).toHaveValue('eager');
+    expect(select).toHaveValue('off');
 
-    // Now let the slow initial fetch resolve with the stale "lazy" value.
+    // Now let the slow initial fetch resolve with the stale "eager" value —
+    // it must differ from the user's edit or this proves nothing.
     await act(async () => {
       resolveGet({ status: 'ok', data: SETTINGS });
       await Promise.resolve();
     });
 
     // The user's edit must survive — the late fetch must not stomp it.
-    expect(select).toHaveValue('eager');
+    expect(select).toHaveValue('off');
   });
 
   it('restore defaults persists in-code defaults and re-hydrates the controls', async () => {
-    mockGet.mockResolvedValueOnce({
-      status: 'ok',
-      data: { ...SETTINGS, followSymlinks: true, hashingMode: 'eager' },
-    });
     render(<Ingestion save={vi.fn()} />);
     // Wait for the fetched (non-default) value to be applied, not merely for
     // the get call to fire — asserting right after the call races hydration.
-    await waitFor(() =>
-      expect(screen.getByLabelText('Follow symbolic links')).toBeChecked(),
-    );
+    await screen.findByRole('checkbox', {
+      name: 'Follow symbolic links',
+      checked: true,
+    });
 
     const restoreBtn = screen.getByText('Restore defaults');
     await act(async () => {
@@ -157,9 +179,10 @@ describe('Ingestion', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() =>
-      expect(screen.getByLabelText('Follow symbolic links')).not.toBeChecked(),
-    );
+    await screen.findByRole('checkbox', {
+      name: 'Follow symbolic links',
+      checked: false,
+    });
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ followSymlinks: false, hashingMode: 'lazy' }),
     );
