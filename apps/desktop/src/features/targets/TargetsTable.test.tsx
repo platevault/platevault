@@ -21,7 +21,13 @@
  *  - filter badges render broadband and/or narrowband bands.
  */
 
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  waitFor,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
 
@@ -42,6 +48,46 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
 }));
+
+// #634: real lunar separation + opposition now come from ONE batched
+// `target.moon_opposition.batch` IPC call instead of synchronous TS
+// `astronomy-engine` math — mock it (mirrors `TargetDetailV2.test.tsx`'s
+// `targetAstroFormatBatch` mock). `moonSeparationDeg: raDeg` reproduces the
+// exact degrees the old synchronous test fixtures assumed (a Dec-0 target's
+// separation from a Moon at RA0/Dec0 equals its RA), without hardcoding by id.
+const { mockMoonOppositionBatch } = vi.hoisted(() => ({
+  mockMoonOppositionBatch: vi.fn(),
+}));
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetMoonOppositionBatch: mockMoonOppositionBatch,
+  },
+}));
+
+interface MoonOppositionBatchTestRequest {
+  targets: Array<{ id: string; raDeg: number | null; decDeg: number | null }>;
+}
+
+beforeEach(() => {
+  mockMoonOppositionBatch.mockReset();
+  mockMoonOppositionBatch.mockImplementation(
+    async (req: MoonOppositionBatchTestRequest) => ({
+      status: 'ok' as const,
+      data: {
+        results: req.targets.map((t) => ({
+          id: t.id,
+          moonSeparationDeg:
+            t.raDeg != null && t.decDeg != null ? Math.abs(t.raDeg) : null,
+          opposition:
+            t.raDeg != null && t.decDeg != null
+              ? { date: '2026-08-01T00:00:00Z', daysUntil: 10 }
+              : null,
+        })),
+      },
+    }),
+  );
+});
 
 import {
   TargetsTable,
@@ -152,7 +198,7 @@ describe('TargetsTable (#84/#85)', () => {
     expect(screen.getAllByText('Unknown').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders real per-band viability pills with a night (spec 047 US3)', () => {
+  it('renders real per-band viability pills with a night (spec 047 US3)', async () => {
     render(
       <TargetsTable
         targets={TARGETS}
@@ -164,11 +210,14 @@ describe('TargetsTable (#84/#85)', () => {
       />,
     );
     // Each row has 7 band pills (L/R/G/B/Ha/SII/OIII), each labelled viable or
-    // not-viable — never a fabricated recommendation.
-    const haPills = screen.getAllByLabelText(
-      /^Ha: (viable|not viable) tonight$/,
-    );
-    expect(haPills.length).toBeGreaterThanOrEqual(1);
+    // not-viable — never a fabricated recommendation. #634: separation now
+    // resolves from the (mocked) batched IPC call, one render tick later.
+    await waitFor(() => {
+      const haPills = screen.getAllByLabelText(
+        /^Ha: (viable|not viable) tonight$/,
+      );
+      expect(haPills.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   it('fires onSelect when a target row is clicked', () => {
@@ -394,23 +443,27 @@ describe('TargetsTable — lunar distance (US2)', () => {
       .map((el) => el.textContent as string);
   }
 
-  it('renders whole-degree separations and "—" for unknown coordinates', () => {
+  it('renders whole-degree separations and "—" for unknown coordinates', async () => {
     renderWithNight('asc', [MID, UNK]);
-    // MID is 90° from the Moon.
-    expect(screen.getByText('90°')).toBeInTheDocument();
+    // MID is 90° from the Moon (#634: resolves from the mocked batched call).
+    await waitFor(() => expect(screen.getByText('90°')).toBeInTheDocument());
     // UNK shows an explicit dash, never a number.
     const table = screen.getByRole('table');
     expect(within(table).getAllByText('—').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('sorts ascending by real separation with unknowns last', () => {
+  it('sorts ascending by real separation with unknowns last', async () => {
     renderWithNight('asc', [FAR, UNK, NEAR, MID]);
-    expect(rowOrder()).toEqual(['NEAR', 'MID', 'FAR', 'UNK']);
+    await waitFor(() =>
+      expect(rowOrder()).toEqual(['NEAR', 'MID', 'FAR', 'UNK']),
+    );
   });
 
-  it('sorts descending by real separation, unknowns STILL last', () => {
+  it('sorts descending by real separation, unknowns STILL last', async () => {
     renderWithNight('desc', [FAR, UNK, NEAR, MID]);
-    expect(rowOrder()).toEqual(['FAR', 'MID', 'NEAR', 'UNK']);
+    await waitFor(() =>
+      expect(rowOrder()).toEqual(['FAR', 'MID', 'NEAR', 'UNK']),
+    );
   });
 
   it('gates off (all "—") when no observing night is provided', () => {
@@ -435,9 +488,15 @@ describe('TargetsTable — lunar distance (US2)', () => {
 // so growing the revealed target set only pays for the delta. These tests
 // assert the cache CONTRACT directly (object-identity reuse on a hit, a
 // fresh compute on a miss) rather than timing, which would be flaky on CI.
+//
+// #634: only `alt` (real astronomy-engine altitude sampling) is cached by
+// `genKey` now — `moon` is derived fresh from the (O(1) map-lookup) batch
+// geometry on every call, so the identity assertions below target `.alt`
+// specifically rather than the whole `{alt, moon}` wrapper.
 describe('TargetsTable row cache (#573)', () => {
   const { getCachedRow, rowCacheGenKey } = __testExports;
   const TARGET = coordItem('CACHE-TEST', 10, 20);
+  const NO_GEOMETRY = new Map();
   const SITE_A: ObserverSite = {
     id: 'site-a',
     name: 'A',
@@ -449,7 +508,7 @@ describe('TargetsTable row cache (#573)', () => {
     minHorizonAltDeg: 0,
   };
 
-  it('reuses the same object on a cache hit (same target id + genKey)', () => {
+  it('reuses the same alt object on a cache hit (same target id + genKey)', () => {
     const cache = new Map();
     const genKey = rowCacheGenKey(
       30,
@@ -467,6 +526,7 @@ describe('TargetsTable row cache (#573)', () => {
       1000,
       DEFAULT_MOON_AVOIDANCE,
       null,
+      NO_GEOMETRY,
     );
     const second = getCachedRow(
       cache,
@@ -477,11 +537,12 @@ describe('TargetsTable row cache (#573)', () => {
       1000,
       DEFAULT_MOON_AVOIDANCE,
       null,
+      NO_GEOMETRY,
     );
-    expect(second).toBe(first);
+    expect(second.alt).toBe(first.alt);
   });
 
-  it('recomputes (fresh object) when the generation key changes', () => {
+  it('recomputes a fresh alt object when the generation key changes', () => {
     const cache = new Map();
     const genKeyA = rowCacheGenKey(
       30,
@@ -506,6 +567,7 @@ describe('TargetsTable row cache (#573)', () => {
       1000,
       DEFAULT_MOON_AVOIDANCE,
       null,
+      NO_GEOMETRY,
     );
     const second = getCachedRow(
       cache,
@@ -516,10 +578,11 @@ describe('TargetsTable row cache (#573)', () => {
       1000,
       DEFAULT_MOON_AVOIDANCE,
       null,
+      NO_GEOMETRY,
     );
-    expect(second).not.toBe(first);
+    expect(second.alt).not.toBe(first.alt);
     // The new entry now occupies the cache slot for this id.
-    expect(cache.get(TARGET.id)).toBe(second);
+    expect(cache.get(TARGET.id)?.alt).toBe(second.alt);
   });
 
   it('rowCacheGenKey changes with each astronomy input', () => {

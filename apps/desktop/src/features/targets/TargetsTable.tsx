@@ -73,9 +73,11 @@
  * is driven by the host page via `?selected`).
  */
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { Pill, Banner, Skeleton, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
@@ -91,6 +93,7 @@ import type { ObservingNight } from './astro/moon-state';
 import {
   deriveRowMoonPlanning,
   UNKNOWN_ROW_PLANNING,
+  type RowMoonGeometry,
   type RowMoonPlanning,
 } from './astro/row-planning';
 import {
@@ -266,7 +269,6 @@ interface TargetGroup {
 interface RowCacheEntry {
   genKey: string;
   alt: RowAltitude;
-  moon: RowMoonPlanning;
 }
 
 /**
@@ -293,9 +295,16 @@ function rowCacheGenKey(
 }
 
 /**
- * Look up (or compute + cache) a target's full-catalogue-pass altitude/moon
- * values. `includeMoonGeometry` is always `false` here — same contract as
+ * Look up (or compute + cache) a target's full-catalogue-pass altitude, and
+ * derive its Moon planning fresh from the pre-fetched batch geometry map
+ * (#634). `includeMoonGeometry` is always `false` here — same contract as
  * the call sites this replaces.
+ *
+ * Only `alt` (real astronomy-engine altitude sampling) is cached by `genKey`
+ * — `moon` is no longer astronomy-engine-derived here (real geometry now
+ * comes from `moonGeometry`, an O(1) map lookup), so recomputing it on every
+ * call is cheap and always reflects the latest fetched batch without needing
+ * its own cache-invalidation key.
  */
 function getCachedRow(
   cache: Map<string, RowCacheEntry>,
@@ -306,21 +315,23 @@ function getCachedRow(
   dateMs: number,
   guidanceParams: MoonAvoidanceParams,
   night: ObservingNight | null,
+  moonGeometry: ReadonlyMap<string, RowMoonGeometry>,
 ): { alt: RowAltitude; moon: RowMoonPlanning } {
   const cached = cache.get(t.id);
-  if (cached && cached.genKey === genKey) return cached;
-  const alt = rowAltitudeFor(
+  const alt =
+    cached && cached.genKey === genKey
+      ? cached.alt
+      : rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false);
+  if (!cached || cached.genKey !== genKey) {
+    cache.set(t.id, { genKey, alt });
+  }
+  const moon = deriveRowMoonPlanning(
     t,
-    usableAltDeg,
-    site,
-    dateMs,
+    night,
     guidanceParams,
-    false,
+    night ? (moonGeometry.get(t.id) ?? null) : null,
   );
-  const moon = deriveRowMoonPlanning(t, night, guidanceParams);
-  const entry: RowCacheEntry = { genKey, alt, moon };
-  cache.set(t.id, entry);
-  return entry;
+  return { alt, moon };
 }
 
 /**
@@ -338,6 +349,7 @@ function groupTargets(
   dateMs: number,
   cache: Map<string, RowCacheEntry>,
   genKey: string,
+  moonGeometry: ReadonlyMap<string, RowMoonGeometry>,
 ): TargetGroup[] {
   const byKey = new Map<
     string,
@@ -354,6 +366,7 @@ function groupTargets(
       dateMs,
       guidanceParams,
       night,
+      moonGeometry,
     );
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
@@ -810,6 +823,68 @@ export function TargetsTable({
     guidanceParams,
   );
 
+  // #634: real lunar-separation + opposition geometry now comes from ONE
+  // batched Rust call per newly-seen target id (never per-row round trips),
+  // replacing the TS `astronomy-engine` math this table used to run at
+  // catalogue scale. A ref cache (mirrors the #573 `rowCacheRef` pattern)
+  // means TargetsPage's incremental reveal only fetches the NEW tail of
+  // ids each chunk, not the whole revealed set again; the night's `nightKey`
+  // gates invalidation (the Moon's position is night-specific). A version
+  // counter (not the cache map itself) triggers the re-render that picks up
+  // newly-arrived entries — mutating a ref never does.
+  const moonGeometryCacheRef = useRef<Map<string, RowMoonGeometry>>(new Map());
+  const moonGeometryNightRef = useRef<string | null>(null);
+  const [moonGeometryVersion, setMoonGeometryVersion] = useState(0);
+
+  useEffect(() => {
+    if (!night) return;
+    if (moonGeometryNightRef.current !== night.nightKey) {
+      moonGeometryCacheRef.current = new Map();
+      moonGeometryNightRef.current = night.nightKey;
+    }
+    const cache = moonGeometryCacheRef.current;
+    const missing = targets.filter(
+      (t) =>
+        typeof t.raDeg === 'number' &&
+        typeof t.decDeg === 'number' &&
+        !cache.has(t.id),
+    );
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    commands
+      .targetMoonOppositionBatch({
+        targets: missing.map((t) => ({
+          id: t.id,
+          raDeg: t.raDeg as number,
+          decDeg: t.decDeg as number,
+        })),
+        at: night.midnight.toISOString(),
+      })
+      .then(unwrap)
+      .then(({ results }) => {
+        if (cancelled) return;
+        for (const r of results) {
+          cache.set(r.id, {
+            lunarSeparationDeg: r.moonSeparationDeg,
+            nextOppositionDate: r.opposition
+              ? r.opposition.date.slice(0, 10)
+              : null,
+            daysToOpposition: r.opposition ? r.opposition.daysUntil : null,
+          });
+        }
+        setMoonGeometryVersion((v) => v + 1);
+      })
+      .catch(() => {
+        // Leave the missing ids absent from the cache — those rows render
+        // the existing explicit-unknown "—" state (never a fabricated
+        // value); a later target-set/night change retries the fetch.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [targets, night]);
+
   // Grouping + sorting + per-row altitude are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
   // inside the virtualized render loop. usableAltDeg + site are included in the
@@ -835,6 +910,7 @@ export function TargetsTable({
           dateMs,
           guidanceParams,
           night,
+          moonGeometryCacheRef.current,
         );
         return { target: t, alt, moon };
       });
@@ -913,6 +989,7 @@ export function TargetsTable({
         dateMs,
         rowCacheRef.current,
         genKey,
+        moonGeometryCacheRef.current,
       );
       return flattenGroups(groups);
     }
@@ -931,6 +1008,7 @@ export function TargetsTable({
         dateMs,
         guidanceParams,
         night,
+        moonGeometryCacheRef.current,
       );
       return { target: t, alt, moon };
     });
@@ -960,6 +1038,7 @@ export function TargetsTable({
     dims,
     collapsed,
     genKey,
+    moonGeometryVersion,
   ]);
 
   const virtualizer = useVirtualizer({
