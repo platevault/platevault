@@ -5,7 +5,45 @@ import { DetailPane, DetailHeader } from '@/components';
 import { m } from '@/lib/i18n';
 import { Pill, Section, Table, EmptyState, Skeleton } from '@/ui';
 import { useArchiveAudit } from './store';
-import type { ArchiveEntry } from '@/bindings/index';
+import type { ArchiveEntry, AuditOutcome } from '@/bindings/index';
+
+// ─── Audit outcome rendering ────────────────────────────────────────────────
+// Mirrors Settings → Audit Log's outcomeVariant/outcomeLabel
+// (apps/desktop/src/features/settings/AuditLog.tsx) — kept local rather than
+// shared since that file isn't in this feature's scope and the mapping is a
+// five-case switch, not worth a cross-feature extraction for one more caller.
+
+function outcomeVariant(
+  outcome: AuditOutcome,
+): 'ok' | 'danger' | 'warn' | 'neutral' {
+  switch (outcome) {
+    case 'applied':
+    case 'ok':
+      return 'ok';
+    case 'refused':
+    case 'paused':
+      return 'warn';
+    case 'failed':
+      return 'danger';
+    default:
+      return 'neutral';
+  }
+}
+
+function outcomeLabel(outcome: AuditOutcome): string {
+  switch (outcome) {
+    case 'applied':
+      return m.settings_auditlog_outcome_applied();
+    case 'ok':
+      return m.settings_auditlog_outcome_ok();
+    case 'refused':
+      return m.settings_auditlog_outcome_refused();
+    case 'failed':
+      return m.settings_auditlog_outcome_failed();
+    case 'paused':
+      return m.settings_auditlog_outcome_paused();
+  }
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -63,10 +101,26 @@ export function ArchiveDetail({ item }: Props) {
                 style: { width: 160 },
               },
               { key: 'detail', label: m.archive_prop_event() },
+              {
+                key: 'outcome',
+                label: m.settings_auditlog_col_outcome(),
+                style: { width: 90 },
+              },
+              {
+                key: 'actor',
+                label: m.settings_auditlog_col_actor(),
+                style: { width: 72 },
+              },
             ]}
             rows={history.map((h) => ({
               ts: <span className="alm-mono">{h.timestamp}</span>,
               detail: h.detail,
+              outcome: (
+                <Pill variant={outcomeVariant(h.outcome)}>
+                  {outcomeLabel(h.outcome)}
+                </Pill>
+              ),
+              actor: <span className="alm-mono">{h.actor}</span>,
             }))}
           />
         )}

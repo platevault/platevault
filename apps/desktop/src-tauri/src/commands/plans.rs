@@ -15,12 +15,16 @@
 //! The `plans.apply` stub is retained for spec 025 compatibility — it returns
 //! `unimplemented` and will be replaced when spec 025 lands.
 
-use app_core::archive_generator::{generate as generate_archive_plan, list_archived};
+use app_core::archive_generator::{
+    generate as generate_archive_plan, generate_restore as generate_restore_plan, list_archived,
+};
 use app_core::plans::{
     approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
     send_archive_to_trash,
 };
-use contracts_core::archive::{ArchiveListResponse, GenerateArchivePlanResult};
+use contracts_core::archive::{
+    ArchiveListResponse, GenerateArchivePlanResult, GenerateRestorePlanResult,
+};
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
     PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
@@ -173,6 +177,27 @@ pub async fn archive_plan_generate(
     title: Option<String>,
 ) -> Result<GenerateArchivePlanResult, ContractError> {
     generate_archive_plan(state.repo.pool(), &project_id, title.as_deref()).await
+}
+
+// ── archive.plan.generate_restore ─────────────────────────────────────────────
+
+/// `archive.plan.generate_restore` — build a reviewable restore (un-archive)
+/// plan from a previously applied archive plan (#885, decision D15). Creates
+/// a `ready_for_review` plan; performs NO filesystem mutation and never
+/// auto-applies (constitution II / FR-002).
+///
+/// # Errors
+///
+/// Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+/// applied archive plan), or `"archive.empty"` (nothing to restore).
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_plan_generate_restore(
+    state: State<'_, AppState>,
+    archived_plan_id: String,
+    title: Option<String>,
+) -> Result<GenerateRestorePlanResult, ContractError> {
+    generate_restore_plan(state.repo.pool(), &archived_plan_id, title.as_deref()).await
 }
 
 // ── archive.send_to_trash ─────────────────────────────────────────────────────

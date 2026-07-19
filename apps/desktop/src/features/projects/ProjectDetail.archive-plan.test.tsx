@@ -57,11 +57,20 @@ vi.mock('@/features/plans/PlanReviewOverlay', () => ({
   PlanReviewOverlay: ({
     planId,
     open,
+    emptyReason,
   }: {
     planId: string | null;
     open: boolean;
+    emptyReason?: string | null;
   }) =>
-    open ? <div data-testid="archive-plan-review-stub">{planId}</div> : null,
+    open ? (
+      <div
+        data-testid="archive-plan-review-stub"
+        data-empty-reason={emptyReason ?? ''}
+      >
+        {planId}
+      </div>
+    ) : null,
 }));
 
 import { ProjectDetailContent } from './ProjectDetail';
@@ -129,6 +138,36 @@ describe('ProjectDetail archive plan generation (spec 017 US2/WP-B)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('archive-plan-review-stub')).toHaveTextContent(
         'plan-archive-1',
+      );
+    });
+  });
+
+  // #603: `archive.plan.generate`'s `emptyReason` (set only for a 0-item
+  // plan) is forwarded to the overlay so it can render the diagnostic
+  // instead of a bare disabled "Approve & apply".
+  it('forwards emptyReason from archive.plan.generate to the review overlay (#603)', async () => {
+    setupStore({ lifecycle: 'completed' });
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
+      status: 'error',
+      contractVersion: '2.0.0',
+      requestId: 'req-4',
+      error: { code: 'plan.required', message: 'Plan required' },
+    });
+    mockGenerateArchivePlan.mockResolvedValue({
+      planId: 'plan-archive-empty',
+      itemCount: 0,
+      protectedItemCount: 0,
+      emptyReason:
+        "No files are linked to this project's sources — nothing to archive",
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-archived'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('archive-plan-review-stub')).toHaveAttribute(
+        'data-empty-reason',
+        "No files are linked to this project's sources — nothing to archive",
       );
     });
   });

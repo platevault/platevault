@@ -58,6 +58,13 @@ export interface PlanReviewOverlayProps {
    * pattern is to re-point this same overlay's `planId` at the new plan.
    */
   onRetryCreated?: (newPlanId: string) => void;
+  /**
+   * Diagnostic sentence explaining a 0-item plan (#603), sourced from the
+   * plan generator's own result (e.g. `GenerateArchivePlanResult.emptyReason`)
+   * — the overlay only ever sees the persisted `PlanDetail`, which carries no
+   * such field, so the caller must forward it from the generate call.
+   */
+  emptyReason?: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -121,6 +128,7 @@ export function PlanReviewOverlay({
   onApplied,
   onDiscarded,
   onRetryCreated,
+  emptyReason,
 }: PlanReviewOverlayProps) {
   const queryClient = useQueryClient();
 
@@ -496,6 +504,15 @@ export function PlanReviewOverlay({
             {plan.totalBytesRequired > 0 &&
               ` ${m.plans_review_bytes_required({ size: formatBytes(plan.totalBytesRequired) })}`}
           </Banner>
+
+          {/* #603: a 0-item plan otherwise dead-ends on a disabled
+              "Approve & apply" with no explanation — render the generator's
+              own diagnostic instead of leaving the user to guess. */}
+          {plan.itemsTotal === 0 && emptyReason && (
+            <Banner variant="warn" data-testid="plan-review-empty-reason">
+              {emptyReason}
+            </Banner>
+          )}
 
           {/* Every proposed item, reviewable before approval (SC-001).
               Virtualized (shared `.alm-listtable` pattern, spec 017 T050):

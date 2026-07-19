@@ -186,6 +186,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
     null,
   );
+  // #603: diagnostic sentence for a 0-item archive plan, surfaced by
+  // `archive.plan.generate` alongside the plan id — the review overlay has
+  // no other way to explain WHY a plan came back empty.
+  const [archiveEmptyReason, setArchiveEmptyReason] = useState<string | null>(
+    null,
+  );
 
   // spec 012 T008: attach the project's filesystem artifact watcher for as
   // long as this drawer is open; detaches on close/project switch.
@@ -336,6 +342,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         }),
         variant: 'info',
       });
+      setArchiveEmptyReason(res.emptyReason ?? null);
       setArchiveReviewPlanId(res.planId);
     } catch {
       addToast({
@@ -812,8 +819,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       <PlanReviewOverlay
         planId={archiveReviewPlanId}
         open={archiveReviewPlanId !== null}
-        onClose={() => setArchiveReviewPlanId(null)}
+        onClose={() => {
+          setArchiveReviewPlanId(null);
+          setArchiveEmptyReason(null);
+        }}
         title={m.projects_archive_review_title()}
+        emptyReason={archiveEmptyReason}
         onApplied={handleArchivePlanApplied}
         onRetryCreated={setArchiveReviewPlanId}
       />

@@ -25,17 +25,36 @@
  *
  * Spec 043 single-column alignment (8–13): ONE search box (no sidebar
  * duplicate), full-width sortable table with per-row testids + th aria-sort,
- * wired search filtering, detail docked only on selection, and the Reveal
- * stub disabled instead of the old enabled no-op button.
+ * wired search filtering, detail docked only on selection.
+ *
+ * Restore/Reveal (14–17, #756/#874/#885): Restore generates a reviewable
+ * restore plan and opens the shared PlanReviewOverlay (mocked here, mirroring
+ * ProjectDetail.archive-plan.test.tsx's convention); Reveal is enabled only
+ * once `archiveFolderPath` resolves and calls the shared `revealInOs`.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ArchiveEntry } from '@/bindings/index';
+import type { ArchiveEntry, GenerateRestorePlanResult } from '@/bindings/index';
 
-const { mockSendToTrash, mockPermanentlyDelete } = vi.hoisted(() => ({
+/** Matches `useMutation().mutate`'s options-object shape (mirrors ArchivePage's call). */
+interface MutateOpts {
+  onSuccess?: (res: GenerateRestorePlanResult) => void;
+  onError?: (err: Error) => void;
+}
+
+const {
+  mockSendToTrash,
+  mockPermanentlyDelete,
+  mockGenerateRestorePlan,
+  mockRevealInOs,
+  mockAddToast,
+} = vi.hoisted(() => ({
   mockSendToTrash: vi.fn(),
   mockPermanentlyDelete: vi.fn(),
+  mockGenerateRestorePlan: vi.fn(),
+  mockRevealInOs: vi.fn(),
+  mockAddToast: vi.fn(),
 }));
 
 const archiveListState: {
@@ -56,6 +75,29 @@ vi.mock('./store', () => ({
     mutate: mockPermanentlyDelete,
     isPending: false,
   }),
+  useGenerateRestorePlan: () => ({
+    mutate: mockGenerateRestorePlan,
+    isPending: false,
+  }),
+}));
+
+vi.mock('@/features/plans/PlanReviewOverlay', () => ({
+  PlanReviewOverlay: ({
+    planId,
+    open,
+  }: {
+    planId: string | null;
+    open: boolean;
+  }) =>
+    open ? <div data-testid="restore-plan-review-stub">{planId}</div> : null,
+}));
+
+vi.mock('@/shared/native/reveal', () => ({
+  revealInOs: mockRevealInOs,
+}));
+
+vi.mock('@/shared/toast', () => ({
+  addToast: mockAddToast,
 }));
 
 const mockNavigate = vi.fn();
@@ -79,6 +121,7 @@ function makeEntry(
     originalPath: 'D:/Astro/Projects/NGC7000_HOO_v1',
     sizeBytes: 12_400_000_000,
     archivedViaPlanId: 'plan-001',
+    archiveFolderPath: 'D:/Astro/.astro-plan-archive/plan-001',
     ...overrides,
   };
 }
@@ -218,8 +261,10 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     expect(screen.getByText('Audit history')).toBeInTheDocument();
   });
 
-  it('13. Reveal is a DISABLED stub with the platform-native label', () => {
-    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+  it('13. Reveal is DISABLED with a title when no archive folder path resolved (#874)', () => {
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', archiveFolderPath: null }),
+    ];
     mockSelectedId.current = 'proj-1';
     render(<ArchivePage />);
     const reveal = screen.getByTestId('archive-reveal-btn');
@@ -227,5 +272,81 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     expect(reveal).toHaveAttribute('title');
     // jsdom reports no platform → the Linux-generic label.
     expect(reveal).toHaveTextContent('Show in file manager');
+  });
+
+  it('14. Reveal is ENABLED and calls revealInOs with the resolved folder (#874)', () => {
+    archiveListState.data = [
+      makeEntry({
+        id: 'proj-1',
+        archiveFolderPath: 'D:/Astro/.astro-plan-archive/plan-001',
+      }),
+    ];
+    mockSelectedId.current = 'proj-1';
+    render(<ArchivePage />);
+    const reveal = screen.getByTestId('archive-reveal-btn');
+    expect(reveal).not.toBeDisabled();
+    fireEvent.click(reveal);
+    expect(mockRevealInOs).toHaveBeenCalledWith(
+      'D:/Astro/.astro-plan-archive/plan-001',
+      expect.objectContaining({ entityKind: 'other', entityId: 'proj-1' }),
+    );
+  });
+
+  it('15. Restore is disabled when archivedViaPlanId is null (#756)', () => {
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', archivedViaPlanId: null }),
+    ];
+    mockSelectedId.current = 'proj-1';
+    render(<ArchivePage />);
+    expect(screen.getByTestId('archive-restore-btn')).toBeDisabled();
+  });
+
+  it('16. Restore generates a restore plan and opens the review overlay (#756/#885)', async () => {
+    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+    mockSelectedId.current = 'proj-1';
+    mockGenerateRestorePlan.mockImplementation(
+      (_planId: string, opts?: MutateOpts) => {
+        opts?.onSuccess?.({
+          planId: 'restore-plan-1',
+          itemCount: 2,
+          protectedItemCount: 0,
+        });
+      },
+    );
+    render(<ArchivePage />);
+    fireEvent.click(screen.getByTestId('archive-restore-btn'));
+    expect(mockGenerateRestorePlan).toHaveBeenCalledWith(
+      'plan-001',
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('restore-plan-review-stub')).toHaveTextContent(
+        'restore-plan-1',
+      );
+    });
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: 'info' }),
+    );
+  });
+
+  it('17. Restore surfaces an error toast when plan generation fails', () => {
+    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+    mockSelectedId.current = 'proj-1';
+    mockGenerateRestorePlan.mockImplementation(
+      (_planId: string, opts?: MutateOpts) => {
+        opts?.onError?.(new Error('db failure'));
+      },
+    );
+    render(<ArchivePage />);
+    fireEvent.click(screen.getByTestId('archive-restore-btn'));
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: 'error' }),
+    );
+    expect(
+      screen.queryByTestId('restore-plan-review-stub'),
+    ).not.toBeInTheDocument();
   });
 });
