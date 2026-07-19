@@ -92,10 +92,15 @@ failing while every static check still passes.
 rather than corrected: with no aggregate row there is nothing to suppress
 (FR-026, SC-007).
 
-**Pre-existing inconsistency, fixed for free**: `count_unacknowledged_inbox_items`
-at `crates/persistence/db/src/repositories/q_desktop.rs:171-179` has **no**
-dedup clause at all, so the status-bar badge already counts the parent *and* its
-siblings. Removing the parent removes this divergence without a targeted fix.
+**~~Pre-existing inconsistency, fixed for free~~ — no longer true.** This
+paragraph described `count_unacknowledged_inbox_items` as having **no** dedup
+clause, so that removing the parent would resolve the status-bar divergence
+without a targeted fix. **#1092 changed that**: the function now calls
+`exclude_split_placeholder!` (`q_desktop.rs:184`, imported at `:13`) and is the
+**fourth** suppression call site listed in §2 — not a beneficiary of the other
+three being deleted. It must be deleted explicitly. Deleting three of four
+leaves the status-bar count inconsistent with the list and SC-004 failing,
+while every static check still passes.
 
 Tests that become vacuous and should be deleted with the predicates:
 
@@ -297,7 +302,7 @@ is the actual source of the extra row.
 
 ## 5. Summary of the change surface
 
-**Deleted**: the parent write path (§4.1), the three dedup predicates and
+**Deleted**: the parent write path (§4.1), the four dedup predicates and
 #1081's macro (§2), the `plan_open` re-split shim (§1), the `group_key != ''`
 filter (§4.3), and the parent-shaped tests (§2, §4.8).
 
