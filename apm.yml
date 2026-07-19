@@ -30,8 +30,11 @@ dependencies:
   - srobroek/agentic-packages/packages/mcp-serena#main
   - srobroek/agentic-packages/packages/user-journeys#main
 includes: auto
+targets:
+  - claude
+  - codex
 scripts:
-  install-agentic-tools: apm install --target claude,codex,agent-skills --update
+  install-agentic-tools: apm install --target claude,codex --update
   compile-agentic-tools: apm compile --target codex --no-constitution && apm compile
     --target claude --no-constitution
   setup-agentic-tools: apm run install-agentic-tools && apm run compile-agentic-tools

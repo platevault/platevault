@@ -259,8 +259,7 @@
   padding: var(--alm-sp-1) var(--alm-sp-2);
   border-bottom: 1px solid var(--alm-border-subtle);
 }
-.alm-listpage__detail-close,
-.alm-listpage__detail-pin {
+.alm-listpage__detail-close {
   background: none;
   border: none;
   cursor: pointer;
@@ -270,11 +269,13 @@
   padding: var(--alm-sp-1);
   border-radius: var(--alm-radius-sm);
 }
-.alm-listpage__detail-close:hover,
-.alm-listpage__detail-pin:hover { color: var(--alm-text); }
+.alm-listpage__detail-close:hover { color: var(--alm-text); }
 
-/* Adaptive dock (spec 054 / #936): drag handle on the side panel's left
- * edge, and the pin-placement toggle in the detail bar (above). */
+/* Adaptive dock (spec 054 / #936): drag handle on the side panel's left edge.
+ * The placement control in the detail bar is the shared `SegControl`
+ * (#1066) — it carries its own `.alm-seg` styling and must NOT be given the
+ * old `__detail-pin` bare-button rule, which would strip its background and
+ * border. */
 .alm-listpage__detail--side {
   position: relative;
 }

@@ -47,7 +47,13 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import {
+  render,
+  fireEvent,
+  waitFor,
+  cleanup,
+  act,
+} from '@testing-library/react';
 import { CommandPalette, PAGES, buildTargetResults } from './CommandPalette';
 import { matchesSearch, normalizeDesig } from '@/features/targets/TargetsPage';
 import { commands } from '@/bindings/index';
@@ -83,106 +89,20 @@ vi.mock('@/bindings/index', async (importOriginal) => {
   };
 });
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type SearchResultKind = 'session' | 'target' | 'project' | 'page' | 'action';
-interface SearchResult {
-  id: string;
-  kind: SearchResultKind;
-  label: string;
-  sublabel?: string;
-  route: string;
-  score: number;
-}
-
-// ── Palette logic helpers (mirrors CommandPalette.tsx) ────────────────────────
-
-// The palette calls navigate({ to: result.route }) on item select.
-// This helper captures what would be passed to navigate.
-function buildNavigateCall(result: SearchResult): string {
-  return result.route;
-}
-
 // PAGES is imported directly from CommandPalette.tsx (the real source of
 // truth) so this test cross-checks production routes instead of a
 // hand-copied array that could silently drift (T007 guard).
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
-
-const MOCK_TARGET_RESULTS: SearchResult[] = [
-  {
-    id: 'target-m31',
-    kind: 'target',
-    label: 'M 31',
-    sublabel: 'Andromeda Galaxy',
-    route: '/targets/550e8400-e29b-41d4-a716-446655440202',
-    score: 0.95,
-  },
-  {
-    id: 'target-m31-alias',
-    kind: 'target',
-    label: 'M 31',
-    sublabel: 'matched alias: NGC 224',
-    route: '/targets/550e8400-e29b-41d4-a716-446655440202',
-    score: 0.88,
-  },
-  {
-    id: 'ses-001',
-    kind: 'session',
-    label: 'NGC 7000 Ha 2026-06-01',
-    route: '/sessions/ses-001',
-    score: 0.6,
-  },
-];
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('CommandPalette routing logic (T008)', () => {
-  it('1. target search result routes start with /targets/', () => {
-    const targets = MOCK_TARGET_RESULTS.filter((r) => r.kind === 'target');
-    for (const r of targets) {
-      expect(r.route).toMatch(/^\/targets\//);
-    }
-  });
-
-  it('2. alias-matched result sublabel surfaces the matched alias', () => {
-    const aliasResult = MOCK_TARGET_RESULTS.find(
-      (r) => r.id === 'target-m31-alias',
-    )!;
-    expect(aliasResult.sublabel).toContain('NGC 224');
-  });
-
-  it('3. navigate receives the full /targets/<uuid> route string', () => {
-    const targetResult = MOCK_TARGET_RESULTS.find((r) => r.kind === 'target')!;
-    const route = buildNavigateCall(targetResult);
-    expect(route).toBe('/targets/550e8400-e29b-41d4-a716-446655440202');
-  });
-
-  it('4. non-target results are not routed to /targets/', () => {
-    const nonTargets = MOCK_TARGET_RESULTS.filter((r) => r.kind !== 'target');
-    for (const r of nonTargets) {
-      expect(r.route).not.toMatch(/^\/targets\//);
-    }
-  });
-
-  it('5. target route UUID segment is a valid UUID v5 format', () => {
-    const targetResult = MOCK_TARGET_RESULTS[0];
-    const uuid = targetResult.route.replace('/targets/', '');
-    expect(uuid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
-  });
-
-  it('6. two alias results for same target share the same route (idempotent nav)', () => {
-    const allTargetResults = MOCK_TARGET_RESULTS.filter(
-      (r) => r.kind === 'target',
-    );
-    const routes = allTargetResults.map((r) => r.route);
-    // Both alias hits for M31 route to the same UUID
-    const unique = new Set(routes);
-    expect(unique.size).toBe(1);
-  });
-});
+// The former "CommandPalette routing logic (T008)" describe block (tests
+// 1-6) asserted properties of the local MOCK_TARGET_RESULTS fixture only —
+// it never called production code, and its "matched alias: NGC 224" sublabel
+// shape doesn't match what buildTargetResults actually produces (see
+// CommandPalette.tsx: sublabel is always primaryDesignation). Real coverage
+// for routing/sublabel/sorting behavior lives in the
+// 'buildTargetResults (#581 ...)' describe block below, which exercises the
+// actual exported function against the real matcher.
 
 describe('CommandPalette PAGES constant (T007 / X-3 guard)', () => {
   it('7. PAGES includes /targets list page', () => {
@@ -224,11 +144,32 @@ describe('CommandPalette PAGES constant (T007 / X-3 guard)', () => {
 });
 
 describe('CommandPalette debounce contract', () => {
-  it('11. debounce interval is 200ms (documented in component)', () => {
-    // The CommandPalette uses a 200ms debounce before calling searchGlobal.
-    // This test pins the value so accidental changes break the test.
-    const DEBOUNCE_MS = 200;
-    expect(DEBOUNCE_MS).toBe(200);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('11. debounces searchGlobal by 200ms after a query change', async () => {
+    // Exercises the real setTimeout(..., 200) in CommandPalette.tsx rather
+    // than pinning a local constant — a local constant can never disagree
+    // with the component.
+    await openPalette();
+    const input = document.querySelector<HTMLInputElement>(
+      '.alm-palette__input',
+    )!;
+    vi.mocked(commands.searchGlobal).mockClear();
+
+    vi.useFakeTimers();
+    fireEvent.change(input, { target: { value: 'M31' } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(199);
+    });
+    expect(commands.searchGlobal).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(commands.searchGlobal).toHaveBeenCalledWith('M31');
   });
 });
 

@@ -64,6 +64,29 @@ vi.mock('@/features/setup/sources-store', () => ({
   resetWizardStateWithSources: mockResetWizardStateWithSources,
 }));
 
+// Update section (#845/#869/#873/#888) — mocked so each test controls the
+// phase directly instead of exercising the real Tauri updater plugin.
+const {
+  mockGetUpdateSnapshot,
+  mockSubscribeUpdate,
+  mockCheckForUpdate,
+  mockRestartPendingUpdate,
+  mockGetRunningVersion,
+} = vi.hoisted(() => ({
+  mockGetUpdateSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
+  mockSubscribeUpdate: vi.fn().mockReturnValue(() => {}),
+  mockCheckForUpdate: vi.fn().mockResolvedValue(undefined),
+  mockRestartPendingUpdate: vi.fn().mockResolvedValue(undefined),
+  mockGetRunningVersion: vi.fn().mockResolvedValue(null),
+}));
+vi.mock('@/data/updateSubscription', () => ({
+  getUpdateSnapshot: mockGetUpdateSnapshot,
+  subscribeUpdate: mockSubscribeUpdate,
+  checkForUpdate: mockCheckForUpdate,
+  restartPendingUpdate: mockRestartPendingUpdate,
+  getRunningVersion: mockGetRunningVersion,
+}));
+
 function makeResponse(
   overrides: Partial<FirstRunRestartResponse> = {},
 ): FirstRunRestartResponse {
@@ -86,6 +109,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetSettings.mockResolvedValue({ values: {} });
   mockNavigate.mockResolvedValue(undefined);
+  mockGetUpdateSnapshot.mockReturnValue({ phase: 'idle' });
+  mockSubscribeUpdate.mockReturnValue(() => {});
+  mockGetRunningVersion.mockResolvedValue(null);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -221,5 +247,80 @@ describe('Advanced — guided-tour restart control (#827)', () => {
     expect(
       await screen.findByTestId('guided-restart-done'),
     ).toBeInTheDocument();
+  });
+});
+
+// ── Software Update section (#845 version display, #888 staged flow,
+// absorbing #869 relaunch-after-install and #873 failed-check states) ──────
+
+describe('Advanced — Software Update section', () => {
+  it('shows the running app version when available (#845)', async () => {
+    mockGetRunningVersion.mockResolvedValue('0.5.0');
+    render(<Advanced save={vi.fn()} />);
+
+    expect(
+      await screen.findByTestId('update-running-version'),
+    ).toHaveTextContent('0.5.0');
+  });
+
+  it('hides the running-version row when unavailable (mock/browser dev)', async () => {
+    mockGetRunningVersion.mockResolvedValue(null);
+    render(<Advanced save={vi.fn()} />);
+
+    await screen.findByTestId('update-status');
+    expect(
+      screen.queryByTestId('update-running-version'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows "up to date" for idle/up-to-date and no restart/retry controls', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({ phase: 'up-to-date' });
+    render(<Advanced save={vi.fn()} />);
+
+    expect(await screen.findByTestId('update-status')).toHaveTextContent(
+      /latest version/i,
+    );
+    expect(screen.queryByTestId('update-restart-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('update-retry-btn')).not.toBeInTheDocument();
+  });
+
+  it('shows a distinct check-failed state with a retry action, not "up to date" (#873)', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'check-failed',
+      error: 'network unreachable',
+    });
+    render(<Advanced save={vi.fn()} />);
+
+    const status = await screen.findByTestId('update-status');
+    expect(status).toHaveTextContent(/couldn't check/i);
+    expect(status).not.toHaveTextContent(/latest version/i);
+
+    fireEvent.click(await screen.findByTestId('update-retry-btn'));
+    expect(mockCheckForUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a restart action once an update is staged and ready', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({ phase: 'ready', version: '0.6.0' });
+    render(<Advanced save={vi.fn()} />);
+
+    expect(await screen.findByTestId('update-status')).toHaveTextContent(
+      '0.6.0',
+    );
+    fireEvent.click(await screen.findByTestId('update-restart-btn'));
+    expect(mockRestartPendingUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads "installed — restart manually", not a failure banner, when relaunch fails after install (#869)', async () => {
+    mockGetUpdateSnapshot.mockReturnValue({
+      phase: 'restart-failed',
+      version: '0.6.0',
+      error: 'relaunch denied',
+    });
+    render(<Advanced save={vi.fn()} />);
+
+    const status = await screen.findByTestId('update-status');
+    expect(status).toHaveTextContent(/restart the app manually/i);
+    expect(status).not.toHaveTextContent(/failed/i);
+    expect(await screen.findByTestId('update-restart-btn')).toBeInTheDocument();
   });
 });

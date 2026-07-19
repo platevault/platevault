@@ -144,10 +144,17 @@ function renderDetail(
 
 describe('SessionsTable — target group headers and rows', () => {
   it('1. renders a target group header for each distinct target', () => {
-    renderList();
-    // Sessions are grouped by target identity; each distinct target heads a group.
+    const { container } = renderList();
+    // Scoped to the actual group-header label cell (SessionsTable.tsx's
+    // `.alm-listgroup__label`, `data-testid="sessions-group-target-<key>"`)
+    // rather than "this text appears anywhere on the page" — the prior
+    // version would still pass even if grouping broke entirely and targets
+    // only ever rendered in the per-row `.alm-sessions-cell--target` cell.
+    const groupLabels = Array.from(
+      container.querySelectorAll('.alm-listgroup__label'),
+    ).map((el) => el.textContent);
     for (const target of ['NGC 7000', 'IC 1396', 'M31', 'M42']) {
-      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
+      expect(groupLabels.some((label) => label?.includes(target))).toBe(true);
     }
   });
 
@@ -345,10 +352,16 @@ describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance 
 
 describe('SessionsTable — live inventory fixture data (T106)', () => {
   it('16. renders sessions from every fixture target', () => {
-    renderList({ sources: INVENTORY_LIST_RESPONSE.sources });
-    // Distinct targets from the fixture all appear as group headers.
+    const { container } = renderList({
+      sources: INVENTORY_LIST_RESPONSE.sources,
+    });
+    // Scoped to the group-header label cell — see test 1's comment above for
+    // why "appears anywhere on the page" isn't sufficient here.
+    const groupLabels = Array.from(
+      container.querySelectorAll('.alm-listgroup__label'),
+    ).map((el) => el.textContent);
     for (const target of ['NGC 7000', 'M31', 'M42']) {
-      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
+      expect(groupLabels.some((label) => label?.includes(target))).toBe(true);
     }
   });
 

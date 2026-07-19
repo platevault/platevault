@@ -17,7 +17,7 @@ use audit::bus::EventBus;
 use audit::stale_propagator::{resolve_project_dependents_hook, StalePropagator};
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{Emitter, Manager};
 use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::artifacts::{
@@ -855,11 +855,11 @@ pub fn build_app() -> tauri::App {
         .plugin(tauri_plugin_opener::init())
         // Spec 051 US10 (T056): signed auto-update plugin. `updater:default` +
         // `process:default` (for the relaunch-to-apply step) are granted in
-        // `capabilities/default.json`. The `plugins.updater.pubkey` in
-        // `tauri.conf.json` is a documented placeholder until the real
-        // minisign keypair/release pipeline land (T060 follow-up) — until
-        // then `check_for_app_update` will only ever see "updater
-        // unavailable" or a verification failure, never a real update.
+        // `capabilities/default.json`. `plugins.updater.pubkey` in
+        // `tauri.conf.json` is the real minisign key (spec 051 SC-009/T059/
+        // T060, #762) — the check/download/verify/relaunch flow itself is
+        // frontend-driven (`updateSubscription.ts`, #888 staged flow), not
+        // triggered from this Rust process.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
@@ -950,46 +950,6 @@ pub fn build_app() -> tauri::App {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-}
-
-/// Check for a signed app update and, if one is available, emit an
-/// `update-available` event the frontend can surface (spec 051 US10, T057).
-///
-/// Mirrors the reference `astro-up` `check_for_app_update` pattern: an
-/// `Err` from `app.updater()` (plugin unavailable, e.g. non-bundled dev
-/// builds) or from `.check()` (network/verification failure, or — until the
-/// T060 follow-up replaces the placeholder `pubkey` — every real call) is
-/// logged at `debug`/`warn` and treated as non-fatal (FR-031); it never
-/// blocks or interrupts app startup.
-pub(crate) async fn check_for_app_update(app: &AppHandle) {
-    use tauri_plugin_updater::UpdaterExt;
-
-    let updater = match app.updater() {
-        Ok(u) => u,
-        Err(e) => {
-            tracing::debug!("Updater not available: {e}");
-            return;
-        }
-    };
-
-    match updater.check().await {
-        Ok(Some(update)) => {
-            tracing::info!(version = update.version.as_str(), "App update available");
-            let _ = app.emit(
-                "update-available",
-                serde_json::json!({
-                    "version": update.version,
-                    "body": update.body,
-                }),
-            );
-        }
-        Ok(None) => {
-            tracing::debug!("App is up to date");
-        }
-        Err(e) => {
-            tracing::warn!("Update check failed: {e}");
-        }
-    }
 }
 
 /// Spawn the spec 002 FR-003 (#713) stale-dependent propagator.
@@ -1227,14 +1187,10 @@ pub fn run_app(
     // rows pending for the next pass.
     spawn_ingest_resolution_drain(pool.clone(), bus.clone(), resolve_cache.clone());
 
-    // spec 051 US10 (T057): startup self-update check. Non-blocking, non-fatal
-    // (FR-031) — failures/unavailability are logged and otherwise ignored.
-    {
-        let handle = app.handle().clone();
-        tokio::spawn(async move {
-            check_for_app_update(&handle).await;
-        });
-    }
+    // spec 051 US10: the startup update check moved to the frontend
+    // (`updateSubscription.ts`'s `startUpdateSubscription()`, #888 staged
+    // flow) — this process no longer runs its own independent check, which
+    // used to emit an `update-available` event nothing listens for anymore.
 
     // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
     // than via AppState), so the raw pool must be managed too. Without this they

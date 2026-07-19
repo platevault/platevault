@@ -36,7 +36,9 @@ import {
 import {
   getUpdateSnapshot,
   subscribeUpdate,
-  installPendingUpdate,
+  checkForUpdate,
+  restartPendingUpdate,
+  getRunningVersion,
 } from '@/data/updateSubscription';
 
 const ADVANCED_KEYS = ['logLevel', 'rememberFollowLogs', 'devMode'];
@@ -59,12 +61,9 @@ export function Advanced({ save }: AdvancedProps) {
   const [firstRunConfirming, setFirstRunConfirming] = useState(false);
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
-  const pendingUpdate = useSyncExternalStore(
-    subscribeUpdate,
-    getUpdateSnapshot,
-  );
-  const [installing, setInstalling] = useState(false);
-  const [updateError, setUpdateError] = useState<string | null>(null);
+  const updateState = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [runningVersion, setRunningVersion] = useState<string | null>(null);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (vals?.logLevel && typeof vals.logLevel === 'string') {
@@ -87,6 +86,17 @@ export function Advanced({ save }: AdvancedProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Running app semver, independent of update state (#845).
+  useEffect(() => {
+    let cancelled = false;
+    void getRunningVersion().then((version) => {
+      if (!cancelled) setRunningVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load guided flow state on mount (spec 010, T042).
@@ -164,17 +174,25 @@ export function Advanced({ save }: AdvancedProps) {
   const handleExport = () => console.log('Export DB triggered');
   const handleReset = () => console.log('Reset preferences triggered');
 
-  // Signed auto-update install (spec 051 US10, T058). Explicit user action
-  // only — never silent/automatic (US10 AS1, FR-030).
-  const handleInstallUpdate = async () => {
-    setInstalling(true);
-    setUpdateError(null);
+  // Staged update flow (#888, absorbs #869/#873): checking/downloading are
+  // automatic; only the restart/install step is an explicit user action
+  // (US10 AS1, FR-030). Both actions manage their own phase transitions in
+  // updateSubscription.ts — this pane just reflects `updateState`.
+  const handleCheckForUpdate = async () => {
+    setUpdateBusy(true);
     try {
-      await installPendingUpdate();
-    } catch (err) {
-      setUpdateError(errMessage(err));
+      await checkForUpdate();
     } finally {
-      setInstalling(false);
+      setUpdateBusy(false);
+    }
+  };
+
+  const handleRestartUpdate = async () => {
+    setUpdateBusy(true);
+    try {
+      await restartPendingUpdate();
+    } finally {
+      setUpdateBusy(false);
     }
   };
 
@@ -362,33 +380,72 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Signed auto-update (spec 051 US10, T058) */}
+      {/* Signed auto-update — staged flow (spec 051 US10, #888/#869/#873) */}
       <SettingsSection title={m.settings_advanced_updates_title()}>
         <SettingsRow label={m.settings_advanced_updates_title()}>
           <div className="alm-adv-settings__control-col">
-            <p className="alm-adv-settings__control-desc">
-              {pendingUpdate
-                ? m.settings_advanced_updates_available({
-                    version: pendingUpdate.version,
-                  })
-                : m.settings_advanced_updates_uptodate()}
+            {runningVersion && (
+              <p
+                className="alm-adv-settings__control-desc"
+                data-testid="update-running-version"
+              >
+                {m.settings_advanced_updates_running_version({
+                  version: runningVersion,
+                })}
+              </p>
+            )}
+            <p
+              className="alm-adv-settings__control-desc"
+              data-testid="update-status"
+            >
+              {updateState.phase === 'checking' &&
+                m.settings_advanced_updates_checking()}
+              {(updateState.phase === 'idle' ||
+                updateState.phase === 'up-to-date') &&
+                m.settings_advanced_updates_uptodate()}
+              {updateState.phase === 'check-failed' &&
+                m.settings_advanced_updates_checkfailed({
+                  message: updateState.error ?? '',
+                })}
+              {updateState.phase === 'downloading' &&
+                m.settings_advanced_updates_downloading({
+                  version: updateState.version ?? '',
+                })}
+              {updateState.phase === 'download-failed' &&
+                m.settings_advanced_updates_downloadfailed({
+                  message: updateState.error ?? '',
+                })}
+              {updateState.phase === 'ready' &&
+                m.settings_advanced_updates_ready({
+                  version: updateState.version ?? '',
+                })}
+              {updateState.phase === 'restart-failed' &&
+                m.settings_advanced_updates_restartfailed()}
             </p>
-            {pendingUpdate && (
+            {(updateState.phase === 'ready' ||
+              updateState.phase === 'restart-failed') && (
               <Btn
                 size="sm"
-                onClick={() => void handleInstallUpdate()}
-                disabled={installing}
-                data-testid="update-install-btn"
+                onClick={() => void handleRestartUpdate()}
+                disabled={updateBusy}
+                data-testid="update-restart-btn"
               >
-                {installing
+                {updateBusy
                   ? m.settings_advanced_updates_installing()
-                  : m.settings_advanced_updates_install()}
+                  : m.settings_advanced_updates_restart()}
               </Btn>
             )}
-            {updateError && (
-              <div className="alm-settings__error" role="alert">
-                {m.settings_advanced_updates_error({ message: updateError })}
-              </div>
+            {(updateState.phase === 'check-failed' ||
+              updateState.phase === 'download-failed') && (
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleCheckForUpdate()}
+                disabled={updateBusy}
+                data-testid="update-retry-btn"
+              >
+                {m.settings_advanced_updates_check_retry()}
+              </Btn>
             )}
           </div>
         </SettingsRow>

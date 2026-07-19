@@ -25,7 +25,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits, write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
@@ -189,21 +189,31 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
         )
         .await?;
 
-    write_minimal_fits(
+    // Both fixtures MUST carry EXPTIME. It is a hard mandatory attribute for
+    // lights (OBJECT+FILTER+EXPTIME) and darks (EXPTIME+GAIN) alike
+    // (`mandatory_set_for`, `crates/app/inbox/src/classify.rs`), so without it
+    // BOTH files collapse into the single `__needs_review__` sentinel bucket —
+    // one row, no split, and this test would be asserting nothing about
+    // mixed-folder splitting at all. The header set mirrors the Layer-1
+    // `t066_mixed_folder_produces_n_sub_items` fixtures, which prove a light +
+    // a dark materialize as two distinct single-type sub-items.
+    write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_001.fits",
         "Light Frame",
         Some("M42"),
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
+        Some(300.0),
     )?;
-    write_minimal_fits(
+    write_minimal_fits_with_exposure(
         root_dir.path(),
         "dark_001.fits",
         "Dark Frame",
         None,
         None,
         Some("2026-01-10T22:05:00"),
+        Some(300.0),
     )?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;

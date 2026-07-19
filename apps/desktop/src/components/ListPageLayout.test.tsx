@@ -432,7 +432,7 @@ describe('ListPageLayout', () => {
           <div>main</div>
         </ListPageLayout>,
       );
-      fireEvent.click(screen.getByTestId('dock-placement-toggle'));
+      fireEvent.click(screen.getByRole('radio', { name: 'Right' }));
       expect(container.querySelector('.alm-listpage__detail')).toHaveClass(
         'alm-listpage__detail--side',
       );
@@ -448,6 +448,55 @@ describe('ListPageLayout', () => {
         </ListPageLayout>,
       );
       // Narrow window (1024), but the pin from the previous mount survives.
+      expect(container2.querySelector('.alm-listpage__detail')).toHaveClass(
+        'alm-listpage__detail--side',
+      );
+    });
+
+    // #1066: the placement model is three-state (side / bottom / null=auto),
+    // but the UI that preceded this was a two-state toggle that only ever set
+    // a concrete pin — so Auto was unreachable once touched, and the adaptive
+    // width rule was permanently dead for that dockId.
+    it('returning to Auto clears the pin and resumes the width rule', () => {
+      resizeWindowTo(1024);
+      const { container, unmount } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-unpin"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      const detailEl = () => container.querySelector('.alm-listpage__detail');
+
+      // Pin to Right on a narrow window — placement defies the width rule.
+      fireEvent.click(screen.getByRole('radio', { name: 'Right' }));
+      expect(detailEl()).toHaveClass('alm-listpage__detail--side');
+
+      // Back to Auto: 1024 is below the threshold, so it must fall to bottom.
+      fireEvent.click(screen.getByRole('radio', { name: 'Auto' }));
+      expect(detailEl()).not.toHaveClass('alm-listpage__detail--side');
+      expect(screen.getByRole('radio', { name: 'Auto' })).toBeChecked();
+
+      // And Auto must survive a remount — i.e. the persisted pin was actually
+      // cleared, not just overridden in component state.
+      unmount();
+      const { container: container2 } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-unpin"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      expect(container2.querySelector('.alm-listpage__detail')).not.toHaveClass(
+        'alm-listpage__detail--side',
+      );
+
+      // Auto still follows the width rule upward, not just downward.
+      resizeWindowTo(1600);
       expect(container2.querySelector('.alm-listpage__detail')).toHaveClass(
         'alm-listpage__detail--side',
       );
