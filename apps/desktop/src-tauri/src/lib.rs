@@ -26,6 +26,7 @@ use crate::commands::artifacts::{
 };
 use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
+    calibration_masters_archive_plan_generate, calibration_masters_archive_plan_generate_restore,
     calibration_masters_get, calibration_masters_list, calibration_match_assign,
     calibration_match_suggest, calibration_match_suggest_batch, calibration_match_unassign,
     calibration_matches,
@@ -204,6 +205,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         calibration_match_assign,
         calibration_match_suggest_batch,
         calibration_match_unassign,
+        // calibration master archive (#886)
+        calibration_masters_archive_plan_generate,
+        calibration_masters_archive_plan_generate_restore,
         // targets (spec 029 stubs — legacy list/get)
         targets_list,
         targets_get,
@@ -451,6 +455,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         calibration_match_assign,
         calibration_match_suggest_batch,
         calibration_match_unassign,
+        // calibration master archive (#886)
+        calibration_masters_archive_plan_generate,
+        calibration_masters_archive_plan_generate_restore,
         // targets (spec 029 stubs — legacy list/get)
         targets_list,
         targets_get,

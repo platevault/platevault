@@ -151,6 +151,32 @@ export const commands = {
 	 */
 	calibrationMatchUnassign: (req: CalibrationMatchUnassignRequest) => typedError<CalibrationMatchUnassignResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_unassign", { req })),
 	/**
+	 *  `calibration.masters.archive_plan_generate` — build a reviewable
+	 *  single-master archive plan (#886). Creates a `ready_for_review` plan;
+	 *  performs NO filesystem mutation and never auto-applies (constitution
+	 *  §II / FR-002). A master currently assigned to one or more sessions
+	 *  requires `confirm_in_use: true` — a first call without it returns
+	 *  `"calibration.master_in_use"` so the UI can show a confirm dialog before
+	 *  retrying.
+	 * 
+	 *  # Errors
+	 *  Returns `Err` with `"master.not_found"`, `"plan.invalid_state"` (already
+	 *  archived), `"calibration.master_untracked"` (no tracked file), or
+	 *  `"calibration.master_in_use"` (needs confirm).
+	 */
+	calibrationMastersArchivePlanGenerate: (masterId: string, title: string | null, confirmInUse: boolean | null) => typedError<GenerateArchivePlanResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_archive_plan_generate", { masterId, title, confirmInUse })),
+	/**
+	 *  `calibration.masters.archive_plan_generate_restore` — build a reviewable
+	 *  restore (un-archive) plan from a previously applied master-archive plan
+	 *  (#886). Creates a `ready_for_review` plan; performs NO filesystem
+	 *  mutation and never auto-applies (constitution §II / FR-002).
+	 * 
+	 *  # Errors
+	 *  Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+	 *  applied master-archive plan), or `"archive.empty"` (nothing to restore).
+	 */
+	calibrationMastersArchivePlanGenerateRestore: (archivedPlanId: string, title: string | null) => typedError<GenerateRestorePlanResult, ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_archive_plan_generate_restore", { archivedPlanId, title })),
+	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
 	 * 
 	 *  # Errors
@@ -640,9 +666,13 @@ export const commands = {
 	 */
 	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_permanently_delete", { planId, confirmText })),
 	/**
-	 *  `archive.list` — list projects currently in the `archived` lifecycle state
-	 *  (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
-	 *  so the management commands act on the owning plan.
+	 *  `archive.list` — list archived projects (spec 017 C5) AND archived
+	 *  calibration masters (#886), each row carrying `archivedViaPlanId` so the
+	 *  management commands (`archive.send_to_trash`/`archive.permanently_delete`,
+	 *  already entity-agnostic — they act purely on a plan's items) work on
+	 *  either kind. The two listings are composed here rather than folded into
+	 *  one generator function, keeping each generator scoped to the entity it
+	 *  owns (`app_core::archive_generator` / `app_core::calibration_archive_generator`).
 	 * 
 	 *  # Errors
 	 * 
@@ -2044,21 +2074,33 @@ export type AppPreferences = {
 	setupCompleted: boolean,
 };
 
-/**  One archived entity row for the Archive page (C5 design: projects only). */
+/**
+ *  One archived entity row for the Archive page. `"project"` (C5 design) or
+ *  `"master"` (#886) today — no session/target tabs until a real archival
+ *  model for them is designed.
+ */
 export type ArchiveEntry = ArchiveEntry_Serialize | ArchiveEntry_Deserialize;
 
-/**  One archived entity row for the Archive page (C5 design: projects only). */
+/**
+ *  One archived entity row for the Archive page. `"project"` (C5 design) or
+ *  `"master"` (#886) today — no session/target tabs until a real archival
+ *  model for them is designed.
+ */
 export type ArchiveEntry_Deserialize = {
-	/**  Archived entity id (a project id in the current design). */
+	/**  Archived entity id (a project or calibration-master id). */
 	id: string,
-	/**  Display name (project name). */
-	name: string,
 	/**
-	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
-	 *  tabs until a real archival model for them is designed).
+	 *  Display name (project name, or the master's file name for `"master"`
+	 *  rows).
 	 */
+	name: string,
+	/**  Entity kind: `"project"` or `"master"`. */
 	entityType: string,
-	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	/**
+	 *  When the entity was archived (ISO-8601). For a project, when it
+	 *  reached the `archived` lifecycle state; masters have no lifecycle
+	 *  state machine, so this is the plan-apply finalize timestamp.
+	 */
 	archivedAt: string,
 	/**
 	 *  Human-readable reason (the archive plan title). `None` when the owning
@@ -2066,7 +2108,10 @@ export type ArchiveEntry_Deserialize = {
 	 *  sentinel standing in for absence).
 	 */
 	reason: string | null,
-	/**  The entity's original on-disk location (project-relative library path). */
+	/**
+	 *  The entity's original on-disk location (project-relative library path
+	 *  for a project row; root-relative file path for a master row).
+	 */
 	originalPath: string,
 	/**
 	 *  Bytes moved into the app-managed archive by the owning plan. `None`
@@ -2089,18 +2134,26 @@ export type ArchiveEntry_Deserialize = {
 	archiveFolderPath: string | null,
 };
 
-/**  One archived entity row for the Archive page (C5 design: projects only). */
+/**
+ *  One archived entity row for the Archive page. `"project"` (C5 design) or
+ *  `"master"` (#886) today — no session/target tabs until a real archival
+ *  model for them is designed.
+ */
 export type ArchiveEntry_Serialize = {
-	/**  Archived entity id (a project id in the current design). */
+	/**  Archived entity id (a project or calibration-master id). */
 	id: string,
-	/**  Display name (project name). */
-	name: string,
 	/**
-	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
-	 *  tabs until a real archival model for them is designed).
+	 *  Display name (project name, or the master's file name for `"master"`
+	 *  rows).
 	 */
+	name: string,
+	/**  Entity kind: `"project"` or `"master"`. */
 	entityType: string,
-	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	/**
+	 *  When the entity was archived (ISO-8601). For a project, when it
+	 *  reached the `archived` lifecycle state; masters have no lifecycle
+	 *  state machine, so this is the plan-apply finalize timestamp.
+	 */
 	archivedAt: string,
 	/**
 	 *  Human-readable reason (the archive plan title). `None` when the owning
@@ -2108,7 +2161,10 @@ export type ArchiveEntry_Serialize = {
 	 *  sentinel standing in for absence).
 	 */
 	reason?: string | null,
-	/**  The entity's original on-disk location (project-relative library path). */
+	/**
+	 *  The entity's original on-disk location (project-relative library path
+	 *  for a project row; root-relative file path for a master row).
+	 */
 	originalPath: string,
 	/**
 	 *  Bytes moved into the app-managed archive by the owning plan. `None`
@@ -2667,6 +2723,20 @@ export type CalibrationMaster_Deserialize = {
 	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	/**
+	 *  #642: the master's owning library root id. `None` alongside
+	 *  `relative_path` when the master frame was never resolved to a
+	 *  `file_record` (legacy/unresolved masters) — never guessed.
+	 */
+	rootId: string | null,
+	/**
+	 *  #642: root-relative path of the master's own file, for Reveal /
+	 *  archive-plan generation. Resolve to an absolute path by joining with
+	 *  the `root_id`'s current library root path (roots stay modeled
+	 *  separately per Constitution I, so a moved/remapped root still
+	 *  resolves correctly).
+	 */
+	relativePath: string | null,
 };
 
 /**  A calibration master as seen in list views. */
@@ -2688,6 +2758,20 @@ export type CalibrationMaster_Serialize = {
 	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	/**
+	 *  #642: the master's owning library root id. `None` alongside
+	 *  `relative_path` when the master frame was never resolved to a
+	 *  `file_record` (legacy/unresolved masters) — never guessed.
+	 */
+	rootId?: string | null,
+	/**
+	 *  #642: root-relative path of the master's own file, for Reveal /
+	 *  archive-plan generation. Resolve to an absolute path by joining with
+	 *  the `root_id`'s current library root path (roots stay modeled
+	 *  separately per Constitution I, so a moved/remapped root still
+	 *  resolves correctly).
+	 */
+	relativePath?: string | null,
 };
 
 /**  Request DTO for `calibration.match.assign`. */
@@ -3677,7 +3761,25 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  item in an `archive.permanently_delete` run. Permission failures use
  *  the more specific `path.permission_denied`.
  */
-"archive.delete_failed" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "attribution.not_light_frame" | "attribution.geometry_unavailable" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"archive.delete_failed" | 
+/**
+ *  #886: `calibration_archive_generator::generate` refuses to archive a
+ *  master currently assigned to one or more sessions unless the caller
+ *  re-calls with `confirm_in_use = true` (decisions.md: warn + require
+ *  confirm before archiving an in-use master).
+ */
+"calibration.master_in_use" | 
+/**
+ *  #886: the master has no `root_id`/`relative_path` resolved to a real
+ *  `file_record` (legacy master, or the applied-frame write at
+ *  master-confirm time failed) — nothing to archive.
+ */
+"calibration.master_untracked" | 
+/**
+ *  #886: `calibration.masters.get`/`.archive` target id has no matching
+ *  `calibration_session` row.
+ */
+"master.not_found" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "attribution.not_light_frame" | "attribution.geometry_unavailable" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
@@ -6340,6 +6442,8 @@ export type MasterDetail_Deserialize = {
 	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	rootId: string | null,
+	relativePath: string | null,
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
 	/**  spec 048 US5: `None` when no matches using this master are flagged. */
@@ -6357,6 +6461,8 @@ export type MasterDetail_Serialize = {
 	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	rootId?: string | null,
+	relativePath?: string | null,
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
 	/**  spec 048 US5: `None` when no matches using this master are flagged. */

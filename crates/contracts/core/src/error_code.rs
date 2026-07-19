@@ -224,6 +224,21 @@ pub enum ErrorCode {
     /// the more specific `path.permission_denied`.
     #[serde(rename = "archive.delete_failed")]
     ArchiveDeleteFailed,
+    /// #886: `calibration_archive_generator::generate` refuses to archive a
+    /// master currently assigned to one or more sessions unless the caller
+    /// re-calls with `confirm_in_use = true` (decisions.md: warn + require
+    /// confirm before archiving an in-use master).
+    #[serde(rename = "calibration.master_in_use")]
+    CalibrationMasterInUse,
+    /// #886: the master has no `root_id`/`relative_path` resolved to a real
+    /// `file_record` (legacy master, or the applied-frame write at
+    /// master-confirm time failed) — nothing to archive.
+    #[serde(rename = "calibration.master_untracked")]
+    CalibrationMasterUntracked,
+    /// #886: `calibration.masters.get`/`.archive` target id has no matching
+    /// `calibration_session` row.
+    #[serde(rename = "master.not_found")]
+    MasterNotFound,
 
     // ── Confirm ──────────────────────────────────────────────────────────────
     #[serde(rename = "confirm.text.mismatch")]

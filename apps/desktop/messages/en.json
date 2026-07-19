@@ -216,6 +216,7 @@
   "common_projects": "Projects",
   "common_remove": "Remove",
   "common_removing": "Removing…",
+  "common_reveal_error": "Could not open the location.",
   "common_reset": "Reset",
   "common_save": "Save",
   "common_saved": "Saved",
@@ -230,6 +231,9 @@
   "err_alias_not_removable": "This alias can't be removed.",
   "err_archive_delete_failed": "Couldn't permanently delete the archive — please try again.",
   "err_archive_empty": "There's nothing to archive.",
+  "err_calibration_master_in_use": "This master is assigned to one or more sessions. Confirm to archive it anyway.",
+  "err_calibration_master_untracked": "This master has no tracked file to archive.",
+  "err_master_not_found": "That calibration master could not be found.",
   "err_attribution_geometry_unavailable": "This item has no pointing/rotation data, so a new framing can't be created for it.",
   "err_attribution_not_light_frame": "Attribution only applies to light frames.",
   "err_classification_ambiguous": "This file could be more than one type — confirm how to classify it.",
@@ -1848,6 +1852,10 @@
   "calibration_action_use_in_project_unavailable_title": "Not available yet — there is no project-picker wired to this action",
   "calibration_action_replace_master_unavailable_title": "Not available yet — there is no replace-master flow wired to this action",
   "calibration_reveal_unavailable_title": "Reveal isn't available yet — master file locations aren't tracked",
+  "calibration_reveal_title": "Open the master file's location in the OS file browser",
+  "calibration_action_archive": "Archive",
+  "calibration_archive_in_use_confirm_title": "Archive an in-use master?",
+  "calibration_archive_in_use_confirm_desc": "This master is currently assigned to one or more sessions. Archiving moves the file into the app-managed archive folder; assignments are not removed.",
   "calibration_flag_master_missing": "Master missing — cannot apply",
   "calibration_flag_source_subs_missing": "Source subs missing — unverifiable provenance",
   "calibration_col_session": "Session",
@@ -2521,6 +2529,21 @@
       "match": {
         "pp=one": "Restore plan created with {count} item — review before anything is moved.",
         "pp=other": "Restore plan created with {count} items — review before anything is moved."
+      }
+    }
+  ],
+  "calibration_archive_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Archive plan created with {count} item — review before anything is moved.",
+        "pp=other": "Archive plan created with {count} items — review before anything is moved."
       }
     }
   ],

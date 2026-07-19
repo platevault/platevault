@@ -256,6 +256,31 @@ pub async fn generate_restore(
     archived_plan_id: &str,
     title: Option<&str>,
 ) -> Result<GenerateRestorePlanResult, ContractError> {
+    generate_restore_generic(pool, archived_plan_id, title, "archive", "restore").await
+}
+
+/// Origin-parameterised tail shared by [`generate_restore`] (whole-project,
+/// `origin = "archive"`) and `calibration_archive_generator::generate_restore`
+/// (#886, single master, `origin = "calibration_master_archive"`) — the two
+/// differ only in which archive-plan origin they reverse and which origin
+/// they write the restore plan under; every other step (state validation,
+/// archived-item filtering, reversed move-item mapping, protection tail) is
+/// identical, so this is extracted rather than duplicated per entity kind.
+///
+/// # Errors
+///
+/// Returns `ContractError` with code:
+/// - `plan.not_found` — no matching archive plan.
+/// - `plan.invalid_state` — the referenced plan is not an *applied* plan of
+///   `expected_archive_origin`.
+/// - `archive.empty` — the archive plan has no items to restore.
+pub(crate) async fn generate_restore_generic(
+    pool: &SqlitePool,
+    archived_plan_id: &str,
+    title: Option<&str>,
+    expected_archive_origin: &str,
+    restore_origin: &str,
+) -> Result<GenerateRestorePlanResult, ContractError> {
     // A missing plan gets the domain-specific `plan.not_found` code (matching
     // this function's documented contract) rather than the generic
     // `db_err`/`internal.database` mapping — mirrors `plans.rs`'s local
@@ -268,11 +293,12 @@ pub async fn generate_restore(
             other => db_err(other),
         })?;
 
-    if archived_plan.origin != "archive" || archived_plan.state != "applied" {
+    if archived_plan.origin != expected_archive_origin || archived_plan.state != "applied" {
         return Err(ContractError::new(
             ErrorCode::PlanInvalidState,
             format!(
-                "plan {archived_plan_id} is not an applied archive plan (origin={}, state={})",
+                "plan {archived_plan_id} is not an applied {expected_archive_origin} plan \
+                 (origin={}, state={})",
                 archived_plan.origin, archived_plan.state
             ),
             ErrorSeverity::Blocking,
@@ -320,8 +346,8 @@ pub async fn generate_restore(
         &GeneratePlanRequest {
             plan_id: plan_id.clone(),
             title: resolved_title,
-            origin: "restore".to_owned(),
-            plan_type: "restore".to_owned(),
+            origin: restore_origin.to_owned(),
+            plan_type: restore_origin.to_owned(),
             origin_path: archived_plan.origin_path,
             destructive_destination: "archive".to_owned(),
             reason: "restore".to_owned(),

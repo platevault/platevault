@@ -78,6 +78,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'volume.still.unavailable': m.err_volume_still_unavailable,
   'disk.still.full': m.err_disk_still_full,
   'archive.empty': m.err_archive_empty,
+  // #886 — calibration master archive.
+  'calibration.master_in_use': m.err_calibration_master_in_use,
+  'calibration.master_untracked': m.err_calibration_master_untracked,
+  'master.not_found': m.err_master_not_found,
   'os_trash.unavailable': m.err_os_trash_unavailable,
   'os_trash.permission.denied': m.err_os_trash_permission_denied,
   'archive.delete_failed': m.err_archive_delete_failed,
