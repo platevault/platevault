@@ -61,6 +61,7 @@
 
 import { type CSSProperties, type ReactNode, useEffect } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
+import { DetailDockPlacementControl } from './DetailDockPlacementControl';
 import { m } from '@/lib/i18n';
 import { useAdaptiveDock, ResizeHandle } from '@/ui';
 
@@ -305,23 +306,14 @@ export function ListPageLayout({
             {(onCloseDetail || isAdaptive) && (
               <div className="alm-listpage__detail-bar">
                 {isAdaptive && (
-                  <button
-                    type="button"
-                    className="alm-listpage__detail-pin"
-                    onClick={() =>
-                      adaptiveDock.setOverride(
-                        adaptiveDock.placement === 'side' ? 'bottom' : 'side',
-                      )
-                    }
-                    data-testid="dock-placement-toggle"
-                    aria-label={
-                      adaptiveDock.placement === 'side'
-                        ? m.list_page_layout_dock_pin_bottom()
-                        : m.list_page_layout_dock_pin_side()
-                    }
-                  >
-                    {adaptiveDock.placement === 'side' ? '⇩' : '⇨'}
-                  </button>
+                  // #1066: a three-state Auto/Bottom/Right control, not the
+                  // old two-state pin button — `override === null` ("Auto") is
+                  // a reachable choice again, so pinning is no longer a
+                  // one-way door out of adaptive placement.
+                  <DetailDockPlacementControl
+                    override={adaptiveDock.override}
+                    onChange={adaptiveDock.setOverride}
+                  />
                 )}
                 {onCloseDetail && (
                   <button

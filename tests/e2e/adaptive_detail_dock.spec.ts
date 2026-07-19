@@ -75,7 +75,7 @@ test.describe("adaptive detail-panel dock (spec 054 / #936)", () => {
 		await expect(detail).toBeVisible({ timeout: 5_000 });
 		await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
 
-		await page.getByTestId("dock-placement-toggle").click();
+		await page.getByRole("radio", { name: "Right" }).click();
 		await expect(detail).toHaveClass(/alm-listpage__detail--side/);
 
 		await page.reload();
