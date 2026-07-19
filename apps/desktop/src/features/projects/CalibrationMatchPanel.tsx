@@ -21,6 +21,7 @@
  * `match.*` / `session.*`, and must be matched as such, not bare).
  */
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { Section, Pill, EmptyState } from '@/ui';
@@ -28,6 +29,7 @@ import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from './calibrationMatch';
 import type { CalibrationMatchType } from './calibrationMatch';
 import type { BatchSessionResultDto } from '@/bindings/index';
+import { useEntityNames, entityNameKey } from '@/hooks/useEntityNames';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 
@@ -75,18 +77,11 @@ interface Props {
   sessionIds: string[];
   /** Whether the collapsible section starts open. Default true. */
   defaultOpen?: boolean;
-  /**
-   * Session id → human-readable name lookup (#663 — the panel previously
-   * always rendered a truncated raw UUID, unlike Sessions/the sources
-   * table which resolve real names).
-   */
-  sessionNames?: Map<string, string>;
 }
 
 export function CalibrationMatchPanel({
   sessionIds,
   defaultOpen = true,
-  sessionNames,
 }: Props) {
   // Batch key is the joined session-id list — matches the `matches(sid)` key
   // shape while distinguishing one panel's session set from another's.
@@ -104,6 +99,15 @@ export function CalibrationMatchPanel({
       }),
     enabled: sessionIds.length > 0,
   });
+
+  // Session id → human-readable name (#663, #809 — resolved via the shared
+  // entity-name hook instead of a prop-drilled ad hoc map, so this panel and
+  // Audit Log/Projects Sources use one resolver).
+  const sessionRefs = useMemo(
+    () => sessionIds.map((id) => ({ entityType: 'session', entityId: id })),
+    [sessionIds],
+  );
+  const sessionNames = useEntityNames(sessionRefs);
 
   const fetchError =
     data?.status === 'error'
@@ -188,7 +192,9 @@ export function CalibrationMatchPanel({
             data-testid={`cal-session-${sid}`}
           >
             <div className="alm-calib-match-panel__session-id">
-              {sessionNames?.get(sid) ?? `${sid.slice(0, 12)}…`}
+              {sessionNames.get(
+                entityNameKey({ entityType: 'session', entityId: sid }),
+              ) ?? `${sid.slice(0, 12)}…`}
             </div>
             <div className="alm-calib-match-panel__type-row">
               {typeResults.map((r) => {

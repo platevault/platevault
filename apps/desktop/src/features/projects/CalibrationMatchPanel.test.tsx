@@ -26,6 +26,21 @@ vi.mock('./calibrationMatch', async (importOriginal) => {
   return { ...original, calibrationMatchSuggestBatch: vi.fn() };
 });
 
+// The shared useEntityNames hook (#809) resolves session names via
+// useInventorySources — mock `inventoryList` so the panel's name lookup
+// doesn't hit a real Tauri bridge in jsdom. Empty by default; individual
+// tests override via mockResolvedValueOnce to prove name resolution.
+const { mockInventoryList } = vi.hoisted(() => ({
+  mockInventoryList: vi.fn(),
+}));
+vi.mock('@/bindings/index', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/bindings/index')>();
+  return {
+    ...original,
+    commands: { ...original.commands, inventoryList: mockInventoryList },
+  };
+});
+
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
 import { calibrationMatchSuggestBatch } from './calibrationMatch';
 import type { CalibrationMatchBatchResponse } from '@/bindings/index';
@@ -113,6 +128,16 @@ function makeSuccessResponse(
 describe('CalibrationMatchPanel (spec 007 T034)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockInventoryList.mockResolvedValue({
+      status: 'ok',
+      data: {
+        status: 'ok',
+        contractVersion: '1.0',
+        requestId: 'req-inventory',
+        generatedAt: '2026-01-01T00:00:00Z',
+        sources: [],
+      },
+    });
   });
 
   it('1. Renders nothing when sessionIds is empty', () => {
@@ -234,5 +259,50 @@ describe('CalibrationMatchPanel (spec 007 T034)', () => {
     const pill = screen.getByTestId(`cal-type-dark-${SESSION_1}`);
     expect(pill).toHaveTextContent('unknown status');
     expect(pill).not.toHaveTextContent('some.unhandled.code');
+  });
+
+  it('9. resolves a session id to its display name via the shared entity-name hook (#809)', async () => {
+    mockInventoryList.mockResolvedValue({
+      status: 'ok',
+      data: {
+        status: 'ok',
+        contractVersion: '1.0',
+        requestId: 'req-inventory',
+        generatedAt: '2026-01-01T00:00:00Z',
+        sources: [
+          {
+            id: 'src-1',
+            path: '/library/src-1',
+            kind: 'library',
+            state: 'active',
+            sessions: [
+              {
+                id: SESSION_1,
+                name: 'M31 – 2026-05-20',
+                sourceId: 'src-1',
+                frames: 40,
+                type: 'light',
+                target: 'M31',
+                filter: null,
+                exposure: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    vi.mocked(calibrationMatchSuggestBatch).mockResolvedValue(
+      makeSuccessResponse(),
+    );
+    render(<CalibrationMatchPanel sessionIds={[SESSION_1, SESSION_2]} />, {
+      wrapper,
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('cal-panel')).toBeInTheDocument();
+    });
+    // SESSION_1 has a resolved name; SESSION_2 has no matching inventory
+    // source, so it keeps the truncated raw-id fallback.
+    expect(screen.getByText('M31 – 2026-05-20')).toBeInTheDocument();
+    expect(screen.getByText(`${SESSION_2.slice(0, 12)}…`)).toBeInTheDocument();
   });
 });
