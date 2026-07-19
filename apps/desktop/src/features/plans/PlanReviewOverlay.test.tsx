@@ -814,6 +814,26 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     await waitFor(() => expect(approveBtn).not.toBeDisabled());
   });
 
+  it('#876: renders no free-space banner when the probe returns availableBytes: null (unreachable/unprobeable destination)', async () => {
+    mockPlansFreeSpaceEstimate.mockResolvedValue(
+      ok({ requiredBytes: 3000, availableBytes: null }),
+    );
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    renderOverlay();
+
+    await waitFor(() =>
+      expect(mockPlansFreeSpaceEstimate).toHaveBeenCalledWith('plan-1'),
+    );
+    // Give the item table (which always renders) time to settle so this
+    // isn't just "banner hasn't appeared yet".
+    await screen.findByText('light_001.xisf');
+    expect(
+      screen.queryByTestId('plan-review-free-space'),
+    ).not.toBeInTheDocument();
+  });
+
   it('#876: renders no free-space banner for a zero-item plan (nothing to probe a destination from)', async () => {
     mockPlansGet.mockResolvedValue(
       ok(plan({ items: [], itemsTotal: 0, itemsPending: 0 })),

@@ -19,16 +19,24 @@ use crate::plans::get_plan;
 
 /// Every item's `from` field is the item's real, currently-present source
 /// path (for cleanup/archive plans, the on-disk file being archived/deleted);
-/// `compute_archive_destination` (`protection.rs`) always anchors an
-/// archive's actual destination on that same source file's own parent
-/// directory, so probing free space from the first item's source parent is
-/// the same volume any archive-action item would actually land on — without
-/// requiring the (not-yet-created) `.astro-plan-archive/<planId>/` directory
-/// itself to exist.
+/// `compute_archive_destination` (`protection.rs`) always anchors an item's
+/// archive destination on that same source file's own parent directory —
+/// but a plan is NOT guaranteed to be single-volume: items can come from
+/// different source roots (e.g. `generate_raw_frame_plan` allows
+/// cross-root selection), each anchoring its own archive destination on a
+/// different volume. Probing only the first item would silently ignore a
+/// too-full second volume, so this collects every DISTINCT source-parent
+/// directory across the plan's items, probes each, and reports the MINIMUM
+/// free space of the volumes that answered — the estimate reflects
+/// whichever destination volume is tightest, not just the first one — all
+/// without requiring the (not-yet-created) `.astro-plan-archive/<planId>/`
+/// directory itself to exist.
 ///
 /// Never a hard gate (constitution II leaves approval to the user): a probe
-/// failure or an empty plan returns `available_bytes: None` rather than an
-/// error, and the real, authoritative check remains the apply-time
+/// failure on every distinct directory, or an empty plan, returns
+/// `available_bytes: None` rather than an error — individual per-directory
+/// probe failures are otherwise skipped rather than failing the whole
+/// estimate, since the real, authoritative check remains the apply-time
 /// `recheck_disk_space` (R-Pause-1).
 ///
 /// # Errors
@@ -40,11 +48,18 @@ pub async fn estimate_free_space(
 ) -> Result<PlanFreeSpaceEstimate, ContractError> {
     let detail = get_plan(pool, plan_id).await?;
 
-    let available_bytes = detail
+    let mut parent_dirs: Vec<Utf8PathBuf> = detail
         .items
-        .first()
-        .and_then(|item| Utf8PathBuf::from(&item.from).parent().map(Utf8PathBuf::from))
-        .and_then(|dir| available_space_bytes(&dir).ok())
+        .iter()
+        .filter_map(|item| Utf8PathBuf::from(&item.from).parent().map(Utf8PathBuf::from))
+        .collect();
+    parent_dirs.sort();
+    parent_dirs.dedup();
+
+    let available_bytes = parent_dirs
+        .iter()
+        .filter_map(|dir| available_space_bytes(dir).ok())
+        .min()
         .map(|bytes| i64::try_from(bytes).unwrap_or(i64::MAX));
 
     Ok(PlanFreeSpaceEstimate { required_bytes: detail.total_bytes_required, available_bytes })
@@ -125,26 +140,26 @@ mod tests {
         assert_eq!(estimate.available_bytes, None, "nothing to probe a destination from");
     }
 
-    #[tokio::test]
-    async fn estimate_free_space_probes_the_first_items_source_parent_directory() {
-        let (db, _bus) = setup().await;
-        insert_draft(&db, "p1").await;
-        // Real filesystem path (a temp dir) so the probe succeeds — mirrors
-        // how a real cleanup/archive item's `from_relative_path` is always an
-        // absolute, currently-present source path (`processing_artifacts.path`).
-        let dir = tempfile::tempdir().unwrap();
-        let source = dir.path().join("file.fits");
-        let source_str = source.to_str().unwrap();
+    /// Helper to insert an item whose `from_relative_path` is an absolute,
+    /// real filesystem path so the probe can succeed — mirrors how a real
+    /// cleanup/archive item's source path is always absolute and currently
+    /// present (`processing_artifacts.path`).
+    async fn add_item_with_real_source_path(
+        db: &Database,
+        plan_id: &str,
+        item_id: &str,
+        source_path: &str,
+    ) {
         repo::insert_plan_item(
             db.pool(),
             &repo::InsertPlanItem {
-                id: "item-1",
-                plan_id: "p1",
+                id: item_id,
+                plan_id,
                 item_index: 1,
                 name: "file.fits",
                 action: "archive",
                 from_root_id: None,
-                from_relative_path: source_str,
+                from_relative_path: source_path,
                 to_root_id: None,
                 to_relative_path: "",
                 reason: "test",
@@ -158,6 +173,15 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn estimate_free_space_probes_the_items_source_parent_directory() {
+        let (db, _bus) = setup().await;
+        insert_draft(&db, "p1").await;
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("file.fits");
+        add_item_with_real_source_path(&db, "p1", "item-1", source.to_str().unwrap()).await;
 
         let estimate = estimate_free_space(db.pool(), "p1").await.unwrap();
         assert!(
@@ -174,5 +198,31 @@ mod tests {
 
         let estimate = estimate_free_space(db.pool(), "p1").await.unwrap();
         assert_eq!(estimate.available_bytes, None, "relative path has no real parent to probe");
+    }
+
+    /// A plan can legitimately span volumes: each item anchors its own
+    /// archive destination on its own source parent (`compute_archive_destination`),
+    /// and cross-root selection is allowed (e.g. `generate_raw_frame_plan`).
+    /// `item-1`'s parent is unreachable (a relative path, same as the
+    /// unreachable-parent test above) and `item-2`'s is a real, distinct
+    /// directory. A regression that only probed the FIRST item would report
+    /// `None` here (item-1's probe fails and nothing else is tried); the
+    /// fixed behaviour collects every distinct parent directory across all
+    /// items, so item-2's real directory still answers.
+    #[tokio::test]
+    async fn estimate_free_space_probes_every_distinct_parent_directory_not_just_the_first() {
+        let (db, _bus) = setup().await;
+        insert_draft(&db, "p1").await;
+        add_item(&db, "p1", "item-1", "archive").await; // from_relative_path: "raw/file.fits"
+        let dir = tempfile::tempdir().unwrap();
+        let second_source = dir.path().join("file.fits");
+        add_item_with_real_source_path(&db, "p1", "item-2", second_source.to_str().unwrap()).await;
+
+        let estimate = estimate_free_space(db.pool(), "p1").await.unwrap();
+        assert!(
+            estimate.available_bytes.is_some_and(|b| b > 0),
+            "item-2's real, distinct parent directory must still be probed even though \
+             item-1's parent (a different directory) is unreachable"
+        );
     }
 }
