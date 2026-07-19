@@ -38,8 +38,8 @@ import { revealInOs } from '@/shared/native/reveal';
 import { queryKeys } from '@/data/queryKeys';
 import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import {
-  DetailHeader,
   DetailPane,
+  DetailPanel,
   MetricLine,
   TopActionBar,
   renderValue,
@@ -474,30 +474,28 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   });
 
   return (
-    <DetailPane fill>
-      {/* ── Identity header ────────────────────────────────────────────── */}
-      <DetailHeader
-        title={project.name}
-        titleExtra={
-          <ProjectStatusTag variant={projectStateVariant(lifecycle)}>
-            {projectStateLabel(lifecycle)}
-          </ProjectStatusTag>
-        }
-        subtitle={undefined}
-        actions={
-          lifecycle !== 'archived' && (
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={() => setEditOpen(true)}
-              data-testid="edit-project-btn"
-            >
-              {m.projects_detail_edit_btn()}
-            </Btn>
-          )
-        }
-      />
-
+    <DetailPanel
+      fill
+      title={project.name}
+      titleExtra={
+        <ProjectStatusTag variant={projectStateVariant(lifecycle)}>
+          {projectStateLabel(lifecycle)}
+        </ProjectStatusTag>
+      }
+      subtitle={undefined}
+      actions={
+        lifecycle !== 'archived' && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditOpen(true)}
+            data-testid="edit-project-btn"
+          >
+            {m.projects_detail_edit_btn()}
+          </Btn>
+        )
+      }
+    >
       {/* ── Top action bar: tool · path · Reveal · Open in tool · CTA ───
           Wrapped in a project-detail scope so the breadcrumb (tool + path)
           and the action cluster lay out on their OWN rows and never overlap
@@ -828,6 +826,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         onApplied={handleArchivePlanApplied}
         onRetryCreated={setArchiveReviewPlanId}
       />
-    </DetailPane>
+    </DetailPanel>
   );
 }
