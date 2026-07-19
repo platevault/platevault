@@ -73,6 +73,44 @@ async fn wait_dom_true(app: &E2eApp, js: &str, timeout: Duration) -> anyhow::Res
     }
 }
 
+/// Dump every input to the orientation walk's auto-run gate, for the failure
+/// path only. Each condition is reported independently so the log distinguishes
+/// "suppression flag leaked in" from "backend state never hydrated" from
+/// "orientationDone was already true" — the three ways the gate can silently
+/// decline to render. Best-effort: returns a marker string rather than erroring,
+/// since this runs while a test is already failing.
+async fn walk_gate_diagnostics(app: &E2eApp) -> String {
+    let js = r#"
+        var out = {};
+        try {
+            var raw = localStorage.getItem('alm-preferences');
+            out.setupCompleted = raw ? JSON.parse(raw).setupCompleted === true : false;
+        } catch (e) { out.setupCompleted = 'read-failed: ' + e; }
+        out.suppressedFlag = localStorage.getItem('alm-onboarding-suppressed');
+        out.shellMounted = !!document.querySelector('.alm-frame');
+        out.pageAnchorPresent = !!document.querySelector('.alm-frame__main');
+        out.joyrideOverlay = !!document.querySelector('.react-joyride__overlay');
+        out.checklistPresent = !!document.querySelector('.alm-onb-checklist');
+        out.route = location.hash;
+        out.uncaughtErrors = (window.__e2eErrors || []).slice(0, 5);
+        return JSON.stringify(out);
+    "#;
+    let dom = match app.driver.execute(js, vec![]).await {
+        Ok(v) => v.convert::<String>().unwrap_or_else(|e| format!("<unconvertible: {e}>")),
+        Err(e) => format!("<dom probe failed: {e}>"),
+    };
+    // Ask the backend directly too: if the projection is healthy here but the
+    // store cache is null, the fault is the UI's hydrate path, not the backend.
+    let backend = match app
+        .invoke::<serde_json::Value>("onboarding_state_get", json!({}))
+        .await
+    {
+        Ok(v) => v["state"]["flags"].to_string(),
+        Err(e) => format!("<onboarding_state_get failed: {e}>"),
+    };
+    format!("dom={dom} backendFlags={backend}")
+}
+
 /// Read the checklist overall-progress `aria-valuenow` (settled "done" count).
 /// `-1` when the progressbar is not in the DOM.
 async fn read_progress_done(app: &E2eApp) -> anyhow::Result<i64> {
@@ -151,10 +189,19 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
         UI_TIMEOUT,
     )
     .await?;
-    anyhow::ensure!(
-        walk_present,
-        "orientation walk did not auto-render after the first-run gate (VC-004 / FR-001)"
-    );
+    if !walk_present {
+        // The walk's auto-run gate (OrientationWalk.tsx) is a silent AND of four
+        // conditions, and a failed `onboarding.state.get` is swallowed by the
+        // store as a console.warn — so a bare "did not render" cannot say WHICH
+        // precondition was missing. This dumps all four plus any uncaught error
+        // the VITE_E2E buffer captured, so a CI-only failure is diagnosable from
+        // the log alone instead of needing a local Windows repro.
+        let diag = walk_gate_diagnostics(&app).await;
+        anyhow::bail!(
+            "orientation walk did not auto-render after the first-run gate \
+             (VC-004 / FR-001); gate state: {diag}"
+        );
+    }
 
     // Complete the walk via its real Skip control. Skip (not step-through) is
     // deliberate: route navigation per stop + joyride re-anchoring is flaky in
