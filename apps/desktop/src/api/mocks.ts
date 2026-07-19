@@ -38,6 +38,8 @@ import type {
   TargetDetailV3_Serialize,
   TargetSearchResponse_Serialize,
   TargetResolveSimbadResponse_Serialize,
+  TargetMoonOppositionBatchRequest,
+  TargetMoonOppositionBatchResponse,
   ProjectCreateResult_Serialize,
   ProjectUpdateResult,
   ProjectSourceAddResult_Serialize,
@@ -865,6 +867,57 @@ export async function mockInvoke(
       const targetId = req?.targetId ?? '';
       mockFavourites.delete(targetId);
       return { targetId };
+    }
+    case 'target_moon_opposition_batch': {
+      // #634: mock mode reuses the SAME TS ephemeris (`astro/moon-state.ts` +
+      // `astro/lunar-separation.ts` + `astro/opposition.ts`) the detail panel
+      // (`TargetDetailV2`'s Best-date tooltip, still TS per ADR-0001's
+      // interactive-ephemeris boundary) computes independently — a
+      // hand-rolled placeholder here would diverge from the detail panel's
+      // value and break the "list Opposition == detail Best date" mock-mode
+      // regression guard (e2e 9.5c). This mirrors what the real Rust command
+      // approximates (both derive the same physical quantity); it is NOT the
+      // real backend, only its mock-mode stand-in.
+      const [{ moonStateAt }, { lunarSeparationDeg }, { nextOpposition }] =
+        await Promise.all([
+          import('@/features/targets/astro/moon-state'),
+          import('@/features/targets/astro/lunar-separation'),
+          import('@/features/targets/astro/opposition'),
+        ]);
+      const req = (
+        _args as { req?: TargetMoonOppositionBatchRequest } | undefined
+      )?.req;
+      const at = req?.at ? new Date(req.at) : new Date();
+      const targets = req?.targets ?? [];
+      const { moonVec } = moonStateAt(at);
+      return {
+        results: targets.map((t) => {
+          if (
+            t.raDeg == null ||
+            t.decDeg == null ||
+            !Number.isFinite(t.raDeg) ||
+            !Number.isFinite(t.decDeg)
+          ) {
+            return { id: t.id, moonSeparationDeg: null, opposition: null };
+          }
+          const moonSeparationDeg = lunarSeparationDeg(
+            t.raDeg,
+            t.decDeg,
+            moonVec,
+          );
+          const opposition = nextOpposition(t.raDeg, at);
+          return {
+            id: t.id,
+            moonSeparationDeg,
+            opposition: opposition
+              ? {
+                  date: opposition.date.toISOString(),
+                  daysUntil: opposition.daysUntil,
+                }
+              : null,
+          };
+        }),
+      } satisfies TargetMoonOppositionBatchResponse;
     }
     case 'target_search': {
       const req = (_args as { req?: { query?: string } } | undefined)?.req;

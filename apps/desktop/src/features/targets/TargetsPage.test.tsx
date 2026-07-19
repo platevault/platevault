@@ -55,6 +55,7 @@ const {
   mockGetTargetNote,
   mockUpdateTargetNote,
   mockAstroFormatBatch,
+  mockMoonOppositionBatch,
 } = vi.hoisted(() => ({
   mockListTargets: vi.fn(),
   mockGetTargetDetail: vi.fn(),
@@ -69,6 +70,8 @@ const {
   mockGetTargetNote: vi.fn(),
   mockUpdateTargetNote: vi.fn(),
   mockAstroFormatBatch: vi.fn(),
+  // #634: TargetsTable's batched Moon-separation/opposition call.
+  mockMoonOppositionBatch: vi.fn(),
 }));
 
 /** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
@@ -89,6 +92,7 @@ vi.mock('@/bindings/index', () => ({
     targetNoteGet: mockGetTargetNote,
     targetNoteUpdate: mockUpdateTargetNote,
     targetAstroFormatBatch: mockAstroFormatBatch,
+    targetMoonOppositionBatch: mockMoonOppositionBatch,
   },
 }));
 
@@ -103,6 +107,20 @@ mockListTargetProjects.mockResolvedValue(ok([]));
 mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
 mockUpdateTargetNote.mockResolvedValue(ok({ notes: null }));
 mockAstroFormatBatch.mockResolvedValue(ok({ formatted: [] }));
+// #634: default to "no result yet" for every requested id — rows render the
+// existing explicit-unknown "—" state, matching the pre-#634 behavior these
+// tests already assert on (no test here depends on a specific separation/
+// opposition value).
+mockMoonOppositionBatch.mockImplementation(
+  async (req: { targets: Array<{ id: string }> }) =>
+    ok({
+      results: req.targets.map((t) => ({
+        id: t.id,
+        moonSeparationDeg: null,
+        opposition: null,
+      })),
+    }),
+);
 
 const mockNavigate = vi.fn();
 const mockSelectedId = { current: undefined as string | undefined };
