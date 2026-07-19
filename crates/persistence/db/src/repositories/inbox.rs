@@ -1505,6 +1505,12 @@ macro_rules! exclude_split_placeholder {
     };
 }
 
+// Re-exported crate-internally so `q_desktop::count_unacknowledged_inbox_items`
+// applies the identical predicate. It lives in another module, which is how it
+// was missed when the predicate was introduced — the status-bar badge counted
+// superseded placeholders the queue list had already hidden.
+pub(crate) use exclude_split_placeholder;
+
 /// Per-frame-type aggregate row returned by [`inbox_stats`].
 #[derive(Clone, Debug)]
 pub struct InboxStatsRow {
