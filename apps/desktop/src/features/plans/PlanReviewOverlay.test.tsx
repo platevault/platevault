@@ -232,7 +232,7 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     expect(screen.getByText('calibrated/light_001.xisf')).toBeInTheDocument();
     // Protected item is clearly marked.
     const protectedRow = screen.getByTestId('plan-review-item-1');
-    expect(protectedRow).toHaveClass('alm-plan-review__row--protected');
+    expect(protectedRow).toHaveClass('pv-plan-review__row--protected');
     // Read-only until approval (FR-002 note).
     expect(
       screen.getByText(/Nothing has been changed on disk/),

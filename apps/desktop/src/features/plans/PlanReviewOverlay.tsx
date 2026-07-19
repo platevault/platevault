@@ -371,18 +371,18 @@ export function PlanReviewOverlay({
     _testid: `plan-review-item-${item.index}`,
     _rowClassName:
       item.protection === 'protected'
-        ? 'alm-plan-review__row--protected'
+        ? 'pv-plan-review__row--protected'
         : undefined,
     name: item.name,
     action: <Pill variant={actionPillVariant(item.action)}>{item.action}</Pill>,
-    from: <span className="alm-mono">{item.from}</span>,
+    from: <span className="pv-mono">{item.from}</span>,
     to:
       item.action === 'delete' ? (
-        <span className="alm-cell--muted">
+        <span className="pv-cell--muted">
           {m.plans_review_deletion_target()}
         </span>
       ) : (
-        <span className="alm-mono">{item.to}</span>
+        <span className="pv-mono">{item.to}</span>
       ),
     protection:
       item.protection === 'protected' ? (
@@ -394,7 +394,7 @@ export function PlanReviewOverlay({
     // only); blank for every other plan type — matches the `linked` column's
     // existing not-applicable convention.
     linkKind: linkKind(item) ?? (
-      <span className="alm-cell--muted">{m.common_none()}</span>
+      <span className="pv-cell--muted">{m.common_none()}</span>
     ),
     // #607: per-item apply outcome, so a partial failure is diagnosable
     // without re-running the plan. `pending` (never attempted, e.g. the plan
@@ -402,20 +402,20 @@ export function PlanReviewOverlay({
     result:
       item.state === 'pending' ? (
         <span
-          className="alm-cell--muted"
+          className="pv-cell--muted"
           data-testid={`plan-review-item-result-${item.index}`}
         >
           {m.common_none()}
         </span>
       ) : (
         <span
-          className="alm-plan-review__result"
+          className="pv-plan-review__result"
           data-testid={`plan-review-item-result-${item.index}`}
         >
           <Pill variant={resultPillVariant(item.state)}>{item.state}</Pill>
           {item.failureReason && (
             <span
-              className="alm-plan-review__failure-reason"
+              className="pv-plan-review__failure-reason"
               title={item.failureReason}
             >
               {item.failureReason}
@@ -425,7 +425,7 @@ export function PlanReviewOverlay({
       ),
     reason: item.reason,
     linked: item.linked ?? (
-      <span className="alm-cell--muted">{m.common_none()}</span>
+      <span className="pv-cell--muted">{m.common_none()}</span>
     ),
   }));
 
@@ -489,15 +489,15 @@ export function PlanReviewOverlay({
       footer={footer}
       // The item table owns its own scroll region (below); the body itself
       // must not also scroll, or the item list would double-scroll.
-      bodyClassName="alm-modal__body--fill"
+      bodyClassName="pv-modal__body--fill"
       data-testid="plan-review-overlay"
     >
       {planLoading && plan == null ? (
-        <div className="alm-plan-review__status">{m.common_loading()}</div>
+        <div className="pv-plan-review__status">{m.common_loading()}</div>
       ) : planError || plan == null ? (
         <Banner variant="danger">{m.plans_review_load_error()}</Banner>
       ) : (
-        <div className="alm-plan-review">
+        <div className="pv-plan-review">
           {/* Summary line: no mutation before approval (FR-002 teaching copy). */}
           <Banner variant="info" role="status">
             {m.plans_review_no_mutation_note()}
@@ -515,16 +515,16 @@ export function PlanReviewOverlay({
           )}
 
           {/* Every proposed item, reviewable before approval (SC-001).
-              Virtualized (shared `.alm-listtable` pattern, spec 017 T050):
+              Virtualized (shared `.pv-listtable` pattern, spec 017 T050):
               plans can carry hundreds of items, so the table owns its own
               bounded scroll region instead of rendering every row — the
               summary/gate/progress/footer above and below stay pinned. */}
-          <div className="alm-listtable">
+          <div className="pv-listtable">
             <Table
               columns={columns}
               rows={rows}
               virtualized
-              scrollClassName="alm-listtable__scroll"
+              scrollClassName="pv-listtable__scroll"
               data-testid="plan-review-items"
             />
           </div>
@@ -540,8 +540,8 @@ export function PlanReviewOverlay({
               are refused at apply time until confirmed. Plan-level — see
               `handleConfirmDestructive`. */}
           {hasDestructiveItems && (
-            <div className="alm-plan-review__destructive-gate">
-              <label className="alm-plan-review__destructive-label">
+            <div className="pv-plan-review__destructive-gate">
+              <label className="pv-plan-review__destructive-label">
                 <input
                   type="checkbox"
                   checked={destructiveConfirmed}
@@ -568,7 +568,7 @@ export function PlanReviewOverlay({
             progress.paused ||
             progress.resumeStalled) && (
             <div
-              className="alm-plan-review__progress"
+              className="pv-plan-review__progress"
               role="status"
               aria-live="polite"
               data-testid="plan-review-progress"

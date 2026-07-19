@@ -57,7 +57,7 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
       name: new RegExp(DARK_FRAMES_ROW),
     });
     await waitFor(() => {
-      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+      expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
         'Keep',
       );
     });
@@ -70,7 +70,7 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
       name: new RegExp(DARK_FRAMES_ROW),
     });
     await waitFor(() => {
-      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+      expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
         'Archive',
       );
     });
@@ -117,7 +117,7 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     });
     fireEvent.click(within(row).getByRole('radio', { name: 'Keep' }));
     await waitFor(() => {
-      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+      expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
         'Keep',
       );
     });
@@ -129,8 +129,6 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     // Give the resolved promise's `.then` a tick to run before asserting it
     // did NOT revert the row.
     await new Promise((r) => setTimeout(r, 0));
-    expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
-      'Keep',
-    );
+    expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent('Keep');
   });
 });

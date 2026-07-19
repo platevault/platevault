@@ -148,10 +148,10 @@ export function GuidedOverlay({ guidedState, onDismiss }: GuidedOverlayProps) {
       onEvent={handleEvent}
       options={{
         zIndex: 9000,
-        primaryColor: 'var(--alm-accent, #7c6af7)',
-        backgroundColor: 'var(--alm-surface, #1e1e2e)',
-        textColor: 'var(--alm-text, #e2e2f0)',
-        arrowColor: 'var(--alm-surface, #1e1e2e)',
+        primaryColor: 'var(--pv-accent, #7c6af7)',
+        backgroundColor: 'var(--pv-surface, #1e1e2e)',
+        textColor: 'var(--pv-text, #e2e2f0)',
+        arrowColor: 'var(--pv-surface, #1e1e2e)',
         overlayColor: 'rgba(0,0,0,0.35)',
       }}
       locale={{

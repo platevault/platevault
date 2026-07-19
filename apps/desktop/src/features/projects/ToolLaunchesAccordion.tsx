@@ -60,15 +60,15 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
   return (
     <div
-      className="artifact-row alm-tool-launches__artifact-row"
+      className="artifact-row pv-tool-launches__artifact-row"
       data-state={artifact.state}
       data-kind={artifact.kind}
     >
       {/* Kind badge */}
       <span
         className={
-          `artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` +
-          (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')
+          `artifact-kind-badge artifact-kind-${artifact.kind} pv-tool-launches__kind-badge` +
+          (isFallback ? ' pv-tool-launches__kind-badge--fallback' : '')
         }
         title={
           isFallback
@@ -82,8 +82,8 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {/* File name — strikethrough when missing */}
       <span
         className={
-          'artifact-file-name alm-tool-launches__file-name' +
-          (isMissing ? ' alm-tool-launches__file-name--missing' : '')
+          'artifact-file-name pv-tool-launches__file-name' +
+          (isMissing ? ' pv-tool-launches__file-name--missing' : '')
         }
         title={artifact.path}
       >
@@ -92,14 +92,14 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
       {/* Status badges */}
       {isMissing && (
-        <span className="artifact-badge artifact-badge-missing alm-tool-launches__badge-missing">
+        <span className="artifact-badge artifact-badge-missing pv-tool-launches__badge-missing">
           {m.settings_tools_missing()}
         </span>
       )}
 
       {isManualOverride && (
         <span
-          className="artifact-badge artifact-badge-manual alm-tool-launches__badge-manual"
+          className="artifact-badge artifact-badge-manual pv-tool-launches__badge-manual"
           title={m.projects_artifacts_manual_override_title()}
         >
           {m.projects_artifacts_manual_badge()}
@@ -110,7 +110,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {isMissing && (
         <button
           type="button"
-          className="artifact-mark-resolved-btn alm-tool-launches__resolve-btn"
+          className="artifact-mark-resolved-btn pv-tool-launches__resolve-btn"
           onClick={handleMarkResolved}
           disabled={working}
           aria-label={m.projects_mark_resolved_aria({ file: fileName })}
@@ -151,11 +151,11 @@ function ArtifactGroupSection({
     .join(', ');
 
   return (
-    <div className="artifact-group alm-tool-launches__group">
-      <div className="artifact-group-header alm-tool-launches__group-header">
-        <span className="alm-tool-launches__group-label">{label}</span>
+    <div className="artifact-group pv-tool-launches__group">
+      <div className="artifact-group-header pv-tool-launches__group-header">
+        <span className="pv-tool-launches__group-label">{label}</span>
         <span
-          className="artifact-count-badge alm-tool-launches__count-badge"
+          className="artifact-count-badge pv-tool-launches__count-badge"
           title={countBadge}
         >
           {group.artifacts.length}
@@ -196,7 +196,7 @@ export function ToolLaunchesAccordion({
         title={m.projects_toollaunches_title()}
         defaultOpen={defaultOpen}
       >
-        <div className="tool-launches-loading alm-tool-launches__loading">
+        <div className="tool-launches-loading pv-tool-launches__loading">
           {m.projects_artifacts_loading()}
         </div>
       </Section>
@@ -209,7 +209,7 @@ export function ToolLaunchesAccordion({
         title={m.projects_toollaunches_title()}
         defaultOpen={defaultOpen}
       >
-        <div className="tool-launches-error alm-tool-launches__error">
+        <div className="tool-launches-error pv-tool-launches__error">
           {m.projects_artifacts_load_error({ error })}
         </div>
       </Section>
@@ -222,7 +222,7 @@ export function ToolLaunchesAccordion({
         title={m.projects_toollaunches_title()}
         defaultOpen={defaultOpen}
       >
-        <div className="tool-launches-empty alm-tool-launches__empty">
+        <div className="tool-launches-empty pv-tool-launches__empty">
           {m.projects_artifacts_empty()}
         </div>
       </Section>

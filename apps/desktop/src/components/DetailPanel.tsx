@@ -26,7 +26,7 @@
  *   children + aux          → 2-zone: [1fr]  [0.30fr]
  *   children only           → 1-zone: [1fr]   (no wrapper)
  *
- * Auto-expand behavior: the dock (.alm-listpage__detail) is height:fit-content
+ * Auto-expand behavior: the dock (.pv-listpage__detail) is height:fit-content
  * capped at clamp(220px, 40vh, 52vh). The dock DOES NOT scroll — only the
  * CONTENT column scrolls (overflow-y:auto, scrollbar-gutter:stable). Remove
  * any overflow on the outer detail-body to avoid double scrollbars.
@@ -68,14 +68,14 @@ export interface FactsKVProps {
 
 export function FactsKV({ label, value, provenance }: FactsKVProps) {
   return (
-    <div className="alm-detailpanel__kv">
-      <dt className="alm-detailpanel__kv-label">
+    <div className="pv-detailpanel__kv">
+      <dt className="pv-detailpanel__kv-label">
         {label}
         {provenance && (
-          <span className="alm-detailpanel__kv-prov">{provenance}</span>
+          <span className="pv-detailpanel__kv-prov">{provenance}</span>
         )}
       </dt>
-      <dd className="alm-detailpanel__kv-value">{value}</dd>
+      <dd className="pv-detailpanel__kv-value">{value}</dd>
     </div>
   );
 }
@@ -147,16 +147,16 @@ export function DetailPanel({
 
   // Build modifier classes for CSS grid-template selection.
   const modifiers = [
-    variant ? `alm-detailpanel--${variant}` : '',
-    hasFacts ? 'alm-detailpanel--has-facts' : '',
-    hasAux ? 'alm-detailpanel--has-aux' : '',
+    variant ? `pv-detailpanel--${variant}` : '',
+    hasFacts ? 'pv-detailpanel--has-facts' : '',
+    hasAux ? 'pv-detailpanel--has-aux' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
   const colsClass = modifiers
-    ? `alm-detailpanel__cols ${modifiers}`
-    : 'alm-detailpanel__cols';
+    ? `pv-detailpanel__cols ${modifiers}`
+    : 'pv-detailpanel__cols';
 
   return (
     <DetailPane fill={fill}>
@@ -168,11 +168,9 @@ export function DetailPanel({
       />
       {hasSlots ? (
         <div className={colsClass}>
-          {hasFacts && (
-            <aside className="alm-detailpanel__facts">{facts}</aside>
-          )}
-          <div className="alm-detailpanel__content">{children}</div>
-          {hasAux && <aside className="alm-detailpanel__aux">{aux}</aside>}
+          {hasFacts && <aside className="pv-detailpanel__facts">{facts}</aside>}
+          <div className="pv-detailpanel__content">{children}</div>
+          {hasAux && <aside className="pv-detailpanel__aux">{aux}</aside>}
         </div>
       ) : (
         children

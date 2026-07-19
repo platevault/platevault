@@ -21,7 +21,7 @@ export const Pill = forwardRef<HTMLSpanElement, PillProps>(function Pill(
   { variant = 'neutral', className, children, ...rest },
   ref,
 ) {
-  const cls = ['alm-pill', `alm-pill--${variant}`, className]
+  const cls = ['pv-pill', `pv-pill--${variant}`, className]
     .filter(Boolean)
     .join(' ');
   return (

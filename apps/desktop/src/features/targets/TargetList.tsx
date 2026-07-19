@@ -93,7 +93,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
       footer={m.common_item_count({ count: filtered.length })}
     >
       <div
-        className="alm-virtual-inner"
+        className="pv-virtual-inner"
         // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
         style={{
           height: `${virtualizer.getTotalSize()}px`,
@@ -110,7 +110,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
               key={t.id}
               data-index={virtualRow.index}
               ref={virtualizer.measureElement}
-              className={`alm-list-item${isSelected ? ' alm-list-item--selected' : ''}`}
+              className={`pv-list-item${isSelected ? ' pv-list-item--selected' : ''}`}
               role="button"
               tabIndex={0}
               aria-label={m.targets_list_view_aria({ label: t.effectiveLabel })}
@@ -132,34 +132,34 @@ export function TargetList({ targets, selected, onSelect }: Props) {
             >
               {density === 'Dense' ? (
                 /* ── Dense: single-line ─────────────────────────────── */
-                <div className="alm-target-row">
-                  <span className="alm-target-row__label">
+                <div className="pv-target-row">
+                  <span className="pv-target-row__label">
                     {t.effectiveLabel}
                   </span>
                   {showAltDesig && (
-                    <span className="alm-target-row__desig">
+                    <span className="pv-target-row__desig">
                       ({t.primaryDesignation})
                     </span>
                   )}
-                  <span className="alm-target-row__spacer" />
+                  <span className="pv-target-row__spacer" />
                   <Pill variant="ghost">{formatType(t.objectType)}</Pill>
                 </div>
               ) : (
                 /* ── Rich: two-line ──────────────────────────────────── */
-                <div className="alm-target-row alm-target-row--rich">
-                  <div className="alm-target-row__line1">
-                    <span className="alm-target-row__label">
+                <div className="pv-target-row pv-target-row--rich">
+                  <div className="pv-target-row__line1">
+                    <span className="pv-target-row__label">
                       {t.effectiveLabel}
                     </span>
                     {showAltDesig && (
-                      <span className="alm-target-row__desig">
+                      <span className="pv-target-row__desig">
                         {t.primaryDesignation}
                       </span>
                     )}
-                    <span className="alm-target-row__spacer" />
+                    <span className="pv-target-row__spacer" />
                   </div>
-                  <div className="alm-target-row__line2">
-                    <span className="alm-target-row__type-label">
+                  <div className="pv-target-row__line2">
+                    <span className="pv-target-row__type-label">
                       {formatType(t.objectType)}
                     </span>
                     {/* CON · COORDS · MAG · best-season · sessions omitted:

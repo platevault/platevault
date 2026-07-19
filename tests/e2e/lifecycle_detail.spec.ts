@@ -4,10 +4,10 @@
 /**
  * Playwright smoke: Sessions page grouped table + detail provenance surface.
  *
- * Updated for the spec-043 redesign: SessionsList (`.alm-list-item` rows) was
- * replaced by a SessionsTable of `.alm-sessions-table__row` rows. The list is
+ * Updated for the spec-043 redesign: SessionsList (`.pv-list-item` rows) was
+ * replaced by a SessionsTable of `.pv-sessions-table__row` rows. The list is
  * FLAT by default (spec 043 §4 / PR #360 — grouping is opt-in via the top-bar
- * Group-by control, and group headers now use the shared `.alm-listgroup`
+ * Group-by control, and group headers now use the shared `.pv-listgroup`
  * class), and the standalone "Provenance" <Section> in SessionDetail was folded
  * into a single PropertyTable whose Source column tags each fact (FITS /
  * Inferred / User).
@@ -49,7 +49,7 @@ test.describe('lifecycle detail · sessions page + provenance UI (spec 006 / spe
 
     // ── 2. Flat table renders session rows (spec 043 §4: the list is FLAT by
     //       default — grouping is opt-in via the top-bar Group-by control) ─────
-    const rows = page.locator('.alm-sessions-table__row');
+    const rows = page.locator('.pv-sessions-table__row');
     await expect(rows.first()).toBeVisible({ timeout: 8_000 });
 
     // ── 3. Click a session row → detail pane opens ────────────────────────────
@@ -59,7 +59,7 @@ test.describe('lifecycle detail · sessions page + provenance UI (spec 006 / spe
     // ── 4. Detail shows a PropertyTable with a source-tagged fact ─────────────
     // The redesigned SessionDetail folds provenance into the fact PropertyTable;
     // each fact carries a Source badge (FITS / Inferred / User).
-    const propTable = page.locator('.alm-property-table').first();
+    const propTable = page.locator('.pv-property-table').first();
     await expect(propTable).toBeVisible({ timeout: 5_000 });
     await expect(
       propTable.getByText(/^(FITS|Inferred|User)$/).first(),
@@ -77,13 +77,13 @@ test.describe('lifecycle detail · sessions page + provenance UI (spec 006 / spe
     ).not.toBeVisible();
 
     // The flat sessions table renders its rows.
-    await expect(page.locator('.alm-sessions-table__row').first()).toBeVisible({
+    await expect(page.locator('.pv-sessions-table__row').first()).toBeVisible({
       timeout: 8_000,
     });
 
     // The redesigned SessionsPage mounts the bottom SessionDetail pane ONLY when
     // a session is selected (`detail={selectedSession != null ? … : undefined}`),
     // so with no selection the detail's PropertyTable must be absent.
-    await expect(page.locator('.alm-property-table')).toHaveCount(0);
+    await expect(page.locator('.pv-property-table')).toHaveCount(0);
   });
 });

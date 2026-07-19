@@ -155,9 +155,9 @@ export function BlockedBanner({
 
   return (
     <Banner variant="danger" role="alert" aria-live="assertive">
-      <div className="alm-blocked-banner__body">
+      <div className="pv-blocked-banner__body">
         <span data-testid="blocked-reason-message">{message}</span>
-        <div className="alm-blocked-banner__actions">
+        <div className="pv-blocked-banner__actions">
           <Btn
             size="sm"
             variant="danger"

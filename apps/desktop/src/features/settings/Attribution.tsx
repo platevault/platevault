@@ -34,23 +34,21 @@ const SOURCES: AttributionSource[] = [
 
 export function Attribution() {
   return (
-    <div className="alm-settings__group">
-      <div className="alm-settings__group-title">
+    <div className="pv-settings__group">
+      <div className="pv-settings__group-title">
         {m.settings_attribution_title()}
       </div>
-      <p className="alm-settings__group-note">
-        {m.settings_attribution_note()}
-      </p>
-      <ul className="alm-attribution__list">
+      <p className="pv-settings__group-note">{m.settings_attribution_note()}</p>
+      <ul className="pv-attribution__list">
         {SOURCES.map((s) => (
-          <li key={s.name} className="alm-attribution__item">
-            <div className="alm-attribution__head">
+          <li key={s.name} className="pv-attribution__item">
+            <div className="pv-attribution__head">
               <strong>{s.name}</strong>
-              <span className="alm-attribution__org">{s.org}</span>
+              <span className="pv-attribution__org">{s.org}</span>
             </div>
-            <p className="alm-attribution__desc">{s.description()}</p>
+            <p className="pv-attribution__desc">{s.description()}</p>
             <a
-              className="alm-attribution__link"
+              className="pv-attribution__link"
               href={s.href}
               target="_blank"
               rel="noopener noreferrer"

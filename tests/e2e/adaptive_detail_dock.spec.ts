@@ -12,7 +12,7 @@
  * localStorage. Exercised against the Calibration page (an existing
  * ListPageLayout consumer that takes the default placement).
  *
- * Existing pins this spec must NOT break: `.alm-listpage__detail` stays the
+ * Existing pins this spec must NOT break: `.pv-listpage__detail` stays the
  * outer detail-panel class in BOTH placements (only the `--side` modifier
  * differs) — `calibration_masters_matching.spec.ts:157` and
  * `inbox_ingest_confirm.spec.ts` select on that base class at the default
@@ -34,23 +34,23 @@ test.describe('adaptive detail-panel dock (spec 054 / #936)', () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/#/calibration');
     await disableGuidedTourOverlay(page);
-    await expect(page.locator('.alm-calib-table')).toBeVisible({
+    await expect(page.locator('.pv-calib-table')).toBeVisible({
       timeout: 8_000,
     });
 
     const darkRow = page
-      .locator('.alm-calib-table__row')
+      .locator('.pv-calib-table__row')
       .filter({ hasText: 'Master Dark · 120s' });
     await darkRow.click();
-    const detail = page.locator('.alm-listpage__detail');
+    const detail = page.locator('.pv-listpage__detail');
     await expect(detail).toBeVisible({ timeout: 5_000 });
-    await expect(detail).toHaveClass(/alm-listpage__detail--side/);
+    await expect(detail).toHaveClass(/pv-listpage__detail--side/);
     await expect(page.getByTestId('dock-resize-handle')).toBeVisible();
 
     // Shrink to the shell's enforced minimum — bottom is the universal
     // narrow fallback (decision #8); the resize handle disappears with it.
     await page.setViewportSize({ width: 1100, height: 720 });
-    await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
+    await expect(detail).not.toHaveClass(/pv-listpage__detail--side/);
     await expect(page.getByTestId('dock-resize-handle')).not.toBeVisible();
     // The panel itself, and its content, remain intact through the switch.
     await expect(detail).toContainText('Poseidon-C PRO');
@@ -63,30 +63,30 @@ test.describe('adaptive detail-panel dock (spec 054 / #936)', () => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('/#/calibration');
     await disableGuidedTourOverlay(page);
-    await expect(page.locator('.alm-calib-table')).toBeVisible({
+    await expect(page.locator('.pv-calib-table')).toBeVisible({
       timeout: 8_000,
     });
 
     await page
-      .locator('.alm-calib-table__row')
+      .locator('.pv-calib-table__row')
       .filter({ hasText: 'Master Dark · 120s' })
       .click();
-    const detail = page.locator('.alm-listpage__detail');
+    const detail = page.locator('.pv-listpage__detail');
     await expect(detail).toBeVisible({ timeout: 5_000 });
-    await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
+    await expect(detail).not.toHaveClass(/pv-listpage__detail--side/);
 
     await page.getByRole('radio', { name: 'Right' }).click();
-    await expect(detail).toHaveClass(/alm-listpage__detail--side/);
+    await expect(detail).toHaveClass(/pv-listpage__detail--side/);
 
     await page.reload();
     await disableGuidedTourOverlay(page);
     await page
-      .locator('.alm-calib-table__row')
+      .locator('.pv-calib-table__row')
       .filter({ hasText: 'Master Dark · 120s' })
       .click();
-    const detailAfterReload = page.locator('.alm-listpage__detail');
+    const detailAfterReload = page.locator('.pv-listpage__detail');
     await expect(detailAfterReload).toBeVisible({ timeout: 5_000 });
     // The pin survives the reload even though 1024 is below the auto threshold.
-    await expect(detailAfterReload).toHaveClass(/alm-listpage__detail--side/);
+    await expect(detailAfterReload).toHaveClass(/pv-listpage__detail--side/);
   });
 });

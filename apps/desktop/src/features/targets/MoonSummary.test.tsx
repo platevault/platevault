@@ -47,11 +47,11 @@ describe('MoonSummary', () => {
     );
     const firstPhase = screen
       .getByTestId('moon-summary')
-      .querySelector('.alm-moon-summary__phase')?.textContent;
+      .querySelector('.pv-moon-summary__phase')?.textContent;
     rerender(<MoonSummary night={computeObservingNight(after)} />);
     const secondPhase = screen
       .getByTestId('moon-summary')
-      .querySelector('.alm-moon-summary__phase')?.textContent;
+      .querySelector('.pv-moon-summary__phase')?.textContent;
     expect(firstPhase).toBe(secondPhase);
   });
 });

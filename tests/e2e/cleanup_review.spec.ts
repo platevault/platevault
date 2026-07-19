@@ -71,7 +71,7 @@ test.describe('cleanup review (spec 017 WP-E / Journey 6)', () => {
 
     // ── 2. Select the fixture project → bottom detail panel mounts ───────────
     const projectRow = page
-      .locator('.alm-projects-table__row')
+      .locator('.pv-projects-table__row')
       .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
@@ -126,7 +126,7 @@ test.describe('cleanup review (spec 017 WP-E / Journey 6)', () => {
     // The master candidate is protected: locked, NO affordance to include it,
     // clearly marked with the shared protected pill.
     const protectedRow = masterGroup.getByTestId('cleanup-candidate-0');
-    await expect(protectedRow).toHaveClass(/alm-cleanup-scan__row--protected/);
+    await expect(protectedRow).toHaveClass(/pv-cleanup-scan__row--protected/);
     await expect(protectedRow.getByText('Protected')).toBeVisible();
 
     // ── 6. Destructive-destination picker uses canonical archive|trash vocab

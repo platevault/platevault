@@ -78,7 +78,7 @@ export function ViewAuditHistory({
 
   return (
     <details
-      className="text-xs text-muted alm-source-views__refs-details"
+      className="text-xs text-muted pv-source-views__refs-details"
       data-testid={`view-history-${viewId}`}
       onToggle={(e) => {
         if (
@@ -90,7 +90,7 @@ export function ViewAuditHistory({
         }
       }}
     >
-      <summary className="alm-source-views__refs-summary">
+      <summary className="pv-source-views__refs-summary">
         {m.projects_source_views_history_toggle()}
       </summary>
 
@@ -104,11 +104,11 @@ export function ViewAuditHistory({
       )}
 
       {!loading && error === null && plans !== null && plans.length > 0 && (
-        <ul className="alm-source-views__refs-list">
+        <ul className="pv-source-views__refs-list">
           {plans.map((plan) => (
             <li
               key={plan.id}
-              className="alm-source-views__refs-item flex items-center gap-2"
+              className="pv-source-views__refs-item flex items-center gap-2"
               data-testid={`view-history-row-${plan.id}`}
             >
               {/* Timestamp, not a mono-restoration surface (spec 055 FR-005:

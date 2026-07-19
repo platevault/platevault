@@ -47,7 +47,7 @@ describe('General — density', () => {
     const select = screen.getByDisplayValue('Comfortable (32px row)');
     fireEvent.change(select, { target: { value: 'compact' } });
 
-    expect(document.documentElement.style.getPropertyValue('--alm-sp-2')).toBe(
+    expect(document.documentElement.style.getPropertyValue('--pv-sp-2')).toBe(
       '6.00px',
     );
     expect(document.documentElement.classList.contains('density-compact')).toBe(
@@ -64,7 +64,7 @@ describe('General — font size', () => {
     fireEvent.change(select, { target: { value: 'large' } });
 
     expect(
-      document.documentElement.style.getPropertyValue('--alm-text-base'),
+      document.documentElement.style.getPropertyValue('--pv-text-base'),
     ).toBe('16px');
     expect(document.documentElement.style.getPropertyValue('font-size')).toBe(
       '16px',
@@ -100,7 +100,7 @@ describe('General — restore defaults (#802)', () => {
     // rather than assuming a starting display value.
     const densityRow = screen
       .getByText('Density')
-      .closest('.alm-settings__row') as HTMLElement;
+      .closest('.pv-settings__row') as HTMLElement;
     const densitySelect = within(densityRow).getByRole('combobox');
 
     fireEvent.click(screen.getByRole('button', { name: /espresso/i }));

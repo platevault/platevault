@@ -10,7 +10,7 @@
  * ProjectDetail architecture (spec 008 / design-v4).
  *
  * What this test proves:
- *  1. The Projects page at /#/projects renders project rows as .alm-list-item
+ *  1. The Projects page at /#/projects renders project rows as .pv-list-item
  *     divs without crashing.
  *  2. The first project ("NGC 7000 Narrowband", lifecycle: "processing") is
  *     rendered with its lifecycle pill visible.
@@ -59,9 +59,9 @@ test.describe('lifecycle transitions · write-side seam (spec 008 / design-v4)',
 
     // ── 2. Project row is visible with "Processing" lifecycle pill ────────────
     // ProjectsTable (spec 043 redesign) renders each project as a
-    // `tr.alm-projects-table__row` containing the project name and a state tag.
+    // `tr.pv-projects-table__row` containing the project name and a state tag.
     const projectRow = page
-      .locator('.alm-projects-table__row')
+      .locator('.pv-projects-table__row')
       .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
@@ -109,15 +109,15 @@ test.describe('lifecycle transitions · write-side seam (spec 008 / design-v4)',
     // All three mock projects should appear.
     await expect(
       page
-        .locator('.alm-projects-table__row')
+        .locator('.pv-projects-table__row')
         .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
-      page.locator('.alm-projects-table__row').filter({ hasText: 'M31 LRGB' }),
+      page.locator('.pv-projects-table__row').filter({ hasText: 'M31 LRGB' }),
     ).toBeVisible();
     await expect(
       page
-        .locator('.alm-projects-table__row')
+        .locator('.pv-projects-table__row')
         .filter({ hasText: 'IC 1396 SHO' }),
     ).toBeVisible();
   });

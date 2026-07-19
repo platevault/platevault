@@ -8,7 +8,7 @@
  *   [props A] [props B] [sessions column: "Used by" + "Compatible" stacked]
  *
  * Actions (Use in project / Replace master / Reveal) are inline-left
- * in the title via titleExtra, wrapped in alm-session-detail2__actions — same
+ * in the title via titleExtra, wrapped in pv-session-detail2__actions — same
  * pattern as SessionDetail's actionButtons. No `actions` prop passed to
  * DetailPanel. No subtitle (kind is already in the title, size is redundant).
  *
@@ -428,7 +428,7 @@ export function MasterDetail({
 
   // Actions inline-left in the title, same pattern as SessionDetail's actionButtons.
   const actionButtons = (
-    <span className="alm-session-detail2__actions">
+    <span className="pv-session-detail2__actions">
       {/* spec 048 US5 (FR-024/025): distinct wording per trigger path; the
 			    match itself is never auto-invalidated or removed, so this is a
 			    warning badge, not a blocking state. */}
@@ -517,7 +517,7 @@ export function MasterDetail({
         <TwoColDetailLayout
           colA={<PropertyTable mode="view" properties={colA} />}
           colB={<PropertyTable mode="view" properties={colB} />}
-          linkedClassName="alm-session-detail2__linked--stack"
+          linkedClassName="pv-session-detail2__linked--stack"
           linked={
             <>
               <SessionListPopover
@@ -534,7 +534,7 @@ export function MasterDetail({
 
         {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
 			    the master's matching-context session, with assign/cancel. */}
-        <div className="alm-session-detail2__match">
+        <div className="pv-session-detail2__match">
           <MatchCandidatesPanel
             sessionId={matchSessionId ?? ''}
             response={suggestResponse}

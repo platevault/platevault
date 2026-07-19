@@ -133,9 +133,9 @@ export function ResolverSettingsControl({
       {compact ? (
         // First-run Configuration step: label + toggle on one line, description
         // below the control (not beside it).
-        <div className="alm-resolver-settings__compact-wrap">
-          <div className="alm-resolver-settings__compact-row">
-            <span className="alm-resolver-settings__compact-label">
+        <div className="pv-resolver-settings__compact-wrap">
+          <div className="pv-resolver-settings__compact-row">
+            <span className="pv-resolver-settings__compact-label">
               {m.settings_resolver_online_label()}
             </span>
             {loaded ? (
@@ -154,7 +154,7 @@ export function ResolverSettingsControl({
               />
             )}
           </div>
-          <div className="alm-settings__row-desc">
+          <div className="pv-settings__row-desc">
             {loaded &&
               (settings.onlineEnabled
                 ? m.settings_resolver_online_desc()
@@ -203,7 +203,7 @@ export function ResolverSettingsControl({
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={endpointId} (cross-column association the rule can't trace) */}
             <input
               id={endpointId}
-              className="alm-input"
+              className="pv-input"
               type="text"
               value={settings.simbadEndpoint}
               disabled={!loaded || !settings.onlineEnabled}
@@ -228,7 +228,7 @@ export function ResolverSettingsControl({
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={debounceId} (cross-column association the rule can't trace) */}
             <input
               id={debounceId}
-              className="alm-input alm-resolver-settings__narrow-input"
+              className="pv-input pv-resolver-settings__narrow-input"
               type="number"
               min={0}
               step={50}
@@ -258,7 +258,7 @@ export function ResolverSettingsControl({
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={timeoutId} (cross-column association the rule can't trace) */}
             <input
               id={timeoutId}
-              className="alm-input alm-resolver-settings__narrow-input"
+              className="pv-input pv-resolver-settings__narrow-input"
               type="number"
               min={1}
               step={1}
@@ -303,12 +303,12 @@ export function ResolverSettingsControl({
             </Btn>
           </SettingsRow>
           {cacheClearMessage && (
-            <div className="alm-settings__row-desc" role="status">
+            <div className="pv-settings__row-desc" role="status">
               {cacheClearMessage}
             </div>
           )}
           {cacheClearError && (
-            <div className="alm-settings__error" role="alert">
+            <div className="pv-settings__error" role="alert">
               {cacheClearError}
             </div>
           )}
@@ -316,7 +316,7 @@ export function ResolverSettingsControl({
       )}
 
       {saveError && (
-        <div className="alm-settings__error" role="alert">
+        <div className="pv-settings__error" role="alert">
           {m.settings_resolver_save_error({ error: saveError })}
         </div>
       )}

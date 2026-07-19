@@ -142,24 +142,24 @@ export function GenerateSourceViewDialog({
         </>
       }
     >
-      <div className="alm-source-views__profile-row">
-        <span className="alm-text-sm alm-text-muted">
+      <div className="pv-source-views__profile-row">
+        <span className="pv-text-sm pv-text-muted">
           {m.projects_source_views_generate_profile_label()}
         </span>
-        <span className="alm-text-sm">
+        <span className="pv-text-sm">
           {m.projects_source_views_generate_profile_default()}
         </span>
       </div>
 
-      <p className="alm-text-sm alm-text-muted">
+      <p className="pv-text-sm pv-text-muted">
         {m.projects_source_views_generate_kind_hint()}
       </p>
 
       {linkKinds &&
         (linkKinds.sourceViewLinkKindIntraDrive ??
           linkKinds.sourceViewLinkKindCrossDrive) && (
-          <div className="alm-text-sm" data-testid="generate-view-link-kinds">
-            <span className="alm-text-muted">
+          <div className="pv-text-sm" data-testid="generate-view-link-kinds">
+            <span className="pv-text-muted">
               {m.projects_source_views_generate_kind_settings_label()}:
             </span>{' '}
             {linkKinds.sourceViewLinkKindIntraDrive && (
@@ -182,11 +182,11 @@ export function GenerateSourceViewDialog({
           </div>
         )}
 
-      <p className="alm-text-xs alm-text-muted">
+      <p className="pv-text-xs pv-text-muted">
         {m.projects_source_views_generate_kind_drift_note()}
       </p>
 
-      <label className="alm-source-views__copy-label">
+      <label className="pv-source-views__copy-label">
         <input
           type="checkbox"
           checked={copyOptIn}

@@ -4,7 +4,7 @@
 /**
  * Regression pin — #816 ("Target detail panel: aliases/notes/coverage/links/
  * back-button silently clipped by DetailPane fill-mode overflow:hidden"):
- * `DetailPane fill` (primitives.css `.alm-detail--fill`) sets `overflow:
+ * `DetailPane fill` (primitives.css `.pv-detail--fill`) sets `overflow:
  * hidden` on the pane itself and expects exactly one descendant to establish
  * its own `overflow-y: auto` scroll region. `TargetDetailV2` used to dump all
  * of its post-header content as flat siblings with no such region, so
@@ -12,7 +12,7 @@
  * beyond the pane's clipped bottom edge with NO way for a mouse-wheel user to
  * ever scroll it into view (an `overflow:hidden` box is not wheel-scrollable,
  * unlike `overflow:auto`/`scroll`). Fixed by wrapping that content in
- * `.alm-planner__scroll` (`flex:1; min-height:0; overflow-y:auto`,
+ * `.pv-planner__scroll` (`flex:1; min-height:0; overflow-y:auto`,
  * redesign-detail.css).
  *
  * IMPORTANT: this deliberately drives a real mouse-wheel event
@@ -57,12 +57,12 @@ test.describe('Regression · Target detail pane content unclipped (#816)', () =>
     await page.goto('/#/targets');
     await disableGuidedTourOverlay(page);
 
-    const m31 = page.locator('.alm-targets-table__row', { hasText: 'M 31' });
+    const m31 = page.locator('.pv-targets-table__row', { hasText: 'M 31' });
     await expect(m31).toBeVisible({ timeout: 8_000 });
     await m31.click();
 
-    const pane = page.locator('.alm-detail--fill');
-    const scrollRegion = page.locator('.alm-planner__scroll');
+    const pane = page.locator('.pv-detail--fill');
+    const scrollRegion = page.locator('.pv-planner__scroll');
     await expect(scrollRegion).toBeVisible();
 
     const backBtn = page.getByRole('button', { name: '← All targets' });

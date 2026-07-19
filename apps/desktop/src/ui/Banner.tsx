@@ -14,7 +14,7 @@ export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
   { variant = 'warn', className, children, ...rest },
   ref,
 ) {
-  const cls = ['alm-banner', `alm-banner--${variant}`, className]
+  const cls = ['pv-banner', `pv-banner--${variant}`, className]
     .filter(Boolean)
     .join(' ');
   return (

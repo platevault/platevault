@@ -14,7 +14,7 @@ export const Toggle = forwardRef<HTMLLabelElement, ToggleProps>(function Toggle(
   { checked, onChange, className, ...rest },
   ref,
 ) {
-  const cls = ['alm-toggle', className].filter(Boolean).join(' ');
+  const cls = ['pv-toggle', className].filter(Boolean).join(' ');
   // Route any accessible-name props onto the actual checkbox so screen
   // readers announce the switch; the rest stay on the wrapping label.
   const {
@@ -31,8 +31,8 @@ export const Toggle = forwardRef<HTMLLabelElement, ToggleProps>(function Toggle(
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
       />
-      <span className="alm-toggle__track" />
-      <span className="alm-toggle__thumb" />
+      <span className="pv-toggle__track" />
+      <span className="pv-toggle__thumb" />
     </label>
   );
 });

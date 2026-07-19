@@ -143,7 +143,7 @@ export function Framing({ save }: FramingProps) {
       >
         <input
           type="number"
-          className="alm-input alm-input--sm alm-settings__num-input"
+          className="pv-input pv-input--sm pv-settings__num-input"
           value={pointingFraction}
           min={POINTING_FRACTION_MIN}
           max={POINTING_FRACTION_MAX}
@@ -171,7 +171,7 @@ export function Framing({ save }: FramingProps) {
               );
           }}
         />
-        <span className="alm-settings__unit-label">
+        <span className="pv-settings__unit-label">
           {m.settings_framing_unit_fraction()}
         </span>
       </SettingsRow>
@@ -182,7 +182,7 @@ export function Framing({ save }: FramingProps) {
       >
         <input
           type="number"
-          className="alm-input alm-input--sm alm-settings__num-input"
+          className="pv-input pv-input--sm pv-settings__num-input"
           value={pointingFallback}
           min={POINTING_FALLBACK_MIN}
           max={POINTING_FALLBACK_MAX}
@@ -210,7 +210,7 @@ export function Framing({ save }: FramingProps) {
               );
           }}
         />
-        <span className="alm-settings__unit-label">
+        <span className="pv-settings__unit-label">
           {m.settings_framing_unit_deg()}
         </span>
       </SettingsRow>
@@ -221,7 +221,7 @@ export function Framing({ save }: FramingProps) {
       >
         <input
           type="number"
-          className="alm-input alm-input--sm alm-settings__num-input"
+          className="pv-input pv-input--sm pv-settings__num-input"
           value={rotationTolerance}
           min={ROTATION_MIN}
           max={ROTATION_MAX}
@@ -249,7 +249,7 @@ export function Framing({ save }: FramingProps) {
               );
           }}
         />
-        <span className="alm-settings__unit-label">
+        <span className="pv-settings__unit-label">
           {m.settings_framing_unit_deg()}
         </span>
       </SettingsRow>
@@ -260,7 +260,7 @@ export function Framing({ save }: FramingProps) {
       >
         <input
           type="number"
-          className="alm-input alm-input--sm alm-settings__num-input"
+          className="pv-input pv-input--sm pv-settings__num-input"
           value={mosaicEnvelope}
           min={MOSAIC_ENVELOPE_MIN}
           max={MOSAIC_ENVELOPE_MAX}
@@ -288,12 +288,12 @@ export function Framing({ save }: FramingProps) {
               );
           }}
         />
-        <span className="alm-settings__unit-label">
+        <span className="pv-settings__unit-label">
           {m.settings_framing_unit_fraction()}
         </span>
       </SettingsRow>
 
-      <p className="alm-calmatch__help">{m.settings_framing_help()}</p>
+      <p className="pv-calmatch__help">{m.settings_framing_help()}</p>
     </SettingsSection>
   );
 }

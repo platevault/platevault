@@ -9,7 +9,7 @@
 // whitespace-collapsed declarations), and groups rules with identical bodies.
 // Reports component-clone groups (>=5 decls, the "per-feature clone" shape the
 // project mandate bans) and utility-pattern groups (<5 decls, >=2 copies,
-// candidates for a shared `.alm-*` utility class). Used to measure CSS dedup
+// candidates for a shared `.pv-*` utility class). Used to measure CSS dedup
 // progress (see CLAUDE.md: "one parameterised component + one CSS class,
 // never per-feature clones").
 //

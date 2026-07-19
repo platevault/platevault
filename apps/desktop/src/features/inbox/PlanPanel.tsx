@@ -585,17 +585,14 @@ export function PlanPanel({
   // Surfaced whenever the last confirm needs a root choice. Block apply until
   // chosen: the plan isn't generated until confirm succeeds with a rootId.
   const rootPicker = pendingRootPick ? (
-    <div
-      className="alm-plan-panel__root-picker"
-      data-testid="inbox-root-picker"
-    >
-      <div className="alm-plan-panel__root-picker-title">
+    <div className="pv-plan-panel__root-picker" data-testid="inbox-root-picker">
+      <div className="pv-plan-panel__root-picker-title">
         {m.inbox_choose_dest_root_title()}
       </div>
-      <div className="alm-plan-panel__root-picker-desc">
+      <div className="pv-plan-panel__root-picker-desc">
         {m.inbox_choose_dest_root_body({ category: pendingRootPick.category })}
       </div>
-      <div className="alm-plan-panel__root-picker-options">
+      <div className="pv-plan-panel__root-picker-options">
         {pendingRootPick.candidates.map((c) => (
           <Btn
             key={c.rootId}
@@ -604,11 +601,11 @@ export function PlanPanel({
             disabled={rootPickBusy}
             data-testid={`inbox-root-option-${c.rootId}`}
             aria-label={m.inbox_use_as_destination_root_aria({ path: c.path })}
-            className="alm-plan-panel__root-option"
+            className="pv-plan-panel__root-option"
           >
-            <span className="alm-plan-panel__root-option-inner">
-              <code className="alm-plan-panel__root-option-path">{c.path}</code>
-              <span className="alm-plan-panel__root-option-kind">{c.kind}</span>
+            <span className="pv-plan-panel__root-option-inner">
+              <code className="pv-plan-panel__root-option-path">{c.path}</code>
+              <span className="pv-plan-panel__root-option-kind">{c.kind}</span>
             </span>
           </Btn>
         ))}
@@ -621,7 +618,7 @@ export function PlanPanel({
   // pick (the latter can occur with zero open plans — the plan wasn't created).
   if (plans.length === 0) {
     return rootPicker ? (
-      <div className="alm-plan-panel" data-testid="plan-panel">
+      <div className="pv-plan-panel" data-testid="plan-panel">
         {rootPicker}
       </div>
     ) : null;
@@ -636,15 +633,15 @@ export function PlanPanel({
     busy || plans.length === 0 || !allDestructiveConfirmed;
 
   return (
-    <div className="alm-plan-panel" data-testid="plan-panel">
+    <div className="pv-plan-panel" data-testid="plan-panel">
       {/* ── Destination-root picker (FR-029): blocks apply until chosen ── */}
       {rootPicker}
 
       {/* ── Pinned header: counts + select-all + apply controls ── */}
-      <div className="alm-plan-panel__bar" data-testid="plan-panel-bar">
-        <div className="alm-plan-panel__bar-left">
+      <div className="pv-plan-panel__bar" data-testid="plan-panel-bar">
+        <div className="pv-plan-panel__bar-left">
           {}
-          <label className="alm-plan-panel__select-all">
+          <label className="pv-plan-panel__select-all">
             <input
               type="checkbox"
               checked={allSelectableSelected}
@@ -653,19 +650,19 @@ export function PlanPanel({
               aria-label={m.inbox_select_all_plans_aria()}
               data-testid="plan-select-all"
             />
-            <span className="alm-plan-panel__select-all-label">
+            <span className="pv-plan-panel__select-all-label">
               {m.common_select_all()}
             </span>
           </label>
           <span
-            className="alm-plan-panel__count-summary"
+            className="pv-plan-panel__count-summary"
             data-testid="plan-total-count"
           >
             {m.plan_count_label({ count: plans.length })} ·{' '}
             {m.action_count_label({ count: totalActions })}
           </span>
         </div>
-        <div className="alm-plan-panel__bar-actions">
+        <div className="pv-plan-panel__bar-actions">
           <Btn
             variant="primary"
             onClick={() => onApplySelected(selectedArray)}
@@ -690,10 +687,10 @@ export function PlanPanel({
       </div>
 
       {/* ── Scrollable group list ── */}
-      <div className="alm-plan-panel__scroll" data-testid="plan-panel-scroll">
+      <div className="pv-plan-panel__scroll" data-testid="plan-panel-scroll">
         {/* Column header — aligns with each plan's group-header grid. */}
-        <div className="alm-plan-panel__list-head" aria-hidden="true">
-          <span className="alm-plan-panel__group-lead" />
+        <div className="pv-plan-panel__list-head" aria-hidden="true">
+          <span className="pv-plan-panel__group-lead" />
           <span>{m.inbox_plan_col_plan()}</span>
           <span>{m.inbox_plan_col_composition()}</span>
           <span>{m.inbox_col_destination()}</span>
@@ -743,14 +740,14 @@ export function PlanPanel({
           return (
             <section
               key={plan.inboxItemId}
-              className="alm-plan-panel__group"
+              className="pv-plan-panel__group"
               data-testid={`plan-group-${plan.inboxItemId}`}
             >
               {/* Group header — an aligned grid row (shares its column template
                   with the list head so every plan's columns line up). */}
-              <div className="alm-plan-panel__group-header">
+              <div className="pv-plan-panel__group-header">
                 {/* Col 1: select + expand */}
-                <span className="alm-plan-panel__group-lead">
+                <span className="pv-plan-panel__group-lead">
                   <input
                     type="checkbox"
                     checked={checked}
@@ -773,13 +770,13 @@ export function PlanPanel({
                         : m.inbox_show_files_aria({ name: plan.itemName })
                     }
                     data-testid={`plan-group-toggle-${plan.inboxItemId}`}
-                    className="alm-plan-panel__expand"
+                    className="pv-plan-panel__expand"
                   >
                     <span
                       className={
                         isExpanded
-                          ? 'alm-plan-panel__chevron alm-plan-panel__chevron--open'
-                          : 'alm-plan-panel__chevron'
+                          ? 'pv-plan-panel__chevron pv-plan-panel__chevron--open'
+                          : 'pv-plan-panel__chevron'
                       }
                       aria-hidden="true"
                     >
@@ -790,7 +787,7 @@ export function PlanPanel({
 
                 {/* Col 2: plan / source folder ("(root)" for the library root) */}
                 <span
-                  className="alm-plan-panel__group-name"
+                  className="pv-plan-panel__group-name"
                   title={plan.itemName || m.inbox_list_root_label()}
                 >
                   {plan.itemName || m.inbox_list_root_label()}
@@ -798,7 +795,7 @@ export function PlanPanel({
 
                 {/* Col 3: composition breakdown (aligned). */}
                 <span
-                  className="alm-plan-panel__group-breakdown"
+                  className="pv-plan-panel__group-breakdown"
                   data-testid={`plan-group-summary-${plan.inboxItemId}`}
                 >
                   {(breakdownEntries.length > 0
@@ -821,26 +818,26 @@ export function PlanPanel({
                     return (
                       <span
                         key={entry.key}
-                        className="alm-plan-panel__summary-type"
+                        className="pv-plan-panel__summary-type"
                       >
                         {i > 0 && (
                           <span
-                            className="alm-plan-panel__summary-sep"
+                            className="pv-plan-panel__summary-sep"
                             aria-hidden="true"
                           >
                             ·{' '}
                           </span>
                         )}
                         {knownLabel !== null ? (
-                          <span className="alm-plan-panel__summary-type-name">
+                          <span className="pv-plan-panel__summary-type-name">
                             {knownLabel}
                           </span>
                         ) : (
                           <>
-                            <span className="alm-plan-panel__summary-type-count">
+                            <span className="pv-plan-panel__summary-type-count">
                               {entry.count}
                             </span>{' '}
-                            <span className="alm-plan-panel__summary-type-name">
+                            <span className="pv-plan-panel__summary-type-name">
                               {pluralLabel(entry.frameType, entry.count)}
                             </span>
                           </>
@@ -852,14 +849,14 @@ export function PlanPanel({
 
                 {/* Col 4: destination (aligned across all plans). In-place
                     catalogues read "In place · <folder>"; moves read "→ <dest>". */}
-                <span className="alm-plan-panel__group-dest">
+                <span className="pv-plan-panel__group-dest">
                   {allInPlace ? (
                     <>
-                      <span className="alm-plan-panel__inplace">
+                      <span className="pv-plan-panel__inplace">
                         {m.inbox_inplace_label()}
                       </span>
                       <code
-                        className="alm-plan-panel__summary-dest"
+                        className="pv-plan-panel__summary-dest"
                         title={breakdownDest?.full ?? plan.itemName}
                       >
                         {breakdownDest?.short ?? plan.itemName}
@@ -868,13 +865,13 @@ export function PlanPanel({
                   ) : (
                     <>
                       <span
-                        className="alm-plan-panel__summary-arrow"
+                        className="pv-plan-panel__summary-arrow"
                         aria-hidden="true"
                       >
                         →
                       </span>
                       <code
-                        className="alm-plan-panel__summary-dest"
+                        className="pv-plan-panel__summary-dest"
                         title={
                           breakdownDest?.full ??
                           summaryLines[0]?.destinationFull ??
@@ -891,7 +888,7 @@ export function PlanPanel({
 
                 {/* Col 5: file count (+ move/in-place split in the tooltip). */}
                 <span
-                  className="alm-plan-panel__group-count"
+                  className="pv-plan-panel__group-count"
                   title={
                     moveCount > 0
                       ? m.inbox_plan_file_count_tooltip_mixed({
@@ -907,10 +904,10 @@ export function PlanPanel({
                 </span>
 
                 {/* Col 6: stale badge + per-group apply (live progress) + discard */}
-                <span className="alm-plan-panel__group-actions">
+                <span className="pv-plan-panel__group-actions">
                   {plan.stale && (
                     <span
-                      className="alm-plan-panel__stale-badge"
+                      className="pv-plan-panel__stale-badge"
                       data-testid={`plan-stale-${plan.inboxItemId}`}
                     >
                       {m.inbox_stale()}
@@ -959,7 +956,7 @@ export function PlanPanel({
                   the OperationEvent channel (spec 042 US16 / FR-021). */}
               {progress && progressPlanId === plan.planId && (
                 <div
-                  className="alm-plan-panel__progress"
+                  className="pv-plan-panel__progress"
                   data-testid={`plan-progress-${plan.inboxItemId}`}
                   role="status"
                   aria-live="polite"
@@ -1005,7 +1002,7 @@ export function PlanPanel({
               {plan.stale && (
                 <Banner
                   variant="danger"
-                  className="alm-plan-panel__stale-banner"
+                  className="pv-plan-panel__stale-banner"
                 >
                   {m.inbox_stale_plan_warning()}
                 </Banner>
@@ -1016,7 +1013,7 @@ export function PlanPanel({
                   "Composition", and the destination under "Destination". Hidden
                   until expanded. */}
               {isExpanded && (
-                <div className="alm-plan-panel__file-rows" id={rowsId}>
+                <div className="pv-plan-panel__file-rows" id={rowsId}>
                   {plan.actions.map((a, actionPos) => {
                     const rowIdx = planRowOffsets[planIdx] + actionPos;
                     // FR-031: prefer the absolute destination path from the last
@@ -1028,15 +1025,15 @@ export function PlanPanel({
                       a.action === 'catalogue' ||
                       a.destinationPreview === a.fromPath;
                     return (
-                      <div key={a.index} className="alm-plan-panel__file-row">
+                      <div key={a.index} className="pv-plan-panel__file-row">
                         <span aria-hidden="true" />
                         <span
-                          className="alm-plan-panel__file-name"
+                          className="pv-plan-panel__file-name"
                           title={a.fromPath}
                         >
                           {basename(a.fromPath)}
                         </span>
-                        <span className="alm-plan-panel__file-action">
+                        <span className="pv-plan-panel__file-action">
                           {/* Per-file frame type (composition), inferred from the
                               path / item hint — not the repetitive action kind. */}
                           {frameTypeLabel(
@@ -1045,26 +1042,26 @@ export function PlanPanel({
                             frameTypeByItemId?.[plan.inboxItemId],
                           )}
                           {a.requiresDestructiveConfirm && (
-                            <span className="alm-plan-panel__file-flag">
+                            <span className="pv-plan-panel__file-flag">
                               {m.inbox_destructive_flag()}
                             </span>
                           )}
                         </span>
-                        <span className="alm-plan-panel__file-dest">
+                        <span className="pv-plan-panel__file-dest">
                           {inPlace ? (
-                            <span className="alm-plan-panel__inplace">
+                            <span className="pv-plan-panel__inplace">
                               {m.inbox_inplace_label()}
                             </span>
                           ) : (
                             <>
                               <span
-                                className="alm-plan-panel__summary-arrow"
+                                className="pv-plan-panel__summary-arrow"
                                 aria-hidden="true"
                               >
                                 →{' '}
                               </span>
                               <code
-                                className="alm-plan-panel__dest"
+                                className="pv-plan-panel__dest"
                                 data-testid={`inbox-dest-absolute-${rowIdx}`}
                                 title={destText}
                               >
@@ -1087,13 +1084,13 @@ export function PlanPanel({
 
       {/* ── Destructive destination control (relocated from ActionSidebar) ── */}
       {hasDestructive && (
-        <div className="alm-plan-panel__destructive">
-          <div className="alm-plan-panel__destructive-title">
+        <div className="pv-plan-panel__destructive">
+          <div className="pv-plan-panel__destructive-title">
             {m.inbox_where_source_files_go()}
           </div>
-          <div className="alm-plan-panel__dest-options">
+          <div className="pv-plan-panel__dest-options">
             {}
-            <label className="alm-plan-panel__dest-label">
+            <label className="pv-plan-panel__dest-label">
               <input
                 type="radio"
                 name="destructive-destination"
@@ -1105,13 +1102,13 @@ export function PlanPanel({
               />
               <span>
                 <strong>{m.inbox_archive_folder()}</strong>
-                <span className="alm-plan-panel__dest-label-hint">
+                <span className="pv-plan-panel__dest-label-hint">
                   {m.inbox_archive_hint()}
                 </span>
               </span>
             </label>
             {}
-            <label className="alm-plan-panel__dest-label">
+            <label className="pv-plan-panel__dest-label">
               <input
                 type="radio"
                 name="destructive-destination"
@@ -1129,7 +1126,7 @@ export function PlanPanel({
               items (trash/delete) were previously refused permanently at
               apply time — `destructive_confirmed` had no writer. Plan-level
               (not per-item — `InboxPlanAction` carries no item id). */}
-          <label className="alm-plan-panel__dest-label">
+          <label className="pv-plan-panel__dest-label">
             <input
               type="checkbox"
               checked={allDestructiveConfirmed}

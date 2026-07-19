@@ -188,14 +188,14 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
         />
       }
     >
-      <table className="alm-table alm-calmatch__table">
+      <table className="pv-table pv-calmatch__table">
         <thead>
           <tr>
             <th>{m.settings_calmatch_field()}</th>
-            <th className="alm-calmatch__col-required">
+            <th className="pv-calmatch__col-required">
               {m.settings_calmatch_required()}
             </th>
-            <th className="alm-calmatch__col-tolerance">
+            <th className="pv-calmatch__col-tolerance">
               {m.settings_calmatch_tolerance()}
             </th>
           </tr>
@@ -207,7 +207,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireCamera} onChange={handleCameraToggle} />
             </td>
-            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Binning — hard toggle, persists to requireSameBinning */}
@@ -216,7 +216,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireBinning} onChange={handleBinningToggle} />
             </td>
-            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Gain — hard toggle, persists to requireSameGain */}
@@ -225,7 +225,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireGain} onChange={handleGainToggle} />
             </td>
-            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Offset — hard toggle, persists to requireSameOffset and feeds
@@ -235,7 +235,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
             </td>
-            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Sensor temp — soft field: pill label + number input */}
@@ -245,17 +245,17 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
               <Pill variant="neutral">{m.settings_calmatch_soft()}</Pill>
             </td>
             <td>
-              <span className="alm-calmatch__tol-input-row">
+              <span className="pv-calmatch__tol-input-row">
                 <input
                   type="number"
-                  className="alm-input alm-calmatch__num-input"
+                  className="pv-input pv-calmatch__num-input"
                   value={tempTolerance}
                   min={0}
                   step={0.5}
                   onChange={handleTempChange}
                   aria-label={m.settings_calmatch_sensor_temp_aria()}
                 />
-                <span className="alm-calmatch__unit">
+                <span className="pv-calmatch__unit">
                   {m.settings_calmatch_unit_c()}
                 </span>
               </span>
@@ -269,17 +269,17 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
               <Pill variant="warn">{m.settings_calmatch_warn()}</Pill>
             </td>
             <td>
-              <span className="alm-calmatch__tol-input-row">
+              <span className="pv-calmatch__tol-input-row">
                 <input
                   type="number"
-                  className="alm-input alm-calmatch__num-input"
+                  className="pv-input pv-calmatch__num-input"
                   value={agingLimit}
                   min={1}
                   max={3650}
                   onChange={handleAgingChange}
                   aria-label={m.settings_calmatch_dark_bias_age_aria()}
                 />
-                <span className="alm-calmatch__unit">
+                <span className="pv-calmatch__unit">
                   {m.settings_calmatch_unit_d()}
                 </span>
               </span>
@@ -288,7 +288,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
         </tbody>
       </table>
 
-      <p className="alm-calmatch__help">{m.settings_calmatch_help()}</p>
+      <p className="pv-calmatch__help">{m.settings_calmatch_help()}</p>
     </SettingsSection>
   );
 }

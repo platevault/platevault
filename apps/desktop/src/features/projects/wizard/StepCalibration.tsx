@@ -190,7 +190,7 @@ export function StepCalibration({
 
   if (selectedSessionIds.length === 0) {
     return (
-      <div className="alm-wizard-calib__root">
+      <div className="pv-wizard-calib__root">
         <EmptyState
           title={m.projects_wizard_calib_no_sources_title()}
           desc={m.projects_wizard_calib_no_sources_desc()}
@@ -200,27 +200,27 @@ export function StepCalibration({
   }
 
   return (
-    <div className="alm-wizard-calib__root">
+    <div className="pv-wizard-calib__root">
       {/* Step description */}
-      <div className="alm-wizard-calib__desc">
+      <div className="pv-wizard-calib__desc">
         {m.projects_wizard_calib_desc()}
       </div>
 
       {loading ? (
-        <div className="alm-wizard-calib__loading">
+        <div className="pv-wizard-calib__loading">
           {m.projects_calib_checking()}
         </div>
       ) : (
         <>
           {/* ── Flats per light source (by filter) ── */}
           <Section title={m.projects_wizard_flats_title()}>
-            <div className="alm-wizard-calib__flat-subtitle">
+            <div className="pv-wizard-calib__flat-subtitle">
               {m.projects_wizard_flats_subtitle()}
             </div>
             {flatRows.length === 0 ? (
               <EmptyState title={m.projects_calib_no_data_title()} />
             ) : (
-              <table className="alm-simple-table">
+              <table className="pv-simple-table">
                 <thead>
                   <tr>
                     <th>{m.common_filter()}</th>
@@ -239,7 +239,7 @@ export function StepCalibration({
                         <td>
                           <Pill variant="ghost">{row.filterLabel}</Pill>
                         </td>
-                        <td className="alm-wizard-calib__cell-lights">
+                        <td className="pv-wizard-calib__cell-lights">
                           {row.lightsCovered}
                         </td>
                         <td>
@@ -254,7 +254,7 @@ export function StepCalibration({
                                 },
                               })
                             }
-                            className="alm-wizard-calib__select"
+                            className="pv-wizard-calib__select"
                             aria-label={m.projects_wizard_flat_master_for_aria({
                               filter: row.filterLabel,
                             })}
@@ -279,10 +279,10 @@ export function StepCalibration({
 
           {/* ── Shared calibration: darks, bias, dark flats ── */}
           <Section title={m.projects_wizard_shared_calib_title()}>
-            <table className="alm-simple-table">
+            <table className="pv-simple-table">
               <thead>
                 <tr>
-                  <th className="alm-wizard-calib__col-role">
+                  <th className="pv-wizard-calib__col-role">
                     {m.projects_wizard_col_role()}
                   </th>
                   <th>{m.projects_wizard_col_pick()}</th>
@@ -302,7 +302,7 @@ export function StepCalibration({
                           onChange={(e) =>
                             onChange({ ...data, [row.field]: e.target.value })
                           }
-                          className="alm-wizard-calib__select"
+                          className="pv-wizard-calib__select"
                           aria-label={m.projects_wizard_pick_role_aria({
                             role: row.role,
                           })}

@@ -89,7 +89,7 @@ function DefaultProtectionControl() {
 
   return (
     <select
-      className="alm-select"
+      className="pv-select"
       value={value}
       aria-label={m.setup_config_default_protection_title()}
       onChange={(e) => onChange(e.target.value as DefaultProtection)}
@@ -110,7 +110,7 @@ function DensityControl() {
   const [density, setDensity] = usePreference('density');
   return (
     <select
-      className="alm-select"
+      className="pv-select"
       value={density}
       aria-label={m.settings_density_legend()}
       onChange={(e) => setDensity(e.target.value as Density)}
@@ -132,7 +132,7 @@ function ThemeControl() {
   const [choice, setChoice] = useThemeChoice();
   return (
     <select
-      className="alm-select"
+      className="pv-select"
       value={choice}
       aria-label={m.settings_general_theme()}
       onChange={(e) => setChoice(e.target.value as ThemeChoice)}
@@ -159,12 +159,12 @@ function ConfigOption({
   control: ReactNode;
 }) {
   return (
-    <div className="alm-setup-catalogs__option">
-      <div className="alm-setup-catalogs__option-header">
-        <span className="alm-setup-catalogs__option-title">{title}</span>
+    <div className="pv-setup-catalogs__option">
+      <div className="pv-setup-catalogs__option-header">
+        <span className="pv-setup-catalogs__option-title">{title}</span>
         {control}
       </div>
-      <div className="alm-settings__row-desc">{description}</div>
+      <div className="pv-settings__row-desc">{description}</div>
     </div>
   );
 }
@@ -180,7 +180,7 @@ function ConfigOption({
  */
 export function StepCatalogs(_props: StepCatalogsProps) {
   return (
-    <div className="alm-step-catalogs">
+    <div className="pv-step-catalogs">
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 

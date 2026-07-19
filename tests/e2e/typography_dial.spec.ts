@@ -11,7 +11,7 @@
  * flat 11px at every stop — it is proportional rounding of the 14px-root
  * scale, and only the `default` (14px root) stop is required to hold the
  * literal 11px floor from FR-003. At `small` (12px root) the floor token
- * (`--alm-text-xs`) rounds to 9px, a documented exception (see plan.md's
+ * (`--pv-text-xs`) rounds to 9px, a documented exception (see plan.md's
  * "Dial rounding" risk note and theme.ts's `roundedTextScalePx` docstring).
  * This test asserts against the per-stop floor theme.ts actually documents,
  * not a universal 11px:
@@ -102,13 +102,13 @@ test.describe('Spec 055 Phase 2 · font-size dial (T014, SC-003/SC-004)', () => 
     await page.goto('/#/sessions');
     await page.waitForLoadState('networkidle');
 
-    const groupLabel = page.locator('.alm-sidebar__group-label').first();
+    const groupLabel = page.locator('.pv-sidebar__group-label').first();
     await expect(groupLabel).toBeVisible();
 
     const defaultPx = await groupLabel.evaluate(
       (el) => getComputedStyle(el).fontSize,
     );
-    expect(defaultPx).toBe('11px'); // --alm-text-xs @ default (14px root)
+    expect(defaultPx).toBe('11px'); // --pv-text-xs @ default (14px root)
 
     await page.goto('/#/settings/general');
     await selectFontSize(page, 'large');
@@ -116,10 +116,10 @@ test.describe('Spec 055 Phase 2 · font-size dial (T014, SC-003/SC-004)', () => 
     await page.waitForLoadState('networkidle');
 
     const largePx = await page
-      .locator('.alm-sidebar__group-label')
+      .locator('.pv-sidebar__group-label')
       .first()
       .evaluate((el) => getComputedStyle(el).fontSize);
-    expect(largePx).toBe('13px'); // --alm-text-xs @ large (16px root)
+    expect(largePx).toBe('13px'); // --pv-text-xs @ large (16px root)
     expect(largePx).not.toBe(defaultPx);
   });
 });

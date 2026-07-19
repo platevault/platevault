@@ -137,8 +137,8 @@ export interface InboxControlsProps {
  */
 export function InboxControls({ dims, setSlot }: InboxControlsProps) {
   return (
-    <div className="alm-inbox-list__controls alm-inbox-list__controls--toolbar">
-      <div className="alm-inbox-list__group-row">
+    <div className="pv-inbox-list__controls pv-inbox-list__controls--toolbar">
+      <div className="pv-inbox-list__group-row">
         {Array.from({ length: MAX_GROUP_LEVELS }).map((_, slot) => {
           const value = dims[slot] ?? '';
           const disabled = slot > 0 && !dims[slot - 1];
@@ -146,7 +146,7 @@ export function InboxControls({ dims, setSlot }: InboxControlsProps) {
           return (
             <select
               key={slot}
-              className="alm-select"
+              className="pv-select"
               value={value}
               disabled={disabled}
               onChange={(e) => setSlot(slot, e.target.value)}

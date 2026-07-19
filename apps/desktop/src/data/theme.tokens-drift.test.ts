@@ -5,7 +5,7 @@
  * theme.tokens-drift.test.ts — #587 follow-up.
  *
  * `theme.ts` hardcodes SPACING_BASE_PX / TEXT_SCALE_BASE_PX as duplicates of
- * the `--alm-sp-*` / `--alm-text-*` base px values in tokens.css (jsdom can't
+ * the `--pv-sp-*` / `--pv-text-*` base px values in tokens.css (jsdom can't
  * reliably resolve stylesheet custom properties via getComputedStyle, so
  * applyTokenScale reads these tables instead of the stylesheet). Nothing else
  * enforces that the two stay in sync — this test parses tokens.css directly
@@ -46,7 +46,7 @@ function parseRootTokenPx(varPrefix: string): Record<string, number> {
 }
 
 /**
- * Parses the `--alm-text-*` rem declarations out of the base `:root` block
+ * Parses the `--pv-text-*` rem declarations out of the base `:root` block
  * and converts back to px-at-the-14px-default-root, rounded to the nearest
  * integer — the same numbers `TEXT_SCALE_BASE_PX` (theme.ts) hardcodes for
  * the per-dial-stop rounding guard (spec 055 T010/T011). tokens.css declares
@@ -58,7 +58,7 @@ function parseRootTextTokenRemAsPx(): Record<string, number> {
   const css = readFileSync(tokensCssPath, 'utf-8');
   const rootBlock = /:root\s*\{([^}]*)\}/.exec(css)?.[1];
   if (rootBlock === undefined) throw new Error('no :root block in tokens.css');
-  const pattern = /(--alm-text-[\w-]+):\s*(\d+(?:\.\d+)?)rem;/g;
+  const pattern = /(--pv-text-[\w-]+):\s*(\d+(?:\.\d+)?)rem;/g;
   const result: Record<string, number> = {};
   for (const match of rootBlock.matchAll(pattern)) {
     result[match[1]] = Math.round(Number(match[2]) * 14);
@@ -66,14 +66,14 @@ function parseRootTextTokenRemAsPx(): Record<string, number> {
   return result;
 }
 
-/** Parses the `--alm-row-height: <n>px;` declaration out of a CSS block's body. */
+/** Parses the `--pv-row-height: <n>px;` declaration out of a CSS block's body. */
 function parseRowHeightPx(block: string, blockLabel: string): number {
-  const match = /--alm-row-height:\s*(\d+(?:\.\d+)?)px;/.exec(block);
-  if (!match) throw new Error(`no --alm-row-height in ${blockLabel} block`);
+  const match = /--pv-row-height:\s*(\d+(?:\.\d+)?)px;/.exec(block);
+  if (!match) throw new Error(`no --pv-row-height in ${blockLabel} block`);
   return Number(match[1]);
 }
 
-/** Parses a single `<selector> { ...--alm-row-height: <n>px...; }` block's value. */
+/** Parses a single `<selector> { ...--pv-row-height: <n>px...; }` block's value. */
 function parseSelectorRowHeightPx(selector: string): number {
   const css = readFileSync(tokensCssPath, 'utf-8');
   const escaped = selector.replace(/[.]/g, '\\.');
@@ -84,19 +84,19 @@ function parseSelectorRowHeightPx(selector: string): number {
 }
 
 describe('theme.ts token-scale base tables match tokens.css :root', () => {
-  it('SPACING_BASE_PX matches --alm-sp-* base px values', () => {
-    const fromCss = parseRootTokenPx('--alm-sp-');
+  it('SPACING_BASE_PX matches --pv-sp-* base px values', () => {
+    const fromCss = parseRootTokenPx('--pv-sp-');
     expect(Object.keys(fromCss).length).toBeGreaterThan(0);
     expect(SPACING_BASE_PX).toEqual(fromCss);
   });
 
-  it('TEXT_SCALE_BASE_PX matches --alm-text-* rem values (converted @ 14px root)', () => {
+  it('TEXT_SCALE_BASE_PX matches --pv-text-* rem values (converted @ 14px root)', () => {
     const fromCss = parseRootTextTokenRemAsPx();
     expect(Object.keys(fromCss).length).toBeGreaterThan(0);
     expect(TEXT_SCALE_BASE_PX).toEqual(fromCss);
   });
 
-  it('ROW_HEIGHT_PX matches --alm-row-height across density selectors', () => {
+  it('ROW_HEIGHT_PX matches --pv-row-height across density selectors', () => {
     const css = readFileSync(tokensCssPath, 'utf-8');
     const rootBlock = /:root\s*\{([^}]*)\}/.exec(css)?.[1];
     if (rootBlock === undefined)
