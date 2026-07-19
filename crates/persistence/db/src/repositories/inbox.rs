@@ -1029,13 +1029,21 @@ pub struct FileOverrideRow {
     pub property_key: String,
     pub value: String,
     pub override_stale: i64,
+    /// File identity recorded when the override was set (spec 041 FR-046,
+    /// R-4 staleness detection). `None` for overrides written before this
+    /// field was wired, or by a caller with no accessible file stat.
+    pub file_size_bytes: Option<i64>,
+    pub file_mtime: Option<String>,
 }
 
-/// Fetch all non-stale property overrides for every file in a source group.
+/// Fetch all property overrides for every file in a source group.
 ///
 /// Returns one row per `(relative_file_path, property_key)` — the full override
 /// map the re-split grouping engine needs to compute updated group keys after a
-/// reclassify call (T068 R-13 re-split).
+/// reclassify call (T068 R-13 re-split). Includes stale rows — `override_stale`
+/// is informational (surfaced to the user), not a filter: a stale override is
+/// still the user's most recent explicit decision and stays in effect until
+/// they act on the staleness signal.
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
@@ -1044,7 +1052,8 @@ pub async fn list_file_overrides_for_group(
     source_group_id: &str,
 ) -> DbResult<Vec<FileOverrideRow>> {
     Ok(sqlx::query_as::<_, FileOverrideRow>(
-        "SELECT relative_file_path, property_key, value, override_stale
+        "SELECT relative_file_path, property_key, value, override_stale,
+                file_size_bytes, file_mtime
          FROM inbox_file_overrides
          WHERE source_group_id = ?
          ORDER BY relative_file_path, property_key",
@@ -1089,6 +1098,33 @@ pub async fn mark_override_stale(
          WHERE inbox_item_id = ? AND relative_file_path = ?",
     )
     .bind(inbox_item_id)
+    .bind(relative_file_path)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Mark every generic property override for one file in a source group as
+/// stale (spec 041 FR-046, R-4 — the `inbox_file_overrides` counterpart to
+/// [`mark_override_stale`]'s evidence-table check).
+///
+/// All property rows for the path share one file identity, so this flags
+/// every `(source_group_id, relative_file_path, *)` row at once rather than
+/// taking a single `property_key`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn mark_file_override_stale(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    relative_file_path: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE inbox_file_overrides
+         SET override_stale = 1
+         WHERE source_group_id = ? AND relative_file_path = ?",
+    )
+    .bind(source_group_id)
     .bind(relative_file_path)
     .execute(pool)
     .await?;
@@ -2494,6 +2530,76 @@ mod tests {
 
         let rows_after = list_evidence(pool, "item-stale-1").await.unwrap();
         assert_eq!(rows_after[0].override_stale, 1, "override_stale must be 1 after mark");
+    }
+
+    /// spec 041 FR-046: `set_file_override` round-trips the file identity
+    /// (size/mtime) through `list_file_overrides_for_group`, and
+    /// `mark_file_override_stale` flips `override_stale` on every property row
+    /// for that path without touching other files' rows.
+    #[tokio::test]
+    async fn mark_file_override_stale_sets_flag_for_path_only() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // inbox_file_overrides.source_group_id is FK-constrained to
+        // inbox_source_groups(id).
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-fovr-1",
+                root_id: "root-1",
+                relative_path: "folder",
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        set_file_override(
+            pool,
+            "sg-fovr-1",
+            "folder/a.fits",
+            "temperatureC",
+            "-10.0",
+            Some(4_194_304),
+            Some("2025-10-10T22:00:00Z"),
+        )
+        .await
+        .unwrap();
+        set_file_override(
+            pool,
+            "sg-fovr-1",
+            "folder/a.fits",
+            "gain",
+            "100",
+            Some(4_194_304),
+            Some("2025-10-10T22:00:00Z"),
+        )
+        .await
+        .unwrap();
+        set_file_override(pool, "sg-fovr-1", "folder/b.fits", "gain", "200", None, None)
+            .await
+            .unwrap();
+
+        let before = list_file_overrides_for_group(pool, "sg-fovr-1").await.unwrap();
+        let a_temp = before
+            .iter()
+            .find(|o| o.relative_file_path == "folder/a.fits" && o.property_key == "temperatureC")
+            .unwrap();
+        assert_eq!(a_temp.file_size_bytes, Some(4_194_304), "identity must round-trip");
+        assert_eq!(a_temp.file_mtime.as_deref(), Some("2025-10-10T22:00:00Z"));
+        assert_eq!(a_temp.override_stale, 0);
+
+        mark_file_override_stale(pool, "sg-fovr-1", "folder/a.fits").await.unwrap();
+
+        let after = list_file_overrides_for_group(pool, "sg-fovr-1").await.unwrap();
+        for o in after.iter().filter(|o| o.relative_file_path == "folder/a.fits") {
+            assert_eq!(o.override_stale, 1, "every property row for the stale path must flip");
+        }
+        let b = after.iter().find(|o| o.relative_file_path == "folder/b.fits").unwrap();
+        assert_eq!(b.override_stale, 0, "unrelated file must be untouched");
     }
 
     /// get_file_metadata returns None before any classify and Some after upsert.

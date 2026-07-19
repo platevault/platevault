@@ -284,20 +284,27 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
         }
     }
 
+    // issue #668: the periodic drain (~30s cadence) runs continuously whether
+    // or not there's anything in the queue; publishing a completion event for
+    // an empty pass floods the activity log with a no-op heartbeat (~470/500
+    // rows in the reported sweep) that buries user-meaningful events. Only
+    // publish when the pass actually considered something.
     if let Some(bus) = bus {
-        let _ = bus
-            .publish(
-                audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
-                Source::System,
-                TargetResolveBatchCompleted {
-                    considered,
-                    resolved: num_resolved,
-                    unresolved: num_unresolved,
-                    pending: num_pending,
-                    at: Timestamp::now_iso(),
-                },
-            )
-            .await;
+        if considered > 0 {
+            let _ = bus
+                .publish(
+                    audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
+                    Source::System,
+                    TargetResolveBatchCompleted {
+                        considered,
+                        resolved: num_resolved,
+                        unresolved: num_unresolved,
+                        pending: num_pending,
+                        at: Timestamp::now_iso(),
+                    },
+                )
+                .await;
+        }
     }
 
     Ok(DrainSummary {
@@ -491,6 +498,52 @@ mod tests {
         // Associated, and cached for next time.
         assert!(target_id_of(&db, &img).await.is_some());
         assert!(cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().is_some());
+    }
+
+    /// issue #668: an empty drain pass (nothing pending — the common case for
+    /// the periodic ~30s heartbeat) must NOT publish `target.resolve_batch
+    /// .completed` at all, so it can't flood the activity log with no-op
+    /// events.
+    #[tokio::test]
+    async fn drain_with_nothing_pending_does_not_publish_batch_completed() {
+        let db = setup().await;
+        let bus = audit::EventBus::with_pool(db.pool().clone());
+        let resolver = FakeResolver::new();
+
+        let summary = resolve_pending(db.pool(), &resolver, Some(&bus), true, 50).await.unwrap();
+        assert_eq!(summary.considered, 0);
+
+        let events = persistence_db::repositories::events::list_since_by_topic(
+            db.pool(),
+            0,
+            audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
+        )
+        .await
+        .unwrap();
+        assert!(events.is_empty(), "empty drain pass must not publish a completion event");
+    }
+
+    /// A pass that actually considers rows — even if none resolve — is real
+    /// activity and must still publish the completion event.
+    #[tokio::test]
+    async fn drain_with_pending_rows_publishes_batch_completed() {
+        let db = setup().await;
+        let bus = audit::EventBus::with_pool(db.pool().clone());
+        let img = make_image(&db, "m31.fits").await;
+        associate_or_enqueue(db.pool(), None, &img, "M 31").await.unwrap();
+
+        let resolver = FakeResolver::new().with_response("M 31", m31());
+        let summary = resolve_pending(db.pool(), &resolver, Some(&bus), true, 50).await.unwrap();
+        assert_eq!(summary.considered, 1);
+
+        let events = persistence_db::repositories::events::list_since_by_topic(
+            db.pool(),
+            0,
+            audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
+        )
+        .await
+        .unwrap();
+        assert_eq!(events.len(), 1, "non-empty pass must publish exactly one completion event");
     }
 
     #[tokio::test]
