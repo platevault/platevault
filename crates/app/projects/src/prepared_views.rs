@@ -19,8 +19,11 @@
 //!   `destructiveDestination` field is accepted.
 //! - R-026-Strategies: only `symlink`, `junction`, `copy` are supported in v1.
 //!   `hardlink` is refused with `view.unsupported_kind`.
-//! - FR-008 / A2: `view.mixed_kind` is returned when `PreparedSourceView.kind`
-//!   disagrees with any item's `materialization`.
+//! - FR-008 (amended by spec 049 CL-2, 2026-07-04): a view whose items carry
+//!   more than one recorded kind is VALID — per-item kind is authoritative.
+//!   `view.mixed_kind` is reserved for the `kind_diverged` STATE only (a
+//!   distinct, explicit terminal state requiring manual resolution via the
+//!   UI), never for a plain per-item/view kind mismatch (#745).
 //! - A4: removed views are never hard-deleted; regeneration always available.
 //! - R-026-Pipeline: the plan enters the standard spec 017/025 review pipeline.
 //! - T004 invariant: plan actions are restricted to recorded view paths only.
@@ -172,7 +175,9 @@ pub async fn list_views(
 /// 1. Project lifecycle is in the allowed set (not `archived`).
 /// 2. View exists and is not in `kind_diverged` state.
 /// 3. All items use a v1-supported kind (not `hardlink`).
-/// 4. `view.kind` matches every item's `materialization` (A2 / FR-008).
+///
+/// A view whose items carry more than one recorded kind is NOT refused here
+/// (spec 049 CL-2 amended FR-008 — per-item kind is authoritative; #745).
 ///
 /// The produced plan has:
 /// - `origin = "prepared_view_removal"`
@@ -220,19 +225,9 @@ pub async fn remove_prepared_view(
         ));
     }
 
-    // 6. Refuse mixed-kind views (A2 / FR-008).
-    let kind_mismatch = items.iter().any(|i| i.materialization != view_row.kind);
-    if kind_mismatch {
-        return Err(ContractError::new(
-            ErrorCode::ViewMixedKind,
-            "The view contains items whose materialization kind does not match the \
-             view's recorded kind. Resolve the mismatch before removing.",
-            ErrorSeverity::Blocking,
-            false,
-        ));
-    }
-
-    // 7. Build the removal plan.
+    // 6. Build the removal plan. (A per-item/view kind mismatch is a VALID
+    //    state since spec 049 CL-2 amended FR-008 — it is intentionally NOT
+    //    refused here; see the module doc and #745.)
     let plan_id = new_id();
     let title = format!("Remove source view {view_id}");
 
@@ -252,7 +247,7 @@ pub async fn remove_prepared_view(
     .await
     .map_err(|e| db_internal_ctx(e, "insert prepared view plan"))?;
 
-    // 8. One archive action per item, targeting only the view's recorded paths
+    // 7. One archive action per item, targeting only the view's recorded paths
     //    (T004: actions restricted to view membership — no inventory paths).
     //    T005/T008: archive_path is pre-computed (see compute_archive_destination)
     //    — without it the executor's `to_relative_path` fallback is empty and
@@ -288,7 +283,7 @@ pub async fn remove_prepared_view(
         .map_err(|e| db_internal_ctx(e, "insert prepared view plan item"))?;
     }
 
-    // 9. Advance plan to ready_for_review so it appears in the review UI.
+    // 8. Advance plan to ready_for_review so it appears in the review UI.
     plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
         .await
         .map_err(|e| db_internal_ctx(e, "advance prepared view plan to ready_for_review"))?;
@@ -561,6 +556,43 @@ mod tests {
         assert_eq!(items[0].action, "archive");
         // linked_entity must point to the view, not to inventory.
         assert_eq!(items[0].linked_entity.as_deref(), Some("view-inv"));
+    }
+
+    /// #745 (spec 049 CL-2 amending FR-008): a per-item materialization that
+    /// differs from the view's own recorded `kind` is a VALID state — this
+    /// is exactly what `finalize_view_generation`'s drive-scope resolution
+    /// produces for a cross-drive project. Removal must NOT refuse it.
+    #[tokio::test]
+    async fn remove_allows_view_with_per_item_kind_mismatch() {
+        let db = setup().await;
+        insert_project(&db, "p-mixed", "ready").await;
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView {
+                id: "view-mixed",
+                project_id: "p-mixed",
+                kind: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+        // Item's own materialization ("copy") disagrees with the view's
+        // dominant recorded kind ("symlink") — the per-49 CL-2 valid case.
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "view-mixed-item-1",
+                view_id: "view-mixed",
+                inventory_item_id: "inv-1",
+                view_relative_path: "Sources/cross_drive.fit",
+                materialization: "copy",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = remove_prepared_view(db.pool(), "view-mixed").await.unwrap();
+        assert!(!resp.plan_id.is_empty());
     }
 
     #[tokio::test]

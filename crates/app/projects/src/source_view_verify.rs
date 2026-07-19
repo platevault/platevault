@@ -83,8 +83,9 @@ fn partial_content_probe(path: &Utf8Path) -> Option<(u64, [u8; 32])> {
 
     let file = std::fs::File::open(path).ok()?;
     let size = file.metadata().ok()?.len();
-    let mut buf = vec![0u8; HASH_PROBE_BYTES.min(size as usize)];
-    let mut reader = file.take(buf.len() as u64);
+    let probe_len = usize::try_from(size).unwrap_or(usize::MAX).min(HASH_PROBE_BYTES);
+    let mut buf = vec![0u8; probe_len];
+    let mut reader = file.take(probe_len as u64);
     reader.read_exact(&mut buf).ok()?;
     Some((size, Sha256::digest(&buf).into()))
 }
