@@ -176,6 +176,11 @@ export function useTargetAstroFormat(
 // direct `setQueryData(detail(id), ...)` write below would get silently
 // clobbered by the list invalidation's own background refetch of the SAME
 // prefix-matched detail query).
+//
+// `exact: true` is required here too: `detail(id)` (`['targets', id]`) is
+// ITSELF a prefix of `sessions(id)`/`projects(id)`/`notes(id)`/`astroFormat(id)`
+// (all `['targets', id, ...]`) — an unqualified invalidate would fuzzy-match
+// and refetch all four every alias/display-alias mutation, not just detail.
 
 function invalidateTarget(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -183,6 +188,7 @@ function invalidateTarget(
 ) {
   void queryClient.invalidateQueries({
     queryKey: queryKeys.targets.detail(targetId),
+    exact: true,
   });
 }
 
