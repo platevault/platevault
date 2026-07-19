@@ -113,12 +113,18 @@ describe('StepCatalogs (Configuration)', () => {
     const theme = screen.getByLabelText('Theme') as HTMLSelectElement;
     expect(theme).not.toBeDisabled();
     const optionValues = Array.from(theme.options).map((o) => o.value);
+    // The wizard's ThemeControl deliberately maps over the full THEMES
+    // registry (unfiltered by `enabled`) — handoff 03's canonical/variant
+    // split only hides Warm Clay/Espresso from the Settings > Appearance
+    // picker, not this first-run control (#504's "all app themes" intent).
     expect(optionValues).toEqual([
       'system',
       'warm-clay',
       'warm-slate',
       'observatory-dark',
       'espresso-dark',
+      'observatory-cool-light',
+      'observatory-cool',
     ]);
   });
 
