@@ -107,15 +107,12 @@ export function buildTargetResults(
 // instead of a hand-copied array that could silently drift from production.
 export const PAGES: Array<{ label: () => string; route: string }> = [
   { label: () => m.common_sessions(), route: '/sessions' },
-  { label: () => m.cmdk_page_review_queue(), route: '/review' },
   {
     label: () => m.settings_datasources_category_calibration(),
     route: '/calibration',
   },
   { label: () => m.nav_targets(), route: '/targets' },
   { label: () => m.common_projects(), route: '/projects' },
-  { label: () => m.cmdk_page_plans(), route: '/plans' },
-  { label: () => m.cmdk_page_audit_log(), route: '/audit' },
   { label: () => m.settings_page_title(), route: '/settings' },
 ];
 

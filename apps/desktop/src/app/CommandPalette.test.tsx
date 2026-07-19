@@ -52,15 +52,21 @@ import { CommandPalette, PAGES, buildTargetResults } from './CommandPalette';
 import { matchesSearch, normalizeDesig } from '@/features/targets/TargetsPage';
 import { commands } from '@/bindings/index';
 import type { TargetListItem } from '@/bindings/index';
+import { router } from './router';
 
 // ── Mocks (rendered smoke tests) ──────────────────────────────────────────────
 
 const mockNavigate = vi.fn();
 
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => mockNavigate,
-  useRouterState: () => '/',
-}));
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useRouterState: () => '/',
+  };
+});
 
 vi.mock('@/bindings/index', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/bindings/index')>();
@@ -202,6 +208,17 @@ describe('CommandPalette PAGES constant (T007 / X-3 guard)', () => {
     for (const p of PAGES) {
       expect(typeof p.label()).toBe('string');
       expect(p.label().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('11. every PAGES route exists in the real route tree (#617 dead-route guard)', () => {
+    // Cross-checks against the production router (not a hand-copied path
+    // list) so a palette entry pointing at a removed/renamed route fails
+    // here instead of silently redirecting via the router's not-found
+    // fallback (the exact #617 bug: /review, /plans, /audit routed nowhere).
+    const realPaths = Object.keys(router.routesByPath);
+    for (const p of PAGES) {
+      expect(realPaths).toContain(p.route);
     }
   });
 });

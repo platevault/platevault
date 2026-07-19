@@ -136,6 +136,9 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
   beforeEach(() => {
     resetLogStore();
     vi.clearAllMocks();
+    // #842 persists `expanded` to localStorage; these tests assume a fresh
+    // collapsed panel on every render.
+    localStorage.removeItem('alm-log-panel-expanded');
     // jsdom does not implement `Element.scrollTo` — the follow-tail effect
     // calls it directly (smooth-scroll path) whenever reduced-motion is not
     // active. Stub it so the effect doesn't throw and unmount the tree.

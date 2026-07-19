@@ -477,8 +477,8 @@
   color: inherit;
 }
 .alm-guidance-cell__trigger:focus-visible {
-  outline: 2px solid var(--alm-focus-ring);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
   border-radius: var(--alm-radius-sm);
 }
 
@@ -933,8 +933,8 @@
   background: var(--alm-hover-bg);
 }
 .alm-session-popover__trigger:focus-visible {
-  outline: 2px solid var(--alm-focus-ring);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
 }
 .alm-session-popover__popup {
   min-width: 260px;
@@ -1019,8 +1019,8 @@
 }
 .alm-inbox-detail__files-trigger:hover { background: var(--alm-hover-bg); }
 .alm-inbox-detail__files-trigger:focus-visible {
-  outline: 2px solid var(--alm-focus-ring);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
 }
 .alm-inbox-detail__files-popup {
   min-width: 560px;

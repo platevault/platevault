@@ -83,7 +83,7 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     const row = await screen.findByRole('row', {
       name: new RegExp(DARK_FRAMES_ROW),
     });
-    const keepBtn = within(row).getByRole('button', { name: 'Keep' });
+    const keepBtn = within(row).getByRole('radio', { name: 'Keep' });
 
     fireEvent.click(keepBtn);
 
@@ -115,7 +115,7 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     const row = await screen.findByRole('row', {
       name: new RegExp(DARK_FRAMES_ROW),
     });
-    fireEvent.click(within(row).getByRole('button', { name: 'Keep' }));
+    fireEvent.click(within(row).getByRole('radio', { name: 'Keep' }));
     await waitFor(() => {
       expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
         'Keep',

@@ -111,6 +111,7 @@
   border: none; background: none; width: calc(100% - var(--alm-sp-1) * 2); text-align: left;
 }
 .alm-sidebar__item:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
+.alm-sidebar__item:focus-visible { outline: none; box-shadow: var(--alm-focus-ring); }
 .alm-sidebar__item--active {
   background: var(--alm-selected-bg); color: var(--alm-accent-text);
   font-weight: var(--alm-weight-semibold);

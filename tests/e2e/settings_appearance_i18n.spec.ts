@@ -91,7 +91,9 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
     // not a localStorage write.
     const row = page.getByRole("row").filter({ hasText: "Raw dark frames" });
     await expect(row).toBeVisible();
-    await expect(row.getByRole("button", { name: "Archive" })).toHaveClass(
+    // SegControl renders WAI-ARIA radio-group semantics (#1010): options are
+    // role="radio", not role="button".
+    await expect(row.getByRole("radio", { name: "Archive" })).toHaveClass(
       /alm-seg__btn--active/,
     );
     // Cleanup's mount effect fires `settings_get('cleanup')` (mock IPC has a
@@ -101,8 +103,8 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
     // back to "Archive"; Cleanup.tsx now tracks whether an edit happened and
     // ignores a mount fetch that resolves afterwards, so a single click+assert
     // is sufficient (no retry needed).
-    await row.getByRole("button", { name: "Keep" }).click();
-    await expect(row.getByRole("button", { name: "Keep" })).toHaveClass(
+    await row.getByRole("radio", { name: "Keep" }).click();
+    await expect(row.getByRole("radio", { name: "Keep" })).toHaveClass(
       /alm-seg__btn--active/,
       { timeout: 15_000 },
     );
@@ -126,7 +128,7 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
     // No stomp risk here (single settings_get after remount, no competing
     // local click) — just the same mock IPC latency, so a longer read-only
     // wait is sufficient.
-    await expect(rowAfter.getByRole("button", { name: "Keep" })).toHaveClass(
+    await expect(rowAfter.getByRole("radio", { name: "Keep" })).toHaveClass(
       /alm-seg__btn--active/,
       { timeout: 15_000 },
     );

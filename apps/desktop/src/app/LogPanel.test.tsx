@@ -87,10 +87,14 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
   beforeEach(() => {
     resetLogStore();
     vi.clearAllMocks();
+    // #842 persists `expanded` to localStorage; these tests assume a fresh
+    // collapsed panel on every render.
+    localStorage.removeItem('alm-log-panel-expanded');
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.removeItem('alm-log-panel-expanded');
   });
 
   it('toggles expand/collapse via the Collapsible trigger', async () => {
