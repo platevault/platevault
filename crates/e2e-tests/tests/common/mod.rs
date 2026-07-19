@@ -1854,6 +1854,12 @@ fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
 /// `crates/app/core/tests/ingest_sessions_integration.rs` (T045/T046) — same
 /// card set, same padding — so the real classifier/session-grouping code
 /// accepts it exactly as it does at Layer 1.
+///
+/// Writes **no** `EXPTIME` card, so every frame type routes to the
+/// `__needs_review__` sentinel (T070 mandatory-attribute gate: lights need
+/// `OBJECT`+`FILTER`+`EXPTIME`, darks need `EXPTIME`+`GAIN`). That is what the
+/// needs-review journeys want; a journey that needs a frame to actually
+/// CLASSIFY must use [`write_minimal_fits_with_exposure`].
 pub fn write_minimal_fits(
     dir: &Path,
     name: &str,
@@ -1861,6 +1867,27 @@ pub fn write_minimal_fits(
     object: Option<&str>,
     filter: Option<&str>,
     date_obs: Option<&str>,
+) -> Result<PathBuf> {
+    write_minimal_fits_with_exposure(dir, name, imagetyp, object, filter, date_obs, None)
+}
+
+/// [`write_minimal_fits`] plus an optional `EXPTIME` card.
+///
+/// `EXPTIME` is a hard mandatory attribute for lights AND darks
+/// (`mandatory_set_for`, `crates/app/inbox/src/classify.rs`), so it is the
+/// difference between a fixture that classifies into a real grouping bucket
+/// and one that collapses into the single `__needs_review__` sentinel bucket.
+/// Header set matches the Layer-1 `t066_mixed_folder_produces_n_sub_items`
+/// fixtures (`EXPTIME=300.0`, `GAIN=100`), which prove a light + a dark
+/// materialize as two distinct single-type sub-items.
+pub fn write_minimal_fits_with_exposure(
+    dir: &Path,
+    name: &str,
+    imagetyp: &str,
+    object: Option<&str>,
+    filter: Option<&str>,
+    date_obs: Option<&str>,
+    exposure_s: Option<f64>,
 ) -> Result<PathBuf> {
     let path = dir.join(name);
     let mut block = vec![b' '; 2880];
@@ -1880,6 +1907,9 @@ pub fn write_minimal_fits(
     }
     if let Some(d) = date_obs {
         write_card(&format!("{:<80}", format!("DATE-OBS= '{d}'")));
+    }
+    if let Some(e) = exposure_s {
+        write_card(&format!("{:<80}", format!("EXPTIME = {e}")));
     }
     write_card(&format!("{:<80}", "GAIN    = 100"));
     write_card(&format!("{:<80}", "XBINNING= 1"));
