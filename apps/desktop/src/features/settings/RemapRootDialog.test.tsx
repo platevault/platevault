@@ -71,7 +71,9 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
 async function choosePath(path: string) {
   mockPick.mockResolvedValueOnce({ path, cancelled: false });
   fireEvent.click(screen.getByRole('button', { name: /Choose folder/i }));
-  await waitFor(() => screen.getByText(path));
+  // DirPicker's path affordance is a manual-entry input now (#662), not a
+  // read-only text node — assert on its value instead of text content.
+  await waitFor(() => screen.getByDisplayValue(path));
 }
 
 beforeEach(() => {

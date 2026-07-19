@@ -1148,8 +1148,9 @@
   white-space: nowrap;
 }
 
-/* Scan depth label ("Recursive" / "Single level") */
-.alm-setup-confirm__scan-depth {
+/* Organization-state label ("Already organized" / "Needs organizing") — was
+   named __scan-depth before scan-depth was retired end-to-end (#913). */
+.alm-setup-confirm__org-state {
   white-space: nowrap;
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
@@ -1379,6 +1380,28 @@
 .alm-step-sources__picker-error {
   font-size: var(--alm-text-xs);
   color: var(--alm-danger);
+}
+
+/* ── Manual "add by path" row (#662) ── */
+.alm-step-sources__manual-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-step-sources__manual-input {
+  font-size: var(--alm-text-xs);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: 1px var(--alm-sp-1);
+  width: 12rem;
+}
+
+.alm-step-sources__manual-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
 }
 
 /* === SETUP STEP SITE (spec 044 T016) === */

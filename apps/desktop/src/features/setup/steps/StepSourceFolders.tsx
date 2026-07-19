@@ -8,10 +8,11 @@ import { InfoTip } from '@/ui/InfoTip';
 import { m } from '@/lib/i18n';
 import { useDirectoryPicker } from '@/shared/native';
 import type { LastPathKind } from '@/shared/native';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type {
   SourceEntry,
   SourceKind,
-  ScanDepth,
   OrganizationState,
 } from '../sources-store';
 import {
@@ -25,7 +26,6 @@ export interface StepSourceFoldersProps {
   onAdd: (path: string, kind: SourceKind) => void;
   onRemove: (index: number) => void;
   onKindChange: (index: number, kind: SourceKind) => void;
-  onScanDepthChange: (index: number, depth: ScanDepth) => void;
   onOrganizationStateChange: (index: number, state: OrganizationState) => void;
   errors: Record<number, string>;
 }
@@ -68,11 +68,8 @@ function normalizePathForCompare(path: string): string {
  * folders cannot be nested inside each other (no-overlap rule, #501), and a
  * duplicate must surface a message rather than silently no-op (#502).
  *
- * Existence / is-a-directory checks are not performed here: in production
- * the only entry point is the native OS directory picker, which already
- * guarantees a real, existing directory. The E2E-only manual path input
- * (tree-shaken from production builds) is a test fixture path and goes
- * through this same check for overlap/duplicate coverage.
+ * Existence is checked separately (see `checkPathExists`) since it requires
+ * an IPC round-trip; this stays a synchronous, in-memory check.
  */
 function findAddTimeConflict(
   entries: SourceEntry[],
@@ -97,6 +94,28 @@ function findAddTimeConflict(
     }
   }
   return null;
+}
+
+/**
+ * Best-effort existence check for a manually typed/pasted path (#662) — the
+ * native OS picker already guarantees a real, existing directory, so this
+ * only matters for the manual-entry affordance, but runs for both so there is
+ * one add-time validation path. Reuses `tools.validate_path` (an existing,
+ * side-effect-free `exists() && is_absolute()` check meant for tool
+ * executables) instead of inventing a new backend command; it does not
+ * discriminate file vs. directory — that stricter check still runs, and
+ * blocks registration, at Confirm-step flush via the real
+ * `roots.register.batch` path validation (`crates/app/core/src/first_run.rs`).
+ * An IPC failure here is treated as inconclusive (not blocking) for the same
+ * reason: the authoritative check runs at flush regardless.
+ */
+async function checkPathExists(path: string): Promise<string | null> {
+  try {
+    const result = unwrap(await commands.toolsValidatePath(path));
+    return result.valid ? null : m.err_path_not_exists();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -183,17 +202,30 @@ function SourceGroup({
   const hasRows = rows.length > 0;
   const [addError, setAddError] = useState<string | null>(null);
 
-  // Add-time validation (#502): reject duplicates/overlaps here, before the
-  // path ever reaches the wizard's registered-sources buffer, so the user
-  // gets immediate, accessible feedback instead of a silent no-op.
-  const handleAdd = (path: string, addKind: SourceKind) => {
+  // Add-time validation (#502, #662): reject duplicates/overlaps and a
+  // nonexistent path here, before the path ever reaches the wizard's
+  // registered-sources buffer, so the user gets immediate, accessible
+  // feedback instead of a silent no-op or a failure buried in the Confirm
+  // step's aggregate registration banner. Returns whether the add succeeded
+  // so callers (e.g. the manual-entry input) know whether to clear their
+  // local buffer.
+  const handleAdd = async (
+    path: string,
+    addKind: SourceKind,
+  ): Promise<boolean> => {
     const conflict = findAddTimeConflict(allEntries, addKind, path);
     if (conflict) {
       setAddError(conflict);
-      return;
+      return false;
+    }
+    const notFound = await checkPathExists(path);
+    if (notFound) {
+      setAddError(notFound);
+      return false;
     }
     setAddError(null);
     onAdd(path, addKind);
+    return true;
   };
 
   // Requirement highlight is driven entirely by CSS data-attribute selectors
@@ -324,16 +356,26 @@ function AddFolderButton({
   validationError,
 }: {
   kind: SourceKind;
-  onAdd: (path: string, kind: SourceKind) => void;
+  onAdd: (path: string, kind: SourceKind) => Promise<boolean>;
   validationError: string | null;
 }) {
   const { pick, loading, error } = useDirectoryPicker();
-  const [e2ePath, setE2ePath] = useState('');
+  const [manualPath, setManualPath] = useState('');
 
   const handleChoose = async () => {
     const result = await pick(undefined, KIND_TO_LAST_PATH[kind]);
     if (result.path) {
-      onAdd(result.path, kind);
+      await onAdd(result.path, kind);
+    }
+  };
+
+  const handleAddManualPath = async () => {
+    const p = manualPath.trim();
+    if (!p) return;
+    // Only clear the buffer on success — a rejected path (duplicate, overlap,
+    // nonexistent) stays visible so the user can see and fix what they typed.
+    if (await onAdd(p, kind)) {
+      setManualPath('');
     }
   };
 
@@ -351,36 +393,43 @@ function AddFolderButton({
         {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
       {/*
-        CI-only path entry: WebDriver cannot drive the native folder picker, so
-        real-UI E2E journeys add a source by typing its path. Gated on the
-        build-time VITE_E2E flag, so it is tree-shaken out of production builds
-        and reuses the exact same `onAdd` registration path as the picker.
+        Manual path entry (#662): the native picker guarantees an existing
+        directory but can't be scripted (WebDriver can't drive OS dialogs) and
+        can't produce inputs the journey's add-time validation needs to reject
+        (duplicate/overlap/nonexistent path) — those require typing/pasting a
+        path. Reuses the exact same `onAdd` (→ findAddTimeConflict +
+        checkPathExists) registration path as the picker, so both entry points
+        get identical validation.
       */}
-      {import.meta.env.VITE_E2E ? (
-        <span data-testid={`e2e-add-by-path-${kind}`}>
-          <input
-            data-testid={`e2e-path-input-${kind}`}
-            aria-label={m.setup_sources_e2e_path_aria({
-              kind: SOURCE_KIND_LABELS[kind](),
-            })}
-            value={e2ePath}
-            onChange={(ev) => setE2ePath(ev.target.value)}
-          />
-          <button
-            type="button"
-            data-testid={`e2e-add-path-btn-${kind}`}
-            onClick={() => {
-              const p = e2ePath.trim();
-              if (p) {
-                onAdd(p, kind);
-                setE2ePath('');
-              }
-            }}
-          >
-            {m.setup_sources_add_e2e()}
-          </button>
-        </span>
-      ) : null}
+      <span
+        className="alm-step-sources__manual-add"
+        data-testid={`manual-add-by-path-${kind}`}
+      >
+        <input
+          className="alm-step-sources__manual-input alm-mono"
+          data-testid={`manual-path-input-${kind}`}
+          aria-label={m.setup_sources_manual_path_aria({
+            kind: SOURCE_KIND_LABELS[kind](),
+          })}
+          value={manualPath}
+          onChange={(ev) => setManualPath(ev.target.value)}
+          onKeyDown={(ev) => {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              void handleAddManualPath();
+            }
+          }}
+        />
+        <Btn
+          size="sm"
+          variant="ghost"
+          data-testid={`manual-add-path-btn-${kind}`}
+          onClick={() => void handleAddManualPath()}
+          disabled={!manualPath.trim()}
+        >
+          {m.setup_sources_add_by_path()}
+        </Btn>
+      </span>
       {error && (
         <span className="alm-step-sources__picker-error">{error.message}</span>
       )}

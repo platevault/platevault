@@ -52,6 +52,7 @@ import type {
   FirstRunCompleteResponse,
   RegisterSourceBatchResponse_Serialize,
   RemapVerification,
+  ToolPathValidation,
   IpcOperationHandle,
   OperationEvent,
   PlanApplyResponse,
@@ -1636,6 +1637,18 @@ export async function mockInvoke(
           error: null,
         })),
       } satisfies RegisterSourceBatchResponse_Serialize;
+    }
+    case 'tools_validate_path': {
+      // Setup wizard manual path entry (#662) add-time existence check —
+      // mock mode has no real filesystem, so treat every non-empty path as
+      // valid (mirrors the native-picker flow, which only ever adds paths
+      // that already exist).
+      const path = (_args?.path as string) ?? '';
+      return {
+        path,
+        valid: path.trim().length > 0,
+        reason: path.trim().length > 0 ? null : 'Path does not exist',
+      } satisfies ToolPathValidation;
     }
     case 'firstrun_complete': {
       return {

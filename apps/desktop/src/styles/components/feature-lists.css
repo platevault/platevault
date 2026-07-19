@@ -1206,14 +1206,17 @@
   color: var(--alm-text-muted);
 }
 
-/* 6a. DirPicker.tsx — mono path span */
-.alm-dir-picker__path {
-  font-family: var(--alm-font-mono);
+/* 6a. DirPicker.tsx — manual path entry input (#662, replaces the former
+   read-only mono path span now that a path can be typed/pasted) */
+.alm-dir-picker__input {
   font-size: var(--alm-text-xs);
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg-input, transparent);
+  color: inherit;
 }
 
 /* 6b. DirPicker.tsx — error div (leaks fixed: --alm-space-1 → --alm-sp-1; raw hex fallback removed) */

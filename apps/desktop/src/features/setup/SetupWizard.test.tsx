@@ -373,8 +373,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 1,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: {
         selectedCatalogIds: ['common', 'openngc'],
@@ -410,8 +410,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 2,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: {
         selectedCatalogIds: ['common', 'openngc'],
@@ -442,8 +442,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 3,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: { selectedCatalogIds: ['common', 'openngc'] },
       tools: {
@@ -479,8 +479,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 3,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: { selectedCatalogIds: ['common', 'openngc'] },
       tools: {
@@ -512,8 +512,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 4,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: { selectedCatalogIds: [] },
       tools: {
@@ -582,8 +582,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 4,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: { selectedCatalogIds: [] },
       tools: {
@@ -629,9 +629,9 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 4,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
-        { path: '/astro/inbox', kind: 'inbox', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
+        { path: '/astro/inbox', kind: 'inbox' },
       ],
       catalogSettings: {
         selectedCatalogIds: ['common', 'openngc'],
@@ -661,9 +661,7 @@ describe('SetupWizard 5-step flow', () => {
     // Seed at step 4 (Confirm) but WITHOUT a project folder
     const seeded = {
       currentStep: 4,
-      sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-      ],
+      sources: [{ path: '/astro/lights', kind: 'light_frames' }],
       catalogSettings: {
         selectedCatalogIds: ['common', 'openngc'],
       },
@@ -719,8 +717,8 @@ describe('SetupWizard 5-step flow', () => {
     const seeded = {
       currentStep: 4,
       sources: [
-        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
-        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
       ],
       catalogSettings: { selectedCatalogIds: [] },
       tools: {
@@ -792,13 +790,11 @@ describe('SetupWizard restart re-confirm (issue #704)', () => {
           {
             path: '/astro/lights',
             kind: 'light_frames',
-            scanDepth: 'recursive',
             organizationState: 'organized',
           },
           {
             path: '/astro/projects',
             kind: 'project',
-            scanDepth: 'recursive',
             organizationState: 'organized',
           },
         ],

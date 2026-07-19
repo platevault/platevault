@@ -12,7 +12,6 @@ const STORAGE_KEY = 'alm-setup-wizard-state';
 // folder the file is in. 'calibration' here is only a user-facing folder
 // category that covers darks, flats, and bias frames together.
 export type SourceKind = 'light_frames' | 'calibration' | 'project' | 'inbox';
-export type ScanDepth = 'recursive' | 'single';
 export type OrganizationState = 'organized' | 'unorganized';
 
 export const ALL_SOURCE_KINDS: SourceKind[] = [
@@ -37,7 +36,6 @@ export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
 export interface SourceEntry {
   path: string;
   kind: SourceKind;
-  scanDepth: ScanDepth;
   /** Organization state for this source (spec 041 R-7).
    *  Inbox kind is always 'unorganized'. Non-inbox defaults to 'organized' (local-first safe default).
    */
@@ -190,12 +188,11 @@ export function addSource(
   sources: SourcesState,
   kind: SourceKind,
   path: string,
-  scanDepth: ScanDepth = 'recursive',
   organizationState?: OrganizationState,
 ): SourcesState {
   const state: OrganizationState =
     kind === 'inbox' ? 'unorganized' : (organizationState ?? 'organized');
-  return [...sources, { path, kind, scanDepth, organizationState: state }];
+  return [...sources, { path, kind, organizationState: state }];
 }
 
 /** Remove a source entry by index, returning updated state. */
@@ -276,9 +273,11 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       sources: validSources.map((s) => ({
         kind: s.kind,
         path: s.path,
-        // Backend RegisterSourceRequest is camelCase — must be `scanDepth`,
-        // not `scan_depth`, or the whole batch arg fails to deserialize.
-        scanDepth: s.scanDepth,
+        // scanDepth is a required backend contract field (camelCase) with no
+        // frontend-configurable state left — 'single' was never implemented,
+        // every scan is recursive (#509), and the UI plumbing was retired
+        // end-to-end (#913). Hardcode the only value the backend ever acts on.
+        scanDepth: 'recursive',
         // organizationState is required by the backend contract (spec 041 R-7).
         // Inbox is always unorganized; non-inbox carries the user's explicit choice.
         organizationState:

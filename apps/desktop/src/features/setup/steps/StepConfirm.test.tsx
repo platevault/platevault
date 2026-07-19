@@ -5,8 +5,9 @@
 /**
  * StepConfirm tests — first-run wizard Confirm summary (issue #515).
  *
- * Covers: each source row shows both organization state (organized/
- * unorganized) and scan depth, not scan depth alone.
+ * Covers: each source row shows organization state (organized/unorganized).
+ * Scan-depth display was retired end-to-end (#913) — 'single' was never
+ * implemented, every scan is recursive (#509).
  */
 
 import { render, screen } from '@testing-library/react';
@@ -24,18 +25,16 @@ const TOOLS: ToolsState = {
 };
 
 describe('StepConfirm', () => {
-  it('shows organization state alongside scan depth for each source row', () => {
+  it('shows organization state for each source row', () => {
     const sources: SourcesState = [
       {
         path: '/astro/lights',
         kind: 'light_frames',
-        scanDepth: 'recursive',
         organizationState: 'organized',
       },
       {
         path: '/astro/inbox',
         kind: 'inbox',
-        scanDepth: 'recursive',
         organizationState: 'unorganized',
       },
     ];
@@ -51,6 +50,5 @@ describe('StepConfirm', () => {
 
     expect(screen.getByText('Already organized')).toBeInTheDocument();
     expect(screen.getByText('Needs organizing')).toBeInTheDocument();
-    expect(screen.getAllByText('Recursive')).toHaveLength(2);
   });
 });

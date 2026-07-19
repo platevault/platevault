@@ -38,9 +38,23 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
         {label && <span className="alm-kv-row__label">{label}</span>}
         <span className="alm-kv-row__value">
           <Folder size={14} />
-          <span className="alm-dir-picker__path">
-            {value || m.ui_dir_picker_no_folder()}
-          </span>
+          {/*
+            Manual entry (#662): the native picker guarantees an existing
+            directory but can't be scripted (WebDriver can't drive OS dialogs)
+            and can't produce inputs the journey's inline validation needs to
+            reject (nonexistent path, duplicate, overlap, file-not-folder) —
+            those all require typing/pasting a path. Real path validation still
+            happens where it always did (each consumer's onChange handler /
+            backend round-trip); this is just the missing input affordance.
+          */}
+          <input
+            type="text"
+            className="alm-dir-picker__input alm-mono"
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={m.ui_dir_picker_no_folder()}
+            aria-label={label ?? m.ui_dir_picker_manual_path_aria()}
+          />
           <Btn size="sm" onClick={handleChoose} disabled={loading}>
             {loading ? m.setup_choosing() : m.ui_dir_picker_choose()}
           </Btn>

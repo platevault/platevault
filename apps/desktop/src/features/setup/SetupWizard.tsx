@@ -29,7 +29,6 @@ import type { CatalogSettings, ToolsState, SiteStepState } from './steps';
 import type {
   SourcesState,
   SourceKind,
-  ScanDepth,
   OrganizationState,
 } from './sources-store';
 import type { FlushResult } from './sources-store';
@@ -285,17 +284,6 @@ export function SetupWizard() {
       return { ...prev, sources: next };
     });
   }, []);
-
-  const handleScanDepthChange = useCallback(
-    (index: number, depth: ScanDepth) => {
-      setState((prev) => {
-        const next = [...prev.sources];
-        next[index] = { ...next[index], scanDepth: depth };
-        return { ...prev, sources: next };
-      });
-    },
-    [],
-  );
 
   const handleOrganizationStateChange = useCallback(
     (index: number, orgState: OrganizationState) => {
@@ -608,7 +596,6 @@ export function SetupWizard() {
             onAdd={handleAddSource}
             onRemove={handleRemoveSource}
             onKindChange={handleKindChange}
-            onScanDepthChange={handleScanDepthChange}
             onOrganizationStateChange={handleOrganizationStateChange}
           />
         )}
