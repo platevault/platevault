@@ -50,11 +50,13 @@ vi.mock('@/features/guided/store', () => ({
   STEP_ORDER: ['step-one', 'step-two'],
 }));
 
-const { mockSetPreference } = vi.hoisted(() => ({
+const { mockSetPreference, mockResetPreferences } = vi.hoisted(() => ({
   mockSetPreference: vi.fn(),
+  mockResetPreferences: vi.fn(),
 }));
 vi.mock('@/data/preferences', () => ({
   setPreference: mockSetPreference,
+  resetPreferences: mockResetPreferences,
 }));
 
 const { mockResetWizardStateWithSources } = vi.hoisted(() => ({
@@ -322,5 +324,65 @@ describe('Advanced — Software Update section', () => {
     expect(status).toHaveTextContent(/restart the app manually/i);
     expect(status).not.toHaveTextContent(/failed/i);
     expect(await screen.findByTestId('update-restart-btn')).toBeInTheDocument();
+  });
+});
+
+// ── Database info + Danger zone (#601/#602) ─────────────────────────────────
+//
+// Both controls used to be console.log no-ops (#601) and the Database panel
+// hardcoded fabricated size/schema/record stats plus a pre-rename path
+// (#602). Export database has no real backend yet — it must render as
+// honestly disabled, not a live-looking no-op. Reset preferences has a real,
+// local-only implementation (`resetPreferences()`) and is wired for real.
+
+describe('Advanced — Database info panel (#602)', () => {
+  it('shows only the real, static Engine fact — no fabricated size/schema/record counts', async () => {
+    render(<Advanced save={vi.fn()} />);
+
+    expect(await screen.findByText('SQLite')).toBeInTheDocument();
+    expect(screen.queryByText('24.8 MB')).not.toBeInTheDocument();
+    expect(screen.queryByText('v1.0')).not.toBeInTheDocument();
+    expect(screen.queryByText(/142,318 files/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('~/.alm/astro-library.db'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders "Export database" disabled with an explanatory title, not a silent no-op', async () => {
+    render(<Advanced save={vi.fn()} />);
+
+    const exportBtn = await screen.findByText('Export database');
+    expect(exportBtn.closest('button')).toBeDisabled();
+    expect(exportBtn.closest('button')).toHaveAttribute(
+      'title',
+      "Database export isn't implemented yet",
+    );
+  });
+});
+
+describe('Advanced — Reset preferences (#601)', () => {
+  it('requires a confirm step before calling resetPreferences', async () => {
+    render(<Advanced save={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTestId('reset-preferences-btn'));
+
+    expect(mockResetPreferences).not.toHaveBeenCalled();
+    expect(
+      await screen.findByTestId('reset-preferences-confirm-btn'),
+    ).toBeInTheDocument();
+  });
+
+  it('on confirm, calls the real resetPreferences() and shows a success message', async () => {
+    render(<Advanced save={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTestId('reset-preferences-btn'));
+    fireEvent.click(await screen.findByTestId('reset-preferences-confirm-btn'));
+
+    await waitFor(() => {
+      expect(mockResetPreferences).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      await screen.findByTestId('reset-preferences-done'),
+    ).toBeInTheDocument();
   });
 });
