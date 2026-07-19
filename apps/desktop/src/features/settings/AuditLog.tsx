@@ -1,24 +1,17 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import {
-  useState,
-  useMemo,
-  useId,
-  useCallback,
-  useEffect,
-  useRef,
-} from 'react';
+import { useState, useMemo, useId, useCallback, useEffect } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useNavigate } from '@tanstack/react-router';
 import { Btn, Pill, Table } from '@/ui';
 import { auditList, auditExport } from './settingsIpc';
-import { commands } from '@/bindings/index';
 import type {
   AuditEntry,
   AuditFilterDto,
   AuditOutcome,
 } from '@/bindings/index';
+import { useEntityNames, entityNameKey } from '@/hooks/useEntityNames';
 import { errMessage } from '@/lib/errors';
 import { formatDateTime, toEpochMs } from '@/lib/datetime';
 import { m } from '@/lib/i18n';
@@ -79,62 +72,6 @@ function resolveAuditEntityPath(
     default:
       return null;
   }
-}
-
-/**
- * Resolve a human display name per row for the entity types that have one
- * (#803). Caches across renders (module scope) since ids repeat across pages
- * within a session. Falls back to the raw id for types with no lookup
- * command, or when the lookup fails/is still pending.
- */
-const entityNameCache = new Map<string, string | null>();
-
-function useEntityNames(entries: AuditEntry[]): Map<string, string> {
-  const [, forceRender] = useState(0);
-  const requested = useRef(new Set<string>());
-
-  useEffect(() => {
-    let cancelled = false;
-    for (const e of entries) {
-      const cacheKey = `${e.entityType}:${e.entityId}`;
-      if (entityNameCache.has(cacheKey) || requested.current.has(cacheKey)) {
-        continue;
-      }
-      const fetcher =
-        e.entityType === 'project'
-          ? commands
-              .projectsGet(e.entityId)
-              .then((r) => (r.status === 'ok' ? r.data.name : null))
-          : e.entityType === 'target'
-            ? commands
-                .targetsGet(e.entityId)
-                .then((r) => (r.status === 'ok' ? r.data.name : null))
-            : e.entityType === 'plan'
-              ? commands
-                  .plansGet(e.entityId)
-                  .then((r) => (r.status === 'ok' ? r.data.title : null))
-              : null;
-      if (!fetcher) continue;
-      requested.current.add(cacheKey);
-      void fetcher
-        .catch(() => null)
-        .then((name) => {
-          entityNameCache.set(cacheKey, name);
-          if (!cancelled) forceRender((n) => n + 1);
-        });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [entries]);
-
-  const names = new Map<string, string>();
-  for (const e of entries) {
-    const cacheKey = `${e.entityType}:${e.entityId}`;
-    const cached = entityNameCache.get(cacheKey);
-    if (cached) names.set(cacheKey, cached);
-  }
-  return names;
 }
 
 const ITEMS_PER_PAGE = 8;
@@ -503,9 +440,7 @@ export function AuditLog() {
           ]}
           rows={entries.map((e) => {
             const path = resolveAuditEntityPath(e.entityType, e.entityId);
-            const resolvedName = entityNames.get(
-              `${e.entityType}:${e.entityId}`,
-            );
+            const resolvedName = entityNames.get(entityNameKey(e));
             return {
               _onClick: path
                 ? () => void navigate({ to: path as never })
