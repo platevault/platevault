@@ -26,6 +26,29 @@ import type { LogLevel, LogEntrySource } from '@/data/logStore';
 
 export type LevelFilter = 'all' | LogLevel;
 
+// Persisted directly in localStorage (not routed through the generated
+// AppPreferences contract, which is backed by a Rust struct + settings IPC)
+// — same lightweight pattern useAdaptiveDock.ts uses for its own UI-only
+// persisted state. Journey 16 groups this with sidebar-collapse persistence
+// as a "persistent layout choice" that survives restart (#842).
+const EXPANDED_STORAGE_KEY = 'alm-log-panel-expanded';
+
+function readStoredExpanded(): boolean {
+  try {
+    return window.localStorage.getItem(EXPANDED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredExpanded(value: boolean): void {
+  try {
+    window.localStorage.setItem(EXPANDED_STORAGE_KEY, String(value));
+  } catch {
+    // Storage full or unavailable; state stays in-memory for this session.
+  }
+}
+
 interface LogPanelState {
   expanded: boolean;
   toggle: () => void;
@@ -55,7 +78,7 @@ const LogPanelContext = createContext<LogPanelState>({
 });
 
 export function LogPanelProvider({ children }: { children: ReactNode }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(readStoredExpanded);
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
   const [followLogs, setFollowLogsState] = useState(false);
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
@@ -87,6 +110,7 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
       if (next) {
         setLevelFilter('all');
       }
+      writeStoredExpanded(next);
       return next;
     });
   }, []);

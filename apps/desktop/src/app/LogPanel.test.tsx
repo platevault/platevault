@@ -87,10 +87,14 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
   beforeEach(() => {
     resetLogStore();
     vi.clearAllMocks();
+    // #842 persists `expanded` to localStorage; these tests assume a fresh
+    // collapsed panel on every render.
+    localStorage.removeItem('alm-log-panel-expanded');
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.removeItem('alm-log-panel-expanded');
   });
 
   it('toggles expand/collapse via the Collapsible trigger', async () => {
@@ -354,5 +358,50 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
       within(logRegion).getByRole('button', { name: 'All sources' }),
     ).toBeInTheDocument();
     expect(within(logRegion).queryByRole('button', { name: 'All' })).toBeNull();
+  });
+});
+
+describe('LogPanel expanded persists across restart (#842)', () => {
+  beforeEach(() => {
+    resetLogStore();
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('persists expand to localStorage and restores it on remount', async () => {
+    seedEntries();
+    const { unmount } = renderPanel();
+
+    expect(getTrigger()).toHaveAttribute('aria-label', 'Expand log panel');
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(getTrigger()).toHaveAttribute('aria-label', 'Collapse log panel');
+    });
+    expect(localStorage.getItem('alm-log-panel-expanded')).toBe('true');
+
+    // Simulate an app restart: unmount (provider state is discarded) and
+    // mount a fresh provider — it must read the persisted flag instead of
+    // defaulting to collapsed.
+    unmount();
+    renderPanel();
+    expect(getTrigger()).toHaveAttribute('aria-label', 'Collapse log panel');
+  });
+
+  it('persists collapse back to localStorage', async () => {
+    localStorage.setItem('alm-log-panel-expanded', 'true');
+    seedEntries();
+    renderPanel();
+
+    expect(getTrigger()).toHaveAttribute('aria-label', 'Collapse log panel');
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(getTrigger()).toHaveAttribute('aria-label', 'Expand log panel');
+    });
+    expect(localStorage.getItem('alm-log-panel-expanded')).toBe('false');
   });
 });
