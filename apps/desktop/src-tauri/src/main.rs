@@ -104,7 +104,32 @@ async fn main() {
     };
 
     let db = Database::connect(&db_url).await.expect("connect SQLite");
-    db.migrate().await.expect("run migrations");
+    if let Err(error) = db.migrate().await {
+        // A raw `expect()` here produced `Migration(VersionMismatch(71))` and a
+        // stack trace — technically true, actionable by nobody. Translate the
+        // recognised "this file predates this build" cases into a named failure
+        // that says which migration diverged and what to do about it, and exit
+        // instead of panicking.
+        if let Some(detail) = persistence_db::migration_divergence_detail(&error) {
+            let message = format!(
+                "Database schema does not match this build: {detail}.\n\
+                 \n\
+                 This database was created by a different revision of PlateVault. \
+                 It is a development-only condition — switching between branches \
+                 that each added migrations leaves a file whose migration history \
+                 no longer matches the running binary.\n\
+                 \n\
+                 To recover, delete the database and let it be recreated:\n\
+                 \x20 {db_url}\n\
+                 \n\
+                 Set ALM_DB_URL to point at a different file if you need to keep this one."
+            );
+            tracing::error!("{message}");
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
+        panic!("run migrations: {error}");
+    }
 
     // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
     // cache. Opening is fast (no warm yet — `run_app` warms it in the

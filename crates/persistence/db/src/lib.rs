@@ -142,6 +142,42 @@ impl Database {
     }
 }
 
+/// Describe a migration failure that means "this database file was written by a
+/// different revision of the app", or `None` for any other failure.
+///
+/// sqlx reports schema-history divergence as a bare `VersionMismatch(71)`.
+/// That is accurate but names neither the cause nor the fix, so a caller that
+/// `expect()`s it dies with a stack trace nobody can act on. Every variant
+/// matched here means the same thing in practice: the `_sqlx_migrations`
+/// history recorded in the file disagrees with the migration set embedded in
+/// the running binary.
+///
+/// This is overwhelmingly a *developer* condition — switching between branches
+/// that each claimed the same migration number, then reopening a database one
+/// of them already migrated. Callers pair the returned description with a
+/// recovery instruction naming the concrete database path.
+///
+/// Returns `None` for failures that are genuinely something else (a migration
+/// script that errored, a dropped connection); callers should keep surfacing
+/// those verbatim rather than blaming a stale file.
+#[must_use]
+pub fn migration_divergence_detail(error: &DbError) -> Option<String> {
+    let DbError::Migration(error) = error else { return None };
+    let detail = match error {
+        sqlx::migrate::MigrateError::VersionMismatch(version) => format!(
+            "migration {version} was already applied to this database, but its script differs from the one in this build"
+        ),
+        sqlx::migrate::MigrateError::VersionMissing(version) => format!(
+            "migration {version} was applied to this database but does not exist in this build"
+        ),
+        sqlx::migrate::MigrateError::VersionNotPresent(version) => format!(
+            "migration {version} is recorded in this database but is absent from this build's migration set"
+        ),
+        _ => return None,
+    };
+    Some(detail)
+}
+
 #[cfg(test)]
 mod tests {
     use super::CRATE_NAME;
@@ -149,6 +185,32 @@ mod tests {
     #[test]
     fn exposes_crate_name() {
         assert_eq!(CRATE_NAME, "persistence_db");
+    }
+
+    /// The three divergence variants each name the offending version, so the
+    /// operator can tell which migration the file disagrees on.
+    #[test]
+    fn divergence_detail_names_the_offending_migration() {
+        for error in [
+            sqlx::migrate::MigrateError::VersionMismatch(71),
+            sqlx::migrate::MigrateError::VersionMissing(71),
+            sqlx::migrate::MigrateError::VersionNotPresent(71),
+        ] {
+            let detail = super::migration_divergence_detail(&super::DbError::Migration(error))
+                .expect("divergence variant should produce a detail");
+            assert!(detail.contains("71"), "detail should name the version: {detail}");
+        }
+    }
+
+    /// A migration script that genuinely failed is not a stale-file problem —
+    /// telling the operator to delete their database would be wrong.
+    #[test]
+    fn divergence_detail_ignores_unrelated_failures() {
+        assert!(super::migration_divergence_detail(&super::DbError::NotImplemented).is_none());
+        assert!(super::migration_divergence_detail(&super::DbError::Migration(
+            sqlx::migrate::MigrateError::Dirty(71)
+        ))
+        .is_none());
     }
 
     /// Smoke-test: connect to in-memory SQLite, run migrations, verify the pool is alive.
