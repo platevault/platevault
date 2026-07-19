@@ -76,6 +76,17 @@ const DARK_SKY: ObserverSite = {
   minHorizonAltDeg: 0,
 };
 
+const THIRD_SITE: ObserverSite = {
+  id: 'site-third',
+  name: 'Remote site',
+  latitudeDeg: 51.5,
+  longitudeDeg: -0.13,
+  elevationM: null,
+  timezone: 'Europe/London',
+  twilight: 'astronomical',
+  minHorizonAltDeg: 0,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockSettingsUpdate.mockResolvedValue(ok(null));
@@ -290,6 +301,55 @@ describe('ObservingSites', () => {
         screen.getByText(m.settings_observing_sites_empty()),
       ).toBeInTheDocument(),
     );
+  });
+
+  // #840: with 2+ non-target candidates remaining, removing the active site
+  // must force an explicit fallback choice instead of auto-selecting one.
+  it('requires an explicit fallback choice when removing the active site with 2+ candidates remaining', async () => {
+    __setObservingStateForTest({
+      sites: [HOME, DARK_SKY, THIRD_SITE],
+      defaultSiteId: HOME.id,
+      activeSiteId: DARK_SKY.id,
+    });
+
+    render(<ObservingSites />);
+
+    const darkSkyRow = screen
+      .getByText(DARK_SKY.name)
+      .closest('tr') as HTMLElement;
+    fireEvent.click(within(darkSkyRow).getByText(m.common_remove()));
+
+    const dialog = await screen.findByRole('dialog');
+    // Confirm without choosing a fallback: blocked, no update fires.
+    await act(async () => {
+      fireEvent.click(within(dialog).getByText(m.common_remove()));
+      await Promise.resolve();
+    });
+    expect(mockSettingsUpdate).not.toHaveBeenCalled();
+    expect(
+      within(dialog).getByText(m.settings_observing_sites_fallback_required()),
+    ).toBeInTheDocument();
+
+    fireEvent.change(
+      within(dialog).getByLabelText(
+        m.settings_observing_sites_fallback_label(),
+      ),
+      { target: { value: THIRD_SITE.id } },
+    );
+    await act(async () => {
+      fireEvent.click(within(dialog).getByText(m.common_remove()));
+      await Promise.resolve();
+    });
+
+    expect(mockSettingsUpdate).toHaveBeenCalledTimes(1);
+    const [, values] = mockSettingsUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(values['observingActiveSiteId']).toBe(THIRD_SITE.id);
+    // Default was untouched (HOME) since only the active pointer targeted
+    // the removed site.
+    expect(values['observingDefaultSiteId']).toBe(HOME.id);
   });
 
   it('shows a save error when the backend rejects the update', async () => {
