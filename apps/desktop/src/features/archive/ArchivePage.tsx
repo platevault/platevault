@@ -30,10 +30,20 @@ import { Btn, EmptyState, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { revealLabel } from '@/lib/reveal-label';
+import { revealInOs } from '@/shared/native/reveal';
+import { addToast } from '@/shared/toast';
+import { queryClient as sharedQueryClient } from '@/data/queryClient';
+import { queryKeys } from '@/data/queryKeys';
+import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 import { ArchiveDetail } from './ArchiveDetail';
 import { ArchiveTable, DEFAULT_ARCHIVE_SORT } from './ArchiveTable';
 import type { ArchiveSort, ArchiveSortCol } from './ArchiveTable';
-import { useArchiveList, useSendToTrash, usePermanentlyDelete } from './store';
+import {
+  useArchiveList,
+  useSendToTrash,
+  usePermanentlyDelete,
+  useGenerateRestorePlan,
+} from './store';
 import type { ArchiveEntry } from '@/bindings/index';
 
 // Backend safety gate for `archive.permanently_delete` (spec 017 WP-B):
@@ -67,6 +77,10 @@ export function ArchivePage() {
 
   const sendToTrash = useSendToTrash();
   const permanentlyDelete = usePermanentlyDelete();
+  const generateRestorePlan = useGenerateRestorePlan();
+  const [restoreReviewPlanId, setRestoreReviewPlanId] = useState<
+    string | null
+  >(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
   // #841: point the destructive confirm modal's initial focus directly at the
@@ -106,6 +120,59 @@ export function ArchivePage() {
     sendToTrash.mutate(item.archivedViaPlanId);
   };
 
+  /**
+   * Generate a reviewable restore (un-archive) plan (#885, decision D15) and
+   * open the shared {@link PlanReviewOverlay} for review + apply — mirrors
+   * ProjectDetail's `handleGenerateArchivePlan`, the plan-gated entry point
+   * for the reverse edge.
+   */
+  const handleGenerateRestorePlan = () => {
+    if (!item?.archivedViaPlanId) return;
+    generateRestorePlan.mutate(item.archivedViaPlanId, {
+      onSuccess: (res) => {
+        addToast({
+          message: m.archive_restore_plan_created_toast({
+            count: res.itemCount,
+          }),
+          variant: 'info',
+        });
+        setRestoreReviewPlanId(res.planId);
+      },
+      onError: () => {
+        addToast({
+          message: m.archive_restore_generate_failed(),
+          variant: 'error',
+        });
+      },
+    });
+  };
+
+  /** After the restore plan applies, the project leaves `archived` (backend
+   * `finalize_restore_lifecycle`) — refresh the list so the row drops. */
+  const handleRestorePlanApplied = () => {
+    void sharedQueryClient.invalidateQueries({
+      queryKey: queryKeys.archive.list(),
+    });
+    clearSelection();
+  };
+
+  /** Reveal the app-managed archive folder in the OS file manager (#874). */
+  const handleReveal = async () => {
+    if (!item?.archiveFolderPath) return;
+    try {
+      await revealInOs(item.archiveFolderPath, {
+        entityKind: 'other',
+        entityId: item.id,
+      });
+    } catch (err: unknown) {
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ?? m.archive_load_error());
+      addToast({ message: msg, variant: 'error' });
+    }
+  };
+
   const handleConfirmDelete = () => {
     if (!item?.archivedViaPlanId || confirmInput !== DELETE_CONFIRM_TEXT)
       return;
@@ -131,6 +198,18 @@ export function ArchivePage() {
       actions={
         item && (
           <>
+            {/* Restore (#756/#885, spec 043 §4 order): generates a
+                reviewable un-archive plan and opens the same review/apply
+                overlay the Archive-generation edge uses. C5 project-only
+                surface, so the project-specific label is correct today. */}
+            <Btn
+              size="sm"
+              disabled={!item.archivedViaPlanId || generateRestorePlan.isPending}
+              onClick={handleGenerateRestorePlan}
+              data-testid="archive-restore-btn"
+            >
+              {m.archive_restore_project_btn()}
+            </Btn>
             <Btn
               size="sm"
               variant="danger"
@@ -147,16 +226,21 @@ export function ArchivePage() {
             >
               {m.archive_delete_permanently_btn()}
             </Btn>
-            {/* STUB: Reveal needs the app-managed archive location
-                (.astro-plan-archive/<planId>/, D24) which the ArchiveEntry
-                contract does not expose yet — disabled, no fake IPC. The old
-                layout shipped this button ENABLED with no handler. Label is
+            {/* Reveal (#874): enabled once the backend resolves the
+                app-managed archive folder (`.astro-plan-archive/<planId>/`)
+                for this entry; stays disabled — same STUB tooltip — when the
+                owning plan has no items to derive a folder from. Label is
                 the shared platform-native revealLabel() (File Explorer /
                 Finder / file manager). */}
             <Btn
               size="sm"
-              disabled
-              title={m.archive_reveal_unavailable_title()}
+              disabled={!item.archiveFolderPath}
+              title={
+                item.archiveFolderPath
+                  ? undefined
+                  : m.archive_reveal_unavailable_title()
+              }
+              onClick={() => void handleReveal()}
               data-testid="archive-reveal-btn"
             >
               {revealLabel()}
@@ -241,6 +325,17 @@ export function ArchivePage() {
           />
         </Modal>
       )}
+
+      {/* Restore plan review overlay (#885): shares the same review → approve
+          → apply kit every other plan-gated flow uses. */}
+      <PlanReviewOverlay
+        planId={restoreReviewPlanId}
+        open={restoreReviewPlanId !== null}
+        onClose={() => setRestoreReviewPlanId(null)}
+        title={m.archive_restore_review_title()}
+        onApplied={handleRestorePlanApplied}
+        onRetryCreated={setRestoreReviewPlanId}
+      />
     </>
   );
 }

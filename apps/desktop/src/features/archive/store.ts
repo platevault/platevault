@@ -20,6 +20,7 @@ import type {
   ArchiveSendToTrashResponse,
   ArchivePermanentlyDeleteResponse,
   GenerateArchivePlanResult,
+  GenerateRestorePlanResult,
 } from '@/bindings/index';
 
 // Local IPC helpers — mirror the `unwrap()` pattern used by projects/store.ts.
@@ -52,6 +53,15 @@ async function generateArchivePlan(
   projectId: string,
 ): Promise<GenerateArchivePlanResult> {
   return unwrap(await commands.archivePlanGenerate(projectId, null));
+}
+
+/** Materialise a reviewable restore (un-archive) plan (#885, decision D15). */
+async function generateRestorePlan(
+  archivedViaPlanId: string,
+): Promise<GenerateRestorePlanResult> {
+  return unwrap(
+    await commands.archivePlanGenerateRestore(archivedViaPlanId, null),
+  );
 }
 
 // Query state shape (matches the projects/store.ts QueryState<T> surface).
@@ -126,5 +136,17 @@ export function usePermanentlyDelete() {
 export function useGenerateArchivePlan() {
   return useMutation<GenerateArchivePlanResult, Error, string>({
     mutationFn: generateArchivePlan,
+  });
+}
+
+/**
+ * Materialise a reviewable restore (un-archive) plan for an archived entry
+ * (#885). The ONLY UI entry point that calls `archive.plan.generate_restore`
+ * — mirrors {@link useGenerateArchivePlan}'s shape so the Archive page can
+ * open the same {@link PlanReviewOverlay} on the result.
+ */
+export function useGenerateRestorePlan() {
+  return useMutation<GenerateRestorePlanResult, Error, string>({
+    mutationFn: generateRestorePlan,
   });
 }

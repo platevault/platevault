@@ -658,7 +658,19 @@ export const commands = {
 	 * 
 	 *  Returns `Err` with the contract error code on database failure.
 	 */
-	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
+	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
+	/**
+	 *  `archive.plan.generate_restore` — build a reviewable restore (un-archive)
+	 *  plan from a previously applied archive plan (#885, decision D15). Creates
+	 *  a `ready_for_review` plan; performs NO filesystem mutation and never
+	 *  auto-applies (constitution II / FR-002).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+	 *  applied archive plan), or `"archive.empty"` (nothing to restore).
+	 */
+	archivePlanGenerateRestore: (archivedPlanId: string, title: string | null) => typedError<GenerateRestorePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate_restore", { archivedPlanId, title })),
 	/**
 	 *  `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
 	 * 
@@ -2067,6 +2079,14 @@ export type ArchiveEntry_Deserialize = {
 	 *  for legacy rows archived before this column existed.
 	 */
 	archivedViaPlanId: string | null,
+	/**
+	 *  Absolute on-disk path to the app-managed archive folder holding this
+	 *  entity's files (`<parent-of-first-item>/.astro-plan-archive/
+	 *  <planId>/`, #874). Derived from the owning plan's first archived item
+	 *  at read time; `None` when the owning plan is missing or has no
+	 *  archived items to derive a folder from — never a fabricated path.
+	 */
+	archiveFolderPath: string | null,
 };
 
 /**  One archived entity row for the Archive page (C5 design: projects only). */
@@ -2101,6 +2121,14 @@ export type ArchiveEntry_Serialize = {
 	 *  for legacy rows archived before this column existed.
 	 */
 	archivedViaPlanId: string | null,
+	/**
+	 *  Absolute on-disk path to the app-managed archive folder holding this
+	 *  entity's files (`<parent-of-first-item>/.astro-plan-archive/
+	 *  <planId>/`, #874). Derived from the owning plan's first archived item
+	 *  at read time; `None` when the owning plan is missing or has no
+	 *  archived items to derive a folder from — never a fabricated path.
+	 */
+	archiveFolderPath?: string | null,
 };
 
 /**  Response for `archive.list` — every project currently in `archived`. */
@@ -4068,7 +4096,13 @@ export type FramingToleranceDto = {
  *  Result of `archive.plan.generate` — a whole-project archive plan created in
  *  `ready_for_review` (constitution II: reviewable, never auto-applied).
  */
-export type GenerateArchivePlanResult = {
+export type GenerateArchivePlanResult = GenerateArchivePlanResult_Serialize | GenerateArchivePlanResult_Deserialize;
+
+/**
+ *  Result of `archive.plan.generate` — a whole-project archive plan created in
+ *  `ready_for_review` (constitution II: reviewable, never auto-applied).
+ */
+export type GenerateArchivePlanResult_Deserialize = {
 	/**  Id of the newly created archive plan (in `ready_for_review` state). */
 	planId: string,
 	/**  Total number of archive items placed on the plan. */
@@ -4078,6 +4112,36 @@ export type GenerateArchivePlanResult = {
 	 *  gate plan approval until acknowledged (constitution II).
 	 */
 	protectedItemCount: number,
+	/**
+	 *  Diagnostic sentence explaining an empty plan (#603): set only when
+	 *  `item_count == 0`, so the review UI can render a reason instead of a
+	 *  bare disabled "Approve & apply" button. `None` whenever the plan has
+	 *  items — never a filler string standing in for "everything's fine".
+	 */
+	emptyReason: string | null,
+};
+
+/**
+ *  Result of `archive.plan.generate` — a whole-project archive plan created in
+ *  `ready_for_review` (constitution II: reviewable, never auto-applied).
+ */
+export type GenerateArchivePlanResult_Serialize = {
+	/**  Id of the newly created archive plan (in `ready_for_review` state). */
+	planId: string,
+	/**  Total number of archive items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
+	/**
+	 *  Diagnostic sentence explaining an empty plan (#603): set only when
+	 *  `item_count == 0`, so the review UI can render a reason instead of a
+	 *  bare disabled "Approve & apply" button. `None` whenever the plan has
+	 *  items — never a filler string standing in for "everything's fine".
+	 */
+	emptyReason?: string | null,
 };
 
 /**
@@ -4105,6 +4169,27 @@ export type GenerateCleanupPlanResult = {
 	/**  Id of the newly created plan (in `ready_for_review` state). */
 	planId: string,
 	/**  Total number of cleanup items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
+};
+
+/**
+ *  Result of `archive.plan.generate_restore` (#885) — a reviewable
+ *  un-archive plan created in `ready_for_review`, moving a project's
+ *  previously archived files back to their recorded original locations.
+ *  Never auto-applied (constitution II).
+ */
+export type GenerateRestorePlanResult = {
+	/**  Id of the newly created restore plan (in `ready_for_review` state). */
+	planId: string,
+	/**
+	 *  Total number of restore items placed on the plan (one per archived
+	 *  item the original archive plan actually moved).
+	 */
 	itemCount: number,
 	/**
 	 *  Number of items that resolved to a protected protection level and will
