@@ -243,8 +243,11 @@
   line-height: 1.35;
 }
 
-.alm-onb-checklist__item:hover .alm-onb-checklist__tooltip,
-.alm-onb-checklist__item:focus-within .alm-onb-checklist__tooltip {
+/* Visibility is owned by ChecklistItemRow, not by `:hover`/`:focus-within`.
+ * The old CSS-only reveal left the tooltip pinned open after any click inside
+ * the row (`:focus-within` stayed true) and could not honour Escape. See the
+ * comment on the `tipOpen` state for the full rationale. */
+.alm-onb-checklist__tooltip[data-open='true'] {
   visibility: visible;
 }
 
@@ -272,12 +275,55 @@
   background: var(--alm-hover-bg);
 }
 
+/*
+ * Labelled trigger — the expanded sidebar's entry point to the flyout. Styled
+ * as a sidebar row rather than a button-looking control, so it sits with the
+ * nav it belongs beside; the flyout it opens carries the panel treatment.
+ */
+.alm-onb-ring--labelled {
+  justify-content: flex-start;
+  gap: var(--alm-sp-2);
+  width: 100%;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  color: var(--alm-text-secondary);
+  font-size: var(--alm-text-sm);
+  text-align: left;
+}
+
+.alm-onb-ring--labelled:hover {
+  color: var(--alm-text);
+}
+
+.alm-onb-ring__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-onb-ring__count {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 .alm-onb-ring__track {
   stroke: var(--alm-bg3);
 }
 
+/* Gradient stops for the progress donut. Set via `stop-color` on classed
+   <stop> elements so both ends stay themeable tokens (all 4 themes define the
+   accent pair) rather than hard-coded SVG attributes. */
+.alm-onb-ring__grad-from {
+  stop-color: var(--alm-accent-deep);
+}
+
+.alm-onb-ring__grad-to {
+  stop-color: var(--alm-accent-hover);
+}
+
 .alm-onb-ring__fill {
-  stroke: var(--alm-accent);
   transition: stroke-dashoffset var(--alm-transition-base);
 }
 
@@ -292,7 +338,10 @@
   border-radius: var(--alm-radius-md);
   background: var(--alm-surface-raised);
   border: 1px solid var(--alm-border);
-  box-shadow: var(--alm-shadow-sm);
+  /* Deliberately the LARGE elevation: this panel floats over the page beside
+     the sidebar, and the 1px `shadow-sm` used for inline surfaces left it
+     reading as part of the sidebar rather than above it. */
+  box-shadow: var(--alm-shadow-lg);
 }
 
 /* The popover already frames the section — drop its inline top border there. */
