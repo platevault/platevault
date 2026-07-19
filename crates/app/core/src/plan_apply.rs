@@ -188,6 +188,64 @@ fn db_err(e: DbError) -> ContractError {
 
 // ── Source view generation finalization (spec 049) ───────────────────────────
 
+/// Terminal step of a `project_create` plan apply: fire the `Created`
+/// manifest trigger (#665 — this and the source add/remove triggers had no
+/// emitters at all; only the unrelated `workflow.run_completed` trigger was
+/// wired). The project's folder structure (including `notes/`) only exists
+/// on disk once this plan applies, so this is the earliest point the write
+/// can succeed.
+///
+/// `origin_path` on a `project_create` plan is the project's filesystem
+/// path, not its id (unlike every other plan origin) — recovered via
+/// `projects::path_exists`.
+///
+/// Best-effort: the project already exists, so a manifest failure here must
+/// NOT fail the apply. Every failure is logged for an external watchdog (§II).
+async fn finalize_project_create_manifest(pool: &SqlitePool, bus: &EventBus, project_path: &str) {
+    use app_core_projects::project_manifests::{
+        build_source_calibration_snapshot, write, WriteManifestParams,
+    };
+    use contracts_core::manifests::ManifestReason as DtoManifestReason;
+    use persistence_db::repositories::projects as projects_repo;
+
+    let project_id = match projects_repo::path_exists(pool, project_path, None).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            tracing::warn!(%project_path, "project_create manifest: no project at this path");
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(%project_path, error=%e, "project_create manifest: path lookup failed");
+            return;
+        }
+    };
+    let lifecycle = match projects_repo::get_project(pool, &project_id).await {
+        Ok(row) => row.lifecycle,
+        Err(e) => {
+            tracing::warn!(%project_id, error=%e, "project_create manifest: project lookup failed");
+            return;
+        }
+    };
+    let (source_map, calibration) = build_source_calibration_snapshot(pool, &project_id).await;
+    let result = write(
+        pool,
+        bus,
+        WriteManifestParams {
+            project_id: &project_id,
+            reason: DtoManifestReason::Created,
+            project_root: std::path::Path::new(project_path),
+            lifecycle_state: &lifecycle,
+            source_map,
+            calibration,
+            workflow_profile: None,
+        },
+    )
+    .await;
+    if let Err(e) = result {
+        tracing::warn!(%project_id, error=%e, "project_create manifest write failed");
+    }
+}
+
 /// Terminal step of a `prepared_view_generation` plan apply: write the
 /// first-materialization `PreparedSourceView` (state `current`) plus one
 /// `PreparedSourceViewItem` per successfully-applied `link` item.
@@ -1339,6 +1397,15 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                 if terminal == "applied" && plan_origin == "archive" {
                     if let Some(project_id) = plan_project_id.as_deref() {
                         finalize_archive_lifecycle(&pool, &bus, &plan_id, project_id).await;
+                    }
+                }
+
+                // #665: on a fully-applied project_create plan, fire the
+                // Created manifest trigger — see finalize_project_create_manifest
+                // for why origin_path is the project's PATH here, not its id.
+                if terminal == "applied" && plan_origin == "project" {
+                    if let Some(project_path) = plan_project_id.as_deref() {
+                        finalize_project_create_manifest(&pool, &bus, project_path).await;
                     }
                 }
 
@@ -2619,6 +2686,42 @@ mod tests {
         let archived = projects_repo::list_archived_projects(db.pool()).await.unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].archived_via_plan_id.as_deref(), Some("plan-arch-1"));
+    }
+
+    /// #665: a fully-applied `project_create` plan must fire the `Created`
+    /// manifest trigger — previously there was no emitter at all for it.
+    #[tokio::test]
+    async fn finalize_project_create_manifest_writes_created_manifest() {
+        use persistence_db::repositories::manifests::list_manifests_for_project;
+        use persistence_db::repositories::projects as projects_repo;
+
+        let (db, bus) = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let project_id = Uuid::new_v4().to_string();
+        projects_repo::insert_project(
+            db.pool(),
+            &projects_repo::InsertProject {
+                id: &project_id,
+                name: "M31 LRGB",
+                tool: "PixInsight",
+                lifecycle: "setup_incomplete",
+                path: dir.path().to_str().unwrap(),
+                notes: None,
+                canonical_target_id: None,
+                is_mosaic: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        finalize_project_create_manifest(db.pool(), &bus, dir.path().to_str().unwrap()).await;
+
+        let (rows, _) = list_manifests_for_project(db.pool(), &project_id, None, 10).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].reason, "created");
+        let manifest =
+            app_core_projects::project_manifests::get(db.pool(), &rows[0].id).await.unwrap();
+        assert_eq!(manifest.manifest.body.lifecycle_state, "setup_incomplete");
     }
 
     /// An already-archived project is idempotent: the closure only (re)records

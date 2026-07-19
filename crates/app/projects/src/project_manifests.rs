@@ -284,7 +284,11 @@ pub async fn write(
 /// calibration choices" — `spawn_workflow_run_subscriber` previously always
 /// passed `None` for both, the only trigger a real user ever exercises
 /// (#665 tracks the other 4 triggers being unwired).
-async fn build_source_calibration_snapshot(
+///
+/// `pub`: also called by `project_setup::add_source`/`remove_source` (this
+/// crate, the `SourceChange` trigger) and `app_core::plan_apply`'s
+/// `finalize_project_create_manifest` (the `Created` trigger, #665).
+pub async fn build_source_calibration_snapshot(
     pool: &SqlitePool,
     project_id: &str,
 ) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
