@@ -122,8 +122,9 @@ for the current moment, not in principle.
 ### D-005 — A superseded sibling is invalidated, not preserved
 
 When a re-scan no longer produces a sibling that has an open plan, the system
-**invalidates** it: the plan is cancelled, the item is marked stale, and an
-explicit signal tells the user their confirmation was superseded.
+**invalidates** it: the item is marked superseded, its plan is blocked from
+application pending the user's decision, and an explicit signal tells the user
+their confirmation was superseded.
 
 The confirmation was made against a world that no longer exists, and a plan
 describes pending filesystem mutations, so silently honouring it is the
@@ -505,15 +506,24 @@ resulting sibling carries a frame type without any user input.
 - **FR-013**: Staleness detection at confirm time MUST be evaluated against the
   files belonging to the item being confirmed. *Confirmed unchanged by the Q-5
   decision: staleness is a per-item property. Reclassification MUST compute a
-  real per-group signature rather than the empty-set hash constant it writes
-  today, which requires threading a root absolute path into `reclassify_v2`.*
+  real per-group signature rather than the empty-set hash constant. **Delivered
+  by #1105** (`038781e2`): `root_absolute_path` is a field on
+  `InboxReclassifyV2Request` and `reclassify.rs:827` joins it per file. No work
+  remains under this requirement.*
 - **FR-014**: Re-classification MUST re-derive a folder's items from the files
   on disk without propagating state, plans, or confirmations between siblings.
 
 **Scan and classification boundary** *(D-006)*
 
 - **FR-015**: Scanning a folder MUST create its source group and MUST NOT
-  create any inbox item.
+  create an inbox item representing the folder as a whole. *Self-describing
+  file-level items are unaffected: a detected calibration master (spec 040)
+  carries its frame type, filter and exposure from the file itself, so its row
+  asserts nothing that classification has yet to determine. `persist_master_item`
+  already creates one row per master file, and a folder containing only masters
+  already produces no aggregate row at all
+  (`apps/desktop/src-tauri/src/commands/inbox.rs:356`) — that is this decision's
+  target shape, already shipped.*
 - **FR-016**: A scanned but unclassified folder MUST be visible in the Inbox
   list, represented by its source group.
 - **FR-017**: When classification completes, the folder's source-group row MUST
@@ -597,7 +607,8 @@ another there.
   aggregate row is deleted, and no replacement suppression logic is introduced.
 - **SC-008**: Re-scanning an unchanged folder produces no item identity churn.
 - **SC-009**: When re-derivation removes an item that had an open plan, that
-  plan is cancelled and the user receives an explicit superseded signal — zero
+  item is marked superseded, its plan is blocked from application pending the
+  user's decision, and the user receives an explicit superseded signal — zero
   cases of a silently discarded or silently retained plan (D-005).
 - **SC-010**: A user can group the Inbox by folder and see each folder's
   siblings together under one header (D-007).

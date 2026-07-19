@@ -103,6 +103,14 @@ The row visible before classification is the *source group*, not an
 while a freshly-scanned folder is still visible to the user. Once classify runs,
 the source-group row is replaced by its N item rows.
 
+**Scope — read "no *parent* item", not "no item".** This answer constrains rows
+that stand for a folder as a whole. It does not touch self-describing file-level
+rows: a detected calibration master (spec 040) is created at scan time by
+`persist_master_item`, carrying real frame type, filter and exposure read from
+the file, so it asserts nothing classification has yet to determine. FR-015
+originally paraphrased this answer as "MUST NOT create any inbox item", which
+outlawed a shipped feature; it has been corrected to match this scope.
+
 **Rejected alternatives**:
 
 - **A — scan creates one provisional item that classify splits.** Rejected: a
@@ -175,7 +183,15 @@ not absent. Worth a journey delta.
 
 ---
 
-## Q-5 — What anchors the confirm staleness guard after reclassification? — RESOLVED: per-item
+## Q-5 — What anchors the confirm staleness guard after reclassification? — RESOLVED: per-item — **AND SHIPPED**
+
+> **Status (2026-07-19): the decision below is implemented on `main`.** PR #1105
+> (`038781e2`) added `root_absolute_path` to `InboxReclassifyV2Request` and
+> `reclassify.rs:827` joins it per file to compute real per-group signatures.
+> The two in-tree comments named at the end of this answer are corrected, and
+> `confirm.rs:1495` carries a `stale_signature_returns_error` test. **No work
+> remains under Q-5.** The present-tense defect language below is retained as
+> the historical record of why — read it as history, not as a task list.
 
 **Answer (product owner)**: Confirm-time staleness stays a **per-item**
 property. **FR-013 stands unchanged.** Reclassification is what must change:

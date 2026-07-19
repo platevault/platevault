@@ -140,11 +140,13 @@ detect supersession. Do not start decision 3 before that lands.
 
 ## Open questions
 
-- **058 FR-020 needs amending.** As written (`spec.md:413-414`) it says the
-  system "MUST cancel that plan". Decision 4 says the system must *not* cancel
-  it without the user. D-005's prose (`spec.md:110-112`) has the same problem.
-  One of the two documents has to change; this spec assumes 058's text is
-  amended to "surface for user decision".
+- ~~**058 FR-020 needs amending.**~~ **RESOLVED (2026-07-19): 058 was amended;
+  decision 4 stands.** FR-020 had already been descoped out of 058 by Q-6, and
+  D-005 already carried the "*supersede and surface, never silently cancel*"
+  refinement — but D-005's opening paragraph and SC-009 still said the plan is
+  cancelled, contradicting the refinement below them. Both now read "marked
+  superseded, plan blocked from application pending the user's decision". No
+  document still asserts automatic cancellation.
 - **Who is the user-facing surface for a superseded item?** A queue row in a
   distinct state, a notification, or the plan surface — undecided. Requirement 5
   fixes the obligation, not the affordance.

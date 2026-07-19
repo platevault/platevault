@@ -70,16 +70,25 @@ the wrong projection for the badge.
 
 The #1038 predicate — `group_key = '' AND source_group_id IS NOT NULL AND
 EXISTS (sibling with non-empty group_key)`, narrowed by #1081 to a genuine
-split — now lives in one macro with three call sites:
+split — now lives in one macro with four call sites:
 
 | Location | Query |
 |---|---|
 | `crates/persistence/db/src/repositories/inbox.rs:1494` | `exclude_split_placeholder!` definition (compile-time literal, because sqlx 0.9 rejects runtime-built SQL) |
-| `crates/persistence/db/src/repositories/inbox.rs:1782` | `list_unacknowledged_across_roots` (the Inbox list) |
-| `crates/persistence/db/src/repositories/inbox.rs:1559` | `inbox_stats` |
-| `crates/persistence/db/src/repositories/inbox.rs:1597` | `count_distinct_inbox_folders` |
+| `crates/persistence/db/src/repositories/inbox.rs:1788` | `list_unacknowledged_across_roots` (the Inbox list) |
+| `crates/persistence/db/src/repositories/inbox.rs:1565` | `inbox_stats` |
+| `crates/persistence/db/src/repositories/inbox.rs:1603` | `count_distinct_inbox_folders` |
+| `crates/persistence/db/src/repositories/q_desktop.rs:184` | `count_unacknowledged_inbox_items` — **the fourth site, in a different file**, reached via the import at `q_desktop.rs:13`. Added when #1092 merged, after this table was first written |
 
-Under this feature the macro and all three call sites are deleted outright
+**Note the file split.** Three sites live in `repositories/inbox.rs`; the fourth
+lives in `repositories/q_desktop.rs`. There is also an
+`apps/desktop/src-tauri/src/commands/inbox.rs` — a *different file with the same
+basename* that contains none of them. Grep the macro name tree-wide rather than
+searching "inbox.rs".
+
+Under this feature the macro and all four call sites are deleted outright
+(plus the `q_desktop.rs:13` import). Deleting three of the four leaves SC-004
+failing while every static check still passes.
 rather than corrected: with no aggregate row there is nothing to suppress
 (FR-026, SC-007).
 
@@ -225,7 +234,7 @@ worth revisiting under the new model rather than carrying forward (Q-7).
 | `crates/app/inbox/src/classify.rs:930-935`, `:959` | per-group signature from per-file hashes — the real per-row anchor |
 | `crates/persistence/db/src/repositories/inbox.rs:501-546` | `upsert_inbox_sub_item` conflicts on `(root_id, relative_path, group_key)`; re-scan stability rests on the group key, **not on any parent row** |
 | `crates/persistence/db/src/repositories/inbox.rs:610-619` | `delete_sub_item_if_unlinked` refuses to purge a plan-linked row; with no parent, a plan-linked stale group can no longer hide behind one (Q-2) |
-| `crates/app/inbox/src/reclassify.rs:820-831` | passes `&[]` for file paths, so the per-group signature is `folder_signature([])` — the empty-set hash constant, **not** an empty string. A live defect on `main` that makes the confirm guard vacuous; see §4.2 and Q-5 |
+| `crates/app/inbox/src/reclassify.rs:820-831` | **Fixed on `main` by #1105 (`038781e2`).** Formerly passed `&[]` for file paths, making the per-group signature `folder_signature([])` — the empty-set hash constant, **not** an empty string — which rendered the confirm guard vacuous. Now joins `req.root_absolute_path` per file (`:827`). Retained here because §4.2 and Q-5 describe the defect, not the fix |
 
 ### 4.6 Materialization
 
