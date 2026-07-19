@@ -1060,6 +1060,21 @@ pub fn run_app(
         pool.clone(),
         &bus,
     );
+    // spec 056 (PQ-005): recover ticks whose live event was missed — published
+    // before the subscriber subscribed, or lost to a kill between the action
+    // and the tick write. Started AFTER the subscriber so the two can only
+    // agree, and never fatally: a failure leaves the checklist exactly as it
+    // behaves today, still repairable via the Settings restore.
+    {
+        let reconcile_pool = pool.clone();
+        drop(tokio::spawn(async move {
+            match app_core::onboarding::reconcile_missed_events(&reconcile_pool).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("onboarding reconciliation recovered {n} missed tick(s)"),
+                Err(e) => tracing::warn!("onboarding reconciliation failed: {e:?}"),
+            }
+        }));
+    }
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));

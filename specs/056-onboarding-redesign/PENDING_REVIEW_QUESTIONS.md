@@ -73,7 +73,7 @@ still-complete section stays visible until a new settling transition).
 Encoded in spec.md FR-031/US3 scenarios 6–7/US5, data-model.md
 `section_hidden_at`, contracts `sectionHidden`, tasks T004/T021/T023/T030.
 
-## PQ-005 — Recovery for missed milestone events (analysis finding U1)
+## PQ-005 — Recovery for missed milestone events — RESOLVED (owner directive 2026-07-19, OVERTURNED)
 
 The record makes ticks backend-authoritative and restore-filtered, but does
 not say what happens if the subscriber misses a live event entirely (published
@@ -81,11 +81,48 @@ before subscription during startup, or process killed between the action and
 the tick write). Seed/restore would self-heal, but only when the user runs
 restore.
 
-**Provisional answer**: accepted v1 limitation — the subscriber is started
-before the UI can invoke use cases (ordering obligation noted in tasks.md
-T006), and any residual miss is corrected by the next restore. No
+**Superseded provisional answer**: accepted v1 limitation — the subscriber is
+started before the UI can invoke use cases (ordering obligation noted in
+tasks.md T006), and any residual miss is corrected by the next restore. No
 startup reconciliation pass in v1 (it would duplicate the seed derivation for
 marginal benefit). Documented in analysis.md U1.
+
+**Resolved answer** (owner directive 2026-07-19): the "corrected by the next
+restore" escape hatch is not one — nothing tells the user the checklist is
+wrong, so they have no reason to run restore. Ticks are event-sourced, so any
+missed event leaves an item permanently unchecked although the work really
+happened.
+
+`app_core::onboarding::reconcile_missed_events` runs once at startup, right
+after `start_onboarding_subscriber` (`apps/desktop/src-tauri/src/lib.rs`), and
+re-derives AUTOMATIC items through the existing `target_state_for` — no
+duplicated derivation, which was the provisional answer's only stated cost.
+It is narrowed to rows that are currently `unchecked` AND whose source is not
+`user`:
+
+- `unchecked` + `seed`/`event` = never ticked → eligible; this is the missed
+  event being recovered.
+- `unchecked` + `user` = a deliberate un-check (PQ-002). Never re-ticked, or
+  the un-check would silently undo itself on every launch and read as broken.
+- `manually_checked`/`dismissed` stay terminal exactly as everywhere else.
+
+Items with no row yet are skipped, not seeded — `ensure_seeded` already
+derives those correctly on the next `state.get`.
+
+This does not violate FR-021 (backend-authoritative-via-subscriber-only). The
+invariant that matters is that a mere READ must never auto-tick, which is why
+`ensure_seeded` uses `insert_if_missing`; this is a distinct, explicit,
+once-per-startup write path deriving from real recorded data, not a read side
+effect. It does run the FR-031 settle path, because it stands in for the tick
+that was lost and must settle as that tick would have. Failure is never fatal
+to startup: it is logged and the app continues, leaving today's behaviour
+(restore still repairs).
+
+Encoded in `crates/app/core/src/onboarding.rs` (`reconcile_missed_events`),
+the startup wiring in `apps/desktop/src-tauri/src/lib.rs`, and four tests in
+`crates/app/core/tests/onboarding_seed_integration.rs` (miss recovered;
+user-un-checked row left alone; settled rows untouched; manual items never
+auto-ticked).
 
 ## Note — `.specify/feature.json` pointer (trail mechanics, not a question)
 

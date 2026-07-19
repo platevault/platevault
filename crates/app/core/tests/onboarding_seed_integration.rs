@@ -21,7 +21,7 @@
 //! auto-tick path (bus event → T005 subscriber → tick) is a separate concern
 //! and is NOT covered here.
 
-use app_core::onboarding::{get_state, restore, set_item_state};
+use app_core::onboarding::{get_state, reconcile_missed_events, restore, set_item_state};
 use contracts_core::onboarding::{
     OnboardingItemSetStateRequest, OnboardingItemState, OnboardingManualState, OnboardingStateDto,
     OnboardingStateSource,
@@ -247,4 +247,92 @@ async fn restore_is_idempotent_across_the_full_milestone_matrix() {
         .map(|i| (i.item_id.clone(), i.state))
         .collect();
     assert_eq!(first, second, "repeated restore is a no-op on derived state");
+}
+
+// ── Startup reconciliation of missed live events (PQ-005) ────────────────────
+
+async fn set_unchecked(pool: &SqlitePool, item_id: &str) {
+    set_item_state(
+        pool,
+        &OnboardingItemSetStateRequest {
+            item_id: item_id.to_owned(),
+            state: OnboardingManualState::Unchecked,
+        },
+    )
+    .await
+    .expect("un-check");
+}
+
+/// The miss being recovered: the milestone really happened (its recorded row
+/// exists) but the row was seeded before it, and no live tick ever landed.
+#[tokio::test]
+async fn reconcile_recovers_a_missed_event() {
+    let pool = setup_pool().await;
+    let seeded = get_state(&pool).await.unwrap().state;
+    assert_eq!(item_state(&seeded, "inbox.confirm_first"), OnboardingItemState::Unchecked);
+
+    insert_confirmed_inbox_item(&pool).await;
+    assert_eq!(reconcile_missed_events(&pool).await.unwrap(), 1);
+
+    let state = get_state(&pool).await.unwrap().state;
+    assert_eq!(item_state(&state, "inbox.confirm_first"), OnboardingItemState::AutoChecked);
+}
+
+/// The distinction the whole pass turns on: an `unchecked` row whose source is
+/// `user` is a deliberate un-check (PQ-002) and must survive every launch.
+#[tokio::test]
+async fn reconcile_leaves_a_user_unchecked_automatic_item_alone() {
+    let pool = setup_pool().await;
+    insert_project(&pool).await;
+    let seeded = get_state(&pool).await.unwrap().state;
+    assert_eq!(item_state(&seeded, "projects.create_first"), OnboardingItemState::AutoChecked);
+
+    set_unchecked(&pool, "projects.create_first").await;
+    assert_eq!(reconcile_missed_events(&pool).await.unwrap(), 0);
+
+    let state = get_state(&pool).await.unwrap().state;
+    assert_eq!(item_state(&state, "projects.create_first"), OnboardingItemState::Unchecked);
+}
+
+#[tokio::test]
+async fn reconcile_leaves_settled_rows_untouched() {
+    let pool = setup_pool().await;
+    get_state(&pool).await.unwrap();
+    dismiss(&pool, "projects.create_first").await;
+    set_item_state(
+        &pool,
+        &OnboardingItemSetStateRequest {
+            item_id: "inbox.confirm_first".to_owned(),
+            state: OnboardingManualState::ManuallyChecked,
+        },
+    )
+    .await
+    .expect("manual check");
+
+    // Both milestones are now genuinely met — reconciliation must still not
+    // rewrite a settled row.
+    insert_project(&pool).await;
+    insert_confirmed_inbox_item(&pool).await;
+    assert_eq!(reconcile_missed_events(&pool).await.unwrap(), 0);
+
+    let state = get_state(&pool).await.unwrap().state;
+    assert_eq!(item_state(&state, "projects.create_first"), OnboardingItemState::Dismissed);
+    assert_eq!(item_state(&state, "inbox.confirm_first"), OnboardingItemState::ManuallyChecked);
+}
+
+/// Manual items (FR-017) have no completion topic, so there is no event for
+/// reconciliation to have missed.
+#[tokio::test]
+async fn reconcile_never_auto_ticks_a_manual_item() {
+    let pool = setup_pool().await;
+    insert_confirmed_inbox_item(&pool).await;
+    insert_project(&pool).await;
+    insert_spawned_tool_launch(&pool).await;
+    get_state(&pool).await.unwrap();
+    reconcile_missed_events(&pool).await.unwrap();
+
+    let state = get_state(&pool).await.unwrap().state;
+    for id in ["sessions.review_first", "sessions.add_note", "calibration.review_masters"] {
+        assert_eq!(item_state(&state, id), OnboardingItemState::Unchecked, "{id} is manual");
+    }
 }

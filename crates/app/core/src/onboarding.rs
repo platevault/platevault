@@ -39,7 +39,11 @@
 //! - the explicit [`restore`] command: re-derives every AUTOMATIC item's row
 //!   via `upsert_if_unsettled`, which is a no-op for settled
 //!   (`manually_checked`/`dismissed`) rows — user progress is never
-//!   discarded.
+//!   discarded;
+//! - the once-per-startup [`reconcile_missed_events`] pass (PQ-005): the same
+//!   re-derivation narrowed to rows that are `unchecked` from a non-`user`
+//!   source, so a missed live event self-heals without ever undoing a
+//!   deliberate un-check.
 //!
 //! ## FR-031 settle path
 //!
@@ -662,6 +666,61 @@ pub async fn tick_from_event(pool: &SqlitePool, item_id: &str) -> Result<(), Onb
         settle_and_maybe_hide(pool).await?;
     }
     Ok(())
+}
+
+/// Startup reconciliation (PQ-005): recover ticks whose live bus event was
+/// missed — published before the subscriber subscribed, or lost because the
+/// process died between the action and the tick write. Without this, such an
+/// item stays `unchecked` forever unless the user happens to run the Settings
+/// restore, which nothing prompts them to do.
+///
+/// Re-derives AUTOMATIC items via [`target_state_for`], but ONLY for rows that
+/// are currently `unchecked` AND whose `source` is not `user`:
+/// - `unchecked` + `seed`/`event` = never ticked → eligible, this is the miss
+///   being recovered;
+/// - `unchecked` + `user` = the user deliberately un-checked it
+///   ([`repo::force_unchecked`], PQ-002). Re-ticking would silently undo that
+///   un-check on every launch and read as a broken checklist;
+/// - settled (`manually_checked`/`dismissed`) rows stay terminal, as
+///   everywhere else.
+///
+/// Items with no row yet are skipped, not seeded: [`ensure_seeded`] derives
+/// those correctly on the next `state.get`, so there is nothing to recover.
+///
+/// This does NOT violate FR-021's backend-authoritative-via-subscriber-only
+/// invariant. The invariant that matters is that a mere READ must never
+/// auto-tick (why [`ensure_seeded`] uses `insert_if_missing`). This is a
+/// distinct, explicit, once-per-startup write path deriving from real recorded
+/// data — not a read side effect. It runs the FR-031 settle path for the same
+/// reason: it stands in for the tick that was lost, so it must settle exactly
+/// as that tick would have.
+///
+/// Returns the number of items actually recovered (for startup logging).
+///
+/// # Errors
+///
+/// - `PersistenceUnavailable`: database failure.
+pub async fn reconcile_missed_events(pool: &SqlitePool) -> Result<usize, OnboardingError> {
+    let rows = repo::load_state(pool).await.map_err(db_err)?;
+    let mut recovered = 0usize;
+
+    for row in rows.iter().filter(|r| r.state == "unchecked" && r.source != "user") {
+        let Some(item) = find_item(&row.item_id) else { continue };
+        if !item.is_automatic() || target_state_for(pool, item).await? != "auto_checked" {
+            continue;
+        }
+        let outcome = repo::upsert_if_unsettled(pool, item.item_id, "auto_checked", "event")
+            .await
+            .map_err(db_err)?;
+        if outcome == UpsertOutcome::Written {
+            recovered += 1;
+        }
+    }
+
+    if recovered > 0 {
+        settle_and_maybe_hide(pool).await?;
+    }
+    Ok(recovered)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
