@@ -363,7 +363,7 @@
 }
 
 /* === ADVANCED settings-row control col (flex column for desc + action button) — */
-/* shared by the guided-tour restart and first-run setup restart controls. */
+/* shared by the onboarding-walk replay/restore and first-run setup restart controls. */
 .alm-adv-settings__control-col { display: flex; flex-direction: column; gap: var(--alm-sp-2); align-items: flex-start; }
 /* Row variant — side-by-side confirm/cancel action pair. */
 .alm-adv-settings__control-row { display: flex; flex-direction: row; gap: var(--alm-sp-2); align-items: center; }
