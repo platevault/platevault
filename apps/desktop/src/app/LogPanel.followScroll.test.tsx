@@ -266,6 +266,14 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     expect(getFollowButton().title).toBeFalsy();
     // The follow-tail effect must actually run and scroll back to the
     // newest row, not silently no-op.
-    expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+    //
+    // waitFor, not a sync expect: the waitFor above gates on the button
+    // LABEL, which flips in the same render commit as `followLogs`. The
+    // follow-tail effect that calls scrollTo runs *after* that commit, so a
+    // sync assertion races it — passing on a fast machine and failing on a
+    // contended runner (#1115). Polling preserves the assertion exactly.
+    await waitFor(() => {
+      expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+    });
   });
 });
