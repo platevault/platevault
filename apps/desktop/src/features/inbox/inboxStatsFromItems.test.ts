@@ -112,6 +112,21 @@ describe('deriveInboxStats', () => {
     ]);
   });
 
+  // #625: "Dark_flat 1 · Darkflat 6" — an unnormalised underscore variant of
+  // the same IMAGETYP value leaked into the status bar as two sibling
+  // categories instead of one normalized category.
+  it('collapses underscore/hyphen/space variants of the same frame type into one bucket', () => {
+    const stats = deriveInboxStats([
+      folder('a', 'Dark_flat', 1),
+      folder('b', 'Darkflat', 6),
+      folder('c', 'dark-flat', 2),
+      folder('d', 'dark flat', 3),
+    ]);
+    const rows = stats.perType.filter((r) => r.frameType === 'darkflat');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].folderCount).toBe(4);
+  });
+
   it('returns zero totals and no rows for an empty list', () => {
     const stats = deriveInboxStats([]);
     expect(stats.totals).toEqual({ folders: 0, masters: 0, images: 0 });
