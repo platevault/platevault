@@ -9137,6 +9137,12 @@ export type TargetListItem_Deserialize = {
 	 *  that ignore unknown keys are unaffected.
 	 */
 	aliases?: string[],
+	/**
+	 *  Count of `acquisition_session` rows linked to this target (#877, planner
+	 *  Sessions column). `0` when no session has resolved to this target yet —
+	 *  additive field, older clients ignoring unknown keys are unaffected.
+	 */
+	sessionCount?: number,
 };
 
 /**
@@ -9172,6 +9178,12 @@ export type TargetListItem_Serialize = {
 	 *  that ignore unknown keys are unaffected.
 	 */
 	aliases: string[],
+	/**
+	 *  Count of `acquisition_session` rows linked to this target (#877, planner
+	 *  Sessions column). `0` when no session has resolved to this target yet —
+	 *  additive field, older clients ignoring unknown keys are unaffected.
+	 */
+	sessionCount: number,
 };
 
 /**  `target.moon_opposition.batch` request. */

@@ -205,6 +205,11 @@ pub struct TargetListItem {
     /// that ignore unknown keys are unaffected.
     #[serde(default)]
     pub aliases: Vec<String>,
+    /// Count of `acquisition_session` rows linked to this target (#877, planner
+    /// Sessions column). `0` when no session has resolved to this target yet —
+    /// additive field, older clients ignoring unknown keys are unaffected.
+    #[serde(default)]
+    pub session_count: u32,
 }
 
 // ── Gen-3 request / response types ────────────────────────────────────────────

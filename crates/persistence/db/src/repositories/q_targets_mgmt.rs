@@ -173,6 +173,39 @@ pub async fn get_alias_kind(
     Ok(row.map(|(kind,)| kind))
 }
 
+// ── acquisition_session ──────────────────────────────────────────────────────
+
+/// `(target_id, session_count)` pairs for every target with at least one
+/// linked `acquisition_session` (#877, planner Sessions column).
+///
+/// The target-id precedence (legacy `target_id` wins over spec-035
+/// `canonical_target_id`) is resolved in Rust via `resolve_session_target_id`
+/// — the SAME function `app_core::sessions::{list_sessions, get_session}`
+/// call — rather than a SQL-side `COALESCE`, so the two paths can never
+/// re-drift onto opposite precedence (reviewer seq=277: a session can have
+/// both columns set, since `backfill_session_targets` only gates on
+/// `canonical_target_id IS NULL`).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn session_counts_by_target(pool: &SqlitePool) -> DbResult<Vec<(String, i64)>> {
+    let rows: Vec<(Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT target_id, canonical_target_id FROM acquisition_session")
+            .fetch_all(pool)
+            .await?;
+
+    let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for (target_id, canonical_target_id) in rows {
+        if let Some(tid) = super::q_core::resolve_session_target_id(target_id, canonical_target_id)
+        {
+            *counts.entry(tid).or_insert(0) += 1;
+        }
+    }
+    let rows: Vec<(String, i64)> = counts.into_iter().collect();
+    Ok(rows)
+}
+
 // ── audit_log_entry ──────────────────────────────────────────────────────────
 
 /// Insert a durable `audit_log_entry` row for a resolution outcome
@@ -310,6 +343,98 @@ mod tests {
         );
         assert!(get_alias_kind(db.pool(), "a-1", "t-002").await.unwrap().is_none());
         assert!(get_alias_kind(db.pool(), "a-missing", "t-001").await.unwrap().is_none());
+    }
+
+    // ── acquisition_session ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn session_counts_by_target_prefers_legacy_and_falls_back_to_canonical() {
+        let db = setup().await;
+        insert_target(db.pool(), "canon-1").await;
+        sqlx::query(
+            "INSERT INTO target (id, primary_designation, created_at)
+             VALUES ('legacy-1', 'Legacy Target', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, canonical_target_id, created_at)
+             VALUES ('s-1', 'K1', '[]', 'canon-1', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, canonical_target_id, created_at)
+             VALUES ('s-2', 'K2', '[]', 'canon-1', '2026-01-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, target_id, created_at)
+             VALUES ('s-3', 'K3', '[]', 'legacy-1', '2026-01-03T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+             VALUES ('s-unlinked', 'K4', '[]', '2026-01-04T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let mut counts = session_counts_by_target(db.pool()).await.unwrap();
+        counts.sort();
+        assert_eq!(counts, vec![("canon-1".to_owned(), 2), ("legacy-1".to_owned(), 1)]);
+    }
+
+    /// Reviewer seq=277: `backfill_session_targets` only gates on
+    /// `canonical_target_id IS NULL`, so a session can end up with BOTH
+    /// `target_id` and `canonical_target_id` set to *different* targets. This
+    /// proves `session_counts_by_target` attributes that session to
+    /// `target_id` — the same precedence `super::q_core::resolve_session_
+    /// target_id` gives `app_core::sessions::{list_sessions, get_session}` —
+    /// so the two read paths can never disagree about which target owns it.
+    #[tokio::test]
+    async fn session_counts_by_target_prefers_legacy_target_id_when_both_columns_set() {
+        let db = setup().await;
+        insert_target(db.pool(), "canon-both").await;
+        sqlx::query(
+            "INSERT INTO target (id, primary_designation, created_at)
+             VALUES ('legacy-both', 'Legacy Both', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session
+                (id, session_key, frame_ids, target_id, canonical_target_id, created_at)
+             VALUES ('s-both', 'K1', '[]', 'legacy-both', 'canon-both', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let counts = session_counts_by_target(db.pool()).await.unwrap();
+        assert_eq!(
+            counts,
+            vec![("legacy-both".to_owned(), 1)],
+            "target_id must win over canonical_target_id when both are set, \
+             matching resolve_session_target_id's precedence exactly"
+        );
+
+        assert_eq!(
+            crate::repositories::q_core::resolve_session_target_id(
+                Some("legacy-both".to_owned()),
+                Some("canon-both".to_owned()),
+            ),
+            Some("legacy-both".to_owned()),
+            "app_core::sessions's own precedence call must agree with the count above"
+        );
     }
 
     // ── audit_log_entry ───────────────────────────────────────────────────────

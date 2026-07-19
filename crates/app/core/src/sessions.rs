@@ -20,9 +20,10 @@
 //! `acquisition_fingerprint` stores per-session metadata dimensions for
 //! calibration matching (gain, filter, binning, optic_train, etc.).
 //!
-//! Many contract DTO fields (confidence, total_integration_seconds, total_size_bytes,
-//! metadata, warnings, framesets) have no column yet; defaulted with
-//! `// TODO(037):` markers until later columns/views are built.
+//! Many contract DTO fields (confidence, metadata, warnings, framesets) have
+//! no column yet; defaulted with `// TODO(037):` markers until later
+//! columns/views are built. `total_integration_seconds` (#775) and
+//! `total_size_bytes` are real sums over active frames, not TODOs.
 //!
 //! Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
 //! inventory — the `state` column (and the review lifecycle it backed) was
@@ -79,13 +80,20 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         // file_record members — honest counts/totals, not the raw array length
         // (which may retain `missing` ids in flag-missing mode).
         let (frame_count, total_size_bytes) = active_frame_summary(pool, &row.frame_ids).await?;
-        // TODO(037): total_integration_seconds -- not stored; requires frame-level data.
-        let total_integration_seconds = 0.0_f64;
+        // #775: real sum of active frames' per-file exposure_s (inbox_file_metadata).
+        let total_integration_seconds = active_frame_exposure_seconds(pool, &row.frame_ids).await?;
         // TODO(037): metadata -- not stored as structured provenance rows yet.
         let metadata = HashMap::new();
         // Surface the canonical target id (spec 035) when the legacy target_id is
         // absent — ingested sessions link via canonical_target_id (R10).
-        let target_ids = row.target_id.or(row.canonical_target_id).into_iter().collect();
+        // Shared precedence with q_targets_mgmt::session_counts_by_target — see
+        // resolve_session_target_id's doc (reviewer seq=277).
+        let target_ids = persistence_db::repositories::q_core::resolve_session_target_id(
+            row.target_id,
+            row.canonical_target_id,
+        )
+        .into_iter()
+        .collect();
         let project_ids = load_project_ids(pool, &id).await?;
         // TODO(037): warnings -- not stored; derive from fingerprint in future.
         let warnings = Vec::new();
@@ -132,11 +140,18 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
     // spec 048 US1: active (non-missing) frame_count/total_size_bytes.
     let (frame_count, total_size_bytes) = active_frame_summary(pool, &row.frame_ids).await?;
-    // TODO(037): total_integration_seconds -- not stored.
-    let total_integration_seconds = 0.0_f64;
+    // #775: real sum of active frames' per-file exposure_s (inbox_file_metadata).
+    let total_integration_seconds = active_frame_exposure_seconds(pool, &row.frame_ids).await?;
     // TODO(037): metadata -- not stored as structured provenance rows yet.
     let metadata = HashMap::new();
-    let target_ids = row.target_id.or(row.canonical_target_id).into_iter().collect();
+    // Shared precedence with q_targets_mgmt::session_counts_by_target — see
+    // resolve_session_target_id's doc (reviewer seq=277).
+    let target_ids = persistence_db::repositories::q_core::resolve_session_target_id(
+        row.target_id,
+        row.canonical_target_id,
+    )
+    .into_iter()
+    .collect();
     let project_ids = load_project_ids(pool, &id).await?;
     // TODO(037): warnings -- not stored.
     let warnings = Vec::new();
@@ -296,6 +311,24 @@ async fn active_frame_summary(
         .await
         .map_err(|e| e.to_string())?;
     Ok((u32::try_from(count.max(0)).unwrap_or(0), u64::try_from(total.max(0)).unwrap_or(0)))
+}
+
+/// Real total integration seconds for a session's `frame_ids` JSON array
+/// (#775): sums each active frame's per-file `exposure_s` from
+/// `inbox_file_metadata`. A frame with no reachable metadata row contributes
+/// `0.0` rather than erroring — sessions must never fail to load.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on database failure.
+async fn active_frame_exposure_seconds(
+    pool: &SqlitePool,
+    frame_ids_json: &str,
+) -> Result<f64, String> {
+    let ids: Vec<String> = serde_json::from_str(frame_ids_json).unwrap_or_default();
+    persistence_db::repositories::q_core::active_frame_exposure_seconds(pool, &ids)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Load project ids linked to a session via `project_sources`.
