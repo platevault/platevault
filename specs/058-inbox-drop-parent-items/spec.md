@@ -14,13 +14,27 @@ classification, the linkage is broken. Greenfield — no backwards
 compatibility."
 
 **Resolves**: [#711](https://github.com/platevault/platevault/issues/711)
-**Instance A** — a list row reporting `CLASSIFIED` for an item that is
-unclassified. Instance B (the false-`NEEDS REVIEW` direction) was closed
-separately by PR #1086 (`22f94a9e`); see
-[Relationship to #711 Instance B](#relationship-to-711-instance-b).
+**Instance A, unsplit remainder only** — a list row reporting `CLASSIFIED` for
+an item that is unclassified, in the case of a folder that does *not* split.
 
-**Supersedes the read-side workarounds in**: PR #1038 (`1eae04e9`) and PR #1081
-(`b4e72263`), both now merged.
+The scope claim is deliberately narrow, because ground is already held:
+
+- **The split case is fixed on `main`.** PR #1038 (`1eae04e9`) hid the aggregate
+  row whenever any sibling existed; PR #1081 (`b4e72263`) narrowed that to
+  genuine splits, which repaired #1038's regression. Between them, a folder that
+  splits no longer shows a lying aggregate row.
+- **Instance B is closed.** The false-`NEEDS REVIEW` direction was closed by
+  PR #1086 (`22f94a9e`); see
+  [Relationship to #711 Instance B](#relationship-to-711-instance-b).
+
+What remains — and what this feature is actually for — is the folder that
+produces exactly one item. #1081's narrowing knowingly returned Instance A for
+that case, because there is no sibling whose existence could suppress the
+placeholder. This feature removes the placeholder itself.
+
+**Supersedes the read-side workarounds in**: PR #1038 and PR #1081. Those
+workarounds are removed (FR-026, SC-007) rather than corrected — with no
+aggregate row there is nothing to suppress.
 
 ## Product Intent
 
@@ -118,8 +132,17 @@ that no longer exists), keep-and-hide (an invisible open plan — the worst
 failure mode), and block-re-scan-until-resolved (one stale plan freezes
 reconciliation for the whole folder, denying the user the obvious remedy).
 
-The mechanism is not yet chosen. The existing confirm staleness guard may
-already be the right hook — see Q-5, which remains open.
+**Refined by the Q-6 decision**: *supersede and surface, never silently cancel.*
+The orphaned sibling is marked superseded and the user decides what happens to
+its plan. Automatic cancellation was the original reading of "invalidate", but a
+plan is a record of pending filesystem mutations, and disposing of one without
+the user's involvement is the same class of act Constitution II exists to
+prevent. The decision's substance — a superseded sibling is not preserved as
+though nothing happened — is unchanged.
+
+**The mechanism is descoped from this feature** and delivered by the follow-on
+micro-spec, together with FR-020/021/022. The staleness guard Q-5 answers is
+per-item and stays per-item; it is not repurposed as the invalidation hook.
 
 ### D-006 — Scan creates the source group; classification creates the items
 
@@ -205,9 +228,62 @@ reconciles the existing rows against that answer. It does not propagate state,
 plans, or confirmations between siblings.
 
 The reconciliation rules this implies — in particular what happens to a sibling
-that a re-scan no longer produces but that already has a plan — are a genuine
-open question. See [PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md)
-Q-2.
+that a re-scan no longer produces but that already has a plan — are answered in
+principle by D-005 (invalidate, do not preserve). Their *mechanism* is
+deliberately not built here; see below.
+
+### The one lifecycle coupling that knowingly survives
+
+This feature declares shared lifecycle dead, and then ships one exception. It is
+recorded here rather than left to be discovered.
+
+`reclassify_v2` (`crates/app/inbox/src/reclassify.rs:347-360`) refuses to
+re-derive a folder when **any** sibling in that source group has an open plan.
+That is a folder-wide block, and it contradicts "no shared plan" above. It
+survives 058 untouched.
+
+It survives because it is load-bearing safety, not an oversight. Re-derivation
+ends by purging groups that no longer exist, via `delete_sub_item_if_unlinked`
+(`crates/persistence/db/src/repositories/inbox.rs:610-619`), which **refuses to
+delete a plan-linked row and does so silently**. Removing the interlock without
+first building an invalidation path would therefore not invalidate the orphaned
+sibling — it would leave it in the queue with an open plan and nothing on disk
+behind it. That is precisely the "keep and show" outcome D-005 rejects. The
+interlock is what prevents the system reaching that state today.
+
+Per-item `reclassify` (`:82`) blocks only on the item's own plan. That narrower
+check is already consistent with D-003 and is not in question.
+
+**Consequence for the reader**: until the follow-on lands, a folder with one
+confirmed sibling cannot have its other siblings reclassified. This is real,
+user-visible friction, accepted knowingly for one release rather than resolved
+by rushing a plan-lifecycle design.
+
+### Target architecture for retiring the coupling *(owner-approved)*
+
+Recorded so the follow-on does not re-derive it:
+
+- **Per-item reclassify becomes the only user-facing classification action**,
+  blocking on that item's own plan and nothing else.
+- **Folder re-derivation becomes a separate identity-scoped operation**,
+  triggered by disk change rather than by a user gesture, that never blocks.
+- **The interlock is retired by irrelevance, not deleted defensively.** Once no
+  user-facing action performs folder-wide re-derivation, the folder-wide block
+  has nothing left to guard and can be removed as dead code — not removed first
+  and compensated for afterwards.
+- **Supersede and surface, never silently cancel.** An orphaned plan-linked
+  sibling is marked superseded and shown to the user, who decides. The system
+  does not discard a plan on the user's behalf (Constitution II).
+- **Delivered by event-driven inversion**, following the existing
+  `crates/app/inbox/src/plan_listener.rs` pattern — **not** by adding a
+  `crates/app/core` dependency edge to `crates/app/inbox`. `cancel_plan` lives
+  at `crates/app/core/src/plan_apply.rs:1871` and `crates/app/core` is not a
+  dependency of `crates/app/inbox`; inverting the call preserves that boundary.
+  `plan_listener.rs:138-140` already returns an item to `classified` when a plan
+  reaches `partially_applied`, `failed`, or `cancelled`, so this is an extension
+  of an established pattern rather than new territory.
+
+See [PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md) Q-6.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -339,8 +415,9 @@ resulting sibling carries a frame type without any user input.
 - **A re-scan that changes the split.** A folder previously split into three
   now yields two, or one, or four. Rows that still correspond to a group
   survive; a row that no longer corresponds to any group is invalidated, and if
-  it carried an open plan that plan is cancelled with an explicit superseded
-  signal (D-005).
+  it carried an open plan it is marked superseded and surfaced to the user, who
+  decides the plan's fate (D-005). *The mechanism ships in the follow-on
+  micro-spec, not here.*
 - **A re-scan that finds the folder unchanged.** Must not churn item ids, or
   the user's selection and any open plans are disturbed for no reason.
 - **Two folders at the same relative path under different roots.** Identity must
@@ -352,6 +429,18 @@ resulting sibling carries a frame type without any user input.
 - **A folder whose files all move into one group after reclassification.** A
   previously split folder becoming homogeneous must converge on a single item
   without leaving orphans.
+- **A needs-review item whose files receive two *different* user-supplied frame
+  types.** This state remains reachable after 058 and reports `mixed`. The
+  `mixed` affordance is therefore retained — see Q-9. **Open design gap for the
+  plan gate**: resolving a heterogeneous needs-review bucket into two frame types
+  is the *expected* outcome of the user doing exactly what they were asked to do,
+  and this feature's own model says two types means two siblings. So the item
+  arguably ought to **split**, rather than come to rest in `mixed` with Confirm
+  disabled — which is a dead end the user can only escape by re-editing answers
+  that were correct. This is recorded as a gap to size, not a decision taken; it
+  inherits the item-identity/remount hazard already documented at
+  `crates/e2e-tests/tests/inbox_ui_journeys.rs:390-399`, because splitting moves
+  the resolved files onto a different item id mid-interaction.
 
 ## Requirements *(mandatory)*
 
@@ -382,6 +471,21 @@ resulting sibling carries a frame type without any user input.
   classification result, for every item.
 - **FR-009**: Inbox summary counts MUST count each visible item consistently
   with the list, with no folder counted twice and none omitted.
+- **FR-028** *(Q-7)*: Needs-review MUST be represented as its own field, distinct
+  from the item's classification identity. One field MUST NOT simultaneously
+  carry classification identity, needs-review status, and a uniqueness
+  discriminator.
+- **FR-029** *(Q-7)*: Resolving a needs-review item MUST record its frame type,
+  its classification identity, and its `classified` state together, as one
+  atomic transition. No intermediate state may be observable in which the item
+  reports `classified` without a frame type.
+- **FR-030** *(Q-7)*: Frame-type agreement across an item's files MUST NOT by
+  itself cause that item to be reported classified; the mandatory-attribute gate
+  MUST pass, and the API response, the item row, and the classification cache
+  MUST agree on the result.
+- **FR-031** *(Q-9)*: The `mixed` classification result and its user-facing
+  affordance MUST be retained. It remains reachable on a needs-review item whose
+  files carry conflicting user-supplied frame types.
 
 **Lifecycle**
 
@@ -391,7 +495,10 @@ resulting sibling carries a frame type without any user input.
 - **FR-012**: Each sibling MUST be independently confirmable while its siblings
   remain unconfirmed.
 - **FR-013**: Staleness detection at confirm time MUST be evaluated against the
-  files belonging to the item being confirmed.
+  files belonging to the item being confirmed. *Confirmed unchanged by the Q-5
+  decision: staleness is a per-item property. Reclassification MUST compute a
+  real per-group signature rather than the empty-set hash constant it writes
+  today, which requires threading a root absolute path into `reclassify_v2`.*
 - **FR-014**: Re-classification MUST re-derive a folder's items from the files
   on disk without propagating state, plans, or confirmations between siblings.
 
@@ -410,12 +517,21 @@ resulting sibling carries a frame type without any user input.
   its existing items.
 - **FR-019**: The system MUST anchor folder-level re-scan comparison to the
   source group rather than to any single item.
-- **FR-020**: When re-derivation no longer produces an item that has an open
-  plan, the system MUST cancel that plan and mark the item stale (D-005).
-- **FR-021**: The system MUST surface an explicit signal when a user's
-  confirmation has been superseded, and MUST NOT silently discard a plan.
-- **FR-022**: Re-derivation MUST NOT be blocked for a whole folder by the
-  existence of one open plan.
+
+*FR-020, FR-021 and FR-022 have been moved out of this feature.* They covered
+plan invalidation on supersession, the user-facing supersession signal, and the
+removal of the folder-wide reclassify block. They are delivered by a follow-on
+micro-spec — see
+[The one lifecycle coupling that knowingly survives](#the-one-lifecycle-coupling-that-knowingly-survives)
+for why, and for the owner-approved target architecture the follow-on
+implements. D-005 remains a recorded decision of this specification; only its
+mechanism is descoped.
+
+See `specs/tiny/reclassify-split-per-item-and-rederivation.md` (PR #1097).
+
+The numbers are retired rather than reused, so that a reader of PR history or of
+the follow-on is never left wondering whether FR-020 means one thing here and
+another there.
 
 **User-visible continuity**
 
@@ -572,19 +688,24 @@ sentinel-carrying row, and gates the classification-cache write with the same
 check, so the cached classification can no longer flip to `single_type` while
 the list row and confirm still correctly see the sentinel.
 
-This feature therefore claims **Instance A only**. Instance A is the direction
-caused by the parent row, and it is the one no read-side patch has been able to
-fix without breaking something else.
+This feature therefore claims **the unsplit remainder of Instance A only**.
+Instance A is the direction caused by the parent row; #1038 and #1081 between
+them closed the split case, and the folder that produces exactly one item is
+what is left. It is the case no read-side patch has been able to fix without
+breaking something else, because for a homogeneous folder the placeholder is the
+row the workflow depends on.
 
 Two consequences for planning:
 
 - Instance B's fix must be **preserved**, not regressed. SC-011 makes that
   explicit, and `22f94a9e` ships its own regression test
-  (`crates/app/inbox/src/reclassify.rs:1027`).
+  (`crates/app/inbox/src/reclassify.rs:1086-1142`).
 - #1086 made the `__needs_review__` sentinel *more* load-bearing rather than
-  less, which sharpens rather than settles the question of whether the
-  sentinel's synthetic-group-key workaround should survive this model change.
-  See Q-7.
+  less. **Resolved by Q-7**: the workaround does not survive — needs-review moves
+  to its own field (FR-028), and the atomic frame-type/identity/state transition
+  that `clear_needs_review_sentinel` performs today must be preserved in its
+  replacement (FR-029). The #1086 test's setup and assertions are edited to read
+  the new field; **its invariant and SC-011 are unchanged** (FR-030).
 
 ## Dependencies
 
@@ -592,6 +713,13 @@ Two consequences for planning:
   deletes their shared read-side predicate and the `exclude_split_placeholder!`
   macro (FR-026, SC-007); nothing needs to be sequenced around them.
 - PR #1086 (`22f94a9e`) is merged and must be preserved (SC-011).
+- A follow-on micro-spec under `specs/tiny/` owns plan invalidation and the
+  retirement of the folder-wide reclassify interlock (the former FR-020/021/022).
+  It depends on this feature rather than blocking it: 058 ships the interlock
+  untouched. See `specs/tiny/reclassify-split-per-item-and-rederivation.md` (PR #1097).
+- The confirm staleness guard is **already vacuous on the reclassify path on
+  `main`** (Q-5). That defect is independent of this feature and could be fixed
+  ahead of it.
 
 ## Next Gates
 
@@ -600,3 +728,19 @@ Per the constitution, this specification must pass review before planning.
 included here — they are owned by the plan gate. [research.md](research.md)
 records the current-code evidence gathered during specification so the planner
 does not have to re-derive it.
+
+All nine review questions are now answered
+([PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md)). Three items are
+handed to the plan gate as **work to size, not decisions to take**:
+
+1. **The D-006 E2E helper tension.** `rescan_and_wait_for_item` and
+   `select_only_item` both assume a scan yields exactly one *selectable* item per
+   folder, but under D-006 a scan yields only a source group — which this
+   specification also requires to be non-confirmable. Five journeys are affected,
+   including all three SC-005 journeys. Detailed in
+   [PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md).
+2. **The needs-review split gap** (Q-9): whether a heterogeneous needs-review
+   bucket resolved into two frame types should split rather than come to rest in
+   `mixed` with Confirm disabled.
+3. **The Q-5 signature work**: threading a root absolute path into
+   `reclassify_v2`, plus the regression test that proves the confirm guard fires.
