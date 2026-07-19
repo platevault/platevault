@@ -508,6 +508,44 @@ pub async fn active_frame_summary(pool: &SqlitePool, ids: &[String]) -> DbResult
     Ok((count, total))
 }
 
+/// Sum of real per-frame `exposure_s` for the active (non-`missing`)
+/// `file_record` ids of a session (#775). Empty `ids` short-circuits to `0.0`.
+///
+/// `file_record` carries no exposure column; the real value lives on
+/// `inbox_file_metadata`, keyed by `(inbox_item_id, relative_file_path)` where
+/// `relative_file_path` is the file's full path relative to its scan root
+/// (confirmed: `app_inbox::confirm` joins it directly onto the root's
+/// absolute path). So a frame's exposure is found by matching
+/// `file_record.relative_path` against an `inbox_file_metadata` row reachable
+/// from an `inbox_items` row sharing `file_record.root_id`. The inner query
+/// groups by `fr.id` (picking the one real value with `MAX`, nulls ignored)
+/// before summing, so a root with multiple inbox groups can never fan out a
+/// single frame into multiple summed rows.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn active_frame_exposure_seconds(pool: &SqlitePool, ids: &[String]) -> DbResult<f64> {
+    if ids.is_empty() {
+        return Ok(0.0);
+    }
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT COALESCE(SUM(per_frame.exposure_s), 0.0) FROM ( \
+             SELECT fr.id, MAX(ifm.exposure_s) AS exposure_s \
+             FROM file_record fr \
+             LEFT JOIN inbox_items ii ON ii.root_id = fr.root_id \
+             LEFT JOIN inbox_file_metadata ifm \
+                 ON ifm.inbox_item_id = ii.id AND ifm.relative_file_path = fr.relative_path \
+             WHERE fr.state != 'missing' AND fr.id IN (",
+    );
+    let mut separated = builder.separated(", ");
+    for id in ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(") GROUP BY fr.id) AS per_frame");
+    let (total,): (f64,) = builder.build_query_as().fetch_one(pool).await?;
+    Ok(total)
+}
+
 /// `project_id`s linked to a session via `project_sources`.
 ///
 /// # Errors
@@ -617,6 +655,125 @@ mod tests {
         let db = setup().await;
         let (count, total) = active_frame_summary(db.pool(), &[]).await.unwrap();
         assert_eq!((count, total), (0, 0));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)] // 0.0 is exactly representable; no accumulated arithmetic
+    async fn active_frame_exposure_seconds_empty_ids_short_circuits() {
+        let db = setup().await;
+        assert_eq!(active_frame_exposure_seconds(db.pool(), &[]).await.unwrap(), 0.0);
+    }
+
+    /// Seed a `library_root` + `file_record` + `inbox_items` + `inbox_file_metadata`
+    /// row so a frame's real per-file exposure is reachable via the
+    /// `(root_id, relative_path)` join `active_frame_exposure_seconds` uses.
+    async fn insert_frame_with_exposure(
+        pool: &sqlx::SqlitePool,
+        frame_id: &str,
+        root_id: &str,
+        relative_path: &str,
+        state: &str,
+        exposure_s: f64,
+    ) {
+        sqlx::query(
+            "INSERT OR IGNORE INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES (?, ?, '/tmp', 'local', 'active', datetime('now'))",
+        )
+        .bind(root_id)
+        .bind(root_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES (?, ?, ?, 100, 't0', ?, 't0', 't0')",
+        )
+        .bind(frame_id)
+        .bind(root_id)
+        .bind(relative_path)
+        .bind(state)
+        .execute(pool)
+        .await
+        .unwrap();
+        let item_id = format!("item-{frame_id}");
+        sqlx::query(
+            "INSERT INTO inbox_items (id, root_id, relative_path, discovered_at, last_scanned_at) \
+             VALUES (?, ?, ?, 't0', 't0')",
+        )
+        .bind(&item_id)
+        .bind(root_id)
+        .bind(relative_path)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO inbox_file_metadata (id, inbox_item_id, relative_file_path, exposure_s) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(format!("meta-{frame_id}"))
+        .bind(&item_id)
+        .bind(relative_path)
+        .bind(exposure_s)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)] // seeded SUM of exact literal inputs; no rounding involved
+    async fn active_frame_exposure_seconds_sums_real_per_frame_values() {
+        let db = setup().await;
+        insert_frame_with_exposure(db.pool(), "f-a", "root-x", "a.fits", "classified", 180.0).await;
+        insert_frame_with_exposure(db.pool(), "f-b", "root-x", "b.fits", "classified", 180.0).await;
+
+        let total = active_frame_exposure_seconds(db.pool(), &["f-a".to_owned(), "f-b".to_owned()])
+            .await
+            .unwrap();
+        assert_eq!(total, 360.0, "real per-frame exposures must sum, never stay 0");
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)] // seeded SUM of exact literal inputs; no rounding involved
+    async fn active_frame_exposure_seconds_excludes_missing_frames() {
+        let db = setup().await;
+        insert_frame_with_exposure(db.pool(), "f-present", "root-y", "p.fits", "classified", 300.0)
+            .await;
+        insert_frame_with_exposure(db.pool(), "f-gone", "root-y", "g.fits", "missing", 9999.0)
+            .await;
+
+        let total = active_frame_exposure_seconds(
+            db.pool(),
+            &["f-present".to_owned(), "f-gone".to_owned()],
+        )
+        .await
+        .unwrap();
+        assert_eq!(total, 300.0, "a missing frame's exposure drops out, mirroring INV-5");
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)] // 0.0 is exactly representable; no accumulated arithmetic
+    async fn active_frame_exposure_seconds_defaults_to_zero_without_metadata() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES ('root-z', 'root-z', '/tmp', 'local', 'active', datetime('now'))",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('f-nometa', 'root-z', 'n.fits', 100, 't0', 'classified', 't0', 't0')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let total =
+            active_frame_exposure_seconds(db.pool(), &["f-nometa".to_owned()]).await.unwrap();
+        assert_eq!(total, 0.0, "a frame with no reachable inbox_file_metadata degrades to 0");
     }
 
     #[tokio::test]
