@@ -484,8 +484,16 @@ resulting sibling carries a frame type without any user input.
   MUST pass, and the API response, the item row, and the classification cache
   MUST agree on the result.
 - **FR-031** *(Q-9)*: The `mixed` classification result and its user-facing
-  affordance MUST be retained. It remains reachable on a needs-review item whose
-  files carry conflicting user-supplied frame types.
+  affordance MUST be retained for as long as placeholder rows exist. It remains
+  reachable on the **pre-materialization placeholder** of a folder whose files
+  span two or more frame types, which reports API `mixed` while its row stores
+  `unclassified`. It is *not* reachable on a needs-review item carrying
+  conflicting user-supplied frame types — that route was recorded originally
+  and refuted at Layer 2, because the re-materialization rebuild clears
+  `manual_override` from the evidence rows. Since this feature removes
+  placeholder rows, **this feature is itself what makes `mixed` unreachable**;
+  the plan gate MUST decide whether the affordance is then retired or
+  re-scoped.
 
 **Lifecycle**
 
