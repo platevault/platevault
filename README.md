@@ -57,7 +57,15 @@ Builds are published on [GitHub Releases](https://github.com/platevault/platevau
 |---|---|
 | Windows x64 | NSIS installer or MSI |
 | Linux | AppImage, `.deb`, or `.rpm` |
-| macOS (Apple Silicon only) | `.dmg` |
+| macOS (Apple Silicon only) | `.dmg`, or via Homebrew |
+
+macOS users can also install and update through the
+[platevault/homebrew-tap](https://github.com/platevault/homebrew-tap):
+
+```bash
+brew tap platevault/tap
+brew install --cask platevault
+```
 
 Bundles are signed for the built-in auto-updater (minisign), but **not**
 signed with an OS-level code-signing certificate yet, so:

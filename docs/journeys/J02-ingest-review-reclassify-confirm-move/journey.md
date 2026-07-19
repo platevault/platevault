@@ -56,10 +56,15 @@ explicit, reviewed plan, and the action is visible in the audit history.
   `dark · 300s`), each still visibly grouped back to its shared source
   folder. Grouping the list by target or frame type nests these items
   correctly, and the status-bar breakdown count matches the queue's real
-  contents using one normalized name per frame type.
+  contents using one normalized name per frame type. The inbox badge counts
+  a split folder once per resulting single-type item — the superseded source
+  folder is hidden from the queue and must not be counted, so the badge and
+  the visible rows always agree.
 - **Expect (negative):** No queue item is shown as an undifferentiated
-  "mixed" type when its files can be split by detected frame type. Opening
-  the Inbox page and leaving it open never spins the page in a runaway
+  "mixed" type when its files can be split by detected frame type. The badge
+  never reads higher than the number of visible queue rows — a split folder
+  must not be counted as its items *plus* its own hidden source folder.
+  Opening the Inbox page and leaving it open never spins the page in a runaway
   re-render loop (previously the page re-rendered continuously the entire
   time it was open, driven by an unstable page-status node identity and a
   freshly-allocated empty-items array while the item-list query was

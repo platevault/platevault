@@ -176,8 +176,18 @@ than a new mechanism:
 
 ### Free distribution channel: Homebrew cask
 
-Independent of Developer ID signing, a **Homebrew cask** is a free
-distribution channel worth adding post-release — `brew install --cask` users
-get a documented, scriptable install path and Homebrew's cask audit gives
-some baseline trust signal even before notarization exists. This is a
-backlog item, not part of this PR's disabled infrastructure.
+Independent of Developer ID signing, a **Homebrew cask** is shipped as a free
+distribution channel: [platevault/homebrew-tap](https://github.com/platevault/homebrew-tap)
+(`brew tap platevault/tap && brew install --cask platevault`). It packages the
+same unnotarized `.dmg` described above (Apple Silicon only, ad-hoc signed),
+so the Gatekeeper caveat and `xattr -d com.apple.quarantine` workaround still
+apply — the cask does not change the app's trust status, only the install
+mechanics. Homebrew's `brew audit --cask`/`brew style` checks run in the tap
+repo's CI and give a baseline packaging-quality signal independent of
+notarization.
+
+`.github/workflows/homebrew-bump.yml` in this repo bumps the cask's
+`version`/`sha256` and opens a PR against the tap repo after each release
+that publishes a macOS `.dmg`, using the same GitHub App identity as
+`release-please.yml` (the app is installed org-wide, so no extra secret is
+needed for the tap repo).

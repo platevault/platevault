@@ -39,7 +39,7 @@ shim has no reason to exist.
 
 ### The false statement
 
-- `crates/app/inbox/src/classify.rs:452` — `update_inbox_item_scan` writes the
+- `crates/app/inbox/src/classify.rs:458` — `update_inbox_item_scan` writes the
   recomputed **folder** signature onto the parent.
 - `crates/app/inbox/src/classify.rs:467` — `update_inbox_item_state(...,
   "classified")` sets the parent's state.
@@ -169,11 +169,28 @@ the change surface considerably.
 The signature guard at `confirm.rs:198` compares `item.content_signature` to the
 request's. For a parent that is the folder signature written by scan/classify;
 for a sibling it is the per-group signature from `materialize_sub_items`
-(`classify.rs:935`, `:959`). Reclassify writes an **empty** signature
-(`reclassify.rs:665-674`, `:844-845`) because it passes no file paths. With the
-parent gone, the per-group signature becomes the sole confirm anchor, so this
-empty-signature path is promoted from a secondary case to the only case. This
-must be resolved during planning — see Q-5.
+(`classify.rs:935`, `:959`).
+
+Reclassify passes no file paths (`reclassify.rs:643-651`, `:820-831`), so the
+per-group signature it writes is **not empty** — it is `folder_signature([])`
+(`crates/app/inbox/src/signature.rs:69-76`), which hex-encodes the SHA-256 of
+empty input. That is a fixed 64-character constant, identical for every
+reclassified item in every folder in every library.
+
+The consequence is sharper than an empty value comparing equal to an empty
+request value: the guard passes trivially, and would pass across unrelated
+items. **The guard is therefore already vacuous on the reclassify path on
+`main` today**, independent of this feature. With the parent gone the per-group
+signature becomes the sole confirm anchor, promoting that vacuous path from a
+secondary case to the only case.
+
+An "empty means stale" rule cannot be implemented as an emptiness check,
+because the value is not empty. Resolved by Q-5.
+
+**Two in-tree comments state the same false premise** and must be corrected
+alongside the fix: `reclassify.rs:648-649` ("the signatures will be zero-length
+(no hashes), yielding an empty sub-group sig") and `reclassify.rs:821` ("Signatures
+will be empty (no file I/O)").
 
 ### 4.3 Source-group-to-item resolution
 
@@ -182,7 +199,7 @@ must be resolved during planning — see Q-5.
 | `crates/app/inbox/src/target_recommendations.rs:227-231` | `resolve_item_id` takes `ids.into_iter().next()` — an arbitrary id-ordered row, today usually the parent. **Latent bug now, ambiguous by design after the change** |
 | `crates/persistence/db/src/repositories/inbox.rs:1451-1466` | `list_item_ids_for_source_group` returns all rows including the parent |
 | `crates/app/inbox/src/reclassify.rs:333-360` | resolves the source group from the request or from the item id |
-| `crates/app/inbox/src/reclassify.rs:372-380` | blocks reclassify if **any** sibling has a plan link — a shared-lifecycle coupling that D-003 contradicts (Q-6) |
+| `crates/app/inbox/src/reclassify.rs:347-360` | blocks reclassify if **any** sibling has a plan link — a shared-lifecycle coupling that D-003 contradicts (Q-6) |
 | `crates/app/inbox/src/reclassify.rs:389-400` | prefers `list_inbox_sub_items` over the full id set *only* to avoid double-counting the parent's duplicate evidence; falls back to the full set when nothing is materialized. This fallback exists solely for the parent and dies with it |
 | `crates/app/inbox/src/reclassify.rs:448-450`, `:697-699` | same double-count avoidance |
 | `crates/app/inbox/src/cone_search.rs:513-540` | per-file target overrides scoped to the source group — folder-scoped by intent, still correct, but re-check once parent evidence disappears |
@@ -210,6 +227,7 @@ worth revisiting under the new model rather than carrying forward (Q-7).
 | `crates/app/inbox/src/classify.rs:930-935`, `:959` | per-group signature from per-file hashes — the real per-row anchor |
 | `crates/persistence/db/src/repositories/inbox.rs:501-546` | `upsert_inbox_sub_item` conflicts on `(root_id, relative_path, group_key)`; re-scan stability rests on the group key, **not on any parent row** |
 | `crates/persistence/db/src/repositories/inbox.rs:610-619` | `delete_sub_item_if_unlinked` refuses to purge a plan-linked row; with no parent, a plan-linked stale group can no longer hide behind one (Q-2) |
+| `crates/app/inbox/src/reclassify.rs:820-831` | passes `&[]` for file paths, so the per-group signature is `folder_signature([])` — the empty-set hash constant, **not** an empty string. A live defect on `main` that makes the confirm guard vacuous; see §4.2 and Q-5 |
 
 ### 4.6 Materialization
 

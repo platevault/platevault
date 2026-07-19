@@ -1,14 +1,22 @@
 # Pending Review Questions — 058 Inbox Drop Parent Items
 
-Questions raised during specification. **Five are now answered** (2026-07-19) —
-Q-1, Q-2, Q-4 and Q-8 by the product owner, Q-3 by events. Answers are recorded
-here and promoted to decisions D-005 through D-007 in
-[spec.md](spec.md#recorded-decisions).
+Questions raised during specification. **All nine are now answered**
+(2026-07-19) — Q-1, Q-2, Q-4, Q-8 and then Q-5, Q-6, Q-7, Q-9 by the product
+owner, Q-3 by events. Answers are recorded here and promoted to decisions D-005
+through D-007 in [spec.md](spec.md#recorded-decisions).
 
-**Four remain genuinely open** and must be resolved at the plan gate: Q-5, Q-6,
-Q-7, Q-9.
+Two of the later answers change this feature's shape rather than merely filling
+a blank, and are worth reading before the plan gate:
 
-Line references verified against `22f94a9e`.
+- **Q-6 descopes plan invalidation** out of 058 (FR-020/021/022 move to a
+  follow-on micro-spec), and records the owner-approved target architecture so
+  the follow-on does not re-derive it.
+- **Q-9's premise was false.** The `mixed` branch does not become dead code. The
+  question dissolves; a different, unrecorded gap is raised in its place.
+
+Line references in the answers below were re-verified against `main` at
+`5059e164`. Several references in the original questions had drifted since
+`22f94a9e`; corrections are noted inline where they occur.
 
 ---
 
@@ -164,110 +172,229 @@ not absent. Worth a journey delta.
 
 ---
 
-# Open
+## Q-5 — What anchors the confirm staleness guard after reclassification? — RESOLVED: per-item
 
-## Q-5 — What anchors the confirm staleness guard after reclassification?
+**Answer (product owner)**: Confirm-time staleness stays a **per-item**
+property. **FR-013 stands unchanged.** Reclassification is what must change:
+`reclassify_v2` MUST compute real per-group signatures, which requires threading
+a root absolute path into it. That path is available at the Tauri command layer
+(`apps/desktop/src-tauri/src/commands/inbox.rs`) and is simply not carried into
+the reclassify request today.
 
-**Context**: The confirm TOCTOU guard (`crates/app/inbox/src/confirm.rs:198`)
-compares the item's content signature against the request's. Reclassify writes
-an **empty** signature to re-materialized items
-(`crates/app/inbox/src/reclassify.rs:665-674`) because it passes no file paths.
-Today the parent's folder signature is a second anchor; after this change the
-per-group signature is the only one.
+**Reasoning**: The signature answers a question about one row — *have the files
+under this item changed since the classification the user is looking at?* An
+anchor scoped more widely than the thing it describes cannot answer that
+question honestly.
 
-**Unresolved**: Either reclassify computes real per-group signatures, or confirm
-falls back to the source group's folder signature, or an empty signature is
-defined as explicitly-stale and forces a re-classify.
+**Rejected**: falling back to the source group's folder signature
+(`inbox_source_groups.content_signature`), which survives this feature and is
+written from real file hashes at scan time. It is materially cheaper, and it was
+rejected anyway: a folder-scoped anchor means a change to **any** file in the
+folder invalidates **every** sibling's confirmation. That is a lifecycle
+coupling — precisely the class D-003 declares extinguished — reintroduced
+through the back door, and it would have required amending FR-013.
 
-**Why it matters**: The guard exists to stop a user confirming a plan built from
-files that changed underneath them. An empty signature that compares equal to an
-empty request signature would silently disable it.
+### A factual correction to this specification's own account
 
-**Raised in priority by Q-2's answer**: D-005 requires an invalidation signal
-when a re-scan supersedes a confirmation, and this guard is the existing
-mechanism for that class of problem. Whether it is reused or a separate
-invalidation path is built is now part of this question.
+The premise stated in this question and in [research.md](research.md) §4.5 —
+that reclassify writes an **empty** signature — is **wrong**, and the error
+matters because it changes what fixes are possible.
 
-**Needs**: An engineering decision, with a regression test asserting the guard
-still fires after reclassification.
+`reclassify_v2` passes an empty file-path slice
+(`crates/app/inbox/src/reclassify.rs:820-831`), so the per-group signature is
+`folder_signature([])`. That function
+(`crates/app/inbox/src/signature.rs:69-76`) hashes the file signatures and
+hex-encodes the digest, so on empty input it returns **the SHA-256 of empty
+input** — a fixed 64-character constant, not an empty string.
 
----
+The consequence is sharper than the original framing. Every item that has ever
+been through `reclassify_v2` carries the *same universal constant* as every
+other such item, in every folder, in every library. The confirm guard
+(`crates/app/inbox/src/confirm.rs:197-205`) therefore passes trivially, and
+would also pass across unrelated items.
 
-## Q-6 — Should reclassify still block on any sibling having a plan?
+**This is a live defect on `main` today, independent of 058.** The guard is
+already vacuous on the reclassify path; this feature does not create the problem,
+it removes the parent row that was masking it and makes that path the only path.
+It could be fixed without this feature, and arguably should be.
 
-**Context**: `crates/app/inbox/src/reclassify.rs:372-380` refuses to reclassify
-when **any** item sharing the source group has a plan link.
+Note also that an "empty means stale" rule — one of the options originally
+considered — **cannot be implemented as an emptiness check**, because the value
+is not empty.
 
-**Unresolved**: This is a shared-lifecycle coupling, which D-003 says should not
-survive. But it is also a genuine safety interlock.
+**Two in-tree comments repeat the same false premise** and must be corrected in
+this feature's first code PR: `reclassify.rs:648-649` and `reclassify.rs:821`.
 
-**Changed by Q-2's answer**: D-005 now supplies a principled alternative that
-did not exist when this question was written — instead of *blocking*
-re-derivation because a plan exists, re-derivation proceeds and any plan whose
-basis vanished is *invalidated*. That is consistent with both D-003 and
-Constitution II, and suggests the interlock can be removed rather than
-preserved.
-
-**Still open because** removing a safety interlock deserves an explicit decision
-rather than inference, and the invalidation path (Q-5) must exist and be tested
-first. Sequencing matters: do not delete the interlock before invalidation
-works.
-
-**Needs**: A product decision, after Q-5.
-
----
-
-## Q-7 — Does the needs-review sentinel workaround survive?
-
-**Updated 2026-07-19 after `22f94a9e` (#1086).** That PR closed #711 Instance B
-by re-checking the mandatory-attribute gate before promoting a sentinel-carrying
-row, and by gating the classification-cache write with it
-(`crates/app/inbox/src/reclassify.rs:186-201`, sentinel cleared at `:221`).
-
-**What did not change**: `clear_needs_review_sentinel`
-(`crates/persistence/db/src/repositories/inbox.rs:584-599`) still rewrites the
-group key in place to a synthetic `type=<ft>·resolved=<item_id>` value, purely
-to dodge the `(root_id, relative_path, group_key)` UNIQUE against an existing
-sibling. The workaround survives #1086 intact.
-
-**The question sharpens rather than resolves.** #1086 made the sentinel *more*
-load-bearing, not less: `inbox_confirm` gates on
-`group_key == SENTINEL_NEEDS_REVIEW` directly
-(`crates/app/inbox/src/confirm.rs:174`), and the classification cache is now
-gated by the same check. So `group_key` currently carries three distinct
-meanings at once — a classification identity, a needs-review flag, and a
-uniqueness discriminator.
-
-**Unresolved**: Whether resolving a needs-review item should instead re-derive
-the folder's items, merging the resolved files into the correct sibling (which
-may already exist), retiring the synthetic key entirely.
-
-**Why it matters**: A group key that encodes an item id is not a classification
-identity, and FR-007 requires every item's identity to be consistent with its
-state. Overloading one column with three meanings is what let a row claim
-`classified` while carrying no frame type in the first place.
-
-**Needs**: A data-model decision. Any change must preserve #1086's Instance B
-fix, which has its own regression test at `reclassify.rs:1027`.
+**Needs**: a regression test asserting the guard still fires after
+reclassification — the existing tests cannot have been covering it.
 
 ---
 
-## Q-9 — Does the `mixed` classification branch become dead code?
+## Q-6 — Should reclassify still block on any sibling having a plan? — RESOLVED: descoped, with the target recorded
 
-**Context**: `canConfirm` requires `classification.type === 'single_type'`
-(`apps/desktop/src/features/inbox/InboxPage.tsx:832-841`). The parent is exactly
-the row that classifies as `mixed`.
+**Answer (product owner)**: **Descoped out of 058.** FR-020, FR-021 and FR-022
+move to a follow-on micro-spec. 058 keeps the existing interlock exactly as it
+is and ships the parent-removal it is actually about.
 
-**Unresolved**: Whether `mixed` remains reachable, and if not, whether
-`InboxDetail.tsx:1037-1048` (`inbox-mixed-alert`), `mixedSummary` (`:842-843`),
-the `handleConfirm` guard (`:607`), and the root-pick guard (`:691`) should be
-removed.
+**Reasoning**: The interlock cannot simply be deleted, because
+`delete_sub_item_if_unlinked`
+(`crates/persistence/db/src/repositories/inbox.rs:610-619`) refuses to purge a
+plan-linked row **silently** — a no-op, not an invalidation. Remove the block
+without an invalidation path and re-derivation leaves an orphaned row carrying
+an open plan and nothing on disk behind it: the "keep and show" outcome D-005
+rejects. So removing it is gated on building D-005's mechanism, which is the
+largest unscoped piece of work in the feature and which was itself gated on Q-5.
+Deciding a plan-lifecycle design under that much sequencing pressure, inside a
+spec about removing placeholder rows, is how the original defect got two
+read-side patches instead of one model fix.
 
-**Narrowed by Q-4's answer**: under D-006 no `inbox_items` row is ever created
-before classification, and classification produces only single-type items. So
-`mixed` looks unreachable for items. The remaining question is whether an
-unclassified **source-group** row needs its own equivalent of the mixed
-affordance — a scanned-but-unclassified folder is precisely a folder whose
-contents are not yet known to be uniform.
+**Consequence, recorded rather than hidden**: 058 ships with one lifecycle
+coupling that contradicts its own D-003. A folder with one confirmed sibling
+cannot have its other siblings reclassified until the follow-on lands. This is
+written up in [spec.md](spec.md#the-one-lifecycle-coupling-that-knowingly-survives),
+together with the **owner-approved target architecture** — per-item reclassify
+as the only user-facing classification action, folder re-derivation as a
+separate non-blocking identity-scoped operation triggered by disk change, the
+interlock retired by irrelevance rather than deleted defensively,
+supersede-and-surface rather than silent cancellation, and delivery by
+event-driven inversion following `crates/app/inbox/src/plan_listener.rs` rather
+than by adding a `crates/app/core` dependency edge to `crates/app/inbox`.
 
-**Needs**: An engineering decision, after the D-006 row-union design exists.
+The follow-on is being authored under `specs/tiny/`.
+
+See `specs/tiny/reclassify-split-per-item-and-rederivation.md` (PR #1097).
+
+**Line reference correction**: this question cited `reclassify.rs:372-380`; the
+interlock is at **`:347-360`** on current `main`.
+
+---
+
+## Q-7 — Does the needs-review sentinel workaround survive? — RESOLVED: give needs-review its own field
+
+**Answer (product owner)**: **No.** Needs-review gets its own column/field,
+distinct from the classification identity. Promoted to FR-028.
+
+**Reasoning**: `group_key` currently carries three meanings at once —
+classification identity, needs-review flag, and uniqueness discriminator — and
+overloading one column is what allowed a row to claim `classified` while
+carrying no frame type in the first place. D-004's greenfield decision (no
+installed base, confirmed by Q-1) means a schema change is **cheapest now** and
+will cost a real migration after release.
+
+**The collision this feature was assumed to relieve, it actually worsens.** The
+synthetic key exists to dodge the `(root_id, relative_path, group_key)` UNIQUE
+against an already-materialised sibling. 058 makes N siblings per folder the
+norm, so a needs-review item resolving to `dark` is **more** likely to find an
+existing `dark` sibling to collide with, not less. Deferring the cleanup would
+be deferring it into a harder problem.
+
+### Two constraints the implementation must respect
+
+**1. `clear_needs_review_sentinel` does three things, not one.**
+`crates/persistence/db/src/repositories/inbox.rs:584-600` writes `group_key`
+**and** `frame_type` **and** `state = 'classified'` in a single statement.
+[research.md](research.md) describes it as purely a UNIQUE-constraint dodge; in
+fact it is **the only path that makes a resolved needs-review item truthfully
+classified**. Any replacement MUST preserve all three writes as one atomic
+transition, or it recreates FR-007's exact violation — a `classified` state with
+no frame type — in a new location. Promoted to FR-029.
+
+**2. The #1086 regression test survives in intent, and is edited in mechanism.**
+`reclassify_type_agreement_without_mandatory_attrs_stays_needs_review`
+(`crates/app/inbox/src/reclassify.rs:1086`; this question originally cited
+`:1027`, and the spec cited `1076-1146`) must keep passing.
+
+Its invariant is **representation-independent**: frame-type agreement across an
+item's files is not sufficient evidence to report that item classified; the
+mandatory-attribute gate must pass; and all three surfaces — API response, item
+row, and classification cache — must agree on the answer. The third assertion is
+the anti-#711 clause, forbidding the cache from diverging from the row.
+
+Nothing in that invariant requires "needs review" to live in `group_key`. So the
+test's **setup and assertion will be edited** to read the new field. **This is
+recorded explicitly so that no later reader mistakes that edit for a weakening
+of the gate.** The invariant and SC-011 survive intact; only the representation
+the test pokes at changes. Promoted to FR-030.
+
+---
+
+## Q-9 — Does the `mixed` classification branch become dead code? — RESOLVED: no, and the premise was false
+
+**Answer**: **Keep `mixed` as is.** The question's premise does not hold, so it
+largely answers itself. Promoted to FR-031.
+
+**The finding**: `mixed` is **not** computed from group keys. It is computed
+from an item's evidence rows, in two places — `classify.rs:1219-1231` (the
+cache-hit path) and `reclassify.rs:166-171` — as a distinct set over
+`manual_override.or(frame_type)`, with `>= 2` meaning mixed.
+
+A freshly materialised needs-review sibling has `frame_type: None` on every
+evidence row, so its distinct set is empty and it reports `unclassified`, not
+mixed. **But the moment a user assigns two different frame types to files inside
+that sentinel item, `manual_override` makes the distinct set size 2 and the item
+reports `mixed`.** A needs-review item is something 058 explicitly keeps. So the
+branch remains reachable, and removing it would leave a reachable state with no
+rendered explanation of why Confirm is disabled.
+
+**A Layer-2 journey also depends on the affordance as a synchronisation
+signal.** `crates/e2e-tests/tests/inbox_ui_journeys.rs:237` waits on
+`inbox-mixed-alert` specifically because its appearance "proves the split was
+materialized server-side" (comment at `:232-236`). Removing the affordance would
+hang that journey — one of the three SC-005 journeys — rather than fail it
+cleanly.
+
+### Two follow-ups
+
+**1. A code comment becomes factually wrong.**
+`apps/desktop/src/features/inbox/InboxPage.tsx:599-606` states that
+`classification.type === "mixed"` is "only reachable when the SELECTED item is
+still the pre-materialization leaf-folder row". That premise is exactly what 058
+invalidates. The conclusion (keep the guard) is still right; the stated reason
+will not be. **Flagged for correction in 058's first code PR** — this comment is
+what misled this specification into asking Q-9 in the first place, and it will
+mislead the next reader the same way.
+
+**2. An open design gap, for the plan gate to size — not to decide here.**
+Resolving a heterogeneous needs-review bucket into two frame types is the
+*expected* outcome of the user doing what they were asked to do. This feature's
+own model says two types means two siblings. So that item arguably ought to
+**split**, rather than come to rest in `mixed` with Confirm disabled — a dead end
+the user can only escape by re-editing answers that were correct. Recorded as an
+edge case in [spec.md](spec.md#edge-cases). It inherits the item-identity /
+remount hazard already documented at `inbox_ui_journeys.rs:390-399`, because
+splitting moves the resolved files onto a different item id mid-interaction.
+
+---
+
+# Corrections to concerns raised against this specification
+
+Two concerns raised during review do not survive contact with the code, and are
+recorded here so they are not re-raised at the plan gate.
+
+**`write_minimal_fits` omitting `EXPTIME` is not a defect.** It is deliberate and
+documented (`crates/e2e-tests/tests/common/mod.rs:1857-1863`): the omission
+routes every frame type to the needs-review sentinel, which is what the
+needs-review journeys want. `write_minimal_fits_with_exposure` (`:1883`) exists
+for journeys that need a frame to actually classify, and the mixed-split journey
+already uses it. No action.
+
+**The real hidden E2E cost is different, and larger.** Two helpers assume a scan
+yields exactly one *selectable* inbox item per folder:
+
+- `rescan_and_wait_for_item` (`crates/e2e-tests/tests/inbox_ui_journeys.rs:135-138`)
+  waits for at least one `inbox-item-*` testid immediately after scan.
+- `select_only_item` (`:148-165`) takes the first `inbox-item-` suffix found,
+  clicks it, and waits for `inbox-confirm-btn` to mount.
+
+Under **D-006**, scan creates no inbox item at all — only a source group. Both
+helpers therefore break unless the source-group row is rendered with an
+`inbox-item-*` testid **and** mounts a Confirm button. But
+[spec.md](spec.md#edge-cases) requires that the source-group row must **not** be
+confirmable. **Those two requirements are in direct tension**, and the tension
+must be resolved before these journeys can be repaired.
+
+Call sites affected: `:224`/`:230`, `:368`/`:369`, `:493`/`:494`, `:554`/`:555`,
+`:630`/`:631` — **five journeys, including all three SC-005 journeys.**
+
+This is not itself an open question: it is a cost of the already-decided D-006
+surfacing through Q-9's territory. **The plan gate must budget for it.**

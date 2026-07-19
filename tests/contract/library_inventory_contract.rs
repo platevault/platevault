@@ -24,11 +24,21 @@ fn operation_catalog() -> String {
     })
 }
 
+/// US1 inventory operations this file builds real `RequestEnvelope`/
+/// `ResponseEnvelope`/`OperationEvent` contract payloads for (see the three
+/// tests below). Single source of truth so the doc-catalog check can't drift
+/// from the operation names this file actually exercises — spec 001 predates
+/// generated JSON Schemas (no per-operation registry exists yet in Rust to
+/// check against; `operation-catalog.md` is the only other artifact naming
+/// these operations).
+const US1_INVENTORY_OPERATIONS: [&str; 3] =
+    ["library.root.register", "library.scan.start", "library.inventory.query"];
+
 #[test]
 fn operation_catalog_documents_us1_inventory_operations() {
     let catalog = operation_catalog();
 
-    for operation in ["library.root.register", "library.scan.start", "library.inventory.query"] {
+    for operation in US1_INVENTORY_OPERATIONS {
         assert!(
             catalog.contains(&format!("`{operation}`")),
             "operation catalog should document {operation}"
@@ -39,7 +49,7 @@ fn operation_catalog_documents_us1_inventory_operations() {
 #[test]
 fn library_root_register_request_is_metadata_only() {
     let envelope = RequestEnvelope::new(
-        OperationName("library.root.register".to_owned()),
+        OperationName(US1_INVENTORY_OPERATIONS[0].to_owned()),
         RequestId("req-root-register-1".to_owned()),
         json!({
             "displayName": "Astrophotography",
@@ -60,7 +70,7 @@ fn library_root_register_request_is_metadata_only() {
     let serialized = serde_json::to_value(envelope).expect("request should serialize");
 
     assert_eq!(serialized["contractVersion"], CONTRACT_VERSION);
-    assert_eq!(serialized["operation"], "library.root.register");
+    assert_eq!(serialized["operation"], US1_INVENTORY_OPERATIONS[0]);
     assert_eq!(serialized["payload"]["scanSettings"]["followLinks"], false);
     assert_eq!(serialized["payload"]["scanSettings"]["hashMode"], "lazy");
     assert!(
@@ -72,7 +82,7 @@ fn library_root_register_request_is_metadata_only() {
 #[test]
 fn library_scan_start_contract_returns_operation_handle_and_scan_events() {
     let request = RequestEnvelope::new(
-        OperationName("library.scan.start".to_owned()),
+        OperationName(US1_INVENTORY_OPERATIONS[1].to_owned()),
         RequestId("req-scan-1".to_owned()),
         json!({
             "rootIds": ["root-astro"],
@@ -90,7 +100,7 @@ fn library_scan_start_contract_returns_operation_handle_and_scan_events() {
         request.request_id.clone(),
         OperationHandle::new(
             OperationId("op-scan-1".to_owned()),
-            OperationName("library.scan.start".to_owned()),
+            OperationName(US1_INVENTORY_OPERATIONS[1].to_owned()),
             OperationStatus::Queued,
         ),
     );
@@ -127,10 +137,10 @@ fn library_scan_start_contract_returns_operation_handle_and_scan_events() {
     let response_json = serde_json::to_value(response).expect("response should serialize");
     let event_json = serde_json::to_value(discovered_batch).expect("event should serialize");
 
-    assert_eq!(request_json["operation"], "library.scan.start");
+    assert_eq!(request_json["operation"], US1_INVENTORY_OPERATIONS[1]);
     assert_eq!(request_json["payload"]["scanSettingsOverride"]["followLinks"], false);
     assert_eq!(response_json["status"], "ok");
-    assert_eq!(response_json["payload"]["operation"], "library.scan.start");
+    assert_eq!(response_json["payload"]["operation"], US1_INVENTORY_OPERATIONS[1]);
     assert_eq!(response_json["payload"]["status"], "queued");
     assert_eq!(event_json["eventType"], "discovered_item_batch");
     assert_eq!(event_json["payload"]["items"][1]["linkTraversal"], "not_followed");
@@ -139,7 +149,7 @@ fn library_scan_start_contract_returns_operation_handle_and_scan_events() {
 #[test]
 fn library_inventory_query_contract_supports_reviewable_pages() {
     let request = RequestEnvelope::new(
-        OperationName("library.inventory.query".to_owned()),
+        OperationName(US1_INVENTORY_OPERATIONS[2].to_owned()),
         RequestId("req-inventory-1".to_owned()),
         json!({
             "rootIds": ["root-astro"],
@@ -182,7 +192,7 @@ fn library_inventory_query_contract_supports_reviewable_pages() {
     let request_json = serde_json::to_value(request).expect("request should serialize");
     let response_json = serde_json::to_value(response).expect("response should serialize");
 
-    assert_eq!(request_json["operation"], "library.inventory.query");
+    assert_eq!(request_json["operation"], US1_INVENTORY_OPERATIONS[2]);
     assert_eq!(response_json["status"], "ok");
     assert_eq!(response_json["payload"]["items"][0]["classification"]["category"], "unknown");
     assert_eq!(response_json["payload"]["summary"]["unknownCount"], 1);

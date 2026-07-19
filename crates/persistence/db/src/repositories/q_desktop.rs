@@ -10,6 +10,7 @@
 
 use sqlx::SqlitePool;
 
+use super::inbox::exclude_split_placeholder;
 use crate::DbResult;
 
 // ── inbox.scan.folder support (spec 041 T065) ──────────────────────────────────
@@ -166,14 +167,22 @@ pub async fn get_inbox_master_item_row(
 /// Count unacknowledged inbox items (`pending_classification` or
 /// `classified`) across all registered roots.
 ///
+/// Applies the same superseded-placeholder exclusion the queue list and stats
+/// summary use, so the status-bar badge never counts a row the queue has
+/// already hidden. Without it a split folder was counted once per sub-item
+/// *plus* once for its placeholder, so the badge read higher than the visible
+/// queue — contradicting journey J02, which requires the badge and the
+/// status-bar breakdown to match the queue's real contents.
+///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
 pub async fn count_unacknowledged_inbox_items(pool: &SqlitePool) -> DbResult<i64> {
-    let count: i64 = sqlx::query_scalar(
+    let count: i64 = sqlx::query_scalar(concat!(
         "SELECT COUNT(*) FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
-         WHERE i.state IN ('pending_classification', 'classified')",
-    )
+         WHERE i.state IN ('pending_classification', 'classified') ",
+        exclude_split_placeholder!()
+    ))
     .fetch_one(pool)
     .await?;
     Ok(count)
@@ -246,6 +255,93 @@ mod tests {
         assert_eq!(count_calibration_masters(db.pool()).await.unwrap(), 0);
         assert_eq!(count_canonical_targets(db.pool()).await.unwrap(), 0);
         assert_eq!(count_projects(db.pool()).await.unwrap(), 0);
+    }
+
+    /// Journey J02 (S1/S8): the status-bar badge must match the queue's real
+    /// contents. A split folder keeps its placeholder row in `inbox_items`,
+    /// but the queue list hides it via `exclude_split_placeholder!`. Before
+    /// this fix `count_unacknowledged_inbox_items` applied no such exclusion,
+    /// so the badge counted the placeholder *and* both sub-items — reading 3
+    /// where the queue showed 2.
+    ///
+    /// Asserts the invariant directly (count == visible rows) rather than a
+    /// hardcoded number, so it keeps holding if the predicate changes.
+    #[tokio::test]
+    async fn status_count_matches_visible_queue_for_split_folder() {
+        use crate::repositories::inbox::{
+            list_unacknowledged_across_roots, upsert_inbox_source_group, upsert_inbox_sub_item,
+            UpsertInboxSubItem, UpsertSourceGroup,
+        };
+
+        let db = setup().await;
+        let root_id = register_test_root(db.pool()).await;
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-split",
+                root_id: &root_id,
+                relative_path: "mixed_folder",
+                content_signature: Some("sig-folder"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        // The folder placeholder (group_key = '') left behind by scan.
+        insert_inbox_folder_placeholder(
+            db.pool(),
+            "item-placeholder",
+            &root_id,
+            "mixed_folder",
+            "sg-split",
+            10,
+            "sig-folder",
+            "fits",
+            "fits",
+        )
+        .await
+        .unwrap();
+
+        // Two distinct groups → a genuine split, so the placeholder is superseded.
+        for (id, key, ft) in
+            [("item-light", "type=light", "light"), ("item-dark", "type=dark", "dark")]
+        {
+            upsert_inbox_sub_item(
+                db.pool(),
+                &UpsertInboxSubItem {
+                    id,
+                    root_id: &root_id,
+                    relative_path: "mixed_folder",
+                    source_group_id: "sg-split",
+                    group_key: key,
+                    group_label: key,
+                    frame_type: Some(ft),
+                    content_signature: "sig-sub",
+                    file_count: 5,
+                    lane: "fits",
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let visible = list_unacknowledged_across_roots(db.pool(), 500).await.unwrap();
+        let count = count_unacknowledged_inbox_items(db.pool()).await.unwrap();
+
+        assert_eq!(
+            visible.len(),
+            2,
+            "queue should show the two sub-items and hide the superseded placeholder: {visible:?}"
+        );
+        assert_eq!(
+            count,
+            i64::try_from(visible.len()).unwrap(),
+            "badge count must equal the visible queue (J02); counting the superseded \
+             placeholder is the #711-class disagreement this guards against"
+        );
     }
 
     #[tokio::test]

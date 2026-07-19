@@ -1,9 +1,39 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+//! Contract checks for `specs/003-first-run-source-setup/contracts/audit.first_run.completed.json`.
+//!
+//! Scope limitation: `tests/contract` does not depend on `audit_types`,
+//! which owns the real `FirstRunCompleted` / `SourceCountByKind` structs and
+//! `TOPIC_FIRST_RUN_COMPLETED` (`crates/audit-types/src/event_bus.rs`). Without
+//! that dev-dependency this file cannot serialize the actual payload and
+//! diff it against the schema below — the previous version of this file
+//! worked around that gap by hand-authoring a fixture JSON blob and then
+//! asserting the fixture matched itself, which is tautological and was
+//! flagged by the C2-audit-firstrun test-validity audit. These tests
+//! instead assert directly on the schema document's own declared structure
+//! (types, required sets, minimums, `additionalProperties`) — the one real
+//! artifact reachable without adding a crate dependency.
+//!
+//! KNOWN DRIFT (flagged, intentionally not "fixed" here — reconciling it
+//! needs either a schema edit or a production change, both out of scope for
+//! a test-only fix): the schema below still requires
+//! `source_count_by_kind.raw`, but the real struct was renamed
+//! `raw` -> `light_frames` in spec 030 (2026-05-26/27, see git history of
+//! `crates/audit-types/src/event_bus.rs`) and the schema was never updated.
+//! The schema's top-level `{event, version, payload}` envelope also does
+//! not match anything production ever emits: the durable `events` row is
+//! `{topic, source, emitted_at, payload}` (`EventRow` in
+//! `crates/persistence/db/src/repositories/events.rs`) and the live broadcast
+//! envelope is `EventEnvelope { contract_version, topic, source,
+//! emitted_at, payload }` (`crates/audit/src/event_bus.rs`). Adding
+//! `audit_types` as a dev-dependency to `tests/contract/Cargo.toml` would let
+//! a future revision of this file assert on the real serialized output and
+//! catch that drift directly.
+
 use std::{fs, path::PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -20,28 +50,6 @@ fn audit_schema() -> Value {
         panic!("failed to read audit schema at {}: {error}", path.display());
     });
     serde_json::from_str(&contents).expect("audit schema should be valid JSON")
-}
-
-/// Build an audit event payload that conforms to the
-/// `audit.first_run.completed` contract shape.
-///
-/// There is no dedicated Rust struct for this event — the audit system uses
-/// the generic `AuditLogEntry` with a free-form `serde_json::Value` payload.
-/// This test verifies the expected payload structure matches the contract.
-fn sample_event() -> Value {
-    json!({
-        "event": "first_run.completed",
-        "version": "1",
-        "payload": {
-            "completed_at": "2026-05-26T14:30:00Z",
-            "source_count_by_kind": {
-                "raw": 2,
-                "calibration": 1,
-                "project": 1,
-                "inbox": 0
-            }
-        }
-    })
 }
 
 // ── schema structure checks ────────────────────────────────────────────────
@@ -69,107 +77,91 @@ fn audit_schema_requires_event_version_payload() {
     assert!(required_strs.contains(&"payload"), "schema must require 'payload'");
 }
 
-// ── event conformance ──────────────────────────────────────────────────────
-
 #[test]
-fn event_has_correct_event_name() {
-    let event = sample_event();
-    assert_eq!(event["event"], json!("first_run.completed"));
+fn audit_schema_event_and_version_are_const_literals() {
+    // `event`/`version` are declared as `const`, not free-form strings — a
+    // producer must emit exactly these literals, not merely a string.
+    let schema = audit_schema();
+    assert_eq!(schema["properties"]["event"]["const"], "first_run.completed");
+    assert_eq!(schema["properties"]["version"]["const"], "1");
 }
 
 #[test]
-fn event_has_version_string() {
-    let event = sample_event();
-    assert_eq!(event["version"], json!("1"));
-}
+fn audit_schema_payload_requires_completed_at_and_source_count_by_kind() {
+    let schema = audit_schema();
+    let required = schema["properties"]["payload"]["required"]
+        .as_array()
+        .expect("schema payload should define required keys");
+    let required_strs: Vec<&str> =
+        required.iter().map(|v| v.as_str().expect("required items should be strings")).collect();
 
-#[test]
-fn payload_has_completed_at_string() {
-    let event = sample_event();
-    let payload = &event["payload"];
-
+    assert!(required_strs.contains(&"completed_at"), "payload must require completed_at");
     assert!(
-        payload["completed_at"].is_string(),
-        "completed_at must be a JSON string (date-time format)"
+        required_strs.contains(&"source_count_by_kind"),
+        "payload must require source_count_by_kind"
     );
 }
 
 #[test]
-fn payload_has_source_count_by_kind_with_required_keys() {
-    let event = sample_event();
-    let counts = &event["payload"]["source_count_by_kind"];
-    let obj = counts.as_object().expect("source_count_by_kind should be an object");
-
-    // Schema requires "raw" and "project"; "calibration" and "inbox" are
-    // optional in the schema but present in a typical event.
-    assert!(obj.contains_key("raw"), "must have raw count");
-    assert!(obj.contains_key("project"), "must have project count");
-}
-
-#[test]
-fn payload_source_counts_are_integers() {
-    let event = sample_event();
-    let counts = &event["payload"]["source_count_by_kind"];
-
-    for kind in ["raw", "calibration", "project", "inbox"] {
-        assert!(counts[kind].is_u64(), "source_count_by_kind.{kind} must be an integer");
-    }
-}
-
-#[test]
-fn payload_raw_and_project_counts_are_at_least_one() {
-    // The contract specifies minimum: 1 for raw and project.
-    let event = sample_event();
-    let counts = &event["payload"]["source_count_by_kind"];
-
-    assert!(counts["raw"].as_u64().unwrap() >= 1, "raw count must be >= 1 per contract");
-    assert!(counts["project"].as_u64().unwrap() >= 1, "project count must be >= 1 per contract");
-}
-
-#[test]
-fn event_top_level_keys_match_schema_properties() {
+fn audit_schema_completed_at_is_a_date_time_string() {
     let schema = audit_schema();
-    let event = sample_event();
+    let field = &schema["properties"]["payload"]["properties"]["completed_at"];
 
-    let schema_props = schema["properties"].as_object().expect("schema should define properties");
-    let event_obj = event.as_object().expect("event should be an object");
-
-    // Every key in the event must be a declared schema property.
-    for key in event_obj.keys() {
-        assert!(
-            schema_props.contains_key(key),
-            "event key \"{key}\" is absent from audit schema properties"
-        );
-    }
+    assert_eq!(field["type"], "string", "completed_at must be typed as a string");
+    assert_eq!(field["format"], "date-time", "completed_at must use date-time format");
 }
 
 #[test]
-fn payload_keys_match_schema_payload_properties() {
+fn audit_schema_source_count_by_kind_requires_raw_and_project() {
     let schema = audit_schema();
-    let event = sample_event();
-
-    let payload_props = schema["properties"]["payload"]["properties"]
-        .as_object()
-        .expect("schema payload should define properties");
-    let payload_obj = event["payload"].as_object().expect("event payload should be an object");
-
-    for key in payload_obj.keys() {
-        assert!(
-            payload_props.contains_key(key),
-            "payload key \"{key}\" is absent from audit schema payload properties"
-        );
-    }
-
-    // Verify the schema's required payload keys are present.
-    let required = schema["properties"]["payload"]["required"]
+    let required = schema["properties"]["payload"]["properties"]["source_count_by_kind"]
+        ["required"]
         .as_array()
-        .expect("schema payload should define required keys");
+        .expect("source_count_by_kind should define required keys");
+    let required_strs: Vec<&str> =
+        required.iter().map(|v| v.as_str().expect("required items should be strings")).collect();
 
-    for req_key in required {
-        let req_key = req_key.as_str().unwrap();
-        assert!(
-            payload_obj.contains_key(req_key),
-            "required payload key \"{req_key}\" is missing from event"
-        );
+    assert!(required_strs.contains(&"raw"), "source_count_by_kind must require raw");
+    assert!(required_strs.contains(&"project"), "source_count_by_kind must require project");
+}
+
+#[test]
+fn audit_schema_source_count_by_kind_fields_are_typed_as_integers() {
+    let schema = audit_schema();
+    let props = schema["properties"]["payload"]["properties"]["source_count_by_kind"]["properties"]
+        .as_object()
+        .expect("source_count_by_kind should define properties");
+
+    assert!(!props.is_empty(), "source_count_by_kind should declare at least one field");
+    for (kind, field) in props {
+        assert_eq!(field["type"], "integer", "source_count_by_kind.{kind} must be typed integer");
     }
+}
+
+#[test]
+fn audit_schema_raw_and_project_have_minimum_one() {
+    let schema = audit_schema();
+    let props =
+        &schema["properties"]["payload"]["properties"]["source_count_by_kind"]["properties"];
+
+    assert_eq!(props["raw"]["minimum"], 1, "raw count minimum must be 1 per contract");
+    assert_eq!(props["project"]["minimum"], 1, "project count minimum must be 1 per contract");
+}
+
+#[test]
+fn audit_schema_payload_and_source_count_by_kind_reject_additional_properties() {
+    // `additionalProperties: false` is what turns "the payload has these
+    // keys" into an enforced contract rather than aspirational documentation.
+    let schema = audit_schema();
+
+    assert_eq!(
+        schema["properties"]["payload"]["additionalProperties"], false,
+        "payload must reject keys outside the declared contract"
+    );
+    assert_eq!(
+        schema["properties"]["payload"]["properties"]["source_count_by_kind"]
+            ["additionalProperties"],
+        false,
+        "source_count_by_kind must reject keys outside the declared contract"
+    );
 }
