@@ -205,8 +205,11 @@
 }
 
 /* ── Cleanup scan results + generate controls (spec 017 WP-E) ─────────────── */
+/* #1068: nowrap (the flex default) pushed "Scan for cleanup candidates" past
+   a narrow side-dock panel's clipped right edge — wrap keeps it reachable. */
 .alm-cleanup-scan__controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--alm-sp-3);
   padding: var(--alm-sp-2) 0;

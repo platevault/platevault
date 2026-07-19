@@ -881,9 +881,12 @@
   gap: var(--alm-sp-2);
 }
 .alm-session-detail2__calib-note { color: var(--alm-text-faint); }
-/* Review actions inline with the title (left-grouped). */
+/* Review actions inline with the title (left-grouped). #1068: `nowrap` (the
+   inline-flex default) pushed "Show in file manager" etc. past a narrow
+   side-dock panel's clipped right edge — wrap keeps every action reachable. */
 .alm-session-detail2__actions {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--alm-sp-2);
   margin-left: var(--alm-sp-3);
