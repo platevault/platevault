@@ -164,11 +164,42 @@ pub async fn reclassify(
 
     // DB values (migration 0048 CHECK): 'classified' / 'unclassified'.
     // API values (stable frontend vocabulary): 'single_type' / 'mixed' / 'unclassified'.
-    let (db_result, updated_type, single_frame_type) = match frame_types.len() {
+    let (mut db_result, mut updated_type, mut single_frame_type) = match frame_types.len() {
         0 => ("unclassified".to_owned(), "unclassified".to_owned(), None),
         1 => ("classified".to_owned(), "single_type".to_owned(), frame_types.into_iter().next()),
         _ => ("unclassified".to_owned(), "mixed".to_owned(), None),
     };
+
+    // issue #711 Instance B: an item still carrying the `__needs_review__`
+    // sentinel must not be reported classified from frame-type agreement
+    // alone. `inbox_confirm` gates on `inbox_items.group_key ==
+    // SENTINEL_NEEDS_REVIEW` directly, and the frame-type aggregation above
+    // only tracks whether overrides agree on ONE type — not whether every
+    // mandatory attribute (filter/exposureS/gain/target) is now actually
+    // present. Left unchecked, the cached classification (and hence
+    // `inbox.classify`/the detail panel) can flip to "single_type" while the
+    // list row and `inbox_confirm` still correctly see the sentinel,
+    // producing the exact list/detail disagreement #711 reports. Re-check
+    // against the same mandatory-attribute gate `materialize_sub_items` uses
+    // before promoting a row, and downgrade the result when it fails.
+    // Scoped to items that already carry the sentinel — a non-sentinel
+    // item's reclassify aggregation is unaffected (issue #724 precedent).
+    let mut sentinel_resolved_ft: Option<metadata_core::FrameType> = None;
+    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+        match single_frame_type.as_deref().and_then(metadata_core::FrameType::from_str_ci) {
+            Some(ft)
+                if mandatory_attrs_present(pool, &req.inbox_item_id, ft, &updated_evidence)
+                    .await =>
+            {
+                sentinel_resolved_ft = Some(ft);
+            }
+            _ => {
+                "unclassified".clone_into(&mut db_result);
+                "unclassified".clone_into(&mut updated_type);
+                single_frame_type = None;
+            }
+        }
+    }
 
     // 6. Update persisted classification
     inbox_repo::upsert_classification(
@@ -184,70 +215,16 @@ pub async fn reclassify(
     .await
     .ok();
 
-    // 6b. Clear the __needs_review__ sentinel when this reclassify fully
-    // resolves the item (issue #724). `inbox_confirm` gates on
-    // `inbox_items.group_key == SENTINEL_NEEDS_REVIEW` directly; the
-    // aggregation above only tracks frame-type agreement, not whether every
-    // mandatory attribute (filter/exposureS/gain/target) is now actually
-    // present, so re-check per file against the same mandatory-attribute gate
-    // `materialize_sub_items` uses before promoting the row.
-    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
-        if let Some(ft) =
-            single_frame_type.as_deref().and_then(metadata_core::FrameType::from_str_ci)
-        {
-            let metadata_rows = inbox_repo::list_inbox_file_metadata(pool, &req.inbox_item_id)
-                .await
-                .unwrap_or_default();
-            let meta_map: HashMap<
-                &str,
-                &persistence_db::repositories::inbox::InboxFileMetadataRow,
-            > = metadata_rows.iter().map(|m| (m.relative_file_path.as_str(), m)).collect();
-
-            let overrides_by_path: HashMap<&str, (Option<&str>, Option<f64>, Option<&str>)> =
-                updated_evidence
-                    .iter()
-                    .map(|ev| {
-                        (
-                            ev.relative_file_path.as_str(),
-                            (
-                                ev.override_filter.as_deref(),
-                                ev.override_exposure_s,
-                                ev.override_binning.as_deref(),
-                            ),
-                        )
-                    })
-                    .collect();
-
-            let all_resolved = updated_evidence.iter().all(|ev| {
-                let (ovr_filter, ovr_exposure, _ovr_binning) = overrides_by_path
-                    .get(ev.relative_file_path.as_str())
-                    .copied()
-                    .unwrap_or((None, None, None));
-                let meta = meta_map.get(ev.relative_file_path.as_str());
-                let raw = metadata_core::RawFileMetadata {
-                    filter: ovr_filter
-                        .map(str::to_owned)
-                        .or_else(|| meta.and_then(|m| m.filter.clone())),
-                    exposure: ovr_exposure
-                        .map(|v| v.to_string())
-                        .or_else(|| meta.and_then(|m| m.exposure_s.map(|v| v.to_string()))),
-                    gain: meta.and_then(|m| m.gain.clone()),
-                    object: meta.and_then(|m| m.object.clone()),
-                    ..Default::default()
-                };
-                super::classify::check_mandatory_missing(ft, Some(&raw), false).is_empty()
-            });
-
-            if all_resolved {
-                persistence_db::repositories::inbox::clear_needs_review_sentinel(
-                    pool,
-                    &req.inbox_item_id,
-                    &ft.to_string(),
-                )
-                .await
-                .ok();
-            }
-        }
+    // 6b. Clear the __needs_review__ sentinel now that the check above
+    // (issue #724) confirmed the item is fully resolved.
+    if let Some(ft) = sentinel_resolved_ft {
+        persistence_db::repositories::inbox::clear_needs_review_sentinel(
+            pool,
+            &req.inbox_item_id,
+            &ft.to_string(),
+        )
+        .await
+        .ok();
     }
 
     // 7. Rebuild breakdown rows so the next classify cache hit returns fresh
@@ -885,6 +862,39 @@ pub async fn reclassify_v2(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// `true` when every evidence row's effective filter/exposure/gain/object
+/// (override, else the extracted `inbox_file_metadata` value) satisfies the
+/// mandatory-attribute gate (T070/FR-047/FR-048) for `ft`. Shared by the
+/// needs-review sentinel-clear decision (issue #724) and the classification
+/// aggregation's own sentinel downgrade (issue #711 Instance B) — both need
+/// the identical per-file check.
+async fn mandatory_attrs_present(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    ft: metadata_core::FrameType,
+    evidence: &[persistence_db::repositories::inbox::InboxEvidenceRow],
+) -> bool {
+    let metadata_rows =
+        inbox_repo::list_inbox_file_metadata(pool, inbox_item_id).await.unwrap_or_default();
+    let meta_map: HashMap<&str, &persistence_db::repositories::inbox::InboxFileMetadataRow> =
+        metadata_rows.iter().map(|m| (m.relative_file_path.as_str(), m)).collect();
+
+    evidence.iter().all(|ev| {
+        let meta = meta_map.get(ev.relative_file_path.as_str());
+        let raw = metadata_core::RawFileMetadata {
+            filter: ev.override_filter.clone().or_else(|| meta.and_then(|m| m.filter.clone())),
+            exposure: ev
+                .override_exposure_s
+                .map(|v| v.to_string())
+                .or_else(|| meta.and_then(|m| m.exposure_s.map(|v| v.to_string()))),
+            gain: meta.and_then(|m| m.gain.clone()),
+            object: meta.and_then(|m| m.object.clone()),
+            ..Default::default()
+        };
+        super::classify::check_mandatory_missing(ft, Some(&raw), false).is_empty()
+    })
+}
+
 /// Parse the X component from a binning string like "2x2".
 fn parse_binning_x(s: &str) -> Option<i64> {
     s.split('x').next().and_then(|p| p.trim().parse::<i64>().ok())
@@ -1061,6 +1071,74 @@ mod tests {
             super::super::classify::SENTINEL_NEEDS_REVIEW,
             "sentinel must be cleared once every mandatory attribute is supplied"
         );
+    }
+
+    /// Issue #711 Instance B: overriding every file's frame_type to a single
+    /// agreed type is not enough to report "classified" while the item is
+    /// still a needs-review sentinel and a DIFFERENT mandatory attribute for
+    /// that type (dark requires exposureS + gain) remains unsupplied.
+    /// Without the fix, step 6's frame-type-only aggregation reported
+    /// "single_type"/"dark" (matching `inbox_classify`'s cached response and
+    /// wrongly enabling the detail panel's Confirm), while `group_key` stayed
+    /// `__needs_review__` (matching the list row) — the exact list/detail
+    /// disagreement #711 reports.
+    #[tokio::test]
+    async fn reclassify_type_agreement_without_mandatory_attrs_stays_needs_review() {
+        let db = test_db().await;
+        setup_unclassified_item(&db, "item-recl-711b").await;
+        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
+            .bind(super::super::classify::SENTINEL_NEEDS_REVIEW)
+            .bind("item-recl-711b")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        let resp = reclassify(
+            db.pool(),
+            ReclassifyRequest {
+                inbox_item_id: "item-recl-711b".to_owned(),
+                overrides: vec![
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_001.fits".to_owned(),
+                        frame_type: "dark".to_owned(),
+                        ..Default::default()
+                    },
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_002.fits".to_owned(),
+                        frame_type: "dark".to_owned(),
+                        ..Default::default()
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resp.updated_type, "unclassified",
+            "frame-type agreement alone must not report classified while exposureS/gain \
+             are still missing for dark frames"
+        );
+        assert_eq!(resp.frame_type, None);
+
+        let group_key: String =
+            sqlx::query_scalar("SELECT group_key FROM inbox_items WHERE id = ?")
+                .bind("item-recl-711b")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            group_key,
+            super::super::classify::SENTINEL_NEEDS_REVIEW,
+            "sentinel must stay set — the item is not actually fully resolved"
+        );
+
+        // The cached classification must agree with the DB result above: a
+        // subsequent inbox.classify cache-hit reads this row.
+        let cached =
+            inbox_repo::get_classification(db.pool(), "item-recl-711b").await.unwrap().unwrap();
+        assert_eq!(cached.result, "unclassified");
+        assert_eq!(cached.frame_type, None);
     }
 
     #[tokio::test]
