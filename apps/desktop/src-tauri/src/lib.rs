@@ -860,7 +860,20 @@ pub fn build_app() -> tauri::App {
         // creates a window of its own) never touches this plugin's store
         // file. `window-state:default` is granted in
         // `capabilities/default.json` (T028).
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        //
+        // Handoff 07: VISIBLE excluded from the restored flags. The `main`
+        // window starts `"visible": false` in tauri.conf.json (splash owns
+        // first paint) — restoring a persisted `visible: true` from the
+        // previous session would fight that gate and show `main` before the
+        // splash's minimum-display/boot-ready handshake completes.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::VISIBLE,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Spec 051 US10 (T056): signed auto-update plugin. `updater:default` +

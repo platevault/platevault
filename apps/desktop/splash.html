@@ -1,0 +1,216 @@
+<!doctype html>
+<!--
+  Copyright (C) 2024-2026 Sjors Robroek
+  SPDX-License-Identifier: AGPL-3.0-only
+
+  Handoff 07 splash window. "Observatory Dark" starfield + status treatment
+  (Splash.dc.html "Starfield * + status" variant) — the warm-dark app
+  palette, matching the app icon tile. Static HTML/CSS on purpose: this is
+  its own Vite entry (see vite.config.ts) and its own Tauri window (see
+  tauri.conf.json "splash"), never mounted inside the React app shell.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PlateVault</title>
+    <style>
+      @keyframes pv-load {
+        0% {
+          left: -34%;
+        }
+        100% {
+          left: 100%;
+        }
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          'Inter',
+          system-ui,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .pv-card {
+        width: 480px;
+        height: 320px;
+        border-radius: 16px;
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(120% 90% at 85% -14%, rgba(217, 138, 61, 0.1), transparent 55%),
+          radial-gradient(1px 1px at 6% 12%, rgba(240, 235, 226, 0.75), transparent),
+          radial-gradient(1px 1px at 13% 34%, rgba(240, 235, 226, 0.55), transparent),
+          radial-gradient(1.4px 1.4px at 19% 70%, rgba(245, 240, 230, 0.8), transparent),
+          radial-gradient(1px 1px at 25% 22%, rgba(232, 168, 106, 0.6), transparent),
+          radial-gradient(1px 1px at 30% 84%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(1.4px 1.4px at 35% 48%, rgba(245, 240, 230, 0.7), transparent),
+          radial-gradient(1px 1px at 41% 16%, rgba(240, 235, 226, 0.6), transparent),
+          radial-gradient(1px 1px at 46% 64%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(1px 1px at 51% 32%, rgba(232, 168, 106, 0.55), transparent),
+          radial-gradient(1.4px 1.4px at 56% 90%, rgba(245, 240, 230, 0.75), transparent),
+          radial-gradient(1px 1px at 61% 20%, rgba(240, 235, 226, 0.55), transparent),
+          radial-gradient(1px 1px at 65% 54%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(1.4px 1.4px at 71% 76%, rgba(245, 240, 230, 0.7), transparent),
+          radial-gradient(1px 1px at 75% 30%, rgba(232, 168, 106, 0.5), transparent),
+          radial-gradient(1px 1px at 80% 62%, rgba(240, 235, 226, 0.6), transparent),
+          radial-gradient(1px 1px at 85% 42%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(1.4px 1.4px at 89% 80%, rgba(245, 240, 230, 0.72), transparent),
+          radial-gradient(1px 1px at 93% 18%, rgba(240, 235, 226, 0.55), transparent),
+          radial-gradient(1px 1px at 96% 52%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(1px 1px at 9% 90%, rgba(240, 235, 226, 0.55), transparent),
+          radial-gradient(1px 1px at 39% 94%, rgba(232, 168, 106, 0.5), transparent),
+          radial-gradient(1.4px 1.4px at 68% 10%, rgba(245, 240, 230, 0.7), transparent),
+          radial-gradient(1px 1px at 22% 50%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(1px 1px at 83% 93%, rgba(240, 235, 226, 0.5), transparent),
+          radial-gradient(135% 105% at 50% -12%, #262019, #1a1815 64%);
+        box-shadow:
+          0 34px 70px -24px rgba(0, 0, 0, 0.72),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      }
+      .pv-content {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        padding-bottom: 46px;
+      }
+      .pv-mark {
+        position: relative;
+        display: inline-flex;
+        width: 158px;
+        height: 158px;
+      }
+      .pv-mark .pv-frame {
+        position: absolute;
+        inset: 0;
+        display: inline-flex;
+        color: #f0ebe2;
+      }
+      .pv-mark .pv-constel {
+        position: relative;
+        display: inline-flex;
+        color: #d98a3d;
+      }
+      .pv-wordmark {
+        font-family: 'Space Grotesk Variable', sans-serif;
+        font-weight: 700;
+        font-size: 34px;
+        letter-spacing: -0.02em;
+        color: #f0ebe2;
+        line-height: 1;
+        text-align: center;
+      }
+      .pv-wordmark .pv-accent {
+        color: #e8a86a;
+      }
+      .pv-status {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 0 40px 26px;
+      }
+      .pv-status-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        color: #cfc7b8;
+        margin-bottom: 9px;
+      }
+      .pv-status-row .pv-version {
+        font-family: ui-monospace, monospace;
+        color: #8f8676;
+      }
+      .pv-progress-track {
+        height: 4px;
+        border-radius: 3px;
+        background: #2c281f;
+        position: relative;
+        overflow: hidden;
+      }
+      .pv-progress-indicator {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 34%;
+        border-radius: 3px;
+        background: #d98a3d;
+        animation: pv-load 1.4s ease-in-out infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <symbol id="pv-frame" viewBox="5 5 54 54">
+          <g transform="rotate(-9 32 32)">
+            <path
+              d="M20 10 H50 A5 5 0 0 1 54 14 V50 A5 5 0 0 1 50 54 H14 A5 5 0 0 1 10 50 V20 Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linejoin="round"
+            ></path>
+          </g>
+        </symbol>
+        <symbol id="pv-constel" viewBox="5 5 54 54">
+          <g transform="rotate(-9 32 32)">
+            <path
+              d="M22 24 L31 33 L42 25 L46 42 M31 33 L27 46"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            ></path>
+            <g fill="currentColor">
+              <path
+                d="M31 27.6 l1.7 4.3 4.3 1.7 -4.3 1.7 -1.7 4.3 -1.7 -4.3 -4.3 -1.7 4.3 -1.7 z"
+              ></path>
+              <circle cx="22" cy="24" r="2.2"></circle>
+              <circle cx="42" cy="25" r="1.9"></circle>
+              <circle cx="46" cy="42" r="1.9"></circle>
+              <circle cx="27" cy="46" r="1.8"></circle>
+            </g>
+          </g>
+        </symbol>
+      </defs>
+    </svg>
+
+    <div class="pv-card">
+      <div class="pv-content">
+        <span class="pv-mark">
+          <span class="pv-frame"><svg width="158" height="158"><use href="#pv-frame"></use></svg></span>
+          <span class="pv-constel"><svg width="158" height="158"><use href="#pv-constel"></use></svg></span>
+        </span>
+        <div class="pv-wordmark">Plate<span class="pv-accent">Vault</span></div>
+      </div>
+      <div class="pv-status">
+        <div class="pv-status-row">
+          <span id="pv-status-text">Starting&hellip;</span>
+          <span class="pv-version" id="pv-version"></span>
+        </div>
+        <div class="pv-progress-track">
+          <div class="pv-progress-indicator"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/splash/main.ts"></script>
+  </body>
+</html>
