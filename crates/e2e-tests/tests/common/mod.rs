@@ -1234,15 +1234,35 @@ impl E2eApp {
             .await
             .context("failed to persist setupCompleted preference")?;
 
-        if suppress_onboarding {
-            // Set BEFORE the reload so the onboarding store reads it at boot;
-            // otherwise the spec-056 US1 walk auto-runs and its modal overlay
+        // Write the flag EXPLICITLY in both directions, before the reload so the
+        // onboarding store reads it at boot.
+        //
+        // Clearing it in the `false` branch is not redundant: on Windows the
+        // webview's localStorage is NOT isolated per test the way the DB and
+        // app-data dirs are. `InstanceEnv` redirects APPDATA/LOCALAPPDATA, but
+        // WebView2 does not resolve its user-data folder from those, so every
+        // test in a shard shares one localStorage origin. Each journey that
+        // calls the suppressing variant leaves the flag set, and whichever
+        // onboarding-enabled test runs after it inherits the suppression and
+        // silently renders no walk. That is exactly what made
+        // `orientation_walk_then_real_confirm_renders_live_auto_tick` fail on
+        // Windows shard 2/2 only, deterministically, while passing on every
+        // ubuntu shard (WebKitGTK honours the redirected XDG dirs, so each
+        // process really does get a clean profile).
+        //
+        // Diagnosed from the failure-path dump in `onboarding_journey.rs`:
+        // `suppressedFlag:"true"` with a healthy backend and a mounted shell.
+        let flag_script = if suppress_onboarding {
+            // Otherwise the spec-056 US1 walk auto-runs and its modal overlay
             // intercepts every subsequent `goto_route`/click in the journey.
-            self.driver
-                .execute(r#"localStorage.setItem('alm-onboarding-suppressed', 'true');"#, vec![])
-                .await
-                .context("failed to set onboarding suppression flag")?;
-        }
+            r#"localStorage.setItem('alm-onboarding-suppressed', 'true');"#
+        } else {
+            r#"localStorage.removeItem('alm-onboarding-suppressed');"#
+        };
+        self.driver
+            .execute(flag_script, vec![])
+            .await
+            .context("failed to write the onboarding suppression flag")?;
 
         self.driver.refresh().await.context("page refresh after first-run completion failed")?;
         self.wait_document_ready(Duration::from_secs(10)).await?;
