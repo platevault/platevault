@@ -406,23 +406,58 @@ export function ChecklistSection({
                     {completed.length > 0 && (
                       <li className="alm-onb-checklist__completed">
                         <ul className="alm-onb-checklist__items">
-                          {completed.map((item) => (
-                            <li
-                              key={item.itemId}
-                              className="alm-onb-checklist__item alm-onb-checklist__item--done"
-                              data-item-id={item.itemId}
-                              data-state={item.state}
-                            >
-                              <Check
-                                size={14}
-                                aria-hidden
-                                className="alm-onb-checklist__check-icon"
-                              />
-                              <span className="alm-onb-checklist__item-label">
-                                {itemLabel(item.itemId)}
-                              </span>
-                            </li>
-                          ))}
+                          {completed.map((item) => {
+                            const doneLabelId = `${idPrefix}-done-${item.itemId.replaceAll('.', '_')}`;
+                            return (
+                              <li
+                                key={item.itemId}
+                                className="alm-onb-checklist__item alm-onb-checklist__item--done"
+                                data-item-id={item.itemId}
+                                data-state={item.state}
+                              >
+                                {/*
+                                  A real checkbox, not the inert tick it used to
+                                  be: a completed row is struck through and
+                                  greyed rather than hidden precisely so it can
+                                  be taken back, and a click that lands on a
+                                  crossed-out row and does nothing reads as
+                                  broken. `aria-checked` + the shared label carry
+                                  the toggle semantics, so no extra string.
+
+                                  Un-checking is allowed on AUTOMATIC rows too.
+                                  It is not a lie about the library: the item
+                                  re-ticks when the underlying action happens
+                                  again, and restore re-derives it from real
+                                  database state.
+                                */}
+                                <button
+                                  type="button"
+                                  role="checkbox"
+                                  aria-checked
+                                  aria-labelledby={doneLabelId}
+                                  className="alm-onb-checklist__check alm-onb-checklist__check--done"
+                                  onClick={() =>
+                                    void setOnboardingItemState(
+                                      item.itemId,
+                                      'unchecked',
+                                    )
+                                  }
+                                >
+                                  <Check
+                                    size={14}
+                                    aria-hidden
+                                    className="alm-onb-checklist__check-icon"
+                                  />
+                                </button>
+                                <span
+                                  id={doneLabelId}
+                                  className="alm-onb-checklist__item-label"
+                                >
+                                  {itemLabel(item.itemId)}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </li>
                     )}

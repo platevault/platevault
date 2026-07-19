@@ -182,6 +182,23 @@
   opacity: 0.5;
 }
 
+/* A completed row's tick is a live control, not decoration: the row is struck
+   through and greyed rather than hidden so the user can take it back, and a
+   click landing on a crossed-out row that did nothing would read as broken.
+   Muted at rest so the row still looks settled; full strength on hover/focus
+   so the affordance is discoverable. */
+.alm-onb-checklist__check--done {
+  cursor: pointer;
+  background: none;
+  border: none;
+  opacity: 0.75;
+}
+
+.alm-onb-checklist__check--done:hover,
+.alm-onb-checklist__check--done:focus-visible {
+  opacity: 1;
+}
+
 /* Round, not a rounded square: every row is now checkable (auto-tick items
    included), and the circle reads as "tick this off" where the old inert
    bullet read as decoration. */

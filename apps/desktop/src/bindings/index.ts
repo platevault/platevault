@@ -6529,10 +6529,23 @@ export type OnboardingItemState = "unchecked" | "auto_checked" | "manually_check
 
 /**
  *  Manual state a caller may request via `onboarding.item.set_state`
- *  (FR-017). Auto states (`unchecked`/`auto_checked`) are rejected —
- *  `invalid_state`.
+ *  (FR-017). `auto_checked` is rejected — `invalid_state` — because only the
+ *  bus subscriber may assert that real work happened.
  */
-export type OnboardingManualState = "manually_checked" | "dismissed";
+export type OnboardingManualState = "manually_checked" | "dismissed" | 
+/**
+ *  Explicit un-check — the only transition that may clear a settled row.
+ * 
+ *  Settled states are otherwise terminal so re-derivation, live ticks and
+ *  repeat calls can never *silently* downgrade a user's decision. An
+ *  un-check is the user asking for exactly that, once, by hand, so it is
+ *  allowed from ANY state, automatic rows included.
+ * 
+ *  It does not let the checklist permanently contradict the library: the
+ *  item re-ticks when the underlying action happens again, and an explicit
+ *  restore re-derives it from real database state.
+ */
+"unchecked";
 
 /**  Request for `onboarding.orientation.complete`. */
 export type OnboardingOrientationCompleteRequest = {

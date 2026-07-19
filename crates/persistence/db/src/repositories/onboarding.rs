@@ -138,6 +138,46 @@ pub async fn upsert_if_unsettled(
     })
 }
 
+/// Force an item back to `unchecked`, whatever its current state.
+///
+/// The deliberate escape hatch from [`upsert_if_unsettled`]'s terminality
+/// rule, and the ONLY write that may clear a settled row. Terminality exists
+/// so that seed re-derivation, live ticks and repeat calls can never *silently*
+/// downgrade a user's decision; an explicit un-check is the opposite — the user
+/// asking for exactly that, once, by hand.
+///
+/// Applies to automatic rows too. Un-checking one is not permanent and is not
+/// meant to be: the item re-ticks when the underlying action happens again
+/// (a fresh bus event), and an explicit Settings restore re-derives it from
+/// real database state, because re-deriving is precisely what restore is for.
+/// The checklist therefore never ends up permanently contradicting the library.
+///
+/// # Errors
+///
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn force_unchecked(pool: &SqlitePool, item_id: &str) -> DbResult<UpsertOutcome> {
+    let now = Timestamp::now_iso();
+    let result = sqlx::query(
+        "INSERT INTO onboarding_state (item_id, state, at, source) VALUES (?, 'unchecked', ?, 'user') \
+         ON CONFLICT(item_id) DO UPDATE SET \
+             state  = 'unchecked', \
+             at     = excluded.at, \
+             source = 'user' \
+         WHERE onboarding_state.state <> 'unchecked'",
+    )
+    .bind(item_id)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+
+    Ok(if result.rows_affected() > 0 {
+        UpsertOutcome::Written
+    } else {
+        // Already unchecked — a genuine no-op, not a refusal.
+        UpsertOutcome::SkippedSettled
+    })
+}
+
 /// Insert a row only if `item_id` has none yet; a no-op otherwise. Used
 /// exclusively by lazy first-activation seeding (`onboarding.state.get`'s
 /// first-ever call): every already-present row — regardless of its state —
@@ -455,6 +495,63 @@ mod tests {
 
         upsert_if_unsettled(&pool, "sessions.review_first", "unchecked", "seed").await.unwrap();
         assert!(!all_items_settled(&pool).await.unwrap());
+    }
+
+    /// The escape hatch clears rows `upsert_if_unsettled` refuses to touch.
+    /// Both settled states, because the point is undoing a user's own click.
+    #[tokio::test]
+    async fn force_unchecked_clears_settled_rows() {
+        let pool = setup().await;
+
+        for settled in ["manually_checked", "dismissed"] {
+            upsert_if_unsettled(&pool, "sessions.review_first", settled, "user").await.unwrap();
+            assert_eq!(
+                load_item(&pool, "sessions.review_first").await.unwrap().unwrap().state,
+                settled
+            );
+
+            let outcome = force_unchecked(&pool, "sessions.review_first").await.unwrap();
+            assert_eq!(outcome, UpsertOutcome::Written, "{settled} must be clearable");
+
+            let row = load_item(&pool, "sessions.review_first").await.unwrap().unwrap();
+            assert_eq!(row.state, "unchecked");
+            assert_eq!(row.source, "user", "an un-check is a user action, not a re-derivation");
+        }
+    }
+
+    /// Automatic rows too — un-checking one is not a lie about the library,
+    /// because the next real event or an explicit restore re-derives it.
+    #[tokio::test]
+    async fn force_unchecked_clears_auto_checked_rows() {
+        let pool = setup().await;
+        upsert_if_unsettled(&pool, "inbox.confirm_first", "auto_checked", "event").await.unwrap();
+
+        assert_eq!(force_unchecked(&pool, "inbox.confirm_first").await.unwrap(), UpsertOutcome::Written);
+        assert_eq!(
+            load_item(&pool, "inbox.confirm_first").await.unwrap().unwrap().state,
+            "unchecked"
+        );
+
+        // …and the row is writable again afterwards, so a later real event
+        // re-ticks it exactly as it would have the first time.
+        upsert_if_unsettled(&pool, "inbox.confirm_first", "auto_checked", "event").await.unwrap();
+        assert_eq!(
+            load_item(&pool, "inbox.confirm_first").await.unwrap().unwrap().state,
+            "auto_checked"
+        );
+    }
+
+    /// Un-checking an already-unchecked row changes nothing, so repeat calls
+    /// cannot fabricate a state transition for the settle path to react to.
+    #[tokio::test]
+    async fn force_unchecked_is_a_no_op_when_already_unchecked() {
+        let pool = setup().await;
+        upsert_if_unsettled(&pool, "sessions.review_first", "unchecked", "seed").await.unwrap();
+
+        assert_eq!(
+            force_unchecked(&pool, "sessions.review_first").await.unwrap(),
+            UpsertOutcome::SkippedSettled
+        );
     }
 
     // ── Milestone queries ────────────────────────────────────────────────────

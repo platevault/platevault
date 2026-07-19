@@ -64,6 +64,32 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		).toBeVisible();
 	});
 
+	test("a completed item can be un-checked from the completed area", async ({
+		page,
+	}) => {
+		await landOnMockRoute(page, "/#/sessions");
+		await openChecklist(page);
+
+		const done = page.locator(
+			`.alm-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+		);
+
+		await page.getByRole("checkbox", { name: "Review a session" }).click();
+		await expect(done).toBeVisible();
+
+		// The completed row is struck through and greyed rather than hidden
+		// precisely so it can be taken back — its tick is a live control, not
+		// decoration. A click landing on a crossed-out row and doing nothing
+		// would read as broken.
+		await done.getByRole("checkbox").click();
+
+		await expect(done).toHaveCount(0);
+		// Back among the group's open items, checkable again.
+		await expect(
+			page.getByRole("checkbox", { name: "Review a session" }),
+		).toBeVisible();
+	});
+
 	test.describe("reduced motion parity", () => {
 		test.use({ reducedMotion: "reduce" });
 

@@ -533,15 +533,31 @@ pub async fn set_item_state(
 ) -> Result<OnboardingItemSetStateResponse, OnboardingError> {
     let item =
         find_item(&req.item_id).ok_or_else(|| OnboardingError::UnknownItem(req.item_id.clone()))?;
-    let target = match req.state {
-        OnboardingManualState::ManuallyChecked => "manually_checked",
-        OnboardingManualState::Dismissed => "dismissed",
-    };
-
-    let outcome =
-        repo::upsert_if_unsettled(pool, item.item_id, target, "user").await.map_err(db_err)?;
-    if outcome == UpsertOutcome::Written {
-        settle_and_maybe_hide(pool).await?;
+    // An un-check is the one transition allowed to clear a settled row, so it
+    // takes the dedicated escape hatch: the terminality-respecting upsert would
+    // silently no-op against exactly the rows the user is trying to undo.
+    //
+    // It also deliberately skips the settle path. Un-checking moves an item
+    // AWAY from settled, so it can never complete a group — running the
+    // FR-031 auto-hide check here could only ever hide the section in response
+    // to the user re-opening work.
+    match req.state {
+        OnboardingManualState::Unchecked => {
+            repo::force_unchecked(pool, item.item_id).await.map_err(db_err)?;
+        }
+        OnboardingManualState::ManuallyChecked | OnboardingManualState::Dismissed => {
+            let target = match req.state {
+                OnboardingManualState::ManuallyChecked => "manually_checked",
+                OnboardingManualState::Dismissed => "dismissed",
+                OnboardingManualState::Unchecked => unreachable!("handled above"),
+            };
+            let outcome = repo::upsert_if_unsettled(pool, item.item_id, target, "user")
+                .await
+                .map_err(db_err)?;
+            if outcome == UpsertOutcome::Written {
+                settle_and_maybe_hide(pool).await?;
+            }
+        }
     }
 
     let row = repo::load_item(pool, item.item_id)

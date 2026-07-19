@@ -1838,8 +1838,17 @@ export async function mockInvoke(
           `unknown onboarding item id: ${itemId}`,
         );
       }
-      // Manual states are permanent (PQ-002/FR-017); once settled, ignore.
-      if (item.state === 'unchecked') {
+      // An explicit un-check is the one transition allowed to clear a settled
+      // row (it mirrors `force_unchecked` on the backend, which bypasses the
+      // terminality rule). It never settles anything, so it cannot trigger the
+      // FR-031 auto-hide below — it moves an item away from settled.
+      if (nextState === 'unchecked') {
+        item.state = 'unchecked';
+        item.source = 'user';
+        item.at = new Date().toISOString();
+        persistOnboarding();
+      } else if (item.state === 'unchecked') {
+        // Otherwise settled states stay terminal (FR-017).
         item.state = nextState;
         item.source = 'user';
         item.at = new Date().toISOString();
