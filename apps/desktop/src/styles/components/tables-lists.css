@@ -260,6 +260,20 @@
   padding: var(--alm-sp-1) var(--alm-sp-2);
   border-bottom: 1px solid var(--alm-border-subtle);
 }
+/* Icon-only Auto/Bottom/Right control (#1068): 3 text buttons ran ~175px,
+ * dominating a ~390px narrow-dock bar. 28px is the touch-target floor this
+ * app ships (WCAG 2.2's own minimum is 24x24 — we don't ship at that edge). */
+.alm-dock-placement-control .alm-seg__btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.alm-dock-placement-control.alm-seg {
+  height: 28px;
+}
 .alm-listpage__detail-close {
   background: none;
   border: none;

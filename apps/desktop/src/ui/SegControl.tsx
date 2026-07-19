@@ -2,12 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { forwardRef, useCallback } from 'react';
-import type { HTMLAttributes, KeyboardEvent } from 'react';
+import type { HTMLAttributes, KeyboardEvent, ReactNode } from 'react';
 
 /** A segmented-control option: a stable `value` and a display `label`. */
 export interface SegControlOption {
   value: string;
   label: string;
+  /**
+   * When set, rendered instead of the `label` text (icon-only button).
+   * `label` still supplies the button's accessible name (`aria-label`) and
+   * hover tooltip so the option stays screen-reader- and hover-discoverable
+   * without visible text (#1068).
+   */
+  icon?: ReactNode;
 }
 
 export interface SegControlProps
@@ -69,8 +76,10 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
                 .join(' ')}
               onClick={() => onChange(o.value)}
               onKeyDown={handleKeyDown}
+              aria-label={o.icon ? o.label : undefined}
+              title={o.label}
             >
-              {o.label}
+              {o.icon ?? o.label}
             </button>
           );
         })}
