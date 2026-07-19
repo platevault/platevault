@@ -729,7 +729,14 @@ pub async fn generate_plan(
         // is also set to the same value so the plan-review UI's destination
         // preview shows where the file will actually land, rather than
         // repeating the source path or showing nothing.
-        let archive_dest = (item.action == "archive")
+        //
+        // Issue #806: only compute the `.astro-plan-archive/` convention when
+        // the plan's chosen destination is actually the archive folder. A
+        // `trash`-destination plan has no app-managed archive subfolder to
+        // preview, so fabricating one here misled the review table's
+        // DESTINATION column even though the plan header correctly showed
+        // "System trash".
+        let archive_dest = (item.action == "archive" && req.destructive_destination != "trash")
             .then(|| compute_archive_destination(&req.plan_id, &item.id, &item.from_relative_path));
         let to_relative_path: &str = archive_dest.as_deref().unwrap_or(&item.to_relative_path);
 

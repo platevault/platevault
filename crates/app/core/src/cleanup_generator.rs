@@ -58,7 +58,7 @@ use contracts_core::cleanup::{
     RawFrameCleanupScanRequest, RawFrameCleanupScanResponse,
 };
 use contracts_core::inventory_frame::{
-    FramePresenceState, InventoryFrameListRequest, InventoryFrameListScope,
+    FramePresenceState, InventoryFrameListRequest, InventoryFrameListScope, RawFrameType,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::artifacts as artifacts_repo;
@@ -437,9 +437,25 @@ pub async fn generate(
 
 // ── Raw sub-frame candidates (spec 048 US3 T027-T031) ───────────────────────
 
-/// Protection category raw sub-frames resolve under (distinct from the
-/// artifact `DataType` categories `intermediate`/`masters`/`finals` above).
-const RAW_FRAME_PROTECTION_CATEGORY: &str = "raw_frames";
+/// Protection category a raw sub-frame resolves under, keyed by its own
+/// `frame_type` (distinct from the artifact `DataType` categories
+/// `intermediate`/`masters`/`finals` above).
+///
+/// Issue #731: this used to be a single fixed pseudo-category
+/// (`"raw_frames"`) for every frame regardless of type. Global
+/// `protected_categories` (default `["lights","masters","finals"]`) elevates a
+/// source to `protected` only when its category is a member of that list —
+/// `"raw_frames"` never is, so a light frame could never be category-elevated
+/// even when the configured categories say lights should be protected.
+/// Mapping to the frame's real type name lets that elevation actually apply.
+fn raw_frame_protection_category(frame_type: RawFrameType) -> &'static str {
+    match frame_type {
+        RawFrameType::Light => "lights",
+        RawFrameType::Dark => "darks",
+        RawFrameType::Flat => "flats",
+        RawFrameType::Bias => "bias",
+    }
+}
 
 /// Pick the protection source id for a raw frame (issue #563): the owning
 /// session when a per-session override row exists (future surface), otherwise
@@ -518,7 +534,7 @@ pub async fn scan_raw_frames(
         let resolved = prot_repo::resolve_protection(
             pool,
             &source_id,
-            Some(RAW_FRAME_PROTECTION_CATEGORY),
+            Some(raw_frame_protection_category(frame.frame_type)),
             &global.level,
             global.block_permanent_delete,
             &global.categories,
@@ -573,7 +589,7 @@ pub async fn generate_raw_frame_plan(
         if row.state == "missing" {
             continue; // FR-022, even if a stale selection still names it
         }
-        let (session_id, _frame_type) =
+        let (session_id, frame_type) =
             frame_inventory::owning_session_frame_type(pool, &row.id).await?;
         let source_id = frame_protection_source(pool, session_id.as_deref(), &row.root_id).await?;
         let size = row.size_bytes.max(0);
@@ -584,7 +600,7 @@ pub async fn generate_raw_frame_plan(
             name: file_name(&row.relative_path).to_owned(),
             action: "archive".to_owned(),
             source_id,
-            category: RAW_FRAME_PROTECTION_CATEGORY.to_owned(),
+            category: raw_frame_protection_category(frame_type).to_owned(),
             from_relative_path: row.relative_path.clone(),
             from_root_id: Some(row.root_id.clone()),
             to_relative_path: String::new(),
@@ -935,6 +951,37 @@ mod tests {
         assert_eq!(plan.total_bytes_required, 0, "delete items need no destination space");
     }
 
+    /// Issue #806 regression: a plan generated with `destructive_destination:
+    /// "trash"` must not fabricate an `.astro-plan-archive/...` item path —
+    /// that convention only applies to the "archive folder" destination.
+    #[tokio::test]
+    async fn generate_with_trash_destination_does_not_fabricate_archive_path() {
+        let (db, _bus, _lock) = setup().await;
+        seed_project(&db, "p1").await;
+        seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
+        set_policy(
+            db.pool(),
+            &CleanupPolicy {
+                entries: vec![CleanupPolicyEntry {
+                    data_type: "intermediate".to_owned(),
+                    action: CleanupAction::Archive,
+                }],
+                auto_on_completion: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = generate(db.pool(), "p1", None, Some("trash")).await.unwrap();
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            !items[0].to_relative_path.contains(".astro-plan-archive"),
+            "trash destination must not show an app-managed archive subfolder path, got {:?}",
+            items[0].to_relative_path
+        );
+    }
+
     // ── Protected-category exclusion end-to-end ───────────────────────────
 
     #[tokio::test]
@@ -1094,6 +1141,55 @@ mod tests {
 
         assert!(resp.candidates.is_empty(), "protected frames must be excluded (FR-021)");
         assert_eq!(resp.total_reclaimable_bytes, 0);
+    }
+
+    /// Issue #731 regression: when the global default level is NOT
+    /// `protected` (so nothing is protected by default), a raw frame's real
+    /// type must still be elevated to `protected` when its category name is a
+    /// member of `protected_categories` — the fixed `"raw_frames"`
+    /// pseudo-category could never match `["lights","masters","finals"]`.
+    #[tokio::test]
+    async fn category_protection_elevates_real_frame_type_not_fixed_pseudo_category() {
+        use app_core_targets::frame_writer::upsert_frame_record;
+
+        let (db, bus, _lock) = setup().await;
+        insert_root(db.pool(), "root-1", "/tmp/lib").await;
+        let light = upsert_frame_record(db.pool(), "root-1", "l1.fits", 1000, "t0", "classified")
+            .await
+            .unwrap();
+        insert_acquisition_session(db.pool(), "sess-1", &[&light]).await;
+
+        // Global default level is "normal" (not protected); only category
+        // membership should elevate a light frame.
+        protection::set_global_protection_default(
+            db.pool(),
+            &bus,
+            "global",
+            "defaultProtection",
+            serde_json::json!("normal"),
+        )
+        .await
+        .unwrap();
+
+        let resp = scan_raw_frames(
+            db.pool(),
+            &RawFrameCleanupScanRequest {
+                scope: RawFrameCleanupScope {
+                    session_id: Some("sess-1".to_owned()),
+                    root_id: None,
+                },
+                kinds: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.candidates.len(), 1);
+        assert_eq!(
+            resp.candidates[0].protection, "protected",
+            "a Light frame's real category ('lights') must be elevated by the default \
+             protected_categories list, not silently bypassed by a fixed pseudo-category"
+        );
     }
 
     #[tokio::test]
