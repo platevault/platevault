@@ -73,7 +73,14 @@ describe('ProjectsTable', () => {
 
   it('shows empty state when no projects', () => {
     renderTable({ projects: [] });
-    expect(screen.getByText(/no projects found/i)).toBeInTheDocument();
+    expect(screen.getByText(/no projects yet/i)).toBeInTheDocument();
+  });
+
+  it('shows filtered-empty state when a filter yields no projects', () => {
+    renderTable({ projects: [], isFiltered: true });
+    expect(
+      screen.getByText(/no projects match the current filters/i),
+    ).toBeInTheDocument();
   });
 
   it('shows loading state when loading and no projects', () => {

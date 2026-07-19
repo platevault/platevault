@@ -148,6 +148,12 @@ export interface ProjectsTableProps {
    * When empty the table renders a flat sorted list.
    */
   dims?: string[];
+  /**
+   * True when a search/lifecycle filter is active, so an empty `projects`
+   * list means "no matches" rather than "no projects exist yet" — the two
+   * cases need different empty-state copy (empty-state canon).
+   */
+  isFiltered?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -160,6 +166,7 @@ export function ProjectsTable({
   sort,
   onSort,
   dims = [],
+  isFiltered = false,
 }: ProjectsTableProps) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
@@ -288,7 +295,9 @@ export function ProjectsTable({
   if (projects.length === 0) {
     return (
       <div className="alm-projects-table__empty">
-        {m.projects_table_empty()}
+        {isFiltered
+          ? m.projects_table_empty_filtered()
+          : m.projects_table_empty()}
       </div>
     );
   }

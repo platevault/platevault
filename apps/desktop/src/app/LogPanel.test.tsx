@@ -331,7 +331,7 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('No entries match the current filter'),
+        screen.getByText('No entries match the current filter.'),
       ).toBeInTheDocument();
     });
     expect(screen.queryByText('No log entries')).not.toBeInTheDocument();

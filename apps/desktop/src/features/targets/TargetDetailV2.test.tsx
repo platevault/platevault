@@ -419,12 +419,12 @@ describe('TargetDetailV2', () => {
   it('14. projects empty-state renders (single mid-page surface)', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getByText('No projects linked.')).toBeInTheDocument(),
+      expect(screen.getByText('No projects linked yet.')).toBeInTheDocument(),
     );
     // #670: the duplicate bottom "Projects" section (same list + a redundant
     // EmptyState restating the same sentence as its own title) was removed —
     // same precedent as the Sessions section above.
-    expect(screen.queryAllByText('No projects linked.').length).toBe(1);
+    expect(screen.queryAllByText('No projects linked yet.').length).toBe(1);
   });
 
   it('15. reloads detail after successful alias add', async () => {

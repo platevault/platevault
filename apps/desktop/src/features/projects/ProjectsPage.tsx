@@ -162,6 +162,7 @@ export function ProjectsPage() {
       : projects;
     return filterBySearch(byState, search);
   }, [projects, lifecycle, search]);
+  const isFiltered = (lifecycle?.length ?? 0) > 0 || search.trim().length > 0;
 
   // Per the top-bar convention (user feedback): OMIT title + summary (the left
   // nav names the page; per-page counts live in the bottom status bar), and do
@@ -234,6 +235,7 @@ export function ProjectsPage() {
         sort={sort}
         onSort={handleHeaderSort}
         dims={dims}
+        isFiltered={isFiltered}
       />
     </ListPageLayout>
   );
