@@ -22,12 +22,9 @@ export interface AuditFirstRunCompleted {
    */
   source: "user" | "restore" | "system";
   /**
-   * Publish time, as [year, ordinalDay, hour, minute, second, nanosecond, offsetHours, offsetMinutes, offsetSeconds]. This is the `time` crate's default OffsetDateTime component encoding leaking through `Timestamp` (#[serde(transparent)], crates/domain/core/src/ids.rs) — NOT RFC 3339, and deliberately documented as-is rather than aspirationally: the durable `events.emitted_at` column holds the RFC 3339 form instead, because crates/audit/src/bus.rs formats it explicitly before the insert. See issue #1093 — normalising Timestamp's wire form is a cross-cutting change affecting every event and DTO that carries one, so it is out of scope here.
-   *
-   * @minItems 9
-   * @maxItems 9
+   * Publish time as an RFC 3339 UTC string, e.g. '2025-07-08T18:40:00Z'. `Timestamp` (crates/domain/core/src/ids.rs) serialises via `time::serde::rfc3339`, so the broadcast envelope and the durable `events.emitted_at` column carry the same wire form. Issue #1093 fixed the earlier 9-element integer component array, which was the `time` crate's default OffsetDateTime encoding leaking through the transparent newtype.
    */
-  emittedAt: [number, number, number, number, number, number, number, number, number];
+  emittedAt: string;
   payload: {
     /**
      * RFC 3339 timestamp when the wizard was marked complete.

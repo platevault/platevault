@@ -21,6 +21,10 @@ export interface WorkflowRunCompletedEvent {
    * Event source per spec 002 R-Source-1. Spec 012 always emits source='system' for this event.
    */
   source: "user" | "restore" | "system";
+  /**
+   * Publish time as an RFC 3339 UTC string, stamped by EventEnvelope::new. Distinct from payload.completedAt, which is when the tool run finished.
+   */
+  emittedAt: string;
   payload: {
     /**
      * Project whose workflow run completed.
