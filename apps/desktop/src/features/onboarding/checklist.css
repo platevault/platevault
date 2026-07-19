@@ -425,7 +425,7 @@
   font-size: var(--alm-text-sm);
 }
 
-/* ── Per-row actions: find spotlight + dismiss (T027) ─────────────────────── */
+/* ── Per-row actions: find spotlight (T027) ───────────────────────────────── */
 .alm-onb-checklist__actions {
   display: flex;
   flex-shrink: 0;
@@ -433,20 +433,7 @@
 }
 
 .alm-onb-checklist__find,
-.alm-onb-checklist__dismiss {
-  display: flex;
-  align-items: center;
-  padding: var(--alm-sp-0);
-  color: var(--alm-text-faint);
-  border-radius: var(--alm-radius-sm);
-}
-
 .alm-onb-checklist__find:hover,
-.alm-onb-checklist__dismiss:hover {
-  color: var(--alm-text-secondary);
-  background: var(--alm-hover-bg);
-}
-
 .alm-onb-checklist__find[aria-pressed='true'] {
   color: var(--alm-accent);
   background: var(--alm-hover-bg);

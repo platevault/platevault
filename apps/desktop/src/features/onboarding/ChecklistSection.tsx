@@ -29,7 +29,6 @@ import {
   Lock,
   MoreHorizontal,
   Search,
-  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
@@ -472,7 +471,6 @@ function ChecklistItemRow({
 
   const check = () =>
     void setOnboardingItemState(item.itemId, 'manually_checked');
-  const dismiss = () => void setOnboardingItemState(item.itemId, 'dismissed');
 
   // Settling in place (T024): a checked, emphasised row that has not yet
   // dropped to the completed area. Non-interactive during the animation.
@@ -559,6 +557,15 @@ function ChecklistItemRow({
           </span>
         )}
       </span>
+      {/*
+        No per-row dismiss (X). The round checkbox is the single completion
+        affordance; a second destructive-looking control on every row was noise,
+        and "remove this one forever" is a rarer intent than "tick it off".
+        Whole-section removal still exists in the section header's ··· menu
+        (FR-013). The backend `dismissed` state is untouched and still settles
+        rows, so a per-item dismiss can return (e.g. behind a row menu) without
+        a migration.
+      */}
       <span className="alm-onb-checklist__actions">
         {findable && (
           <button
@@ -571,14 +578,6 @@ function ChecklistItemRow({
             <Search size={13} aria-hidden />
           </button>
         )}
-        <button
-          type="button"
-          className="alm-onb-checklist__dismiss"
-          aria-label={m.onboarding_item_dismiss_label({ item: label })}
-          onClick={dismiss}
-        >
-          <X size={13} aria-hidden />
-        </button>
       </span>
     </li>
   );
