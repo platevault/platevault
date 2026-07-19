@@ -13,6 +13,9 @@ a blank, and are worth reading before the plan gate:
   the follow-on does not re-derive it.
 - **Q-9's premise was false.** The `mixed` branch does not become dead code. The
   question dissolves; a different, unrecorded gap is raised in its place.
+  **Amended after Layer-2 verification:** the conclusion holds but the mechanism
+  first recorded here was wrong, and the criticism of `InboxPage.tsx:599-606` is
+  withdrawn — that comment is correct. See Q-9 for the evidence.
 
 Line references in the answers below were re-verified against `main` at
 `5059e164`. Several references in the original questions had drifted since
@@ -323,18 +326,42 @@ the test pokes at changes. Promoted to FR-030.
 **Answer**: **Keep `mixed` as is.** The question's premise does not hold, so it
 largely answers itself. Promoted to FR-031.
 
-**The finding**: `mixed` is **not** computed from group keys. It is computed
-from an item's evidence rows, in two places — `classify.rs:1219-1231` (the
-cache-hit path) and `reclassify.rs:166-171` — as a distinct set over
-`manual_override.or(frame_type)`, with `>= 2` meaning mixed.
+**The finding**: `mixed` remains reachable — but by a different route than
+this document first recorded. The original mechanism given here was refuted at
+Layer 2; see the correction below.
 
-A freshly materialised needs-review sibling has `frame_type: None` on every
-evidence row, so its distinct set is empty and it reports `unclassified`, not
-mixed. **But the moment a user assigns two different frame types to files inside
-that sentinel item, `manual_override` makes the distinct set size 2 and the item
-reports `mixed`.** A needs-review item is something 058 explicitly keeps. So the
-branch remains reachable, and removing it would leave a reachable state with no
-rendered explanation of why Confirm is disabled.
+`mixed` is reachable **only** via `classify.rs:404` (`_ => ("unclassified",
+"mixed", None)`): a folder whose files span two or more distinct frame types
+stores DB `result = "unclassified"` while returning API `classification_type =
+"mixed"` for its **pre-materialization placeholder** item. That is the sole
+live path, and removing the affordance would leave it with no rendered
+explanation of why Confirm is disabled.
+
+**The reclassify route is not a second path** — this is the correction. It was
+recorded here as: a needs-review item whose files receive two different
+`manual_override` values makes the distinct set over
+`manual_override.or(frame_type)` (`classify.rs:1223`) size 2, so the item
+reports `mixed`. That does not happen. `reclassify_v2` does write
+`manual_override` (`reclassify.rs:556`), but the subsequent
+`materialize_sub_items` → `seed_sub_item_cache` rebuild **deletes and
+re-inserts that item's evidence with `manual_override: None`**
+(`classify.rs:1023`, `:1038`). The distinct set therefore sees an empty set and
+reports `unclassified`.
+
+**Verified at Layer 2, not by reading.** Two files with unmapped `IMAGETYP` and
+no `EXPTIME` were landed in one `__needs_review__` item, then given two
+different frame types (`light` and `dark`) through the real per-file dropdowns
+and the real "Apply manual overrides" button — one `reclassify_v2` carrying two
+differing overrides, exactly the scenario recorded above. Result: no
+`inbox-mixed-alert`, both files still reported as unclassified evidence, and
+Type labels `["unclassified", "needs review"]`. Meanwhile
+`inbox_ui_mixed_folder_splits_into_single_type_items` — which gates on
+`inbox-mixed-alert` — passes, which is what pins the surviving path to
+`classify.rs:404`.
+
+Since 058 removes placeholder rows entirely, **058 is itself the change that
+finally makes `mixed` unreachable.** That should be stated explicitly when the
+plan gate sizes FR-031.
 
 **A Layer-2 journey also depends on the affordance as a synchronisation
 signal.** `crates/e2e-tests/tests/inbox_ui_journeys.rs:237` waits on
@@ -345,14 +372,24 @@ cleanly.
 
 ### Two follow-ups
 
-**1. A code comment becomes factually wrong.**
-`apps/desktop/src/features/inbox/InboxPage.tsx:599-606` states that
-`classification.type === "mixed"` is "only reachable when the SELECTED item is
-still the pre-materialization leaf-folder row". That premise is exactly what 058
-invalidates. The conclusion (keep the guard) is still right; the stated reason
-will not be. **Flagged for correction in 058's first code PR** — this comment is
-what misled this specification into asking Q-9 in the first place, and it will
-mislead the next reader the same way.
+**1. ~~A code comment becomes factually wrong.~~ WITHDRAWN — the comment is
+correct.** This document previously flagged
+`apps/desktop/src/features/inbox/InboxPage.tsx:599-606` for correction, on the
+grounds that its claim — `classification.type === "mixed"` is "only reachable
+when the SELECTED item is still the pre-materialization leaf-folder row" — was
+a premise 058 invalidates.
+
+That flag was wrong, and it was wrong because it rested on the refuted
+reclassify mechanism above. The comment describes `classify.rs:404` precisely,
+which the Layer-2 evidence confirms is the only live path. **No correction is
+needed in 058's first code PR.**
+
+Worth recording why this inverted: the comment was accurate, this specification
+read it as stale, and then cited its own misreading as evidence that the
+comment was misleading. Only running the scenario settled it. Treat
+confidently-argued claims about this surface as unverified until a journey
+drives them — that applies to this correction too, which is verified for the
+override shape tested and not proven exhaustive over every possible one.
 
 **2. An open design gap, for the plan gate to size — not to decide here.**
 Resolving a heterogeneous needs-review bucket into two frame types is the
