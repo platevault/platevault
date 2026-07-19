@@ -182,7 +182,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     // Backend flag flipped so it never auto-runs again (FR-004).
     let _done: serde_json::Value = app
         .invoke_until("onboarding_state_get", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
-            v["flags"]["orientationDone"] == json!(true)
+            v["state"]["flags"]["orientationDone"] == json!(true)
         })
         .await?;
 
@@ -282,7 +282,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     // manual — an event-sourced tick).
     let _final: serde_json::Value = app
         .invoke_until("onboarding_state_get", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
-            v["items"].as_array().is_some_and(|items| {
+            v["state"]["items"].as_array().is_some_and(|items| {
                 items.iter().any(|i| {
                     i["itemId"] == json!("inbox.confirm_first")
                         && i["state"] == json!("auto_checked")

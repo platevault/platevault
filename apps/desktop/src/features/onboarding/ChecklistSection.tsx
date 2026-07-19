@@ -94,6 +94,14 @@ export const itemLabel = (id: string): string =>
   catalog[`onboarding_item_${id.replaceAll('.', '_')}_label`]();
 export const itemTooltip = (id: string): string =>
   catalog[`onboarding_item_${id.replaceAll('.', '_')}_tooltip`]();
+// The backend sends dotted registry reason keys (e.g.
+// `onboarding.prerequisite.inbox.confirm_first`); Paraglide message functions
+// are underscore-keyed, so convert before lookup exactly as the item strings do
+// — a raw dotted key resolves to `undefined()` and crashes the whole shell into
+// the error boundary (only the real backend populates prerequisites, so mocks
+// with `prerequisite: null` never reach this path).
+export const prerequisiteReason = (reasonKey: string): string =>
+  catalog[reasonKey.replaceAll('.', '_')]();
 
 function pageForPath(pathname: string): OnboardingPage | null {
   return PAGE_ORDER.find((p) => pathname.startsWith(PAGE_META[p].path)) ?? null;
@@ -501,7 +509,7 @@ function ChecklistItemRow({
         {blocked && item.prerequisite && (
           <span className="alm-onb-checklist__prereq">
             <span className="alm-onb-checklist__prereq-reason">
-              {catalog[item.prerequisite.reasonKey]()}
+              {prerequisiteReason(item.prerequisite.reasonKey)}
             </span>
             <button
               type="button"
