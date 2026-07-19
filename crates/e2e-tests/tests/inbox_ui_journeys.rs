@@ -27,7 +27,6 @@ use std::time::Duration;
 use anyhow::Context;
 use common::{write_minimal_fits, write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
-use thirtyfour::By;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -460,14 +459,40 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
 /// Callers MUST compare with exact equality, never `contains`: "unclassified"
 /// has "classified" as a substring, so a substring check cannot tell the fixed
 /// badge from the defective one.
-async fn classification_cell_labels(app: &E2eApp) -> Vec<String> {
-    let cells =
-        app.driver.find_all(By::Css(".alm-inbox-row__classification")).await.unwrap_or_default();
-    let mut labels = Vec::with_capacity(cells.len());
-    for cell in cells {
-        labels.push(cell.text().await.unwrap_or_default().trim().to_lowercase());
-    }
-    labels
+///
+/// Read as ONE `execute` against the live document rather than
+/// `find_all` + per-element `.text()`. The two-step form is not equivalent
+/// here: the Inbox list re-renders (and swaps row DOM nodes) constantly, so
+/// every handle returned by `find_all` can be detached before `.text()` reads
+/// it, and `.text()` on a detached handle yields a `stale element reference`
+/// error that a `unwrap_or_default()` silently turns into `""`. That is
+/// exactly how this journey first failed: WebDriver reported two Type cells
+/// whose text was `["", ""]` — two labels that `classificationLabel` can
+/// never produce — because both handles were stale, not because the badge
+/// rendered blank. A single snapshot cannot interleave with a re-render.
+async fn classification_cell_labels(app: &E2eApp) -> anyhow::Result<Vec<String>> {
+    let raw: String = app
+        .driver
+        .execute(
+            r#"
+            return JSON.stringify(
+                Array.prototype.map.call(
+                    document.querySelectorAll('.alm-inbox-row__classification'),
+                    function (el) { return el.textContent || ''; }
+                )
+            );
+            "#,
+            vec![],
+        )
+        .await
+        .context("reading the Type-column cells failed")?
+        .json()
+        .as_str()
+        .context("the Type-cell snapshot script did not return a string")?
+        .to_owned();
+    let labels: Vec<String> =
+        serde_json::from_str(&raw).context("the Type-cell snapshot was not a JSON array")?;
+    Ok(labels.into_iter().map(|l| l.trim().to_lowercase()).collect())
 }
 
 /// Issue #711 Instance A (unsplit-folder variant): the Type-column badge of a
@@ -549,14 +574,22 @@ async fn inbox_ui_unsplit_unclassified_folder_badge_is_not_classified() -> anyho
     select_only_item(&app).await?;
     app.wait_testid("inbox-unclassified-alert", UI_TIMEOUT).await?;
 
-    // classify does not invalidate the list query, so re-read the list the way
-    // a user would (reload) until the post-classify rows land. The
-    // materialized "needs review" sub-item is the settle signal: it can only
-    // be rendered once classify ran AND the list refetched — which keeps a
-    // not-yet-refreshed list from being misreported as a badge regression.
+    // classify does not invalidate the list query, so force the refetch until
+    // the post-classify rows land. The materialized "needs review" sub-item is
+    // the settle signal: it can only be rendered once classify ran AND the list
+    // refetched — which keeps a not-yet-refreshed list from being misreported
+    // as a badge regression.
+    //
+    // Invalidate the query rather than `driver.refresh()`. A full page reload
+    // tears down the document these assertions read: after it the app remounts
+    // through /setup-gate → route restore, and the observed result was an
+    // Inbox page with NO `inbox-list` element at all for the rest of the
+    // 20s budget, while WebDriver kept serving detached row handles from the
+    // pre-reload document. Invalidation refetches the same list in place, so
+    // the settle signal and the badge are read from one live document.
     let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
     let labels = loop {
-        let labels = classification_cell_labels(&app).await;
+        let labels = classification_cell_labels(&app).await?;
         if labels.iter().any(|l| l == "needs review") {
             break labels;
         }
@@ -565,12 +598,10 @@ async fn inbox_ui_unsplit_unclassified_folder_badge_is_not_classified() -> anyho
             "the post-classify Inbox list never settled within {UI_TIMEOUT:?} (no \
              materialized 'needs review' sub-item row appeared); Type cells were {labels:?}"
         );
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        app.driver
-            .refresh()
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        app.invalidate_query(r#"["inbox","all"]"#)
             .await
-            .context("refresh while waiting for the post-classify list failed")?;
-        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+            .context("invalidating the inbox list query while waiting for classify failed")?;
     };
 
     anyhow::ensure!(
