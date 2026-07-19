@@ -479,6 +479,20 @@ describe('TargetsTable — lunar distance (US2)', () => {
     // No numeric lunar separations; both rows show the unknown dash.
     expect(screen.queryByText('90°')).not.toBeInTheDocument();
   });
+
+  it('#634: fetches geometry for the whole revealed set in ONE batched call, never per-row', async () => {
+    renderWithNight('asc', [FAR, UNK, NEAR, MID]);
+    await waitFor(() => expect(screen.getByText('90°')).toBeInTheDocument());
+    // One call for the batch, not one per target row.
+    expect(mockMoonOppositionBatch).toHaveBeenCalledTimes(1);
+    // UNK (null coordinates) is filtered out client-side before the IPC call
+    // (mirrors the real command's own "never a fabricated value" contract) —
+    // only the 3 targets with real coordinates are sent.
+    const req = mockMoonOppositionBatch.mock.calls[0][0] as {
+      targets: unknown[];
+    };
+    expect(req.targets).toHaveLength(3);
+  });
 });
 
 // ── Row cache contract (#573 perf) ──────────────────────────────────────────
