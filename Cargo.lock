@@ -237,6 +237,7 @@ dependencies = [
  "persistence_db",
  "project_structure",
  "serde_json",
+ "sha2 0.10.9",
  "simbad-resolver",
  "sqlx",
  "tempfile",

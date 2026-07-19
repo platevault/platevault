@@ -42,10 +42,33 @@ import { DetailPanel, PropertyTable, renderValue } from '@/components';
 import { errMessage } from '@/lib/errors';
 import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
+import { revealLabel } from '@/lib/reveal-label';
+import { copyToClipboard, revealInOs } from '@/shared/native/reveal';
+import { addToast } from '@/shared/toast';
 import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
 import type { InboxClassifyResponse } from './store';
 import { ConeSearchSuggestions } from './ConeSearchSuggestions';
+
+/**
+ * Resolve an inbox item's reveal target: the source root joined with the
+ * item's `relativePath`. Mirrors `features/sessions/revealInventory.ts`'s
+ * `resolveRevealPath` (same tested contract: backend `relativePath` is always
+ * forward-slash-normalized — `crates/app/inbox/src/scan.rs` — while the root
+ * is native, so every separator is rewritten to the root's own). Duplicated
+ * rather than imported to keep this feature's scope self-contained; the two
+ * helpers must stay behaviorally identical if either changes.
+ */
+function resolveInboxRevealPath(
+  rootPath: string,
+  relativePath: string,
+): string {
+  if (!relativePath) return rootPath;
+  const sep = rootPath.includes('\\') ? '\\' : '/';
+  const root = rootPath.replace(/[/\\]+$/, '');
+  const rel = relativePath.replace(/^[/\\]+/, '').replace(/[/\\]+/g, sep);
+  return `${root}${sep}${rel}`;
+}
 
 // ── reclassify_v2 (spec 041 R-13/T068, issue #755) ────────────────────────────
 //
@@ -368,6 +391,7 @@ export interface InboxDetailProps {
 
 export function InboxDetail({
   item,
+  rootAbsolutePath,
   classification,
   fileMetadata,
   onConfirm,
@@ -583,6 +607,39 @@ export function InboxDetail({
 
   const title = item.relativePath || m.inbox_list_root_label();
   const classType = classification?.type ?? 'pending';
+
+  // Reveal this item's location in the OS file browser (#715, spec 004
+  // FR-005/SC-002). No connectivity gate like Sessions (#889): the Inbox
+  // root is the currently-scanned root, always reachable while this pane is
+  // shown. On failure, the toast carries a "Copy path" action (#717 FR-010:
+  // `copyToClipboard` was exported with zero call sites anywhere in the app).
+  const handleReveal = useCallback(async () => {
+    const revealPath = resolveInboxRevealPath(
+      rootAbsolutePath,
+      item.relativePath,
+    );
+    try {
+      await revealInOs(revealPath, {
+        entityKind: 'inbox_item',
+        entityId: item.inboxItemId,
+      });
+    } catch {
+      addToast({
+        message: m.inbox_toast_reveal_error(),
+        variant: 'error',
+        action: {
+          label: m.common_copy_path(),
+          onClick: () => {
+            void copyToClipboard(revealPath).then((ok) => {
+              if (ok) {
+                addToast({ message: m.common_path_copied(), variant: 'info' });
+              }
+            });
+          },
+        },
+      });
+    }
+  }, [rootAbsolutePath, item.relativePath, item.inboxItemId]);
 
   // Library picker (point 1): narrow the destination roots to the category that
   // can receive this item's frame type. Only meaningful for a single-type item
@@ -946,6 +1003,15 @@ export function InboxDetail({
           </select>
         </label>
       )}
+      {/* Reveal — platform-native label (shared revealLabel() helper, #715). */}
+      <Btn
+        size="sm"
+        onClick={() => void handleReveal()}
+        title={m.inbox_reveal_title()}
+        data-testid="inbox-reveal-btn"
+      >
+        {revealLabel()}
+      </Btn>
     </span>
   );
 

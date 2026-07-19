@@ -140,24 +140,41 @@ fn tool_id_from_project_tool(project_tool: &str) -> String {
     project_tool.to_lowercase().split_whitespace().collect::<Vec<_>>().join("_")
 }
 
-/// Non-recursive directory listing of real files only.
+/// Recursive directory listing of real files only (#780).
 ///
-/// Constitution: never follows symlinks (no per-root opt-in exists for
-/// project output folders in v1), and never recurses (matches the
-/// single-level contract `workflow_artifacts::reconciler::reconcile` already
-/// exercises in its unit tests).
+/// Must agree with the live watcher's `RecursiveMode::Recursive`
+/// (`fs_inventory::artifact_watcher`, e.g. output/ subfolders) — a
+/// non-recursive on-attach reconcile only ever saw the project root's
+/// top-level files, so every reopen (a) marked every real artifact (which
+/// lives under a subfolder like `output/`) `Gone`→`missing`, and (b) never
+/// `detect`-ed files written to a subfolder while the project was closed.
+///
+/// Constitution: never follows symlinks/junctions (no per-root opt-in exists
+/// for project output folders in v1) — neither into a symlinked directory
+/// nor as a symlinked file.
 fn real_read_dir(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut out = Vec::new();
+    real_read_dir_into(dir, &mut out)?;
+    Ok(out)
+}
+
+/// Recursion helper for [`real_read_dir`]; `out` accumulates real file paths
+/// across the whole subtree.
+fn real_read_dir_into(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     let entries =
         std::fs::read_dir(dir).map_err(|e| format!("read_dir({}) failed: {e}", dir.display()))?;
-    let mut out = Vec::new();
     for entry in entries.flatten() {
         let Ok(file_type) = entry.file_type() else { continue };
-        if file_type.is_symlink() || !file_type.is_file() {
+        if file_type.is_symlink() {
             continue;
         }
-        out.push(entry.path());
+        if file_type.is_dir() {
+            real_read_dir_into(&entry.path(), out)?;
+        } else if file_type.is_file() {
+            out.push(entry.path());
+        }
     }
-    Ok(out)
+    Ok(())
 }
 
 /// Real (size, mtime) probe. Uses `symlink_metadata` and rejects symlinks
@@ -533,5 +550,54 @@ mod tests {
         record_raw_event(&evt(&path, ArtifactEventKind::Created), &xisf_extensions(), &mut pending);
 
         assert!(pending.is_empty(), "a path that can't be stat'd must not be tracked");
+    }
+
+    // ── real_read_dir (#780) ──────────────────────────────────────────────────
+
+    #[test]
+    fn real_read_dir_finds_files_nested_under_subfolders() {
+        let dir = tempfile::tempdir().unwrap();
+        let output_dir = dir.path().join("output");
+        std::fs::create_dir_all(&output_dir).unwrap();
+        let top_file = dir.path().join("top.fits");
+        let nested_file = output_dir.join("nested.xisf");
+        std::fs::write(&top_file, b"x").unwrap();
+        std::fs::write(&nested_file, b"x").unwrap();
+
+        let found = real_read_dir(dir.path()).unwrap();
+
+        assert!(found.contains(&top_file), "top-level file must be found");
+        assert!(found.contains(&nested_file), "file nested under a subfolder must be found");
+    }
+
+    #[test]
+    fn real_read_dir_recurses_multiple_levels() {
+        let dir = tempfile::tempdir().unwrap();
+        let deep_dir = dir.path().join("output").join("2026-01-01");
+        std::fs::create_dir_all(&deep_dir).unwrap();
+        let deep_file = deep_dir.join("integration.xisf");
+        std::fs::write(&deep_file, b"x").unwrap();
+
+        let found = real_read_dir(dir.path()).unwrap();
+
+        assert!(found.contains(&deep_file), "file nested two levels deep must be found");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn real_read_dir_never_descends_into_a_symlinked_directory() {
+        // Constitution: never follow symlinks/junctions unless explicitly
+        // enabled per root — a symlinked subdirectory's contents must not
+        // leak into the reconcile pass's file list.
+        let dir = tempfile::tempdir().unwrap();
+        let real_target = tempfile::tempdir().unwrap();
+        let hidden_file = real_target.path().join("outside.fits");
+        std::fs::write(&hidden_file, b"x").unwrap();
+        let link_path = dir.path().join("linked_output");
+        std::os::unix::fs::symlink(real_target.path(), &link_path).unwrap();
+
+        let found = real_read_dir(dir.path()).unwrap();
+
+        assert!(found.is_empty(), "must not descend into a symlinked directory: found {found:?}");
     }
 }

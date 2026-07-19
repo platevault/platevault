@@ -17,6 +17,12 @@ export const commands = {
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
 	 * 
+	 *  #665: on a successful `Project` entity transition, fires the
+	 *  `LifecycleTransition` manifest trigger — this and the source add/remove
+	 *  trigger were the last of the 4 unwired manifest emitters (project create
+	 *  and source add/remove are wired in `app_core_projects`; `workflow_run` was
+	 *  the only one that ever existed).
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
@@ -1795,9 +1801,11 @@ export const commands = {
 	 *  `project.manifest.reveal_in_os` — open the manifest file's folder in the
 	 *  OS file manager.
 	 * 
-	 *  Delegates to `tauri-plugin-opener::reveal_item_in_dir`. On Linux, if the
-	 *  opener plugin fails, falls back to `xdg-open` on the parent directory
-	 *  (matching the pattern from `native.reveal`).
+	 *  #716: routes through the shared spec-004 `native.reveal` core
+	 *  (`reveal_with_audit`) instead of reimplementing the opener/xdg-open
+	 *  fallback independently — path validation and `native.reveal.failed`
+	 *  audit-on-failure now apply here too, which the standalone reimplementation
+	 *  never had. The external `Result<(), String>` contract is unchanged.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
@@ -2524,7 +2532,13 @@ export type BrokenItemState =
  *  The on-disk materialization kind no longer matches the kind recorded
  *  for this item (spec 026 FR-008 mixed-kind concept, per-item).
  */
-"changed_kind";
+"changed_kind" | 
+/**
+ *  A copy-kind item's destination content no longer matches the
+ *  canonical source (a real file copy, unlike a symlink/hardlink, can
+ *  silently drift — spec 026 FR-009 / #746).
+ */
+"hash_diverged";
 
 /**  Calendar data for the sessions calendar view. */
 export type CalendarData = {

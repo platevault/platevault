@@ -244,6 +244,28 @@ async fn maybe_regress_to_incomplete(
     Ok(Some("setup_incomplete".to_owned()))
 }
 
+/// Fire the `SourceChange` manifest trigger after a source is linked/unlinked
+/// (#665 — project create, source add/remove, and lifecycle transitions had
+/// no emitters at all; this covers the source add/remove half).
+///
+/// Best-effort: a manifest write failure must never fail the source
+/// add/remove use case itself (Constitution V — the DB row for the mutation
+/// itself already succeeded; the manifest is a documentation side-effect).
+/// Delegates to the shared `project_manifests::write_lifecycle_manifest`
+/// (re-reads the project row, so the just-applied lifecycle change from
+/// `maybe_auto_ready`/`maybe_regress_to_incomplete` is already reflected).
+async fn write_source_change_manifest(pool: &SqlitePool, bus: &EventBus, project_id: &str) {
+    use contracts_core::manifests::ManifestReason as DtoManifestReason;
+
+    crate::project_manifests::write_lifecycle_manifest(
+        pool,
+        bus,
+        project_id,
+        DtoManifestReason::SourceChange,
+    )
+    .await;
+}
+
 // ── Path anchoring (Constitution I) ───────────────────────────────────────────
 
 /// Resolve the requested project path to an unambiguous absolute location.
@@ -867,6 +889,8 @@ pub async fn add_source(
     .await
     .map_err(bus_err)?;
 
+    write_source_change_manifest(pool, bus, &req.project_id).await;
+
     let added_row = repo::ProjectSourceRow {
         id: src_id,
         project_id: req.project_id.clone(),
@@ -981,6 +1005,8 @@ pub async fn remove_source(
     )
     .await
     .map_err(bus_err)?;
+
+    write_source_change_manifest(pool, bus, &req.project_id).await;
 
     Ok(ProjectSourceRemoveResult {
         project_id: req.project_id.clone(),
@@ -1460,6 +1486,48 @@ mod tests {
         assert_eq!(result.new_lifecycle, Some("ready".to_owned()));
     }
 
+    /// #665: `add_source` must fire the `SourceChange` manifest trigger with
+    /// the POST-mutation lifecycle (here, the auto `ready` transition), not
+    /// the stale pre-mutation value.
+    #[tokio::test]
+    async fn add_source_writes_source_change_manifest() {
+        let (pool, bus) = setup().await;
+        let create_req = make_create_req("M31 Andromeda", ProjectTool::PixInsight);
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
+
+        // `TEST_PROJECT_ROOT` is a synthetic, non-writable path (existing
+        // convention across this module's tests) — point the project at a
+        // real tempdir so the manifest file write can actually succeed.
+        let dir = tempfile::tempdir().unwrap();
+        sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
+            .bind(dir.path().to_str().unwrap())
+            .bind(&created.project_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let add_req = ProjectSourceAddRequest {
+            request_id: new_id(),
+            project_id: created.project_id.clone(),
+            inventory_session_id: "inv-001".to_owned(),
+        };
+        add_source(&pool, &bus, &add_req).await.unwrap();
+
+        let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+            &pool,
+            &created.project_id,
+            None,
+            10,
+        )
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].reason, "source_change");
+        let manifest = crate::project_manifests::get(&pool, &rows[0].id).await.unwrap();
+        assert_eq!(manifest.manifest.body.lifecycle_state, "ready");
+        assert!(manifest.manifest.body.source_map.is_some());
+    }
+
     #[tokio::test]
     async fn add_source_duplicate_rejected() {
         let (pool, bus) = setup().await;
@@ -1524,6 +1592,51 @@ mod tests {
         };
         let result = remove_source(&pool, &bus, &rm_req).await.unwrap();
         assert_eq!(result.new_lifecycle, Some("setup_incomplete".to_owned()));
+    }
+
+    /// #665: `remove_source` must also fire the `SourceChange` manifest
+    /// trigger, with the POST-removal regressed lifecycle.
+    #[tokio::test]
+    async fn remove_source_writes_source_change_manifest() {
+        let (pool, bus) = setup().await;
+        let create_req = make_create_req("NGC 6960 Veil", ProjectTool::PixInsight);
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        sqlx::query("UPDATE projects SET path = ? WHERE id = ?")
+            .bind(dir.path().to_str().unwrap())
+            .bind(&created.project_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let add_req = ProjectSourceAddRequest {
+            request_id: new_id(),
+            project_id: created.project_id.clone(),
+            inventory_session_id: "inv-001".to_owned(),
+        };
+        add_source(&pool, &bus, &add_req).await.unwrap();
+
+        let rm_req = ProjectSourceRemoveRequest {
+            request_id: new_id(),
+            project_id: created.project_id.clone(),
+            project_source_id: "inv-001".to_owned(),
+            confirm_last_source: true,
+        };
+        remove_source(&pool, &bus, &rm_req).await.unwrap();
+
+        let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+            &pool,
+            &created.project_id,
+            None,
+            10,
+        )
+        .await
+        .unwrap();
+        // One from add_source, one from remove_source.
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|r| r.reason == "source_change"));
+        let latest = crate::project_manifests::get(&pool, &rows[0].id).await.unwrap();
+        assert_eq!(latest.manifest.body.lifecycle_state, "setup_incomplete");
     }
 
     #[tokio::test]

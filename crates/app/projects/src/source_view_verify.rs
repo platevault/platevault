@@ -67,6 +67,29 @@ pub(crate) async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -
     }
 }
 
+/// Bytes probed from the start of each file for the copy-kind content-drift
+/// check (#746). Partial, not a full-file hash: constitution ("Large-file
+/// hashing MUST be optional or lazy") plus astro frames can be huge; a
+/// changed size or a differing partial digest both prove drift, and this
+/// mirrors the existing partial-hash convention (`app_core_inbox::signature`).
+const HASH_PROBE_BYTES: usize = 65536;
+
+/// Cheap (size, partial-digest) content probe for the drift check. `None`
+/// when the file cannot be read (never treated as a divergence — avoids a
+/// false positive from a transient permission/race error).
+fn partial_content_probe(path: &Utf8Path) -> Option<(u64, [u8; 32])> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let file = std::fs::File::open(path).ok()?;
+    let size = file.metadata().ok()?.len();
+    let probe_len = usize::try_from(size).unwrap_or(usize::MAX).min(HASH_PROBE_BYTES);
+    let mut buf = vec![0u8; probe_len];
+    let mut reader = file.take(probe_len as u64);
+    reader.read_exact(&mut buf).ok()?;
+    Some((size, Sha256::digest(&buf).into()))
+}
+
 /// Classify one view item against the live filesystem + inventory state.
 /// `None` means the item is clean. Shared by `verify_source_view` (read-only
 /// report) and `sweep_view_staleness` (T014/T015: same resolution logic,
@@ -123,10 +146,23 @@ fn classify_item(
         // Recorded as a symlink but the destination is a regular file —
         // the on-disk kind diverged (spec 026 FR-008 mixed-kind concept).
         return Some(BrokenItemState::ChangedKind);
+    } else if item.materialization == "copy" {
+        // Copy-kind destinations are independent bytes on disk (unlike a
+        // hardlink, which shares the source's inode and can never drift) —
+        // #746: content can silently diverge from the canonical source.
+        if let Some(expected) = &source.abs_path {
+            let diverged = match (partial_content_probe(dest), partial_content_probe(expected)) {
+                (Some(a), Some(b)) => a != b,
+                // Can't probe one side (permission/race) — don't false-positive.
+                _ => false,
+            };
+            if diverged {
+                return Some(BrokenItemState::HashDiverged);
+            }
+        }
     }
-    // Non-symlink destinations (hardlink/copy) that lstat succeeded on
-    // and whose recorded kind wasn't symlink are clean: their bytes are
-    // independent of the source's current inventory path.
+    // Hardlink destinations that lstat succeeded on are clean: their bytes
+    // are identical to the source by construction (shared inode).
     None
 }
 
@@ -210,6 +246,7 @@ pub async fn sweep_view_staleness(pool: &SqlitePool, view_id: &str) -> Result<()
             None => ItemObservedState::Present,
             Some(BrokenItemState::Missing) => ItemObservedState::Missing,
             Some(BrokenItemState::ChangedKind) => ItemObservedState::ChangedKind,
+            Some(BrokenItemState::HashDiverged) => ItemObservedState::HashDiverged,
             Some(BrokenItemState::Moved | BrokenItemState::UnresolvedLink) => {
                 ItemObservedState::Diverged
             }
@@ -445,6 +482,147 @@ mod tests {
         let resp = verify_source_view(db.pool(), "view3").await.unwrap();
         assert!(!resp.clean);
         assert_eq!(resp.broken_items[0].state, BrokenItemState::Moved);
+    }
+
+    // ── #746: copy-kind content-drift detection ──────────────────────────────
+
+    #[tokio::test]
+    async fn copy_kind_identical_content_verifies_clean() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let dest_dir = dir.path().join("dest");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let source_file = source_dir.join("light1.fits");
+        std::fs::write(&source_file, b"identical bytes").unwrap();
+        let dest_file = dest_dir.join("light1.fits");
+        std::fs::write(&dest_file, b"identical bytes").unwrap();
+
+        insert_project(&db, "p1", dir.path().join("proj").to_str().unwrap()).await;
+        insert_root(&db, "root1", source_dir.to_str().unwrap()).await;
+        insert_file_record(&db, "frame1", "root1", "light1.fits").await;
+
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView {
+                id: "view-copy-1",
+                project_id: "p1",
+                kind: "copy",
+            },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "item-copy-1",
+                view_id: "view-copy-1",
+                inventory_item_id: "frame1",
+                view_relative_path: dest_file.to_str().unwrap(),
+                materialization: "copy",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = verify_source_view(db.pool(), "view-copy-1").await.unwrap();
+        assert!(resp.clean, "expected clean, got broken_items: {:?}", resp.broken_items);
+    }
+
+    #[tokio::test]
+    async fn copy_kind_diverged_content_is_reported() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let dest_dir = dir.path().join("dest");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let source_file = source_dir.join("light1.fits");
+        std::fs::write(&source_file, b"original bytes").unwrap();
+        let dest_file = dest_dir.join("light1.fits");
+        // Destination copy edited independently after generation — the drift
+        // FR-009 requires detecting (previously always reported clean).
+        std::fs::write(&dest_file, b"edited elsewhere").unwrap();
+
+        insert_project(&db, "p1", dir.path().join("proj").to_str().unwrap()).await;
+        insert_root(&db, "root1", source_dir.to_str().unwrap()).await;
+        insert_file_record(&db, "frame1", "root1", "light1.fits").await;
+
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView {
+                id: "view-copy-2",
+                project_id: "p1",
+                kind: "copy",
+            },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "item-copy-2",
+                view_id: "view-copy-2",
+                inventory_item_id: "frame1",
+                view_relative_path: dest_file.to_str().unwrap(),
+                materialization: "copy",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = verify_source_view(db.pool(), "view-copy-2").await.unwrap();
+        assert!(!resp.clean);
+        assert_eq!(resp.broken_items[0].state, BrokenItemState::HashDiverged);
+    }
+
+    #[tokio::test]
+    async fn hardlink_kind_never_probed_for_hash_divergence() {
+        // A hardlink shares the source's inode: its bytes are the source's
+        // bytes by construction, so no content probe should ever run (and
+        // none is needed — verifies the existing clean-hardlink contract is
+        // untouched by the new copy-kind probe).
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let dest_dir = dir.path().join("dest");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let source_file = source_dir.join("light1.fits");
+        std::fs::write(&source_file, b"x").unwrap();
+        let dest_file = dest_dir.join("light1.fits");
+        std::fs::hard_link(&source_file, &dest_file).unwrap();
+
+        insert_project(&db, "p1", dir.path().join("proj").to_str().unwrap()).await;
+        insert_root(&db, "root1", source_dir.to_str().unwrap()).await;
+        insert_file_record(&db, "frame1", "root1", "light1.fits").await;
+
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView {
+                id: "view-hl-1",
+                project_id: "p1",
+                kind: "hardlink",
+            },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "item-hl-1",
+                view_id: "view-hl-1",
+                inventory_item_id: "frame1",
+                view_relative_path: dest_file.to_str().unwrap(),
+                materialization: "hardlink",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = verify_source_view(db.pool(), "view-hl-1").await.unwrap();
+        assert!(resp.clean, "expected clean, got broken_items: {:?}", resp.broken_items);
     }
 
     // ── sweep_view_staleness (T014/T015) ─────────────────────────────────────

@@ -123,7 +123,8 @@ export type BrokenItemState =
   | 'missing'
   | 'moved'
   | 'unresolved_link'
-  | 'changed_kind';
+  | 'changed_kind'
+  | 'hash_diverged';
 
 /** One broken/missing/stale item reported by `sourceview.verify`. */
 export interface BrokenItem {
@@ -322,6 +323,8 @@ export function brokenItemStateLabel(state: BrokenItemState): string {
       return m.projects_source_views_verify_state_unresolved_link();
     case 'changed_kind':
       return m.projects_source_views_verify_state_changed_kind();
+    case 'hash_diverged':
+      return m.projects_source_views_verify_state_hash_diverged();
     default:
       return state;
   }

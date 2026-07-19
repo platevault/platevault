@@ -155,40 +155,15 @@ pub const TOPIC_ROOT_DELETED: &str = "root.deleted";
 
 // ── Native filesystem control audit events (spec 004) ─────────────────────
 
-/// Kind of picker that failed.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-    JsonSchema,
-    Type,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum PickerKind {
-    Directory,
-    File,
-}
-
-/// Payload for the `native.picker.failed` topic (spec 004).
-///
-/// Audit event emitted when an OS picker dialog fails.
-/// Does NOT include path or path_hash fields (A2 decision: correlate via entity_id).
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct NativePickerFailed {
-    pub picker_kind: PickerKind,
-    pub error_code: String,
-    pub request_id: String,
-}
-
-pub const TOPIC_NATIVE_PICKER_FAILED: &str = "native.picker.failed";
+// #717 FR-006: `native.picker.failed` (`PickerKind`/`NativePickerFailed`/
+// `TOPIC_NATIVE_PICKER_FAILED`) was defined but never constructed anywhere —
+// tauri-plugin-dialog's blocking picker API (`blocking_pick_folder`/
+// `blocking_pick_file`, used by `commands::native::native_directory_pick`/
+// `native_file_pick`) returns `Option<FilePath>` with no error variant at
+// all, so there was never a real "picker failed" signal distinct from "user
+// cancelled" to emit it from. Removed per the issue's own fallback ("emit
+// from a real failure path or remove the dead type") rather than fabricate
+// a failure condition the underlying dialog API cannot report.
 
 /// Payload for the `native.reveal.failed` topic (spec 004).
 ///

@@ -895,6 +895,57 @@ async fn lifecycle_transition_apply() {
     assert!(!response.contract_version.is_empty());
 }
 
+/// #665: a successful Project transition through the real Tauri command
+/// (not just the bare use case above) must fire the `LifecycleTransition`
+/// manifest trigger — one of the 3 manifest emitters that never existed at
+/// all before this fix.
+#[tokio::test]
+async fn lifecycle_transition_apply_writes_lifecycle_transition_manifest() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+
+    let project_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
+         VALUES (?, 'M31 LRGB', 'PixInsight', 'ready', ?, NULL, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .bind(project_id.to_string())
+    .bind(dir.path().to_str().unwrap())
+    .execute(state.repo.pool())
+    .await
+    .expect("insert project row");
+
+    let request = TransitionRequest::Project(ProjectTransitionRequest::new(
+        uuid::Uuid::new_v4(),
+        project_id,
+        ProjectState::Ready,
+        ProjectState::Processing,
+        TransitionActor::User,
+    ));
+
+    let response =
+        desktop_shell::commands::lifecycle::lifecycle_transition_apply(state.clone(), request)
+            .await
+            .expect("command must not error");
+    assert_eq!(response.status, contracts_core::lifecycle::TransitionStatus::Success);
+
+    let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+        state.repo.pool(),
+        &project_id.to_string(),
+        None,
+        10,
+    )
+    .await
+    .expect("list_manifests_for_project");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].reason, "lifecycle_transition");
+    let manifest = app_core::project_manifests::get(state.repo.pool(), &rows[0].id)
+        .await
+        .expect("project_manifests::get");
+    assert_eq!(manifest.manifest.body.lifecycle_state, "processing");
+}
+
 #[tokio::test]
 async fn lifecycle_ledger_list() {
     let db = Database::in_memory().await.expect("in-memory database");

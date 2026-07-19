@@ -45,12 +45,30 @@ fn siril_profile() -> ToolProfile {
     }
 }
 
+fn planetary_suite_profile() -> ToolProfile {
+    ToolProfile {
+        id: "planetary_suite",
+        name: "Planetary Suite",
+        // No stable macOS bundle id is known for AutoStakkert! (research.md R2:
+        // "if present; else surface not found") — `open -b` dispatch stays
+        // unavailable until one is confirmed; Windows/Linux launch by path only.
+        bundle_id: None,
+        // AutoStakkert! opens its own dialog; cwd anchors it (spec 011 R3).
+        args_template: vec![],
+        supports_open_folder: false,
+        detach_strategy: DetachStrategy::Setsid,
+        // No Planetary-Suite-specific layout yet — falls back to
+        // DEFAULT_SOURCE_VIEW_LAYOUT like Siril.
+        source_view_layout: None,
+    }
+}
+
 /// Return all seeded processing-tool profiles as an owned `Vec`.
 ///
 /// Call `validate_seeds()` at app boot to assert integrity.
 #[must_use]
 pub fn all() -> Vec<ToolProfile> {
-    vec![pixinsight_profile(), siril_profile()]
+    vec![pixinsight_profile(), siril_profile(), planetary_suite_profile()]
 }
 
 /// Validate all seed profiles.
@@ -136,8 +154,16 @@ mod tests {
     }
 
     #[test]
-    fn two_seeds_are_registered() {
-        assert_eq!(all().len(), 2);
+    fn three_seeds_are_registered() {
+        assert_eq!(all().len(), 3);
+    }
+
+    #[test]
+    fn planetary_suite_is_seeded_and_launches_bare() {
+        let p = find("planetary_suite").expect("planetary_suite must be seeded");
+        assert_eq!(p.name, "Planetary Suite");
+        assert!(!p.supports_open_folder);
+        assert!(p.args_template.is_empty());
     }
 
     // ── Spec 049 US2 T023: WBPP layout groups by session/night → filter →
@@ -161,14 +187,19 @@ mod tests {
 
     #[test]
     fn resolve_source_view_layout_falls_back_to_default() {
-        // No profile, an unknown profile, and a seeded profile without an
-        // explicit layout (siril) all fall back to the WBPP/PixInsight default.
+        // No profile, an unmatched profile ref, and seeded profiles without an
+        // explicit layout of their own (siril, planetary_suite) all fall back
+        // to the WBPP/PixInsight default.
         assert_eq!(resolve_source_view_layout(None), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
+        assert_eq!(
+            resolve_source_view_layout(Some("photoshop")),
+            crate::DEFAULT_SOURCE_VIEW_LAYOUT
+        );
+        assert_eq!(resolve_source_view_layout(Some("siril")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
         assert_eq!(
             resolve_source_view_layout(Some("Planetary Suite")),
             crate::DEFAULT_SOURCE_VIEW_LAYOUT
         );
-        assert_eq!(resolve_source_view_layout(Some("siril")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
     }
 
     // ── Spec 049 US2 T024: changing the layout pattern only changes the

@@ -89,6 +89,20 @@ function resultPillVariant(state: PlanItemDetail_Serialize['state']) {
   }
 }
 
+/**
+ * #761 (spec 049 FR-004): the resolved per-item link kind (symlink/junction/
+ * copy/hardlink), when this item carries one. Generation/regeneration plans
+ * (`source_view_generate.rs`/`prepared_views.rs::regenerate_prepared_view`)
+ * attach it as a `materialization` provenance entry — the only way today to
+ * show the user, before apply, what capability was actually resolved for
+ * each item (the contract data already existed; the review UI never read it).
+ */
+function linkKind(item: PlanItemDetail_Serialize): string | null {
+  return (
+    item.provenance?.find((p) => p.label === 'materialization')?.value ?? null
+  );
+}
+
 function destinationLabel(plan: PlanDetail_Serialize): string {
   // DTO enum is `archive | os_trash` (the DB canonical vocabulary is
   // `archive | trash`; plans.get maps trash → os_trash).
@@ -335,6 +349,7 @@ export function PlanReviewOverlay({
     { key: 'from', label: m.plans_review_col_from() },
     { key: 'to', label: m.plans_review_col_to() },
     { key: 'protection', label: m.plans_review_col_protection() },
+    { key: 'linkKind', label: m.plans_review_col_link_kind() },
     { key: 'result', label: m.plans_review_col_result() },
     { key: 'reason', label: m.plans_review_col_reason() },
     { key: 'linked', label: m.plans_review_col_linked() },
@@ -367,6 +382,12 @@ export function PlanReviewOverlay({
       ) : (
         <Pill variant="ghost">{m.settings_cleanup_protection_normal()}</Pill>
       ),
+    // #761: per-item resolved link kind (generation/regeneration plans
+    // only); blank for every other plan type — matches the `linked` column's
+    // existing not-applicable convention.
+    linkKind: linkKind(item) ?? (
+      <span className="alm-cell--muted">{m.common_none()}</span>
+    ),
     // #607: per-item apply outcome, so a partial failure is diagnosable
     // without re-running the plan. `pending` (never attempted, e.g. the plan
     // hasn't been applied yet) shows a muted dash rather than a pill.
