@@ -802,6 +802,72 @@ mod tests {
         }
     }
 
+    /// A confirmed folder placeholder must stay on the open-plans surface even
+    /// though `classify` has materialized a sub-item for its source group.
+    ///
+    /// `classify` runs `materialize_sub_items` for EVERY source-group-backed
+    /// item, so an ordinary single-type folder ends up with a placeholder plus
+    /// one sub-item — the same shape as a real split. The #711 placeholder
+    /// dedup in `list_unacknowledged_across_roots` therefore also hid the row
+    /// the user actually confirmed, and `list_open_inbox_plans` reads that same
+    /// query, so the plan vanished from the review surface and "Review plans"
+    /// never rendered (regression from #1038, caught by the Layer-2 journeys
+    /// `inbox_ui_catalogue_in_place_zero_moves_byte_identical` and
+    /// `inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination`).
+    #[tokio::test]
+    async fn list_open_keeps_confirmed_placeholder_with_materialized_sub_item() {
+        let db = test_db().await;
+        let (item_id, root_path) = setup_classified_item(&db).await;
+
+        // Give the placeholder a source group and materialize the single-type
+        // sub-item classify would have written for it.
+        let root_id = "root-plan-test";
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &inbox_repo::UpsertSourceGroup {
+                id: "sg-plan-test",
+                root_id,
+                relative_path: "lights",
+                content_signature: Some("sig-abc"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET source_group_id = 'sg-plan-test' WHERE id = ?")
+            .bind(&item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        inbox_repo::upsert_inbox_sub_item(
+            db.pool(),
+            &inbox_repo::UpsertInboxSubItem {
+                id: "sub-plan-test",
+                root_id,
+                relative_path: "lights",
+                source_group_id: "sg-plan-test",
+                group_key: "type=light",
+                group_label: "(root) · light",
+                frame_type: Some("light"),
+                content_signature: "sig-sub",
+                file_count: 1,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        do_confirm(&db, &item_id, &root_path).await;
+
+        let resp = list_open_inbox_plans(db.pool()).await.unwrap();
+        let ids: Vec<&str> = resp.plans.iter().map(|p| p.inbox_item_id.as_str()).collect();
+        assert!(
+            ids.contains(&item_id.as_str()),
+            "the confirmed placeholder's plan must stay on the open-plans surface, got {ids:?}"
+        );
+    }
+
     /// `apply_selected_inbox_plans` applies only the named items and leaves the
     /// others in `plan_open`.
     #[tokio::test]
