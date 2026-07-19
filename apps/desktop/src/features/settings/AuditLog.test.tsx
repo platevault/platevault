@@ -24,15 +24,49 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockList, mockExport } = vi.hoisted(() => ({
+const { mockList, mockExport, mockNavigate } = vi.hoisted(() => ({
   mockList: vi.fn(),
   mockExport: vi.fn(),
+  mockNavigate: vi.fn(),
 }));
 
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => mockNavigate,
+}));
+
+// #803 entity-name resolution calls these per-row; default to a "not found"
+// error so unrelated tests keep seeing the raw `entityType · entityId` text.
 vi.mock('@/bindings/index', () => ({
   commands: {
     auditList: mockList,
     auditExport: mockExport,
+    projectsGet: vi.fn().mockResolvedValue({
+      status: 'error',
+      error: {
+        code: 'entity.not_found',
+        message: 'not found',
+        severity: 'warning',
+        retryable: false,
+      },
+    }),
+    targetsGet: vi.fn().mockResolvedValue({
+      status: 'error',
+      error: {
+        code: 'entity.not_found',
+        message: 'not found',
+        severity: 'warning',
+        retryable: false,
+      },
+    }),
+    plansGet: vi.fn().mockResolvedValue({
+      status: 'error',
+      error: {
+        code: 'entity.not_found',
+        message: 'not found',
+        severity: 'warning',
+        retryable: false,
+      },
+    }),
   },
 }));
 
@@ -68,6 +102,7 @@ const ENTRIES = [
 beforeEach(() => {
   mockList.mockReset();
   mockExport.mockReset();
+  mockNavigate.mockReset();
   mockList.mockResolvedValue({
     status: 'ok',
     data: { entries: ENTRIES, total: ENTRIES.length },
@@ -258,27 +293,28 @@ describe('AuditLog', () => {
 
     render(<AuditLog />);
 
-    // waitFor on the rendered title (not just "mockList was called") — the
+    // waitFor on rendered content (not just "mockList was called") — the
     // list call resolves asynchronously, so asserting immediately after only
     // the call-count race with the re-render that actually paints the rows
     // (observed flaky on a loaded CI runner: assertion ran while the table
-    // still showed "Loading…").
+    // still showed "Loading…"). Detail is now a visible column (#749), not
+    // a hover-only tooltip.
     await waitFor(() =>
       expect(
-        screen.getByTitle(
+        screen.getByText(
           'Transition ready → prepared for project requires an approved filesystem plan',
         ),
       ).toBeInTheDocument(),
     );
     expect(
-      screen.getByTitle('2 fields require review before this transition'),
+      screen.getByText('2 fields require review before this transition'),
     ).toBeInTheDocument();
     expect(
-      screen.getByTitle('Target resolved from query “M 31”'),
+      screen.getByText('Target resolved from query “M 31”'),
     ).toBeInTheDocument();
     // Fallback: no usable template → stored English detail, byte-identical.
     expect(
-      screen.getByTitle('some legacy free-form refusal reason'),
+      screen.getByText('some legacy free-form refusal reason'),
     ).toBeInTheDocument();
   });
 
@@ -305,5 +341,93 @@ describe('AuditLog', () => {
 
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('renders the state-change column (#749)', async () => {
+    render(<AuditLog />);
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    expect(screen.getByText('needs_review → confirmed')).toBeInTheDocument();
+    expect(screen.getByText('ready_for_review → approved')).toBeInTheDocument();
+  });
+
+  it('maps the outcome and entity-type selects to structured filters (#749)', async () => {
+    render(<AuditLog />);
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText('Outcome'), {
+      target: { value: 'refused' },
+    });
+    await waitFor(() =>
+      expect(mockList).toHaveBeenLastCalledWith(
+        { outcome: 'refused' },
+        { limit: 8, offset: 0 },
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText('Entity'), {
+      target: { value: 'project' },
+    });
+    await waitFor(() =>
+      expect(mockList).toHaveBeenLastCalledWith(
+        { outcome: 'refused', entityType: 'project' },
+        { limit: 8, offset: 0 },
+      ),
+    );
+  });
+
+  it('navigates to the entity page when a linked row is clicked (#831)', async () => {
+    render(<AuditLog />);
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    // ENTRIES[0] is entityType 'session', which has a real /sessions/:id route.
+    fireEvent.click(screen.getByText('session.confirmed'));
+
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/sessions/ses-001' });
+  });
+
+  it('does not link entity types without a destination page (#626 reasoning, #831)', async () => {
+    render(<AuditLog />);
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    // ENTRIES[1] is entityType 'plan' — no /plans/:id route exists yet.
+    fireEvent.click(screen.getByText('plan.approved'));
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('resolves a project entity to its display name (#803)', async () => {
+    const { commands } = await import('@/bindings/index');
+    vi.mocked(commands.projectsGet).mockResolvedValueOnce({
+      status: 'ok',
+      data: { id: 'proj-abc', name: 'J5 Lifecycle Test' } as never,
+    });
+    mockList.mockResolvedValue({
+      status: 'ok',
+      data: {
+        entries: [
+          {
+            id: 'audit-201',
+            timestamp: '2026-07-14T10:00:00Z',
+            eventType: 'project.archive_refused',
+            entityType: 'project',
+            entityId: 'proj-abc',
+            fromState: null,
+            toState: null,
+            actor: 'system',
+            outcome: 'refused',
+            detail: 'Archive refused',
+          },
+        ],
+        total: 1,
+      },
+    });
+
+    render(<AuditLog />);
+
+    await waitFor(() => {
+      expect(screen.getByText('J5 Lifecycle Test')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('project · proj-abc')).not.toBeInTheDocument();
   });
 });

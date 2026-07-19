@@ -77,15 +77,41 @@ function passesSourceFilter(
   return filter.includes(entrySource);
 }
 
+// All known log-entry sources, for the category/source filter chips (#666).
+// Kept local (not exported from `data/logStore`) — this is a UI concern only.
+const ALL_LOG_SOURCES: LogEntrySource[] = [
+  'audit',
+  'diagnostic',
+  'catalog',
+  'plan',
+  'workflow',
+  'lifecycle',
+  'inventory',
+  'settings',
+  'project',
+  'target',
+  'tool',
+];
+
 // ── Entity navigation helpers ─────────────────────────────────────────────────
 
 type EntityNavigateFn = (entityType: string, entityId: string) => void;
 type AuditNavigateFn = (requestId: string) => void;
 
-function buildEntityPath(entityType: string, entityId: string): string {
+/**
+ * Resolve an entity link's destination path, or `null` when the entity type
+ * has no deep-linkable destination yet (row still shows subject-context text,
+ * just without click affordance).
+ *
+ * `plan` is intentionally not linked — no `/plans/:id` route exists yet (#626);
+ * `catalog` and the fallback point at the real Settings panes (`/settings/$pane`
+ * is a plain path segment, so a literal string is fine here — no route for
+ * `/audit` or `/settings?tab=catalogs` ever existed).
+ */
+function buildEntityPath(entityType: string, entityId: string): string | null {
   switch (entityType) {
     case 'plan':
-      return `/plans/${entityId}`;
+      return null;
     case 'project':
       return `/projects/${entityId}`;
     case 'session':
@@ -93,9 +119,9 @@ function buildEntityPath(entityType: string, entityId: string): string {
     case 'target':
       return `/targets/${entityId}`;
     case 'catalog':
-      return `/settings?tab=catalogs`;
+      return `/settings/catalogs`;
     default:
-      return `/audit?entityType=${entityType}&entityId=${entityId}`;
+      return `/settings/audit?entityType=${entityType}&entityId=${entityId}`;
   }
 }
 
@@ -111,6 +137,7 @@ export function LogPanel() {
     levelFilter,
     setLevelFilter,
     sourceFilter,
+    setSourceFilter,
   } = useLogPanel();
 
   const navigate = useNavigate();
@@ -214,6 +241,7 @@ export function LogPanel() {
   const navigateToEntity: EntityNavigateFn = useCallback(
     (entityType, entityId) => {
       const path = buildEntityPath(entityType, entityId);
+      if (path == null) return;
       void navigate({ to: path as never });
     },
     [navigate],
@@ -221,7 +249,7 @@ export function LogPanel() {
 
   const navigateToAudit: AuditNavigateFn = useCallback(
     (requestId) => {
-      void navigate({ to: `/audit?requestId=${requestId}` as never });
+      void navigate({ to: `/settings/audit?requestId=${requestId}` as never });
     },
     [navigate],
   );
@@ -309,6 +337,12 @@ export function LogPanel() {
                 }`}
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
+                // Disambiguates from the category/source filter's own "All"
+                // chip below — both groups have a visible "All" label, but
+                // e2e/a11y queries need distinct accessible names.
+                aria-label={
+                  chip.value === 'all' ? m.logpanel_level_all_aria() : undefined
+                }
               >
                 {chip.label()}
               </button>
@@ -331,12 +365,66 @@ export function LogPanel() {
           </div>
         )}
 
+        {/* Category/source filter chips (#666) */}
+        {expanded && (
+          <div
+            className="alm-logpanel__filters"
+            role="group"
+            aria-label={m.logpanel_source_filter_aria()}
+          >
+            <button
+              type="button"
+              className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
+                sourceFilter.length === 0 ? ' alm-logpanel__chip--active' : ''
+              }`}
+              onClick={() => setSourceFilter([])}
+              aria-pressed={sourceFilter.length === 0}
+              aria-label={m.logpanel_source_all_aria()}
+            >
+              {m.log_level_all()}
+            </button>
+            {ALL_LOG_SOURCES.map((source) => (
+              <button
+                key={source}
+                type="button"
+                className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
+                  sourceFilter.length === 0 || sourceFilter.includes(source)
+                    ? ' alm-logpanel__chip--active'
+                    : ''
+                }`}
+                onClick={() =>
+                  setSourceFilter(
+                    sourceFilter.length === 0
+                      ? [source]
+                      : sourceFilter.includes(source)
+                        ? sourceFilter.filter((s) => s !== source)
+                        : [...sourceFilter, source],
+                  )
+                }
+                aria-pressed={
+                  sourceFilter.length === 0 || sourceFilter.includes(source)
+                }
+              >
+                {source}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Follow toggle */}
         {expanded && (
           <button
             type="button"
             className={`alm-btn alm-btn--ghost alm-btn--xs${followLogs ? ' alm-logpanel__chip--active' : ''}`}
-            onClick={() => setFollowLogs(!followLogs)}
+            onClick={() => {
+              const next = !followLogs;
+              setFollowLogs(next);
+              // #832: re-enabling Follow must resume at the newest row even
+              // if a manual scroll-up left `scrollPaused` set — otherwise the
+              // follow-tail effect's guard (`!followLogs || scrollPaused`)
+              // silently no-ops and the toggle looks broken.
+              if (next) setScrollPaused(false);
+            }}
             aria-pressed={followLogs}
             aria-label={
               followLogs
@@ -402,7 +490,14 @@ export function LogPanel() {
           data-virtual-scroll="true"
         >
           {visibleEntries.length === 0 ? (
-            <li className="alm-logpanel__empty">{m.logpanel_empty()}</li>
+            <li className="alm-logpanel__empty">
+              {/* #669: a filtered-to-empty view must not read as "nothing
+                  was ever recorded" when entries exist but the active
+                  filter excludes all of them. */}
+              {entries.length === 0
+                ? m.logpanel_empty()
+                : m.logpanel_empty_filtered()}
+            </li>
           ) : (
             <div
               className="alm-virtual-inner"
@@ -463,11 +558,18 @@ function LogEntryRow({
   index,
   measureRef,
 }: LogEntryRowProps) {
-  const hasEntityLink = entry.entityType != null && entry.entityId != null;
-  const hasAuditLink = entry.requestId != null && !hasEntityLink;
+  const hasEntity = entry.entityType != null && entry.entityId != null;
+  // #626: a link is only "linkable" when a real route exists for it (e.g.
+  // `plan` has no destination yet — buildEntityPath returns null for it).
+  const hasEntityLink =
+    hasEntity &&
+    buildEntityPath(entry.entityType ?? '', entry.entityId ?? '') != null;
+  const hasAuditLink = entry.requestId != null && !hasEntity;
   // Subject context (#583): the entity/request the line is about, surfaced
   // as visible text rather than only implied by the click-to-navigate arrow.
-  const contextLabel = hasEntityLink
+  // Shown even when the entity has no link yet (e.g. `plan`, #626) so the
+  // context isn't lost, just the click affordance.
+  const contextLabel = hasEntity
     ? `${entry.entityType} · ${entry.entityId}`
     : hasAuditLink
       ? entry.requestId

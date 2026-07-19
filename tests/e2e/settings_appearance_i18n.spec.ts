@@ -347,13 +347,28 @@ test.describe("Journey 10 · Bottom log viewer (spec 019)", () => {
     await expect(logRegion.getByText(errorMsg)).toBeVisible();
 
     // Controls present (FR-003 level chips + FR-007 JSON export, follow-tail).
-    for (const chip of ["All", "Error", "Warn", "Info", "Debug"]) {
+    // "All" is disambiguated via aria-label (#666 added a second filter
+    // group, also with a visible "All" chip) — assert both by their
+    // distinct accessible names rather than the shared visible text.
+    await expect(
+      logRegion.getByRole("button", { name: "All levels", exact: true }),
+    ).toBeVisible();
+    for (const chip of ["Error", "Warn", "Info", "Debug"]) {
       await expect(
         logRegion.getByRole("button", { name: chip, exact: true }),
       ).toBeVisible();
     }
     await expect(
       logRegion.getByRole("button", { name: "Export log to JSON file" }),
+    ).toBeVisible();
+
+    // Category/source filter (#666) — same visible "All" text as the level
+    // filter, disambiguated by aria-label; a real source chip is present.
+    await expect(
+      logRegion.getByRole("button", { name: "All sources", exact: true }),
+    ).toBeVisible();
+    await expect(
+      logRegion.getByRole("button", { name: "target", exact: true }),
     ).toBeVisible();
 
     // Truncation marker is NOT reachable in mock mode (documented above):

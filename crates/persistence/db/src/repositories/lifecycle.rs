@@ -198,6 +198,72 @@ fn state_column_for(entity_type: EntityType) -> &'static str {
     }
 }
 
+/// FR-003 (#713): resolve the project whose dependents (research.md §6 —
+/// `processing_artifact`/`prepared_source_view` rows sharing this
+/// `project_id`) the StalePropagator should recompute. Trivial for a Project
+/// transition (its own id); a lookup for entity types that themselves carry a
+/// `project_id` FK; `None` otherwise (no propagation redesign — session-level
+/// dependents are out of scope here).
+async fn resolve_transition_project_id(
+    pool: &sqlx::SqlitePool,
+    entity_type: EntityType,
+    id_str: &str,
+) -> Option<String> {
+    match entity_type {
+        EntityType::Project => Some(id_str.to_owned()),
+        EntityType::ProcessingArtifact | EntityType::Projection => {
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT project_id FROM processing_artifact WHERE id = ?",
+            )
+            .bind(id_str)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+        }
+        EntityType::PreparedSource => sqlx::query_scalar::<_, Option<String>>(
+            "SELECT project_id FROM prepared_source_view WHERE id = ?",
+        )
+        .bind(id_str)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .flatten(),
+        _ => None,
+    }
+}
+
+/// FR-003 (#713): marks a project's dependent `processing_artifact`/
+/// `prepared_source_view` rows stale (research.md §6 — `ProjectManifest
+/// depends_on Project`). DB-boundary home for
+/// `audit::stale_propagator::resolve_project_dependents_hook`, which has no
+/// raw-SQL access of its own (check-db-boundary.sh).
+///
+/// # Errors
+/// Returns `DbError` if either `UPDATE` fails.
+pub async fn mark_project_dependents_stale(
+    pool: &sqlx::SqlitePool,
+    project_id: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE processing_artifact SET staleness = 'stale' \
+         WHERE project_id = ? AND staleness != 'stale'",
+    )
+    .bind(project_id)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE prepared_source_view SET state = 'stale' \
+         WHERE project_id = ? AND state NOT IN ('stale', 'retired')",
+    )
+    .bind(project_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Raw `ledger_view` row, decoded by column name via `#[derive(FromRow)]`
 /// instead of a hand-rolled positional-tuple `query_as` + manual per-field
 /// map (Tier-3 dedup/abstraction audit). `entity_id`/`entity_type` are kept
@@ -451,6 +517,9 @@ impl LifecycleRepository for SqliteLifecycleRepository {
 
         tx.commit().await?;
 
+        let project_id =
+            resolve_transition_project_id(&self.pool, transition.entity_type, &id_str).await;
+
         // Publish event after successful commit (fire-and-forget — publish
         // failure must never roll back or fail an already-committed transition).
         let event_payload = serde_json::to_value(LifecycleTransitionApplied {
@@ -460,6 +529,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
             to_state: transition.to_state.clone(),
             actor: transition.actor.clone(),
             at: applied_at,
+            project_id,
         })
         .unwrap_or(Value::Null);
         self.bus.publish(TOPIC_LIFECYCLE_TRANSITION_APPLIED, Source::System, event_payload).await;

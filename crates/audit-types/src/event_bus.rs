@@ -66,6 +66,13 @@ pub struct LifecycleTransitionApplied {
     pub to_state: String,
     pub actor: String,
     pub at: Timestamp,
+    /// The project whose dependents (research.md §6 fan-out —
+    /// `processing_artifact` / `prepared_source_view` rows carrying the same
+    /// `project_id`) should be recomputed, when resolvable. `Some(entity_id)`
+    /// when `entity_type == Project`; `None` when not resolvable at the
+    /// call site (spec 002 FR-003, #713 — minimal slice, no propagation
+    /// redesign).
+    pub project_id: Option<String>,
 }
 
 pub const TOPIC_LIFECYCLE_TRANSITION_APPLIED: &str = "lifecycle.transition.applied";

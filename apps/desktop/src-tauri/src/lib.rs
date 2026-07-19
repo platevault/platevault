@@ -14,6 +14,7 @@ pub mod watcher;
 use std::sync::Arc;
 
 use audit::bus::EventBus;
+use audit::stale_propagator::{resolve_project_dependents_hook, StalePropagator};
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
@@ -989,6 +990,19 @@ pub(crate) async fn check_for_app_update(app: &AppHandle) {
     }
 }
 
+/// Spawn the spec 002 FR-003 (#713) stale-dependent propagator.
+///
+/// Never spawned in production before this — projections/prepared sources
+/// only recomputed their staleness through calling code that happened to
+/// run the exact update, not automatically on the owning project's
+/// transition (research.md §6 fan-out).
+fn spawn_stale_dependent_propagator(
+    pool: SqlitePool,
+    bus: &EventBus,
+) -> tokio::task::JoinHandle<()> {
+    StalePropagator::new().with_hook(resolve_project_dependents_hook(pool)).spawn(bus)
+}
+
 /// Spawn the spec-035 US4/T043 background ingest-resolution drain.
 ///
 /// Every interval the task rebuilds the resolver from the persisted
@@ -1052,6 +1066,9 @@ fn spawn_ingest_resolution_drain(
     });
 }
 
+// Sequential startup/subscriber-wiring assembly, not complex logic — same
+// shape as `specta_builder` above, which carries the same allow.
+#[allow(clippy::too_many_lines)]
 pub fn run_app(
     app: tauri::App,
     pool: SqlitePool,
@@ -1079,6 +1096,7 @@ pub fn run_app(
         pool.clone(),
     );
     crate::commands::guided::start_guided_event_forwarder(app.handle().clone(), &bus);
+    drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));

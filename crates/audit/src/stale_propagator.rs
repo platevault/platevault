@@ -15,6 +15,7 @@
 
 use std::sync::Arc;
 
+use sqlx::SqlitePool;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::bus::EventBus;
@@ -79,6 +80,49 @@ impl StalePropagator {
     }
 }
 
+/// FR-003 (#713): marks a project's dependent projections/prepared sources
+/// stale when the project's own lifecycle transitions (research.md §6:
+/// `ProjectManifest depends_on Project`). Narrow slice of the dependency
+/// graph — only the `project_id` FK dependents already modeled in the schema
+/// (`processing_artifact.project_id`, `prepared_source_view.project_id`);
+/// session-level dependents (`PreparedSourceView depends_on AcquisitionSession[]`)
+/// would need a further join and are out of scope for this minimal fix.
+///
+/// No-ops when the envelope carries no `projectId` (unresolvable at the
+/// publish site — see `LifecycleTransitionApplied::project_id`).
+#[must_use]
+pub fn resolve_project_dependents_hook(pool: SqlitePool) -> PropagatorFn {
+    Arc::new(move |env| {
+        let Some(project_id) = env.payload.get("projectId").and_then(|v| v.as_str()) else {
+            return Ok(());
+        };
+        let project_id = project_id.to_owned();
+        let pool = pool.clone();
+        // Hooks are synchronous (best-effort, at-least-once per the module
+        // docs); spawn the actual DB write rather than blocking the
+        // dispatch loop that drives every other registered hook.
+        tokio::spawn(async move {
+            // DB-boundary: the actual UPDATE statements live in
+            // `persistence_db::repositories::lifecycle` (check-db-boundary.sh
+            // forbids raw SQL outside crates/persistence/db).
+            if let Err(err) =
+                persistence_db::repositories::lifecycle::mark_project_dependents_stale(
+                    &pool,
+                    &project_id,
+                )
+                .await
+            {
+                tracing::warn!(
+                    project_id,
+                    error = %err,
+                    "stale-dependent propagation failed"
+                );
+            }
+        });
+        Ok(())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,6 +168,7 @@ mod tests {
                 to_state: "processing".to_owned(),
                 actor: "user".to_owned(),
                 at: Timestamp::now_utc(),
+                project_id: Some("00000000-0000-0000-0000-000000000000".to_owned()),
             },
         )
         .await
@@ -134,6 +179,178 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
+        handle.abort();
+    }
+
+    /// Real migrated DB — `resolve_project_dependents_hook` needs the actual
+    /// `processing_artifact`/`prepared_source_view` tables (migration 0002).
+    async fn migrated_test_bus() -> (persistence_db::Database, EventBus) {
+        let db = persistence_db::Database::in_memory().await.expect("in-memory db");
+        db.migrate().await.expect("migrate");
+        let bus = EventBus::with_pool(db.pool().clone());
+        (db, bus)
+    }
+
+    /// Seeds two projects (`project_id` / `other_project_id`) each with a
+    /// `processing_artifact` row, plus one `prepared_source_view` row for
+    /// `project_id` only — the fixture `resolve_project_dependents_hook`
+    /// tests scope their assertions against.
+    async fn seed_two_project_dependents(
+        pool: &sqlx::SqlitePool,
+        project_id: &str,
+        other_project_id: &str,
+        now: &str,
+    ) {
+        sqlx::query(
+            "INSERT INTO target (id, primary_designation, created_at) VALUES ('t1', 'M31', ?)",
+        )
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        for pid in [project_id, other_project_id] {
+            sqlx::query(
+                "INSERT INTO project (id, name, target_id, session_ids, created_at) \
+                 VALUES (?, 'p', 't1', '[]', ?)",
+            )
+            .bind(pid)
+            .bind(now)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES ('root1', 'r', '/tmp', 'local', 'active', ?)",
+        )
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+             (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('fr1', 'root1', 'a.fits', 1, ?, 'observed', ?, ?)",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO processing_artifact \
+             (id, project_id, file_record_id, kind, staleness, created_at) \
+             VALUES ('art-mine', ?, 'fr1', 'manifest', 'current', ?)",
+        )
+        .bind(project_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO processing_artifact \
+             (id, project_id, file_record_id, kind, staleness, created_at) \
+             VALUES ('art-other', ?, 'fr1', 'manifest', 'current', ?)",
+        )
+        .bind(other_project_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO prepared_source_view (id, project_id, state, created_at) \
+             VALUES ('psv-mine', ?, 'ready', ?)",
+        )
+        .bind(project_id)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn resolve_project_dependents_hook_marks_project_scoped_rows_stale() {
+        let (db, bus) = migrated_test_bus().await;
+        let project_id = "11111111-1111-1111-1111-111111111111";
+        let other_project_id = "22222222-2222-2222-2222-222222222222";
+        let now = "2026-07-19T00:00:00Z";
+        seed_two_project_dependents(db.pool(), project_id, other_project_id, now).await;
+
+        let propagator =
+            StalePropagator::new().with_hook(resolve_project_dependents_hook(db.pool().clone()));
+        let handle = propagator.spawn(&bus);
+
+        bus.publish(
+            TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+            Source::User,
+            LifecycleTransitionApplied {
+                entity_type: EntityType::Project,
+                entity_id: project_id.to_owned(),
+                from_state: "ready".to_owned(),
+                to_state: "processing".to_owned(),
+                actor: "user".to_owned(),
+                at: Timestamp::now_utc(),
+                project_id: Some(project_id.to_owned()),
+            },
+        )
+        .await
+        .unwrap();
+
+        // The hook's own DB write is a spawned task; give it time to land.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        handle.abort();
+
+        let mine: String =
+            sqlx::query_scalar("SELECT staleness FROM processing_artifact WHERE id = 'art-mine'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(mine, "stale", "this project's artifact must flip to stale");
+
+        let other: String =
+            sqlx::query_scalar("SELECT staleness FROM processing_artifact WHERE id = 'art-other'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(other, "current", "a different project's artifact must be untouched");
+
+        let psv: String =
+            sqlx::query_scalar("SELECT state FROM prepared_source_view WHERE id = 'psv-mine'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(psv, "stale", "this project's prepared source view must flip to stale");
+    }
+
+    #[tokio::test]
+    async fn resolve_project_dependents_hook_is_a_noop_without_project_id() {
+        let (db, bus) = migrated_test_bus().await;
+        let propagator =
+            StalePropagator::new().with_hook(resolve_project_dependents_hook(db.pool().clone()));
+        let handle = propagator.spawn(&bus);
+
+        // No project_id resolvable (e.g. a FileRecord transition) — must not
+        // panic or error the dispatch loop.
+        bus.publish(
+            TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+            Source::System,
+            LifecycleTransitionApplied {
+                entity_type: EntityType::FileRecord,
+                entity_id: "fr-unrelated".to_owned(),
+                from_state: "observed".to_owned(),
+                to_state: "changed".to_owned(),
+                actor: "system".to_owned(),
+                at: Timestamp::now_utc(),
+                project_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        tokio::task::yield_now().await;
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         handle.abort();
     }
 }

@@ -9,7 +9,13 @@
  * `LogPanel.followState.test.tsx` (mocked router, commands, subscription).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { appendLog, resetLogStore } from '@/data/logStore';
 import { LogPanelProvider } from '@/app/LogPanelContext';
 import { LogPanel } from '@/app/LogPanel';
@@ -201,7 +207,11 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
       expect(screen.getByText('All good')).toBeInTheDocument();
     });
 
-    const sourceSpans = screen.getAllByText('audit');
+    // Scope to <span> only — the source-filter chip group (#666) also
+    // renders a plain-text "audit" button sharing the same visible text.
+    const sourceSpans = screen
+      .getAllByText('audit')
+      .filter((el) => el.tagName === 'SPAN');
     expect(sourceSpans.length).toBeGreaterThan(0);
     for (const span of sourceSpans) {
       expect(span).toHaveClass('alm-logpanel__event-source');
@@ -242,5 +252,107 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
     expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(
       true,
     );
+  });
+
+  it('filters entries by category/source chip (#666)', async () => {
+    appendLog([
+      {
+        id: 'aud:20',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:04Z',
+        level: 'info',
+        source: 'target',
+        message: 'Target resolved',
+      },
+      {
+        id: 'aud:21',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:05Z',
+        level: 'info',
+        source: 'settings',
+        message: 'Setting changed',
+      },
+    ]);
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Target resolved')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Setting changed')).toBeInTheDocument();
+
+    const categoryGroup = screen.getByRole('group', {
+      name: 'Category filter',
+    });
+
+    // Narrow to the "target" category chip only.
+    const targetChip = within(categoryGroup).getByRole('button', {
+      name: 'target',
+    });
+    fireEvent.click(targetChip);
+
+    // Narrowing to "target" alone deselects it from the implicit
+    // "all active" state — its `aria-pressed` stays "true" (now explicitly
+    // selected) while every *other* chip flips to "false". Wait on the
+    // actual filtering effect rather than the chip's own pressed state,
+    // which reads "true" before and after the click.
+    await waitFor(() => {
+      expect(screen.queryByText('Setting changed')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Target resolved')).toBeInTheDocument();
+
+    // Reset via the group's own "All" chip (aria-label "All sources"
+    // disambiguates it from the level filter's "All levels" chip — both
+    // groups show the same visible "All" text).
+    fireEvent.click(
+      within(categoryGroup).getByRole('button', { name: 'All sources' }),
+    );
+    expect(screen.getByText('Setting changed')).toBeInTheDocument();
+  });
+
+  it('distinguishes a filtered-empty view from a truly empty one (#669)', async () => {
+    // All seeded entries are `source: 'audit'` — narrowing the category
+    // filter to "target" excludes every one of them while entries still
+    // exist in the buffer, exercising the filtered-empty (not truly-empty)
+    // branch.
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Something failed')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'target' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('No entries match the current filter'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText('No log entries')).not.toBeInTheDocument();
+  });
+
+  it('gives the level-filter and category-filter "All" chips distinct accessible names', async () => {
+    // Regression: both filter groups show the same visible "All" text —
+    // an unqualified `getByRole('button', { name: 'All', exact: true })`
+    // within the panel must resolve to exactly one element, not two
+    // (real-UI e2e strict-mode violation caught in review).
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Something failed')).toBeInTheDocument();
+    });
+
+    const logRegion = screen.getByRole('log', { name: 'Operation log' });
+    expect(
+      within(logRegion).getByRole('button', { name: 'All levels' }),
+    ).toBeInTheDocument();
+    expect(
+      within(logRegion).getByRole('button', { name: 'All sources' }),
+    ).toBeInTheDocument();
+    expect(within(logRegion).queryByRole('button', { name: 'All' })).toBeNull();
   });
 });
