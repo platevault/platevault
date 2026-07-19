@@ -16,7 +16,7 @@ import { Btn } from '@/ui';
 import { getSettings, restartFirstRun } from './settingsIpc';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
-import { setPreference } from '@/data/preferences';
+import { setPreference, resetPreferences } from '@/data/preferences';
 import {
   resetWizardStateWithSources,
   type SourceEntry,
@@ -53,6 +53,8 @@ export function Advanced({ save }: AdvancedProps) {
   const updateState = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [runningVersion, setRunningVersion] = useState<string | null>(null);
+  const [resetConfirming, setResetConfirming] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (vals?.logLevel && typeof vals.logLevel === 'string') {
@@ -117,8 +119,22 @@ export function Advanced({ save }: AdvancedProps) {
     }
   };
 
-  const handleExport = () => console.log('Export DB triggered');
-  const handleReset = () => console.log('Reset preferences triggered');
+  // #601: no `db.export` backend command exists yet — the button used to be
+  // a console.log no-op styled as a real action. Disabled with an
+  // explanatory title (same "not backed yet" convention as MasterDetail's
+  // #642 disabled actions) rather than shipping a dead "live" button.
+  //
+  // Reset preferences, by contrast, genuinely has a real backend already
+  // (`resetPreferences()` — theme/density/font-size, local-only, no IPC
+  // needed) — it was just never wired to the button. Gated behind a confirm
+  // step for consistency with this pane's other resets (guided-tour/
+  // first-run restarts above).
+  const handleReset = () => {
+    resetPreferences();
+    setResetConfirming(false);
+    setResetDone(true);
+    setTimeout(() => setResetDone(false), 3000);
+  };
 
   // Staged update flow (#888, absorbs #869/#873): checking/downloading are
   // automatic; only the restart/install step is an explicit user action
@@ -144,32 +160,26 @@ export function Advanced({ save }: AdvancedProps) {
 
   return (
     <>
-      {/* Database info */}
+      {/* Database info (#602: this panel used to hardcode a fabricated size,
+          schema version, and record count — plus a pre-rename `~/.alm/` path
+          — directly above the real status bar showing genuinely different
+          live numbers. No backend command exists yet to report real db stats
+          or a real path, so those rows are removed rather than shown wrong;
+          "Engine" is the one row that was always a true, static fact. */}
       <SettingsSection
         title={m.settings_advanced_db_title()}
         action={
-          <Btn size="sm" onClick={handleExport}>
+          <Btn
+            size="sm"
+            disabled
+            title={m.settings_advanced_db_export_unavailable_title()}
+          >
             {m.settings_advanced_db_export()}
           </Btn>
         }
       >
-        <SettingsRow label={m.settings_advanced_db_location()}>
-          {/* eslint-disable-next-line alm/no-user-string -- filesystem path identifier, not translatable */}
-          <code className="alm-mono alm-adv-settings__db-path">
-            ~/.alm/astro-library.db
-          </code>
-        </SettingsRow>
         <SettingsRow label={m.settings_advanced_db_engine()}>
           {m.settings_advanced_db_engine_value()}
-        </SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_size()}>
-          {m.settings_advanced_db_size_value()}
-        </SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_schema()}>
-          {m.settings_advanced_db_schema_value()}
-        </SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_records()}>
-          {m.settings_advanced_db_records_value()}
         </SettingsRow>
       </SettingsSection>
 
@@ -360,7 +370,10 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Danger zone */}
+      {/* Danger zone (#601): was a console.log no-op styled as a real
+          destructive action. `resetPreferences()` is real and local-only, so
+          it's wired for real, gated behind a confirm step like this pane's
+          other resets. */}
       <SettingsSection title={m.settings_advanced_danger_title()}>
         <div className="alm-adv-settings__danger-box">
           <div className="alm-adv-settings__danger-heading">
@@ -369,9 +382,48 @@ export function Advanced({ save }: AdvancedProps) {
           <p className="alm-adv-settings__danger-desc">
             {m.settings_advanced_danger_desc()}
           </p>
-          <Btn size="sm" variant="danger" onClick={handleReset}>
-            {m.settings_advanced_danger_reset()}
-          </Btn>
+          {resetConfirming ? (
+            <>
+              <p className="alm-adv-settings__danger-desc">
+                {m.settings_advanced_danger_confirm_desc()}
+              </p>
+              <div className="alm-adv-settings__control-row">
+                <Btn
+                  size="sm"
+                  variant="danger"
+                  onClick={handleReset}
+                  data-testid="reset-preferences-confirm-btn"
+                >
+                  {m.settings_advanced_danger_confirm_yes()}
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setResetConfirming(false)}
+                >
+                  {m.settings_advanced_danger_reset_cancel()}
+                </Btn>
+              </div>
+            </>
+          ) : (
+            <Btn
+              size="sm"
+              variant="danger"
+              onClick={() => setResetConfirming(true)}
+              data-testid="reset-preferences-btn"
+            >
+              {m.settings_advanced_danger_reset()}
+            </Btn>
+          )}
+          {resetDone && (
+            <p
+              className="alm-adv-settings__control-desc"
+              role="status"
+              data-testid="reset-preferences-done"
+            >
+              {m.settings_advanced_danger_reset_done()}
+            </p>
+          )}
         </div>
       </SettingsSection>
     </>

@@ -142,7 +142,7 @@
 
 /* Select height override (component geometry) + dark-mode theming */
 .alm-source-protect__select {
-  height: 28px;
+  height: var(--alm-control-h);
   background: var(--alm-surface);
   color: var(--alm-text);
   border: 1px solid var(--alm-border);
@@ -575,7 +575,7 @@
 
 /* Log-level select — fixed height to match other controls */
 .alm-adv-settings__log-select {
-  height: 28px;
+  height: var(--alm-control-h);
 }
 
 /* Settings-row control description paragraph — shared by the onboarding-walk

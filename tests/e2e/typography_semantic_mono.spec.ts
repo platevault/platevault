@@ -119,22 +119,27 @@ test.describe("Spec 055 · semantic base layer + mono restoration (Phase 3)", ()
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/settings/advanced");
+    await page.goto("/#/settings/sources");
     await page.waitForLoadState("networkidle");
 
-    const dbPath = page.locator(".alm-adv-settings__db-path");
-    await expect(dbPath).toBeVisible();
-    await expect(dbPath).toHaveText("~/.alm/astro-library.db");
+    // A registered data-source root's path (real, mock-fixture-backed data —
+    // apps/desktop/src/api/mocks.ts `mockRoots`) — not the fabricated Advanced
+    // pane db-path #601/#602 removed. Same `<code class="alm-mono">` mechanism.
+    const rootPath = page.locator(".alm-data-sources__root-path", {
+      hasText: "/astro/raw",
+    });
+    await expect(rootPath).toBeVisible();
+    await expect(rootPath).toHaveText("/astro/raw");
 
-    const family = await dbPath.evaluate(
+    const family = await rootPath.evaluate(
       (el) => getComputedStyle(el).fontFamily,
     );
     expect(family).not.toContain("Inter");
     expect(family.toLowerCase()).toContain("mono");
 
-    // `code, pre, kbd` base-layer rule (reset.css): the db-path element itself
+    // `code, pre, kbd` base-layer rule (reset.css): the root-path element itself
     // is a <code>, which is the same mechanism as every other code/pre surface.
-    const tag = await dbPath.evaluate((el) => el.tagName.toLowerCase());
+    const tag = await rootPath.evaluate((el) => el.tagName.toLowerCase());
     expect(tag).toBe("code");
   });
 

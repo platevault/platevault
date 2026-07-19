@@ -140,6 +140,13 @@ export function SessionDetail({
   // Session facts as a clean tabular PropertyTable, spread across two columns.
   const factProps: PropertyDef[] = [
     {
+      // #619: `type` was a genuinely unrendered DTO field — the row doesn't
+      // show it either, so this is new information, not a restated column.
+      key: 'type',
+      label: m.inbox_frame_type_label(),
+      value: session.type,
+    },
+    {
       key: 'target',
       label: m.projects_create_target_label(),
       value: session.target ?? null,

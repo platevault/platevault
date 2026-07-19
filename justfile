@@ -8,6 +8,7 @@ test:
     cargo nextest run --workspace
     cargo test --workspace --doc
     pnpm -r --if-present test
+    node scripts/check-eslint-baseline.test.mjs
 
 # Lint and format
 lint:

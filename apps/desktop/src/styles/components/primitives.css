@@ -6,6 +6,20 @@
   max-width: 280px;
   white-space: normal;
   overflow-wrap: anywhere;
+
+  /* The popup renders in a PORTAL, so it inherits nothing from the surface it
+     floats over. Without its own background/border it drew as bare text on top
+     of whatever was underneath — unreadable over tables and panels. It carries
+     a full surface of its own, all token-driven so the four themes track it. */
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-rule);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  line-height: 1.5;
+  box-shadow: var(--alm-shadow-sm);
+  z-index: 60;
 }
 
 /* === PILL === */
@@ -31,7 +45,7 @@
 /* === BUTTON === */
 .alm-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  gap: var(--alm-sp-1); height: 28px;
+  gap: var(--alm-sp-1); height: var(--alm-control-h);
   padding: 0 var(--alm-sp-3);
   font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
 
@@ -61,7 +75,7 @@
   color: var(--alm-text-secondary);
   border-color: var(--alm-border);
 }
-.alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
+.alm-btn--sm { height: var(--alm-control-h-sm); padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
 
 /* === SECTION === */
 .alm-section { margin-bottom: var(--alm-sp-4); }

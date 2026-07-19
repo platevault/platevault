@@ -124,6 +124,13 @@
   /* Row density */
   --alm-row-height: 32px;
 
+  /* Control height (#616) — single source of truth for toolbar-adjacent
+     controls (buttons, text inputs, selects, SegControl) so they line up in
+     the same row instead of drifting per-component (measured: input 27px,
+     select 25px, button 24px, Settings select 28px, all in one chrome). */
+  --alm-control-h: 26px;
+  --alm-control-h-sm: 24px;
+
   /* Transitions */
   --alm-transition-fast: 100ms ease;
   --alm-transition-base: 150ms ease;

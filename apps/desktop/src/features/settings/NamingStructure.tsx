@@ -220,12 +220,12 @@ const SAMPLE_METADATA = {
   target: 'NGC7000',
   filter: 'Ha',
   date: '2026-04-12',
-  frame_type: 'light' as const,
+  frameType: 'light' as const,
   camera: 'ASI2600MM',
   exposure: '300s',
   gain: '100',
   binning: '1x1',
-  set_temp: '-10C',
+  setTemp: '-10C',
 };
 
 // ── Per-type live preview (package P11: real backend resolver) ───────────────
@@ -449,19 +449,32 @@ function PerTypePatternChipsEditor({
   const handleRemove = (id: string) =>
     onChange(chips.filter((c) => c.id !== id));
 
+  // #820: an empty `chips` array means "using the built-in default" — the row
+  // shows `defaultPlaceholder` (e.g. `bias/`) as static text, but that text
+  // was never captured into chip state. Adding the first chip to such a row
+  // must seed from the default pattern first, or the add silently discards
+  // it instead of appending to it.
+  const baseChips = (): PathChip[] =>
+    chips.length === 0 && defaultPlaceholder.trim() !== ''
+      ? parsePathPattern(defaultPlaceholder)
+      : chips;
+
   const handleAddToken = (value: string) => {
-    onChange([...chips, { id: nextPathId(), kind: 'token', value }]);
+    onChange([...baseChips(), { id: nextPathId(), kind: 'token', value }]);
     setShowTokenMenu(false);
   };
 
   const handleAddSep = () => {
-    onChange([...chips, { id: nextPathId(), kind: 'sep', value: '/' }]);
+    onChange([...baseChips(), { id: nextPathId(), kind: 'sep', value: '/' }]);
   };
 
   const handleAddLiteral = () => {
     const trimmed = literalInput.trim();
     if (trimmed === '') return;
-    onChange([...chips, { id: nextPathId(), kind: 'literal', value: trimmed }]);
+    onChange([
+      ...baseChips(),
+      { id: nextPathId(), kind: 'literal', value: trimmed },
+    ]);
     setLiteralInput('');
     setShowLiteralInput(false);
   };
@@ -1000,6 +1013,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
             scope="naming"
             keys={NAMING_KEYS}
             onRestored={applyValues}
+            scopeLabel={m.settings_naming_project_restore_scope()}
           />
         }
       >

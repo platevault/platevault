@@ -71,12 +71,4 @@ mod tests {
         let fields = action_critical_fields(EntityType::Project, "ready", "processing");
         assert!(fields.is_empty());
     }
-
-    #[test]
-    fn table_is_empty_since_session_review_removal() {
-        // Spec 041 FR-051 (T076): the session confirmation cells were the
-        // only rows this table ever carried. If a future entity family adds
-        // action-bound review cells here, update this test to match.
-        assert!(TABLE.is_empty());
-    }
 }

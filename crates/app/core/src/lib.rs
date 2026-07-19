@@ -293,7 +293,12 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "app_core");
+        // CRATE_NAME has no consumers today (nothing reads it outside this
+        // test): assert against the real source of truth (Cargo.toml's
+        // `name`, via CARGO_PKG_NAME) instead of mirroring the same literal
+        // the constant is defined with, so a Cargo.toml rename that forgets
+        // to update CRATE_NAME is caught.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 
     #[test]

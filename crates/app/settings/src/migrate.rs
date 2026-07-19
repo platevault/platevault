@@ -183,10 +183,11 @@ mod tests {
         }
     }
 
-    /// Currently both lists are empty (identity migration).
-    #[test]
-    fn v1_to_v2_is_currently_identity() {
-        assert!(DROP_KEYS.is_empty(), "DROP_KEYS must be empty until a real v2 is defined");
-        assert!(RESET_KEYS.is_empty(), "RESET_KEYS must be empty until a real v2 is defined");
-    }
+    // `v1_to_v2_is_currently_identity` removed: it only mirrored the
+    // DROP_KEYS/RESET_KEYS const definitions against themselves, with zero
+    // discriminating power. The real, currently-identity migration behavior
+    // is already exercised end-to-end (real DB, real `migrate_v1_to_v2` call)
+    // by `migration_summary_counts_are_correct` and `dropped_key_is_removed_from_db`
+    // in `tests/settings_v1_to_v2.rs`, which assert `dropped == 0` / `reset == 0`
+    // via actual execution rather than reading the const back.
 }

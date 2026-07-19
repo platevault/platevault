@@ -68,13 +68,13 @@ beforeEach(() => {
 describe('ResolverSettingsControl', () => {
   it('loads settings and reflects the online toggle as checked', async () => {
     render(<ResolverSettingsControl />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    // The toggle's aria-label now sits on the <input> itself (a11y: the
-    // accessible name belongs on the interactive control), so getByLabelText
-    // returns the checkbox directly.
-    const checkbox = screen.getByLabelText(
+    // findBy (not waitFor(mockGet called) + sync getBy): the mock being
+    // *called* races the `.then()` that flips `loaded` and swaps the
+    // skeleton for the real control — findBy polls until the labeled
+    // control actually exists, which is the state under test.
+    const checkbox = (await screen.findByLabelText(
       'Enable online SIMBAD resolution',
-    ) as HTMLInputElement;
+    )) as HTMLInputElement;
     expect(checkbox).toBeChecked();
   });
 
@@ -127,15 +127,21 @@ describe('ResolverSettingsControl', () => {
     const toggle = await screen.findByLabelText(
       'Enable online SIMBAD resolution',
     );
-    await act(async () => {
-      fireEvent.click(toggle);
-      await Promise.resolve();
-    });
 
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        settings: expect.objectContaining({ onlineEnabled: false }),
-      }),
+    // fireEvent already batches inside `act()`; `persist()`'s own
+    // `await updateResolverSettings(...)` then `setSettings(...)` chain
+    // resolves over more than one microtask, which a single manual
+    // `await Promise.resolve()` doesn't reliably flush (source of the CI
+    // act() warnings) — waitFor polls (each poll act()-wrapped) until the
+    // full persist cycle actually lands, deterministically either way.
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({ onlineEnabled: false }),
+        }),
+      ),
     );
   });
 
@@ -194,5 +200,58 @@ describe('ResolverSettingsControl', () => {
     expect(
       await screen.findByText('Could not clear the resolve cache: disk full'),
     ).toBeInTheDocument();
+  });
+
+  // #822 regression: a mount-race clobber, same class as Framing's (4c39ec12)
+  // — the mount-time `target.resolution.settings` fetch can resolve in the
+  // gap between an onChange (uncommitted local state) and the later blur
+  // commit, reverting the typed value back to the fetched default before the
+  // blur ever fires — and the blur then persists that clobbered value.
+  it('does not let the mount-time fetch clobber an in-progress debounce edit, and blur persists the typed value', async () => {
+    let resolveGet!: (v: unknown) => void;
+    mockGet.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+    mockUpdate.mockImplementation((req: { settings: unknown }) =>
+      Promise.resolve({
+        status: 'ok',
+        data: {
+          contractVersion: '1.0',
+          requestId: 'r',
+          settings: req.settings,
+        },
+      }),
+    );
+
+    render(<ResolverSettingsControl />);
+
+    const input = (await screen.findByLabelText(
+      'Typeahead debounce (ms)',
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '500' } });
+    expect(input).toHaveValue(500);
+
+    // The stale mount fetch now resolves with the pre-edit default — it must
+    // not clobber the uncommitted edit.
+    await act(async () => {
+      resolveGet({
+        status: 'ok',
+        data: { contractVersion: '1.0', requestId: 'r', settings: SETTINGS },
+      });
+      await Promise.resolve();
+    });
+    expect(input).toHaveValue(500);
+
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({ debounceMs: 500 }),
+        }),
+      ),
+    );
+    expect(input).toHaveValue(500);
   });
 });

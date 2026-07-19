@@ -126,6 +126,7 @@
   "calibration_empty_desc": "Run a scan to import calibration frames.",
   "calibration_empty_title": "No calibration masters",
   "calibration_fp_exposure": "Exposure",
+  "calibration_fp_age": "Age",
   "calibration_fp_kind": "Kind",
   "calibration_fp_sensor_mode": "Sensor mode",
   "calibration_fp_temperature": "Temperature",
@@ -625,6 +626,21 @@
   "projects_wizard_summary_coming_up": "Coming up",
   "projects_wizard_summary_darks_label": "Darks",
   "projects_wizard_summary_lights_label": "Lights",
+  "projects_wizard_summary_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} master",
+        "pp=other": "{count} masters"
+      }
+    }
+  ],
   "projects_wizard_summary_selected": "Selected",
   "projects_wizard_summary_title": "Project summary",
   "projects_wizard_target_unresolved": "Unresolved target",
@@ -695,19 +711,18 @@
   "settings_action_restore_defaults": "Restore defaults",
   "settings_action_restore_defaults_restoring": "Restoring…",
   "settings_action_restore_defaults_done": "Restored",
+  "settings_advanced_danger_confirm_desc": "This resets theme, density, and font size to defaults. Library roots, equipment, and session data are not affected.",
+  "settings_advanced_danger_confirm_yes": "Yes, reset",
   "settings_advanced_danger_desc": "Resets all UI preferences (theme, density, font size) to defaults. Library roots, equipment, and session data are not affected.",
   "settings_advanced_danger_reset": "Reset preferences",
+  "settings_advanced_danger_reset_cancel": "Cancel",
+  "settings_advanced_danger_reset_done": "Preferences reset to defaults.",
   "settings_advanced_danger_title": "Danger Zone",
   "settings_advanced_db_engine": "Engine",
   "settings_advanced_db_engine_value": "SQLite",
   "settings_advanced_db_export": "Export database",
-  "settings_advanced_db_location": "Location",
-  "settings_advanced_db_records": "Records",
-  "settings_advanced_db_records_value": "142,318 files · 22 sessions · 3 projects",
-  "settings_advanced_db_schema": "Schema version",
-  "settings_advanced_db_schema_value": "v1.0",
+  "settings_advanced_db_export_unavailable_title": "Database export isn't implemented yet",
   "settings_advanced_db_size": "Size",
-  "settings_advanced_db_size_value": "24.8 MB",
   "settings_advanced_db_title": "Database",
   "settings_advanced_log_debug": "Debug",
   "settings_advanced_log_error": "Error",
@@ -748,6 +763,7 @@
   "settings_calmatch_sensor_temp": "Sensor temp",
   "settings_calmatch_sensor_temp_aria": "Sensor temperature tolerance in degrees Celsius",
   "settings_calmatch_soft": "soft",
+  "settings_calmatch_restore_scope": "Calibration matching tolerance defaults",
   "settings_calmatch_title": "Matching criteria",
   "settings_calmatch_tolerance": "Tolerance",
   "settings_calmatch_unit_c": "°C",
@@ -887,6 +903,7 @@
   "settings_naming_preview_default": "(default)",
   "settings_naming_preview_label": "Preview:",
   "settings_naming_preview_unavailable": "Preview unavailable",
+  "settings_naming_project_restore_scope": "Project folder pattern defaults (not the per-type patterns below)",
   "settings_naming_project_title": "PROJECT FOLDER PATTERN",
   "settings_naming_remove_token": "Remove {label}",
   "settings_naming_sep_path_label": "/ (path separator)",
@@ -932,6 +949,7 @@
   "settings_planner_altitude_label": "Usable altitude threshold (°)",
   "settings_planner_altitude_title": "ALTITUDE THRESHOLD",
   "settings_planner_altitude_unit": "degrees above horizon",
+  "settings_planner_moon_avoidance_restore_scope": "Moon-avoidance table defaults only (not the usable altitude threshold)",
   "settings_planner_moon_avoidance_title": "MOON AVOIDANCE (PER BAND)",
   "settings_planner_moon_avoidance_info": "Per-band Moon-avoidance thresholds that drive the Planner's filter guidance pills tonight — higher distance/width settings make a band more Moon-sensitive.",
   "settings_planner_moon_avoidance_band_col": "Band",
@@ -944,6 +962,7 @@
   "settings_resolver_cache_clear_label": "Clear resolve cache",
   "settings_resolver_cache_clear_pending": "Clearing…",
   "settings_resolver_cache_clear_success": "Resolve cache cleared — re-warming in the background.",
+  "settings_resolver_restore_scope": "Target resolution defaults (online, endpoint, debounce, timeout)",
   "settings_resolver_catalogues_title": "DEFAULT CATALOGUES",
   "settings_resolver_debounce_label": "Typeahead debounce (ms)",
   "settings_resolver_endpoint_label": "SIMBAD endpoint",
@@ -970,6 +989,7 @@
   "settings_tools_path_aria": "Executable path for {name}",
   "settings_tools_path_placeholder": "Executable path…",
   "settings_tools_redetect_aria": "Re-run auto-detect for all tools",
+  "settings_tools_save_error": "Could not save the path for {name}: {error}",
   "settings_tools_title": "TOOL WORKFLOWS",
   "setup_add_folder": "+ Add folder…",
   "setup_choosing": "Choosing…",
@@ -1173,7 +1193,6 @@
   "targets_detail_no_aliases": "No aliases",
   "targets_detail_no_coverage": "No coverage data yet.",
   "targets_detail_no_projects_linked": "No projects linked.",
-  "targets_detail_no_projects_linked_title": "No projects linked",
   "targets_detail_no_sessions": "No linked sessions yet.",
   "targets_detail_notes_title": "Observing notes",
   "targets_detail_notes_placeholder": "Add observing notes for this target…",
@@ -1350,6 +1369,7 @@
   "projects_toast_save_notes_failed": "Failed to save notes: {error}",
   "projects_notes_byte_limit_exceeded": "Note exceeds the {max}-byte limit.",
   "projects_wizard_toast_created": "Project \"{name}\" created.",
+  "projects_wizard_toast_view_project": "View project",
   "projects_wizard_toast_created_folders": "Project \"{name}\" created — project folders created on disk.",
   "projects_wizard_toast_folders_failed": "Project \"{name}\" created, but folder creation failed. The folder plan remains available for review.",
   "projects_source_views_removal_toast": "Removal plan created. Review and apply plan to complete removal.",
@@ -1765,6 +1785,7 @@
   "settings_source_views_kind_symlink": "Symlink",
   "settings_source_views_kind_junction": "Junction",
   "settings_source_views_drift_note": "If the configured kind isn't achievable on a given filesystem, a documented fallback is applied automatically at generation time and reported as a plan warning (Developer Mode surfaces the filesystem capability probe).",
+  "settings_source_views_restore_scope": "Source view link-kind defaults (same drive, cross drive)",
   "settings_framing_title": "Clustering Tolerances",
   "settings_framing_pointing_fraction_label": "Pointing tolerance",
   "settings_framing_pointing_fraction_info": "Fraction of the optic-train's field-of-view diagonal used as the pointing tolerance when grouping light sessions into one framing. Default 0.10 (10%).",
@@ -2071,6 +2092,21 @@
   "calibration_session_popover_no_matches": "No matches",
   "calibration_used_by_label": "Used by",
   "calibration_compatible_label": "Compatible",
+  "calibration_fp_age_value": [
+    {
+      "declarations": [
+        "input days",
+        "local pp = days: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{days} day old",
+        "pp=other": "{days} days old"
+      }
+    }
+  ],
   "inbox_apply_n_overrides": [
     {
       "declarations": [
@@ -2156,8 +2192,8 @@
         "pp"
       ],
       "match": {
-        "pp=one": "{count} master",
-        "pp=other": "{count} masters"
+        "pp=one": "{count} master candidate",
+        "pp=other": "{count} master candidates"
       }
     }
   ],

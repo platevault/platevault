@@ -39,29 +39,14 @@ async fn insert_acquisition_session(pool: &sqlx::SqlitePool, id: &str) {
 }
 
 // ── 1. sessions stub: merge and split return not-implemented errors ───────────
-
-#[tokio::test]
-async fn merge_and_split_stubs_return_not_implemented_errors() {
-    let (db, _repo, _bus) = support::setup().await;
-    let pool = db.pool();
-
-    // split_session stub
-    let split_result = app_core::sessions::split_session(pool, "ses-001", "filter").await;
-    assert!(split_result.is_err(), "split_session must return Err");
-    assert!(
-        split_result.unwrap_err().contains("not yet implemented"),
-        "error message must mention 'not yet implemented'"
-    );
-
-    // merge_sessions stub
-    let ids = vec!["ses-001".to_owned(), "ses-002".to_owned()];
-    let merge_result = app_core::sessions::merge_sessions(pool, &ids).await;
-    assert!(merge_result.is_err(), "merge_sessions must return Err");
-    assert!(
-        merge_result.unwrap_err().contains("not yet implemented"),
-        "error message must mention 'not yet implemented'"
-    );
-}
+//
+// `merge_and_split_stubs_return_not_implemented_errors` removed: it exactly
+// duplicated `split_session_returns_not_implemented` /
+// `merge_sessions_returns_not_implemented` in `src/sessions.rs`'s own unit
+// tests, with zero added value — both stubs take `_pool: &SqlitePool` and
+// ignore it entirely, so exercising them through a real DB pool here (vs. an
+// unconnected in-memory pool at the unit level) exercises no additional code
+// path.
 
 // ── 2. list_sessions: returns real rows, empty on fresh DB ───────────────────
 

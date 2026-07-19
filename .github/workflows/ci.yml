@@ -184,10 +184,15 @@ jobs:
       # --- Fast checks first (FR-012) ---
       # Frontend lint gate: Biome (format check + syntactic rules) first, then
       # the slimmed ESLint layer Biome cannot replicate — the spec-046
-      # `alm/no-user-string` i18n rule (fails the build on any hardcoded
-      # user-facing string, SC-001/SC-002), type-aware typescript-eslint,
-      # react-hooks, jsx-a11y, and the inline-style ban — then the design-token
-      # guard (check-tokens.sh).
+      # `alm/no-user-string` i18n rule (fails the build on any NEW hardcoded
+      # user-facing string, SC-001/SC-002, gated through
+      # scripts/check-eslint-baseline.mjs + eslint-alm-baseline.txt so
+      # pre-existing violations drain via the refactor sweep instead of
+      # blocking every PR), type-aware typescript-eslint, react-hooks,
+      # jsx-a11y, and the inline-style ban — then the design-token guard
+      # (check-tokens.sh) and the i18n catalog lint
+      # (check-i18n-catalog.mjs: raw `{code}` interpolation + duplicate
+      # catalog values, same baseline-drain pattern).
       - name: Frontend lint (Biome + ESLint gates + tokens)
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint

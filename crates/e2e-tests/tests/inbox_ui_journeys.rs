@@ -494,18 +494,13 @@ async fn inbox_ui_missing_path_attribute_banner_blocks_confirm() -> anyhow::Resu
     select_only_item(&app).await?;
 
     // The FR-032 banner is metadata-driven: the detail pane's
-    // `inbox.item.metadata` query races the per-file extraction that the
-    // SAME selection's `inbox.classify` call persists, and can cache an
-    // empty file list for the session (nothing invalidates it when classify
-    // lands). A real user recovers by re-opening the item; do the same once
-    // — after a reload the metadata rows persisted by the first selection's
-    // classify make the banner render deterministically.
-    if app.wait_testid("inbox-missing-attr-banner", UI_TIMEOUT).await.is_err() {
-        app.driver.refresh().await.context("refresh for banner retry failed")?;
-        app.wait_bridge_ready(Duration::from_secs(15)).await?;
-        select_only_item(&app).await?;
-        app.wait_testid("inbox-missing-attr-banner", UI_TIMEOUT).await?;
-    }
+    // `inbox.item.metadata` query and the SAME selection's `inbox.classify`
+    // call (which persists the per-file extracted rows the query reads) fire
+    // concurrently. `useInboxClassification` now invalidates that item's
+    // metadata query once classify settles (issue #1019), so the banner
+    // renders deterministically on FIRST selection — no reload/re-select
+    // workaround. If this wait times out, the invalidation regressed.
+    app.wait_testid("inbox-missing-attr-banner", UI_TIMEOUT).await?;
     let banner_text = app.text_testid("inbox-missing-attr-banner").await?;
     anyhow::ensure!(
         banner_text.to_lowercase().contains("required metadata missing"),

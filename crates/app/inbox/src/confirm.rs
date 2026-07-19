@@ -2352,7 +2352,11 @@ mod tests {
 
         // A fully-resolved item (group_key defaults to '' in the helper, which is
         // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
-        let result = confirm(
+        // Same registered-source / classified-item shape as
+        // `non_inbox_source_moves_in_place`, which deterministically succeeds —
+        // a fully-resolved item must confirm cleanly, not merely "not fail on
+        // the sentinel gate".
+        let resp = confirm(
             db.pool(),
             &bus,
             ConfirmRequest {
@@ -2364,21 +2368,13 @@ mod tests {
                 chosen_attribution: None,
             },
         )
-        .await;
+        .await
+        .expect("fully-resolved item must confirm successfully and produce a plan");
 
-        // The item passes the sentinel gate (group_key != SENTINEL_NEEDS_REVIEW).
-        // It may still fail on other gates (destination root, pattern) — what we
-        // assert is that it does NOT fail with InboxMissingPathAttributes from the
-        // sentinel check: any error must NOT be the sentinel gate.
-        if let Err(ref e) = result {
-            assert_ne!(
-                e.code,
-                ErrorCode::InboxMissingPathAttributes,
-                "fully-resolved item must not be blocked by the needs-review sentinel gate: {}",
-                e.message
-            );
-        }
-        // If it succeeds, the plan was created — also valid.
+        assert!(!resp.plan_id.is_empty(), "confirm must produce a plan id");
+        assert_eq!(resp.items_total, 1, "one classified file must produce one plan item");
+        assert_eq!(resp.move_count, 1, "unorganized source must produce a move item");
+        assert_eq!(resp.catalogue_count, 0, "unorganized source must not catalogue in place");
     }
 
     // ── inventory.confirmed publish (review fix: swallow-on-failure) ─────────

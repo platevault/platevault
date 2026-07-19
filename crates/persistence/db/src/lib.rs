@@ -213,6 +213,30 @@ mod tests {
         .is_none());
     }
 
+    /// End-to-end proof that the classifier matches the variant sqlx *actually*
+    /// emits, not merely the one we assumed. Hand-constructing
+    /// `VersionMismatch` in the tests above would pass even if sqlx reported
+    /// divergence some other way — this drives a genuine divergence by
+    /// rewriting an applied migration's recorded checksum, exactly as a
+    /// renumbered migration does to a developer's existing database.
+    #[tokio::test]
+    async fn real_sqlx_divergence_is_classified() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("first migrate");
+
+        // Corrupt one applied migration's checksum so the next run sees the
+        // script as modified since it was applied.
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
+            .execute(db.pool())
+            .await
+            .expect("tamper with recorded checksum");
+
+        let error = db.migrate().await.expect_err("divergent history must fail");
+        let detail = super::migration_divergence_detail(&error)
+            .expect("a real sqlx divergence must be classified, not fall through");
+        assert!(detail.contains('1'), "detail should name the version: {detail}");
+    }
+
     /// Smoke-test: connect to in-memory SQLite, run migrations, verify the pool is alive.
     #[tokio::test]
     async fn database_connect_in_memory_and_migrate() {

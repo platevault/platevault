@@ -41,6 +41,10 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "audit_types");
+        // CRATE_NAME has no consumers today: assert against Cargo.toml's real
+        // `name` (CARGO_PKG_NAME) instead of mirroring the constant's own
+        // literal, so a package rename that forgets to update CRATE_NAME is
+        // caught.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 }

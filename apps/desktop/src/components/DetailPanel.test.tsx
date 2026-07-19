@@ -303,4 +303,50 @@ describe('FactsKV', () => {
     );
     expect(screen.getByText('Inferred')).toBeDefined();
   });
+
+  // ── Scroll-containment contract — the #816 regression pin (T004, #1069) ───
+  //
+  // #816 was "Target detail panel: aliases/notes/coverage/links/back-button
+  // silently clipped by DetailPane fill-mode overflow:hidden". The fix (#1035)
+  // is a CSS rule in redesign-detail.css:
+  //
+  //     .alm-detail--fill > .alm-planner__scroll { flex:1; min-height:0; overflow-y:auto }
+  //
+  // That is a DIRECT-CHILD selector, which makes it a structural contract on
+  // DetailPanel rather than a mere stylesheet detail: nest the scroll wrapper
+  // one level deeper and the selector silently stops matching — no test fails,
+  // no type breaks, the content just starts getting clipped again.
+  //
+  // This became load-bearing in #1067, when TargetDetailV2 migrated onto
+  // DetailPanel and deliberately kept content-only mode instead of the facts
+  // slot, precisely because facts nests children one level too deep.
+  //
+  // jsdom has no layout engine, so these assert the STRUCTURAL contract the
+  // CSS depends on, not actual pixel scrolling.
+
+  it('19. content-only children stay direct children of .alm-detail--fill (#816)', () => {
+    const { container } = render(
+      <DetailPanel fill title="Selected target">
+        <div className="alm-planner__scroll">tall unstructured content</div>
+      </DetailPanel>,
+    );
+    // The exact selector redesign-detail.css relies on.
+    expect(
+      container.querySelector('.alm-detail--fill > .alm-planner__scroll'),
+    ).not.toBeNull();
+  });
+
+  it('20. the facts slot does NOT satisfy that selector — why TargetDetailV2 avoids it', () => {
+    const { container } = render(
+      <DetailPanel fill title="Selected target" facts={<dl>identity</dl>}>
+        <div className="alm-planner__scroll">tall unstructured content</div>
+      </DetailPanel>,
+    );
+    // Present in the tree, but nested under .alm-detailpanel__content — the
+    // direct-child rule no longer applies and #816's clipping would return.
+    expect(container.querySelector('.alm-planner__scroll')).not.toBeNull();
+    expect(
+      container.querySelector('.alm-detail--fill > .alm-planner__scroll'),
+    ).toBeNull();
+  });
 });

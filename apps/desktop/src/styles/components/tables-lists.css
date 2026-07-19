@@ -132,7 +132,8 @@
 }
 .alm-filterbar__field-label { white-space: nowrap; }
 .alm-filterbar__select {
-  padding: var(--alm-sp-1) var(--alm-sp-2);
+  height: var(--alm-control-h);
+  padding: 0 var(--alm-sp-2);
   font-size: var(--alm-text-sm);
   color: var(--alm-text);
   background: var(--alm-surface-raised);

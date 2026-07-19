@@ -163,6 +163,8 @@ mod tests {
         assert_eq!(V1_REGISTRY.get("date").unwrap().fallback, "undated");
         assert_eq!(V1_REGISTRY.get("frame_type").unwrap().fallback, "unknown");
         assert_eq!(V1_REGISTRY.get("camera").unwrap().fallback, "unknown-camera");
+        assert_eq!(V1_REGISTRY.get("exposure").unwrap().fallback, "unknown-exposure");
+        assert_eq!(V1_REGISTRY.get("gain").unwrap().fallback, "unknown-gain");
         assert_eq!(V1_REGISTRY.get("binning").unwrap().fallback, "1x1");
         assert_eq!(V1_REGISTRY.get("set_temp").unwrap().fallback, "untempered");
     }
