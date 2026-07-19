@@ -339,9 +339,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         <span className="alm-field-label">{m.common_sources()}</span>
         <div className="alm-edit-project__sources">
           {project.sources.length === 0 ? (
-            <span className="alm-field-hint">
-              {m.projects_edit_sources_empty()}
-            </span>
+            <span className="alm-field-hint">{m.projects_sources_empty()}</span>
           ) : (
             <ul className="alm-edit-project__sources-list">
               {project.sources.map((src) => (

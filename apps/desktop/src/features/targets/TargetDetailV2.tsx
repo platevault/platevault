@@ -522,7 +522,7 @@ export function TargetDetailV2({
       setNotesEditing(false);
       setNotesSaved(true);
     } catch {
-      setNotesError(m.targets_detail_notes_save_error());
+      setNotesError(m.sessions_notes_save_failed());
     } finally {
       setNotesSaving(false);
     }

@@ -136,7 +136,7 @@ export function SessionNotesSection({
           data-testid="session-notes-error"
           className="alm-field-error"
         >
-          {m.sessions_notes_byte_limit({
+          {m.projects_notes_byte_limit_exceeded({
             max: MAX_NOTE_BYTES.toLocaleString(),
           })}
         </span>

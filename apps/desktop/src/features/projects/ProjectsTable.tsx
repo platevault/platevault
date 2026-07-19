@@ -192,7 +192,7 @@ export function ProjectsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        ariaLabel={m.projects_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ) : (
       c.label()

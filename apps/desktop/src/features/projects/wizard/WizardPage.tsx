@@ -450,11 +450,11 @@ export function WizardPage() {
   // Back / Next button labels per wireframe
   const backLabels = [
     '',
-    m.projects_wizard_back_default(),
+    m.setup_wizard_back(),
     m.projects_wizard_back_to_sources(),
     m.projects_wizard_back_calibration(),
     m.projects_wizard_back_source_views(),
-    m.projects_wizard_back_default(),
+    m.setup_wizard_back(),
   ];
   const nextLabels = [
     m.projects_wizard_next_sources(),

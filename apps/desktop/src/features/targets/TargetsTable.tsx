@@ -1085,7 +1085,7 @@ export function TargetsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as TargetSortCol)}
-        ariaLabel={m.targets_table_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
         title={c.title?.()}
       />
     ) : (
