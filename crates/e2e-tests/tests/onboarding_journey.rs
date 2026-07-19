@@ -101,10 +101,7 @@ async fn walk_gate_diagnostics(app: &E2eApp) -> String {
     };
     // Ask the backend directly too: if the projection is healthy here but the
     // store cache is null, the fault is the UI's hydrate path, not the backend.
-    let backend = match app
-        .invoke::<serde_json::Value>("onboarding_state_get", json!({}))
-        .await
-    {
+    let backend = match app.invoke::<serde_json::Value>("onboarding_state_get", json!({})).await {
         Ok(v) => v["state"]["flags"].to_string(),
         Err(e) => format!("<onboarding_state_get failed: {e}>"),
     };
