@@ -18,9 +18,10 @@
 use app_core::archive_generator::{
     generate as generate_archive_plan, generate_restore as generate_restore_plan, list_archived,
 };
+use app_core::plan_free_space::estimate_free_space;
 use app_core::plans::{
-    approve_plan, discard_plan, estimate_free_space, get_plan, list_plans,
-    permanently_delete_archive, retry_plan, send_archive_to_trash,
+    approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
+    send_archive_to_trash,
 };
 use contracts_core::archive::{
     ArchiveListResponse, GenerateArchivePlanResult, GenerateRestorePlanResult,
