@@ -135,9 +135,8 @@ pub async fn generate(
     // with no explanation) — the generator is the only place that knows WHY
     // (zero `present` processing artifacts recorded for this project), so
     // compute the diagnostic here rather than leaving the review UI to guess.
-    let empty_reason = (item_count == 0).then(|| {
-        "No files are linked to this project's sources — nothing to archive".to_owned()
-    });
+    let empty_reason = (item_count == 0)
+        .then(|| "No files are linked to this project's sources — nothing to archive".to_owned());
 
     let resp = protection::generate_plan(
         pool,
@@ -180,7 +179,7 @@ async fn resolve_archive_folder_path(pool: &SqlitePool, plan_id: &str) -> Option
     let items = plans_repo::list_plan_items(pool, plan_id).await.ok()?;
     let item = items.iter().find(|i| i.archive_path.is_some() && i.from_root_id.is_none())?;
     let archive_path = item.archive_path.as_deref()?;
-    Utf8Path::new(archive_path).parent().map(|p| p.to_string())
+    Utf8Path::new(archive_path).parent().map(ToString::to_string)
 }
 
 /// `archive.list` — every project currently in the `archived` lifecycle state.
@@ -257,7 +256,8 @@ pub async fn generate_restore(
     archived_plan_id: &str,
     title: Option<&str>,
 ) -> Result<GenerateRestorePlanResult, ContractError> {
-    let archived_plan = plans_repo::get_plan(pool, archived_plan_id, false).await.map_err(db_err)?;
+    let archived_plan =
+        plans_repo::get_plan(pool, archived_plan_id, false).await.map_err(db_err)?;
 
     if archived_plan.origin != "archive" || archived_plan.state != "applied" {
         return Err(ContractError::new(
@@ -272,7 +272,8 @@ pub async fn generate_restore(
     }
 
     let source_items = plans_repo::list_plan_items(pool, archived_plan_id).await.map_err(db_err)?;
-    let archived_items: Vec<_> = source_items.into_iter().filter(|i| i.archive_path.is_some()).collect();
+    let archived_items: Vec<_> =
+        source_items.into_iter().filter(|i| i.archive_path.is_some()).collect();
 
     if archived_items.is_empty() {
         return Err(ContractError::new(
@@ -284,9 +285,8 @@ pub async fn generate_restore(
     }
 
     let plan_id = new_id();
-    let resolved_title = title
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("Restore: {}", archived_plan.title));
+    let resolved_title =
+        title.map_or_else(|| format!("Restore: {}", archived_plan.title), str::to_owned);
 
     let items: Vec<CleanupPlanItem> = archived_items
         .into_iter()
@@ -479,6 +479,24 @@ mod tests {
         assert_eq!(resp.item_count, 0);
         let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
         assert_eq!(plan.total_bytes_required, 0);
+        // #603: a 0-item plan carries a diagnostic sentence the review UI can
+        // render instead of a bare disabled "Approve & apply".
+        assert_eq!(
+            resp.empty_reason.as_deref(),
+            Some("No files are linked to this project's sources — nothing to archive")
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_non_empty_project_has_no_empty_reason() {
+        let db = setup().await;
+        seed_project(&db, "p1", "completed").await;
+        seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
+        let resp = generate(db.pool(), "p1", None).await.unwrap();
+        assert_eq!(
+            resp.empty_reason, None,
+            "empty_reason must never be a filler string standing in for a non-empty plan"
+        );
     }
 
     #[tokio::test]
@@ -521,5 +539,104 @@ mod tests {
         seed_project(&db, "p1", "completed").await;
         let resp = list_archived(db.pool()).await.unwrap();
         assert!(resp.entries.is_empty());
+    }
+
+    /// #874: `archive.list` resolves the Reveal folder from the owning plan's
+    /// first archived item, once one actually exists.
+    #[tokio::test]
+    async fn list_archived_resolves_archive_folder_path_from_owning_plan() {
+        let db = setup().await;
+        seed_project(&db, "p1", "archived").await;
+        seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
+        let gen_resp = generate(db.pool(), "p1", None).await.unwrap();
+        projects_repo::set_archived_via_plan_id(db.pool(), "p1", &gen_resp.plan_id).await.unwrap();
+
+        let resp = list_archived(db.pool()).await.unwrap();
+        assert_eq!(resp.entries.len(), 1);
+        let folder = resp.entries[0]
+            .archive_folder_path
+            .as_deref()
+            .expect("archive_folder_path must resolve once the plan has an archived item");
+        assert!(folder.contains(".astro-plan-archive/"));
+        assert!(folder.contains(&gen_resp.plan_id));
+        assert!(
+            !folder.contains("light_001.xisf"),
+            "must be the containing folder, not the item's own file path: {folder}"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_archived_folder_path_none_when_owning_plan_has_no_items() {
+        let db = setup().await;
+        seed_project(&db, "p-empty", "archived").await;
+        let gen_resp = generate(db.pool(), "p-empty", None).await.unwrap();
+        projects_repo::set_archived_via_plan_id(db.pool(), "p-empty", &gen_resp.plan_id)
+            .await
+            .unwrap();
+
+        let resp = list_archived(db.pool()).await.unwrap();
+        assert_eq!(resp.entries[0].archive_folder_path, None);
+    }
+
+    /// #885: `generate_restore` mirrors an applied archive plan's items back
+    /// to their original recorded locations, as a reviewable, un-applied
+    /// `ready_for_review` restore plan.
+    #[tokio::test]
+    async fn generate_restore_reverses_an_applied_archive_plan() {
+        let db = setup().await;
+        seed_project(&db, "p1", "archived").await;
+        seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
+        let archive_resp = generate(db.pool(), "p1", None).await.unwrap();
+        plans_repo::update_plan_state(db.pool(), &archive_resp.plan_id, "applied").await.unwrap();
+
+        let restore_resp = generate_restore(db.pool(), &archive_resp.plan_id, None).await.unwrap();
+        assert_eq!(restore_resp.item_count, 1);
+
+        let plan = plans_repo::get_plan(db.pool(), &restore_resp.plan_id, false).await.unwrap();
+        assert_eq!(plan.origin, "restore");
+        assert_eq!(plan.plan_type, "restore");
+        assert_eq!(plan.state, "ready_for_review");
+        // Carries the project id forward so a successful apply can drive
+        // finalize_restore_lifecycle (R-Unarchive).
+        assert_eq!(plan.origin_path.as_deref(), Some("p1"));
+
+        let restore_items = plans_repo::list_plan_items(db.pool(), &restore_resp.plan_id).await.unwrap();
+        assert_eq!(restore_items.len(), 1);
+        let archive_items = plans_repo::list_plan_items(db.pool(), &archive_resp.plan_id).await.unwrap();
+        // Reversed: the restore item's source is the archived item's
+        // destination, and its destination is the archived item's original source.
+        assert_eq!(restore_items[0].from_relative_path, archive_items[0].to_relative_path);
+        assert_eq!(restore_items[0].to_relative_path, archive_items[0].from_relative_path);
+    }
+
+    #[tokio::test]
+    async fn generate_restore_refuses_a_non_applied_archive_plan() {
+        let db = setup().await;
+        seed_project(&db, "p1", "completed").await;
+        seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
+        // ready_for_review, not applied — generate() never applies (FR-002).
+        let archive_resp = generate(db.pool(), "p1", None).await.unwrap();
+
+        let err = generate_restore(db.pool(), &archive_resp.plan_id, None).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PlanInvalidState);
+    }
+
+    #[tokio::test]
+    async fn generate_restore_refuses_a_non_archive_plan() {
+        let db = setup().await;
+        seed_project(&db, "p1", "completed").await;
+        let err = generate_restore(db.pool(), "nonexistent-plan", None).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PlanNotFound);
+    }
+
+    #[tokio::test]
+    async fn generate_restore_refuses_when_archived_plan_had_no_items() {
+        let db = setup().await;
+        seed_project(&db, "p-empty", "archived").await;
+        let archive_resp = generate(db.pool(), "p-empty", None).await.unwrap();
+        plans_repo::update_plan_state(db.pool(), &archive_resp.plan_id, "applied").await.unwrap();
+
+        let err = generate_restore(db.pool(), &archive_resp.plan_id, None).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ArchiveEmpty);
     }
 }

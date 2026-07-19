@@ -22,7 +22,9 @@ use app_core::plans::{
     approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
     send_archive_to_trash,
 };
-use contracts_core::archive::{ArchiveListResponse, GenerateArchivePlanResult, GenerateRestorePlanResult};
+use contracts_core::archive::{
+    ArchiveListResponse, GenerateArchivePlanResult, GenerateRestorePlanResult,
+};
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
     PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
