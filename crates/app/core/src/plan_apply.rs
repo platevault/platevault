@@ -572,12 +572,24 @@ async fn finalize_calibration_master_archive(pool: &SqlitePool, plan_id: &str, m
     use persistence_db::repositories::q_calibration;
 
     let archived_at = Timestamp::now_iso();
-    if let Err(e) = q_calibration::set_master_archived(pool, master_id, plan_id, &archived_at).await
-    {
-        tracing::error!(
-            %master_id, %plan_id, error=%e,
-            "master archive closure: failed to record archived_at/archived_via_plan_id"
-        );
+    match q_calibration::set_master_archived(pool, master_id, plan_id, &archived_at).await {
+        Ok(()) => {
+            // F0 invalidate-after-commit contract (crates/app/cache/src/lib.rs,
+            // mirrors plan_listener.rs's master-confirm write): the write above
+            // has committed (sqlx pool auto-commits per statement), so the
+            // masters snapshot cache is safe to clear now — never before, to
+            // avoid a reader repopulating it with a stale pre-commit value.
+            // `calibration.masters.list` reads through this no-TTL cache; without
+            // this call an archived master stays visible until an unrelated
+            // master-confirm event happens to invalidate it.
+            crate::calibration::caches::invalidate_calibration_masters();
+        }
+        Err(e) => {
+            tracing::error!(
+                %master_id, %plan_id, error=%e,
+                "master archive closure: failed to record archived_at/archived_via_plan_id"
+            );
+        }
     }
 }
 
@@ -590,8 +602,12 @@ async fn finalize_calibration_master_archive(pool: &SqlitePool, plan_id: &str, m
 async fn finalize_calibration_master_restore(pool: &SqlitePool, master_id: &str) {
     use persistence_db::repositories::q_calibration;
 
-    if let Err(e) = q_calibration::clear_master_archived(pool, master_id).await {
-        tracing::error!(%master_id, error=%e, "master restore closure: failed to clear archived flag");
+    match q_calibration::clear_master_archived(pool, master_id).await {
+        // Same invalidate-after-commit contract as the archive closure above.
+        Ok(()) => crate::calibration::caches::invalidate_calibration_masters(),
+        Err(e) => {
+            tracing::error!(%master_id, error=%e, "master restore closure: failed to clear archived flag");
+        }
     }
 }
 
@@ -3049,6 +3065,49 @@ mod tests {
             q_calibration::get_calibration_master(db.pool(), "m-rest-1").await.unwrap().unwrap();
         assert_eq!(row.archived_at, None);
         assert_eq!(row.archived_via_plan_id, None);
+    }
+
+    /// Regression: `calibration.masters.list` reads through
+    /// `app_core_calibration`'s process-global no-TTL snapshot cache
+    /// (`crates/app/cache/src/lib.rs` F0 contract — callers MUST invalidate
+    /// at write sites). The two tests above assert the DB write via
+    /// `q_calibration` directly, which bypasses the cache entirely and would
+    /// pass even if the finalize closures never invalidated it. This test
+    /// goes through the actual cache-backed read path
+    /// (`crate::calibration::masters_list`) both before and after
+    /// each closure, so a missing `invalidate_calibration_masters()` call
+    /// fails it (an archived master would incorrectly stay visible; a
+    /// restored one would incorrectly stay hidden).
+    #[tokio::test]
+    async fn finalize_calibration_master_archive_and_restore_invalidate_the_masters_cache() {
+        let (db, _bus) = setup().await;
+        seed_calibration_master(&db, "m-cache-1").await;
+
+        // Defensive: this test is the only app_core (as opposed to
+        // app_core_calibration) test touching the process-global cache
+        // static today, but start from a known-clean slate regardless.
+        crate::calibration::caches::invalidate_calibration_masters();
+
+        // Prime the cache with the pre-archive snapshot (master visible).
+        let before = crate::calibration::masters_list(db.pool()).await.unwrap();
+        assert!(before.iter().any(|m| m.id == "m-cache-1"));
+
+        finalize_calibration_master_archive(db.pool(), "plan-m-cache-1", "m-cache-1").await;
+
+        let after_archive = crate::calibration::masters_list(db.pool()).await.unwrap();
+        assert!(
+            !after_archive.iter().any(|m| m.id == "m-cache-1"),
+            "archived master must disappear from the CACHED masters.list read, not just the \
+             direct q_calibration read — missing invalidate_calibration_masters() call"
+        );
+
+        finalize_calibration_master_restore(db.pool(), "m-cache-1").await;
+
+        let after_restore = crate::calibration::masters_list(db.pool()).await.unwrap();
+        assert!(
+            after_restore.iter().any(|m| m.id == "m-cache-1"),
+            "restored master must reappear in the CACHED masters.list read"
+        );
     }
 
     #[tokio::test]
