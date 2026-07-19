@@ -1,0 +1,99 @@
+use super::{
+    bus_err, caches, db_err, descriptors, is_catalogues_enabled_key, is_tools_bundle_id_key, repo,
+    validate_value, ContractError, EventBus, SettingsGetResponse, SettingsRepair, SettingsState,
+    Source, SqlitePool, Timestamp, Value, TOPIC_SETTINGS_REPAIR,
+};
+
+// ── get_settings ──────────────────────────────────────────────────────────
+
+/// Load all settings with defaults hydrated for missing rows (T018).
+///
+/// Invalid stored values are deleted and reset to default, with a
+/// `settings.repair` audit event emitted (T019).
+///
+/// # Errors
+///
+/// Returns `ContractError` on database or audit failure.
+pub async fn get_settings(
+    pool: &SqlitePool,
+    bus: &EventBus,
+) -> Result<SettingsGetResponse, ContractError> {
+    // Read-through: on hit, skip the DB entirely (F0 in-memory caching layer).
+    if let Some(cached) = caches::settings_bag().load() {
+        return Ok(SettingsGetResponse { settings: (*cached).clone() });
+    }
+
+    let all_raw = repo::get_all_raw(pool).await.map_err(db_err)?;
+    let mut settings = SettingsState::default();
+
+    for (key, value) in all_raw {
+        // Validate stored value.
+        if let Err(_validation_err) = validate_value(&key, &value) {
+            // Repair: delete the bad row and emit a warn audit event.
+            repo::delete_key(pool, &key).await.map_err(db_err)?;
+
+            let default_value = default_value_for_key(&key);
+            let at = Timestamp::now_iso();
+            bus.publish(
+                TOPIC_SETTINGS_REPAIR,
+                Source::System,
+                SettingsRepair {
+                    key: key.clone(),
+                    invalid_value: value.clone(),
+                    default_value: default_value.clone(),
+                    at,
+                },
+            )
+            .await
+            .map_err(bus_err)?;
+
+            // Use the default — do not apply the invalid stored value.
+            continue;
+        }
+
+        // Apply the validated value.
+        apply_value_to_state(&key, value, &mut settings);
+    }
+
+    caches::store_settings_bag(std::sync::Arc::new(settings.clone()));
+    Ok(SettingsGetResponse { settings })
+}
+
+/// Apply a raw JSON value to the correct field of `SettingsState`.
+///
+/// Unknown keys (structured-path keys like tools.*) are stored in the DB but
+/// not mapped to static SettingsState fields.
+pub(super) fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
+    if let Some(descriptor) = descriptors::descriptor_for(key) {
+        (descriptor.apply)(value, state);
+    }
+    // Else: structured-path keys are not mapped to static SettingsState
+    // fields. Use resolve_setting(key, source_id) to read them individually.
+}
+
+/// Return the in-code default value for a given key as `serde_json::Value`.
+pub(super) fn default_value_for_key(key: &str) -> Value {
+    if let Some(descriptor) = descriptors::descriptor_for(key) {
+        return (descriptor.default)(SettingsState::default());
+    }
+    // Structured-path: tools.<id>.bundle_id resolves the seed default
+    // when no user override is stored (spec 018 T042).
+    if is_tools_bundle_id_key(key) {
+        if let Some(tool_id) = key.strip_prefix("tools.").and_then(|r| r.strip_suffix(".bundle_id"))
+        {
+            if let Some(profile) = workflow_profiles::seed::find(tool_id) {
+                return match profile.bundle_id {
+                    // Known bundle ID from seed (may be wrong on non-macOS; callers
+                    // should prefer the per-OS auto-detected value when available).
+                    Some(id) => Value::String(id.to_owned()),
+                    None => Value::Null,
+                };
+            }
+        }
+        return Value::Null;
+    }
+    if is_catalogues_enabled_key(key) {
+        return serde_json::json!(["M", "NGC", "IC", "Sh2"]);
+    }
+    Value::Null
+}

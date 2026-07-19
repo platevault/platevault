@@ -15,7 +15,11 @@ use super::{materialization_from_provenance, new_id, plans_repo, EventBus, Sqlit
 ///
 /// Best-effort: the project already exists, so a manifest failure here must
 /// NOT fail the apply. Every failure is logged for an external watchdog (§II).
-pub(super) async fn finalize_project_create_manifest(pool: &SqlitePool, bus: &EventBus, project_path: &str) {
+pub(super) async fn finalize_project_create_manifest(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_path: &str,
+) {
     use contracts_core::manifests::ManifestReason as DtoManifestReason;
     use persistence_db::repositories::projects as projects_repo;
 
@@ -311,7 +315,11 @@ pub(super) async fn finalize_archive_lifecycle(
 ///
 /// Best-effort: the files are already moved back, so a failure here must NOT
 /// fail the apply. Every failure is logged for an external watchdog (§II).
-pub(super) async fn finalize_restore_lifecycle(pool: &SqlitePool, bus: &EventBus, project_id: &str) {
+pub(super) async fn finalize_restore_lifecycle(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+) {
     use crate::lifecycle::lifecycle_use_case::{transition_lifecycle, TransitionCommand};
     use domain_core::ids::EntityId;
     use domain_core::lifecycle::data_asset::EntityType;
@@ -382,7 +390,11 @@ pub(super) async fn finalize_restore_lifecycle(pool: &SqlitePool, bus: &EventBus
 ///
 /// Best-effort: the file is already archived, so a failure here must NOT
 /// fail the apply. Every failure is logged for an external watchdog (§II).
-pub(super) async fn finalize_calibration_master_archive(pool: &SqlitePool, plan_id: &str, master_id: &str) {
+pub(super) async fn finalize_calibration_master_archive(
+    pool: &SqlitePool,
+    plan_id: &str,
+    master_id: &str,
+) {
     use persistence_db::repositories::q_calibration;
 
     let archived_at = Timestamp::now_iso();

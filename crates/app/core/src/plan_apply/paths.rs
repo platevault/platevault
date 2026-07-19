@@ -291,7 +291,6 @@ pub(super) fn item_row_to_executor_item(
     }
 }
 
-
 /// Resolve a `root_id` to its absolute path: legacy `library_root` table
 /// first, then `registered_sources` (gen-3 source model).
 ///

@@ -296,8 +296,7 @@ async fn finalize_project_create_manifest_writes_created_manifest() {
     let (rows, _) = list_manifests_for_project(db.pool(), &project_id, None, 10).await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].reason, "created");
-    let manifest =
-        app_core_projects::project_manifests::get(db.pool(), &rows[0].id).await.unwrap();
+    let manifest = app_core_projects::project_manifests::get(db.pool(), &rows[0].id).await.unwrap();
     assert_eq!(manifest.manifest.body.lifecycle_state, "setup_incomplete");
 }
 
@@ -339,9 +338,8 @@ async fn finalize_archive_lifecycle_non_uuid_is_noop() {
     let (db, bus) = setup().await;
     finalize_archive_lifecycle(db.pool(), &bus, "plan-x", "not-a-uuid").await;
     // No panic, no rows.
-    let archived = persistence_db::repositories::projects::list_archived_projects(db.pool())
-        .await
-        .unwrap();
+    let archived =
+        persistence_db::repositories::projects::list_archived_projects(db.pool()).await.unwrap();
     assert!(archived.is_empty());
 }
 
@@ -376,10 +374,7 @@ async fn finalize_archive_lifecycle_refuses_illegal_source_state() {
 
     // Lifecycle untouched — no illegal edge recorded.
     let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
-    assert_eq!(
-        project.lifecycle, "ready",
-        "illegal archive source must leave lifecycle unchanged"
-    );
+    assert_eq!(project.lifecycle, "ready", "illegal archive source must leave lifecycle unchanged");
     // No archive link recorded.
     let archived = projects_repo::list_archived_projects(db.pool()).await.unwrap();
     assert!(archived.is_empty(), "no archive link may be recorded for a refused closure");
@@ -411,9 +406,7 @@ async fn finalize_restore_lifecycle_restores_archived_project() {
     )
     .await
     .unwrap();
-    projects_repo::set_archived_via_plan_id(db.pool(), &project_id, "plan-arch-1")
-        .await
-        .unwrap();
+    projects_repo::set_archived_via_plan_id(db.pool(), &project_id, "plan-arch-1").await.unwrap();
 
     finalize_restore_lifecycle(db.pool(), &bus, &project_id).await;
 
@@ -492,8 +485,7 @@ async fn finalize_calibration_master_archive_records_flag_and_plan_link() {
 
     finalize_calibration_master_archive(db.pool(), "plan-m-arch-1", "m-arch-1").await;
 
-    let row =
-        q_calibration::get_calibration_master(db.pool(), "m-arch-1").await.unwrap().unwrap();
+    let row = q_calibration::get_calibration_master(db.pool(), "m-arch-1").await.unwrap().unwrap();
     assert!(row.archived_at.is_some());
     assert_eq!(row.archived_via_plan_id.as_deref(), Some("plan-m-arch-1"));
 }
@@ -508,8 +500,7 @@ async fn finalize_calibration_master_restore_clears_flag() {
 
     finalize_calibration_master_restore(db.pool(), "m-rest-1").await;
 
-    let row =
-        q_calibration::get_calibration_master(db.pool(), "m-rest-1").await.unwrap().unwrap();
+    let row = q_calibration::get_calibration_master(db.pool(), "m-rest-1").await.unwrap().unwrap();
     assert_eq!(row.archived_at, None);
     assert_eq!(row.archived_via_plan_id, None);
 }
@@ -652,9 +643,8 @@ async fn retry_plan_item_rejects_when_no_active_run() {
     .unwrap();
     // Deliberately NOT registering an ActiveRun.
 
-    let err = retry_plan_item(db.pool(), "p-retry-no-run", "p-retry-no-run-item-0")
-        .await
-        .unwrap_err();
+    let err =
+        retry_plan_item(db.pool(), "p-retry-no-run", "p-retry-no-run-item-0").await.unwrap_err();
     assert_eq!(err.code, ErrorCode::RunNotFound);
 
     // The DB write must never have happened — item stays failed, not
@@ -1006,10 +996,7 @@ async fn n766_apply_writes_one_durable_audit_row_per_succeeded_item() {
 
     let entries = list_audit_entries(
         db.pool(),
-        &AuditLogFilter {
-            entity_type: Some("filesystem_plan".to_owned()),
-            ..Default::default()
-        },
+        &AuditLogFilter { entity_type: Some("filesystem_plan".to_owned()), ..Default::default() },
     )
     .await
     .unwrap();
@@ -1300,10 +1287,7 @@ fn t023a_destructive_confirmed_reads_from_db_column() {
     let root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
     let item = item_row_to_executor_item(&row, &root_map, "archive");
     assert!(item.destructive_confirmed, "destructive_confirmed=1 in DB must be read as true");
-    assert!(
-        item.requires_destructive_confirm,
-        "delete action must require destructive confirm"
-    );
+    assert!(item.requires_destructive_confirm, "delete action must require destructive confirm");
 }
 
 // ── FR-017: panic-safe registry removal (US12) ──────────────────────────────
