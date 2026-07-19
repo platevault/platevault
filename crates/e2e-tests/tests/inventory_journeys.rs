@@ -326,23 +326,24 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     .await
     .map_err(|e| anyhow::anyhow!("sessions.list never settled to frameCount=1 for the reconciled session before the UI reload: {e}"))?;
 
-    // ── 6. Real UI (AFTER): a fresh page load re-fetches sessions.list ──
+    // ── 6. Real UI (AFTER): force sessions.list to re-fetch ──
     //
     // `goto_route` only changes the URL fragment on the SAME document — per
     // the HTML fragment-navigation algorithm this never creates a new
     // Document, so the shared `QueryClient` (30s `staleTime`,
     // `apps/desktop/src/data/queryClient.ts`) survives across it and the
-    // `sessions.list` query stays cached from the BEFORE read above. A real
-    // `driver.refresh()` (used for the same reason by
-    // `complete_first_run_gate`) forces an actual reload, discarding the
-    // in-memory QueryClient so the SAME real DOM surface is guaranteed to
-    // re-fetch and reflect the real reconciliation result rather than
-    // serving stale cached data.
-    app.driver
-        .refresh()
-        .await
-        .map_err(|e| anyhow::anyhow!("page refresh before the AFTER read failed: {e}"))?;
-    app.wait_document_ready(Duration::from_secs(10)).await?;
+    // `sessions.list` query stays cached from the BEFORE read above. The
+    // freshness guarantee is the `invalidate_query` below, which refetches
+    // that exact query in place.
+    //
+    // This step used to ALSO do a `driver.refresh()` to discard the whole
+    // QueryClient. Removed per #1113: a reload remounts the app through the
+    // setup gate and route restore, so the document the assertions read can
+    // be torn down under them while WebDriver keeps serving detached handles
+    // from the pre-reload document — and it was never the actual guarantee
+    // here anyway (the comment on `invalidate_query` below already recorded
+    // that the reload "is not a guaranteed proof of that on every WebDriver
+    // backend"). Invalidation keeps one live document.
     app.goto_route("/projects").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.wait_testid(&format!("project-row-{project_id}"), Duration::from_secs(15))
@@ -358,11 +359,9 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     // Deterministic fix for the cross-PR flake (CI evidence: "last seen:
     // Some(\"2\")" surviving the full 15s wait — only possible from a
     // served-stale-cache render, since step 5b above already proved a fresh
-    // backend read returns 1). `driver.refresh()` above is meant to force a
-    // fresh QueryClient, but is not a guaranteed proof of that on every
-    // WebDriver backend; explicitly invalidating the exact query the picker
-    // reads removes the dependency on the reload actually having discarded
-    // the 30s-`staleTime` cache (`E2eApp::invalidate_query` doc comment).
+    // backend read returns 1). Invalidating the exact query the picker reads
+    // is the whole freshness guarantee for this read — see step 6 for why the
+    // page reload that used to precede it was removed.
     // Lane nD's frontend reconcile invalidation (PR #517, MERGED) wires this
     // same invalidation into the real "Reconcile" button's click handler, but
     // this journey calls `inventory_reconcile_run` directly over the invoke

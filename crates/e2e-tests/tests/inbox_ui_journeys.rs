@@ -236,15 +236,23 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
     // earlier would abort the in-flight classify and restart it every cycle.
     app.wait_testid("inbox-mixed-alert", UI_TIMEOUT).await?;
 
-    // The list itself isn't invalidated by classify; re-read it the way a
-    // user would (reload) until the split rows land. The list refetches and
-    // re-renders several times after a reload, so a transiently-empty
-    // `find_all` is churn, not failure — only the deadline decides.
+    // The list itself isn't invalidated by classify; force the refetch until
+    // the split rows land. The list refetches and re-renders several times,
+    // so a transiently-EMPTY `find_all` is churn, not failure — only the
+    // deadline decides. A driver-level `find_all` FAILURE is not churn and is
+    // no longer flattened into an empty vec (#1111): that default is
+    // indistinguishable from "the list rendered no rows", i.e. it reports a
+    // failure to observe as an observation.
+    //
+    // Read the rows as one live-document text snapshot rather than holding
+    // `WebElement` handles across the settle: the handles that satisfy the
+    // count check can be detached by the very next re-render before the
+    // "mixed" assertion below reads them.
     let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
-    let rows = loop {
-        let rows = app.find_all_testid_prefix("inbox-item-").await.unwrap_or_default();
-        if rows.len() >= 2 {
-            break rows;
+    let row_texts = loop {
+        let row_texts = app.testid_prefix_texts("inbox-item-").await?;
+        if row_texts.len() >= 2 {
+            break row_texts;
         }
         if tokio::time::Instant::now() >= deadline {
             // Round 6 (fix-inbox-splitrow-label): rounds 3-5 proved the
@@ -254,7 +262,7 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
             // tsx`) — the drop is real-webview-only. Live diagnostics off
             // failing Windows runs (28807257849, 28807308638) then showed the
             // SAME instant recording `rows.len() == 0` from this very
-            // `find_all_testid_prefix` check while a `dump_ui_diagnostics`
+            // row-count check while a `dump_ui_diagnostics`
             // JS eval gathered moments later (after an intervening
             // `inbox.list` invoke round-trip) reported `rowCount: 2` for the
             // identical live page — i.e. the two split rows land in the real
@@ -265,10 +273,10 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
             // check the pass path uses, before treating it as a real
             // failure. A genuine regression still times out below.
             let grace_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-            let mut late_rows = rows;
+            let mut late_rows = row_texts;
             while late_rows.len() < 2 && tokio::time::Instant::now() < grace_deadline {
                 tokio::time::sleep(Duration::from_millis(250)).await;
-                late_rows = app.find_all_testid_prefix("inbox-item-").await.unwrap_or_default();
+                late_rows = app.testid_prefix_texts("inbox-item-").await?;
             }
             if late_rows.len() >= 2 {
                 break late_rows;
@@ -288,7 +296,13 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
                 .invoke("inbox_list", serde_json::json!({}))
                 .await
                 .unwrap_or_else(|e| serde_json::json!({ "invoke_error": e.to_string() }));
-            let url = app.driver.current_url().await.map(|u| u.to_string()).unwrap_or_default();
+            // Diagnostic-only: a failed read is reported AS a failed read, so
+            // it can never be mistaken for the app sitting on an empty URL.
+            let url = app
+                .driver
+                .current_url()
+                .await
+                .map_or_else(|e| format!("<current_url read failed: {e}>"), |u| u.to_string());
             // Round 5: the backend-vs-UI split above already proved the
             // backend returns the right rows, and the entire frontend
             // transform pipeline renders that exact payload correctly in
@@ -310,12 +324,20 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
                 late_rows.len()
             );
         }
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        app.driver.refresh().await.context("refresh while waiting for split rows failed")?;
-        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+        // Invalidate the query rather than `driver.refresh()` (#1113). A full
+        // page reload tears down the document these assertions read: after it
+        // the app remounts through the setup gate and route restore, and the
+        // observed result was an Inbox page with NO `inbox-list` element for
+        // the rest of the budget while WebDriver kept serving detached row
+        // handles from the pre-reload document. Invalidation refetches the
+        // same list in place, so the settle signal and the rows below are read
+        // from one live document.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        app.invalidate_query(r#"["inbox","all"]"#)
+            .await
+            .context("invalidating the inbox list query while waiting for split rows failed")?;
     };
-    for row in &rows {
-        let text = row.text().await.unwrap_or_default().to_lowercase();
+    for text in &row_texts {
         anyhow::ensure!(
             !text.contains("mixed"),
             "expected split single-type rows, not an ambiguous 'mixed' row: {text:?}"

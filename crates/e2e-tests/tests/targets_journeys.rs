@@ -125,28 +125,25 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // (b) Explicit state check: is a real `role="alert"` field error visible
     // (Phase 1 threw, `TargetSearch.tsx`'s catch branch), or is the
     // `--resolving` status still showing (stuck on Phase 2 / SIMBAD)?
-    match app.driver.find(By::Css(".alm-field-error")).await {
-        Ok(el) => {
-            let text = el.text().await.unwrap_or_default();
-            report.push_str(&format!("--- error state: PRESENT, text={text:?} ---\n"));
+    // Diagnostic-only, but a failed `.text()` read is reported AS a failed
+    // read rather than defaulted to "" (#1111) — otherwise a stale handle
+    // renders as `text=""`, which is indistinguishable from a real element
+    // whose text is genuinely empty and would misdirect the next investigation.
+    for (label, css) in [
+        ("error state", ".alm-field-error"),
+        ("resolving (SIMBAD phase-2) state", ".alm-target-search__status--resolving"),
+        ("generic status line", ".alm-target-search__status"),
+    ] {
+        match app.driver.find(By::Css(css)).await {
+            Ok(el) => {
+                let text = el
+                    .text()
+                    .await
+                    .map_or_else(|e| format!("<text read failed: {e}>"), |t| format!("{t:?}"));
+                report.push_str(&format!("--- {label}: PRESENT, text={text} ---\n"));
+            }
+            Err(_) => report.push_str(&format!("--- {label}: absent ---\n")),
         }
-        Err(_) => report.push_str("--- error state: absent ---\n"),
-    }
-    match app.driver.find(By::Css(".alm-target-search__status--resolving")).await {
-        Ok(el) => {
-            let text = el.text().await.unwrap_or_default();
-            report.push_str(&format!(
-                "--- resolving (SIMBAD phase-2) state: PRESENT, text={text:?} ---\n"
-            ));
-        }
-        Err(_) => report.push_str("--- resolving (SIMBAD phase-2) state: absent ---\n"),
-    }
-    match app.driver.find(By::Css(".alm-target-search__status")).await {
-        Ok(el) => {
-            let text = el.text().await.unwrap_or_default();
-            report.push_str(&format!("--- generic status line: PRESENT, text={text:?} ---\n"));
-        }
-        Err(_) => report.push_str("--- generic status line: absent ---\n"),
     }
 
     // (c) Best-effort screenshot — written to a fixed, predictable path per
@@ -655,7 +652,13 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
         app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
             anyhow::anyhow!("expected the detail Best-date stat with its Moon explanation: {e}")
         })?;
-    let label = best_date.attr("aria-label").await?.unwrap_or_default();
+    // A MISSING aria-label and an EMPTY one are different regressions; don't
+    // let `unwrap_or_default()` collapse them into the same `got ""` message.
+    let label = best_date
+        .attr("aria-label")
+        .await
+        .context("reading the Best-date stat's aria-label failed")?
+        .context("the Best-date stat has no aria-label attribute at all")?;
     anyhow::ensure!(
         label.contains("Matches opposition")
             || label.contains("falls near full Moon")
