@@ -128,8 +128,7 @@ fn audit_schema_source_count_by_kind_requires_raw_and_project() {
 #[test]
 fn audit_schema_source_count_by_kind_fields_are_typed_as_integers() {
     let schema = audit_schema();
-    let props = schema["properties"]["payload"]["properties"]["source_count_by_kind"]
-        ["properties"]
+    let props = schema["properties"]["payload"]["properties"]["source_count_by_kind"]["properties"]
         .as_object()
         .expect("source_count_by_kind should define properties");
 
@@ -142,8 +141,8 @@ fn audit_schema_source_count_by_kind_fields_are_typed_as_integers() {
 #[test]
 fn audit_schema_raw_and_project_have_minimum_one() {
     let schema = audit_schema();
-    let props = &schema["properties"]["payload"]["properties"]["source_count_by_kind"]
-        ["properties"];
+    let props =
+        &schema["properties"]["payload"]["properties"]["source_count_by_kind"]["properties"];
 
     assert_eq!(props["raw"]["minimum"], 1, "raw count minimum must be 1 per contract");
     assert_eq!(props["project"]["minimum"], 1, "project count minimum must be 1 per contract");
