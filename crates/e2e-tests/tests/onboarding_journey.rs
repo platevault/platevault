@@ -108,8 +108,42 @@ async fn walk_gate_diagnostics(app: &E2eApp) -> String {
     format!("dom={dom} backendFlags={backend}")
 }
 
+/// Open the Getting-started flyout and wait for the checklist inside it.
+///
+/// The checklist is NOT inline in the sidebar: `ChecklistPopover` portals it to
+/// `document.body`, so nothing matching `.alm-onb-checklist` (or any
+/// `[data-item-id]`) exists until the `.alm-onb-ring` trigger is clicked. This
+/// test predated that redesign and queried the checklist directly, which is why
+/// it failed with "checklist item `inbox.confirm_first` did not render".
+///
+/// Idempotent, because the trigger TOGGLES: it clicks only when `aria-expanded`
+/// is not already `"true"`. Navigating closes the flyout, so this must be called
+/// again after every `goto_route`.
+///
+/// Mirrors `openChecklist` in `tests/e2e/support/harness.ts` — the mock-mode
+/// Playwright suite needed exactly the same fix for exactly the same reason.
+async fn open_checklist(app: &E2eApp) -> anyhow::Result<()> {
+    let opened = wait_dom_true(
+        app,
+        r#"
+        var ring = document.querySelector('.alm-onb-ring');
+        if (!ring) return false;
+        if (ring.getAttribute('aria-expanded') !== 'true') { ring.click(); }
+        return !!document.querySelector('.alm-onb-checklist');
+        "#,
+        UI_TIMEOUT,
+    )
+    .await?;
+    anyhow::ensure!(
+        opened,
+        "Getting-started flyout did not open (trigger `.alm-onb-ring` missing or click ignored); {}",
+        walk_gate_diagnostics(app).await
+    );
+    Ok(())
+}
+
 /// Read the checklist overall-progress `aria-valuenow` (settled "done" count).
-/// `-1` when the progressbar is not in the DOM.
+/// `-1` when the progressbar is not in the DOM. Requires the flyout to be open.
 async fn read_progress_done(app: &E2eApp) -> anyhow::Result<i64> {
     let ret = app
         .driver
@@ -234,6 +268,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     // present and still unchecked (no settled `data-state`).
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(UI_TIMEOUT).await?;
+    open_checklist(&app).await?;
     let item_unchecked = wait_dom_true(
         &app,
         r#"
@@ -305,6 +340,11 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
 
     // ── 4. VC-004: the LIVE auto-tick renders — the checklist's overall done
     // count increments once the store re-reads on `onboarding:state-changed`.
+    //
+    // Re-open first (a no-op when it is still open): the progressbar lives
+    // inside the portalled flyout, so a closed flyout would make this read -1
+    // and report "the tick never rendered" when the tick was actually fine.
+    open_checklist(&app).await?;
     let ticked_in_ui = wait_dom_true(
         &app,
         &format!(
