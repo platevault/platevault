@@ -4,7 +4,7 @@
   "title": "workflow.run_completed event",
   "description": "Emitted on the spec 002 event bus when a tool workflow run completes. Spec 012 emits this when ToolLaunch.completed_at is set by the attribution pass. Spec 024 subscribes to write workflow_run manifests; spec 024 calls artifact.list?projectId=... for artifact details on receipt.",
   "type": "object",
-  "required": ["contractVersion", "topic", "source", "payload"],
+  "required": ["contractVersion", "topic", "source", "emittedAt", "payload"],
   "additionalProperties": false,
   "properties": {
     "contractVersion": {
@@ -19,6 +19,11 @@
       "type": "string",
       "enum": ["user", "restore", "system"],
       "description": "Event source per spec 002 R-Source-1. Spec 012 always emits source='system' for this event."
+    },
+    "emittedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Publish time as an RFC 3339 UTC string, stamped by EventEnvelope::new. Distinct from payload.completedAt, which is when the tool run finished."
     },
     "payload": {
       "type": "object",
