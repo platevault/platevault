@@ -500,7 +500,7 @@ export function WizardPage() {
             })}
           />
           <SummaryRow
-            label={m.projects_wizard_bias_label()}
+            label={m.common_bias()}
             value={m.projects_wizard_summary_master_count({
               count: biasSelected,
             })}

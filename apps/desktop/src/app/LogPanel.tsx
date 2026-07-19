@@ -47,7 +47,7 @@ import { useHotkeys } from '@/lib/useHotkeys';
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 const LEVEL_CHIPS: { value: LevelFilter; label: () => string }[] = [
-  { value: 'all', label: () => m.log_level_all() },
+  { value: 'all', label: () => m.common_all() },
   { value: 'error', label: () => m.settings_advanced_log_error() },
   { value: 'warn', label: () => m.settings_advanced_log_warn() },
   { value: 'info', label: () => m.settings_advanced_log_info() },
@@ -381,7 +381,7 @@ export function LogPanel() {
               aria-pressed={sourceFilter.length === 0}
               aria-label={m.logpanel_source_all_aria()}
             >
-              {m.log_level_all()}
+              {m.common_all()}
             </button>
             {ALL_LOG_SOURCES.map((source) => (
               <button

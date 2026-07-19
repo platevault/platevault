@@ -256,9 +256,9 @@ export function SessionsPage() {
               value: kindFilter,
               options: [
                 { value: 'light', label: m.sessions_kind_light_label() },
-                { value: 'dark', label: m.inbox_kind_dark() },
+                { value: 'dark', label: m.common_dark() },
                 { value: 'flat', label: m.inbox_kind_flat() },
-                { value: 'bias', label: m.inbox_kind_bias() },
+                { value: 'bias', label: m.common_bias() },
               ],
               allLabel: m.common_all(),
               onChange: (v) => setKindFilter(v as InventoryFrameType | ''),

@@ -26,7 +26,7 @@ const RECOMMENDATION_LABEL: Record<Recommendation, () => string> = {
   'broadband-ok': () => m.targets_filters_broadband_nb(),
   'narrowband-only': () => m.targets_filters_narrowband_only(),
   'avoid-tonight': () => m.targets_filters_avoid_tonight(),
-  unknown: () => m.targets_recommendation_unknown(),
+  unknown: () => m.common_unknown(),
 };
 
 /** Human label for a recommendation category. */

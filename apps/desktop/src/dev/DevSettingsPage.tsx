@@ -109,7 +109,7 @@ export function DevSettingsPage() {
 
         {saving && (
           <p className="alm-dev-contracts-page__export-result">
-            {m.dev_settings_saving()}
+            {m.common_saving()}
           </p>
         )}
       </div>

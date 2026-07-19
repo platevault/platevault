@@ -165,9 +165,9 @@ function frameTypeLabel(cls: FrameTypeClass): string {
     case 'flat':
       return m.inbox_kind_flat();
     case 'dark':
-      return m.inbox_kind_dark();
+      return m.common_dark();
     case 'bias':
-      return m.inbox_kind_bias();
+      return m.common_bias();
     case 'master_flat':
       return m.settings_naming_frametype_master_flat();
     case 'master_dark':

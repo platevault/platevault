@@ -89,7 +89,7 @@ const STEPS = [
     description: () => m.setup_step_site_desc(),
   },
   {
-    label: () => m.setup_step_confirm_label(),
+    label: () => m.common_confirm(),
     heading: () => m.setup_step_confirm_heading(),
     description: () => m.setup_step_confirm_desc(),
   },

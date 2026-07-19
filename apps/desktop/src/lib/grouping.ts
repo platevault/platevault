@@ -72,7 +72,7 @@ export function groupByDimensions<T>(
       {
         dimension: '',
         key: '__all__',
-        label: m.inbox_group_all_label(),
+        label: m.common_all(),
         count: items.length,
         items: [...items],
         children: [],

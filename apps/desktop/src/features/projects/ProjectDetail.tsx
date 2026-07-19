@@ -491,7 +491,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             onClick={() => setEditOpen(true)}
             data-testid="edit-project-btn"
           >
-            {m.projects_detail_edit_btn()}
+            {m.common_edit()}
           </Btn>
         )
       }

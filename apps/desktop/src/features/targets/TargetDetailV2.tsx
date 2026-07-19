@@ -1198,7 +1198,7 @@ export function TargetDetailV2({
                 className="alm-target-detail__edit-btn"
               >
                 {detail.displayAlias != null
-                  ? m.projects_detail_edit_btn()
+                  ? m.common_edit()
                   : m.targets_detail_set_alias()}
               </button>
             </div>
@@ -1348,7 +1348,7 @@ export function TargetDetailV2({
                     setNotesSaved(false);
                   }}
                 >
-                  {m.projects_detail_edit_btn()}
+                  {m.common_edit()}
                 </button>
                 {notesSaved && (
                   <span className="alm-target-detail__notes-saved">

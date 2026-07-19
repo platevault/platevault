@@ -185,7 +185,7 @@ export function ProjectNotesSection({
         {!readOnly && (
           <div>
             <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              {m.projects_detail_edit_btn()}
+              {m.common_edit()}
             </Btn>
           </div>
         )}
