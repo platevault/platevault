@@ -328,9 +328,23 @@ pub async fn register_source(
     // already be cached, but this keeps the write site authoritative if a
     // removed root's id is ever reused.
     caches::invalidate_library_root(&resp.source_id);
+    seed_new_source_protection(pool, &resp.source_id, req.kind).await;
     write_source_register_audit(bus, &resp.source_id, &req.path, req.kind, Outcome::Applied, None)
         .await?;
     Ok(resp)
+}
+
+/// Seed a freshly registered source's protection level (issue #730 — the real
+/// `register_source`/`register_source_batch` entry points never called
+/// `protection::seed_source_protection`, so new Inbox sources fell through to
+/// the flat global default (`protected`) instead of `data-model.md`'s
+/// Defaults Table). Best-effort: a seeding failure must not fail the
+/// registration itself, which already committed.
+async fn seed_new_source_protection(pool: &SqlitePool, source_id: &str, kind: SourceKind) {
+    let kind_str: &'static str = kind.into();
+    if let Err(e) = crate::protection::seed_source_protection(pool, source_id, kind_str).await {
+        tracing::warn!(%source_id, kind = kind_str, error = ?e, "failed to seed source protection");
+    }
 }
 
 /// Change a source's organization state after registration (spec 041, T030).
@@ -455,6 +469,7 @@ async fn partition_batch_sources<'a>(
 /// clippy's line budget; audits `Failure` items too (review round 1 #3 —
 /// these were previously dropped without a durable row).
 async fn audit_batch_results(
+    pool: &SqlitePool,
     bus: &EventBus,
     valid_sources: &[(usize, &RegisterSourceRequest)],
     repo_items: Vec<contracts_core::first_run::BatchItem>,
@@ -467,6 +482,7 @@ async fn audit_batch_results(
         match repo_item.status {
             ItemStatus::Success => {
                 if let Some(source_id) = &repo_item.source_id {
+                    seed_new_source_protection(pool, source_id, source.kind).await;
                     write_source_register_audit(
                         bus,
                         source_id,
@@ -547,7 +563,7 @@ pub async fn register_source_batch(
                 return Err(err);
             }
         };
-        items.extend(audit_batch_results(bus, &valid_sources, batch_resp.items).await?);
+        items.extend(audit_batch_results(pool, bus, &valid_sources, batch_resp.items).await?);
     }
 
     // Sort items by original index for deterministic output.
