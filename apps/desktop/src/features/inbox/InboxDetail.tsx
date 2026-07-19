@@ -42,10 +42,32 @@ import { DetailPanel, PropertyTable, renderValue } from '@/components';
 import { errMessage } from '@/lib/errors';
 import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
+import { revealLabel } from '@/lib/reveal-label';
+import { revealInOs } from '@/shared/native/reveal';
 import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
 import type { InboxClassifyResponse } from './store';
 import { ConeSearchSuggestions } from './ConeSearchSuggestions';
+
+/**
+ * Resolve an inbox item's reveal target: the source root joined with the
+ * item's `relativePath`. Mirrors `features/sessions/revealInventory.ts`'s
+ * `resolveRevealPath` (same tested contract: backend `relativePath` is always
+ * forward-slash-normalized — `crates/app/inbox/src/scan.rs` — while the root
+ * is native, so every separator is rewritten to the root's own). Duplicated
+ * rather than imported to keep this feature's scope self-contained; the two
+ * helpers must stay behaviorally identical if either changes.
+ */
+function resolveInboxRevealPath(
+  rootPath: string,
+  relativePath: string,
+): string {
+  if (!relativePath) return rootPath;
+  const sep = rootPath.includes('\\') ? '\\' : '/';
+  const root = rootPath.replace(/[/\\]+$/, '');
+  const rel = relativePath.replace(/^[/\\]+/, '').replace(/[/\\]+/g, sep);
+  return `${root}${sep}${rel}`;
+}
 
 // ── reclassify_v2 (spec 041 R-13/T068, issue #755) ────────────────────────────
 //
@@ -368,6 +390,7 @@ export interface InboxDetailProps {
 
 export function InboxDetail({
   item,
+  rootAbsolutePath,
   classification,
   fileMetadata,
   onConfirm,
@@ -583,6 +606,23 @@ export function InboxDetail({
 
   const title = item.relativePath || m.inbox_list_root_label();
   const classType = classification?.type ?? 'pending';
+
+  // Reveal this item's location in the OS file browser (#715, spec 004
+  // FR-005/SC-002). No connectivity gate like Sessions (#889): the Inbox
+  // root is the currently-scanned root, always reachable while this pane is
+  // shown.
+  const [revealError, setRevealError] = useState<string | null>(null);
+  const handleReveal = useCallback(async () => {
+    setRevealError(null);
+    try {
+      await revealInOs(
+        resolveInboxRevealPath(rootAbsolutePath, item.relativePath),
+        { entityKind: 'inbox_item', entityId: item.inboxItemId },
+      );
+    } catch {
+      setRevealError(m.inbox_toast_reveal_error());
+    }
+  }, [rootAbsolutePath, item.relativePath, item.inboxItemId]);
 
   // Library picker (point 1): narrow the destination roots to the category that
   // can receive this item's frame type. Only meaningful for a single-type item
@@ -946,6 +986,15 @@ export function InboxDetail({
           </select>
         </label>
       )}
+      {/* Reveal — platform-native label (shared revealLabel() helper, #715). */}
+      <Btn
+        size="sm"
+        onClick={() => void handleReveal()}
+        title={m.inbox_reveal_title()}
+        data-testid="inbox-reveal-btn"
+      >
+        {revealLabel()}
+      </Btn>
     </span>
   );
 
@@ -967,6 +1016,15 @@ export function InboxDetail({
           was clipped by `.alm-listpage__detail-body`'s `overflow: hidden`
           (unreachable, not just unscrolled). */}
       <div className="alm-inbox-detail__scroll">
+        {revealError && (
+          <Banner
+            variant="danger"
+            className="alm-inbox-detail__banner-mt3"
+            data-testid="inbox-reveal-error"
+          >
+            {revealError}
+          </Banner>
+        )}
         {/* Mixed: advisory banner */}
         {classType === 'mixed' && (
           <Banner
