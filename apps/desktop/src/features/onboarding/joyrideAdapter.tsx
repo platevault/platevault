@@ -36,6 +36,8 @@ import type {
   TooltipRenderProps,
 } from 'react-joyride';
 import { m } from '@/lib/i18n';
+import { Btn } from '@/ui';
+import './walk.css';
 
 /** A library-agnostic onboarding step. Consumers build these; the adapter maps
  * them to joyride's `Step` so joyride's types never leak past this module. */
@@ -97,44 +99,48 @@ function OnboardingTooltip({
         {step.title ? (
           <h2 className="alm-onboarding-tooltip__title">{step.title}</h2>
         ) : null}
-        <button
-          type="button"
+        <Btn
+          variant="ghost"
+          size="sm"
           className="alm-onboarding-tooltip__close"
           aria-label={closeProps['aria-label']}
           onClick={closeProps.onClick}
         >
           {m.onboarding_walk_close()}
-        </button>
+        </Btn>
       </div>
 
       <div className="alm-onboarding-tooltip__body">{step.content}</div>
 
       <div className="alm-onboarding-tooltip__footer">
-        <button
-          type="button"
+        <Btn
+          variant="ghost"
+          size="sm"
           className="alm-onboarding-tooltip__skip"
           onClick={skipProps.onClick}
         >
           {m.onboarding_walk_skip()}
-        </button>
+        </Btn>
         <div className="alm-onboarding-tooltip__nav">
           {index > 0 ? (
-            <button
-              type="button"
+            <Btn
+              variant="ghost"
+              size="sm"
               className="alm-onboarding-tooltip__back"
               onClick={backProps.onClick}
             >
               {m.onboarding_walk_back()}
-            </button>
+            </Btn>
           ) : null}
-          <button
-            type="button"
+          <Btn
+            variant="primary"
+            size="sm"
             data-action="primary"
             className="alm-onboarding-tooltip__primary"
             onClick={primaryProps.onClick}
           >
             {isLastStep ? m.onboarding_walk_finish() : m.onboarding_walk_next()}
-          </button>
+          </Btn>
         </div>
       </div>
     </div>
