@@ -283,7 +283,7 @@ export function MasterDetail({
       await revealInventoryPath({ path: revealTarget, sessionId: master.id });
     } catch {
       addToast({
-        message: m.calibration_toast_reveal_error(),
+        message: m.common_reveal_error(),
         variant: 'error',
       });
     }
@@ -314,7 +314,7 @@ export function MasterDetail({
             return;
           }
           addToast({
-            message: err.message || m.calibration_archive_generate_failed(),
+            message: err.message || m.projects_archive_generate_failed(),
             variant: 'error',
           });
         },
@@ -329,7 +329,7 @@ export function MasterDetail({
         onSuccess: handleArchiveSuccess,
         onError: (err) => {
           addToast({
-            message: err.message || m.calibration_archive_generate_failed(),
+            message: err.message || m.projects_archive_generate_failed(),
             variant: 'error',
           });
         },
@@ -579,7 +579,7 @@ export function MasterDetail({
         planId={archiveReviewPlanId}
         open={archiveReviewPlanId !== null}
         onClose={() => setArchiveReviewPlanId(null)}
-        title={m.calibration_archive_review_title()}
+        title={m.projects_archive_review_title()}
         onApplied={handleArchivePlanApplied}
         onRetryCreated={setArchiveReviewPlanId}
       />
