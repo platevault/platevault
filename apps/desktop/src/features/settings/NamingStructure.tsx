@@ -1013,6 +1013,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
             scope="naming"
             keys={NAMING_KEYS}
             onRestored={applyValues}
+            scopeLabel={m.settings_naming_project_restore_scope()}
           />
         }
       >

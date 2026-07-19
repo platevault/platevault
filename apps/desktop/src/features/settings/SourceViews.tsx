@@ -21,7 +21,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSettings } from './settingsIpc';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow } from './SettingsKit';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
+
+const SOURCE_VIEWS_KEYS = [
+  'sourceViewLinkKindIntraDrive',
+  'sourceViewLinkKindCrossDrive',
+];
 
 type LinkKind = 'symlink' | 'hardlink' | 'junction';
 
@@ -74,7 +83,25 @@ export function SourceViews({ save }: SourceViewsProps) {
   }, []);
 
   return (
-    <SettingsSection title={m.settings_source_views_title()}>
+    <SettingsSection
+      title={m.settings_source_views_title()}
+      action={
+        <RestoreDefaultsBtn
+          scope="sourceViews"
+          keys={SOURCE_VIEWS_KEYS}
+          scopeLabel={m.settings_source_views_restore_scope()}
+          onRestored={(values) => {
+            editedRef.current = false;
+            if (typeof values.sourceViewLinkKindIntraDrive === 'string') {
+              setIntraDrive(values.sourceViewLinkKindIntraDrive as LinkKind);
+            }
+            if (typeof values.sourceViewLinkKindCrossDrive === 'string') {
+              setCrossDrive(values.sourceViewLinkKindCrossDrive as LinkKind);
+            }
+          }}
+        />
+      }
+    >
       <SettingsRow
         label={m.settings_source_views_intra_drive_label()}
         info={m.settings_source_views_intra_drive_info()}

@@ -24,7 +24,7 @@ import {
   type ResolverSettings,
 } from './settingsIpc';
 import { m } from '@/lib/i18n';
-import { SettingsRow } from './SettingsKit';
+import { SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
 
 const DEFAULT_SETTINGS: ResolverSettings = {
   onlineEnabled: true,
@@ -95,6 +95,15 @@ export function ResolverSettingsControl({
     },
     [settings],
   );
+
+  // #802: reuses the same optimistic-then-persist path as every other
+  // control in this component; marks editedRef so a still-in-flight mount
+  // fetch can't clobber the restored values back to whatever it was about
+  // to load (same mount-race guard as #822).
+  const handleRestoreDefaults = useCallback(async () => {
+    editedRef.current = true;
+    await persist(DEFAULT_SETTINGS);
+  }, [persist]);
 
   // spec 052 P1 (FR-002): manual "clear resolve cache" action — wipes the
   // shared redb typeahead/search cache and re-warms it; never touches saved
@@ -265,6 +274,16 @@ export function ResolverSettingsControl({
               onBlur={(e) =>
                 void persist({ requestTimeoutSecs: Number(e.target.value) })
               }
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            label={m.settings_action_restore_defaults()}
+            info={m.settings_resolver_restore_scope()}
+          >
+            <RestoreDefaultsBtn
+              onRestore={handleRestoreDefaults}
+              scopeLabel={m.settings_resolver_restore_scope()}
             />
           </SettingsRow>
 

@@ -181,7 +181,12 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
   return (
     <SettingsSection
       title={m.settings_calmatch_title()}
-      action={<RestoreDefaultsBtn onRestore={handleRestoreCalibration} />}
+      action={
+        <RestoreDefaultsBtn
+          onRestore={handleRestoreCalibration}
+          scopeLabel={m.settings_calmatch_restore_scope()}
+        />
+      }
     >
       <table className="alm-table alm-calmatch__table">
         <thead>
