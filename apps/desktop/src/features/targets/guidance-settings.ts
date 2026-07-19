@@ -78,6 +78,16 @@ export function coerceParams(value: unknown): MoonAvoidanceParams {
 let current: MoonAvoidanceParams = { ...DEFAULT_MOON_AVOIDANCE };
 const listeners = new Set<() => void>();
 
+// #836: TargetsPage re-runs `loadGuidanceParams()` on every mount (T017) so a
+// fresh Targets visit picks up settings changed elsewhere. A Settings-pane
+// edit is fire-and-forget from its onBlur handler, so navigating to Targets
+// right after an edit can start a `settingsGet` that reads the backend
+// *before* the edit's `settingsUpdate` has committed; if that stale read
+// resolves after the save's cache update, it clobbers the just-saved value.
+// `writeGen` guards against this: a load only applies if no save has
+// committed since the load started.
+let writeGen = 0;
+
 function emit(): void {
   for (const fn of listeners) fn();
 }
@@ -96,12 +106,17 @@ function snapshot(): MoonAvoidanceParams {
  * on planner mount; falls back to defaults when the backend is unavailable.
  */
 export async function loadGuidanceParams(): Promise<MoonAvoidanceParams> {
+  const genAtStart = writeGen;
   try {
     const data = unwrap(await commands.settingsGet(PLANNER_SCOPE));
     const values = data.values as Record<string, unknown>;
-    current = coerceParams(values[MOON_AVOIDANCE_KEY]);
+    if (writeGen === genAtStart) {
+      current = coerceParams(values[MOON_AVOIDANCE_KEY]);
+    }
   } catch {
-    current = { ...DEFAULT_MOON_AVOIDANCE };
+    if (writeGen === genAtStart) {
+      current = { ...DEFAULT_MOON_AVOIDANCE };
+    }
   }
   emit();
   return current;
@@ -115,6 +130,7 @@ export async function saveGuidanceParams(
   params: MoonAvoidanceParams,
 ): Promise<void> {
   const clean = coerceParams(params);
+  writeGen += 1;
   unwrap(
     await commands.settingsUpdate(PLANNER_SCOPE, {
       [MOON_AVOIDANCE_KEY]: clean,
@@ -145,6 +161,7 @@ export function getGuidanceParams(): MoonAvoidanceParams {
 /** Test-only: reset the cache to shipped defaults. */
 export function __resetGuidanceParamsForTest(): void {
   current = { ...DEFAULT_MOON_AVOIDANCE };
+  writeGen = 0;
   emit();
 }
 

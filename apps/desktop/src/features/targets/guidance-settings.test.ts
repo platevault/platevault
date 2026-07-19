@@ -107,6 +107,36 @@ describe('saveGuidanceParams (live propagation, SC-008)', () => {
   });
 });
 
+describe('loadGuidanceParams vs saveGuidanceParams race (#836)', () => {
+  it('does not let a load started before a save clobber the just-saved value', async () => {
+    // A TargetsPage-mount `settingsGet` is in flight (started before the
+    // Settings-pane edit) when `saveGuidanceParams` commits — the stale read
+    // must not overwrite the newer save once it resolves.
+    let resolveGet!: (v: unknown) => void;
+    settingsGet.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+    settingsUpdate.mockResolvedValue(null);
+
+    const loadPromise = loadGuidanceParams();
+
+    const next = {
+      ...DEFAULT_MOON_AVOIDANCE,
+      OIII: { distanceDeg: 95, widthDays: 10 },
+    };
+    await saveGuidanceParams(next);
+    expect(getGuidanceParams().OIII.distanceDeg).toBe(95);
+
+    // The stale load now resolves with the pre-save (empty) values.
+    resolveGet({ scope: PLANNER_SCOPE, values: {} });
+    await loadPromise;
+
+    expect(getGuidanceParams().OIII.distanceDeg).toBe(95);
+  });
+});
+
 describe('restoreGuidanceDefaults', () => {
   it('calls restore-defaults for the key then reloads', async () => {
     settingsRestoreDefaults.mockResolvedValue({
