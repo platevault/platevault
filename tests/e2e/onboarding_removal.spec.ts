@@ -7,29 +7,26 @@
  * Covers the section-header "Remove getting started" menu + one-line confirm
  * (T029) and the Settings → Advanced restore control (T030).
  *
- * ── Mock-mode coverage limits (VC-002) ──────────────────────────────────────
- *  The remove-persists and restore-brings-back assertions need a working
- *  `onboarding_section_set` mutation AND reload persistence, both blocked in
- *  mock mode: `mocks.ts` reads `_args?.hidden`, but the binding invokes
- *  `{ request: { hidden, sidebarCollapsed } }`, so remove never flips
- *  `sectionHidden`; and `mockOnboardingFlags` re-initialises on `page.reload()`,
- *  so cross-reload persistence needs a localStorage round-trip. Both fixes are
- *  orchestrator-owned. Those tests are authored below and `test.skip`ed.
+ * SECTION-level removal is the only per-checklist removal control that exists:
+ * the per-row dismiss "X" was deliberately deleted (the round checkbox is the
+ * single per-item affordance). This file covers the surviving header ··· menu.
  *
- * What IS reachable now: the menu + one-line confirm copy (Paraglide keys),
- * and the Settings restore control rendering — neither needs a mutation.
+ * The checklist now lives only inside the `.alm-onb-ring` flyout (portalled to
+ * `document.body`), so `.alm-onb-checklist` — and with it the header menu — is
+ * absent until the ring is clicked; see `openChecklist`.
  */
 
-import { test, expect, landOnMockRoute } from "./support/harness";
+import { test, expect, landOnMockRoute, openChecklist, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
+import type { Page } from "@playwright/test";
 
-const SECTION = ".alm-onb-checklist";
 
+/** Open the checklist flyout and wait for its body (no-op when already open). */
 test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 	test("header menu offers Remove with a one-line confirm using the Paraglide copy (T029)", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+		await openChecklist(page);
 
 		await page
 			.getByRole("button", { name: "Getting started options" })
@@ -72,7 +69,7 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+		await openChecklist(page);
 
 		await page
 			.getByRole("button", { name: "Getting started options" })
@@ -80,17 +77,20 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 		await page.getByRole("menuitem", { name: "Remove getting started" }).click();
 		await page.locator(".alm-onb-checklist__menu-confirm-yes").click();
 
+		// Removal unmounts the flyout AND its sidebar ring trigger, and the mock
+		// persists `sectionHidden`, so a reload must not bring either back.
 		await expect(page.locator(SECTION)).toHaveCount(0);
+		await expect(page.locator(RING)).toHaveCount(0);
 		await page.reload();
+		await expect(page.locator(RING)).toHaveCount(0, { timeout: 8_000 });
 		await expect(page.locator(SECTION)).toHaveCount(0);
-		await expect(page.locator(".alm-onb-ring")).toHaveCount(0);
 	});
 
 	test("restore brings the section back with re-derived pre-ticked state (FR-014)", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+		await openChecklist(page);
 
 		// Remove it …
 		await page
@@ -104,6 +104,7 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 		await page.goto("/#/settings/advanced");
 		await page.getByTestId("onboarding-restore-btn").click();
 		await page.goto("/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible();
+		// The ring trigger comes back first; the section is behind it again.
+		await openChecklist(page);
 	});
 });

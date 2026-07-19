@@ -9,34 +9,35 @@
  * completed area, the automatic-tick progress pulse, and the polite per-tick
  * aria-live announcement, plus reduced-motion parity.
  *
- * ── Mock-mode coverage limits (VC-002) ──────────────────────────────────────
- *  A. Every assertion that needs a real `unchecked → settled` transition (manual
- *     check-off, dismiss, completed-area move, reduced-motion parity of the
- *     final state) is blocked by the shared T007 mock's request-arg defect:
- *     `mocks.ts` `onboarding_item_set_state` reads `_args?.itemId` but the
- *     generated binding invokes `{ request: { itemId, state } }`, so every mock
- *     check-off / dismiss no-ops, the store never emits the transition, and the
- *     choreography never plays. Those tests are authored below and `test.skip`ed
- *     with a TODO(consolidation) pointing at the one-line `_args?.request?.…`
- *     fix (orchestrator-owned).
- *  B. The AUTOMATIC-tick progress pulse cannot be exercised at all in mock mode:
- *     only the real bus subscriber emits `source === 'event'` ticks (research
- *     R5 / VC-002). Documented here; not authored as a runnable assertion.
+ * The checklist is only mounted inside the `.alm-onb-ring` flyout (portalled to
+ * `document.body`), so every test opens it first — see `openChecklist`.
  *
- * What IS reachable now: the always-rendered polite aria-live region T024 adds,
- * which needs no transition.
+ * ── Mock-mode coverage limit (VC-002) ───────────────────────────────────────
+ *  The AUTOMATIC-tick progress pulse cannot be exercised in mock mode: only the
+ *  real bus subscriber emits `source === 'event'` ticks (research R5 / VC-002),
+ *  and `useCompletionChoreography` pulses on that source alone. Documented
+ *  below; covered by the backend / Layer-2 lane instead.
+ *
+ * ── No per-row dismiss ──────────────────────────────────────────────────────
+ *  The per-row dismiss "X" was deliberately removed: the round checkbox is the
+ *  single per-item completion affordance, and whole-section removal lives in
+ *  the section header's ··· menu (covered by `onboarding_removal.spec.ts`).
+ *  The dismiss choreography test that used to live here was deleted with it —
+ *  re-pointing it at the checkbox would have duplicated the manual check-off
+ *  test below verbatim.
  */
 
-import { test, expect, landOnMockRoute } from "./support/harness";
+import { test, expect, landOnMockRoute, openChecklist, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
+import type { Page } from "@playwright/test";
 
-const SECTION = ".alm-onb-checklist";
 
+/** Open the checklist flyout and wait for its body (no-op when already open). */
 test.describe("onboarding completion choreography (spec 056 US3)", () => {
 	test("renders a polite aria-live region for per-tick announcements (T024)", async ({
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+		await openChecklist(page);
 
 		const announcer = page.locator(
 			`${SECTION} [role="status"][aria-live="polite"]`,
@@ -48,7 +49,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+		await openChecklist(page);
 
 		const row = page.locator('[data-item-id="sessions.review_first"]');
 		await page.getByRole("checkbox", { name: "Review a session" }).click();
@@ -63,42 +64,19 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		).toBeVisible();
 	});
 
-	test("dismiss plays the same choreography and moves the item to the completed area", async ({
-		page,
-	}) => {
-		await landOnMockRoute(page, "/#/sessions");
-		await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
-
-		const row = page.locator('[data-item-id="sessions.add_note"]');
-		await row.getByRole("button", { name: /Dismiss/ }).click();
-
-		await expect(row).toHaveAttribute("data-completing", "true");
-		await expect(
-			page.locator(
-				`.alm-onb-checklist__completed [data-item-id="sessions.add_note"]`,
-			),
-		).toBeVisible();
-	});
-
-	// TODO(consolidation): same mocks.ts `_args?.request?.…` defect — with no
-	// working mutation there is no transition to compare across motion settings.
-	// Body asserts reduced-motion PARITY: identical final settled state, zero
-	// motion (no completing marker, item lands directly in the completed area).
 	test.describe("reduced motion parity", () => {
 		test.use({ reducedMotion: "reduce" });
 
 		test("completion applies the final state instantly with no animation (FR-020)", async ({
 			page,
 		}) => {
-				await landOnMockRoute(page, "/#/sessions");
-			await expect(page.locator(SECTION)).toBeVisible({ timeout: 8_000 });
+			await landOnMockRoute(page, "/#/sessions");
+			await openChecklist(page);
 
 			await page.getByRole("checkbox", { name: "Review a session" }).click();
 
 			// No transient completing marker under reduced motion …
-			await expect(
-				page.locator('[data-completing="true"]'),
-			).toHaveCount(0);
+			await expect(page.locator('[data-completing="true"]')).toHaveCount(0);
 			// … the item is in its final completed-area state immediately.
 			await expect(
 				page.locator(

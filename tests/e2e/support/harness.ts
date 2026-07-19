@@ -200,6 +200,34 @@ export async function landOnMockRoute(page: Page, hash: string): Promise<void> {
   }
 }
 
+/** Sidebar trigger that opens the Getting-started flyout. */
+export const ONB_RING = ".alm-onb-ring";
+/** The checklist itself — only in the DOM while the flyout is open. */
+export const ONB_SECTION = ".alm-onb-checklist";
+
+/**
+ * Open the Getting-started flyout and wait for the checklist inside it.
+ *
+ * The checklist is NOT inline in the sidebar: `ChecklistPopover` portals it to
+ * `document.body`, so `.alm-onb-checklist` does not exist until the ring
+ * trigger is clicked. Any spec asserting on checklist content must call this
+ * after landing on its route — four spec files failed precisely because they
+ * assumed the pre-redesign inline host.
+ *
+ * Idempotent: the trigger TOGGLES, so this clicks only when `aria-expanded` is
+ * not already `"true"`. That matters because several flows (clicking a nav
+ * link, reloading) close the flyout as a side effect, and a blind second click
+ * would re-close what the caller wanted open.
+ */
+export async function openChecklist(page: Page): Promise<void> {
+  const ring = page.locator(ONB_RING);
+  await expect(ring).toBeVisible({ timeout: 8_000 });
+  if ((await ring.getAttribute("aria-expanded")) !== "true") {
+    await ring.click();
+  }
+  await expect(page.locator(ONB_SECTION)).toBeVisible({ timeout: 8_000 });
+}
+
 /**
  * Drop-in replacement for `@playwright/test`'s `test`: identical, except every
  * test's `page` has the Tauri `Channel` polyfill installed automatically.

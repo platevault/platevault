@@ -20,13 +20,19 @@
  * would otherwise intercept every click on these surfaces.
  */
 
-import { test, expect, landOnMockRoute } from "./support/harness";
+import { test, expect, landOnMockRoute, openChecklist, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
 import type { Page } from "@playwright/test";
 
 const OVERLAY = ".react-joyride__overlay";
 const SPOTLIGHT = ".react-joyride__spotlight";
 const CREATE_CTA = '[data-guide-anchor="projects.create-cta"]';
 
+/**
+ * Open the checklist flyout and wait for its body (no-op when already open).
+ *
+ * The checklist — and therefore every row find affordance — is only mounted
+ * inside the `.alm-onb-ring` flyout, portalled to `document.body`.
+ */
 function findBtn(page: Page, itemId: string) {
 	return page
 		.locator(`[data-item-id="${itemId}"]`)
@@ -38,6 +44,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		const btn = findBtn(page, "projects.create_first");
 		await expect(btn).toBeVisible({ timeout: 8_000 });
 
@@ -54,6 +61,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 	// ── Dismissal matrix: all five paths (FR-023) ──────────────────────────────
 	test("dismiss by clicking the spotlighted target", async ({ page }) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
 
@@ -65,6 +73,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
 
@@ -74,6 +83,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 
 	test("dismiss with Escape", async ({ page }) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
 
@@ -83,6 +93,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 
 	test("dismiss by toggling the find affordance again", async ({ page }) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		const btn = findBtn(page, "projects.create_first");
 		await btn.click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
@@ -94,6 +105,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 
 	test("dismiss by changing pages", async ({ page }) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
 
@@ -109,6 +121,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 
 	test("never dismisses on a timer (FR-023)", async ({ page }) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
 
@@ -122,6 +135,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/inbox");
+		await openChecklist(page);
 		// The projects group is a one-line header off its own page — expand it so
 		// its rows (and their find affordances) render.
 		await page
@@ -140,12 +154,18 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/sessions");
-		// `sessions.add_note` has no on-page control anchor → unavailable state.
+		await openChecklist(page);
+		// `sessions.add_note` maps to the `sessions.note-field` anchor, but that
+		// control lives on a session DETAIL page — it is not on the sessions list
+		// the item navigates to, so the resolver times out and falls to the same
+		// unavailable branch as a genuinely anchor-less item. (The older comment
+		// here claimed the item had no anchor at all; it has one, it just cannot
+		// resolve from this page. Same user-visible outcome, different cause.)
 		await findBtn(page, "sessions.add_note").click();
 
 		const callout = page.locator(".alm-onb-spotlight-unavailable");
-		await expect(callout).toBeVisible();
-		await expect(callout).toContainText("isn't on screen");
+		await expect(callout).toBeVisible({ timeout: 8_000 });
+		await expect(callout).toContainText("Nothing to point at");
 		// No joyride spotlight was drawn.
 		await expect(page.locator(OVERLAY)).toHaveCount(0);
 	});
@@ -154,6 +174,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 		await expect(page.locator(OVERLAY)).toBeVisible();
 
@@ -172,6 +193,7 @@ test.describe("onboarding find-it spotlight — reduced motion (VC-002)", () => 
 		page,
 	}) => {
 		await landOnMockRoute(page, "/#/projects");
+		await openChecklist(page);
 		await findBtn(page, "projects.create_first").click();
 
 		// The spotlight still renders (static outline) …
