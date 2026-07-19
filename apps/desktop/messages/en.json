@@ -126,6 +126,7 @@
   "calibration_empty_desc": "Run a scan to import calibration frames.",
   "calibration_empty_title": "No calibration masters",
   "calibration_fp_exposure": "Exposure",
+  "calibration_fp_age": "Age",
   "calibration_fp_kind": "Kind",
   "calibration_fp_sensor_mode": "Sensor mode",
   "calibration_fp_temperature": "Temperature",
@@ -694,19 +695,18 @@
   "settings_action_restore_defaults": "Restore defaults",
   "settings_action_restore_defaults_restoring": "Restoring…",
   "settings_action_restore_defaults_done": "Restored",
+  "settings_advanced_danger_confirm_desc": "This resets theme, density, and font size to defaults. Library roots, equipment, and session data are not affected.",
+  "settings_advanced_danger_confirm_yes": "Yes, reset",
   "settings_advanced_danger_desc": "Resets all UI preferences (theme, density, font size) to defaults. Library roots, equipment, and session data are not affected.",
   "settings_advanced_danger_reset": "Reset preferences",
+  "settings_advanced_danger_reset_cancel": "Cancel",
+  "settings_advanced_danger_reset_done": "Preferences reset to defaults.",
   "settings_advanced_danger_title": "Danger Zone",
   "settings_advanced_db_engine": "Engine",
   "settings_advanced_db_engine_value": "SQLite",
   "settings_advanced_db_export": "Export database",
-  "settings_advanced_db_location": "Location",
-  "settings_advanced_db_records": "Records",
-  "settings_advanced_db_records_value": "142,318 files · 22 sessions · 3 projects",
-  "settings_advanced_db_schema": "Schema version",
-  "settings_advanced_db_schema_value": "v1.0",
+  "settings_advanced_db_export_unavailable_title": "Database export isn't implemented yet",
   "settings_advanced_db_size": "Size",
-  "settings_advanced_db_size_value": "24.8 MB",
   "settings_advanced_db_title": "Database",
   "settings_advanced_log_debug": "Debug",
   "settings_advanced_log_error": "Error",
@@ -1174,7 +1174,6 @@
   "targets_detail_no_aliases": "No aliases",
   "targets_detail_no_coverage": "No coverage data yet.",
   "targets_detail_no_projects_linked": "No projects linked.",
-  "targets_detail_no_projects_linked_title": "No projects linked",
   "targets_detail_no_sessions": "No linked sessions yet.",
   "targets_detail_notes_title": "Observing notes",
   "targets_detail_notes_placeholder": "Add observing notes for this target…",
@@ -1303,6 +1302,7 @@
   "projects_toast_save_notes_failed": "Failed to save notes: {error}",
   "projects_notes_byte_limit_exceeded": "Note exceeds the {max}-byte limit.",
   "projects_wizard_toast_created": "Project \"{name}\" created.",
+  "projects_wizard_toast_view_project": "View project",
   "projects_wizard_toast_created_folders": "Project \"{name}\" created — project folders created on disk.",
   "projects_wizard_toast_folders_failed": "Project \"{name}\" created, but folder creation failed. The folder plan remains available for review.",
   "projects_source_views_removal_toast": "Removal plan created. Review and apply plan to complete removal.",
@@ -2032,6 +2032,21 @@
   "calibration_session_popover_no_matches": "No matches",
   "calibration_used_by_label": "Used by",
   "calibration_compatible_label": "Compatible",
+  "calibration_fp_age_value": [
+    {
+      "declarations": [
+        "input days",
+        "local pp = days: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{days} day old",
+        "pp=other": "{days} days old"
+      }
+    }
+  ],
   "inbox_apply_n_overrides": [
     {
       "declarations": [
@@ -2117,8 +2132,8 @@
         "pp"
       ],
       "match": {
-        "pp=one": "{count} master",
-        "pp=other": "{count} masters"
+        "pp=one": "{count} master candidate",
+        "pp=other": "{count} master candidates"
       }
     }
   ],

@@ -158,9 +158,9 @@ font-weight: var(--alm-weight-medium);
 .alm-radio--active .alm-radio__desc { color: var(--alm-accent-text); }
 
 /* Segmented control */
-.alm-seg { display: inline-flex; border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm); overflow: hidden; }
+.alm-seg { display: inline-flex; height: var(--alm-control-h-sm); border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm); overflow: hidden; }
 .alm-seg__btn {
-  padding: var(--alm-sp-0) var(--alm-sp-2); font-size: var(--alm-text-xs);
+  height: 100%; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs);
   border: none; background: var(--alm-bg); color: var(--alm-text-muted);
   cursor: pointer;font-weight: var(--alm-weight-medium);
   border-right: 1px solid var(--alm-border);

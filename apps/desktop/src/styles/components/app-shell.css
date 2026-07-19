@@ -213,7 +213,7 @@
   border-bottom: 1px solid var(--alm-border-subtle);
 }
 .alm-list-sidebar__controls select {
-  width: 100%; height: 26px; font-size: var(--alm-text-xs);
+  width: 100%; height: var(--alm-control-h); font-size: var(--alm-text-xs);
   border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm);
   background: var(--alm-bg); color: var(--alm-text-secondary);
   padding: 0 var(--alm-sp-2);
