@@ -344,4 +344,112 @@ describe('Equipment', () => {
       screen.getByText(m.settings_equipment_delete_in_use()),
     ).toBeInTheDocument();
   });
+
+  // #659: duplicate name/alias flagged client-side (aliases are the FITS
+  // INSTRUME/TELESCOP join key).
+  it('rejects a camera name that duplicates an existing camera', async () => {
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'ASI2600MM Pro' },
+    });
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    expect(
+      screen.getByText(m.settings_equipment_name_duplicate()),
+    ).toBeInTheDocument();
+    expect(mockCamerasCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a camera alias that duplicates an existing camera alias', async () => {
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'A different camera' },
+    });
+    fireEvent.change(screen.getByLabelText(m.common_aliases()), {
+      // CAMERA already carries alias 'ZWO 2600' — case/whitespace-insensitive.
+      target: { value: ' zwo 2600 ' },
+    });
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    expect(
+      screen.getByText(m.settings_equipment_alias_duplicate()),
+    ).toBeInTheDocument();
+    expect(mockCamerasCreate).not.toHaveBeenCalled();
+  });
+
+  // #661: dedicated sentence-form error, not the bare field label.
+  it('shows a dedicated message for a missing train focal length', async () => {
+    mockTrainsList.mockResolvedValue(ok([]));
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+    mockTelescopesList.mockResolvedValue(ok([TELESCOPE]));
+
+    render(<Equipment save={vi.fn()} />);
+    // Wait for cameras/telescopes to load their options before the train
+    // form's selects are populated.
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText(m.settings_equipment_trains_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Main Imaging Train' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_camera()),
+      { target: { value: CAMERA.id } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_telescope()),
+      { target: { value: TELESCOPE.id } },
+    );
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    const errorEl = screen.getByText(
+      m.settings_equipment_focal_length_required(),
+    );
+    expect(errorEl).toBeInTheDocument();
+    // The bare field label is not reused as the error text (#661) — the
+    // error carries its own sentence-form message, distinct from the label.
+    expect(errorEl.textContent).not.toBe(
+      m.settings_equipment_field_focal_length(),
+    );
+    expect(mockTrainsCreate).not.toHaveBeenCalled();
+  });
+
+  // #835: a train requires both a camera and a telescope selected.
+  it('rejects an optical train saved with no camera and no telescope', () => {
+    mockTrainsList.mockResolvedValue(ok([]));
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+    mockTelescopesList.mockResolvedValue(ok([TELESCOPE]));
+
+    render(<Equipment save={vi.fn()} />);
+    fireEvent.click(screen.getByText(m.settings_equipment_trains_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Main Imaging Train' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_focal_length()),
+      { target: { value: '2350' } },
+    );
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    expect(
+      screen.getByText(m.settings_equipment_train_parts_required()),
+    ).toBeInTheDocument();
+    expect(mockTrainsCreate).not.toHaveBeenCalled();
+  });
 });

@@ -97,7 +97,19 @@ export function ObservingSites() {
   const [deleteTarget, setDeleteTarget] = useState<ObserverSite | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // #840: chosen fallback when removing a site that holds the default/active
+  // pointer and more than one other candidate remains — forces an explicit
+  // choice instead of silently picking the first remaining site.
+  const [fallbackSiteId, setFallbackSiteId] = useState<string | null>(null);
   const timezones = ianaTimezones();
+
+  const deleteRemaining = deleteTarget
+    ? sites.filter((s) => s.id !== deleteTarget.id)
+    : [];
+  const deleteNeedsFallbackChoice =
+    deleteTarget != null &&
+    deleteRemaining.length > 1 &&
+    (deleteTarget.id === activeSiteId || deleteTarget.id === defaultSiteId);
 
   const startAdd = () => {
     setForm(emptyForm());
@@ -201,28 +213,39 @@ export function ObservingSites() {
 
   const requestDelete = (site: ObserverSite) => {
     setDeleteError(null);
+    setFallbackSiteId(null);
     setDeleteTarget(site);
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+    const remaining = sites.filter((s) => s.id !== deleteTarget.id);
+    // #840: when removing the default/active site with 2+ remaining
+    // candidates, the choice is ambiguous — require the user to pick rather
+    // than silently taking the first remaining site.
+    const needsFallbackChoice =
+      remaining.length > 1 &&
+      (deleteTarget.id === activeSiteId || deleteTarget.id === defaultSiteId);
+    if (needsFallbackChoice && !fallbackSiteId) {
+      setDeleteError(m.settings_observing_sites_fallback_required());
+      return;
+    }
     setDeleteBusy(true);
     setDeleteError(null);
     try {
-      const remaining = sites.filter((s) => s.id !== deleteTarget.id);
-      // T020: keep default/active valid — reassign to a remaining site (first
-      // one) when the deleted site held either pointer, or clear to the
-      // no-site state when nothing is left.
+      // T020: keep default/active valid — reassign to the chosen fallback (or
+      // the sole remaining site when unambiguous) when the deleted site held
+      // either pointer, or clear to the no-site state when nothing is left.
+      const fallbackId = needsFallbackChoice
+        ? fallbackSiteId
+        : (remaining[0]?.id ?? null);
       const nextDefaultSiteId =
-        defaultSiteId === deleteTarget.id
-          ? (remaining[0]?.id ?? null)
-          : defaultSiteId;
+        defaultSiteId === deleteTarget.id ? fallbackId : defaultSiteId;
       const nextActiveSiteId =
-        activeSiteId === deleteTarget.id
-          ? (nextDefaultSiteId ?? remaining[0]?.id ?? null)
-          : activeSiteId;
+        activeSiteId === deleteTarget.id ? fallbackId : activeSiteId;
       await saveSites(remaining, nextDefaultSiteId, nextActiveSiteId);
       setDeleteTarget(null);
+      setFallbackSiteId(null);
     } catch (err: unknown) {
       setDeleteError(
         m.settings_observing_sites_delete_error({ error: errMessage(err) }),
@@ -257,7 +280,15 @@ export function ObservingSites() {
               label: m.settings_observing_sites_col_timezone(),
             },
             { key: 'status', label: m.settings_observing_sites_col_status() },
-            { key: 'actions', label: '', style: { width: 260 } },
+            {
+              key: 'actions',
+              label: '',
+              style: { width: 260 },
+              // #838: bound the cell width too (Table only applies `style` to
+              // the header) so the 4-action row-actions flex group actually
+              // wraps instead of forcing the column past the viewport edge.
+              cellStyle: { width: 260 },
+            },
           ]}
           rows={sites.map(
             (site): TableRow => ({
@@ -468,6 +499,7 @@ export function ObservingSites() {
           if (deleteBusy) return;
           setDeleteTarget(null);
           setDeleteError(null);
+          setFallbackSiteId(null);
         }}
         onConfirm={() => void handleConfirmDelete()}
         title={m.settings_observing_sites_delete_confirm_title({
@@ -477,6 +509,32 @@ export function ObservingSites() {
         confirmLabel={deleteBusy ? m.common_removing() : m.common_remove()}
         confirmVariant="danger"
       >
+        {deleteNeedsFallbackChoice && (
+          <div className="alm-stack-1">
+            <label
+              className="alm-field-label"
+              htmlFor="observing-site-fallback"
+            >
+              {m.settings_observing_sites_fallback_label()}
+            </label>
+            <select
+              id="observing-site-fallback"
+              className="alm-select"
+              aria-label={m.settings_observing_sites_fallback_label()}
+              value={fallbackSiteId ?? ''}
+              onChange={(e) => setFallbackSiteId(e.target.value || null)}
+            >
+              <option value="">
+                {m.settings_observing_sites_fallback_placeholder()}
+              </option>
+              {deleteRemaining.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {deleteError && <span className="alm-field-error">{deleteError}</span>}
       </ConfirmOverlay>
     </SettingsSection>

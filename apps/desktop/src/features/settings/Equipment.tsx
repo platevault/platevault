@@ -78,6 +78,38 @@ function formatAliases(aliases: string[]): string {
   return aliases.length > 0 ? aliases.join(', ') : '—';
 }
 
+/** Case/whitespace-insensitive name collision check against an entity list. */
+function isDuplicateName<T extends { id: string; name: string }>(
+  items: T[],
+  name: string,
+  excludeId: string | null,
+): boolean {
+  const normalized = name.trim().toLowerCase();
+  return items.some(
+    (item) =>
+      item.id !== excludeId && item.name.trim().toLowerCase() === normalized,
+  );
+}
+
+/**
+ * True when any of `aliases` collides with another item's aliases
+ * (case/whitespace-insensitive). Aliases are the FITS header join key
+ * (`INSTRUME`/`TELESCOP`), so cross-item collisions make session→equipment
+ * resolution ambiguous — worse than a duplicate display name (#659).
+ */
+function hasDuplicateAlias<T extends { id: string; aliases: string[] }>(
+  items: T[],
+  aliases: string[],
+  excludeId: string | null,
+): boolean {
+  const normalized = new Set(aliases.map((a) => a.trim().toLowerCase()));
+  return items.some(
+    (item) =>
+      item.id !== excludeId &&
+      item.aliases.some((a) => normalized.has(a.trim().toLowerCase())),
+  );
+}
+
 /** Parses a focal-length input; blank → null, non-numeric → null. */
 function parseFocalLength(text: string): number | null {
   const trimmed = text.trim();
@@ -303,10 +335,18 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setCameraFormError(m.settings_equipment_name_required());
       return;
     }
+    if (isDuplicateName(cameras, name, cameraForm.id)) {
+      setCameraFormError(m.settings_equipment_name_duplicate());
+      return;
+    }
+    const aliases = parseAliases(cameraForm.aliasesText);
+    if (hasDuplicateAlias(cameras, aliases, cameraForm.id)) {
+      setCameraFormError(m.settings_equipment_alias_duplicate());
+      return;
+    }
     setCameraSaving(true);
     setCameraFormError(null);
     try {
-      const aliases = parseAliases(cameraForm.aliasesText);
       // FR-035: '' (unknown) persists as null; passband only matters for OSC.
       const sensorType =
         cameraForm.sensorType === '' ? null : cameraForm.sensorType;
@@ -353,10 +393,18 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setTelescopeFormError(m.settings_equipment_name_required());
       return;
     }
+    if (isDuplicateName(telescopes, name, telescopeForm.id)) {
+      setTelescopeFormError(m.settings_equipment_name_duplicate());
+      return;
+    }
+    const aliases = parseAliases(telescopeForm.aliasesText);
+    if (hasDuplicateAlias(telescopes, aliases, telescopeForm.id)) {
+      setTelescopeFormError(m.settings_equipment_alias_duplicate());
+      return;
+    }
     setTelescopeSaving(true);
     setTelescopeFormError(null);
     try {
-      const aliases = parseAliases(telescopeForm.aliasesText);
       const focalLengthMm = parseFocalLength(telescopeForm.focalLengthMmText);
       if (telescopeForm.id) {
         await equipmentTelescopeUpdate({
@@ -402,9 +450,19 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setTrainFormError(m.settings_equipment_name_required());
       return;
     }
+    if (isDuplicateName(trains, name, trainForm.id)) {
+      setTrainFormError(m.settings_equipment_name_duplicate());
+      return;
+    }
+    // #835: a train without both parts selected has nothing to resolve
+    // camera/telescope-specific FITS metadata against.
+    if (!trainForm.cameraId || !trainForm.telescopeId) {
+      setTrainFormError(m.settings_equipment_train_parts_required());
+      return;
+    }
     const focalLengthMm = parseFocalLength(trainForm.focalLengthMmText);
     if (focalLengthMm == null) {
-      setTrainFormError(m.settings_equipment_field_focal_length());
+      setTrainFormError(m.settings_equipment_focal_length_required());
       return;
     }
     setTrainSaving(true);
@@ -451,6 +509,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
     const name = filterForm.name.trim();
     if (!name) {
       setFilterFormError(m.settings_equipment_name_required());
+      return;
+    }
+    if (isDuplicateName(filters, name, filterForm.id)) {
+      setFilterFormError(m.settings_equipment_name_duplicate());
       return;
     }
     setFilterSaving(true);
