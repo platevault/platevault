@@ -159,6 +159,11 @@
   --alm-info-bg: #e8eef1; --alm-info-border: #bcd0db;
   --alm-accent: #3f6b7a; --alm-accent-hover: #345863; --alm-accent-deep: #2a4651;
   --alm-accent-bg: #e3edf0; --alm-accent-text: #2c5160;
+  /* Find-spotlight outline (spec 056 R11, WCAG 1.4.11): MUST stay ≥3:1 against
+     the dimmed overlay field (page bg under joyride's 50%-black overlay). On
+     light themes the accent falls to ~1.3:1 there, so the ring is white
+     (measured 4.0–4.9:1); dark themes keep the accent (7–8:1). */
+  --alm-onb-spotlight-stroke: #ffffff;
   --alm-hover-bg: rgba(0,0,0,0.04); --alm-selected-bg: #e6ecee;
   --alm-shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
 }
@@ -177,6 +182,7 @@
   --alm-info-bg: #e8eef1; --alm-info-border: #bcd0db;
   --alm-accent: #b25a35; --alm-accent-hover: #9c4c2a; --alm-accent-deep: #7c3a1f;
   --alm-accent-bg: #f3e3d8; --alm-accent-text: #8a4324;
+  --alm-onb-spotlight-stroke: #ffffff;
   --alm-hover-bg: rgba(0,0,0,0.04); --alm-selected-bg: #f1e6da;
   --alm-shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
 }
@@ -195,6 +201,7 @@
   --alm-info-bg: #1a2630; --alm-info-border: #33485a;
   --alm-accent: #d98a3d; --alm-accent-hover: #e89a4d; --alm-accent-deep: #b86f2a;
   --alm-accent-bg: #3a2c1b; --alm-accent-text: #e8a86a;
+  --alm-onb-spotlight-stroke: var(--alm-accent);
   --alm-hover-bg: rgba(255,255,255,0.05); --alm-selected-bg: #332a1d;
   --alm-shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
 }
@@ -213,6 +220,7 @@
   --alm-info-bg: #18242e; --alm-info-border: #314556;
   --alm-accent: #cf9d63; --alm-accent-hover: #ddac72; --alm-accent-deep: #b8843f;
   --alm-accent-bg: #312517; --alm-accent-text: #d9ad77;
+  --alm-onb-spotlight-stroke: var(--alm-accent);
   --alm-hover-bg: rgba(255,255,255,0.05); --alm-selected-bg: #2e271d;
   --alm-shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
 }

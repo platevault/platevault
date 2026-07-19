@@ -53,14 +53,32 @@ export async function installTauriChannelPolyfill(page: Page): Promise<void> {
   });
 }
 
-/** Seed first-run as complete so the app lands on real content, not the wizard. */
-export function seedSetupComplete(page: Page): void {
+/**
+ * Seed first-run as complete so the app lands on real content, not the wizard.
+ *
+ * By default this ALSO marks the spec-056 US1 orientation walk done, because
+ * seeding setup alone would otherwise auto-launch the modal walk (it navigates
+ * to /inbox and dims the page) over every unrelated spec, intercepting its flow.
+ * Onboarding stays ENABLED (the checklist still renders — this is not
+ * `disableOnboarding`); only the once-per-install walk is suppressed. The one
+ * suite that tests the walk itself passes `{ suppressWalk: false }` so the
+ * mock's own persisted `orientationDone` governs auto-run (needed for the
+ * "never auto-runs after restart" assertion — an unconditional init-script seed
+ * would re-clobber the persisted flag on every reload).
+ */
+export function seedSetupComplete(
+  page: Page,
+  opts?: { suppressWalk?: boolean },
+): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
       "alm-preferences",
       JSON.stringify({ setupCompleted: true }),
     );
   });
+  if (opts?.suppressWalk !== false) {
+    seedOnboarding(page, { flags: { orientationDone: true } });
+  }
 }
 
 /**

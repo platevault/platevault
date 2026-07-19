@@ -17,16 +17,7 @@
  * Uses the static mock fixture (`VITE_USE_MOCKS=true`, see playwright.config.ts)
  * — no real backend.
  */
-import { test, expect } from "@playwright/test";
-
-function seedSetupComplete(page: import("@playwright/test").Page): void {
-  page.addInitScript(() => {
-    window.localStorage.setItem(
-      "alm-preferences",
-      JSON.stringify({ setupCompleted: true }),
-    );
-  });
-}
+import { test, expect, seedSetupComplete } from "./support/harness";
 
 test.describe("Sessions list — Integration column shows total time (#798)", () => {
   test("a session's Integration cell shows total time, not the raw per-frame exposure", async ({

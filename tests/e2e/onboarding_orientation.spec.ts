@@ -87,7 +87,10 @@ async function expectNoModalAria(page: Page): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
-  seedSetupComplete(page);
+  // `{ suppressWalk: false }`: this suite exists to test the US1 walk, so it
+  // keeps the walk enabled (the mock's own persisted `orientationDone` governs
+  // auto-run) rather than the default walk-suppressing seed.
+  seedSetupComplete(page, { suppressWalk: false });
   await injectSectionAnchor(page);
 });
 

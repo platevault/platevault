@@ -35,6 +35,7 @@ Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 | 21 | Router & URL state | n/a | ✅ | **all top-level screens load** (FR-007) |
 | 22 | Audit event model (cross-cutting) | ✅ | via #18 | bus + stale propagation; **spec 030 Q15/#647 (T122–T125, 2026-07-14)**: settings/protection/equipment/source+root mutations now write durable `audit_log_entry` rows (previously bus-only for protection/source/root, no audit at all for equipment) — see the Q15 row below |
 | 23 | Framing clustering + Inbox-confirm attribution (spec 008 Q27) | ✅ | ❌ | clustering/list/merge/split/reassign + attribution ranking/apply-path all real IPC, **zero frontend consumer** — see the dated section below |
+| 24 | Onboarding: orientation walk + real-work auto-ticks (spec 056) | ✅ | ✅ | walk + live auto-tick real-UI journey; behavioral contract **J18** — see the dated section below |
 
 **Required round-trip proof (FR-008)**: areas #1, #7, #12/#14 each round-trip a
 UI value through the real backend.
@@ -494,6 +495,26 @@ full 6-step wizard happy path (Sources→Tools→Config→Site→Confirm→Scan)
 to end, and Data Sources management (rescan/remap/disable/delete/reveal) —
 both remain "UNCOVERED" per the original audit and are follow-up candidates,
 not regressions.
+
+## Spec 056 — three-layer onboarding (orientation walk + checklists + spotlight) — 2026-07-18
+
+New area #24 (above). The behavioral contract is journey **J18**
+(`docs/journeys/J18-onboarding-orientation-getting-started/journey.md`, VC-001):
+one-time orientation walk after first-run, a per-page "Getting started"
+checklist that auto-ticks from real domain events (never demo data), a
+non-blocking find spotlight, and remove/restore/replay controls.
+
+| Layer | Coverage | Where |
+|---|---|---|
+| L1 (real backend) | publisher → subscriber → persisted tick for the three real milestone events (`inventory.confirmed`, `project.created`, `tool.launch` with `outcome=="spawned"`); restore-sourced events inert; settled states never downgraded (VC-003) | `apps/desktop/src-tauri/tests/onboarding_subscriber_integration.rs` |
+| L1 (seed/restore) | pre-existing confirmed inventory/projects/launches pre-tick on seed AND restore; manual/dismissed rows survive restore; settle sets `section_hidden_at` (FR-031) | `crates/app/core/tests/onboarding_seed_integration.rs` |
+| L2 (real UI → real IPC → real backend) | orientation walk auto-renders + completes, then a **real inventory confirm** drives a **live auto-tick that renders in the checklist** (VC-004) | `crates/e2e-tests/tests/onboarding_journey.rs::orientation_walk_then_real_confirm_renders_live_auto_tick` (`just test-e2e`) |
+| Mock-Playwright | walk (incl. skip/Escape/never-twice/replay), accordion semantics + tooltip-on-focus, spotlight dismissal matrix, persistence flags, reduced-motion parity. **Known limit (VC-002)**: mock-mode event path is a no-op, so auto-ticking is NOT validated there — that is exactly what the L2 journey covers | `tests/e2e/onboarding_{orientation,checklist,choreography,spotlight,removal}.spec.ts` |
+
+**Milestone-event follow-ups (research R4)**: two milestones have no dedicated
+bus topic in v1 (no new backend events minted) so their checklist items are
+manual — `calibration.master.registered` and a site-saved event are filed as
+follow-ups against campaign tracker #881.
 
 ## Spec 008 Q27 iteration — framing clustering + Inbox-confirm attribution (F-Framing-8/9/11) — 2026-07-17
 
