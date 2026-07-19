@@ -295,11 +295,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         if: steps.verify-app-cache.outputs.usable != 'true'
 
+      # cache-on-failure deliberately left at its default (false). Saving from a
+      # failed run persists whatever broken/partial state the failure produced,
+      # and every later run then restores it. A macOS leg failed with
+      # `build-script-build: cannot execute binary file` (exit 126) after
+      # restoring a bad entry — which reads as a source defect rather than a
+      # cache defect and cost real diagnostic time. A failed run should cost a
+      # rebuild, never poison the next one.
       - uses: Swatinem/rust-cache@v2
         if: steps.verify-app-cache.outputs.usable != 'true'
         with:
           shared-key: "rust-e2e-ubuntu-latest"
-          cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
         if: steps.verify-app-cache.outputs.usable != 'true'
