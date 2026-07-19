@@ -11,11 +11,26 @@
  * value absence.
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { render as rtlRender, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { MasterDetail } from './MasterDetail';
 import { commands } from '@/bindings/index';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
+
+// MasterDetail is now backed by TanStack Query (useCalibration.ts) — every
+// render needs a QueryClientProvider ancestor.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const MASTER_ID = 'aaaaaaaa-0000-0000-0000-000000000002';
 

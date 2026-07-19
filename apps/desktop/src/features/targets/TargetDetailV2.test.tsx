@@ -38,12 +38,28 @@
 
 import {
   configure,
-  render,
+  render as rtlRender,
   screen,
   fireEvent,
   waitFor,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
+
+// TargetDetailV2 is now backed by TanStack Query (store.ts) — every render
+// needs a QueryClientProvider ancestor. Shadowing `render` here (instead of
+// touching every one of this file's ~30 call sites) keeps the diff mechanical.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 // Windows-CI headroom (same flake class as PR #412's settings hydration races):
 // every test in this file waits on content that only renders after mocked async
@@ -472,6 +488,36 @@ describe('TargetDetailV2', () => {
     await waitFor(() =>
       expect(screen.queryByText('My Nebula')).not.toBeInTheDocument(),
     );
+  });
+
+  it('16b. alias add/remove refetch ONLY the detail query, not sessions/projects/notes (invalidation-prefix regression)', async () => {
+    // `queryKeys.targets.detail(id)` (['targets', id]) is itself a PREFIX of
+    // sessions(id)/projects(id)/notes(id)/astroFormat(id) (['targets', id,
+    // ...]) — an unqualified invalidateQueries() on detail(id) would fuzzy-
+    // match and refetch all four. Asserts store.ts's invalidateTarget() uses
+    // `exact: true` so an alias mutation costs exactly one extra detail fetch.
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
+    expect(mockListTargetSessions).toHaveBeenCalledTimes(1);
+    expect(mockListTargetProjects).toHaveBeenCalledTimes(1);
+    expect(mockGetTargetNote).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
+      target: { value: 'Regression Alias' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+    await waitFor(() => expect(mockGetTargetDetail).toHaveBeenCalledTimes(2));
+
+    expect(mockListTargetSessions).toHaveBeenCalledTimes(1);
+    expect(mockListTargetProjects).toHaveBeenCalledTimes(1);
+    expect(mockGetTargetNote).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByLabelText('Remove alias My Nebula'));
+    await waitFor(() => expect(mockGetTargetDetail).toHaveBeenCalledTimes(3));
+
+    expect(mockListTargetSessions).toHaveBeenCalledTimes(1);
+    expect(mockListTargetProjects).toHaveBeenCalledTimes(1);
+    expect(mockGetTargetNote).toHaveBeenCalledTimes(1);
   });
 
   it('17. display-alias Set/Edit button is visible', async () => {

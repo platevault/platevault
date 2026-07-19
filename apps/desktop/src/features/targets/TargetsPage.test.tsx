@@ -30,7 +30,7 @@
  */
 
 import {
-  render,
+  render as rtlRender,
   screen,
   fireEvent,
   waitFor,
@@ -38,6 +38,22 @@ import {
   act,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
+
+// TargetsPage (list load + the nested TargetDetailV2/useFavourites) is now
+// TanStack-Query-backed — every render needs a QueryClientProvider ancestor.
+// Shadowing `render` keeps every call site in this file unchanged.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 

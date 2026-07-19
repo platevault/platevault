@@ -28,16 +28,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate, Link } from '@tanstack/react-router';
-import { commands } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
-import type { TargetDetailV3 } from '@/bindings/aliases';
 import type { ContractError } from '@/lib/errors';
 import type { TargetListItem } from '@/bindings/index';
-import type {
-  TargetSessionItem,
-  TargetProjectItem,
-  TargetAstroFormat,
-} from '@/bindings';
+import {
+  useTargetDetail,
+  useTargetSessions,
+  useTargetProjects,
+  useTargetNotes,
+  useTargetAstroFormat,
+  useAddTargetAlias,
+  useRemoveTargetAlias,
+  useSetTargetDisplayAlias,
+  useClearTargetDisplayAlias,
+  useUpdateTargetNotes,
+} from './store';
+import type { TargetDetailV3 } from './store';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -422,7 +427,6 @@ export function TargetDetailV2({
   onMutated,
 }: Props) {
   const guidanceParams = useGuidanceParams();
-  const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -430,28 +434,13 @@ export function TargetDetailV2({
   const [displayAliasEditing, setDisplayAliasEditing] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
 
-  // US2: linked sessions
-  const [sessions, setSessions] = useState<TargetSessionItem[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
-
-  // US3: linked projects
-  const [projects, setProjects] = useState<TargetProjectItem[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(true);
-
-  // US4: observing notes
-  const [notes, setNotes] = useState<string | null>(null);
+  // US4: observing notes (draft/editing/save-status stay local; the persisted
+  // value is TanStack-Query-backed via useTargetNotes/useUpdateTargetNotes).
   const [notesEditing, setNotesEditing] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
-
-  // Sexagesimal RA/Dec (adopt target-match): backend-formatted, carry-safe
-  // rounding (replaces the hand-rolled fmtRa/fmtDec, which could round a
-  // seconds value up to an invalid ":60").
-  const [astroFormat, setAstroFormat] = useState<TargetAstroFormat | null>(
-    null,
-  );
 
   const navigate = useNavigate();
 
@@ -461,91 +450,69 @@ export function TargetDetailV2({
   // US2/T024: the Planner's chosen date (defaults to "tonight", FR-008).
   const dateMs = usePlannerDateMs();
 
-  const load = useCallback(() => {
-    setLoadState({ status: 'loading' });
-    commands
-      .targetGet({ targetId })
-      .then(unwrap)
-      .then((data) => {
-        setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
-        setDisplayAliasInput(data.displayAlias ?? '');
-      })
-      .catch(() => {
-        setLoadState({
-          status: 'error',
-          message: m.targets_detail_load_error(),
-        });
-      });
-  }, [targetId]);
+  const detailQuery = useTargetDetail(targetId);
+  const { data: sessions = [], loading: sessionsLoading } =
+    useTargetSessions(targetId);
+  const { data: projects = [], loading: projectsLoading } =
+    useTargetProjects(targetId);
+  const { data: notes = null } = useTargetNotes(targetId);
+  // Sexagesimal RA/Dec (adopt target-match): backend-formatted, carry-safe
+  // rounding (replaces the hand-rolled fmtRa/fmtDec, which could round a
+  // seconds value up to an invalid ":60"). Only fires once the detail has
+  // loaded (mirrors the pre-migration effect's `loadState.status==='loaded'` gate).
+  const { data: astroFormat = null } = useTargetAstroFormat(
+    targetId,
+    detailQuery.data?.raDeg ?? null,
+    detailQuery.data?.decDeg ?? null,
+    !!detailQuery.data,
+  );
+
+  const loadState: LoadState = detailQuery.error
+    ? { status: 'error', message: m.targets_detail_load_error() }
+    : detailQuery.loading || !detailQuery.data
+      ? { status: 'loading' }
+      : { status: 'loaded', data: detailQuery.data };
+
+  // Sync the display-alias draft from the server value whenever a fresh
+  // detail lands (mount, post-mutation refetch, or a display-alias mutation's
+  // own cache write) — guarded on `!displayAliasEditing` so an in-progress
+  // edit is never clobbered by a background refetch (mirrors
+  // ProjectNotesSection's initialContent-sync convention).
+  useEffect(() => {
+    if (detailQuery.data && !displayAliasEditing) {
+      setDisplayAliasInput(detailQuery.data.displayAlias ?? '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailQuery.data]);
+
+  // Sync the notes draft from the server value whenever it changes, and reset
+  // editing/saved/error state when the target itself changes.
+  useEffect(() => {
+    if (!notesEditing) setNotesDraft(notes ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes]);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  // US2: load linked sessions when targetId changes.
-  useEffect(() => {
-    setSessionsLoading(true);
-    commands
-      .targetSessionsList({ targetId })
-      .then(unwrap)
-      .then((data) => setSessions(data))
-      .catch(() => setSessions([]))
-      .finally(() => setSessionsLoading(false));
-  }, [targetId]);
-
-  // US3: load linked projects when targetId changes.
-  useEffect(() => {
-    setProjectsLoading(true);
-    commands
-      .targetProjectsList({ targetId })
-      .then(unwrap)
-      .then((data) => setProjects(data))
-      .catch(() => setProjects([]))
-      .finally(() => setProjectsLoading(false));
-  }, [targetId]);
-
-  // US4: load observing notes when targetId changes.
-  useEffect(() => {
-    commands
-      .targetNoteGet({ targetId })
-      .then(unwrap)
-      .then(({ notes: n }) => {
-        setNotes(n ?? null);
-        setNotesDraft(n ?? '');
-      })
-      .catch(() => {
-        setNotes(null);
-        setNotesDraft('');
-      });
-    // Reset editing state when target changes.
     setNotesEditing(false);
     setNotesSaved(false);
     setNotesError(null);
   }, [targetId]);
 
-  // Sexagesimal RA/Dec: one batched call (N=1 here) once the detail loads.
-  // No reset-to-null branch needed for the non-'loaded' states: `astroFormat`
-  // is only read below after the loading/error early-returns, so a stale
-  // value from a prior target is never displayed before this effect refetches.
-  useEffect(() => {
-    if (loadState.status !== 'loaded') return;
-    const { id, raDeg, decDeg } = loadState.data;
-    commands
-      .targetAstroFormatBatch({ targets: [{ id, raDeg, decDeg }] })
-      .then(unwrap)
-      .then(({ formatted }) => setAstroFormat(formatted[0] ?? null))
-      .catch(() => setAstroFormat(null));
-  }, [loadState]);
+  const addAliasMutation = useAddTargetAlias();
+  const removeAliasMutation = useRemoveTargetAlias();
+  const setDisplayAliasMutation = useSetTargetDisplayAlias();
+  const clearDisplayAliasMutation = useClearTargetDisplayAlias();
+  const updateNotesMutation = useUpdateTargetNotes();
 
   // US4: save notes handler.
   const handleNotesSave = useCallback(async () => {
     setNotesSaving(true);
     setNotesError(null);
     try {
-      const { notes: saved } = unwrap(
-        await commands.targetNoteUpdate({ targetId, notes: notesDraft }),
-      );
-      setNotes(saved ?? null);
+      const { notes: saved } = await updateNotesMutation.mutateAsync({
+        targetId,
+        notes: notesDraft,
+      });
       setNotesDraft(saved ?? '');
       setNotesEditing(false);
       setNotesSaved(true);
@@ -554,7 +521,7 @@ export function TargetDetailV2({
     } finally {
       setNotesSaving(false);
     }
-  }, [targetId, notesDraft]);
+  }, [targetId, notesDraft, updateNotesMutation]);
 
   // Add user alias.
   const handleAliasAdd = useCallback(async () => {
@@ -565,43 +532,38 @@ export function TargetDetailV2({
     }
     setAliasError(null);
     try {
-      unwrap(await commands.targetAliasAdd({ targetId, alias }));
+      await addAliasMutation.mutateAsync({ targetId, alias });
       setAliasInput('');
-      load();
       onMutated?.();
     } catch (err) {
       const e = err as ContractError;
       setAliasError(errorMessage(e, m.targets_detail_add_alias_failed()));
     }
-  }, [targetId, aliasInput, load, onMutated]);
+  }, [targetId, aliasInput, addAliasMutation, onMutated]);
 
   // Remove user alias by id.
   const handleAliasRemove = useCallback(
     async (aliasId: string) => {
       setActionError(null);
       try {
-        unwrap(await commands.targetAliasRemove({ targetId, aliasId }));
-        load();
+        await removeAliasMutation.mutateAsync({ targetId, aliasId });
         onMutated?.();
       } catch (err) {
         const e = err as ContractError;
         setActionError(errorMessage(e, m.targets_detail_remove_alias_failed()));
       }
     },
-    [targetId, load, onMutated],
+    [targetId, removeAliasMutation, onMutated],
   );
 
   // Set display alias.
   const handleDisplayAliasSet = useCallback(async () => {
     setActionError(null);
     try {
-      const data = unwrap(
-        await commands.targetDisplayAliasSet({
-          targetId,
-          displayAlias: displayAliasInput.trim(),
-        }),
-      );
-      setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
+      const data = await setDisplayAliasMutation.mutateAsync({
+        targetId,
+        displayAlias: displayAliasInput.trim(),
+      });
       setDisplayAliasInput(data.displayAlias ?? '');
       setDisplayAliasEditing(false);
       onMutated?.();
@@ -611,14 +573,13 @@ export function TargetDetailV2({
         errorMessage(e, m.targets_detail_set_display_alias_failed()),
       );
     }
-  }, [targetId, displayAliasInput, onMutated]);
+  }, [targetId, displayAliasInput, setDisplayAliasMutation, onMutated]);
 
   // Clear display alias.
   const handleDisplayAliasClear = useCallback(async () => {
     setActionError(null);
     try {
-      const data = unwrap(await commands.targetDisplayAliasClear({ targetId }));
-      setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
+      await clearDisplayAliasMutation.mutateAsync({ targetId });
       setDisplayAliasInput('');
       setDisplayAliasEditing(false);
       onMutated?.();
@@ -628,7 +589,7 @@ export function TargetDetailV2({
         errorMessage(e, m.targets_detail_clear_display_alias_failed()),
       );
     }
-  }, [targetId, onMutated]);
+  }, [targetId, clearDisplayAliasMutation, onMutated]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 

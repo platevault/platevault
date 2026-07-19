@@ -12,6 +12,7 @@ export const queryKeys = {
   projects: {
     all: () => ['projects'] as const,
     detail: (id: string) => ['projects', id] as const,
+    artifacts: (id: string) => ['projects', id, 'artifacts'] as const,
   },
   inventory: {
     // No filters → prefix-only key, so `invalidateQueries({ queryKey:
@@ -38,6 +39,16 @@ export const queryKeys = {
     masters: () => ['calibration', 'masters'] as const,
     master: (id: string) => ['calibration', 'masters', id] as const,
     matches: (sid: string) => ['calibration', 'matches', sid] as const,
+    settings: () => ['calibration', 'settings'] as const,
+  },
+  targets: {
+    list: () => ['targets'] as const,
+    detail: (id: string) => ['targets', id] as const,
+    sessions: (id: string) => ['targets', id, 'sessions'] as const,
+    projects: (id: string) => ['targets', id, 'projects'] as const,
+    notes: (id: string) => ['targets', id, 'notes'] as const,
+    astroFormat: (id: string) => ['targets', id, 'astroFormat'] as const,
+    favourites: () => ['targets', 'favourites'] as const,
   },
   guided: {
     state: () => ['guided'] as const,

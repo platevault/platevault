@@ -46,8 +46,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { commands } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
 import type { TargetListItem } from '@/bindings/index';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
@@ -56,6 +54,7 @@ import { Btn, EmptyState } from '@/ui';
 import { useGrouping } from '@/lib/use-grouping';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
+import { useTargets } from './store';
 import {
   filterByCatalogues,
   PLANNER_CATALOGS,
@@ -198,7 +197,6 @@ const REVEAL_CHUNK = 300;
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
-  const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [addOpen, setAddOpen] = useState(false);
   /** '' = show full Planner catalog; 'my' = My Targets stub (#91). */
   const [myTargetsFilter, setMyTargetsFilter] = useState('');
@@ -293,20 +291,18 @@ export function TargetsPage() {
     void loadGuidanceParams();
   }, []);
 
-  const load = useCallback(() => {
-    setListState({ status: 'loading' });
-    commands
-      .targetList()
-      .then(unwrap)
-      .then((items) => setListState({ status: 'loaded', items }))
-      .catch(() =>
-        setListState({ status: 'error', message: m.targets_page_error_load() }),
-      );
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const targetsQuery = useTargets();
+  const load = targetsQuery.refetch;
+  // `listState` mirrors the pre-migration state machine so the rest of this
+  // component (progressive reveal, error/loading branches) stays unchanged.
+  // `loading` covers BOTH the initial fetch and any explicit `load()` refetch
+  // (`isFetching`, not just "no data yet") — matching the old `load()`, which
+  // always flipped back to 'loading' synchronously on every reload.
+  const listState: ListState = targetsQuery.error
+    ? { status: 'error', message: m.targets_page_error_load() }
+    : targetsQuery.loading || !targetsQuery.data
+      ? { status: 'loading' }
+      : { status: 'loaded', items: targetsQuery.data };
 
   /**
    * Progressive reveal of the Planner catalogue (#573): `commands.targetList()`

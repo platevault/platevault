@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Calibration feature hooks — spec 007.
+ * Calibration feature hooks — spec 007, TanStack Query (#610).
  *
  * useCalibrationMasters   : loads CalibrationMaster[] from the real backend.
  * useCalibrationSuggest   : calls calibration.match.suggest for one session.
@@ -10,7 +10,8 @@
  * useCalibrationSettings  : reads prefill_suggestion from persisted settings.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type {
@@ -30,30 +31,15 @@ export interface UseMastersState {
 }
 
 export function useCalibrationMasters(): UseMastersState {
-  const [state, setState] = useState<UseMastersState>({
-    masters: [],
-    loading: true,
-    error: undefined,
+  const { data, isFetching, error } = useQuery({
+    queryKey: queryKeys.calibration.masters(),
+    queryFn: async () => unwrap(await commands.calibrationMastersList()),
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    commands
-      .calibrationMastersList()
-      .then(unwrap)
-      .then((masters) => {
-        if (!cancelled) setState({ masters, loading: false, error: undefined });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled)
-          setState({ masters: [], loading: false, error: errMessage(err) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return state;
+  return {
+    masters: data ?? [],
+    loading: isFetching,
+    error: error ? errMessage(error) : undefined,
+  };
 }
 
 // ── Suggest for one session ───────────────────────────────────────────────────
@@ -70,51 +56,26 @@ export function useCalibrationSuggest(
   sessionId: string | undefined,
   calibrationTypes?: CalibrationType[],
 ): UseSuggestState {
-  const [response, setResponse] = useState<
-    CalibrationMatchSuggestResponse | undefined
-  >(undefined);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [rev, setRev] = useState(0);
-
-  const refresh = useCallback(() => setRev((r) => r + 1), []);
-
-  useEffect(() => {
-    if (!sessionId) {
-      setResponse(undefined);
-      setLoading(false);
-      return undefined;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(undefined);
-    commands
-      .calibrationMatchSuggest({
-        contractVersion: '2.0.0',
-        requestId: `suggest-${sessionId}-${Date.now()}`,
-        sessionId,
-        calibrationTypes: calibrationTypes ?? null,
-      })
-      .then(unwrap)
-      .then((res) => {
-        if (!cancelled) {
-          setResponse(res);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(errMessage(err));
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, rev]);
-
-  return { response, loading, error, refresh };
+  const queryKey = queryKeys.calibration.matches(sessionId ?? '__none__');
+  const { data, isFetching, error, refetch } = useQuery({
+    queryKey,
+    queryFn: async () =>
+      unwrap(
+        await commands.calibrationMatchSuggest({
+          contractVersion: '2.0.0',
+          requestId: `suggest-${sessionId}-${Date.now()}`,
+          sessionId: sessionId as string,
+          calibrationTypes: calibrationTypes ?? null,
+        }),
+      ),
+    enabled: !!sessionId,
+  });
+  return {
+    response: data,
+    loading: isFetching,
+    error: error ? errMessage(error) : undefined,
+    refresh: () => void refetch(),
+  };
 }
 
 // ── Assign ────────────────────────────────────────────────────────────────────
@@ -131,34 +92,38 @@ export interface UseAssignState {
 }
 
 export function useCalibrationAssign(): UseAssignState {
-  const [assigning, setAssigning] = useState(false);
-  const [result, setResult] = useState<
-    CalibrationMatchAssignResponse | undefined
-  >(undefined);
+  const mutation = useMutation({
+    mutationFn: async ({
+      sessionId,
+      masterId,
+      override,
+    }: {
+      sessionId: string;
+      masterId: string;
+      override: boolean;
+    }) =>
+      unwrap(
+        await commands.calibrationMatchAssign({
+          contractVersion: '2.0.0',
+          requestId: `assign-${sessionId}-${Date.now()}`,
+          sessionId,
+          masterId,
+          override,
+        }),
+      ),
+  });
 
-  const assign = useCallback(
-    async (sessionId: string, masterId: string, override = false) => {
-      setAssigning(true);
-      try {
-        const res = unwrap(
-          await commands.calibrationMatchAssign({
-            contractVersion: '2.0.0',
-            requestId: `assign-${sessionId}-${Date.now()}`,
-            sessionId,
-            masterId,
-            override,
-          }),
-        );
-        setResult(res);
-        return res;
-      } finally {
-        setAssigning(false);
-      }
-    },
-    [],
-  );
+  const assign = async (
+    sessionId: string,
+    masterId: string,
+    override = false,
+  ) => mutation.mutateAsync({ sessionId, masterId, override });
 
-  return { assigning, result, assign };
+  return {
+    assigning: mutation.isPending,
+    result: mutation.data,
+    assign,
+  };
 }
 
 // ── Settings: prefill_suggestion + aging threshold ───────────────────────────
@@ -170,28 +135,27 @@ export function useCalibrationSettings(): {
   prefillSuggestion: boolean;
   agingThresholdDays: number;
 } {
-  const [prefillSuggestion, setPrefillSuggestion] = useState(true);
-  const [agingThresholdDays, setAgingThresholdDays] = useState(
-    DEFAULT_AGING_THRESHOLD_DAYS,
-  );
+  const { data } = useQuery({
+    queryKey: queryKeys.calibration.settings(),
+    queryFn: async () => {
+      const res = unwrap(await commands.settingsGet('calibration'));
+      const v = res.values as Record<string, unknown>;
+      return {
+        prefillSuggestion:
+          typeof v['calibrationPrefillSuggestion'] === 'boolean'
+            ? v['calibrationPrefillSuggestion']
+            : true,
+        agingThresholdDays:
+          typeof v['calibrationAgingThresholdDays'] === 'number'
+            ? v['calibrationAgingThresholdDays']
+            : DEFAULT_AGING_THRESHOLD_DAYS,
+      };
+    },
+  });
 
-  useEffect(() => {
-    commands
-      .settingsGet('calibration')
-      .then(unwrap)
-      .then((data) => {
-        const v = data.values as Record<string, unknown>;
-        if (typeof v['calibrationPrefillSuggestion'] === 'boolean') {
-          setPrefillSuggestion(v['calibrationPrefillSuggestion']);
-        }
-        if (typeof v['calibrationAgingThresholdDays'] === 'number') {
-          setAgingThresholdDays(v['calibrationAgingThresholdDays']);
-        }
-      })
-      .catch(() => {
-        // Backend unavailable — keep defaults.
-      });
-  }, []);
-
-  return { prefillSuggestion, agingThresholdDays };
+  return {
+    prefillSuggestion: data?.prefillSuggestion ?? true,
+    agingThresholdDays:
+      data?.agingThresholdDays ?? DEFAULT_AGING_THRESHOLD_DAYS,
+  };
 }

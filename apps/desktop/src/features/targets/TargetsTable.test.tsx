@@ -29,7 +29,21 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import type { TargetListItem } from '@/bindings/index';
+
+// TargetsTable's internal `useFavourites()` fallback (used whenever a caller
+// doesn't pass `favouriteIds`/`onToggleFavourite`, which is every test in this
+// file) is now TanStack-Query-backed and needs a QueryClientProvider ancestor.
+function wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 // The no-site banner (spec 044 US3) links to Settings via `Link`, which needs
 // a router context this test doesn't provide. Stub it as a plain anchor —
@@ -62,6 +76,18 @@ const { mockMoonOppositionBatch } = vi.hoisted(() => ({
 vi.mock('@/bindings/index', () => ({
   commands: {
     targetMoonOppositionBatch: mockMoonOppositionBatch,
+    // TargetsTable's internal useFavourites() fallback fetches this on every
+    // mount; a static empty list keeps every test in this file deterministic
+    // (favourites are not this file's concern).
+    targetFavouritesList: () =>
+      Promise.resolve({ status: 'ok', data: { targetIds: [] } }),
+    targetFavouritesAdd: () =>
+      Promise.resolve({
+        status: 'ok',
+        data: { targetId: '', favouritedAt: '' },
+      }),
+    targetFavouritesRemove: () =>
+      Promise.resolve({ status: 'ok', data: { targetId: '' } }),
   },
 }));
 
@@ -134,6 +160,7 @@ function renderTable(
       onSort={onSort}
       {...overrides}
     />,
+    { wrapper },
   );
   return { onSelect, onSort };
 }
@@ -208,6 +235,7 @@ describe('TargetsTable (#84/#85)', () => {
         onSort={vi.fn()}
         night={nightWithMoonAtVernalEquinox()}
       />,
+      { wrapper },
     );
     // Each row has 7 band pills (L/R/G/B/Ha/SII/OIII), each labelled viable or
     // not-viable — never a fabricated recommendation. #634: separation now
@@ -433,6 +461,7 @@ describe('TargetsTable — lunar distance (US2)', () => {
         onSort={vi.fn()}
         night={night}
       />,
+      { wrapper },
     );
   }
 
@@ -475,6 +504,7 @@ describe('TargetsTable — lunar distance (US2)', () => {
         sort={DEFAULT_TARGET_SORT}
         onSort={vi.fn()}
       />,
+      { wrapper },
     );
     // No numeric lunar separations; both rows show the unknown dash.
     expect(screen.queryByText('90°')).not.toBeInTheDocument();
