@@ -2667,6 +2667,20 @@ export type CalibrationMaster_Deserialize = {
 	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	/**
+	 *  #642: the master's owning library root id. `None` alongside
+	 *  `relative_path` when the master frame was never resolved to a
+	 *  `file_record` (legacy/unresolved masters) — never guessed.
+	 */
+	rootId: string | null,
+	/**
+	 *  #642: root-relative path of the master's own file, for Reveal /
+	 *  archive-plan generation. Resolve to an absolute path by joining with
+	 *  the `root_id`'s current library root path (roots stay modeled
+	 *  separately per Constitution I, so a moved/remapped root still
+	 *  resolves correctly).
+	 */
+	relativePath: string | null,
 };
 
 /**  A calibration master as seen in list views. */
@@ -2688,6 +2702,20 @@ export type CalibrationMaster_Serialize = {
 	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	/**
+	 *  #642: the master's owning library root id. `None` alongside
+	 *  `relative_path` when the master frame was never resolved to a
+	 *  `file_record` (legacy/unresolved masters) — never guessed.
+	 */
+	rootId?: string | null,
+	/**
+	 *  #642: root-relative path of the master's own file, for Reveal /
+	 *  archive-plan generation. Resolve to an absolute path by joining with
+	 *  the `root_id`'s current library root path (roots stay modeled
+	 *  separately per Constitution I, so a moved/remapped root still
+	 *  resolves correctly).
+	 */
+	relativePath?: string | null,
 };
 
 /**  Request DTO for `calibration.match.assign`. */
@@ -6340,6 +6368,8 @@ export type MasterDetail_Deserialize = {
 	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	rootId: string | null,
+	relativePath: string | null,
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
 	/**  spec 048 US5: `None` when no matches using this master are flagged. */
@@ -6357,6 +6387,8 @@ export type MasterDetail_Serialize = {
 	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	rootId?: string | null,
+	relativePath?: string | null,
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
 	/**  spec 048 US5: `None` when no matches using this master are flagged. */

@@ -10,7 +10,12 @@
  * disabled (with an explanatory title) rather than silently do nothing.
  */
 
-import { render as rtlRender, screen } from '@testing-library/react';
+import {
+  render as rtlRender,
+  screen,
+  waitFor,
+  fireEvent,
+} from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -37,6 +42,21 @@ vi.mock('@/bindings/index', () => ({
       data: { usedBySessionIds: [], compatibleSessions: [] },
     }),
     sessionsList: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+    inventoryList: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        sources: [
+          {
+            id: 'root-1',
+            path: '/data/lib',
+            kind: 'local',
+            state: 'active',
+            sessions: [],
+          },
+        ],
+      },
+    }),
+    nativeReveal: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   },
 }));
 
@@ -101,5 +121,43 @@ describe('MasterDetail — header action buttons (#642)', () => {
     const btn = screen.getByRole('button', { name: 'Replace master' });
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute('title');
+  });
+
+  it('enables Reveal and calls nativeReveal once the master resolves to a file on an actionable root (#642)', async () => {
+    const { commands } = await import('@/bindings/index');
+    render(
+      <MasterDetail
+        master={makeMaster({
+          rootId: 'root-1',
+          relativePath: 'masters/masterDark_300s.xisf',
+        })}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
+    const btn = await screen.findByTestId('calibration-reveal-btn');
+    await waitFor(() => expect(btn).not.toBeDisabled());
+
+    fireEvent.click(btn);
+
+    await waitFor(() =>
+      expect(commands.nativeReveal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: '/data/lib/masters/masterDark_300s.xisf',
+        }),
+      ),
+    );
+  });
+
+  it('renders Reveal disabled when the master has no resolved frame path', () => {
+    render(
+      <MasterDetail
+        master={makeMaster({ rootId: null, relativePath: null })}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
+    const btn = screen.getByTestId('calibration-reveal-btn');
+    expect(btn).toBeDisabled();
   });
 });

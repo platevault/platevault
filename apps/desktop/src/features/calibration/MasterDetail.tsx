@@ -12,10 +12,15 @@
  * pattern as SessionDetail's actionButtons. No `actions` prop passed to
  * DetailPanel. No subtitle (kind is already in the title, size is redundant).
  *
- * #642: all three header actions are disabled with an explanatory `title`,
- * not wired to fake IPC — none has a backing flow yet (no project-picker, no
- * replace-master use case, no master file path on the contract for Reveal).
- * Same "disabled, no fake handler" precedent as ArchivePage's Reveal button.
+ * #642: "Use in project" and "Replace master" stay disabled with an
+ * explanatory `title` — no project-picker or replace-master use case exists
+ * yet. Reveal is now wired: the contract carries `rootId`/`relativePath`
+ * (masters_list/masters_get, `crates/app/calibration/src/matching.rs`),
+ * resolved to an absolute path the same way SessionsPage does (root path
+ * from `useInventorySources()` + `resolveRevealPath`), reused rather than
+ * duplicated. Falls back to disabled+explanatory-title when the master's
+ * frame was never resolved to a `file_record` (legacy masters) or its
+ * owning root isn't currently actionable.
  *
  * Data wiring:
  *   - master.usedBySessionIds from the list endpoint is always empty.
@@ -58,6 +63,13 @@ import {
   formatGain,
   formatBinning,
 } from '@/lib/format';
+import { addToast } from '@/shared/toast';
+import { useInventorySources } from '@/features/sessions/store';
+import { isSourceActionable } from '@/features/sessions/connectivity';
+import {
+  resolveRevealPath,
+  revealInventoryPath,
+} from '@/features/sessions/revealInventory';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 import { useCalibrationAssign, useCalibrationSuggest } from './useCalibration';
@@ -162,6 +174,9 @@ export function MasterDetail({
     queryKey: queryKeys.sessions.all(),
     queryFn: async () => unwrap(await commands.sessionsList()),
   });
+  // #642: shares the same inventory-sources query SessionsPage's Reveal
+  // action reads (`queryKeys.inventory.all`) — no private fetch.
+  const sourcesQuery = useInventorySources();
 
   const detail: DetailState = useMemo(() => {
     const empty: DetailState = {
@@ -230,6 +245,34 @@ export function MasterDetail({
   const isAgingWarn = master.ageDays > agingThresholdDays && !isAging1Year;
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
   const fp = master.fingerprint;
+
+  // #642: resolve the master's absolute file location the same way
+  // SessionsPage resolves a session's reveal target — join the owning
+  // source's current root path with the master's root-relative path.
+  // `undefined` (disabled) when the master's frame was never resolved to a
+  // `file_record` or its root isn't currently listed.
+  const revealSource = sourcesQuery.data?.sources.find(
+    (s) => s.id === master.rootId,
+  );
+  const revealTarget =
+    master.rootId != null && master.relativePath != null && revealSource != null
+      ? resolveRevealPath(revealSource.path, master.relativePath)
+      : undefined;
+  const revealActionable =
+    revealTarget != null &&
+    revealSource != null &&
+    isSourceActionable(revealSource.state);
+  const handleReveal = async () => {
+    if (!revealTarget) return;
+    try {
+      await revealInventoryPath({ path: revealTarget, sessionId: master.id });
+    } catch {
+      addToast({
+        message: m.calibration_toast_reveal_error(),
+        variant: 'error',
+      });
+    }
+  };
 
   const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
   const masterDisc =
@@ -349,17 +392,28 @@ export function MasterDetail({
         </Btn>
       )}
       {/* Platform-native label via the shared revealLabel() helper.
-          #642: no master file path is exposed by the backend (no `path`
-          field on CalibrationMaster/MasterDetail) — disabled, no fake IPC,
-          matching the ArchivePage Reveal precedent. */}
-      <Btn
-        size="sm"
-        disabled
-        title={m.calibration_reveal_unavailable_title()}
-        data-testid="calibration-reveal-btn"
-      >
-        {revealLabel()}
-      </Btn>
+          #642: wired once the master's frame path resolves to an
+          actionable source; falls back to disabled+explanatory title
+          (legacy master with no tracked file, or its root unavailable). */}
+      {revealActionable ? (
+        <Btn
+          size="sm"
+          onClick={() => void handleReveal()}
+          title={m.calibration_reveal_title()}
+          data-testid="calibration-reveal-btn"
+        >
+          {revealLabel()}
+        </Btn>
+      ) : (
+        <Btn
+          size="sm"
+          disabled
+          title={m.calibration_reveal_unavailable_title()}
+          data-testid="calibration-reveal-btn"
+        >
+          {revealLabel()}
+        </Btn>
+      )}
     </span>
   );
 

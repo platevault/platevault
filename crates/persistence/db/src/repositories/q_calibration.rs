@@ -99,6 +99,12 @@ pub struct CalibrationMasterViewRow {
     pub fp_binning: Option<String>,
     pub fp_optic_train: Option<String>,
     pub source_session_id: Option<String>,
+    /// #642: the master's owning library root, `None` when the master frame
+    /// was never resolved to a `file_record` (legacy/unresolved masters).
+    pub root_id: Option<String>,
+    /// #642: root-relative path of the master's own applied frame file
+    /// (`calibration_session.frame_ids[0]` joined to `file_record`).
+    pub frame_relative_path: Option<String>,
 }
 
 /// Whether an `acquisition_session` row exists for `session_id`.
@@ -217,7 +223,7 @@ pub async fn list_calibration_masters(
     let rows = sqlx::query_as::<_, CalibrationMasterViewRow>(
         "SELECT id, kind, created_at, size_bytes,
                 fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
-                fp_optic_train, source_session_id
+                fp_optic_train, source_session_id, root_id, frame_relative_path
          FROM calibration_master_view
          ORDER BY created_at DESC",
     )
@@ -237,7 +243,7 @@ pub async fn get_calibration_master(
     let row = sqlx::query_as::<_, CalibrationMasterViewRow>(
         "SELECT id, kind, created_at, size_bytes,
                 fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
-                fp_optic_train, source_session_id
+                fp_optic_train, source_session_id, root_id, frame_relative_path
          FROM calibration_master_view
          WHERE id = ?",
     )
