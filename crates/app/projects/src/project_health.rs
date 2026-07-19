@@ -171,6 +171,7 @@ pub async fn check_project_ready_invariant(
                 to_state: "ready".to_owned(),
                 actor: "system".to_owned(),
                 at: now,
+                project_id: Some(project_id.to_owned()),
             },
         )
         .await;
@@ -263,6 +264,7 @@ pub async fn emit_block_transition(
                 to_state: "blocked".to_owned(),
                 actor: "system".to_owned(),
                 at: now,
+                project_id: Some(project_id.to_owned()),
             },
         )
         .await;
@@ -328,6 +330,7 @@ pub async fn emit_unarchive_transition(
                 to_state: "ready".to_owned(),
                 actor: "system".to_owned(),
                 at: now,
+                project_id: Some(project_id.to_owned()),
             },
         )
         .await;

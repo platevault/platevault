@@ -89,6 +89,13 @@ where
         })
         .await?;
 
+    // FR-003 (#713): trivial project_id resolution — this primitive has no
+    // pool access to look up a non-Project entity's owning project (that
+    // lookup lives in `SqliteLifecycleRepository::record_transition`, which
+    // publishes its own `lifecycle.transition.applied` with the fully
+    // resolved value); `None` here is a StalePropagator no-op, not a bug.
+    let project_id = (cmd.entity_type == EntityType::Project).then(|| cmd.entity_id.to_string());
+
     // Publish event (durable write to `events` table + live broadcast).
     let _ = bus
         .publish(
@@ -101,6 +108,7 @@ where
                 to_state: cmd.to_state,
                 actor: cmd.actor,
                 at: record.applied_at,
+                project_id,
             },
         )
         .await;
