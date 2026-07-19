@@ -625,15 +625,30 @@ fn materialization_from_provenance(
 /// as `compute_plan_path_set`'s `to_root` fallback) so a cross-root move
 /// joins `to_relative_path` against the *picked* destination root instead of
 /// silently reusing the source root (#765).
+///
+/// `plan_destructive_destination` is the *plan-level* `plans.destructive_destination`
+/// choice ("archive" | "trash"), not a per-item column: both `cleanup_generator`
+/// and `archive_generator` always store `action = "archive"` for a
+/// destructive-but-reversible item (the item-level `"trash"` action string is
+/// otherwise dead — no generator ever writes it). Without consulting this, a
+/// user's review-time "System trash" choice had no effect at apply time —
+/// every such item silently archived into `.astro-plan-archive` instead.
 fn item_row_to_executor_item(
     row: &plans_repo::PlanItemRow,
     root_map: &HashMap<String, Utf8PathBuf>,
+    plan_destructive_destination: &str,
 ) -> ExecutorItem {
     // DB path columns are stored as `String` (unchanged DB representation,
     // Local-First custody §I). Rust strings are already UTF-8, so building a
     // `Utf8PathBuf` from them is infallible and lossless.
     let action = match row.action.as_str() {
         "move" => ExecutorItemAction::Move,
+        // The user's review-time "System trash" choice (plan-level) routes an
+        // `action = "archive"` item through OS trash instead of the app
+        // archive folder — see this function's doc comment.
+        "archive" if plan_destructive_destination == "trash" => {
+            ExecutorItemAction::Trash { fallback_archive_destination: None }
+        }
         "archive" => {
             // archive_path stores the pre-computed relative archive path.
             let archive_dest = row
@@ -1095,8 +1110,10 @@ pub async fn apply_plan(
         }
     }
 
-    let executor_items: Vec<ExecutorItem> =
-        item_rows.iter().map(|r| item_row_to_executor_item(r, &root_map)).collect();
+    let executor_items: Vec<ExecutorItem> = item_rows
+        .iter()
+        .map(|r| item_row_to_executor_item(r, &root_map, &plan_row.destructive_destination))
+        .collect();
 
     // Overlap check + active-run registration (FR-017, R-Concur-1): the
     // plan's claimed (source ∪ destination ∪ archive) path set must be
@@ -2017,7 +2034,7 @@ pub async fn resume_plan(
     let executor_items: Vec<ExecutorItem> = item_rows
         .iter()
         .filter(|r| matches!(r.item_state.as_str(), "pending" | "failed"))
-        .map(|r| item_row_to_executor_item(r, &root_map))
+        .map(|r| item_row_to_executor_item(r, &root_map, &plan_row.destructive_destination))
         .collect();
 
     // Re-register the ActiveRun (R-Concur-1). A paused run has no registry
@@ -2944,6 +2961,97 @@ mod tests {
         assert!(audit_count > 0, "apply_plan must write at least one durable audit_log_entry row");
     }
 
+    /// Removes `ALM_E2E_OS_TRASH_FAKE` on drop (including panic unwind) so a
+    /// failed assertion in the test body can never leak the var into other
+    /// tests in this binary (this crate has no other test that exercises the
+    /// `Trash` executor action, so the var is otherwise untouched here).
+    struct EnvVarGuard(&'static str);
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(self.0);
+        }
+    }
+
+    /// Regression for the "trash destination is dead code" finding: both
+    /// `cleanup_generator` and `archive_generator` always store
+    /// `action = "archive"` for a destructive-but-reversible item; the
+    /// user's plan-level "System trash" choice (`plans.destructive_destination`)
+    /// was never consulted at apply time, so it silently archived into
+    /// `.astro-plan-archive` regardless of what the user picked in review.
+    /// `ALM_E2E_OS_TRASH_FAKE` (headless-safe OS-trash double, added for the
+    /// e2e harness) makes the OS-trash outcome deterministic here too.
+    #[tokio::test]
+    async fn archive_action_item_with_trash_destination_really_trashes() {
+        std::env::set_var("ALM_E2E_OS_TRASH_FAKE", "1");
+        let _env_guard = EnvVarGuard("ALM_E2E_OS_TRASH_FAKE");
+
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("intermediate.fits");
+        std::fs::write(&file_path, b"data").unwrap();
+        let abs = file_path.to_str().unwrap();
+
+        let (db, bus) = setup().await;
+        repo::insert_plan(
+            db.pool(),
+            &repo::InsertPlan {
+                id: "p-trash-e2e",
+                title: "Test",
+                origin: "cleanup",
+                origin_path: None,
+                plan_type: "cleanup",
+                destructive_destination: "trash",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "p-trash-e2e-item-0",
+                plan_id: "p-trash-e2e",
+                item_index: 1,
+                name: "intermediate.fits",
+                action: "archive",
+                from_root_id: None,
+                from_relative_path: abs,
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        repo::update_plan_state(db.pool(), "p-trash-e2e", "ready_for_review").await.unwrap();
+        repo::set_approved(db.pool(), "p-trash-e2e", "2026-06-01T00:00:00Z", "test-token")
+            .await
+            .unwrap();
+
+        apply_plan(db.pool(), &bus, "p-trash-e2e", "test-token", None).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+
+        assert!(
+            !file_path.exists(),
+            "an archive-action item under a trash-destination plan must actually be removed via trash"
+        );
+        assert!(
+            !dir.path().join(".astro-plan-archive").exists(),
+            "a trash-destination item must not fall through to the app archive folder"
+        );
+        let plan = repo::get_plan(db.pool(), "p-trash-e2e", false).await.unwrap();
+        assert_eq!(plan.state, "applied");
+        let items = repo::list_plan_items(db.pool(), "p-trash-e2e").await.unwrap();
+        assert_eq!(items[0].item_state, "succeeded");
+    }
+
     /// #766: one durable `audit_log_entry` row per succeeded plan_item
     /// (query DB, not the live EventBus) — the exact SUCCESS criterion from
     /// the issue repro.
@@ -3081,7 +3189,7 @@ mod tests {
         let mut root_map = HashMap::new();
         root_map.insert("root-001".to_owned(), Utf8PathBuf::from("/mnt/library"));
 
-        let item = item_row_to_executor_item(&row, &root_map);
+        let item = item_row_to_executor_item(&row, &root_map, "archive");
         assert_eq!(
             item.library_root,
             Some(Utf8PathBuf::from("/mnt/library")),
@@ -3120,7 +3228,7 @@ mod tests {
         };
 
         let root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
-        let item = item_row_to_executor_item(&row, &root_map);
+        let item = item_row_to_executor_item(&row, &root_map, "archive");
         assert_eq!(item.library_root, None);
     }
 
@@ -3161,7 +3269,7 @@ mod tests {
         root_map.insert("inbox-root".to_owned(), Utf8PathBuf::from("/mnt/inbox"));
         root_map.insert("lights-root".to_owned(), Utf8PathBuf::from("/mnt/lights/1"));
 
-        let item = item_row_to_executor_item(&row, &root_map);
+        let item = item_row_to_executor_item(&row, &root_map, "archive");
         assert_eq!(
             item.library_root,
             Some(Utf8PathBuf::from("/mnt/inbox")),
@@ -3209,7 +3317,7 @@ mod tests {
         let mut root_map = HashMap::new();
         root_map.insert("root-001".to_owned(), Utf8PathBuf::from("/mnt/library"));
 
-        let item = item_row_to_executor_item(&row, &root_map);
+        let item = item_row_to_executor_item(&row, &root_map, "archive");
         assert_eq!(item.destination_root, item.library_root);
         assert_eq!(item.destination_root, Some(Utf8PathBuf::from("/mnt/library")));
     }
@@ -3262,7 +3370,7 @@ mod tests {
         };
 
         let root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
-        let item = item_row_to_executor_item(&row, &root_map);
+        let item = item_row_to_executor_item(&row, &root_map, "archive");
         assert!(item.destructive_confirmed, "destructive_confirmed=1 in DB must be read as true");
         assert!(
             item.requires_destructive_confirm,
