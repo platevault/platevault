@@ -287,6 +287,23 @@
   background: var(--alm-warn-bg);
 }
 
+/* #607: per-item apply result cell — pill + (when failed) the persisted
+   failure reason, truncated with the full text in the title tooltip. */
+.alm-plan-review__result {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-plan-review__failure-reason {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16rem;
+}
+
 .alm-plan-review__progress {
   display: flex;
   align-items: center;

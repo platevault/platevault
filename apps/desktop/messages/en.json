@@ -2393,6 +2393,8 @@
   "plans_review_col_protection": "Protection",
   "plans_review_col_reason": "Reason",
   "plans_review_col_linked": "Linked entity",
+  "plans_review_col_result": "Result",
+  "plans_review_result_pending": "pending",
   "plans_review_deletion_target": "Deleted, not moved",
   "plans_review_approve_apply_btn": "Approve & apply",
   "plans_review_approving": "Approving…",
