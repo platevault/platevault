@@ -698,6 +698,30 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     expect(unlinkedRow).toHaveTextContent('None');
   });
 
+  // #761 (spec 049 FR-004): a generation/regeneration plan item's resolved
+  // link kind (materialization provenance) is on the contract already —
+  // the review UI never rendered it before approval.
+  it("renders each item's resolved link kind from provenance (#761)", async () => {
+    mockPlansGet.mockResolvedValue(
+      ok(
+        plan({
+          items: [
+            item({
+              provenance: [{ label: 'materialization', value: 'copy' }],
+            }),
+            // No provenance at all (e.g. an archive/cleanup plan item) —
+            // must render "None", not blank or crash.
+            item({ id: 'item-1', index: 1, name: 'raw_002.fits' }),
+          ],
+        }),
+      ),
+    );
+    renderOverlay();
+    expect(await screen.findByText('copy')).toBeInTheDocument();
+    const noProvenanceRow = screen.getByTestId('plan-review-item-1');
+    expect(noProvenanceRow).toHaveTextContent('None');
+  });
+
   // FR-011 (issue #733): a plan reopened from a prior session has no
   // session-local `finalState` — the footer must key off the persisted
   // `plan.state` instead of always rendering the pre-apply pair (which the
