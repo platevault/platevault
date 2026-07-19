@@ -86,7 +86,14 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         let metadata = HashMap::new();
         // Surface the canonical target id (spec 035) when the legacy target_id is
         // absent — ingested sessions link via canonical_target_id (R10).
-        let target_ids = row.target_id.or(row.canonical_target_id).into_iter().collect();
+        // Shared precedence with q_targets_mgmt::session_counts_by_target — see
+        // resolve_session_target_id's doc (reviewer seq=277).
+        let target_ids = persistence_db::repositories::q_core::resolve_session_target_id(
+            row.target_id,
+            row.canonical_target_id,
+        )
+        .into_iter()
+        .collect();
         let project_ids = load_project_ids(pool, &id).await?;
         // TODO(037): warnings -- not stored; derive from fingerprint in future.
         let warnings = Vec::new();
@@ -137,7 +144,14 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     let total_integration_seconds = active_frame_exposure_seconds(pool, &row.frame_ids).await?;
     // TODO(037): metadata -- not stored as structured provenance rows yet.
     let metadata = HashMap::new();
-    let target_ids = row.target_id.or(row.canonical_target_id).into_iter().collect();
+    // Shared precedence with q_targets_mgmt::session_counts_by_target — see
+    // resolve_session_target_id's doc (reviewer seq=277).
+    let target_ids = persistence_db::repositories::q_core::resolve_session_target_id(
+        row.target_id,
+        row.canonical_target_id,
+    )
+    .into_iter()
+    .collect();
     let project_ids = load_project_ids(pool, &id).await?;
     // TODO(037): warnings -- not stored.
     let warnings = Vec::new();

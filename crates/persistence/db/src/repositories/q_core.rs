@@ -456,6 +456,24 @@ pub async fn get_session_joined(pool: &SqlitePool, id: &str) -> DbResult<Option<
     Ok(row)
 }
 
+/// Canonical precedence for a session's linked target id (legacy `target_id`
+/// wins over spec-035's `canonical_target_id` when both happen to be set).
+///
+/// Reviewer seq=277: `q_targets_mgmt::session_counts_by_target` and
+/// `app_core::sessions::{list_sessions, get_session}` MUST agree on this
+/// order — a session can end up with both columns set (`backfill_session_
+/// targets` only gates on `canonical_target_id IS NULL`, not on `target_id`),
+/// and disagreeing precedence would attribute the same session to two
+/// different targets depending which code path reads it. Both call sites use
+/// this single function so they can't re-drift.
+#[must_use]
+pub fn resolve_session_target_id(
+    target_id: Option<String>,
+    canonical_target_id: Option<String>,
+) -> Option<String> {
+    target_id.or(canonical_target_id)
+}
+
 /// Row from `acquisition_fingerprint` supplementary metadata dimensions.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct FingerprintRow {
@@ -774,6 +792,64 @@ mod tests {
         let total =
             active_frame_exposure_seconds(db.pool(), &["f-nometa".to_owned()]).await.unwrap();
         assert_eq!(total, 0.0, "a frame with no reachable inbox_file_metadata degrades to 0");
+    }
+
+    /// Regression for the `GROUP BY fr.id` fan-out guard: two `inbox_items`
+    /// rows in the SAME root (e.g. a stale/superseded duplicate from
+    /// reclassify — see the doc comment on `active_frame_exposure_seconds`)
+    /// each carry an `inbox_file_metadata` row matching the frame's exact
+    /// `relative_path`. Joining `inbox_items` on `root_id` alone (no filter on
+    /// its own `relative_path`) produces one row per (file_record, inbox_item)
+    /// pair; without the inner `GROUP BY fr.id` + `MAX`, `SUM` would add both
+    /// matches and double-count to 200.0 instead of the real 100.0.
+    #[tokio::test]
+    #[allow(clippy::float_cmp)] // exact literal input, no rounding involved
+    async fn active_frame_exposure_seconds_collapses_duplicate_inbox_item_fan_out() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES ('root-dup', 'root-dup', '/tmp', 'local', 'active', datetime('now'))",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('f-dup', 'root-dup', 'shared.fits', 100, 't0', 'classified', 't0', 't0')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Two DISTINCT inbox_items rows in the same root (different group_key),
+        // each with its own inbox_file_metadata row for the identical
+        // relative_file_path the frame carries.
+        for item_id in ["item-dup-a", "item-dup-b"] {
+            sqlx::query(
+                "INSERT INTO inbox_items (id, root_id, relative_path, group_key, discovered_at, last_scanned_at) \
+                 VALUES (?, 'root-dup', 'shared.fits', ?, 't0', 't0')",
+            )
+            .bind(item_id)
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO inbox_file_metadata (id, inbox_item_id, relative_file_path, exposure_s) \
+                 VALUES (?, ?, 'shared.fits', 100.0)",
+            )
+            .bind(format!("meta-{item_id}"))
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+
+        let total = active_frame_exposure_seconds(db.pool(), &["f-dup".to_owned()]).await.unwrap();
+        assert_eq!(
+            total, 100.0,
+            "a duplicate inbox_items row in the same root must not double-count exposure"
+        );
     }
 
     #[tokio::test]

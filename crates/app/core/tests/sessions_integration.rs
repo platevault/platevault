@@ -286,3 +286,53 @@ async fn get_session_excludes_missing_frames_from_integration_seconds() {
         "a missing frame's exposure drops out of the total (INV-5 parity)"
     );
 }
+
+// ── 9. reviewer seq=277: target_id/canonical_target_id precedence agreement ──
+
+/// Seed a minimal `canonical_target` row (spec 035).
+async fn insert_canonical_target(pool: &sqlx::SqlitePool, id: &str) {
+    sqlx::query(
+        "INSERT INTO canonical_target
+            (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+         VALUES (?, NULL, ?, 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(format!("C-{id}"))
+    .execute(pool)
+    .await
+    .expect("insert canonical_target");
+}
+
+/// `backfill_session_targets` (crates/app/targets/src/ingest_sessions.rs) only
+/// gates on `canonical_target_id IS NULL`, so a session can legitimately end
+/// up with BOTH `target_id` and `canonical_target_id` set to *different*
+/// targets. `list_sessions`/`get_session` must resolve the SAME target as
+/// `q_targets_mgmt::session_counts_by_target` (both call
+/// `q_core::resolve_session_target_id`) — otherwise the Sessions page and the
+/// planner's Sessions column would attribute the same session to two
+/// different targets.
+#[tokio::test]
+async fn list_sessions_prefers_legacy_target_id_when_both_columns_set() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    support::insert_target(pool, "legacy-both").await;
+    insert_canonical_target(pool, "canon-both").await;
+    sqlx::query(
+        "INSERT INTO acquisition_session
+            (id, session_key, frame_ids, target_id, canonical_target_id, created_at)
+         VALUES ('ses-both', 'KEY', '[]', 'legacy-both', 'canon-both', '2026-01-01T00:00:00Z')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let sessions = app_core::sessions::list_sessions(pool).await.unwrap();
+    let ses = sessions.iter().find(|s| s.id == "ses-both").expect("ses-both must be in list");
+    assert_eq!(
+        ses.target_ids,
+        vec!["legacy-both".to_owned()],
+        "target_id must win over canonical_target_id when both are set, \
+         matching q_targets_mgmt::session_counts_by_target's precedence exactly"
+    );
+}
