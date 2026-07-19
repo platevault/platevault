@@ -30,15 +30,17 @@ per-page opt-in code — the default `detailPlacement` prop value is
   currently used by any adopting page).
 - **`apps/desktop/src/components/DetailPanel.tsx`** is the shared detail
   container (3-zone facts/content/aux grid, single scroll region). Adopted by
-  three of six pages (Sessions via `SessionDetail`, Calibration via
-  `MasterDetail`, Inbox via `InboxDetail`); Archive, Projects, and Targets
-  still hand-roll their own detail markup (#1067, open).
+  all six pages (Sessions via `SessionDetail`, Calibration via
+  `MasterDetail`, Inbox via `InboxDetail`, Archive via `ArchiveDetail`,
+  Targets via `TargetDetailV2`, Projects via `ProjectDetail`) — the last
+  three migrated by **PR #1072**, closing #1067.
 
-Two follow-up PRs fixed bugs in this area without changing the mechanism:
+Three follow-up PRs fixed bugs in this area without changing the mechanism:
 **#1035** closed #816 (Target detail content clipping — a scroll-containment
 bug, unrelated to placement logic) and fixed unrelated Target-detail issues
 (#856, #612, #796); **#1060** shipped SegControl accessibility work (Refs
-#1010) that the pending #1066 fix is expected to reuse.
+#1010) that **#1070** later reused to build the 3-state Auto/Bottom/Right
+`DetailDockPlacementControl`, closing #1066.
 
 ## What the original plan proposed but was NOT built
 
@@ -60,12 +62,16 @@ superseded) proposed:
    the shared `DetailPanel`, plus a CI guard against bespoke panel markup.
 6. Targets-specific pinned identity columns and conditional horizontal scroll.
 
-**None of 1–6 exist on `main`.** What shipped (#1003) is architecturally
-simpler: one width signal, two placements, untyped `localStorage`, a 2-state
-toggle, partial `DetailPanel` adoption, and no Targets column work. Items 3
-and 4 are tracked as open follow-ups (#1066 for the control, #1067 for the
-`DetailPanel` migrations); item 2 is an open product decision (#1068); items 1
-and 6 have no tracked follow-up as of this reconciliation.
+**Items 4 and 5 have since shipped**, just not exactly as originally
+designed: item 4's Auto/Bottom/Right control landed via **PR #1070**
+(closing #1066) on top of the shipped `useAdaptiveDock`/`localStorage`
+mechanism rather than a typed preference; item 5's full `DetailPanel`
+migration + shared-component guard test landed via **PR #1072** (closing
+#1067). **Items 1, 3, and 6 still do not exist on `main`** — item 3 (typed
+`AppPreferences` persistence) has no tracked follow-up; item 6 (Targets
+pinned columns) has no tracked follow-up; item 2 (the `'split'` placement)
+is **withdrawn**, not merely open — #1068 was decided against building it
+(see spec.md's Deferred / superseded section).
 
 ## Technical Context
 
@@ -139,14 +145,15 @@ apps/desktop/src/
 │   └── ResizeHandle.tsx          # pointer-drag divider
 ├── components/
 │   ├── ListPageLayout.tsx        # detailPlacement/dockId/adaptiveThreshold props; wires useAdaptiveDock
-│   └── DetailPanel.tsx           # shared detail container (3 of 6 pages adopted — #1067 open)
+│   ├── DetailDockPlacementControl.tsx  # 3-state Auto/Bottom/Right control (PR #1070, closes #1066)
+│   └── DetailPanel.tsx           # shared detail container (6 of 6 pages adopted — PR #1072, closes #1067)
 └── features/
     ├── sessions/SessionsPage.tsx        # default adaptive placement, DetailPanel via SessionDetail
     ├── calibration/CalibrationPage.tsx  # default adaptive placement, DetailPanel via MasterDetail
     ├── inbox/InboxPage.tsx              # default adaptive placement, DetailPanel via InboxDetail
-    ├── archive/ArchivePage.tsx          # default adaptive placement, detail NOT on DetailPanel (#1067)
-    ├── targets/TargetsPage.tsx          # default adaptive placement, detail NOT on DetailPanel (#1067)
-    └── projects/ProjectsPage.tsx        # default adaptive placement (see note below), detail NOT on DetailPanel (#1067)
+    ├── archive/ArchivePage.tsx          # default adaptive placement, DetailPanel via ArchiveDetail
+    ├── targets/TargetsPage.tsx          # default adaptive placement, DetailPanel via TargetDetailV2
+    └── projects/ProjectsPage.tsx        # default adaptive placement (see note below), DetailPanel via ProjectDetail
 ```
 
 **Note on Projects**: `ProjectsPage.tsx`'s module docstring (as of this
@@ -155,21 +162,27 @@ reconciliation) still claims it uses `detailPlacement="side-and-bottom"`
 `detailPlacement` at all — it defaults to `'adaptive'` like every other page.
 `'side-and-bottom'` remains a real, tested capability of `ListPageLayout` (see
 `ListPageLayout.test.tsx`) but is not currently used by any page. This is a
-pre-existing doc/code drift in `ProjectsPage.tsx` itself, out of scope for
-this documentation-only reconciliation to fix — flagging it here so it isn't
-mistaken for a claim in this spec record.
+pre-existing doc/code drift in `ProjectsPage.tsx` itself; tracked as **#1108**
+(open PR) rather than fixed here, since fixing `ProjectsPage.tsx` is out of
+scope for this documentation-only reconciliation.
 
 ## Risks & mitigations (reconciled)
 
-- **Placement can't return to Auto once pinned** — live bug, not a risk:
-  #1066, PR #1070 open.
-- **Inconsistent `DetailPanel` adoption** (3/6 pages) means the container
-  scroll-containment guarantee (#1035's #816 fix) is proven for its adopters
-  but not verified for Archive/Projects/Targets, which hand-roll their own
-  scroll structure. Tracked as #1067.
+- **Placement couldn't return to Auto once pinned** — was a live bug, now
+  fixed: #1066, closed by PR #1070's `DetailDockPlacementControl`.
+- **`DetailPanel` adoption was inconsistent (3/6 pages)** — resolved: PR
+  #1072 migrated Archive/Projects/Targets, closing #1067, so the container
+  scroll-containment guarantee (#1035's #816 fix) now applies to all six
+  adopters uniformly.
 - **No page currently differentiates its threshold** — every page uses the
   1400px default via `adaptiveThreshold`'s absence. If a specific page's
   table needs a different value (the original design reserved 1500px for
-  Targets), it is a one-line prop change, not an architecture change.
-- **Undecided Inbox direction** (#1068) — do not build either the permanent
-  split or remove the Format column without a recorded product decision.
+  Targets), it is a one-line prop change, not an architecture change. No
+  tracked issue.
+- **Inbox direction is now decided** (#1068): the owner chose to keep the
+  adaptive dock and the Format column, withdrawing the permanent-split
+  design (its driving need, #553, was independently fixed by PR #939). Do
+  not build the permanent split without a new product ask that reopens this.
+- **New, from real-app validation of the shipped mechanism**: #1106 (icon-only
+  placement control, detail-panel overflow, stable `dockId`s — open PR) and
+  #1107 (vertical clipping of `.alm-listpage__detail-body` — open issue).

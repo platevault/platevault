@@ -57,7 +57,7 @@ configured) real per-site astronomy for tonight.
   provided, or user-added since the list was last loaded — see S3 for a
   known gap where an alias added in the same session isn't searchable until
   the list reloads). Narrow the window while the side dock (S3) is open, to
-  where the table would drop below its column floor.
+  where the table would drop below its own 1000px min-width floor.
 - **Expect:** The list shows the targets the user has actually added to their
   library (not the full bundled seed catalog), sortable by any column with a
   single active sort indicator, and optionally groupable (e.g. by catalogue).
@@ -67,17 +67,18 @@ configured) real per-site astronomy for tonight.
   large added-target set, first paint reveals rows in chunks of 300 rather
   than blocking on the full set; during that reveal window a search matches
   only rows already revealed, catching up as more are revealed a moment
-  later. Opening the page no longer freezes the app. The table shows a
-  permanent, importance-based column order at every width: star (favorite),
-  designation, imaging time, opposition, type, filters, max alt, lunar
-  dist, sessions. When the side dock narrows the table below its column
-  floor, the favorite-star and designation columns stay pinned on the left
-  while the remaining columns scroll horizontally as a group — no column is
-  ever auto-hidden to make room.
+  later. Opening the page no longer freezes the app. The table's fixed
+  column order, left to right, is: star (favorite), designation, type, max
+  alt, opposition, lunar dist, filters, imaging time, sessions. No column is
+  pinned and none is ever auto-hidden: the table has its own 1000px
+  min-width floor, independent of the side dock, below which the WHOLE
+  table (every column together) scrolls horizontally as one unit inside its
+  own scroll container.
 - **Expect (negative):** At full window width there is no horizontal
   scrollbar and no clipped cell in the table; as the side dock narrows the
-  available width, no column silently disappears — the remaining columns
-  scroll as a unit instead.
+  available width below the table's min-width floor, no column silently
+  disappears and none is singled out to stay in place — the whole table
+  scrolls horizontally as one unit instead.
 - **Expect (negative):** The bundled seed catalog (thousands of entries) is
   never materialized as browsable rows in this list — it is reachable only
   through the Add-target search (S2).
@@ -88,9 +89,14 @@ configured) real per-site astronomy for tonight.
   altitude sampling ran synchronously over the entire catalogue on every
   render). PR #914 fixes a carried nJ09c-review nit: virtualized row height
   now tracks the active density setting instead of a fixed height, so
-  scrolling stays visually aligned when density changes. spec-054/FR-008,
-  FR-009 (permanent column order, pinned star+designation columns, no
-  auto-hide as the side dock narrows available width).
+  scrolling stays visually aligned when density changes. Column order/
+  scroll-as-one-unit behavior per `TargetsTable.tsx` (`<colgroup>` order),
+  `merges-3.css` (`.alm-targets-table` `min-width: 1000px`,
+  `table-layout: fixed`), `merges-2.css` (`.alm-targets-table__scroll`
+  `overflow-x: auto`) — no `position: sticky` column rule and no
+  column-hiding logic exist anywhere in this file. spec-054/FR-006–FR-008
+  (a pinned-column, priority-scroll, no-auto-hide design) were never
+  delivered — superseded, no tracked issue.
 
   The app shell's Targets sidebar badge shows the count of the user's own
   favourited targets (the same set "My Targets" filters to, see S5) — PR
@@ -128,7 +134,7 @@ configured) real per-site astronomy for tonight.
 ### S3 — Review and edit target identity {#S3}
 - **Do:** Open a target's detail panel. Add or remove an alias, set or clear
   a display label, write an observing note. Resize the window across the
-  1500px logical-width threshold; separately, use the panel's per-page pin
+  1400px logical-width threshold; separately, use the panel's per-page pin
   to force a placement.
 - **Expect:** The detail panel shows real identity data (designation, type,
   coordinates, source, and an optional catalog id — shown as an explicit
@@ -137,8 +143,9 @@ configured) real per-site astronomy for tonight.
   control; catalog-provided aliases have none. Setting or clearing a
   display label updates the detail heading immediately. Notes save and
   persist across a restart. The panel docks to the SIDE, full-height and
-  drag-resizable, when the window is ≥1500px logical wide, and to the
-  BOTTOM below that width; the chosen side-dock width persists across
+  drag-resizable, when the window is ≥1400px logical wide (the shared
+  adaptive-dock default — Targets passes no page-specific threshold), and
+  to the BOTTOM below that width; the chosen side-dock width persists across
   restarts, and a per-page pin (Auto/Side/Bottom) overrides the automatic
   width-based choice when set. Every section — the altitude graph, alias
   list/add control, display-label editor, notes, Coverage/links sections,
@@ -156,8 +163,11 @@ configured) real per-site astronomy for tonight.
   live-link gap, not a layout gap).
 - **Trace:** issue #658 (open, live-link gap, unaffected by spec-054);
   issue #816 (dissolved — fixed by spec-054 adaptive dock, see Δ6);
-  journey-run-2026-07-14.md Journey 9 section; spec-054/FR-002, FR-006,
-  FR-007.
+  journey-run-2026-07-14.md Journey 9 section; `TargetDetailV2.tsx` (wraps
+  `DetailPanel fill`, own `.alm-planner__scroll` region); spec-054/FR-001
+  (adaptive side/bottom placement), FR-003 (per-page pin), FR-005
+  (resizable/persistent side width). FR-002 (a Targets-specific 1500px
+  threshold) was never delivered — superseded, no tracked issue.
 
 ### S4 — Read tonight's real per-site astronomy {#S4}
 - **Do:** With an observing site configured, open a target's row or detail
@@ -275,18 +285,14 @@ configured) real per-site astronomy for tonight.
 
 - **Δ6** 2026-07-17 · S1, S3 · behavior-change
   The target detail panel now uses the adaptive dock: full-height,
-  drag-resizable side placement at ≥1500px logical window width (width
+  drag-resizable side placement at ≥1400px logical window width (width
   persists; a per-page pin overrides the automatic choice), bottom
   placement below that width. Every section is now reachable by scrolling
   in either placement — fixes issue #816 (content below the altitude graph
   was clipped invisible with no scroll affordance). Issue #658 (alias/label
   live-link to the list) is a distinct, still-open gap, unaffected by this
-  change. The table now keeps a permanent importance-based column order
-  (star, designation, imaging time, opposition, type, filters, max alt,
-  lunar dist, sessions) at every width; when the side dock narrows the
-  table, the star and designation columns pin left while the rest scroll
-  horizontally as a group — no column is ever auto-hidden.
-  Evidence: spec-054-adaptive-detail-dock (FR-002, FR-006–FR-009) · by:
+  change.
+  Evidence: spec-054-adaptive-detail-dock (FR-001, FR-003, FR-005) · by:
   journey-scribe (intent-gated)
 
 Note (not a Δ entry — provenance for why two deltas were not folded into the
