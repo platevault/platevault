@@ -301,8 +301,12 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
     });
     expect(screen.getByText('Target resolved')).toBeInTheDocument();
 
-    // Reset via the group's own "All" chip.
-    fireEvent.click(within(categoryGroup).getByRole('button', { name: 'All' }));
+    // Reset via the group's own "All" chip (aria-label "All sources"
+    // disambiguates it from the level filter's "All levels" chip — both
+    // groups show the same visible "All" text).
+    fireEvent.click(
+      within(categoryGroup).getByRole('button', { name: 'All sources' }),
+    );
     expect(screen.getByText('Setting changed')).toBeInTheDocument();
   });
 
@@ -327,5 +331,28 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByText('No log entries')).not.toBeInTheDocument();
+  });
+
+  it('gives the level-filter and category-filter "All" chips distinct accessible names', async () => {
+    // Regression: both filter groups show the same visible "All" text —
+    // an unqualified `getByRole('button', { name: 'All', exact: true })`
+    // within the panel must resolve to exactly one element, not two
+    // (real-UI e2e strict-mode violation caught in review).
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Something failed')).toBeInTheDocument();
+    });
+
+    const logRegion = screen.getByRole('log', { name: 'Operation log' });
+    expect(
+      within(logRegion).getByRole('button', { name: 'All levels' }),
+    ).toBeInTheDocument();
+    expect(
+      within(logRegion).getByRole('button', { name: 'All sources' }),
+    ).toBeInTheDocument();
+    expect(within(logRegion).queryByRole('button', { name: 'All' })).toBeNull();
   });
 });

@@ -337,6 +337,12 @@ export function LogPanel() {
                 }`}
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
+                // Disambiguates from the category/source filter's own "All"
+                // chip below — both groups have a visible "All" label, but
+                // e2e/a11y queries need distinct accessible names.
+                aria-label={
+                  chip.value === 'all' ? m.logpanel_level_all_aria() : undefined
+                }
               >
                 {chip.label()}
               </button>
@@ -373,6 +379,7 @@ export function LogPanel() {
               }`}
               onClick={() => setSourceFilter([])}
               aria-pressed={sourceFilter.length === 0}
+              aria-label={m.logpanel_source_all_aria()}
             >
               {m.log_level_all()}
             </button>
