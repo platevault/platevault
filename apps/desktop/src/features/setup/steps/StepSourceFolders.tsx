@@ -97,22 +97,24 @@ function findAddTimeConflict(
 }
 
 /**
- * Best-effort existence check for a manually typed/pasted path (#662) — the
- * native OS picker already guarantees a real, existing directory, so this
- * only matters for the manual-entry affordance, but runs for both so there is
- * one add-time validation path. Reuses `tools.validate_path` (an existing,
- * side-effect-free `exists() && is_absolute()` check meant for tool
- * executables) instead of inventing a new backend command; it does not
- * discriminate file vs. directory — that stricter check still runs, and
- * blocks registration, at Confirm-step flush via the real
- * `roots.register.batch` path validation (`crates/app/core/src/first_run.rs`).
- * An IPC failure here is treated as inconclusive (not blocking) for the same
- * reason: the authoritative check runs at flush regardless.
+ * Best-effort existence + file-vs-directory check for a manually typed/pasted
+ * path (#662, #1056) — the native OS picker already guarantees a real,
+ * existing directory, so this only matters for the manual-entry affordance,
+ * but runs for both so there is one add-time validation path. Reuses
+ * `tools.validate_path` (an existing, side-effect-free `exists() &&
+ * is_absolute()` check meant for tool executables, extended with an `isDir`
+ * signal) instead of inventing a new backend command. The stricter
+ * `roots.register.batch` path validation (`crates/app/core/src/first_run.rs`)
+ * still runs, and blocks registration, at Confirm-step flush regardless — this
+ * is only meant to surface the error earlier. An IPC failure here is treated
+ * as inconclusive (not blocking) for the same reason.
  */
 async function checkPathExists(path: string): Promise<string | null> {
   try {
     const result = unwrap(await commands.toolsValidatePath(path));
-    return result.valid ? null : m.err_path_not_exists();
+    if (!result.valid) return m.err_path_not_exists();
+    if (result.isDir === false) return m.err_path_not_directory();
+    return null;
   } catch {
     return null;
   }

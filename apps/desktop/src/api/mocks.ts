@@ -1697,10 +1697,15 @@ export async function mockInvoke(
       // valid (mirrors the native-picker flow, which only ever adds paths
       // that already exist).
       const path = (_args?.path as string) ?? '';
+      const valid = path.trim().length > 0;
       return {
         path,
-        valid: path.trim().length > 0,
-        reason: path.trim().length > 0 ? null : 'Path does not exist',
+        valid,
+        reason: valid ? null : 'Path does not exist',
+        // Mock mode has no real filesystem; treat every valid mock path as a
+        // directory (mirrors the native-picker flow, which only ever adds
+        // existing directories).
+        isDir: valid ? true : null,
       } satisfies ToolPathValidation;
     }
     case 'firstrun_complete': {

@@ -9861,6 +9861,13 @@ export type ToolPathValidation = {
 	path: string,
 	valid: boolean,
 	reason: string | null,
+	/**
+	 *  `Some(true)` when the path exists and is a directory, `Some(false)`
+	 *  when it exists and is a file (or other non-directory entry). `None`
+	 *  when the path does not exist, so callers cannot distinguish file vs.
+	 *  directory (issue #1056).
+	 */
+	isDir: boolean | null,
 };
 
 /**  Response DTO for `tool.profile.list`. */
