@@ -3,21 +3,33 @@
 
 /**
  * The ONE parameterised Getting-started checklist (spec 056, US2 T017–T019;
- * research R10). Rendered verbatim in two hosts:
- *   - inline in the sidebar (`Sidebar.tsx`) when the sidebar is expanded, and
- *   - inside the icon-collapsed popover (`ChecklistPopover.tsx`, T020).
- * Both mount the SAME component and share `checklist.css` (one class family,
- * tokens only) — never a per-surface clone (`scripts/css-dup-sniff.mjs`).
+ * research R10). Its sole host is the flyout in `ChecklistPopover.tsx`, which
+ * `Sidebar.tsx` mounts at BOTH sidebar widths — only the trigger differs
+ * (labelled row when expanded, bare progress ring when icon-collapsed).
+ *
+ * T018 originally specified an inline section in the expanded sidebar, with the
+ * popover reserved for the collapsed width. That was dropped: rendered inline,
+ * the list blended into the sidebar's own surface and read as navigation rather
+ * than as a checklist. Both widths now use the flyout, which is portalled to
+ * `<body>` because `.alm-sidebar` is `overflow: hidden` and was scissoring the
+ * panel away. There is consequently NO inline host — anything asserting on this
+ * component (tests included) must open the flyout first.
+ *
+ * One component, one `checklist.css` class family (tokens only) — never a
+ * per-surface clone (`scripts/css-dup-sniff.mjs`).
  *
  * State is read straight from the onboarding store (backend-authoritative,
  * research R5): the component re-renders whenever the projection changes, so
  * prerequisite satisfaction clears live without a reload (FR-010) and auto-ticks
  * surface as soon as the store re-reads on `onboarding:state-changed`.
  *
- * Completion choreography (animation, completed-area move, dismiss control) is
- * layered on by US3 T024/T025; this node renders the settled end-state (open
- * items on top, completed greyed at the bottom of their group) plus the manual
- * check affordance the group-collapse behaviour (FR-031) needs.
+ * Completion choreography (animation, completed-area move) is layered on by US3
+ * T024/T025; this node renders the settled end-state (open items on top,
+ * completed greyed at the bottom of their group) plus the manual check
+ * affordance the group-collapse behaviour (FR-031) needs. The per-row dismiss
+ * control was removed: the round checkbox writes `manually_checked` and nothing
+ * else, and `dismissed` is deliberately unreachable from the UI (the backend
+ * still supports it, so a row menu can restore it later without a migration).
  */
 
 import { useEffect, useMemo, useState } from 'react';
