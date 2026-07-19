@@ -68,13 +68,13 @@ beforeEach(() => {
 describe('ResolverSettingsControl', () => {
   it('loads settings and reflects the online toggle as checked', async () => {
     render(<ResolverSettingsControl />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    // The toggle's aria-label now sits on the <input> itself (a11y: the
-    // accessible name belongs on the interactive control), so getByLabelText
-    // returns the checkbox directly.
-    const checkbox = screen.getByLabelText(
+    // findBy (not waitFor(mockGet called) + sync getBy): the mock being
+    // *called* races the `.then()` that flips `loaded` and swaps the
+    // skeleton for the real control — findBy polls until the labeled
+    // control actually exists, which is the state under test.
+    const checkbox = (await screen.findByLabelText(
       'Enable online SIMBAD resolution',
-    ) as HTMLInputElement;
+    )) as HTMLInputElement;
     expect(checkbox).toBeChecked();
   });
 
@@ -127,15 +127,21 @@ describe('ResolverSettingsControl', () => {
     const toggle = await screen.findByLabelText(
       'Enable online SIMBAD resolution',
     );
-    await act(async () => {
-      fireEvent.click(toggle);
-      await Promise.resolve();
-    });
 
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        settings: expect.objectContaining({ onlineEnabled: false }),
-      }),
+    // fireEvent already batches inside `act()`; `persist()`'s own
+    // `await updateResolverSettings(...)` then `setSettings(...)` chain
+    // resolves over more than one microtask, which a single manual
+    // `await Promise.resolve()` doesn't reliably flush (source of the CI
+    // act() warnings) — waitFor polls (each poll act()-wrapped) until the
+    // full persist cycle actually lands, deterministically either way.
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({ onlineEnabled: false }),
+        }),
+      ),
     );
   });
 
