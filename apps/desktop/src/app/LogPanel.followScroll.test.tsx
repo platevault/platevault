@@ -223,4 +223,45 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     });
     expect(getFollowButton().title).toBeFalsy();
   });
+
+  it('re-enabling Follow resumes at the newest row even after a stale scroll-pause (#832)', async () => {
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Second entry')).toBeInTheDocument();
+    });
+
+    // Turn follow off first (repro starts with Follow inactive).
+    fireEvent.click(getFollowButton());
+    await waitFor(() => {
+      expect(getFollowButton().textContent).toBe('— Follow');
+    });
+
+    const list = document.querySelector<HTMLUListElement>(
+      '.alm-logpanel__events',
+    );
+    if (!list) throw new Error('scroll list not found');
+
+    // Scroll away from the top while follow is off — `handleScroll` sets
+    // `scrollPaused` regardless of `followLogs`.
+    setScrollMetrics(list, { scrollTop: 400 });
+    fireEvent.scroll(list);
+
+    const scrollToMock = Element.prototype.scrollTo as ReturnType<typeof vi.fn>;
+    scrollToMock.mockClear();
+
+    // Re-enable Follow — before the fix, the leftover `scrollPaused` from
+    // the earlier scroll silently blocked the follow-tail effect's guard.
+    fireEvent.click(getFollowButton());
+
+    await waitFor(() => {
+      expect(getFollowButton().textContent).toBe('↓ Follow');
+    });
+    expect(getFollowButton().title).toBeFalsy();
+    // The follow-tail effect must actually run and scroll back to the
+    // newest row, not silently no-op.
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+  });
 });

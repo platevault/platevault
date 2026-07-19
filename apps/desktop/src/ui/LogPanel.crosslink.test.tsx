@@ -77,7 +77,7 @@ describe('LogPanel cross-link behavior (T017)', () => {
     mockNavigate.mockReturnValue(Promise.resolve());
   });
 
-  it('navigates to entity path when row has entityType + entityId', async () => {
+  it('does not link plan entities — no /plans/:id route exists yet (#626)', async () => {
     appendLog([
       {
         id: 'aud:10',
@@ -98,13 +98,14 @@ describe('LogPanel cross-link behavior (T017)', () => {
       expect(screen.getByText('Plan approved')).toBeInTheDocument();
     });
 
-    const row = screen.getByRole('button', { name: /Plan approved.*navigate/ });
-    fireEvent.click(row);
-
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/plans/plan-abc' });
+    // Subject-context text still renders (#583); it's just not clickable.
+    expect(screen.getByText('plan · plan-abc')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Plan approved.*navigate/ }),
+    ).toBeNull();
   });
 
-  it('navigates to audit timeline when row has requestId but no entity', async () => {
+  it('navigates to the Settings audit pane when row has requestId but no entity', async () => {
     appendLog([
       {
         id: 'aud:11',
@@ -130,7 +131,67 @@ describe('LogPanel cross-link behavior (T017)', () => {
     fireEvent.click(row);
 
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: '/audit?requestId=req-xyz',
+      to: '/settings/audit?requestId=req-xyz',
+    });
+  });
+
+  it('navigates to the settings/catalogs pane for catalog entities (#626)', async () => {
+    appendLog([
+      {
+        id: 'aud:14',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'info',
+        source: 'catalog',
+        message: 'Catalog downloaded',
+        entityType: 'catalog',
+        entityId: 'gaia',
+      },
+    ]);
+
+    renderPanel();
+    expandPanel();
+
+    await waitFor(() => {
+      expect(screen.getByText('Catalog downloaded')).toBeInTheDocument();
+    });
+
+    const row = screen.getByRole('button', {
+      name: /Catalog downloaded.*navigate/,
+    });
+    fireEvent.click(row);
+
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/settings/catalogs' });
+  });
+
+  it('navigates to settings/audit for unknown entity types (#626)', async () => {
+    appendLog([
+      {
+        id: 'aud:15',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'info',
+        source: 'settings',
+        message: 'Setting changed',
+        entityType: 'settings',
+        entityId: 'advanced',
+      },
+    ]);
+
+    renderPanel();
+    expandPanel();
+
+    await waitFor(() => {
+      expect(screen.getByText('Setting changed')).toBeInTheDocument();
+    });
+
+    const row = screen.getByRole('button', {
+      name: /Setting changed.*navigate/,
+    });
+    fireEvent.click(row);
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/settings/audit?entityType=settings&entityId=advanced',
     });
   });
 
