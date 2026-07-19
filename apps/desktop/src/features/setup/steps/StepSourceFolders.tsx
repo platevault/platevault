@@ -326,12 +326,20 @@ function AddFolderButton({
   validationError: string | null;
 }) {
   const { pick, loading, error } = useDirectoryPicker();
-  const [e2ePath, setE2ePath] = useState('');
+  const [manualPath, setManualPath] = useState('');
 
   const handleChoose = async () => {
     const result = await pick(undefined, KIND_TO_LAST_PATH[kind]);
     if (result.path) {
       onAdd(result.path, kind);
+    }
+  };
+
+  const handleAddManualPath = () => {
+    const p = manualPath.trim();
+    if (p) {
+      onAdd(p, kind);
+      setManualPath('');
     }
   };
 
@@ -349,36 +357,42 @@ function AddFolderButton({
         {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
       {/*
-        CI-only path entry: WebDriver cannot drive the native folder picker, so
-        real-UI E2E journeys add a source by typing its path. Gated on the
-        build-time VITE_E2E flag, so it is tree-shaken out of production builds
-        and reuses the exact same `onAdd` registration path as the picker.
+        Manual path entry (#662): the native picker guarantees an existing
+        directory but can't be scripted (WebDriver can't drive OS dialogs) and
+        can't produce inputs the journey's add-time validation needs to reject
+        (duplicate/overlap) — those require typing/pasting a path. Reuses the
+        exact same `onAdd` (→ findAddTimeConflict) registration path as the
+        picker, so both entry points get identical validation.
       */}
-      {import.meta.env.VITE_E2E ? (
-        <span data-testid={`e2e-add-by-path-${kind}`}>
-          <input
-            data-testid={`e2e-path-input-${kind}`}
-            aria-label={m.setup_sources_e2e_path_aria({
-              kind: SOURCE_KIND_LABELS[kind](),
-            })}
-            value={e2ePath}
-            onChange={(ev) => setE2ePath(ev.target.value)}
-          />
-          <button
-            type="button"
-            data-testid={`e2e-add-path-btn-${kind}`}
-            onClick={() => {
-              const p = e2ePath.trim();
-              if (p) {
-                onAdd(p, kind);
-                setE2ePath('');
-              }
-            }}
-          >
-            {m.setup_sources_add_e2e()}
-          </button>
-        </span>
-      ) : null}
+      <span
+        className="alm-step-sources__manual-add"
+        data-testid={`manual-add-by-path-${kind}`}
+      >
+        <input
+          className="alm-step-sources__manual-input alm-mono"
+          data-testid={`manual-path-input-${kind}`}
+          aria-label={m.setup_sources_manual_path_aria({
+            kind: SOURCE_KIND_LABELS[kind](),
+          })}
+          value={manualPath}
+          onChange={(ev) => setManualPath(ev.target.value)}
+          onKeyDown={(ev) => {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              handleAddManualPath();
+            }
+          }}
+        />
+        <Btn
+          size="sm"
+          variant="ghost"
+          data-testid={`manual-add-path-btn-${kind}`}
+          onClick={handleAddManualPath}
+          disabled={!manualPath.trim()}
+        >
+          {m.setup_sources_add_by_path()}
+        </Btn>
+      </span>
       {error && (
         <span className="alm-step-sources__picker-error">{error.message}</span>
       )}

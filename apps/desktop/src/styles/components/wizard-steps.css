@@ -1381,6 +1381,28 @@
   color: var(--alm-danger);
 }
 
+/* ── Manual "add by path" row (#662) ── */
+.alm-step-sources__manual-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-step-sources__manual-input {
+  font-size: var(--alm-text-xs);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: 1px var(--alm-sp-1);
+  width: 12rem;
+}
+
+.alm-step-sources__manual-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
 /* === SETUP STEP SITE (spec 044 T016) === */
 
 /* Root container */

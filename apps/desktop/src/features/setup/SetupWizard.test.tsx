@@ -661,9 +661,7 @@ describe('SetupWizard 5-step flow', () => {
     // Seed at step 4 (Confirm) but WITHOUT a project folder
     const seeded = {
       currentStep: 4,
-      sources: [
-        { path: '/astro/lights', kind: 'light_frames' },
-      ],
+      sources: [{ path: '/astro/lights', kind: 'light_frames' }],
       catalogSettings: {
         selectedCatalogIds: ['common', 'openngc'],
       },

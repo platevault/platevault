@@ -248,7 +248,12 @@ describe('flushToDB — organizationState in register payload', () => {
   });
 
   it('sends the user-chosen organizationState for non-inbox sources', async () => {
-    const sources = addSource([], 'light_frames', '/astro/lights', 'unorganized');
+    const sources = addSource(
+      [],
+      'light_frames',
+      '/astro/lights',
+      'unorganized',
+    );
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
