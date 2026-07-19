@@ -403,7 +403,7 @@ describe('TargetDetailV2', () => {
     mockGetTargetDetail.mockRejectedValueOnce(new Error('network error'));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getByText('Failed to load target.')).toBeInTheDocument(),
+      expect(screen.getByText('Could not load target.')).toBeInTheDocument(),
     );
   });
 
@@ -910,7 +910,7 @@ describe('TargetDetailV2', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() =>
-      expect(screen.getByText('Failed to save notes.')).toBeInTheDocument(),
+      expect(screen.getByText('Could not save notes.')).toBeInTheDocument(),
     );
   });
 });

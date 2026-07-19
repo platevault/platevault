@@ -290,7 +290,7 @@ describe('TargetsPage', () => {
     mockListTargets.mockRejectedValue(new Error('db error'));
     render(<TargetsPage />);
     await waitFor(() =>
-      expect(screen.getByText('Failed to load targets.')).toBeInTheDocument(),
+      expect(screen.getByText('Could not load targets.')).toBeInTheDocument(),
     );
   });
 

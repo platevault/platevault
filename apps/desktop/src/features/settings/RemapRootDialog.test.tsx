@@ -258,7 +258,7 @@ describe('RemapRootDialog', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/Remap failed: disk unavailable/i),
+        screen.getByText(/Could not remap: disk unavailable/i),
       ).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /Apply remap/i })).toBeDisabled();
