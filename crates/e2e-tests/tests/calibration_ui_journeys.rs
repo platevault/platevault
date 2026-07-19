@@ -207,25 +207,22 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
         );
     }
 
-    let rows = app.find_all_testid_prefix("inbox-item-").await?;
+    // One live-document snapshot, not `find_all` + per-handle `.text()`: a
+    // `stale element reference` defaulted to "" would UNDERCOUNT the master
+    // labels and report a driver failure as a missing product label (#1111).
+    let row_texts = app.testid_prefix_texts("inbox-item-").await?;
     anyhow::ensure!(
-        rows.len() >= 2,
+        row_texts.len() >= 2,
         "expected the master dark + master bias to appear as 2 individual real \
          Inbox items (not one folder aggregate), found {}",
-        rows.len()
+        row_texts.len()
     );
-    let mut saw_master_label = 0usize;
-    for row in &rows {
-        let text = row.text().await.unwrap_or_default().to_lowercase();
-        if text.contains("master") {
-            saw_master_label += 1;
-        }
-    }
+    let saw_master_label = row_texts.iter().filter(|t| t.contains("master")).count();
     anyhow::ensure!(
         saw_master_label >= 2,
         "expected each master item's row to carry a real 'N master' label \
          (`inbox_master_row_label`), got {saw_master_label} of {} rows",
-        rows.len()
+        row_texts.len()
     );
 
     app.shutdown().await
