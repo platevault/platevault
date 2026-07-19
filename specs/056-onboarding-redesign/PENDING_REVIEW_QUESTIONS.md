@@ -15,15 +15,38 @@ has confirmed inventory / projects / launches (e.g. an upgrading 0.x user).
 derivation as restore — one seeding routine, no item ever lies about existing
 work. Encoded in spec.md FR-014 and Clarifications.
 
-## PQ-002 — No per-item undo in v1
+## PQ-002 — Per-item undo — RESOLVED (owner directive 2026-07-19, OVERTURNED)
 
 The record defines manual check-off and dismiss, plus the single section-level
 restore/reset. It does not mention reverting one item.
 
-**Provisional answer** (rescoped by review fix 2026-07-18): no per-item undo
-in v1, and manual states are permanent — restore re-derives AUTOMATIC items
-only and never discards manually_checked/dismissed states. Encoded in spec.md
-FR-014/FR-017.
+**Superseded provisional answer** (rescoped by review fix 2026-07-18): no
+per-item undo in v1; manual states permanent.
+
+**Resolved answer** (owner directive 2026-07-19): completed items ARE
+un-checkable. Review surfaced that "no undo" was stronger than it read —
+`upsert_if_unsettled` was the only write path for item state and treated
+settled states as terminal, so a single unconfirmed click permanently marked
+an item done with no recovery path in the product at all. Since completed rows
+are struck through and greyed rather than hidden, their tick looked clickable
+and did nothing.
+
+`repo::force_unchecked` is the single deliberate escape hatch; terminality
+still holds for re-derivation, live ticks and repeat calls, which must never
+*silently* downgrade a decision. Un-checking applies to AUTOMATIC rows too
+(owner's call): it cannot make the checklist contradict the library, because
+the item re-ticks on the next real event and an explicit restore re-derives it
+from database state. Un-checking never runs the FR-031 settle path — it moves
+an item away from settled.
+
+Encoded in `crates/persistence/db/src/repositories/onboarding.rs`
+(`force_unchecked` + 3 tests), `crates/app/core/src/onboarding.rs`
+(`set_item_state`), `OnboardingManualState::Unchecked` in the contract,
+`ChecklistSection.tsx` completed-area checkbox, mocks, and an e2e in
+`onboarding_choreography.spec.ts`. PQ-001 accepted unchanged (owner note
+2026-07-19: greenfield, no 0.x users — derivation over an empty DB is
+identical to starting unchecked, and stays correct if a DB is ever rebuilt
+against an existing library).
 
 ## PQ-003 — Find affordance across pages navigates first
 
