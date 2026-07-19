@@ -402,6 +402,26 @@ export function InboxDetail({
   );
   const [bulkError, setBulkError] = useState<string | null>(null);
 
+  // #611: acknowledgement gate for a HETEROGENEOUS bulk frame-type override
+  // (the selection spans more than one currently-detected frame type).
+  // Keyed by a signature of (selected files, chosen type) so the checkbox
+  // un-acknowledges itself the instant either changes — an acknowledgement
+  // must never silently carry over to a DIFFERENT selection/value.
+  const [heterogeneousAckKey, setHeterogeneousAckKey] = useState<string | null>(
+    null,
+  );
+  // #611: last bulk frame-type override applied, so the user can undo it —
+  // restores each file's PRE-OVERRIDE detected frame type via a per-file
+  // `overrides` call (never a bulk one — the prior values are heterogeneous
+  // by construction here). Files that had no prior detected type (genuinely
+  // unclassified) are omitted: there is nothing valid to restore them to.
+  const [lastFrameTypeUndo, setLastFrameTypeUndo] = useState<{
+    count: number;
+    overrides: Array<{ filePath: string; properties: { frameType: string } }>;
+  } | null>(null);
+  const [undoLoading, setUndoLoading] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+
   // Files popover: which row is "inspected" inside the popover.
   const [inspectedIdx, setInspectedIdx] = useState<number | null>(null);
 
@@ -459,8 +479,33 @@ export function InboxDetail({
     setBulkPropValues((prev) => ({ ...prev, [key]: value }));
   };
 
+  // #611: the currently-detected frame type for each selected file, keyed by
+  // path, sourced from the per-file metadata table (not the classification
+  // response — that only lists WHICH files are unclassified, not what each
+  // one's own already-detected type is). Used to warn before a bulk override
+  // silently overwrites a heterogeneous selection.
+  const selectedDetectedTypes = new Map<string, string | null>();
+  for (const fp of selectedFiles) {
+    const meta = fileMetadata?.find((f) => f.relativeFilePath === fp);
+    selectedDetectedTypes.set(fp, meta?.frameTypeEffective ?? null);
+  }
+  const distinctSelectedTypes = new Set(
+    Array.from(selectedDetectedTypes.values()).filter(
+      (t): t is string => t != null,
+    ),
+  );
+  const isHeterogeneousFrameTypeBulk =
+    bulkFrameType !== '' && distinctSelectedTypes.size > 1;
+  const heterogeneousSignature = isHeterogeneousFrameTypeBulk
+    ? `${bulkFrameType}::${Array.from(selectedFiles).sort().join(',')}`
+    : null;
+  const heterogeneousAcked =
+    !isHeterogeneousFrameTypeBulk ||
+    heterogeneousAckKey === heterogeneousSignature;
+
   const handleBulkApply = async () => {
     if (selectedFiles.size === 0) return;
+    if (isHeterogeneousFrameTypeBulk && !heterogeneousAcked) return;
     const filePaths = Array.from(selectedFiles);
     const bulk: Array<{
       property: string;
@@ -480,14 +525,59 @@ export function InboxDetail({
     }
     if (bulk.length === 0) return;
     setBulkError(null);
+    setUndoError(null);
+    // #611: snapshot each selected file's PRE-OVERRIDE detected frame type
+    // before applying, so a bad bulk override is recoverable. Only captured
+    // when this call actually changes frameType, and only for files that had
+    // a known prior type (nothing valid to restore an unclassified file to).
+    const undoOverrides =
+      bulkFrameType !== ''
+        ? filePaths
+            .map((fp) => {
+              const prev = selectedDetectedTypes.get(fp);
+              return prev
+                ? { filePath: fp, properties: { frameType: prev } }
+                : null;
+            })
+            .filter(
+              (
+                o,
+              ): o is { filePath: string; properties: { frameType: string } } =>
+                o != null,
+            )
+        : [];
     try {
       const result = await reclassifyV2({ bulk });
       setSelectedFiles(new Set());
       setBulkFrameType('');
       setBulkPropValues({});
+      setHeterogeneousAckKey(null);
+      if (undoOverrides.length > 0) {
+        setLastFrameTypeUndo({
+          count: undoOverrides.length,
+          overrides: undoOverrides,
+        });
+      }
       onReclassified?.(result);
     } catch (err) {
       setBulkError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleUndoBulkFrameType = async () => {
+    if (!lastFrameTypeUndo) return;
+    setUndoLoading(true);
+    setUndoError(null);
+    try {
+      const result = await reclassifyV2({
+        overrides: lastFrameTypeUndo.overrides,
+      });
+      setLastFrameTypeUndo(null);
+      onReclassified?.(result);
+    } catch (err) {
+      setUndoError(errMessage(err));
+    } finally {
+      setUndoLoading(false);
     }
   };
 
@@ -1142,11 +1232,53 @@ export function InboxDetail({
                       );
                     })}
 
+                    {/* #611: the selection spans more than one currently-
+                        detected frame type — warn before the override is
+                        silently applied to files it may not actually belong
+                        to (e.g. calibration files stranded under a light's
+                        target/filter/date destination). Require an explicit
+                        acknowledgement before Apply proceeds. */}
+                    {isHeterogeneousFrameTypeBulk && (
+                      <Banner
+                        variant="warn"
+                        className="alm-inbox-detail__banner-mt2"
+                        data-testid="bulk-heterogeneous-warning"
+                      >
+                        <div className="alm-inbox-alert__msg">
+                          <span className="alm-inbox-alert__title">
+                            {m.inbox_bulk_heterogeneous_title()}
+                          </span>
+                          <span className="alm-inbox-alert__body">
+                            {m.inbox_bulk_heterogeneous_body({
+                              type: bulkFrameType,
+                            })}
+                          </span>
+                        </div>
+                        <label className="alm-inbox-detail__select-all-row">
+                          <input
+                            type="checkbox"
+                            checked={heterogeneousAcked}
+                            onChange={(e) =>
+                              setHeterogeneousAckKey(
+                                e.target.checked
+                                  ? heterogeneousSignature
+                                  : null,
+                              )
+                            }
+                            data-testid="bulk-heterogeneous-ack"
+                          />
+                          {m.inbox_bulk_heterogeneous_ack_label({
+                            type: bulkFrameType,
+                          })}
+                        </label>
+                      </Banner>
+                    )}
+
                     <button
                       type="button"
                       className="alm-btn alm-btn--sm alm-btn--accent"
                       onClick={handleBulkApply}
-                      disabled={reclassifyLoading}
+                      disabled={reclassifyLoading || !heterogeneousAcked}
                       aria-label={m.inbox_bulk_override_apply_aria({
                         count: selectedFiles.size,
                       })}
@@ -1154,9 +1286,13 @@ export function InboxDetail({
                     >
                       {reclassifyLoading
                         ? m.common_applying()
-                        : m.inbox_apply_to_selected({
-                            count: selectedFiles.size,
-                          })}
+                        : isHeterogeneousFrameTypeBulk
+                          ? m.inbox_bulk_apply_anyway({
+                              count: selectedFiles.size,
+                            })
+                          : m.inbox_apply_to_selected({
+                              count: selectedFiles.size,
+                            })}
                     </button>
                   </fieldset>
                 )}
@@ -1167,6 +1303,46 @@ export function InboxDetail({
                     className="alm-inbox-detail__banner-mt2"
                   >
                     {bulkError}
+                  </Banner>
+                )}
+
+                {/* #611: recoverable bulk frame-type override — restores each
+                    file's pre-override detected type via a per-file
+                    `overrides` call. */}
+                {lastFrameTypeUndo && (
+                  <Banner
+                    variant="info"
+                    className="alm-inbox-detail__banner-mt2"
+                    data-testid="bulk-undo-banner"
+                  >
+                    <div className="alm-inbox-alert__msg">
+                      <span className="alm-inbox-alert__body">
+                        {m.inbox_bulk_undo_message({
+                          count: lastFrameTypeUndo.count,
+                        })}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="alm-btn alm-btn--sm"
+                      onClick={() => void handleUndoBulkFrameType()}
+                      disabled={undoLoading}
+                      aria-label={m.inbox_bulk_undo_aria()}
+                      data-testid="bulk-undo-btn"
+                    >
+                      {undoLoading
+                        ? m.common_applying()
+                        : m.inbox_bulk_undo_button()}
+                    </button>
+                  </Banner>
+                )}
+
+                {undoError && (
+                  <Banner
+                    variant="danger"
+                    className="alm-inbox-detail__banner-mt2"
+                  >
+                    {undoError}
                   </Banner>
                 )}
 

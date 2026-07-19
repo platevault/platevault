@@ -51,6 +51,7 @@ function render(ui: React.ReactElement) {
 }
 
 import type {
+  InboxFileMetadata_Serialize as InboxFileMetadata,
   InboxItemSummary_Serialize as InboxItemSummary,
   InboxClassifyResponse_Serialize as InboxClassifyResponse,
   PropertyRegistryEntry_Serialize as PropertyRegistryEntry,
@@ -460,5 +461,152 @@ describe('InboxDetail — T027/T028/#755: multi-select bulk reclassify (v2)', ()
       filePath: 'file_A.fits',
       properties: { frameType: 'light' },
     });
+  });
+});
+
+// ── #611: bulk frame-type override heterogeneity warning + undo ─────────────
+
+function fileMeta(
+  relativeFilePath: string,
+  frameTypeEffective: string | null,
+): InboxFileMetadata {
+  return {
+    relativeFilePath,
+    frameTypeEffective,
+    imageTyp: null,
+    filter: null,
+    exposureS: null,
+    binningX: null,
+    binningY: null,
+    gain: null,
+    temperatureC: null,
+    object: null,
+    dateObs: null,
+    instrume: null,
+    telescop: null,
+    naxis1: null,
+    naxis2: null,
+    stackCount: null,
+    isMaster: false,
+    overrideStale: false,
+  };
+}
+
+describe('InboxDetail — #611: bulk frame-type heterogeneity warning + undo', () => {
+  beforeEach(() => {
+    mockInboxReclassifyV2.mockClear();
+    mockInboxReclassifyV2.mockResolvedValue({
+      sourceGroupId: 'item-001',
+      subItems: [],
+      needsReviewCount: 0,
+    });
+  });
+
+  it('warns and blocks Apply when the selection spans different detected frame types, until acknowledged', async () => {
+    const heterogeneousMetadata = [
+      fileMeta('file_A.fits', 'dark'),
+      fileMeta('file_B.fits', 'bias'),
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as ItemProp}
+        rootAbsolutePath="/astro/inbox"
+        classification={twoFileClassification as unknown as ClassProp}
+        fileMetadata={heterogeneousMetadata}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('reclassify-select-0'));
+    fireEvent.click(screen.getByTestId('reclassify-select-1'));
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'light' },
+    });
+
+    expect(
+      screen.getByTestId('bulk-heterogeneous-warning'),
+    ).toBeInTheDocument();
+    const applyBtn = screen.getByTestId('bulk-apply-btn');
+    expect(applyBtn).toBeDisabled();
+
+    fireEvent.click(applyBtn);
+    expect(mockInboxReclassifyV2).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('bulk-heterogeneous-ack'));
+    expect(applyBtn).not.toBeDisabled();
+
+    fireEvent.click(applyBtn);
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not warn when the selection is a single detected frame type', () => {
+    const homogeneousMetadata = [
+      fileMeta('file_A.fits', 'dark'),
+      fileMeta('file_B.fits', 'dark'),
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as ItemProp}
+        rootAbsolutePath="/astro/inbox"
+        classification={twoFileClassification as unknown as ClassProp}
+        fileMetadata={homogeneousMetadata}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('reclassify-select-0'));
+    fireEvent.click(screen.getByTestId('reclassify-select-1'));
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'light' },
+    });
+
+    expect(
+      screen.queryByTestId('bulk-heterogeneous-warning'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('bulk-apply-btn')).not.toBeDisabled();
+  });
+
+  it('offers Undo after a bulk frame-type override, restoring each file to its prior detected type', async () => {
+    const heterogeneousMetadata = [
+      fileMeta('file_A.fits', 'dark'),
+      fileMeta('file_B.fits', 'bias'),
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as ItemProp}
+        rootAbsolutePath="/astro/inbox"
+        classification={twoFileClassification as unknown as ClassProp}
+        fileMetadata={heterogeneousMetadata}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('reclassify-select-0'));
+    fireEvent.click(screen.getByTestId('reclassify-select-1'));
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'light' },
+    });
+    fireEvent.click(screen.getByTestId('bulk-heterogeneous-ack'));
+    fireEvent.click(screen.getByTestId('bulk-apply-btn'));
+
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
+
+    const undoBtn = await screen.findByTestId('bulk-undo-btn');
+    fireEvent.click(undoBtn);
+
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(2));
+    const undoCallArg = mockInboxReclassifyV2.mock.calls[1][0] as {
+      overrides: Array<{
+        filePath: string;
+        properties: Record<string, unknown>;
+      }>;
+      bulk: unknown[];
+    };
+    expect(undoCallArg.bulk).toEqual([]);
+    expect(
+      undoCallArg.overrides
+        .slice()
+        .sort((a, b) => a.filePath.localeCompare(b.filePath)),
+    ).toEqual([
+      { filePath: 'file_A.fits', properties: { frameType: 'dark' } },
+      { filePath: 'file_B.fits', properties: { frameType: 'bias' } },
+    ]);
   });
 });
