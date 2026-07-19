@@ -221,7 +221,7 @@ export function SessionsPage() {
         sessionId: selected,
       });
     } catch {
-      addToast({ message: m.sessions_toast_reveal_error(), variant: 'error' });
+      addToast({ message: m.common_reveal_error(), variant: 'error' });
     }
   }, [selected, revealTarget]);
 

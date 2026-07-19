@@ -113,13 +113,8 @@ export function ManifestsAccordion({
     setRevealWorking(manifest.id);
     try {
       await revealManifestInOs({ path: manifest.path });
-    } catch (err: unknown) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ??
-            m.projects_manifests_reveal_failed_fallback());
-      addToast({ message: msg, variant: 'error' });
+    } catch {
+      addToast({ message: m.common_reveal_error(), variant: 'error' });
     } finally {
       setRevealWorking(null);
     }
