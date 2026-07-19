@@ -103,8 +103,8 @@ function ShellInner() {
     return () => stopGuidedEventBridge();
   }, [prefs.setupCompleted]);
 
-  // Spec 051 US10 (T058): listen for the backend's startup `update-available`
-  // event for the whole app session, so it's captured even if the user
+  // Spec 051 US10 (T058, #888 staged flow): run the frontend-driven update
+  // check for the whole app session, so it's captured even if the user
   // hasn't opened Settings > Advanced yet.
   useEffect(() => {
     void startUpdateSubscription();
