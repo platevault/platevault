@@ -118,7 +118,11 @@ describe('AuditLog', () => {
     render(<AuditLog />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    expect(screen.getByText('session.confirmed')).toBeInTheDocument();
+    // findBy, not getBy: rows render behind `{!loading && …}` (AuditLog.tsx)
+    // and `loading` only clears once auditList's promise RESOLVES — the
+    // waitFor above only proves the call was made. A sync getBy therefore
+    // races the "Loading…" row on a contended runner (#1083).
+    expect(await screen.findByText('session.confirmed')).toBeInTheDocument();
     expect(screen.getByText('plan.approved')).toBeInTheDocument();
     // First call has no filters (nothing typed yet).
     expect(mockList).toHaveBeenCalledWith(null, { limit: 8, offset: 0 });
@@ -358,7 +362,11 @@ describe('AuditLog', () => {
     render(<AuditLog />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    expect(screen.getByText('needs_review → confirmed')).toBeInTheDocument();
+    // findBy: rows are gated on `loading` clearing, which the waitFor above
+    // does not prove (#1083).
+    expect(
+      await screen.findByText('needs_review → confirmed'),
+    ).toBeInTheDocument();
     expect(screen.getByText('ready_for_review → approved')).toBeInTheDocument();
   });
 
@@ -392,7 +400,9 @@ describe('AuditLog', () => {
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // ENTRIES[0] is entityType 'session', which has a real /sessions/:id route.
-    fireEvent.click(screen.getByText('session.confirmed'));
+    // findBy: the row only exists once `loading` clears (#1083); clicking a
+    // row that hasn't rendered would throw rather than navigate.
+    fireEvent.click(await screen.findByText('session.confirmed'));
 
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/sessions/ses-001' });
   });
@@ -402,7 +412,10 @@ describe('AuditLog', () => {
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // ENTRIES[1] is entityType 'plan' — no /plans/:id route exists yet.
-    fireEvent.click(screen.getByText('plan.approved'));
+    // findBy: without it a still-loading table makes this pass vacuously —
+    // the click never lands, so "navigate was not called" proves nothing
+    // about the no-route behaviour (#1083).
+    fireEvent.click(await screen.findByText('plan.approved'));
 
     expect(mockNavigate).not.toHaveBeenCalled();
   });
