@@ -10,12 +10,20 @@
  * trailing danger chip, History is a collapsible (closed by default), and
  * (#833) the History section renders the project's audit trail — transitions
  * with from→to state/outcome/actor — with an empty state when there is none.
+ * Also covers the `/shell/projects` route `selected`-search-param fallback
+ * used when the (optional) `projectId` prop isn't passed — see the prop's
+ * doc comment on `ProjectLifecycleStepperProps` for why.
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+
+const { mockUseSearch } = vi.hoisted(() => ({ mockUseSearch: vi.fn() }));
+vi.mock('@tanstack/react-router', () => ({
+  useSearch: mockUseSearch,
+}));
 
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
@@ -63,11 +71,16 @@ function historyEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
 
 describe('ProjectLifecycleStepper', () => {
   beforeEach(() => {
-    // Default: empty, loaded history — individual tests override as needed.
+    // Default: empty, loaded history and no route selection — individual
+    // tests override as needed.
     mockUseProjectHistory.mockReturnValue({
       data: [],
       loading: false,
       error: undefined,
+    });
+    mockUseSearch.mockReturnValue({
+      selected: undefined,
+      lifecycle: undefined,
     });
   });
 
@@ -170,5 +183,24 @@ describe('ProjectLifecycleStepper', () => {
     expect(
       screen.getByText(/no lifecycle history recorded/i),
     ).toBeInTheDocument();
+  });
+
+  it('falls back to the /shell/projects route selected search param when projectId is not passed', () => {
+    mockUseSearch.mockReturnValue({
+      selected: 'proj-route-1',
+      lifecycle: undefined,
+    });
+    const { projectId: _unused, ...rest } = TS;
+    render(<ProjectLifecycleStepper state="ready" {...rest} />, { wrapper });
+    expect(mockUseProjectHistory).toHaveBeenCalledWith('proj-route-1');
+  });
+
+  it('prefers an explicit projectId prop over the route search param', () => {
+    mockUseSearch.mockReturnValue({
+      selected: 'proj-route-1',
+      lifecycle: undefined,
+    });
+    render(<ProjectLifecycleStepper state="ready" {...TS} />, { wrapper });
+    expect(mockUseProjectHistory).toHaveBeenCalledWith('proj-1');
   });
 });

@@ -146,12 +146,19 @@ export function useProjectDetail(id: string): QueryState<ProjectDetailDto> {
   };
 }
 
-/** Subscribe to a project's lifecycle audit trail (#833). */
-export function useProjectHistory(id: string): QueryState<AuditEntry[]> {
+/**
+ * Subscribe to a project's lifecycle audit trail (#833). `id` is optional
+ * (matching `useArchiveAudit`'s `entityId: string | undefined` shape,
+ * `features/archive/store.ts`) — the query stays disabled until a caller
+ * resolves one.
+ */
+export function useProjectHistory(
+  id: string | undefined,
+): QueryState<AuditEntry[]> {
   const { data, isFetching, error } = useQuery({
-    queryKey: queryKeys.projects.history(id),
-    queryFn: () => listProjectAudit(id),
-    enabled: !!id,
+    queryKey: queryKeys.projects.history(id ?? ''),
+    queryFn: () => listProjectAudit(id as string),
+    enabled: Boolean(id),
   });
   return {
     data,

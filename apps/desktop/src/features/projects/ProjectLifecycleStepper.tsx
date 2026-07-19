@@ -18,6 +18,7 @@
  * collapsible. No inline styles.
  */
 
+import { useSearch } from '@tanstack/react-router';
 import { Section, Table, EmptyState, Skeleton, Pill } from '@/ui';
 import { PROJECT_LIFECYCLE, projectStateIndex } from '@/lib/lifecycle';
 import { m } from '@/lib/i18n';
@@ -26,8 +27,16 @@ import { auditOutcomeVariant, auditOutcomeLabel } from '@/lib/audit-outcome';
 import { useProjectHistory } from './store';
 
 export interface ProjectLifecycleStepperProps {
-  /** Project id — scopes the audit-log query for the History section (#833). */
-  projectId: string;
+  /**
+   * Project id — scopes the audit-log query for the History section (#833).
+   * Optional: the component's only mount point (`ProjectDetail.tsx:638`) is
+   * off-limits while the #998 split is unmerged, so it isn't wired to pass
+   * this explicitly yet. Falls back to the `/shell/projects` route's
+   * `selected` search param — the same id source `ProjectDetail.tsx:176`
+   * reads via `useProjectDetail(projectId)`. Follow-up: once #998 lands,
+   * thread `projectId` through explicitly and drop the fallback.
+   */
+  projectId?: string;
   /** Stored project state (e.g. "processing", "setup_incomplete", "blocked"). */
   state: string;
   /** ISO creation timestamp (for the History collapsible). */
@@ -63,11 +72,13 @@ export function ProjectLifecycleStepper({
   const currentIdx =
     projectStateIndex[state as keyof typeof projectStateIndex] ?? -1;
   const isBlocked = state === 'blocked';
+  const { selected: routeProjectId } = useSearch({ from: '/shell/projects' });
+  const resolvedProjectId = projectId ?? routeProjectId;
   const {
     data: history,
     loading: historyLoading,
     error: historyError,
-  } = useProjectHistory(projectId);
+  } = useProjectHistory(resolvedProjectId);
 
   return (
     <div className="alm-stepper" data-testid="project-lifecycle-stepper">

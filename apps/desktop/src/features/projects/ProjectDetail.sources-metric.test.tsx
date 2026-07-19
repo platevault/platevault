@@ -17,6 +17,19 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    // ProjectLifecycleStepper's History section (#833) falls back to this
+    // route search param when its (optional) projectId prop isn't wired;
+    // unrelated to this file's assertions, so a static empty selection is
+    // enough.
+    useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+  };
+});
+
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {
@@ -26,6 +39,13 @@ vi.mock('./store', async (importOriginal) => {
     useTransitionLifecycle: vi.fn(),
     useReinferChannels: vi.fn(),
     useDismissChannelDrift: vi.fn(),
+    // Avoids requiring a QueryClientProvider for this file's real-useQuery
+    // History query (#833) — same reasoning as useProjectDetail above.
+    useProjectHistory: vi.fn(() => ({
+      data: [],
+      loading: false,
+      error: undefined,
+    })),
   };
 });
 
