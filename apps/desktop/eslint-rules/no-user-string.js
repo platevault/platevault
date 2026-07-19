@@ -12,12 +12,22 @@
  *   - JSX text nodes that contain a letter            <button>Save</button>
  *   - A fixed set of user-facing JSX attributes       placeholder="Search…"
  *     (placeholder, title, alt, aria-label, aria-description, aria-placeholder,
- *      aria-roledescription, aria-valuetext, label)
+ *      aria-roledescription, aria-valuetext, label, the LABEL_PROP_KEYS set
+ *      below, and any attribute NAME ending in `Label` — e.g. `detailLabel`,
+ *      `confirmLabel` — the codebase's convention for custom props that flow
+ *      into a nested aria-label/rendered label)
  *   - String-literal OR template-literal first argument to a toast/notify
  *     call                                            toast(`Saved ${n} items`)
+ *     (a nested `action: { label: '…' }` on the options object is already
+ *     caught by the object-literal LABEL_PROP_KEYS check below — `label` is
+ *     in that set regardless of enclosing context)
  *   - A prose string/template literal passed directly to a `useState` setter
  *     whose paired state variable is later rendered   setErrorMsg(`Hard-rule
  *     mismatch: ${dims.join(', ')}.`) … {errorMsg}
+ *   - A prose string/template literal `return`ed directly from a function
+ *     whose name reads as a display-label helper (contains Label/Text/Title/
+ *     Message) instead of calling m.<key>()  function statusLabel(s) {
+ *     return s === 'ok' ? 'All good' : 'Needs review'; }
  *
  * What it deliberately ignores (machine strings, not user-facing):
  *   - Any attribute not in the user-facing set (className, id, data-*, key,
@@ -87,6 +97,18 @@ const LABEL_PROP_KEYS = new Set([
 // are always shown to the user.
 const TOAST_OBJECT_PROPS = new Set(["message", "title", "body", "description"]);
 
+// Attribute NAME test for the JSXAttribute check: the fixed USER_ATTRS set,
+// the LABEL_PROP_KEYS set (already vetted as user-facing prose keys for
+// object-literal properties — applying the SAME set to JSX attributes closes
+// the gap where a custom component prop like `tooltip="…"` or
+// `confirmLabel="…"` bypassed the check entirely), and any attribute name
+// ending in `Label` (e.g. `detailLabel`, `bottomDetailLabel`) — a stable
+// naming convention in this codebase for props that are documented to default
+// to a catalog message and flow into a rendered/aria-label position (see
+// ListPageLayout's `detailLabel`, ConfirmOverlay's `confirmLabel`).
+const isUserAttrName = (name) =>
+  USER_ATTRS.has(name) || LABEL_PROP_KEYS.has(name) || /Label$/.test(name);
+
 const hasLetter = (s) => /\p{L}/u.test(s);
 
 // True for `useState(...)` / `React.useState(...)` call expressions. Used to
@@ -138,6 +160,45 @@ const templatePreview = (node) =>
   node.quasis
     .map((q, i) => (q.value.cooked ?? "") + (i < node.expressions.length ? "${…}" : ""))
     .join("");
+
+// Function AST node types the ReturnStatement check climbs to find the
+// enclosing function (nearest one — a return inside a nested callback belongs
+// to that callback, not an outer named function).
+const FUNCTION_NODE_TYPES = new Set([
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+]);
+
+// Best-effort declared name for a function node: its own `id` (function
+// declarations), or the name it was assigned to (`const x = () => …`,
+// `{ x() {…} }`, `x = () => …`).
+const functionNameOf = (fnNode) => {
+  if (fnNode.id && fnNode.id.type === "Identifier") return fnNode.id.name;
+  const p = fnNode.parent;
+  if (!p) return null;
+  if (p.type === "VariableDeclarator" && p.id.type === "Identifier") {
+    return p.id.name;
+  }
+  if (
+    (p.type === "Property" || p.type === "MethodDefinition") &&
+    !p.computed &&
+    p.key.type === "Identifier"
+  ) {
+    return p.key.name;
+  }
+  if (p.type === "AssignmentExpression" && p.left.type === "Identifier") {
+    return p.left.name;
+  }
+  return null;
+};
+
+// Display-label helper naming convention used throughout this codebase
+// (objectTypeLabel, statusLabel, detailText, profileLabelFor, stepLabels…):
+// a function whose NAME contains one of these words exists specifically to
+// produce rendered UI copy, so a raw literal `return`ed from it is flagged
+// the same as one written inline in JSX.
+const DISPLAY_FN_NAME_RE = /Label|Text|Title|Message/;
 
 // True when an expression evaluates to (or can short-circuit to) user-facing
 // prose: a letter-bearing string literal or template, OR a conditional / logical
@@ -219,6 +280,8 @@ const rule = {
         "Hardcoded user-facing toast string {{text}}. Move it into messages/en.json and use m.<key>().",
       variable:
         "Hardcoded user-facing string {{text}} assigned to `{{name}}` and rendered. Move it into messages/en.json and use m.<key>(). If not user-facing, add `// eslint-disable-next-line alm/no-user-string -- <reason>`.",
+      returnLiteral:
+        "Hardcoded user-facing string {{text}} returned directly from `{{name}}`. Move it into messages/en.json and use m.<key>(). If not user-facing, add `// eslint-disable-next-line alm/no-user-string -- <reason>`.",
     },
   },
 
@@ -246,7 +309,7 @@ const rule = {
           if (gp && gp.type === "JSXAttribute") {
             const an =
               gp.name && gp.name.type === "JSXIdentifier" ? gp.name.name : null;
-            return an != null && USER_ATTRS.has(an);
+            return an != null && isUserAttrName(an);
           }
           return false;
         }
@@ -285,6 +348,24 @@ const rule = {
         return node.expression.value;
       }
       return null;
+    };
+
+    // Shared by the ReturnStatement and concise-arrow-body checks: `exprNode`
+    // is the returned expression, `fromNode` is the ReturnStatement or the
+    // ArrowFunctionExpression itself (used to find the enclosing function).
+    const checkDisplayFnReturn = (exprNode, fromNode) => {
+      if (!exprNode) return;
+      if (!isUserStringExpr(exprNode) || !userStringHasProse(exprNode)) return;
+      let fn = fromNode;
+      while (fn && !FUNCTION_NODE_TYPES.has(fn.type)) fn = fn.parent;
+      if (!fn) return;
+      const name = functionNameOf(fn);
+      if (!name || !DISPLAY_FN_NAME_RE.test(name)) return;
+      context.report({
+        node: exprNode,
+        messageId: "returnLiteral",
+        data: { name, text: quote(userStringPreview(exprNode)) },
+      });
     };
 
     return {
@@ -401,7 +482,7 @@ const rule = {
           node.name && node.name.type === "JSXIdentifier"
             ? node.name.name
             : null;
-        if (!name || !USER_ATTRS.has(name)) return;
+        if (!name || !isUserAttrName(name)) return;
         const val = stringLiteralValue(node.value);
         if (val !== null && hasLetter(val)) {
           context.report({
@@ -636,6 +717,29 @@ const rule = {
             }
           }
         }
+      },
+
+      // A prose string/template `return`ed directly from a function whose
+      // NAME reads as a display-label helper (contains Label/Text/Title/
+      // Message — the codebase's `xLabel`/`xText` convention, e.g.
+      // `objectTypeLabel`, `statusLabel`, `detailText`). These functions
+      // exist specifically to produce rendered UI copy, so a raw literal
+      // here is the same class of leak as one written inline in JSX — it
+      // just hasn't been traced through a variable/call yet. Gated by the
+      // same prose heuristic as the other tracing checks (userStringHasProse)
+      // so machine-token switch/case returns ('ok' | 'info' | 'neutral')
+      // are not flagged.
+      ReturnStatement(node) {
+        checkDisplayFnReturn(node.argument, node);
+      },
+
+      // Concise-body arrow functions have no ReturnStatement at all — the
+      // body IS the return value (`const statusLabel = (s) => s === 'ok' ?
+      // 'All good' : 'Needs review';`). Mirror of the ReturnStatement check
+      // above for that form.
+      ArrowFunctionExpression(node) {
+        if (node.body.type === "BlockStatement") return;
+        checkDisplayFnReturn(node.body, node);
       },
     };
   },
