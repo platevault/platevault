@@ -521,6 +521,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn project_links_for_sessions_returns_matching_rows_filtered_by_id_set() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, path, created_at, updated_at) VALUES \
+                ('proj-a', 'Andromeda Widefield', 'PixInsight', 'proj-a', \
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'), \
+                ('proj-b', 'Bubble Nebula', 'PixInsight', 'proj-b', \
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO project_sources (id, project_id, inventory_session_id, linked_at) VALUES \
+                ('ps-1', 'proj-a', 'acq-link-1', '2026-01-02T00:00:00Z'), \
+                ('ps-2', 'proj-b', 'acq-link-2', '2026-01-02T00:00:00Z'), \
+                ('ps-3', 'proj-a', 'acq-link-3', '2026-01-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // acq-link-3 is deliberately excluded from the query set, and
+        // missing-id has no project_sources row at all — both must be
+        // absent from the result, proving the join is filtered by the
+        // caller-supplied id set rather than returning every linked row.
+        let ids = vec!["acq-link-1".to_owned(), "acq-link-2".to_owned(), "missing-id".to_owned()];
+        let links = list_project_links_for_sessions(db.pool(), &ids).await.unwrap();
+
+        assert_eq!(links.len(), 2, "acq-link-3 and missing-id must not appear");
+        // Query orders by p.name ASC: "Andromeda Widefield" < "Bubble Nebula".
+        assert_eq!(links[0].project_id, "proj-a");
+        assert_eq!(links[0].project_name, "Andromeda Widefield");
+        assert_eq!(links[0].session_id, "acq-link-1");
+        assert_eq!(links[1].project_id, "proj-b");
+        assert_eq!(links[1].project_name, "Bubble Nebula");
+        assert_eq!(links[1].session_id, "acq-link-2");
+    }
+
+    #[tokio::test]
     async fn get_library_root_state_returns_none_for_unknown() {
         let db = setup().await;
         let result = get_library_root_state(db.pool(), "00000000-0000-0000-0000-000000000000")
