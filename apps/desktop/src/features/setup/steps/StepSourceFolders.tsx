@@ -11,7 +11,6 @@ import type { LastPathKind } from '@/shared/native';
 import type {
   SourceEntry,
   SourceKind,
-  ScanDepth,
   OrganizationState,
 } from '../sources-store';
 import {
@@ -25,7 +24,6 @@ export interface StepSourceFoldersProps {
   onAdd: (path: string, kind: SourceKind) => void;
   onRemove: (index: number) => void;
   onKindChange: (index: number, kind: SourceKind) => void;
-  onScanDepthChange: (index: number, depth: ScanDepth) => void;
   onOrganizationStateChange: (index: number, state: OrganizationState) => void;
   errors: Record<number, string>;
 }

@@ -30,7 +30,7 @@ import { StepSourceFolders } from './StepSourceFolders';
 import type { SourceEntry } from '../sources-store';
 
 function makeEntry(path: string, kind: SourceEntry['kind']): SourceEntry {
-  return { path, kind, scanDepth: 'recursive', organizationState: 'organized' };
+  return { path, kind, organizationState: 'organized' };
 }
 
 const noop = vi.fn();
@@ -42,7 +42,6 @@ function renderStep(entries: SourceEntry[], onAdd = vi.fn()) {
       onAdd={onAdd}
       onRemove={noop}
       onKindChange={noop}
-      onScanDepthChange={noop}
       onOrganizationStateChange={noop}
       errors={{}}
     />,

@@ -44,7 +44,6 @@ function makeEntry(
   return {
     path: `/astro/${kind}`,
     kind,
-    scanDepth: 'recursive',
     organizationState,
   };
 }
@@ -62,7 +61,6 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
@@ -82,7 +80,6 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
@@ -102,7 +99,6 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
@@ -122,7 +118,6 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
@@ -145,7 +140,6 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
@@ -158,9 +152,8 @@ describe('StepSourceFolders — organization state selector', () => {
     expect(orgSelects).toHaveLength(1);
   });
 
-  // Scan-depth is a no-op dropped from the UI (#509) — 'single' is never
-  // implemented, so every source is scanned recursively regardless of the
-  // stored (now unreachable-from-the-UI) scanDepth field.
+  // Scan-depth is a no-op dropped from the UI (#509) — 'single' was never
+  // implemented, and the scanDepth field/plumbing has been fully retired (#913).
   it('does not render a scan-depth selector', () => {
     const entries: SourceEntry[] = [makeEntry('light_frames', 'organized')];
     render(
@@ -169,7 +162,6 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
@@ -194,7 +186,6 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
         onAdd={vi.fn()}
         onRemove={vi.fn()}
         onKindChange={vi.fn()}
-        onScanDepthChange={vi.fn()}
         onOrganizationStateChange={onOrganizationStateChange}
         errors={{}}
       />,
@@ -218,7 +209,6 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
         onAdd={vi.fn()}
         onRemove={vi.fn()}
         onKindChange={vi.fn()}
-        onScanDepthChange={vi.fn()}
         onOrganizationStateChange={onOrganizationStateChange}
         errors={{}}
       />,
@@ -258,13 +248,7 @@ describe('flushToDB — organizationState in register payload', () => {
   });
 
   it('sends the user-chosen organizationState for non-inbox sources', async () => {
-    const sources = addSource(
-      [],
-      'light_frames',
-      '/astro/lights',
-      'recursive',
-      'unorganized',
-    );
+    const sources = addSource([], 'light_frames', '/astro/lights', 'unorganized');
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
@@ -283,7 +267,7 @@ describe('flushToDB — organizationState in register payload', () => {
   it('always sends "unorganized" for inbox sources regardless of stored value', async () => {
     // Force-add an inbox source — addSource already coerces to unorganized,
     // but we test that flushToDB also enforces it.
-    const sources = addSource([], 'inbox', '/astro/inbox', 'recursive');
+    const sources = addSource([], 'inbox', '/astro/inbox');
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
@@ -301,7 +285,7 @@ describe('flushToDB — organizationState in register payload', () => {
 
   it('defaults to "organized" for non-inbox sources when no state is specified', async () => {
     // addSource with no explicit organizationState → defaults to 'organized'
-    const sources = addSource([], 'project', '/astro/projects', 'recursive');
+    const sources = addSource([], 'project', '/astro/projects');
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
