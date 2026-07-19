@@ -1734,6 +1734,8 @@
   "settings_auditlog_col_timestamp": "Timestamp",
   "settings_auditlog_col_event": "Event",
   "settings_auditlog_col_entity": "Entity",
+  "settings_auditlog_col_state_change": "State change",
+  "settings_auditlog_col_detail": "Detail",
   "settings_auditlog_col_outcome": "Outcome",
   "settings_auditlog_col_actor": "Actor",
   "settings_sourceview_label_junctions": "NTFS Junctions",

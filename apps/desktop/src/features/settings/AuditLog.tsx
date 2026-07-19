@@ -1,10 +1,19 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState, useMemo, useId, useCallback, useEffect } from 'react';
+import {
+  useState,
+  useMemo,
+  useId,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import { useNavigate } from '@tanstack/react-router';
 import { Btn, Pill, Table } from '@/ui';
 import { auditList, auditExport } from './settingsIpc';
+import { commands } from '@/bindings/index';
 import type {
   AuditEntry,
   AuditFilterDto,
@@ -14,6 +23,119 @@ import { errMessage } from '@/lib/errors';
 import { formatDateTime, toEpochMs } from '@/lib/datetime';
 import { m } from '@/lib/i18n';
 import { SettingsSection } from './SettingsKit';
+
+/** All `AuditOutcome` values, for the structured outcome filter (#749). */
+const OUTCOME_VALUES: AuditOutcome[] = [
+  'applied',
+  'ok',
+  'refused',
+  'failed',
+  'paused',
+];
+
+/**
+ * Entity types seen across `write_audit` call-sites (domain-core's
+ * `EntityType` enum plus `target`/`session`, which are audited via
+ * free-form strings rather than that enum). Kept local — `AuditFilterDto`'s
+ * `entityType` is a plain string, not a closed contract enum (#749).
+ */
+const ENTITY_TYPE_VALUES = [
+  'project',
+  'target',
+  'session',
+  'plan',
+  'filesystem_plan',
+  'settings',
+  'protection',
+  'equipment',
+  'framing',
+  'library_root',
+  'file_record',
+  'data_source',
+  'prepared_source',
+  'processing_artifact',
+  'projection',
+] as const;
+
+/**
+ * Entity types with a dedicated detail page to cross-link to (#831). Other
+ * types (settings, protection, equipment, and the rest of
+ * `ENTITY_TYPE_VALUES`) have no reachable page yet, so their rows stay
+ * unlinked rather than routing to a dead end. `plan` is intentionally
+ * excluded — no `/plans/:id` route exists yet (#626, same reasoning as the
+ * LogPanel's `buildEntityPath`).
+ */
+function resolveAuditEntityPath(
+  entityType: string,
+  entityId: string,
+): string | null {
+  switch (entityType) {
+    case 'project':
+      return `/projects/${entityId}`;
+    case 'target':
+      return `/targets/${entityId}`;
+    case 'session':
+      return `/sessions/${entityId}`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Resolve a human display name per row for the entity types that have one
+ * (#803). Caches across renders (module scope) since ids repeat across pages
+ * within a session. Falls back to the raw id for types with no lookup
+ * command, or when the lookup fails/is still pending.
+ */
+const entityNameCache = new Map<string, string | null>();
+
+function useEntityNames(entries: AuditEntry[]): Map<string, string> {
+  const [, forceRender] = useState(0);
+  const requested = useRef(new Set<string>());
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const e of entries) {
+      const cacheKey = `${e.entityType}:${e.entityId}`;
+      if (entityNameCache.has(cacheKey) || requested.current.has(cacheKey)) {
+        continue;
+      }
+      const fetcher =
+        e.entityType === 'project'
+          ? commands
+              .projectsGet(e.entityId)
+              .then((r) => (r.status === 'ok' ? r.data.name : null))
+          : e.entityType === 'target'
+            ? commands
+                .targetsGet(e.entityId)
+                .then((r) => (r.status === 'ok' ? r.data.name : null))
+            : e.entityType === 'plan'
+              ? commands
+                  .plansGet(e.entityId)
+                  .then((r) => (r.status === 'ok' ? r.data.title : null))
+              : null;
+      if (!fetcher) continue;
+      requested.current.add(cacheKey);
+      void fetcher
+        .catch(() => null)
+        .then((name) => {
+          entityNameCache.set(cacheKey, name);
+          if (!cancelled) forceRender((n) => n + 1);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [entries]);
+
+  const names = new Map<string, string>();
+  for (const e of entries) {
+    const cacheKey = `${e.entityType}:${e.entityId}`;
+    const cached = entityNameCache.get(cacheKey);
+    if (cached) names.set(cacheKey, cached);
+  }
+  return names;
+}
 
 const ITEMS_PER_PAGE = 8;
 
@@ -115,11 +237,13 @@ function detailText(e: AuditEntry): string {
   return e.detail;
 }
 
-/** Build the `audit.list` filter payload from the screen's search/date controls. */
+/** Build the `audit.list` filter payload from the screen's search/date/structured controls. */
 function buildFilters(
   search: string,
   dateFrom: string,
   dateTo: string,
+  outcome: AuditOutcome | '',
+  entityType: string,
 ): AuditFilterDto | null {
   const filters: AuditFilterDto = {};
   let hasFilter = false;
@@ -134,6 +258,14 @@ function buildFilters(
   if (dateTo) {
     // Exclusive upper bound: the day after `dateTo`, so the whole day is included.
     filters.to = new Date(toEpochMs(dateTo) + 86400000).toISOString();
+    hasFilter = true;
+  }
+  if (outcome) {
+    filters.outcome = outcome;
+    hasFilter = true;
+  }
+  if (entityType) {
+    filters.entityType = entityType;
     hasFilter = true;
   }
   return hasFilter ? filters : null;
@@ -155,9 +287,14 @@ export function AuditLog() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState<AuditOutcome | ''>('');
+  const [entityTypeFilter, setEntityTypeFilter] = useState('');
   const [page, setPage] = useState(0);
   const dateFromId = useId();
   const dateToId = useId();
+  const outcomeFilterId = useId();
+  const entityTypeFilterId = useId();
+  const navigate = useNavigate();
 
   const applySearch = useDebouncedCallback((value: string) => {
     setSearch(value);
@@ -168,9 +305,12 @@ export function AuditLog() {
   useEffect(() => () => applySearch.cancel(), [applySearch]);
 
   const filters = useMemo(
-    () => buildFilters(search, dateFrom, dateTo),
-    [search, dateFrom, dateTo],
+    () =>
+      buildFilters(search, dateFrom, dateTo, outcomeFilter, entityTypeFilter),
+    [search, dateFrom, dateTo, outcomeFilter, entityTypeFilter],
   );
+
+  const entityNames = useEntityNames(entries);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,6 +413,49 @@ export function AuditLog() {
             }}
           />
         </label>
+        <label className="alm-audit-log__date-label" htmlFor={outcomeFilterId}>
+          {m.settings_auditlog_col_outcome()}
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
+          <select
+            id={outcomeFilterId}
+            className="alm-select alm-audit-log__date-input"
+            value={outcomeFilter}
+            onChange={(e) => {
+              setOutcomeFilter(e.target.value as AuditOutcome | '');
+              setPage(0);
+            }}
+          >
+            <option value="">{m.log_level_all()}</option>
+            {OUTCOME_VALUES.map((o) => (
+              <option key={o} value={o}>
+                {outcomeLabel(o)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label
+          className="alm-audit-log__date-label"
+          htmlFor={entityTypeFilterId}
+        >
+          {m.settings_auditlog_col_entity()}
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
+          <select
+            id={entityTypeFilterId}
+            className="alm-select alm-audit-log__date-input"
+            value={entityTypeFilter}
+            onChange={(e) => {
+              setEntityTypeFilter(e.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="">{m.log_level_all()}</option>
+            {ENTITY_TYPE_VALUES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {exportError && (
@@ -302,6 +485,12 @@ export function AuditLog() {
             { key: 'event', label: m.settings_auditlog_col_event() },
             { key: 'entity', label: m.settings_auditlog_col_entity() },
             {
+              key: 'stateChange',
+              label: m.settings_auditlog_col_state_change(),
+              style: { width: 140 },
+            },
+            { key: 'detail', label: m.settings_auditlog_col_detail() },
+            {
               key: 'outcome',
               label: m.settings_auditlog_col_outcome(),
               style: { width: 90 },
@@ -312,25 +501,47 @@ export function AuditLog() {
               style: { width: 72 },
             },
           ]}
-          rows={entries.map((e) => ({
-            timestamp: (
-              <code className="alm-mono alm-audit-log__ts">
-                {formatDateTime(e.timestamp)}
-              </code>
-            ),
-            event: <span className="alm-audit-log__event">{e.eventType}</span>,
-            entity: (
-              <span className="alm-audit-log__entity" title={detailText(e)}>
-                {e.entityType} · {e.entityId}
-              </span>
-            ),
-            outcome: (
-              <Pill variant={outcomeVariant(e.outcome)}>
-                {outcomeLabel(e.outcome)}
-              </Pill>
-            ),
-            actor: <span className="alm-audit-log__actor">{e.actor}</span>,
-          }))}
+          rows={entries.map((e) => {
+            const path = resolveAuditEntityPath(e.entityType, e.entityId);
+            const resolvedName = entityNames.get(
+              `${e.entityType}:${e.entityId}`,
+            );
+            return {
+              _onClick: path
+                ? () => void navigate({ to: path as never })
+                : undefined,
+              timestamp: (
+                <code className="alm-mono alm-audit-log__ts">
+                  {formatDateTime(e.timestamp)}
+                </code>
+              ),
+              event: (
+                <span className="alm-audit-log__event">{e.eventType}</span>
+              ),
+              entity: (
+                <span className="alm-audit-log__entity" title={e.entityId}>
+                  {resolvedName ?? `${e.entityType} · ${e.entityId}`}
+                </span>
+              ),
+              stateChange:
+                e.fromState || e.toState ? (
+                  <span className="alm-audit-log__state-change">
+                    {e.fromState ?? '—'} → {e.toState ?? '—'}
+                  </span>
+                ) : (
+                  '—'
+                ),
+              detail: (
+                <span className="alm-audit-log__detail">{detailText(e)}</span>
+              ),
+              outcome: (
+                <Pill variant={outcomeVariant(e.outcome)}>
+                  {outcomeLabel(e.outcome)}
+                </Pill>
+              ),
+              actor: <span className="alm-audit-log__actor">{e.actor}</span>,
+            };
+          })}
         />
       )}
 
