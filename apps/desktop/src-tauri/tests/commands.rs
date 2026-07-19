@@ -124,10 +124,7 @@ async fn stub_sessions_split() {
         split.original.session_key.target, "NGC 7000",
         "original must come from stub_sessions()[0]"
     );
-    assert_eq!(
-        split.new.session_key.target, "IC 1396",
-        "new must come from stub_sessions()[1]"
-    );
+    assert_eq!(split.new.session_key.target, "IC 1396", "new must come from stub_sessions()[1]");
 }
 
 #[tokio::test]
