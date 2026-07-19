@@ -116,9 +116,11 @@ impl Database {
     // 0067 (renumbered from a 0066 collision with #773's own
     // 0066_session_notes.sql), again for its renumber to 0068 (a second
     // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
-    // main independently), and again for spec 056's migration 0069
-    // (onboarding redesign) — to force `sqlx::migrate!` re-embed each time
-    // (project memory: stale-embed guard).
+    // main independently), and again for spec 056's onboarding migrations —
+    // first as 0069/0070, then renumbered to 0071/0072 after main landed its
+    // own 0069_fix_processing_artifact_project_fk and 0070_protection_two_level
+    // while this branch was open (a third independent collision) — to force
+    // `sqlx::migrate!` re-embed each time (project memory: stale-embed guard).
     //
     // #745 (spec 049 CL-2): this used to also run the spec 026 T006a
     // `kind_diverged` reconciliation scan on every start, force-flipping any
