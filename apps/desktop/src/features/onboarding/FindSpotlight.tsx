@@ -38,15 +38,19 @@ import {
 } from './ChecklistSection';
 
 /**
- * The three items whose real control carries a resolvable page-level anchor.
- * The other eight items have no on-page control to spotlight yet, so the find
- * affordance shows the unavailable-target explanation (spec edge case). Values
- * match the `data-guide-anchor` attributes wired on the real pages.
+ * The items whose real control carries a resolvable page-level anchor. The
+ * remaining items have no on-page control to spotlight yet (their control
+ * only exists once data the user hasn't created yet is present), so the find
+ * affordance shows the unavailable-target explanation (spec edge case).
+ * Values match the `data-guide-anchor` attributes wired on the real pages.
  */
 const ITEM_ANCHORS: Record<string, string> = {
   'inbox.confirm_first': 'inbox.confirm-row',
   'projects.create_first': 'projects.create-cta',
   'projects.launch_tool': 'project.open-in-tool',
+  'targets.add_favourite': 'targets.favourite-toggle',
+  'sessions.add_note': 'sessions.note-field',
+  'calibration.match_master': 'calibration.match-assign',
 };
 
 /**
