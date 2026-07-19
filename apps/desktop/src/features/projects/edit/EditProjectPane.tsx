@@ -36,12 +36,17 @@ import {
   useSessionNames,
 } from '@/features/projects/store';
 import { SessionSourcePicker } from '@/features/projects/SessionSourcePicker';
-import type { ProjectDetailDto, ProjectChannelDto } from '@/bindings/index';
+import type {
+  ProjectDetailDto,
+  ProjectChannelDto,
+  ErrorCode,
+} from '@/bindings/index';
 import {
   editProjectFormSchema,
   type EditProjectFormValues,
 } from '@/features/projects/schemas';
 import { errMessage, isContractError } from '@/lib/errors';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
 
 // ── Tool-lock and read-only helpers ──────────────────────────────────────────
 
@@ -168,10 +173,14 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         });
         onClose();
       } catch (err: unknown) {
-        const code =
-          typeof err === 'string'
+        // isContractError first: a ContractError's `.message` is the raw
+        // backend diagnostic (never shown to the user, FR-009), not the
+        // `.code` that mapUpdateError switches on.
+        const code = isContractError(err)
+          ? err.code
+          : typeof err === 'string'
             ? err
-            : ((err as Error)?.message ?? 'unknown');
+            : 'unknown';
         setServerError(mapUpdateError(code));
       }
     },
@@ -330,9 +339,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         <span className="alm-field-label">{m.common_sources()}</span>
         <div className="alm-edit-project__sources">
           {project.sources.length === 0 ? (
-            <span className="alm-field-hint">
-              {m.projects_edit_sources_empty()}
-            </span>
+            <span className="alm-field-hint">{m.projects_sources_empty()}</span>
           ) : (
             <ul className="alm-edit-project__sources-list">
               {project.sources.map((src) => (
@@ -579,6 +586,11 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 }
 
 // ── Error mapping ─────────────────────────────────────────────────────────────
+// `projects.update` codes intentionally keep edit-specific wording where it is
+// clearer than the shared catalog (e.g. "This project is archived and cannot
+// be edited." vs. the generic "This item is read-only"); any other known code
+// falls through to the shared errors.ts catalog before the generic fallback,
+// so consolidation doesn't regress coverage for codes this switch never named.
 
 function mapUpdateError(code: string): string {
   switch (code) {
@@ -598,7 +610,11 @@ function mapUpdateError(code: string): string {
       return m.projects_edit_err_read_only();
     case 'no_op':
       return m.projects_edit_err_no_op();
-    default:
-      return m.projects_edit_err_generic({ code });
+    default: {
+      const resolve = ERROR_MESSAGES[code as ErrorCode] as
+        | (() => string)
+        | undefined;
+      return resolve ? resolve() : m.projects_edit_err_generic();
+    }
   }
 }

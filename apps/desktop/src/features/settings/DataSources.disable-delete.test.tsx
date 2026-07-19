@@ -183,12 +183,12 @@ describe('DataSources — Delete', () => {
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     openKebab();
-    fireEvent.click(screen.getByRole('menuitem', { name: /^Delete$/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Remove$/i }));
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole('button', { name: /^Delete$/i }),
+        within(dialog).getByRole('button', { name: /^Remove$/i }),
       );
       await Promise.resolve();
     });
@@ -213,14 +213,14 @@ describe('DataSources — Delete', () => {
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     openKebab();
-    const deleteItem = screen.getByRole('menuitem', { name: /^Delete$/i });
+    const deleteItem = screen.getByRole('menuitem', { name: /^Remove$/i });
     expect(deleteItem).toBeInTheDocument();
 
     fireEvent.click(deleteItem);
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole('button', { name: /^Delete$/i }),
+        within(dialog).getByRole('button', { name: /^Remove$/i }),
       );
       await Promise.resolve();
     });
@@ -250,12 +250,12 @@ describe('DataSources — Delete', () => {
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     openKebab();
-    fireEvent.click(screen.getByRole('menuitem', { name: /^Delete$/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Remove$/i }));
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
       fireEvent.click(
-        within(dialog).getByRole('button', { name: /^Delete$/i }),
+        within(dialog).getByRole('button', { name: /^Remove$/i }),
       );
       await Promise.resolve();
     });

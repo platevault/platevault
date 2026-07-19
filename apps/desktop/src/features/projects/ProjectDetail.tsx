@@ -346,7 +346,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       setArchiveReviewPlanId(res.planId);
     } catch {
       addToast({
-        message: m.projects_archive_generate_failed(),
+        message: m.archive_generate_failed(),
         variant: 'error',
       });
     }
@@ -375,10 +375,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         entityId: projectId,
       });
     } catch (err: unknown) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ?? m.sessions_toast_reveal_error());
+      const msg = typeof err === 'string' ? err : m.common_reveal_error();
       addToast({ message: msg, variant: 'error' });
     }
   };
@@ -491,7 +488,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             onClick={() => setEditOpen(true)}
             data-testid="edit-project-btn"
           >
-            {m.projects_detail_edit_btn()}
+            {m.common_edit()}
           </Btn>
         )
       }
@@ -821,7 +818,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           setArchiveReviewPlanId(null);
           setArchiveEmptyReason(null);
         }}
-        title={m.projects_archive_review_title()}
+        title={m.archive_generate_review_title()}
         emptyReason={archiveEmptyReason}
         onApplied={handleArchivePlanApplied}
         onRetryCreated={setArchiveReviewPlanId}

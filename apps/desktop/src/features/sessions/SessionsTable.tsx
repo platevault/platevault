@@ -257,7 +257,7 @@ export function SessionsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as SessionSortCol)}
-        ariaLabel={m.sessions_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ) : (
       c.label()

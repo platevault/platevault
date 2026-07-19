@@ -105,14 +105,11 @@ export function GenerateSourceViewDialog({
       onPlanCreated?.(resp.planId);
       onClose();
     } catch (err: unknown) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err
-          ? String(err.code)
-          : 'internal';
-      setError(errMessage(err));
+      const message = errMessage(err);
+      setError(message);
       addToast({
         variant: 'warn',
-        message: m.projects_source_views_generate_failed({ code }),
+        message: m.projects_source_views_generate_failed({ message }),
       });
     } finally {
       setSubmitting(false);

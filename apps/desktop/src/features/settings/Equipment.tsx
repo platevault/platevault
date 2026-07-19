@@ -803,7 +803,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           <Table
             columns={[
               { key: 'name', label: m.settings_equipment_col_name() },
-              { key: 'aliases', label: m.settings_equipment_col_aliases() },
+              { key: 'aliases', label: m.common_aliases() },
               { key: 'sensor', label: m.settings_equipment_col_sensor() },
               { key: 'source', label: m.settings_equipment_col_source() },
               { key: 'actions', label: '', style: { width: 140 } },
@@ -994,7 +994,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           <Table
             columns={[
               { key: 'name', label: m.settings_equipment_col_name() },
-              { key: 'aliases', label: m.settings_equipment_col_aliases() },
+              { key: 'aliases', label: m.common_aliases() },
               {
                 key: 'focalLength',
                 label: m.settings_equipment_col_focal_length(),
@@ -1134,7 +1134,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
 
       {/* Filters */}
       <SettingsSection
-        title={m.settings_equipment_filters_title()}
+        title={m.common_filters()}
         action={
           <Btn
             size="sm"

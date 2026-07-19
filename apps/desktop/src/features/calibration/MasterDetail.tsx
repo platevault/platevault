@@ -315,7 +315,7 @@ export function MasterDetail({
             return;
           }
           addToast({
-            message: err.message || m.projects_archive_generate_failed(),
+            message: err.message || m.archive_generate_failed(),
             variant: 'error',
           });
         },
@@ -330,7 +330,7 @@ export function MasterDetail({
         onSuccess: handleArchiveSuccess,
         onError: (err) => {
           addToast({
-            message: err.message || m.projects_archive_generate_failed(),
+            message: err.message || m.archive_generate_failed(),
             variant: 'error',
           });
         },
@@ -578,7 +578,7 @@ export function MasterDetail({
         planId={archiveReviewPlanId}
         open={archiveReviewPlanId !== null}
         onClose={() => setArchiveReviewPlanId(null)}
-        title={m.projects_archive_review_title()}
+        title={m.archive_generate_review_title()}
         onApplied={handleArchivePlanApplied}
         onRetryCreated={setArchiveReviewPlanId}
       />

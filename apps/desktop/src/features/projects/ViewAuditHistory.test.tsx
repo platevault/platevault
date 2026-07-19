@@ -129,7 +129,7 @@ describe('ViewAuditHistory', () => {
     fireEvent.click(screen.getByText('History'));
 
     await waitFor(() => {
-      expect(screen.getByText(/failed to load history/i)).toBeInTheDocument();
+      expect(screen.getByText(/could not load history/i)).toBeInTheDocument();
     });
   });
 });

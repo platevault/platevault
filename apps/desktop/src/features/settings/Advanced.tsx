@@ -307,7 +307,7 @@ export function Advanced({ save }: AdvancedProps) {
                       onClick={() => setGuidedConfirming(false)}
                       disabled={guidedRestarting}
                     >
-                      {m.settings_advanced_guided_restart_cancel()}
+                      {m.common_cancel()}
                     </Btn>
                   </div>
                 </div>
@@ -367,7 +367,7 @@ export function Advanced({ save }: AdvancedProps) {
                     onClick={() => setFirstRunConfirming(false)}
                     disabled={firstRunRestarting}
                   >
-                    {m.settings_advanced_firstrun_restart_cancel()}
+                    {m.common_cancel()}
                   </Btn>
                 </div>
               </div>
@@ -442,7 +442,7 @@ export function Advanced({ save }: AdvancedProps) {
                 data-testid="update-restart-btn"
               >
                 {updateBusy
-                  ? m.settings_advanced_updates_installing()
+                  ? m.common_restarting()
                   : m.settings_advanced_updates_restart()}
               </Btn>
             )}
@@ -493,7 +493,7 @@ export function Advanced({ save }: AdvancedProps) {
                   variant="ghost"
                   onClick={() => setResetConfirming(false)}
                 >
-                  {m.settings_advanced_danger_reset_cancel()}
+                  {m.common_cancel()}
                 </Btn>
               </div>
             </>

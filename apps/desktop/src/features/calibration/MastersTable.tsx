@@ -416,7 +416,7 @@ export function MastersTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort)}
-        ariaLabel={m.calibration_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ),
   }));

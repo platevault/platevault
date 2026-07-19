@@ -242,7 +242,7 @@ function ToolCard({
             <Toggle
               checked={config.enabled}
               onChange={onToggle}
-              aria-label={m.setup_tools_enable_aria({ name: def.name() })}
+              aria-label={m.settings_tools_enable_aria({ name: def.name() })}
             />
           </div>
           {notFound && (

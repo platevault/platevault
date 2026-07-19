@@ -159,7 +159,7 @@ export function SessionFrameInventory({
           data-testid="frame-inventory-scan-btn"
         >
           {scan.isPending
-            ? m.sessions_frame_inventory_scanning()
+            ? m.common_loading()
             : m.sessions_frame_inventory_scan_btn()}
         </Btn>
         {result && (

@@ -362,7 +362,7 @@ export function AuditLog() {
               setPage(0);
             }}
           >
-            <option value="">{m.log_level_all()}</option>
+            <option value="">{m.common_all()}</option>
             {OUTCOME_VALUES.map((o) => (
               <option key={o} value={o}>
                 {outcomeLabel(o)}
@@ -385,7 +385,7 @@ export function AuditLog() {
               setPage(0);
             }}
           >
-            <option value="">{m.log_level_all()}</option>
+            <option value="">{m.common_all()}</option>
             {ENTITY_TYPE_VALUES.map((t) => (
               <option key={t} value={t}>
                 {t}

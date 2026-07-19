@@ -552,7 +552,7 @@ export function PlanReviewOverlay({
                 />
                 <span>
                   {confirmingDestructive
-                    ? m.plans_review_confirm_destructive_confirming()
+                    ? m.common_confirming()
                     : m.plans_review_confirm_destructive_label()}
                 </span>
               </label>

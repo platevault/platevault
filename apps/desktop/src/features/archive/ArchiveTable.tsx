@@ -129,7 +129,7 @@ export function ArchiveTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort)}
-        ariaLabel={m.archive_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ),
   }));

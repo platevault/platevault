@@ -528,8 +528,7 @@ function RootCard({
       });
     } catch (err: unknown) {
       addToast({
-        message:
-          typeof err === 'string' ? err : m.sessions_toast_reveal_error(),
+        message: typeof err === 'string' ? err : m.common_reveal_error(),
         variant: 'error',
       });
     }

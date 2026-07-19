@@ -23,6 +23,7 @@ import { Btn, Pill } from '@/ui';
 import { Modal, TargetSearch } from '@/components';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import type { TargetSuggestion } from '@/bindings/aliases';
 
 export interface AddTargetDialogProps {
@@ -86,9 +87,7 @@ export function AddTargetDialog({
         );
       }
     } catch (err: unknown) {
-      const code =
-        typeof err === 'string' ? err : ((err as Error)?.message ?? 'unknown');
-      setError(m.targets_add_failed({ code }));
+      setError(m.targets_add_failed({ message: errMessage(err) }));
     } finally {
       setResolving(false);
     }
