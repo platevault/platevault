@@ -11,10 +11,27 @@
  * platform source is actually consulted.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { MasterDetail } from './MasterDetail';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
+
+// MasterDetail is now backed by TanStack Query (useCalibration.ts) — every
+// render needs a QueryClientProvider ancestor.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    ),
+  });
+}
 
 // Detail data-loading is not under test — resolve both commands empty.
 vi.mock('@/bindings/index', () => ({

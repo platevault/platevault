@@ -36,7 +36,9 @@
  *   master gets its first assignment instead of faked from stub data.
  */
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
@@ -100,13 +102,6 @@ export function MasterDetail({
   prefillSuggestion,
   agingThresholdDays,
 }: Props) {
-  const [detail, setDetail] = useState<DetailState>({
-    confirmedNames: [],
-    compatibleNames: [],
-    loading: false,
-    missingFlag: null,
-  });
-
   // Matching context: the session `calibration.match.suggest` is anchored on.
   // See the file-header note — real `usedBySessionIds`, not the stub
   // `compatibleSessions` field.
@@ -145,63 +140,70 @@ export function MasterDetail({
     };
   };
 
-  useEffect(() => {
-    if (!master) {
-      setDetail({
-        confirmedNames: [],
-        compatibleNames: [],
-        loading: false,
-        missingFlag: null,
-      });
-      return;
-    }
-    const masterId = master.id;
-    let cancelled = false;
-    setDetail({
+  // Real `usedBySessionIds`/`compatibleSessions` (populated) come from a
+  // per-master detail fetch; `sessionsList()` cross-references both sets of
+  // ids to human-readable "{target} · {filter} · {night}" labels. Shares the
+  // `queryKeys.sessions.all()` cache entry with the rest of the app (e.g.
+  // `SessionSourcePicker`) rather than a private key.
+  const masterId = master?.id;
+  const masterDetailQuery = useQuery({
+    queryKey: queryKeys.calibration.master(masterId ?? '__none__'),
+    queryFn: async () =>
+      unwrap(await commands.calibrationMastersGet(masterId as string)),
+    enabled: !!masterId,
+  });
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.sessions.all(),
+    queryFn: async () => unwrap(await commands.sessionsList()),
+  });
+
+  const detail: DetailState = useMemo(() => {
+    const empty: DetailState = {
       confirmedNames: [],
       compatibleNames: [],
-      loading: true,
+      loading: false,
       missingFlag: null,
-    });
-
-    Promise.all([
-      commands.calibrationMastersGet(masterId).then(unwrap),
-      commands.sessionsList().then(unwrap),
-    ])
-      .then(([masterDetail, sessions]) => {
-        if (cancelled) return;
-        const idToName = new Map<string, string>();
-        for (const s of sessions) {
-          const k = s.sessionKey;
-          idToName.set(s.id, `${k.target} · ${k.filter} · ${k.night}`);
-        }
-        const confirmedNames = masterDetail.usedBySessionIds
-          .map((id) => idToName.get(id) ?? id)
-          .filter(Boolean);
-        const compatibleNames = masterDetail.compatibleSessions
-          .map((e) => idToName.get(e.sessionId) ?? e.sessionId)
-          .filter(Boolean);
-        setDetail({
-          confirmedNames,
-          compatibleNames,
-          loading: false,
-          missingFlag: masterDetail.missingFlag ?? null,
-        });
-      })
-      .catch(() => {
-        if (!cancelled)
-          setDetail({
-            confirmedNames: [],
-            compatibleNames: [],
-            loading: false,
-            missingFlag: null,
-          });
-      });
-
-    return () => {
-      cancelled = true;
     };
-  }, [master]);
+    if (!masterId) return empty;
+    if (masterDetailQuery.isFetching || sessionsQuery.isFetching) {
+      return { ...empty, loading: true };
+    }
+    // Mirrors the pre-migration catch-and-swallow: a failed detail or
+    // sessions fetch degrades to the empty state rather than an error banner.
+    if (masterDetailQuery.error || sessionsQuery.error || !masterDetailQuery.data) {
+      return empty;
+    }
+    const masterDetail = masterDetailQuery.data;
+    const idToName = new Map<string, string>();
+    // Defensive: guard against a non-array `sessionsList()` payload (the old
+    // effect's Promise.all().catch() silently swallowed this; a bare `for...of`
+    // here would otherwise throw synchronously during render).
+    const sessionsList = Array.isArray(sessionsQuery.data)
+      ? sessionsQuery.data
+      : [];
+    for (const s of sessionsList) {
+      const k = s.sessionKey;
+      idToName.set(s.id, `${k.target} · ${k.filter} · ${k.night}`);
+    }
+    return {
+      confirmedNames: masterDetail.usedBySessionIds
+        .map((id) => idToName.get(id) ?? id)
+        .filter(Boolean),
+      compatibleNames: masterDetail.compatibleSessions
+        .map((e) => idToName.get(e.sessionId) ?? e.sessionId)
+        .filter(Boolean),
+      loading: false,
+      missingFlag: masterDetail.missingFlag ?? null,
+    };
+  }, [
+    masterId,
+    masterDetailQuery.data,
+    masterDetailQuery.isFetching,
+    masterDetailQuery.error,
+    sessionsQuery.data,
+    sessionsQuery.isFetching,
+    sessionsQuery.error,
+  ]);
 
   if (!master) {
     return (

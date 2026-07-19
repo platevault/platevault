@@ -38,6 +38,7 @@ export const queryKeys = {
     masters: () => ['calibration', 'masters'] as const,
     master: (id: string) => ['calibration', 'masters', id] as const,
     matches: (sid: string) => ['calibration', 'matches', sid] as const,
+    settings: () => ['calibration', 'settings'] as const,
   },
   targets: {
     list: () => ['targets'] as const,
