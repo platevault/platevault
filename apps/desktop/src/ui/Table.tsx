@@ -40,6 +40,21 @@ function focusAdjacentRow(current: HTMLTableRowElement, dir: 1 | -1) {
   clickable[idx + dir]?.focus();
 }
 
+/**
+ * Move keyboard focus to the first or last focusable (selectable) row in the
+ * same scope as `current`. Wired to Home/End on clickable rows.
+ */
+function focusEdgeRow(current: HTMLTableRowElement, edge: 'first' | 'last') {
+  const scope = current.closest('tbody') ?? current.parentElement;
+  if (!scope) return;
+  const clickable = scope.querySelectorAll<HTMLTableRowElement>(
+    'tr[data-row-clickable="true"]',
+  );
+  const target =
+    edge === 'first' ? clickable[0] : clickable[clickable.length - 1];
+  target?.focus();
+}
+
 export interface TableColumn {
   key: string;
   /** Header content. Accepts a plain string or rich nodes (e.g. sortable header buttons). */
@@ -179,6 +194,12 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
                 } else if (e.key === 'ArrowUp') {
                   e.preventDefault();
                   focusAdjacentRow(e.currentTarget, -1);
+                } else if (e.key === 'Home') {
+                  e.preventDefault();
+                  focusEdgeRow(e.currentTarget, 'first');
+                } else if (e.key === 'End') {
+                  e.preventDefault();
+                  focusEdgeRow(e.currentTarget, 'last');
                 }
               }
             : undefined

@@ -154,7 +154,7 @@
    :root default so the default light palette has a single source of truth. */
 :root,
 [data-theme="warm-slate"] {
-  --pv-ink: #20211f; --pv-ink2: #42433f; --pv-ink3: #6a6b66; --pv-ink4: #70706a;
+  --pv-ink: #20211f; --pv-ink2: #42433f; --pv-ink3: #5a5b54; --pv-ink4: #606159;
   --pv-rule: #d5d3cb; --pv-rule2: #e6e4dd;
   --pv-bg: #f5f4f1; --pv-surface: #ecebe6; --pv-bg3: #e2e0d9; --pv-surface-raised: #ffffff;
   --pv-on-accent: #ffffff;
@@ -172,7 +172,7 @@
 
 /* Warm Clay — warm light, terracotta accent */
 [data-theme="warm-clay"] {
-  --pv-ink: #221f1a; --pv-ink2: #433e35; --pv-ink3: #736b5e; --pv-ink4: #75705f;
+  --pv-ink: #221f1a; --pv-ink2: #433e35; --pv-ink3: #5b544a; --pv-ink4: #625b50;
   --pv-rule: #d8d1c4; --pv-rule2: #e8e2d6;
   --pv-bg: #f6f4ef; --pv-surface: #efeae1; --pv-bg3: #e6e0d4; --pv-surface-raised: #fffdf9;
   --pv-on-accent: #ffffff;
@@ -190,7 +190,7 @@
 
 /* Observatory Dark — warm charcoal, amber accent (default dark + OS-dark) */
 [data-theme="observatory-dark"] {
-  --pv-ink: #f0ebe2; --pv-ink2: #cfc7b8; --pv-ink3: #a59c8a; --pv-ink4: #8f8676;
+  --pv-ink: #f0ebe2; --pv-ink2: #cfc7b8; --pv-ink3: #a59c8a; --pv-ink4: #9a9180;
   --pv-rule: #3a352b; --pv-rule2: #2e2a22;
   --pv-bg: #1b1916; --pv-surface: #232019; --pv-bg3: #2c281f; --pv-surface-raised: #26221b;
   --pv-on-accent: #1b1916;
@@ -208,7 +208,7 @@
 
 /* Espresso Dark — deep near-black, caramel accent */
 [data-theme="espresso-dark"] {
-  --pv-ink: #ece7df; --pv-ink2: #cabfae; --pv-ink3: #9b9384; --pv-ink4: #8a8272;
+  --pv-ink: #ece7df; --pv-ink2: #cabfae; --pv-ink3: #9b9384; --pv-ink4: #9c947f;
   --pv-rule: #332e28; --pv-rule2: #272320;
   --pv-bg: #161412; --pv-surface: #1e1b18; --pv-bg3: #272320; --pv-surface-raised: #1e1b18;
   --pv-on-accent: #161412;
