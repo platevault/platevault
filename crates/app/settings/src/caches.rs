@@ -17,7 +17,6 @@ use std::sync::{Arc, OnceLock};
 
 use app_core_cache::SnapshotCache;
 use domain_core::settings::SettingsState;
-use serde_json::Value;
 
 /// The full v1 settings bag, hydrated with in-code defaults for missing rows
 /// (mirrors `get_settings`'s output). 1 slot.
@@ -42,40 +41,6 @@ pub fn store_settings_bag(value: Arc<SettingsState>) {
 /// Clear the settings-bag snapshot so the next read reloads from the DB.
 pub fn invalidate_settings_bag() {
     settings_bag().invalidate();
-}
-
-/// The noisy-key values (as a JSON object) from the most recently PUBLISHED
-/// `settings.snapshot` event (issue #668). 1 slot.
-///
-/// `emit_snapshot` compares its freshly collected values against this before
-/// publishing, and skips the publish (a no-op) when nothing changed — mirrors
-/// `app_core_targets::ingest_resolution::resolve_pending`'s
-/// `target.resolve_batch.completed` suppression on `considered == 0`: a
-/// periodic heartbeat with nothing to report should not flood the activity
-/// log (#668 — ~470/500 rows in a real sweep were this + the target
-/// heartbeat). Not invalidated by `update_setting`/`restore_defaults`/
-/// `set_source_override`: those already emit their own real
-/// `settings.changed`/`protection.default.changed` events, so a later
-/// snapshot correctly finds "no further noisy-key change" and stays quiet
-/// until a *noisy* key changes.
-static LAST_SNAPSHOT_VALUES: OnceLock<SnapshotCache<Value>> = OnceLock::new();
-
-/// Return the process-global last-published-snapshot value cache.
-#[must_use]
-pub fn last_snapshot_values() -> &'static SnapshotCache<Value> {
-    LAST_SNAPSHOT_VALUES.get_or_init(SnapshotCache::new)
-}
-
-/// Store the noisy-key values just published in a `settings.snapshot` event.
-pub fn store_last_snapshot_values(value: Arc<Value>) {
-    last_snapshot_values().store(value);
-}
-
-/// Clear the last-published-snapshot cache (test isolation only — the real
-/// `emit_snapshot` caller never needs to invalidate this outside its own
-/// store-on-publish).
-pub fn invalidate_last_snapshot_values() {
-    last_snapshot_values().invalidate();
 }
 
 #[cfg(test)]
