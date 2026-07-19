@@ -578,8 +578,8 @@
   height: 28px;
 }
 
-/* Settings-row control description paragraph — shared by the guided-tour
-   restart and first-run setup restart controls. */
+/* Settings-row control description paragraph — shared by the onboarding-walk
+   replay/restore and first-run setup restart controls. */
 .alm-adv-settings__control-desc {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
