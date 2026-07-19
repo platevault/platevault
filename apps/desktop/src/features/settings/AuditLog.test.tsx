@@ -333,7 +333,18 @@ describe('AuditLog', () => {
     render(<AuditLog />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByText('Export'));
+    // The Export button is `disabled={exporting || loading}` (AuditLog.tsx),
+    // and `loading` only clears once auditList's promise RESOLVES — the
+    // waitFor above only proves the call was made. fireEvent.click on a
+    // disabled button is a silent no-op, so clicking synchronously here
+    // races the load on slow runners: auditExport is simply never invoked
+    // and the assertion below fails with "Number of calls: 0" (observed on
+    // macos-latest). Wait for the button to actually be enabled first.
+    const exportBtn = await screen.findByRole('button', {
+      name: 'Export audit events to a file',
+    });
+    await waitFor(() => expect(exportBtn).toBeEnabled());
+    fireEvent.click(exportBtn);
 
     await waitFor(() => expect(mockExport).toHaveBeenCalledWith(null));
     await waitFor(() => expect(clickSpy).toHaveBeenCalled());

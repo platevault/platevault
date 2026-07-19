@@ -119,7 +119,14 @@ describe('ResolverSettingsControl', () => {
     render(<ResolverSettingsControl />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
-    const toggle = screen.getByLabelText('Enable online SIMBAD resolution');
+    // findBy, not getBy: the waitFor above only proves mockGet was CALLED,
+    // not that its promise resolved — `loaded` flips in a .finally() after
+    // that, so a sync getBy races the loading skeleton on slow runners and
+    // fails with "Unable to find a label" (observed on windows-latest). The
+    // sibling compact-mode test below already carries this same fix.
+    const toggle = await screen.findByLabelText(
+      'Enable online SIMBAD resolution',
+    );
     await act(async () => {
       fireEvent.click(toggle);
       await Promise.resolve();
