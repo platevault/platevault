@@ -310,6 +310,10 @@
   font-size: var(--alm-text-lg); font-weight: var(--alm-weight-semibold);
   display: flex; align-items: center; gap: var(--alm-sp-2);
   line-height: var(--alm-leading-tight);
+  /* #1068: narrow side-dock widths (~390px) push the inline title-row
+     actions (e.g. Inbox's "Show in file manager") past the panel edge;
+     wrapping keeps every action reachable instead of clipped. */
+  flex-wrap: wrap;
 }
 /* Default subtitle content is a filesystem path (e.g. archive original path,
    spec 055 T022) — break-all + mono, see merges-1.css for the prose override. */

@@ -211,6 +211,7 @@ export function ProjectsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockId="projects"
       // Standardised bottom-docked detail (Sessions/Calibration convention): the
       // project identity (ProjectDetailContent) stacks above the operational
       // sections (ProjectBottomDetail) in ONE full-width bottom panel — no right

@@ -402,11 +402,51 @@
  * narrow side column we tighten section spacing, pin the close bar, and make
  * each region a compact, scannable block. */
 
-/* Tighter vertical rhythm between sections in the narrow column. */
+/* Tighter vertical rhythm between sections in the narrow column. #1068:
+   min-width:0 lets this column-flex item actually shrink to the fixed side
+   width instead of growing to its widest descendant's content size. */
 .alm-listpage__detail--side .alm-project-detail__sections {
   display: flex;
   flex-direction: column;
   gap: var(--alm-sp-2);
+  min-width: 0;
+}
+
+/* #1068: wide data tables (Projects sources ROLE/SOURCE/FILTER/SUBS/INTEG,
+   Calibration's compatible-sessions match table — both rendered via the
+   shared `Section` + `Table`) have no horizontal-scroll wrapper in the side
+   dock, so overflowing columns/buttons (e.g. Assign) are clipped and
+   unreachable. `overflow-x: auto` also zeroes this flex item's automatic
+   min-size (CSS Flexbox §4.5: non-visible overflow ⇒ no min-content floor),
+   which is what lets it shrink to the available width in the first place. */
+.alm-listpage__detail--side .alm-section {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* Calibration's match table sits one level up inside a row-flex row
+   (.alm-session-detail2), which — unlike the column above — needs its own
+   min-width:0 to stop the wide table forcing this flex item wider than the
+   panel before the wrap/scroll rules above ever get a chance to apply. */
+.alm-listpage__detail--side .alm-session-detail2__match {
+  min-width: 0;
+}
+
+/* #1068: ProjectBottomDetail's `.alm-project-bottom__grid` is shared between
+   the wide BOTTOM strip and this SIDE column (rendered via
+   .alm-project-detail-stack). Its `repeat(auto-fill, minmax(280px, 1fr))` plus
+   the notes cell's `grid-column: span 2` forces a second track that a ~390px
+   side panel can't actually give 280px to — Grid then crushes that column
+   (observed: 280px + 73px), stranding whatever section auto-placed into it
+   (e.g. "Scan for cleanup candidates") far narrower than its own content. The
+   component already collapses to 1 column via `@media (max-width: 700px)`,
+   but that's keyed to the WINDOW, not this panel, so it never fires here —
+   force the same collapse by panel width instead. */
+.alm-listpage__detail--side .alm-project-bottom__grid {
+  grid-template-columns: 1fr;
+}
+.alm-listpage__detail--side .alm-project-bottom__cell--notes {
+  grid-column: span 1;
 }
 
 /* Compact the lifecycle stepper so it doesn't dominate the top of the column. */

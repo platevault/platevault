@@ -560,6 +560,7 @@ export function TargetsPage() {
         }
         onCloseDetail={selected ? clearSelection : undefined}
         detailLabel="Target details"
+        dockId="targets"
       >
         {listState.status === 'error' ? (
           <EmptyState
