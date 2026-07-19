@@ -10,6 +10,7 @@ import { m } from '@/lib/i18n';
 import { setPreference } from '@/data/preferences';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import {
   StepSourceFolders,
   StepTools,
@@ -337,12 +338,10 @@ export function SetupWizard() {
       setFlushResult(result);
       goTo(SCAN_STEP);
     } catch (err) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ?? String(err));
       setSubmitError(
-        m.setup_sources_error_batch_registration_failed({ message: msg }),
+        m.setup_sources_error_batch_registration_failed({
+          message: errMessage(err),
+        }),
       );
     } finally {
       setIsSubmitting(false);
@@ -419,11 +418,9 @@ export function SetupWizard() {
       clearWizardState();
       void navigate({ to: '/inbox' });
     } catch (err) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ?? String(err));
-      setSubmitError(m.setup_wizard_finish_failed({ message: msg }));
+      setSubmitError(
+        m.setup_wizard_finish_failed({ message: errMessage(err) }),
+      );
       setIsFinishing(false);
     }
     // `state.tools` was already read here without being a dependency (stale

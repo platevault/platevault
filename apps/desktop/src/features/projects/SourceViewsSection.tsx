@@ -130,13 +130,11 @@ export function SourceViewsSection({
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err
-          ? String(err.code)
-          : 'internal';
       addToast({
         variant: 'warn',
-        message: m.projects_source_views_removal_failed({ code }),
+        message: m.projects_source_views_removal_failed({
+          message: errMessage(err),
+        }),
       });
     } finally {
       setBusyViewId(null);
@@ -164,13 +162,11 @@ export function SourceViewsSection({
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err
-          ? String(err.code)
-          : 'internal';
       addToast({
         variant: 'warn',
-        message: m.projects_source_views_regen_failed({ code }),
+        message: m.projects_source_views_regen_failed({
+          message: errMessage(err),
+        }),
       });
     } finally {
       setBusyViewId(null);
@@ -183,13 +179,11 @@ export function SourceViewsSection({
       const resp = await verifySourceView(viewId);
       setVerifyResults((prev) => ({ ...prev, [viewId]: resp }));
     } catch (err: unknown) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err
-          ? String(err.code)
-          : 'internal';
       addToast({
         variant: 'warn',
-        message: m.projects_source_views_verify_failed({ code }),
+        message: m.projects_source_views_verify_failed({
+          message: errMessage(err),
+        }),
       });
     } finally {
       setBusyViewId(null);

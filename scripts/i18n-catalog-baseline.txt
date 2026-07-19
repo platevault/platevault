@@ -2,13 +2,6 @@
 # scripts/check-i18n-catalog.mjs fails CI on any code-param / dup-value
 # violation NOT listed here. Entries drain via the i18n refactor sweep.
 # Regenerate with: node scripts/check-i18n-catalog.mjs --generate
-code-param	projects_create_err_generic
-code-param	projects_edit_err_generic
-code-param	projects_source_views_generate_failed
-code-param	projects_source_views_regen_failed
-code-param	projects_source_views_removal_failed
-code-param	projects_source_views_verify_failed
-code-param	targets_add_failed
 dup-value	filter_multiselect_count,inbox_n_selected
 dup-value	filter_group_by_label,inbox_group_by_aria
 dup-value	calibration_master_title,setup_scan_master_kind
