@@ -251,6 +251,9 @@ export function Cleanup({ save }: CleanupProps) {
                             onChange={(v) => handleTableChange(row.id, v)}
                             danger
                             dangerValue="Delete"
+                            aria-label={m.settings_cleanup_action_aria({
+                              type: row.type,
+                            })}
                           />
                         </td>
                       </tr>

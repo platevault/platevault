@@ -752,6 +752,7 @@
   "settings_calmatch_warn": "warn",
   "settings_catalogue_enable_default_aria": "Enable {label} by default",
   "settings_catalogue_save_error": "Could not save catalogue defaults: {error}",
+  "settings_cleanup_action_aria": "Action for {type}",
   "settings_cleanup_block_delete_label": "Block permanent delete",
   "settings_cleanup_col_action": "Default action",
   "settings_cleanup_col_datatype": "Data type",
