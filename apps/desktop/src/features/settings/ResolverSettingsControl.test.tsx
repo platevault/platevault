@@ -68,10 +68,9 @@ beforeEach(() => {
 describe('ResolverSettingsControl', () => {
   it('loads settings and reflects the online toggle as checked', async () => {
     render(<ResolverSettingsControl />);
-    // findBy (not waitFor(mockGet called) + sync getBy): the mock being
-    // *called* races the `.then()` that flips `loaded` and swaps the
-    // skeleton for the real control — findBy polls until the labeled
-    // control actually exists, which is the state under test.
+    // findBy, not getBy + waitFor(mockGet called): `loaded` flips in a
+    // .finally() after the mockGet promise RESOLVES, so a sync getBy right
+    // after "called" races the loading skeleton on slow runners.
     const checkbox = (await screen.findByLabelText(
       'Enable online SIMBAD resolution',
     )) as HTMLInputElement;
@@ -160,8 +159,7 @@ describe('ResolverSettingsControl', () => {
 
   it('shows endpoint/debounce/timeout fields in full mode', async () => {
     render(<ResolverSettingsControl />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    expect(screen.getByLabelText('SIMBAD endpoint')).toBeInTheDocument();
+    expect(await screen.findByLabelText('SIMBAD endpoint')).toBeInTheDocument();
     expect(
       screen.getByLabelText('Typeahead debounce (ms)'),
     ).toBeInTheDocument();
@@ -173,10 +171,9 @@ describe('ResolverSettingsControl', () => {
   // a synchronous count.
   it('reports the background re-warm (not a count) after clearing the cache', async () => {
     render(<ResolverSettingsControl />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Clear resolve cache' }),
+      await screen.findByRole('button', { name: 'Clear resolve cache' }),
     );
 
     await waitFor(() => expect(mockCacheClear).toHaveBeenCalled());
@@ -191,10 +188,9 @@ describe('ResolverSettingsControl', () => {
   it('reports the cache-clear error when the command fails', async () => {
     mockCacheClear.mockRejectedValue(new Error('disk full'));
     render(<ResolverSettingsControl />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Clear resolve cache' }),
+      await screen.findByRole('button', { name: 'Clear resolve cache' }),
     );
 
     expect(
