@@ -13,11 +13,14 @@ items. Siblings are linked by sharing a source group. Upon split
 classification, the linkage is broken. Greenfield — no backwards
 compatibility."
 
-**Resolves**: [#711](https://github.com/platevault/platevault/issues/711) —
-inbox list-row classification badge disagrees with its own detail panel.
+**Resolves**: [#711](https://github.com/platevault/platevault/issues/711)
+**Instance A** — a list row reporting `CLASSIFIED` for an item that is
+unclassified. Instance B (the false-`NEEDS REVIEW` direction) was closed
+separately by PR #1086 (`22f94a9e`); see
+[Relationship to #711 Instance B](#relationship-to-711-instance-b).
 
-**Supersedes the read-side workarounds in**: PR #1038 (`1eae04e9`) and the
-follow-up PR #1081 (open at time of writing).
+**Supersedes the read-side workarounds in**: PR #1038 (`1eae04e9`) and PR #1081
+(`b4e72263`), both now merged.
 
 ## Product Intent
 
@@ -36,10 +39,8 @@ list advertising a classification it does not have.
 
 This has produced a visible, reproducible lie. In #711 Instance A a list row
 reads **CLASSIFIED** while opening it shows `unclassified`, a blocking
-"Frame types required" banner, and a disabled Confirm button. In Instance B the
-row reads **NEEDS REVIEW** while the item is in fact a confirmable light frame.
-The list and the detail panel disagree about the same item id, in both
-directions — a false-safe and a false-danger.
+"Frame types required" banner, and a disabled Confirm button. The list and the
+detail panel disagree about the same item id.
 
 The badge is not rendering the wrong thing. The badge is rendering the database
 faithfully, and **the database contains a false statement**. Classification sets
@@ -60,9 +61,13 @@ not open for re-litigation during planning.
 
 ### D-001 — A folder produces only real items
 
-A scanned folder yields **exactly one** inbox item when all its files belong to
-one group, and **N sibling items** when classification finds N distinct groups.
-There is no parent row, no placeholder row, and no aggregate row in any case.
+A classified folder yields **exactly one** inbox item when all its files belong
+to one group, and **N sibling items** when classification finds N distinct
+groups. There is no parent row, no placeholder row, and no aggregate inbox item
+in any case.
+
+D-006 completes this: before classification the folder has *no* inbox items at
+all, so there is never a moment at which an aggregate item exists.
 
 ### D-002 — Sibling linkage is a set relationship, not pairwise
 
@@ -86,17 +91,68 @@ source-group behaviour is not preserved. The model is not designed around
 existing `plan_open` parent rows surviving the change. Existing library
 databases do not need their inbox state preserved.
 
-**Accepted risk**: v0.5.0 is already published with a working updater, so real
-users may already hold a library database. Under this change, an existing
-database's **open inbox plans and confirmed-but-unapplied inbox items would be
-stranded** — the rows the plans and confirmations bind to are the very rows
-being removed. The product owner has judged this acceptable given the current
-user base and the cost of writing and testing a migration for a model that is
-itself being deleted.
+**Accepted risk**: under this change, an existing database's **open inbox plans
+and confirmed-but-unapplied inbox items would be stranded** — the rows the plans
+and confirmations bind to are the very rows being removed.
 
-Planning MUST still decide *how* the stranding presents: silent breakage is not
-acceptable even when data loss is. See
-[PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md) Q-1.
+**Why that risk is acceptable right now**: there are no current installs
+(product owner, resolving Q-1). The stranding cannot reach a user because no
+user holds a library database. No migration UX, first-launch reset notice, or
+legacy-row detection is designed.
+
+**This licence is conditional on that fact.** If any part of this work lands
+after the product has real users, the question reopens — see
+[PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md) Q-1. It is answered
+for the current moment, not in principle.
+
+### D-005 — A superseded sibling is invalidated, not preserved
+
+When a re-scan no longer produces a sibling that has an open plan, the system
+**invalidates** it: the plan is cancelled, the item is marked stale, and an
+explicit signal tells the user their confirmation was superseded.
+
+The confirmation was made against a world that no longer exists, and a plan
+describes pending filesystem mutations, so silently honouring it is the
+dangerous option (Constitution II). Rejected: keep-and-show (a row for a group
+that no longer exists), keep-and-hide (an invisible open plan — the worst
+failure mode), and block-re-scan-until-resolved (one stale plan freezes
+reconciliation for the whole folder, denying the user the obvious remedy).
+
+The mechanism is not yet chosen. The existing confirm staleness guard may
+already be the right hook — see Q-5, which remains open.
+
+### D-006 — Scan creates the source group; classification creates the items
+
+Scan creates **only** the source group. The Inbox list shows unclassified
+source groups alongside classified items, so a freshly scanned folder is
+visible immediately. Once classification runs, that source-group row is
+replaced by its N item rows.
+
+This is what makes D-001 hold *unconditionally* rather than eventually: no
+`inbox_items` row representing a whole folder is ever created, not even
+transiently.
+
+Rejected: **scan creates one provisional item that classify splits** — a
+transient parent is still a parent, and it revives the selection-churn coupling
+that caused the #1038 outage (FR-023). Rejected as primary but **retained as a
+fallback**: **scan creates the source group and nothing is displayed until
+classify** — because classify is a per-item command rather than automatic on
+scan, the invisible window is not momentary; a user could scan a whole drive and
+be shown an empty Inbox.
+
+**Known cost, accepted**: the Inbox list becomes a union of two row types, and
+selection must survive the "one source-group row becomes N item rows"
+transition. This is real design work for the plan gate, not a solved problem.
+
+### D-007 — Siblings are made legible by grouping on the folder
+
+The Inbox list gains a **folder grouping dimension**, keyed on the source group
+that siblings already share. Multiple rows per folder become legible as "one
+folder, N frame types" rather than N unexplained near-identical rows.
+
+This reuses the existing grouping machinery rather than adding a bespoke
+sibling affordance. Whether folder becomes the Inbox *default* grouping, and the
+one engine limitation this runs into, are recorded in Q-8.
 
 ## Linkage Semantics *(required by D-003)*
 
@@ -281,13 +337,18 @@ resulting sibling carries a frame type without any user input.
   to a synthetic value chosen specifically to dodge a uniqueness constraint
   against a sibling — see [research.md](research.md) §4.
 - **A re-scan that changes the split.** A folder previously split into three
-  now yields two, or one, or four. Which existing rows survive, and what happens
-  to a row that no longer corresponds to any group but already carries a plan.
-  See Q-2.
+  now yields two, or one, or four. Rows that still correspond to a group
+  survive; a row that no longer corresponds to any group is invalidated, and if
+  it carried an open plan that plan is cancelled with an explicit superseded
+  signal (D-005).
 - **A re-scan that finds the folder unchanged.** Must not churn item ids, or
   the user's selection and any open plans are disturbed for no reason.
 - **Two folders at the same relative path under different roots.** Identity must
-  remain root-scoped.
+  remain root-scoped — including when grouping the list by folder, which is why
+  D-007 groups on the source group rather than on the path string.
+- **A folder scanned but never classified.** Stays visible as its source-group
+  row indefinitely; it must not silently disappear from the queue, and it must
+  not be confirmable (there is nothing yet to confirm).
 - **A folder whose files all move into one group after reclassification.** A
   previously split folder becoming homogeneous must converge on a single item
   without leaving orphans.
@@ -298,12 +359,12 @@ resulting sibling carries a frame type without any user input.
 
 **Model**
 
-- **FR-001**: A scanned folder MUST produce at least one inbox item and MUST
-  NOT produce any item that lacks a classification identity.
-- **FR-002**: A folder whose files all belong to one group MUST produce exactly
-  one inbox item.
-- **FR-003**: A folder whose files belong to N distinct groups MUST produce
-  exactly N inbox items.
+- **FR-001**: The system MUST NOT create any inbox item that lacks a
+  classification identity, at any point in the folder's lifecycle.
+- **FR-002**: A classified folder whose files all belong to one group MUST
+  produce exactly one inbox item.
+- **FR-003**: A classified folder whose files belong to N distinct groups MUST
+  produce exactly N inbox items.
 - **FR-004**: The system MUST NOT create, retain, or expose an inbox item that
   represents a folder as a whole in addition to that folder's real items.
 - **FR-005**: Items derived from one folder MUST be identifiable as a set via
@@ -334,34 +395,52 @@ resulting sibling carries a frame type without any user input.
 - **FR-014**: Re-classification MUST re-derive a folder's items from the files
   on disk without propagating state, plans, or confirmations between siblings.
 
-**Re-scan**
+**Scan and classification boundary** *(D-006)*
 
-- **FR-015**: Re-scanning an unchanged folder MUST NOT change the identity of
+- **FR-015**: Scanning a folder MUST create its source group and MUST NOT
+  create any inbox item.
+- **FR-016**: A scanned but unclassified folder MUST be visible in the Inbox
+  list, represented by its source group.
+- **FR-017**: When classification completes, the folder's source-group row MUST
+  be replaced in the list by that folder's item rows.
+
+**Re-scan and invalidation**
+
+- **FR-018**: Re-scanning an unchanged folder MUST NOT change the identity of
   its existing items.
-- **FR-016**: The system MUST anchor folder-level re-scan comparison to the
+- **FR-019**: The system MUST anchor folder-level re-scan comparison to the
   source group rather than to any single item.
+- **FR-020**: When re-derivation no longer produces an item that has an open
+  plan, the system MUST cancel that plan and mark the item stale (D-005).
+- **FR-021**: The system MUST surface an explicit signal when a user's
+  confirmation has been superseded, and MUST NOT silently discard a plan.
+- **FR-022**: Re-derivation MUST NOT be blocked for a whole folder by the
+  existence of one open plan.
 
 **User-visible continuity**
 
-- **FR-017**: A user's selection MUST NOT be silently dropped as a result of
-  classification producing the folder's items.
-- **FR-018**: After confirming an item, the resulting plan MUST be reachable on
+- **FR-023**: A user's selection MUST NOT be silently dropped as a result of
+  classification replacing a source-group row with item rows.
+- **FR-024**: After confirming an item, the resulting plan MUST be reachable on
   the plan surface.
+- **FR-025**: The Inbox list MUST offer grouping by folder, so that items
+  derived from one folder can be viewed together (D-007).
 
 **Removal**
 
-- **FR-019**: The system MUST NOT retain read-side logic whose only purpose is
+- **FR-026**: The system MUST NOT retain read-side logic whose only purpose is
   to hide a superseded aggregate row from lists or counts.
-- **FR-020**: No migration of existing parent-and-child inbox rows is provided
-  (D-004). The absence of a migration MUST be recorded in the shipped change
-  notes so an existing user is not silently surprised.
+- **FR-027**: No migration of existing parent-and-child inbox rows is provided
+  (D-004).
 
 ### Key Entities
 
 - **Source group**: The folder-level identity for a scanned directory — its
   root, its path relative to that root, its content signature, its format, and
-  its lane. Owns facts that are true of the directory itself. Relates to one or
-  more inbox items. Is not itself an item and is never shown as a queue row.
+  its lane. Owns facts that are true of the directory itself. Relates to zero or
+  more inbox items: zero after scan, N after classification. **Is not an inbox
+  item**, but is shown as a queue row while the folder is unclassified (D-006),
+  and is the key the folder grouping dimension groups on (D-007).
 - **Inbox item**: One actionable unit of the queue — a set of files from one
   folder that share a classification identity. Carries its own frame type,
   state, evidence, signature, and at most one plan binding. Every item is
@@ -377,8 +456,10 @@ resulting sibling carries a frame type without any user input.
   panel badge, and the item's own classification result agree — zero
   disagreements, measured across uniform, mixed, and needs-review folders.
   (This is the #711 exit condition.)
-- **SC-002**: Scanning a folder with one frame type yields exactly one queue
-  row; scanning a folder with N frame types yields exactly N rows.
+- **SC-002**: Classifying a folder with one frame type yields exactly one queue
+  row; classifying a folder with N frame types yields exactly N rows.
+- **SC-002b**: A scanned but unclassified folder is visible in the Inbox as
+  exactly one row, and that row is not an inbox item (D-006).
 - **SC-003**: Zero inbox items exist in any state carrying a `classified` state
   without a frame type.
 - **SC-004**: The Inbox summary counts equal the number of rows the list shows,
@@ -391,6 +472,14 @@ resulting sibling carries a frame type without any user input.
 - **SC-007**: Every read-side predicate that exists solely to suppress an
   aggregate row is deleted, and no replacement suppression logic is introduced.
 - **SC-008**: Re-scanning an unchanged folder produces no item identity churn.
+- **SC-009**: When re-derivation removes an item that had an open plan, that
+  plan is cancelled and the user receives an explicit superseded signal — zero
+  cases of a silently discarded or silently retained plan (D-005).
+- **SC-010**: A user can group the Inbox by folder and see each folder's
+  siblings together under one header (D-007).
+- **SC-011**: #711 Instance B stays fixed — reclassify does not report
+  `classified` while mandatory attributes are still missing (the `22f94a9e`
+  regression test continues to pass).
 
 ## Rejected Alternatives
 
@@ -473,12 +562,36 @@ row is authoritative.
   evaluated against).
 - Migration of existing inbox data (D-004).
 
+## Relationship to #711 Instance B
+
+#711 reported two directions of the same disagreement. **Instance B** — a row
+reading `NEEDS REVIEW` for an item that is in fact a confirmable light frame —
+was closed by PR #1086 (`22f94a9e`) while this specification was being written.
+That fix re-checks the mandatory-attribute gate before promoting a
+sentinel-carrying row, and gates the classification-cache write with the same
+check, so the cached classification can no longer flip to `single_type` while
+the list row and confirm still correctly see the sentinel.
+
+This feature therefore claims **Instance A only**. Instance A is the direction
+caused by the parent row, and it is the one no read-side patch has been able to
+fix without breaking something else.
+
+Two consequences for planning:
+
+- Instance B's fix must be **preserved**, not regressed. SC-011 makes that
+  explicit, and `22f94a9e` ships its own regression test
+  (`crates/app/inbox/src/reclassify.rs:1027`).
+- #1086 made the `__needs_review__` sentinel *more* load-bearing rather than
+  less, which sharpens rather than settles the question of whether the
+  sentinel's synthetic-group-key workaround should survive this model change.
+  See Q-7.
+
 ## Dependencies
 
-- PR #1081 is open at the time of writing and touches the same read-side
-  predicates this feature deletes. The interaction between the two is a
-  sequencing question for planning — see
-  [PENDING_REVIEW_QUESTIONS.md](PENDING_REVIEW_QUESTIONS.md) Q-3.
+- PR #1081 (`b4e72263`) and PR #1038 (`1eae04e9`) are both merged. This feature
+  deletes their shared read-side predicate and the `exclude_split_placeholder!`
+  macro (FR-026, SC-007); nothing needs to be sequenced around them.
+- PR #1086 (`22f94a9e`) is merged and must be preserved (SC-011).
 
 ## Next Gates
 

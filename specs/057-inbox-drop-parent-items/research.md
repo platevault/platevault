@@ -4,11 +4,17 @@
 
 **Created**: 2026-07-19
 
-**Base commit**: `316318ff`
+**Base commit**: `22f94a9e`
 
-All line references were verified against `316318ff`. PR #1081 is **open, not
-merged**, so the `exclude_split_placeholder!` macro it introduces does not exist
-on `main`; the predicate it extracts is currently triplicated inline (§2).
+All line references were re-verified against `22f94a9e` on 2026-07-19, after
+three relevant merges:
+
+- **`b4e72263` (#1081)** — landed, so `exclude_split_placeholder!` now exists on
+  `main` and the predicate is no longer triplicated inline (§2).
+- **`22f94a9e` (#1086)** — closed #711 **Instance B** by re-checking the
+  mandatory-attribute gate before promoting a sentinel-carrying row. Narrows
+  this feature's claim to Instance A, and sharpens §4.4 / Q-7.
+- **`1eae04e9` (#1038)** — already accounted for.
 
 ## 1. Root cause of #711
 
@@ -16,7 +22,7 @@ on `main`; the predicate it extracts is currently triplicated inline (§2).
 
 `classify()` calls `materialize_sub_items` for every source-group-backed item:
 
-- `crates/app/inbox/src/classify.rs:434` — the gate is
+- `crates/app/inbox/src/classify.rs:433` — the gate is
   `item.source_group_id.as_deref().filter(|_| item.state != "plan_open")`.
 - `crates/app/inbox/src/classify.rs:435` — the call.
 
@@ -63,20 +69,19 @@ the wrong projection for the badge.
 ## 2. Read-side machinery to be removed
 
 The #1038 predicate — `group_key = '' AND source_group_id IS NOT NULL AND
-EXISTS (sibling with non-empty group_key)` — is currently inline in three
-places:
+EXISTS (sibling with non-empty group_key)`, narrowed by #1081 to a genuine
+split — now lives in one macro with three call sites:
 
 | Location | Query |
 |---|---|
-| `crates/persistence/db/src/repositories/inbox.rs:1767-1775` | `list_unacknowledged_across_roots` (the Inbox list) |
-| `crates/persistence/db/src/repositories/inbox.rs:1520-1528` | `inbox_stats` |
-| `crates/persistence/db/src/repositories/inbox.rs:1566-1574` | `count_distinct_inbox_folders` |
+| `crates/persistence/db/src/repositories/inbox.rs:1494` | `exclude_split_placeholder!` definition (compile-time literal, because sqlx 0.9 rejects runtime-built SQL) |
+| `crates/persistence/db/src/repositories/inbox.rs:1782` | `list_unacknowledged_across_roots` (the Inbox list) |
+| `crates/persistence/db/src/repositories/inbox.rs:1559` | `inbox_stats` |
+| `crates/persistence/db/src/repositories/inbox.rs:1597` | `count_distinct_inbox_folders` |
 
-PR #1081 extracts these three into an `exclude_split_placeholder!` macro
-(compile-time literal, because sqlx 0.9 rejects runtime-built SQL). Under this
-feature all three predicates — and the macro, if #1081 has landed — are deleted
-outright rather than corrected: with no aggregate row there is nothing to
-suppress (FR-019, SC-007).
+Under this feature the macro and all three call sites are deleted outright
+rather than corrected: with no aggregate row there is nothing to suppress
+(FR-026, SC-007).
 
 **Pre-existing inconsistency, fixed for free**: `count_unacknowledged_inbox_items`
 at `crates/persistence/db/src/repositories/q_desktop.rs:171-179` has **no**
@@ -199,7 +204,7 @@ worth revisiting under the new model rather than carrying forward (Q-7).
 | Location | Note |
 |---|---|
 | `crates/app/inbox/src/scan.rs:315-353` | one scanned item per leaf folder with one folder-level signature (`signature.rs:86`) |
-| `apps/desktop/src-tauri/src/commands/inbox.rs:331` | folder signature written to `inbox_source_groups.content_signature` — **survives the parent's removal; this is the natural new anchor** (FR-016) |
+| `apps/desktop/src-tauri/src/commands/inbox.rs:331` | folder signature written to `inbox_source_groups.content_signature` — **survives the parent's removal; this is the natural new anchor** (FR-019) |
 | `apps/desktop/src-tauri/src/commands/inbox.rs:415` | the same signature also written to the parent row — deleted |
 | `apps/desktop/src-tauri/src/commands/inbox.rs:448` | the signature returned to the UI is read back **from the parent**, and the UI later echoes it into confirm — this path must be re-sourced |
 | `crates/app/inbox/src/classify.rs:930-935`, `:959` | per-group signature from per-file hashes — the real per-row anchor |
@@ -228,7 +233,7 @@ model. Findings are couplings and stale rationales, not filters.
 |---|---|
 | `apps/desktop/src/features/inbox/InboxList.tsx:65` | the only production `groupKey` read — `=== '__needs_review__'`. Untouched unless the sentinel moves to its own field |
 | `apps/desktop/src/features/inbox/InboxPage.tsx:1159` | `key={selectedItem.sourceGroupId ?? selectedItem.inboxItemId}` remounts the detail panel per source group; its 16-line comment (`:1140-1158`) is premised on parent-purge and goes stale, though the key is still needed for re-split churn |
-| `apps/desktop/src/features/inbox/InboxPage.tsx:319-326` | `useStaleSelectionCleanup` — clears the URL selection when the selected id leaves the list, with no path-based fallback. This is one of the two surfaces #1038 broke (FR-017) |
+| `apps/desktop/src/features/inbox/InboxPage.tsx:319-326` | `useStaleSelectionCleanup` — clears the URL selection when the selected id leaves the list, with no path-based fallback. This is one of the two surfaces #1038 broke (FR-023) |
 | `apps/desktop/src/lib/use-stale-selection.ts:14-31` | the generic hook; clears once per stale id |
 | `apps/desktop/src/features/inbox/InboxPage.tsx:100-113` | `pickReclassifyTarget` picks one post-split target by largest file count; returns null when all siblings are needs-review |
 | `apps/desktop/src/features/inbox/InboxPage.tsx:141-153` | `resolveReclassifyHandoff` gives up when the pending id is absent |

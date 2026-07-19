@@ -1,89 +1,170 @@
 # Pending Review Questions — 057 Inbox Drop Parent Items
 
-Questions that could **not** be resolved from the code and are not settled by
-the product owner's recorded decisions. Each must be answered during the plan
-gate. None of them reopen D-001 through D-004.
+Questions raised during specification. **Five are now answered** (2026-07-19) —
+Q-1, Q-2, Q-4 and Q-8 by the product owner, Q-3 by events. Answers are recorded
+here and promoted to decisions D-005 through D-007 in
+[spec.md](spec.md#recorded-decisions).
+
+**Four remain genuinely open** and must be resolved at the plan gate: Q-5, Q-6,
+Q-7, Q-9.
+
+Line references verified against `22f94a9e`.
 
 ---
 
-## Q-1 — How does the greenfield decision present to an existing user?
+# Answered
 
-**Context**: D-004 accepts that an existing library database's open inbox plans
-and confirmed-but-unapplied items are stranded, because the rows they bind to
-are removed. v0.5.0 is already published with a working updater, so this can
-reach a real user.
+## Q-1 — How does the greenfield decision present to an existing user? — RESOLVED: not applicable
 
-**Unresolved**: *Silent* stranding is not acceptable even when data loss is. The
-options span: reset the inbox queue on first launch after upgrade and tell the
-user; detect legacy rows and show a one-time explanation; refuse to start
-against a legacy database; or do nothing and accept confusing residue.
+**Answer (product owner)**: There are no current installs. D-004 stands
+unchanged, and no upgrade-presentation work is needed.
 
-**Why it matters**: An open plan describes pending filesystem mutations. A user
-who believes a plan is queued and finds it silently gone has lost trust in the
-plan surface, which is the product's core safety mechanism (Constitution II).
+**Reasoning**: The stranding risk D-004 accepts cannot reach a user, because
+there is no user holding a library database to strand. The question was
+well-formed against the assumption that v0.5.0's published updater implied a
+real installed base; that assumption was wrong.
 
-**Needs**: A product decision.
+**Consequence**: No migration UX is designed. No first-launch reset notice, no
+legacy-row detection, no explanation dialog. D-004's accepted risk stays
+recorded in [spec.md](spec.md) so that a future reader — for whom there *will*
+be an installed base — understands that this feature's licence to break inbox
+data was granted under conditions that no longer apply.
 
----
-
-## Q-2 — What happens to a sibling that a re-scan no longer produces?
-
-**Context**: A folder previously split into three now yields two — a file moved
-groups, or headers changed. `delete_sub_item_if_unlinked`
-(`crates/persistence/db/src/repositories/inbox.rs:610-619`) refuses to purge a
-plan-linked row. Today such a row can quietly persist behind the parent. With no
-parent, it is a visible orphan.
-
-**Unresolved**: Is the plan-linked orphan kept and shown, kept and hidden,
-invalidated with its plan cancelled, or blocked from re-scan until the plan
-resolves?
-
-**Why it matters**: This is the reconciliation rule the linkage semantics imply
-but do not determine, and it is the one case where "the linkage is broken"
-collides with "the folder is re-derived as a whole".
-
-**Needs**: A product decision, then a data-model rule.
+**Note for the future**: If any part of this work lands after the product has
+real users, this question reopens. It is answered for the current moment, not
+in principle.
 
 ---
 
-## Q-3 — Sequencing against PR #1081
+## Q-2 — What happens to a sibling that a re-scan no longer produces? — RESOLVED: invalidate
 
-**Context**: #1081 is open and modifies the same three predicates this feature
-deletes, extracting them into `exclude_split_placeholder!`. It also adds a
-regression test (`crates/app/core/src/inbox_plan.rs`) whose intent maps to
-SC-005 but whose fixture is parent-shaped.
+**Answer (product owner)**: Invalidate it. Cancel the plan, mark the item stale,
+and surface an explicit signal that the user's confirmation was superseded.
 
-**Unresolved**: Land #1081 first and delete its macro here, or supersede it.
+**Reasoning**: The confirmation was made against a world that no longer exists.
+A plan describes pending filesystem mutations, so silently honouring a plan
+whose basis has vanished is the dangerous option — Constitution II requires
+every mutation to be reviewable, and a plan the user can no longer meaningfully
+review fails that test.
 
-**Recommendation (not a decision)**: Land #1081. It repairs a live regression on
-`main`, and this feature is a multi-artifact SpecKit change that will not land
-quickly. Deleting a merged macro is cheap; leaving `main` regressed is not.
+**Rejected alternatives**:
 
-**Needs**: An engineering decision at plan time.
+- **Keep and show** — leaves a queue row representing a group that no longer
+  exists on disk. Reintroduces exactly the class of defect this feature exists
+  to remove: a row asserting something untrue about the library.
+- **Keep and hide** — the worst failure mode. An open plan describing filesystem
+  mutations, invisible to the user, still bound to a stale confirmation.
+- **Block re-scan until the plan resolves** — one stale plan freezes
+  reconciliation for the entire folder, so the user cannot fix the situation by
+  re-scanning, which is the obvious remedy.
+
+**Promoted to**: D-005.
+
+**Coupling to Q-5**: The confirm staleness guard
+(`crates/app/inbox/src/confirm.rs:198`) is the existing mechanism for exactly
+this class of problem — a confirmation made against a state that has since
+changed. It may already be the right hook for the invalidation signal rather
+than a new mechanism. **Q-5 remains open**; this is a lead for the plan gate,
+not a decision.
+
+---
+
+## Q-3 — Sequencing against PR #1081 — RESOLVED by events
+
+**Answer**: #1081 merged as `b4e72263`, ahead of this spec. The recommendation
+in the original question (land it first) is what happened.
+
+**Consequence**: `exclude_split_placeholder!` now exists on `main`
+(`crates/persistence/db/src/repositories/inbox.rs:1494`, invoked at `:1559`,
+`:1597`, `:1782`). This feature **deletes the macro and all three invocations**
+rather than correcting them — with no aggregate row there is nothing to
+suppress (FR-026, SC-007).
 
 ---
 
-## Q-4 — Does scan create items, or does classification?
+## Q-4 — Does scan create items, or does classification? — RESOLVED: Option C
 
-**Context**: `InboxScanFolderResponse.items` is one-row-per-folder by
-construction (`apps/desktop/src-tauri/src/commands/inbox.rs:441-453`), because
-scan creates the parent. But scan cannot know the group count — that requires
-reading headers, which is classification's job.
+**Answer (product owner)**: Option C. **Scan creates the source group only. The
+Inbox list displays unclassified source groups alongside classified items.**
 
-**Unresolved**: Either scan creates one provisional item that classification
-splits into N (which reintroduces a transient parent-like row, and with it the
-selection-churn problem of FR-017), or scan creates the source group only and
-classification creates all items (which leaves a scanned-but-unclassified folder
-with no row to show).
+The row visible before classification is the *source group*, not an
+`inbox_items` row. No parent item ever exists, so D-001 holds unconditionally,
+while a freshly-scanned folder is still visible to the user. Once classify runs,
+the source-group row is replaced by its N item rows.
 
-**Why it matters**: This determines whether an aggregate row can exist even
-transiently, which bears directly on D-001, and it determines what the user sees
-between scan and classify.
+**Rejected alternatives**:
 
-**Needs**: A design decision, with FR-017 and the second option's empty-queue
-window both explicitly weighed.
+- **A — scan creates one provisional item that classify splits.** Rejected: a
+  transient parent is still a parent. It revives the selection-churn coupling
+  (FR-023, `useStaleSelectionCleanup` at
+  `apps/desktop/src/features/inbox/InboxPage.tsx:319-326`) that caused the #1038
+  outage, and it would mean D-001 holds only eventually rather than at all times.
+- **B — scan creates only the source group, nothing displayed until classify.**
+  Rejected as the primary approach, **retained as a fallback**. Because classify
+  is a per-item IPC command rather than something that runs automatically on
+  scan, the invisible window is not momentary: a user could scan a whole drive
+  and be shown an empty Inbox.
+
+**Promoted to**: D-006.
+
+**Known cost, explicitly accepted**: the Inbox list becomes a **union of two row
+types** — unclassified source groups and classified items — and selection must
+survive the "one source-group row becomes N item rows" transition. This is a
+real design task for the plan gate, not a solved problem. It is the same union
+that Q-8's grouping construct needs, so the two should be designed together.
 
 ---
+
+## Q-8 — How are N sibling rows presented? — RESOLVED: group by folder
+
+**Answer (product owner)**: Add a **folder / source-group grouping dimension**
+to the Inbox list, keyed on the `source_group_id` that siblings already share —
+"we already have the relationship id on the objects."
+
+**Verified**: `GROUPING_DIMENSIONS`
+(`apps/desktop/src/features/inbox/InboxControls.tsx:48`) currently offers
+target, frameType, date, filter, exposure, instrument, source, format, and
+orgState. There is **no** folder dimension, and `source` is the *root* basename
+(`accessor: (i) => basename(i.rootAbsolutePath)`, `:80-83`), not the containing
+folder. The grouping machinery (`useGrouping`, spec 043, persisted ordered
+dimensions) already exists.
+
+**Promoted to**: D-007.
+
+**One correction to the framing.** This is slightly more than an accessor plus a
+label. The grouping engine collapses bucket key and header label into a single
+string — `apps/desktop/src/lib/grouping.ts:49` returns `{ key: s, label: s }`
+from the accessor's value, and groups sort by label (`:58`). So an accessor
+returning `sourceGroupId` produces **UUID group headers sorted in UUID order**,
+and an accessor returning `relativePath` produces readable headers that
+**collide across roots** — two folders at the same relative path under different
+roots would merge into one group, which is the precise error the root-scoped
+identity model exists to prevent.
+
+**Cheapest correct fix**: widen the accessor to return the `{ key, label }` pair
+the engine already models internally (`grouping.ts:23-26`, `:41`), so the key
+can be `sourceGroupId` while the label is the folder path. This extends existing
+structure rather than adding a parallel mechanism, and touches `keyOf`'s
+collapse at `:49` plus the accessor signature. Every existing accessor keeps
+working if the widened form is optional. **This is a recommendation, not a
+decision** — the plan gate owns it.
+
+**Also for the plan gate**: whether folder becomes the Inbox **default**
+grouping. Worth it — it makes the mixed-folder case more legible than today
+rather than less, which is the difference between this feature improving the
+Inbox and merely making it correct. It composes with D-006, since both need the
+same union of source-group and item rows.
+
+**Related presentation defects this does not by itself fix**:
+`InboxList.tsx:165-167` falls back to the root basename when the relative path
+is empty, so N siblings of a root-level folder still render N identical Path
+cells; `InboxList.tsx:185` sorts by relative path with no secondary key, so
+sibling order within a folder is unstable. Grouping makes these less visible,
+not absent. Worth a journey delta.
+
+---
+
+# Open
 
 ## Q-5 — What anchors the confirm staleness guard after reclassification?
 
@@ -102,8 +183,13 @@ defined as explicitly-stale and forces a re-classify.
 files that changed underneath them. An empty signature that compares equal to an
 empty request signature would silently disable it.
 
-**Needs**: An engineering decision. Whichever is chosen needs a regression test
-asserting the guard still fires after reclassification.
+**Raised in priority by Q-2's answer**: D-005 requires an invalidation signal
+when a re-scan supersedes a confirmation, and this guard is the existing
+mechanism for that class of problem. Whether it is reused or a separate
+invalidation path is built is now part of this question.
+
+**Needs**: An engineering decision, with a regression test asserting the guard
+still fires after reclassification.
 
 ---
 
@@ -113,56 +199,56 @@ asserting the guard still fires after reclassification.
 when **any** item sharing the source group has a plan link.
 
 **Unresolved**: This is a shared-lifecycle coupling, which D-003 says should not
-survive. But it is also a genuine safety interlock: reclassification re-derives
-the folder's items, and a plan bound to a row that re-derivation may delete is a
-real hazard (this is Q-2 from the other direction).
+survive. But it is also a genuine safety interlock.
 
-**Why it matters**: It is the clearest case where D-003's "no shared lifecycle"
-and re-derivation's folder-wide nature genuinely conflict. It should be resolved
-deliberately, not by mechanically applying D-003.
+**Changed by Q-2's answer**: D-005 now supplies a principled alternative that
+did not exist when this question was written — instead of *blocking*
+re-derivation because a plan exists, re-derivation proceeds and any plan whose
+basis vanished is *invalidated*. That is consistent with both D-003 and
+Constitution II, and suggests the interlock can be removed rather than
+preserved.
 
-**Needs**: A product decision, coupled with Q-2.
+**Still open because** removing a safety interlock deserves an explicit decision
+rather than inference, and the invalidation path (Q-5) must exist and be tested
+first. Sequencing matters: do not delete the interlock before invalidation
+works.
+
+**Needs**: A product decision, after Q-5.
 
 ---
 
 ## Q-7 — Does the needs-review sentinel workaround survive?
 
-**Context**: `clear_needs_review_sentinel`
-(`crates/persistence/db/src/repositories/inbox.rs:585-598`) rewrites the group
-key in place to a synthetic `type=<ft>·resolved=<item_id>` value purely to dodge
-the `(root_id, relative_path, group_key)` UNIQUE against an existing sibling. It
-exists because reclassify v1 mutates in place instead of re-splitting.
+**Updated 2026-07-19 after `22f94a9e` (#1086).** That PR closed #711 Instance B
+by re-checking the mandatory-attribute gate before promoting a sentinel-carrying
+row, and by gating the classification-cache write with it
+(`crates/app/inbox/src/reclassify.rs:186-201`, sentinel cleared at `:221`).
+
+**What did not change**: `clear_needs_review_sentinel`
+(`crates/persistence/db/src/repositories/inbox.rs:584-599`) still rewrites the
+group key in place to a synthetic `type=<ft>·resolved=<item_id>` value, purely
+to dodge the `(root_id, relative_path, group_key)` UNIQUE against an existing
+sibling. The workaround survives #1086 intact.
+
+**The question sharpens rather than resolves.** #1086 made the sentinel *more*
+load-bearing, not less: `inbox_confirm` gates on
+`group_key == SENTINEL_NEEDS_REVIEW` directly
+(`crates/app/inbox/src/confirm.rs:174`), and the classification cache is now
+gated by the same check. So `group_key` currently carries three distinct
+meanings at once — a classification identity, a needs-review flag, and a
+uniqueness discriminator.
 
 **Unresolved**: Whether resolving a needs-review item should instead re-derive
-the folder's items (merging the resolved files into the correct sibling, which
+the folder's items, merging the resolved files into the correct sibling (which
 may already exist), retiring the synthetic key entirely.
 
 **Why it matters**: A group key that encodes an item id is not a classification
 identity, and FR-007 requires every item's identity to be consistent with its
-state. The synthetic key is a uniqueness hack wearing an identity field's
-clothes.
+state. Overloading one column with three meanings is what let a row claim
+`classified` while carrying no frame type in the first place.
 
-**Needs**: A data-model decision.
-
----
-
-## Q-8 — How are N sibling rows presented so the user can tell them apart?
-
-**Context**: `InboxList.tsx:165-167` falls back to the root basename when the
-relative path is empty, so N siblings of a root-level folder render N identical
-Path cells. `InboxList.tsx:185` sorts by relative path with no secondary key, so
-sibling order is unstable between renders.
-
-**Unresolved**: What distinguishes sibling rows visually — frame type alone, an
-explicit shared-folder affordance, grouping siblings together — and what the
-stable sort key is.
-
-**Why it matters**: The model makes multiple rows per folder routine where it
-was previously rare. This is a **new** UX problem created by the change, not an
-existing defect, and it is the most likely way a technically correct
-implementation still produces a confusing Inbox.
-
-**Needs**: A design decision. Worth a journey delta.
+**Needs**: A data-model decision. Any change must preserve #1086's Instance B
+fix, which has its own regression test at `reclassify.rs:1027`.
 
 ---
 
@@ -170,16 +256,18 @@ implementation still produces a confusing Inbox.
 
 **Context**: `canConfirm` requires `classification.type === 'single_type'`
 (`apps/desktop/src/features/inbox/InboxPage.tsx:832-841`). The parent is exactly
-the row that classifies as `mixed`. With no parent, it is unclear whether any
-row can still classify `mixed`.
+the row that classifies as `mixed`.
 
 **Unresolved**: Whether `mixed` remains reachable, and if not, whether
 `InboxDetail.tsx:1037-1048` (`inbox-mixed-alert`), `mixedSummary` (`:842-843`),
 the `handleConfirm` guard (`:607`), and the root-pick guard (`:691`) should be
 removed.
 
-**Why it matters**: Dead branches around a confirm gate are a hazard — a future
-reader may assume `mixed` is reachable and reason about a state that cannot
-occur. Answer depends on Q-4.
+**Narrowed by Q-4's answer**: under D-006 no `inbox_items` row is ever created
+before classification, and classification produces only single-type items. So
+`mixed` looks unreachable for items. The remaining question is whether an
+unclassified **source-group** row needs its own equivalent of the mixed
+affordance — a scanned-but-unclassified folder is precisely a folder whose
+contents are not yet known to be uniform.
 
-**Needs**: An engineering decision, after Q-4.
+**Needs**: An engineering decision, after the D-006 row-union design exists.
