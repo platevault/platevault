@@ -1254,42 +1254,14 @@ export function TargetDetailV2({
           )}
         </Section>
 
-        {/* Sessions surface lives in the mid-page SESSIONS/PROJECTS link row
-          above (single source of truth) — the duplicate bottom Sessions
-          section was removed to avoid two Sessions surfaces. */}
-
-        {/* ── Projects (spec 023 US3) ──────────────────────────────────────── */}
-        <Section title={m.common_projects()} count={projects.length}>
-          {projects.length === 0 ? (
-            <EmptyState
-              title={m.targets_detail_no_projects_linked_title()}
-              desc={m.targets_detail_no_projects_linked()}
-            />
-          ) : (
-            <ul className="alm-target-detail__project-list">
-              {projects.map((p) => (
-                <li key={p.id} className="alm-target-detail__project-item">
-                  <button
-                    className="alm-target-detail__project-btn"
-                    onClick={() =>
-                      void navigate({
-                        to: '/projects',
-                        search: { selected: p.id },
-                      })
-                    }
-                  >
-                    <span className="alm-target-detail__project-name">
-                      {p.name}
-                    </span>
-                    <span className="alm-target-detail__project-lifecycle">
-                      {p.lifecycle}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        {/* Sessions AND Projects surfaces both live in the mid-page
+          SESSIONS/PROJECTS link row above (single source of truth) — the
+          duplicate bottom Sessions section was already removed to avoid two
+          Sessions surfaces; the bottom Projects section (#670) was the same
+          duplication (identical p.name/p.lifecycle list, same
+          navigate-to-/projects action, plus a redundant EmptyState whose
+          title and desc restated the same "No projects linked" sentence
+          twice) — removed for the same reason. */}
 
         {/* ── Observing notes (spec 023 US4) ──────────────────────────────── */}
         <Section title={m.targets_detail_notes_title()}>
