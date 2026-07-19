@@ -386,7 +386,9 @@ describe('TargetSearch', () => {
     render(<TargetSearch onSelect={vi.fn()} />);
     await typeAndFlush(screen.getByRole('combobox'), 'm31');
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not search for targets');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not search for targets',
+    );
   });
 
   // ── US3 (T022/T023): SIMBAD long-tail merge + dedupe + cancel-in-flight ──────
