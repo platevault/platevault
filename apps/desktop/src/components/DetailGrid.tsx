@@ -17,8 +17,8 @@ export interface DetailGridProps {
  */
 export function DetailGrid({ children, rail }: DetailGridProps) {
   return (
-    <div className="alm-dash">
-      <div className="alm-dash__primary">{children}</div>
+    <div className="pv-dash">
+      <div className="pv-dash__primary">{children}</div>
       {rail}
     </div>
   );
@@ -35,8 +35,8 @@ export interface RailProps {
  */
 export function Rail({ children }: RailProps) {
   return (
-    <div className="alm-rail">
-      <div className="alm-rail__panel">{children}</div>
+    <div className="pv-rail">
+      <div className="pv-rail__panel">{children}</div>
     </div>
   );
 }
@@ -49,8 +49,8 @@ export interface RailCardProps {
 /** A labeled group inside the Rail, divided from its neighbours by a hairline. */
 export function RailCard({ title, children }: RailCardProps) {
   return (
-    <div className="alm-rail__card">
-      <div className="alm-rail__card-h">{title}</div>
+    <div className="pv-rail__card">
+      <div className="pv-rail__card-h">{title}</div>
       {children}
     </div>
   );

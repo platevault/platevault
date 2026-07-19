@@ -3,14 +3,14 @@
 #
 # Fails if:
 #   1. Raw hex colors appear in apps/desktop/src/styles/components.css
-#      (all colors must use --alm-* CSS variables).
+#      (all colors must use --pv-* CSS variables).
 #   2. Raw `ms` values appear in components.css
-#      (motion durations must use --alm-transition-* variables).
-#   3. Legacy/non-ALM token namespaces appear in TSX/TS source files
-#      (--mantine-color-* and --alm-color-* do not exist in tokens.css).
-#   4. Bare --alm-radius (without -sm/-md/-lg suffix) appears in TSX/TS
+#      (motion durations must use --pv-transition-* variables).
+#   3. Legacy/non-PV token namespaces appear in TSX/TS source files
+#      (--mantine-color-* and --pv-color-* do not exist in tokens.css).
+#   4. Bare --pv-radius (without -sm/-md/-lg suffix) appears in TSX/TS
 #      source files — pin the R-4 regression fix (spec 028, 2026-06-17).
-#      Valid radius tokens: --alm-radius-sm, --alm-radius-md, --alm-radius-lg.
+#      Valid radius tokens: --pv-radius-sm, --pv-radius-md, --pv-radius-lg.
 #
 # Exceptions documented in components.css policy comment (spec 022 T011):
 #   - Component-intrinsic geometry px values are intentionally raw.
@@ -43,7 +43,7 @@ for f in "${COMPONENTS_CSS[@]}"; do
   [ -n "$h" ] && HEX_HITS+="${f##*/styles/}:"$'\n'"$h"$'\n'
 done
 if [ -n "$HEX_HITS" ]; then
-  echo "FAIL: Raw hex colors found in component CSS (use --alm-* tokens instead):"
+  echo "FAIL: Raw hex colors found in component CSS (use --pv-* tokens instead):"
   echo "$HEX_HITS"
   PASS=false
 else
@@ -59,7 +59,7 @@ for f in "${COMPONENTS_CSS[@]}"; do
   [ -n "$h" ] && MS_HITS+="${f##*/styles/}:"$'\n'"$h"$'\n'
 done
 if [ -n "$MS_HITS" ]; then
-  echo "FAIL: Raw ms values found in component CSS (use --alm-transition-* tokens instead):"
+  echo "FAIL: Raw ms values found in component CSS (use --pv-transition-* tokens instead):"
   echo "$MS_HITS"
   PASS=false
 else
@@ -68,33 +68,33 @@ fi
 
 # ── Check 3: No legacy token namespaces in TSX/TS source ─────────────────────
 echo ""
-echo "3. Checking for legacy/non-ALM token namespaces in source files..."
-# --mantine-color-* and --alm-color-* are not in tokens.css
-LEGACY_HITS=$(grep -rnP "(--mantine-color-|--alm-color-)" \
+echo "3. Checking for legacy/non-PV token namespaces in source files..."
+# --mantine-color-* and --pv-color-* are not in tokens.css
+LEGACY_HITS=$(grep -rnP "(--mantine-color-|--pv-color-)" \
   --include="*.tsx" --include="*.ts" \
   "$SRC_DIR" | grep -v "\.test\." | grep -v "bindings/" || true)
 if [ -n "$LEGACY_HITS" ]; then
-  echo "FAIL: Legacy token references found (--mantine-color-* / --alm-color-* do not exist in tokens.css):"
+  echo "FAIL: Legacy token references found (--mantine-color-* / --pv-color-* do not exist in tokens.css):"
   echo "$LEGACY_HITS"
   PASS=false
 else
   echo "  OK: No legacy token namespaces."
 fi
 
-# ── Check 4: No bare --alm-radius (R-4 regression pin, spec 028) ─────────────
+# ── Check 4: No bare --pv-radius (R-4 regression pin, spec 028) ─────────────
 echo ""
-echo "4. Checking for bare --alm-radius (undefined; use --alm-radius-{sm,md,lg}) in source files..."
-# Match var(--alm-radius) or --alm-radius followed by a non-dash character (i.e., not a suffix).
-# The grep uses a negative lookahead: --alm-radius not followed by -
-BARE_RADIUS_HITS=$(grep -rnP "var\(--alm-radius\)" \
+echo "4. Checking for bare --pv-radius (undefined; use --pv-radius-{sm,md,lg}) in source files..."
+# Match var(--pv-radius) or --pv-radius followed by a non-dash character (i.e., not a suffix).
+# The grep uses a negative lookahead: --pv-radius not followed by -
+BARE_RADIUS_HITS=$(grep -rnP "var\(--pv-radius\)" \
   --include="*.tsx" --include="*.ts" \
   "$SRC_DIR" | grep -v "\.test\." | grep -v "bindings/" || true)
 if [ -n "$BARE_RADIUS_HITS" ]; then
-  echo "FAIL: Bare --alm-radius found (R-4 regression: token is undefined; use --alm-radius-md instead):"
+  echo "FAIL: Bare --pv-radius found (R-4 regression: token is undefined; use --pv-radius-md instead):"
   echo "$BARE_RADIUS_HITS"
   PASS=false
 else
-  echo "  OK: No bare --alm-radius references."
+  echo "  OK: No bare --pv-radius references."
 fi
 
 # ── Check 5: Every [data-theme] block declares the full raw-token set ────────

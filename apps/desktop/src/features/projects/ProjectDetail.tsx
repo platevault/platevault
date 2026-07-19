@@ -217,7 +217,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   if (loading && !project) {
     return (
       <DetailPane fill>
-        <div className="alm-project-detail__loading">
+        <div className="pv-project-detail__loading">
           {m.projects_detail_loading()}
         </div>
       </DetailPane>
@@ -410,19 +410,19 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     {
       key: 'role',
       label: m.projects_col_role(),
-      className: 'alm-project-detail__role-cell',
+      className: 'pv-project-detail__role-cell',
     },
     { key: 'source', label: m.projects_col_source() },
     { key: 'filter', label: m.common_filter() },
     {
       key: 'subs',
       label: m.projects_col_subs(),
-      className: 'alm-project-detail__num-cell',
+      className: 'pv-project-detail__num-cell',
     },
     {
       key: 'integ',
       label: m.projects_col_integ(),
-      className: 'alm-project-detail__integ-cell',
+      className: 'pv-project-detail__integ-cell',
     },
   ];
 
@@ -434,7 +434,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     const integS = src.frames * parseExposureSeconds(src.exposure);
     return {
       role: (
-        <span className="alm-project-detail__role-cell">
+        <span className="pv-project-detail__role-cell">
           {renderValue(src.role ?? null, { applicability: 'applicable' })}
         </span>
       ),
@@ -442,7 +442,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         // #720 FR-006/SC-002: click through to the source's Inventory
         // (Sessions) entry instead of rendering inert text.
         <a
-          className="alm-project-detail__source-name"
+          className="pv-project-detail__source-name"
           href={`#/sessions?selected=${encodeURIComponent(src.inventoryId)}`}
           data-testid={`project-source-link-${src.inventoryId}`}
         >
@@ -458,12 +458,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         renderValue(null, { applicability: 'applicable' })
       ),
       subs: (
-        <span className="alm-project-detail__num-cell">
+        <span className="pv-project-detail__num-cell">
           {fmtFrames(src.frames)}
         </span>
       ),
       integ: (
-        <span className="alm-project-detail__integ-cell">
+        <span className="pv-project-detail__integ-cell">
           {fmtIntegS(integS)}
         </span>
       ),
@@ -498,7 +498,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           and the action cluster lay out on their OWN rows and never overlap
           the MetricLine below (task #81). The shared bar's single fixed-height
           flex row is relaxed to auto-height + wrap only within this scope. */}
-      <div className="alm-project-detail__action-bar">
+      <div className="pv-project-detail__action-bar">
         <TopActionBar
           title=""
           right={
@@ -508,7 +508,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
              hooks (previously on a separate bottom footer that has been
              removed to de-duplicate the per-project actions). */
             <div
-              className="alm-project-detail__bar-actions"
+              className="pv-project-detail__bar-actions"
               data-testid="lifecycle-actions"
             >
               {/* Reveal — platform-native label (shared revealLabel()) */}
@@ -563,9 +563,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             </div>
           }
         >
-          <span className="alm-project-detail__bar-tool">{toolLabel}</span>
+          <span className="pv-project-detail__bar-tool">{toolLabel}</span>
           {project.path && (
-            <span className="alm-project-detail__bar-path">{project.path}</span>
+            <span className="pv-project-detail__bar-path">{project.path}</span>
           )}
         </TopActionBar>
       </div>
@@ -583,7 +583,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
           <span>{m.projects_detail_channel_drift()}</span>
-          <div className="alm-project-detail__drift-actions">
+          <div className="pv-project-detail__drift-actions">
             <Btn
               size="sm"
               variant="primary"
@@ -646,28 +646,28 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         <Link
           to="/targets"
           search={{ selected: project.canonicalTarget.id }}
-          className="alm-project-detail__target-info"
+          className="pv-project-detail__target-info"
           data-testid="project-canonical-target"
         >
-          <span className="alm-project-detail__target-label">
+          <span className="pv-project-detail__target-label">
             {m.projects_create_target_label()}
           </span>
-          <span className="alm-project-detail__target-name">
+          <span className="pv-project-detail__target-name">
             {project.canonicalTarget.primaryDesignation}
           </span>
           {project.canonicalTarget.commonName && (
-            <span className="alm-project-detail__target-common">
+            <span className="pv-project-detail__target-common">
               {project.canonicalTarget.commonName}
             </span>
           )}
         </Link>
       )}
 
-      <div className="alm-project-detail__sections">
+      <div className="pv-project-detail__sections">
         {/* ── Sources section ────────────────────────────────────────────── */}
         <Section title={m.common_sources()} count={project.sources.length}>
           {project.sources.length === 0 ? (
-            <div className="alm-project-detail__sources-empty">
+            <div className="pv-project-detail__sources-empty">
               {m.projects_sources_empty()}
             </div>
           ) : (
@@ -697,16 +697,16 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               ) : undefined
             }
           >
-            <div className="alm-project-detail__channels-section">
+            <div className="pv-project-detail__channels-section">
               {derivedChannels.map((ch) => (
-                <div key={ch.label} className="alm-project-detail__channel-row">
-                  <span className="alm-project-detail__ch-letter">
+                <div key={ch.label} className="pv-project-detail__channel-row">
+                  <span className="pv-project-detail__ch-letter">
                     {ch.label[0]}
                   </span>
-                  <span className="alm-project-detail__ch-filter">
+                  <span className="pv-project-detail__ch-filter">
                     {ch.filter}
                   </span>
-                  <div className="alm-project-detail__ch-coverage">
+                  <div className="pv-project-detail__ch-coverage">
                     <CoverageBar
                       label=""
                       value={ch.totalFrames}
@@ -714,13 +714,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                       unit=""
                     />
                   </div>
-                  <span className="alm-project-detail__ch-subs">
+                  <span className="pv-project-detail__ch-subs">
                     {fmtFrames(ch.totalFrames)}
                   </span>
-                  <span className="alm-project-detail__ch-integ">
+                  <span className="pv-project-detail__ch-integ">
                     {ch.totalIntegS > 0 ? fmtIntegS(ch.totalIntegS) : '—'}
                   </span>
-                  <div className="alm-project-detail__ch-status">
+                  <div className="pv-project-detail__ch-status">
                     <Pill variant={ch.inSync ? 'ghost' : 'warn'}>
                       {ch.inSync
                         ? m.projects_channels_in_sync()
@@ -745,14 +745,14 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {/* ── Tool-launch not-configured hint ─────────────────────────────── */}
       {launchDisabledReason === 'not_configured' && (
         <div
-          className="alm-project-detail__footer alm-project-detail__footer--tool"
+          className="pv-project-detail__footer pv-project-detail__footer--tool"
           data-testid="tool-launch-footer"
         >
-          <span className="alm-project-detail__tool-hint">
+          <span className="pv-project-detail__tool-hint">
             {m.projects_tool_not_configured()}{' '}
             <a
               href="#/settings?pane=tools"
-              className="alm-project-detail__tool-link"
+              className="pv-project-detail__tool-link"
             >
               {m.projects_tool_configure_link()}
             </a>
@@ -768,14 +768,14 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           aria-label={m.projects_tool_already_running_aria({
             tool: projectToolStr,
           })}
-          className="alm-project-detail__modal-overlay"
+          className="pv-project-detail__modal-overlay"
           data-testid="relaunch-modal"
         >
-          <div className="alm-project-detail__modal-card">
-            <p className="alm-project-detail__modal-body">
+          <div className="pv-project-detail__modal-card">
+            <p className="pv-project-detail__modal-body">
               {m.projects_relaunch_body({ tool: projectToolStr })}
             </p>
-            <div className="alm-project-detail__modal-actions">
+            <div className="pv-project-detail__modal-actions">
               <Btn
                 size="sm"
                 variant="ghost"
@@ -799,7 +799,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
       {/* ── Edit pane overlay ───────────────────────────────────────────── */}
       {editOpen && (
-        <div className="alm-project-detail__edit-overlay">
+        <div className="pv-project-detail__edit-overlay">
           <EditProjectPane
             project={project}
             onClose={() => setEditOpen(false)}

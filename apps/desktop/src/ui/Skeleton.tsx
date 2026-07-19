@@ -52,14 +52,14 @@ export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
   ) {
     const vars: CSSProperties = {
       ...style,
-      ...(len(width) ? { ['--alm-skel-w' as string]: len(width) } : null),
-      ...(len(height) ? { ['--alm-skel-h' as string]: len(height) } : null),
-      ...(radius ? { ['--alm-skel-r' as string]: radius } : null),
+      ...(len(width) ? { ['--pv-skel-w' as string]: len(width) } : null),
+      ...(len(height) ? { ['--pv-skel-h' as string]: len(height) } : null),
+      ...(radius ? { ['--pv-skel-r' as string]: radius } : null),
     };
     return (
       <div
         ref={ref}
-        className={['alm-skeleton-group', className].filter(Boolean).join(' ')}
+        className={['pv-skeleton-group', className].filter(Boolean).join(' ')}
         role="status"
         aria-busy="true"
         aria-label={label}
@@ -71,7 +71,7 @@ export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
         {Array.from({ length: Math.max(1, count) }, (_, i) => (
           <span
             key={i}
-            className={`alm-skeleton alm-skeleton--${variant}`}
+            className={`pv-skeleton pv-skeleton--${variant}`}
             aria-hidden="true"
           />
         ))}

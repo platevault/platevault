@@ -18,7 +18,7 @@ export interface RadioGroupProps
 
 export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
   function RadioGroup({ options, value, onChange, className, ...rest }, ref) {
-    const cls = ['alm-radio-group', className].filter(Boolean).join(' ');
+    const cls = ['pv-radio-group', className].filter(Boolean).join(' ');
     return (
       <div ref={ref} className={cls} {...rest}>
         {options.map((o) => {
@@ -28,11 +28,11 @@ export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
           return (
             <button
               key={val}
-              className={`alm-radio ${value === val ? 'alm-radio--active' : ''}`}
+              className={`pv-radio ${value === val ? 'pv-radio--active' : ''}`}
               onClick={() => onChange(val)}
             >
               <div>{label}</div>
-              {desc && <div className="alm-radio__desc">{desc}</div>}
+              {desc && <div className="pv-radio__desc">{desc}</div>}
             </button>
           );
         })}

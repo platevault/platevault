@@ -146,10 +146,10 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
   };
 
   return (
-    <div className="alm-step-tools">
-      <p className="alm-step-tools__intro">{m.setup_tools_intro()}</p>
+    <div className="pv-step-tools">
+      <p className="pv-step-tools__intro">{m.setup_tools_intro()}</p>
 
-      <div className="alm-step-tools__list">
+      <div className="pv-step-tools__list">
         {TOOL_DEFS.map((def) => {
           const config = tools[def.key];
           return (
@@ -165,7 +165,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
         })}
       </div>
 
-      <p className="alm-step-tools__note">{m.setup_tools_skip_note()}</p>
+      <p className="pv-step-tools__note">{m.setup_tools_skip_note()}</p>
     </div>
   );
 }
@@ -200,12 +200,12 @@ function ToolCard({
   };
 
   return (
-    <div className="alm-step-tools__card" data-testid={`tool-card-${def.key}`}>
+    <div className="pv-step-tools__card" data-testid={`tool-card-${def.key}`}>
       {/* Header row: name + status pill + description + enable toggle */}
-      <div className="alm-step-tools__header">
-        <div className="alm-step-tools__tool-info">
-          <div className="alm-step-tools__name-row">
-            <span className="alm-step-tools__tool-name">{def.name()}</span>
+      <div className="pv-step-tools__header">
+        <div className="pv-step-tools__tool-info">
+          <div className="pv-step-tools__name-row">
+            <span className="pv-step-tools__tool-name">{def.name()}</span>
             {config.path === null ? (
               <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
             ) : pathValid ? (
@@ -214,10 +214,10 @@ function ToolCard({
               <Pill variant="danger">{m.setup_tools_invalid()}</Pill>
             )}
           </div>
-          <span className="alm-step-tools__tool-desc">{def.description()}</span>
+          <span className="pv-step-tools__tool-desc">{def.description()}</span>
         </div>
-        <div className="alm-step-tools__controls">
-          <div className="alm-step-tools__actions">
+        <div className="pv-step-tools__controls">
+          <div className="pv-step-tools__actions">
             <Btn
               variant="ghost"
               size="sm"
@@ -227,14 +227,14 @@ function ToolCard({
                 name: def.name(),
               })}
               title={m.setup_tools_redetect()}
-              className="alm-step-tools__redetect-btn"
+              className="pv-step-tools__redetect-btn"
             >
               <RotateCw
                 size={14}
                 aria-hidden="true"
                 className={
                   redetecting
-                    ? 'alm-step-tools__redetect-icon--spinning'
+                    ? 'pv-step-tools__redetect-icon--spinning'
                     : undefined
                 }
               />
@@ -246,7 +246,7 @@ function ToolCard({
             />
           </div>
           {notFound && (
-            <span className="alm-step-tools__not-found">
+            <span className="pv-step-tools__not-found">
               {m.setup_tools_no_installation()}
             </span>
           )}
@@ -255,8 +255,8 @@ function ToolCard({
 
       {/* Executable path picker, only when enabled */}
       {config.enabled && (
-        <div className="alm-step-tools__path-block">
-          <div className="alm-step-tools__path-row">
+        <div className="pv-step-tools__path-block">
+          <div className="pv-step-tools__path-row">
             <ToolPathPicker
               toolName={def.name()}
               path={config.path}
@@ -264,7 +264,7 @@ function ToolCard({
             />
           </div>
           {config.path !== null && !pathValid && (
-            <span className="alm-field-error">
+            <span className="pv-field-error">
               {m.setup_tools_invalid_executable()}
             </span>
           )}
@@ -305,13 +305,13 @@ function ToolPathPicker({
 
   return (
     <>
-      <span className="alm-step-tools__path-label">
+      <span className="pv-step-tools__path-label">
         {m.setup_tools_executable_label()}
       </span>
       <span
         className={
-          'alm-mono alm-step-tools__path-value' +
-          (path ? ' alm-step-tools__path-value--set' : '')
+          'pv-mono pv-step-tools__path-value' +
+          (path ? ' pv-step-tools__path-value--set' : '')
         }
         title={path ?? undefined}
       >

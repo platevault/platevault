@@ -32,7 +32,7 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
     { options, value, onChange, danger, dangerValue, className, ...rest },
     ref,
   ) {
-    const cls = ['alm-seg', className].filter(Boolean).join(' ');
+    const cls = ['pv-seg', className].filter(Boolean).join(' ');
 
     // WAI-ARIA radio-group pattern (#1010): Left/Up selects the previous
     // option, Right/Down the next, wrapping at the ends. Moves both focus
@@ -65,12 +65,12 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
               aria-checked={active}
               tabIndex={active ? 0 : -1}
               className={[
-                'alm-seg__btn',
-                active && 'alm-seg__btn--active',
+                'pv-seg__btn',
+                active && 'pv-seg__btn--active',
                 danger &&
                   dangerValue != null &&
                   o.value === dangerValue &&
-                  'alm-seg__btn--danger',
+                  'pv-seg__btn--danger',
               ]
                 .filter(Boolean)
                 .join(' ')}

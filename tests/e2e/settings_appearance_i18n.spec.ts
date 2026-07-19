@@ -10,7 +10,7 @@
  *     per-line panes, cleanup per-type action overrides.  FR-002/FR-004/FR-006.
  *   - 043 (UI redesign / PlateVault): 4-theme + System appearance system with
  *     `data-theme` on <html>, persisted in `localStorage['alm.theme']`; the
- *     page-layout convention (`.alm-page__bar` pinned, content scroll region
+ *     page-layout convention (`.pv-page__bar` pinned, content scroll region
  *     `overflow-y:auto` — action bar always visible, only content scrolls).
  *   - 046 (i18n / error-codes): Paraglide baseLocale catalog. FR-004 hard-pins
  *     English with NO in-app language switcher, so this suite asserts the
@@ -96,7 +96,7 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     // SegControl renders WAI-ARIA radio-group semantics (#1010): options are
     // role="radio", not role="button".
     await expect(row.getByRole('radio', { name: 'Archive' })).toHaveClass(
-      /alm-seg__btn--active/,
+      /pv-seg__btn--active/,
     );
     // Cleanup's mount effect fires `settings_get('cleanup')` (mock IPC has a
     // randomized 50-150ms artificial latency, see `apps/desktop/src/api/mocks.ts`
@@ -107,7 +107,7 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     // is sufficient (no retry needed).
     await row.getByRole('radio', { name: 'Keep' }).click();
     await expect(row.getByRole('radio', { name: 'Keep' })).toHaveClass(
-      /alm-seg__btn--active/,
+      /pv-seg__btn--active/,
       { timeout: 15_000 },
     );
 
@@ -133,7 +133,7 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     // local click) — just the same mock IPC latency, so a longer read-only
     // wait is sufficient.
     await expect(rowAfter.getByRole('radio', { name: 'Keep' })).toHaveClass(
-      /alm-seg__btn--active/,
+      /pv-seg__btn--active/,
       { timeout: 15_000 },
     );
   });
@@ -157,7 +157,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     await expect(page.getByText('Theme', { exact: true })).toBeVisible();
 
     // System + 4 named themes = 5 swatch cards.
-    const swatches = page.locator('.alm-theme-swatch');
+    const swatches = page.locator('.pv-theme-swatch');
     await expect(swatches).toHaveCount(5);
 
     for (const theme of THEME_CASES) {
@@ -191,7 +191,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     // #794 repro: switch theme, then navigate away — the choice must not
     // silently revert to the resolved-system dark default.
     await page.goto('/#/targets');
-    await expect(page.locator('.alm-sidebar')).toBeVisible();
+    await expect(page.locator('.pv-sidebar')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
       'warm-clay',
@@ -222,7 +222,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
 
 test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
   // The Settings Cleanup pane has a long per-type table, so its content region
-  // (`.alm-two-pane__detail`, overflow-y:auto) actually overflows at 720px —
+  // (`.pv-two-pane__detail`, overflow-y:auto) actually overflows at 720px —
   // making it a faithful probe for "action bar always visible, only content
   // scrolls".
   async function assertBarPinnedWhileContentScrolls(
@@ -231,12 +231,12 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
   ): Promise<void> {
     await page.setViewportSize({ width: 1100, height });
 
-    const bar = page.locator('.alm-page__bar').first();
+    const bar = page.locator('.pv-page__bar').first();
     await expect(bar).toBeVisible();
     const barBoxBefore = await bar.boundingBox();
     expect(barBoxBefore).not.toBeNull();
 
-    const scroller = page.locator('.alm-two-pane__detail').first();
+    const scroller = page.locator('.pv-two-pane__detail').first();
     // Content must genuinely overflow, else "only content scrolls" is untested.
     const overflow = await scroller.evaluate(
       (el) => el.scrollHeight - el.clientHeight,
@@ -267,7 +267,7 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
     ).toBeVisible();
     // The top action bar carries the page title.
     await expect(
-      page.locator('.alm-page__bar').getByText('Settings', { exact: true }),
+      page.locator('.pv-page__bar').getByText('Settings', { exact: true }),
     ).toBeVisible();
 
     await assertBarPinnedWhileContentScrolls(page, 720);
@@ -286,7 +286,7 @@ test.describe('Journey 10 · i18n catalog (spec 046)', () => {
 
     // Known keys must resolve to their English strings, not literal keys.
     await expect(
-      page.locator('.alm-page__bar').getByText('Settings', { exact: true }),
+      page.locator('.pv-page__bar').getByText('Settings', { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Data Sources', exact: true }),
@@ -308,7 +308,7 @@ test.describe('Journey 10 · i18n catalog (spec 046)', () => {
 
     // Every settings-nav label must be a rendered string, never a raw key.
     const navLabels = await page
-      .locator('.alm-settings__nav-item')
+      .locator('.pv-settings__nav-item')
       .allInnerTexts();
     expect(navLabels.length).toBeGreaterThan(0);
     for (const label of navLabels) {
@@ -381,7 +381,7 @@ test.describe('Journey 10 · Bottom log viewer (spec 019)', () => {
 
     // Truncation marker is NOT reachable in mock mode (documented above):
     // assert its honest absence rather than fabricating a truncated buffer.
-    await expect(page.locator('.alm-logpanel__truncation-marker')).toHaveCount(
+    await expect(page.locator('.pv-logpanel__truncation-marker')).toHaveCount(
       0,
     );
 
@@ -419,9 +419,9 @@ test.describe('Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)', ()
   async function assertShellIntactNoHorizontalOverflow(
     page: Page,
   ): Promise<void> {
-    await expect(page.locator('.alm-sidebar')).toBeVisible();
-    await expect(page.locator('.alm-page__bar').first()).toBeVisible();
-    await expect(page.locator('.alm-frame__main')).toBeVisible();
+    await expect(page.locator('.pv-sidebar')).toBeVisible();
+    await expect(page.locator('.pv-page__bar').first()).toBeVisible();
+    await expect(page.locator('.pv-frame__main')).toBeVisible();
 
     const overflow = await page.evaluate(() => {
       const doc = document.scrollingElement!;
@@ -447,7 +447,7 @@ test.describe('Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)', ()
     seedSetupComplete(page);
     await page.setViewportSize({ width: 880, height: 576 });
     await page.goto('/#/targets');
-    await expect(page.locator('.alm-sidebar')).toBeVisible();
+    await expect(page.locator('.pv-sidebar')).toBeVisible();
 
     await assertShellIntactNoHorizontalOverflow(page);
   });

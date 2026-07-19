@@ -25,7 +25,7 @@ async function selectProject(
   name: string,
 ): Promise<void> {
   const row = page
-    .locator('.alm-projects-table__row')
+    .locator('.pv-projects-table__row')
     .filter({ hasText: name })
     .first();
   await expect(row).toBeVisible({ timeout: 8_000 });

@@ -56,14 +56,14 @@ export function RotationWarningNotice({ warning }: RotationWarningNoticeProps) {
   return (
     <Banner
       variant="warn"
-      className="alm-rotation-warning"
+      className="pv-rotation-warning"
       data-testid={`rotation-warning-${warning.kind}`}
     >
       <AlertTriangle
         size={14}
         role="img"
         aria-label={m.calibration_rotation_warning_aria()}
-        className="alm-rotation-warning__icon"
+        className="pv-rotation-warning__icon"
       />{' '}
       {message}
     </Banner>

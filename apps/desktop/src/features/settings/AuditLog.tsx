@@ -310,10 +310,10 @@ export function AuditLog() {
         </Btn>
       }
     >
-      <div className="alm-audit-log__filters">
+      <div className="pv-audit-log__filters">
         <input
           type="text"
-          className="alm-input alm-audit-log__search"
+          className="pv-input pv-audit-log__search"
           placeholder={m.settings_auditlog_search_placeholder()}
           value={searchInput}
           onChange={(e) => {
@@ -322,13 +322,13 @@ export function AuditLog() {
           }}
           aria-label={m.settings_auditlog_search_aria()}
         />
-        <label className="alm-audit-log__date-label" htmlFor={dateFromId}>
+        <label className="pv-audit-log__date-label" htmlFor={dateFromId}>
           {m.settings_auditlog_date_from()}
           {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
           <input
             id={dateFromId}
             type="date"
-            className="alm-input alm-audit-log__date-input"
+            className="pv-input pv-audit-log__date-input"
             value={dateFrom}
             onChange={(e) => {
               setDateFrom(e.target.value);
@@ -336,13 +336,13 @@ export function AuditLog() {
             }}
           />
         </label>
-        <label className="alm-audit-log__date-label" htmlFor={dateToId}>
+        <label className="pv-audit-log__date-label" htmlFor={dateToId}>
           {m.settings_auditlog_date_to()}
           {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
           <input
             id={dateToId}
             type="date"
-            className="alm-input alm-audit-log__date-input"
+            className="pv-input pv-audit-log__date-input"
             value={dateTo}
             onChange={(e) => {
               setDateTo(e.target.value);
@@ -350,12 +350,12 @@ export function AuditLog() {
             }}
           />
         </label>
-        <label className="alm-audit-log__date-label" htmlFor={outcomeFilterId}>
+        <label className="pv-audit-log__date-label" htmlFor={outcomeFilterId}>
           {m.settings_auditlog_col_outcome()}
           {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
           <select
             id={outcomeFilterId}
-            className="alm-select alm-audit-log__date-input"
+            className="pv-select pv-audit-log__date-input"
             value={outcomeFilter}
             onChange={(e) => {
               setOutcomeFilter(e.target.value as AuditOutcome | '');
@@ -371,14 +371,14 @@ export function AuditLog() {
           </select>
         </label>
         <label
-          className="alm-audit-log__date-label"
+          className="pv-audit-log__date-label"
           htmlFor={entityTypeFilterId}
         >
           {m.settings_auditlog_col_entity()}
           {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
           <select
             id={entityTypeFilterId}
-            className="alm-select alm-audit-log__date-input"
+            className="pv-select pv-audit-log__date-input"
             value={entityTypeFilter}
             onChange={(e) => {
               setEntityTypeFilter(e.target.value);
@@ -396,17 +396,17 @@ export function AuditLog() {
       </div>
 
       {exportError && (
-        <div className="alm-audit-log__export-error" role="alert">
+        <div className="pv-audit-log__export-error" role="alert">
           {m.settings_auditlog_export_failed({ error: exportError })}
         </div>
       )}
 
       {loading && (
-        <div className="alm-audit-log__status">{m.common_loading()}</div>
+        <div className="pv-audit-log__status">{m.common_loading()}</div>
       )}
 
       {loadError && (
-        <div className="alm-audit-log__load-error">
+        <div className="pv-audit-log__load-error">
           {m.settings_auditlog_load_error({ error: loadError })}
         </div>
       )}
@@ -446,54 +446,52 @@ export function AuditLog() {
                 ? () => void navigate({ to: path as never })
                 : undefined,
               timestamp: (
-                <code className="alm-mono alm-audit-log__ts">
+                <code className="pv-mono pv-audit-log__ts">
                   {formatDateTime(e.timestamp)}
                 </code>
               ),
-              event: (
-                <span className="alm-audit-log__event">{e.eventType}</span>
-              ),
+              event: <span className="pv-audit-log__event">{e.eventType}</span>,
               entity: (
-                <span className="alm-audit-log__entity" title={e.entityId}>
+                <span className="pv-audit-log__entity" title={e.entityId}>
                   {resolvedName ?? `${e.entityType} · ${e.entityId}`}
                 </span>
               ),
               stateChange:
                 e.fromState || e.toState ? (
-                  <span className="alm-audit-log__state-change">
+                  <span className="pv-audit-log__state-change">
                     {e.fromState ?? '—'} → {e.toState ?? '—'}
                   </span>
                 ) : (
                   '—'
                 ),
               detail: (
-                <span className="alm-audit-log__detail">{detailText(e)}</span>
+                <span className="pv-audit-log__detail">{detailText(e)}</span>
               ),
               outcome: (
                 <Pill variant={outcomeVariant(e.outcome)}>
                   {outcomeLabel(e.outcome)}
                 </Pill>
               ),
-              actor: <span className="alm-audit-log__actor">{e.actor}</span>,
+              actor: <span className="pv-audit-log__actor">{e.actor}</span>,
             };
           })}
         />
       )}
 
       {!loading && !loadError && entries.length === 0 && (
-        <p className="alm-audit-log__empty">{m.settings_auditlog_empty()}</p>
+        <p className="pv-audit-log__empty">{m.settings_auditlog_empty()}</p>
       )}
 
       {/* Pagination */}
-      <div className="alm-audit-log__pagination">
-        <span className="alm-audit-log__page-count">
+      <div className="pv-audit-log__pagination">
+        <span className="pv-audit-log__page-count">
           {m.settings_auditlog_event_count({ count: total })} &middot;{' '}
           {m.settings_auditlog_page_of({
             current: page + 1,
             total: totalPages,
           })}
         </span>
-        <div className="alm-audit-log__page-btns">
+        <div className="pv-audit-log__page-btns">
           <Btn
             size="sm"
             variant="ghost"

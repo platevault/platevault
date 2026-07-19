@@ -4,7 +4,7 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
  * SessionListPopover — migrated onto the shared `DetailLinkedGroup` leaf
- * (#813) instead of hand-rolling the `alm-session-detail2__head`/`__muted`
+ * (#813) instead of hand-rolling the `pv-session-detail2__head`/`__muted`
  * classes. Proves the head label and empty/non-empty rendering still hold.
  */
 
@@ -15,10 +15,8 @@ import { SessionListPopover } from './SessionListPopover';
 describe('SessionListPopover', () => {
   it('renders the muted "None" placeholder when there are no names', () => {
     render(<SessionListPopover label="Used by" names={[]} />);
-    expect(screen.getByText('Used by')).toHaveClass(
-      'alm-session-detail2__head',
-    );
-    expect(screen.getByText('None')).toHaveClass('alm-session-detail2__muted');
+    expect(screen.getByText('Used by')).toHaveClass('pv-session-detail2__head');
+    expect(screen.getByText('None')).toHaveClass('pv-session-detail2__muted');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
@@ -30,7 +28,7 @@ describe('SessionListPopover', () => {
       />,
     );
     expect(screen.getByText('Compatible')).toHaveClass(
-      'alm-session-detail2__head',
+      'pv-session-detail2__head',
     );
     expect(screen.getByText('2 ▾')).toBeInTheDocument();
     expect(screen.queryByText('None')).not.toBeInTheDocument();

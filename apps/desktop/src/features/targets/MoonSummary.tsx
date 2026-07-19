@@ -74,23 +74,23 @@ export function MoonSummary({ night }: Props) {
 
   return (
     <div
-      className="alm-moon-summary"
+      className="pv-moon-summary"
       aria-label={ariaLabel}
       data-testid="moon-summary"
     >
       <svg
-        className="alm-moon-summary__glyph"
+        className="pv-moon-summary__glyph"
         viewBox={`${-R - 1} ${-R - 1} ${2 * R + 2} ${2 * R + 2}`}
         width={2 * R + 2}
         height={2 * R + 2}
         aria-hidden="true"
         focusable="false"
       >
-        <circle className="alm-moon-summary__disk" r={R} cx={0} cy={0} />
-        <path className="alm-moon-summary__lit" d={litSemicirclePath(waxing)} />
+        <circle className="pv-moon-summary__disk" r={R} cx={0} cy={0} />
+        <path className="pv-moon-summary__lit" d={litSemicirclePath(waxing)} />
         <ellipse
           className={
-            ellipseLit ? 'alm-moon-summary__lit' : 'alm-moon-summary__disk'
+            ellipseLit ? 'pv-moon-summary__lit' : 'pv-moon-summary__disk'
           }
           cx={0}
           cy={0}
@@ -98,12 +98,12 @@ export function MoonSummary({ night }: Props) {
           ry={R}
         />
       </svg>
-      <span className="alm-moon-summary__text">
-        <span className="alm-moon-summary__title">
+      <span className="pv-moon-summary__text">
+        <span className="pv-moon-summary__title">
           {m.targets_moon_summary_title()}
         </span>
-        <span className="alm-moon-summary__phase">{label}</span>
-        <span className="alm-moon-summary__meta">
+        <span className="pv-moon-summary__phase">{label}</span>
+        <span className="pv-moon-summary__meta">
           {m.targets_moon_illumination({ pct })} · {direction}
         </span>
       </span>

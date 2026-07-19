@@ -16,7 +16,7 @@
  * (T022); the settings write makes the choice durable across relaunch
  * (SC-005/SC-006).
  *
- * Reuses the shared `SettingsFormShell`/`.alm-equipment__form*` frame — one
+ * Reuses the shared `SettingsFormShell`/`.pv-equipment__form*` frame — one
  * parameterised add/edit form, not a per-pane clone.
  */
 
@@ -264,10 +264,10 @@ export function ObservingSites() {
         </Btn>
       }
     >
-      {listError && <p className="alm-equipment__load-error">{listError}</p>}
+      {listError && <p className="pv-equipment__load-error">{listError}</p>}
 
       {sites.length === 0 ? (
-        <p className="alm-equipment__empty">
+        <p className="pv-equipment__empty">
           {m.settings_observing_sites_empty()}
         </p>
       ) : (
@@ -294,7 +294,7 @@ export function ObservingSites() {
             (site): TableRow => ({
               name: site.name,
               coords: (
-                <code className="alm-mono">
+                <code className="pv-mono">
                   {m.settings_observing_sites_coords_value({
                     lat: site.latitudeDeg.toFixed(4),
                     lon: site.longitudeDeg.toFixed(4),
@@ -303,7 +303,7 @@ export function ObservingSites() {
               ),
               timezone: site.timezone,
               status: (
-                <span className="alm-equipment__badges">
+                <span className="pv-equipment__badges">
                   {site.id === defaultSiteId && (
                     <Pill variant="info">
                       {m.settings_observing_sites_default_badge()}
@@ -317,7 +317,7 @@ export function ObservingSites() {
                 </span>
               ),
               actions: (
-                <span className="alm-equipment__row-actions">
+                <span className="pv-equipment__row-actions">
                   {site.id !== activeSiteId && (
                     <Btn
                       size="sm"
@@ -364,28 +364,28 @@ export function ObservingSites() {
           onCancel={() => setForm(null)}
           onSave={handleSubmit}
         >
-          <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-name">
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-name">
               {m.settings_observing_sites_field_name()}
             </label>
             <input
               id="observing-site-name"
               type="text"
-              className="alm-input"
+              className="pv-input"
               aria-label={m.settings_observing_sites_field_name()}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
-          <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-lat">
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-lat">
               {m.settings_observing_sites_field_latitude()}
             </label>
             <input
               id="observing-site-lat"
               type="text"
               inputMode="decimal"
-              className="alm-input"
+              className="pv-input"
               aria-label={m.settings_observing_sites_field_latitude()}
               value={form.latitudeDegText}
               onChange={(e) =>
@@ -393,15 +393,15 @@ export function ObservingSites() {
               }
             />
           </div>
-          <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-lon">
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-lon">
               {m.settings_observing_sites_field_longitude()}
             </label>
             <input
               id="observing-site-lon"
               type="text"
               inputMode="decimal"
-              className="alm-input"
+              className="pv-input"
               aria-label={m.settings_observing_sites_field_longitude()}
               value={form.longitudeDegText}
               onChange={(e) =>
@@ -409,9 +409,9 @@ export function ObservingSites() {
               }
             />
           </div>
-          <div className="alm-stack-1">
+          <div className="pv-stack-1">
             <label
-              className="alm-field-label"
+              className="pv-field-label"
               htmlFor="observing-site-elevation"
             >
               {m.settings_observing_sites_field_elevation()}
@@ -420,7 +420,7 @@ export function ObservingSites() {
               id="observing-site-elevation"
               type="text"
               inputMode="decimal"
-              className="alm-input"
+              className="pv-input"
               aria-label={m.settings_observing_sites_field_elevation()}
               value={form.elevationMText}
               onChange={(e) =>
@@ -428,13 +428,13 @@ export function ObservingSites() {
               }
             />
           </div>
-          <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-tz">
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-tz">
               {m.settings_observing_sites_field_timezone()}
             </label>
             <select
               id="observing-site-tz"
-              className="alm-select"
+              className="pv-select"
               aria-label={m.settings_observing_sites_field_timezone()}
               value={form.timezone}
               onChange={(e) => setForm({ ...form, timezone: e.target.value })}
@@ -446,16 +446,13 @@ export function ObservingSites() {
               ))}
             </select>
           </div>
-          <div className="alm-stack-1">
-            <label
-              className="alm-field-label"
-              htmlFor="observing-site-twilight"
-            >
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-twilight">
               {m.settings_observing_sites_field_twilight()}
             </label>
             <select
               id="observing-site-twilight"
-              className="alm-select"
+              className="pv-select"
               aria-label={m.settings_observing_sites_field_twilight()}
               value={form.twilight}
               onChange={(e) =>
@@ -474,15 +471,15 @@ export function ObservingSites() {
               </option>
             </select>
           </div>
-          <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-horizon">
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-horizon">
               {m.settings_observing_sites_field_horizon()}
             </label>
             <input
               id="observing-site-horizon"
               type="text"
               inputMode="decimal"
-              className="alm-input"
+              className="pv-input"
               aria-label={m.settings_observing_sites_field_horizon()}
               value={form.minHorizonAltDegText}
               onChange={(e) =>
@@ -510,16 +507,13 @@ export function ObservingSites() {
         confirmVariant="danger"
       >
         {deleteNeedsFallbackChoice && (
-          <div className="alm-stack-1">
-            <label
-              className="alm-field-label"
-              htmlFor="observing-site-fallback"
-            >
+          <div className="pv-stack-1">
+            <label className="pv-field-label" htmlFor="observing-site-fallback">
               {m.settings_observing_sites_fallback_label()}
             </label>
             <select
               id="observing-site-fallback"
-              className="alm-select"
+              className="pv-select"
               aria-label={m.settings_observing_sites_fallback_label()}
               value={fallbackSiteId ?? ''}
               onChange={(e) => setFallbackSiteId(e.target.value || null)}
@@ -535,7 +529,7 @@ export function ObservingSites() {
             </select>
           </div>
         )}
-        {deleteError && <span className="alm-field-error">{deleteError}</span>}
+        {deleteError && <span className="pv-field-error">{deleteError}</span>}
       </ConfirmOverlay>
     </SettingsSection>
   );

@@ -104,7 +104,7 @@ describe('MastersTable (spec 043 §4)', () => {
       <MastersTable {...baseProps} masters={masters} />,
     );
     // No group-header rows when ungrouped…
-    expect(container.querySelectorAll('.alm-listgroup')).toHaveLength(0);
+    expect(container.querySelectorAll('.pv-listgroup')).toHaveLength(0);
     // …but every master still renders as a row.
     expect(screen.getByTestId('master-usage-dark-1')).toBeInTheDocument();
     expect(screen.getByTestId('master-usage-flat-1')).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('MastersTable (spec 043 §4)', () => {
       <MastersTable {...baseProps} masters={masters} dims={['kind']} />,
     );
     // One shared group-header row per present kind, each collapsible via testid.
-    expect(container.querySelectorAll('.alm-listgroup')).toHaveLength(3);
+    expect(container.querySelectorAll('.pv-listgroup')).toHaveLength(3);
     expect(
       screen.getByTestId('calibration-group-kind-dark'),
     ).toBeInTheDocument();

@@ -27,7 +27,7 @@ export interface LockProps extends HTMLAttributes<HTMLSpanElement> {
  */
 export function Lock({ reason, className, ...rest }: LockProps) {
   const label = reason ?? m.settings_cleanup_protection_protected();
-  const cls = ['alm-lock', className].filter(Boolean).join(' ');
+  const cls = ['pv-lock', className].filter(Boolean).join(' ');
   return (
     <Tooltip
       content={label}

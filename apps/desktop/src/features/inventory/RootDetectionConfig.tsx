@@ -16,7 +16,7 @@
  *     churn across the whole wizard shell for a control that fits naturally
  *     next to each source's existing per-root detail card.
  *
- * Reuses the existing `alm-settings__row*` classes (Data Sources' own
+ * Reuses the existing `pv-settings__row*` classes (Data Sources' own
  * per-source override panel) instead of introducing new CSS.
  *
  * Split into an outer toggle (`RootDetectionConfig`, no query hooks) and an
@@ -74,10 +74,10 @@ function RootDetectionConfigPanel({
 
   return (
     <div
-      className="alm-settings__group"
+      className="pv-settings__group"
       data-testid={`root-detection-${rootId}`}
     >
-      <div className="alm-settings__group-title">
+      <div className="pv-settings__group-title">
         {m.inventory_detection_title()}
         <Btn size="sm" variant="ghost" onClick={onClose}>
           {m.common_close()}
@@ -85,21 +85,21 @@ function RootDetectionConfigPanel({
       </div>
 
       {isLoading && (
-        <div className="alm-data-sources__status">{m.common_loading()}</div>
+        <div className="pv-data-sources__status">{m.common_loading()}</div>
       )}
       {error && (
-        <div className="alm-data-sources__load-error">{errMessage(error)}</div>
+        <div className="pv-data-sources__load-error">{errMessage(error)}</div>
       )}
 
       {data && (
         <>
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
+          <div className="pv-settings__row">
+            <div className="pv-settings__row-label">
               {m.inventory_detection_mode_label()}
             </div>
-            <div className="alm-settings__row-content">
+            <div className="pv-settings__row-content">
               <select
-                className="alm-select"
+                className="pv-select"
                 value={data.reconcileMode}
                 aria-label={m.inventory_detection_mode_label()}
                 onChange={(e) =>
@@ -118,11 +118,11 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
+          <div className="pv-settings__row">
+            <div className="pv-settings__row-label">
               {m.inventory_detection_live_label()}
             </div>
-            <div className="alm-settings__row-content">
+            <div className="pv-settings__row-content">
               <Toggle
                 aria-label={m.inventory_detection_live_label()}
                 checked={data.detection.live}
@@ -140,11 +140,11 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
+          <div className="pv-settings__row">
+            <div className="pv-settings__row-label">
               {m.inventory_detection_scheduled_label()}
             </div>
-            <div className="alm-settings__row-content">
+            <div className="pv-settings__row-content">
               <Toggle
                 aria-label={m.inventory_detection_scheduled_label()}
                 checked={data.detection.scheduled}
@@ -162,11 +162,11 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
+          <div className="pv-settings__row">
+            <div className="pv-settings__row-label">
               {m.inventory_detection_on_open_label()}
             </div>
-            <div className="alm-settings__row-content">
+            <div className="pv-settings__row-content">
               <Toggle
                 aria-label={m.inventory_detection_on_open_label()}
                 checked={data.detection.onOpen}
@@ -184,11 +184,11 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
+          <div className="pv-settings__row">
+            <div className="pv-settings__row-label">
               {m.inventory_detection_follow_symlinks_label()}
             </div>
-            <div className="alm-settings__row-content">
+            <div className="pv-settings__row-content">
               <Toggle
                 aria-label={m.inventory_detection_follow_symlinks_label()}
                 checked={data.detection.followSymlinks}
@@ -207,7 +207,7 @@ function RootDetectionConfigPanel({
           </div>
 
           {setConfig.isError && (
-            <div className="alm-data-sources__add-error">
+            <div className="pv-data-sources__add-error">
               {errMessage(setConfig.error)}
             </div>
           )}

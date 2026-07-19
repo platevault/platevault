@@ -72,11 +72,11 @@ export function StepLayout({
   }, [nameData, pattern, strategy]);
 
   return (
-    <div className="alm-wizard-layout">
+    <div className="pv-wizard-layout">
       {/* Naming pattern */}
-      <div className="alm-wizard-layout__section">
+      <div className="pv-wizard-layout__section">
         {}
-        <label htmlFor="naming-pattern" className="alm-wizard-layout__label">
+        <label htmlFor="naming-pattern" className="pv-wizard-layout__label">
           {m.projects_wizard_naming_pattern_label()}
         </label>
         <input
@@ -86,16 +86,16 @@ export function StepLayout({
           value={pattern}
           onChange={(e) => onChange({ namingPattern: e.target.value })}
           placeholder={DEFAULT_PATTERN}
-          className="alm-wizard-layout__input"
+          className="pv-wizard-layout__input"
         />
-        <div className="alm-wizard-layout__token-row">
+        <div className="pv-wizard-layout__token-row">
           {AVAILABLE_TOKENS.map((t) => (
             <span
               key={t.token}
               title={m.projects_wizard_token_example_title({
                 example: t.example,
               })}
-              className="alm-wizard-layout__token-chip"
+              className="pv-wizard-layout__token-chip"
             >
               {t.token}
             </span>
@@ -104,11 +104,11 @@ export function StepLayout({
       </div>
 
       {/* Directory structure preview */}
-      <div className="alm-wizard-layout__section">
-        <h3 className="alm-wizard-layout__label">
+      <div className="pv-wizard-layout__section">
+        <h3 className="pv-wizard-layout__label">
           {m.projects_wizard_dir_preview_title()}
         </h3>
-        <div className="alm-wizard-layout__preview">
+        <div className="pv-wizard-layout__preview">
           {examplePaths.structure.map((path, i) => {
             const depth =
               path.split('/').length - examplePaths.root.split('/').length;
@@ -116,7 +116,7 @@ export function StepLayout({
             return (
               <div
                 key={i}
-                className="alm-wizard-layout__path-row"
+                className="pv-wizard-layout__path-row"
                 data-dir={isDir ? 'true' : undefined}
                 // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for layout tree rows
                 style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}

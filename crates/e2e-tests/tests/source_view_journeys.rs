@@ -276,7 +276,7 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     app.wait_testid("generate-source-view-dialog", Duration::from_secs(10)).await?;
 
     // Round 4/5 (#470) root cause: the dialog's own diagnostics dump showed
-    // a real `alm-banner--danger` reading "No usable link method is
+    // a real `pv-banner--danger` reading "No usable link method is
     // available on this filesystem. Allow copying to proceed instead." —
     // the CI runner's tempdir filesystem cannot symlink OR hardlink at all,
     // `sourceview.generate` correctly refuses with `no_link_kind`

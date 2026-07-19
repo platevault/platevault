@@ -13,13 +13,13 @@ export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Btn = forwardRef<HTMLButtonElement, BtnProps>(
-  // Omitting `variant` yields the base `.alm-btn`; `md` is the base size and
+  // Omitting `variant` yields the base `.pv-btn`; `md` is the base size and
   // emits no modifier so callers passing no size render exactly as before.
   function Btn({ variant, size = 'md', className, children, ...rest }, ref) {
     const cls = [
-      'alm-btn',
-      variant && `alm-btn--${variant}`,
-      size !== 'md' && `alm-btn--${size}`,
+      'pv-btn',
+      variant && `pv-btn--${variant}`,
+      size !== 'md' && `pv-btn--${size}`,
       className,
     ]
       .filter(Boolean)

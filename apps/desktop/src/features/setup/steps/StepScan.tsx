@@ -177,7 +177,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
   return (
     <div
       data-testid={`scan-source-${source.path}`}
-      className="alm-setup-scan__card"
+      className="pv-setup-scan__card"
     >
       {/* ── Always-visible header row ─────────────────────────────────────── */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- conditionally interactive: role=button + keyboard (Enter/Space) handler applied together only when isExpandable; inert div otherwise */}
@@ -198,28 +198,28 @@ function SourceSummary({ state }: SourceSummaryProps) {
             : undefined
         }
         className={
-          'alm-setup-scan__header' +
-          (isExpandable ? ' alm-setup-scan__header--expandable' : '')
+          'pv-setup-scan__header' +
+          (isExpandable ? ' pv-setup-scan__header--expandable' : '')
         }
       >
         {/* Chevron — only shown when expandable */}
         {isExpandable && (
-          <span aria-hidden="true" className="alm-setup-scan__chevron">
+          <span aria-hidden="true" className="pv-setup-scan__chevron">
             {expanded ? '▾' : '▸'}
           </span>
         )}
 
         {/* Source path */}
-        <span className="alm-setup-scan__path">{source.path}</span>
+        <span className="pv-setup-scan__path">{source.path}</span>
 
         {/* Kind label (muted, small) */}
-        <span className="alm-setup-scan__kind">
+        <span className="pv-setup-scan__kind">
           {source.kind.replace('_', ' ')}
         </span>
 
         {/* Compact count summary */}
         {countSummary && (
-          <span className="alm-setup-scan__count">{countSummary}</span>
+          <span className="pv-setup-scan__count">{countSummary}</span>
         )}
 
         {/* Phase pill */}
@@ -235,13 +235,11 @@ function SourceSummary({ state }: SourceSummaryProps) {
       {/* ── Always-visible transient states (below header, outside collapse) ── */}
       {/* These are small/short and don't benefit from collapse. */}
       {phase === 'error' && error && (
-        <p className="alm-setup-scan__msg alm-setup-scan__msg--error">
-          {error}
-        </p>
+        <p className="pv-setup-scan__msg pv-setup-scan__msg--error">{error}</p>
       )}
 
       {phase === 'scanning' && (
-        <p className="alm-setup-scan__msg alm-setup-scan__msg--scanning">
+        <p className="pv-setup-scan__msg pv-setup-scan__msg--scanning">
           {m.setup_scan_scanning()}
         </p>
       )}
@@ -249,7 +247,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
       {phase === 'done' && totalItems === 0 && (
         <p
           data-testid="scan-empty"
-          className="alm-setup-scan__msg alm-setup-scan__msg--empty"
+          className="pv-setup-scan__msg pv-setup-scan__msg--empty"
         >
           {m.setup_scan_nothing_detected()}
         </p>
@@ -257,12 +255,12 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
       {/* ── Collapsible detail panel (chips + table) ─────────────────────── */}
       {isExpandable && expanded && (
-        <div className="alm-setup-scan__detail">
+        <div className="pv-setup-scan__detail">
           {/* Kind-count chips */}
           {kindCounts.size > 0 && (
-            <div className="alm-setup-scan__chips">
+            <div className="pv-setup-scan__chips">
               {Array.from(kindCounts.entries()).map(([kind, count]) => (
-                <span key={kind} className="alm-setup-scan__chip">
+                <span key={kind} className="pv-setup-scan__chip">
                   {count} {kind}
                 </span>
               ))}
@@ -270,20 +268,20 @@ function SourceSummary({ state }: SourceSummaryProps) {
           )}
 
           {/* Scrollable metadata table of detected ingestion groups */}
-          <div className="alm-setup-scan__table-wrap">
-            <table className="alm-setup-scan__table">
+          <div className="pv-setup-scan__table-wrap">
+            <table className="pv-setup-scan__table">
               <thead>
-                <tr className="alm-setup-scan__thead-row">
-                  <th className="alm-setup-scan__cell">
+                <tr className="pv-setup-scan__thead-row">
+                  <th className="pv-setup-scan__cell">
                     {m.setup_scan_col_folder()}
                   </th>
-                  <th className="alm-setup-scan__cell">
+                  <th className="pv-setup-scan__cell">
                     {m.setup_scan_col_files()}
                   </th>
-                  <th className="alm-setup-scan__cell">
+                  <th className="pv-setup-scan__cell">
                     {m.setup_scan_col_format()}
                   </th>
-                  <th className="alm-setup-scan__cell">
+                  <th className="pv-setup-scan__cell">
                     {m.setup_scan_col_types()}
                   </th>
                 </tr>
@@ -323,21 +321,21 @@ function SourceSummary({ state }: SourceSummaryProps) {
                     <tr
                       key={item.inboxItemId}
                       data-testid={`scan-item-${item.inboxItemId}`}
-                      className="alm-setup-scan__tbody-row"
+                      className="pv-setup-scan__tbody-row"
                     >
-                      <td className="alm-setup-scan__cell--path">
-                        <span className="alm-setup-scan__path-cell-inner">
+                      <td className="pv-setup-scan__cell--path">
+                        <span className="pv-setup-scan__path-cell-inner">
                           {item.isMaster && (
                             <Pill variant="info">{m.setup_scan_master()}</Pill>
                           )}
                           {rowLabel}
                         </span>
                       </td>
-                      <td className="alm-setup-scan__cell">{item.fileCount}</td>
-                      <td className="alm-setup-scan__cell">
+                      <td className="pv-setup-scan__cell">{item.fileCount}</td>
+                      <td className="pv-setup-scan__cell">
                         {(item.format ?? item.lane).toUpperCase()}
                       </td>
-                      <td className="alm-setup-scan__cell">{detectedTypes}</td>
+                      <td className="pv-setup-scan__cell">{detectedTypes}</td>
                     </tr>
                   );
                 })}
@@ -565,17 +563,17 @@ export function StepScan({
   }, [allDone, onAllDoneChange]);
 
   return (
-    <div className="alm-setup-scan" data-testid="step-scan">
+    <div className="pv-setup-scan" data-testid="step-scan">
       {!resolved ? null : sourceStates.length === 0 ? (
         // Review round 2 #2: gated on `resolved` (not sourceStates.length
         // alone) so this genuinely-empty message can't flash for real
         // sources while the alreadyRegistered resolution above is pending.
-        <p className="alm-setup-scan__empty-msg">{m.setup_scan_no_sources()}</p>
+        <p className="pv-setup-scan__empty-msg">{m.setup_scan_no_sources()}</p>
       ) : (
         <>
           {/* Per-source results — scrollable region; expanding accordions scroll here,
               not the whole wizard page. */}
-          <div className="alm-setup-scan__scroll">
+          <div className="pv-setup-scan__scroll">
             {sourceStates.map((s) => (
               <SourceSummary key={s.source.path} state={s} />
             ))}
@@ -583,7 +581,7 @@ export function StepScan({
 
           {/* Summary line (shown when all sources are complete) */}
           {allDone && (
-            <p data-testid="scan-summary" className="alm-setup-scan__summary">
+            <p data-testid="scan-summary" className="pv-setup-scan__summary">
               {totalDetected > 0
                 ? m.setup_scan_summary_found({ count: totalDetected })
                 : m.setup_scan_summary_empty()}

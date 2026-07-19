@@ -39,7 +39,7 @@ test.describe('Sessions list — Integration column shows total time (#798)', ()
     // (There are several M31 sessions in the fixture — match the specific
     // filter cell so this doesn't accidentally hit a different M31 row.)
     const row = page
-      .locator('.alm-sessions-table__row', {
+      .locator('.pv-sessions-table__row', {
         has: page.getByText('2026-03-28'),
       })
       .first();
@@ -56,7 +56,7 @@ test.describe('Sessions list — Type filter defaults to acquisition (#652)', ()
     seedSetupComplete(page);
     await page.goto('/#/sessions');
 
-    await expect(page.locator('.alm-sessions-table__row').first()).toBeVisible({
+    await expect(page.locator('.pv-sessions-table__row').first()).toBeVisible({
       timeout: 8_000,
     });
 
@@ -81,7 +81,7 @@ test.describe('Sessions detail — project-chip navigation carries the id (#865)
     await page.goto('/#/sessions');
 
     const row = page
-      .locator('.alm-sessions-table__row', {
+      .locator('.pv-sessions-table__row', {
         hasText: 'NGC 7000',
       })
       .first();

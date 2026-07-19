@@ -238,9 +238,9 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     const summary = screen.getByTestId('plan-group-summary-g1');
     expect(summary).toHaveTextContent('2 darks');
     const group = screen.getByTestId('plan-group-g1');
-    expect(
-      group.querySelector('.alm-plan-panel__group-dest'),
-    ).toHaveTextContent('masters/darks');
+    expect(group.querySelector('.pv-plan-panel__group-dest')).toHaveTextContent(
+      'masters/darks',
+    );
   });
 
   // ── #75: frame-type-hint aggregation for catalogue actions ───────────────────
@@ -360,7 +360,7 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(summary).toHaveTextContent('light');
     // It is a SINGLE composition cell (all types inline), not per-type rows.
     expect(
-      summary.querySelectorAll('.alm-plan-panel__summary-type'),
+      summary.querySelectorAll('.pv-plan-panel__summary-type'),
     ).toHaveLength(3);
 
     // The ▸ toggle expands the per-file rows on demand.
@@ -424,7 +424,7 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(summary).not.toHaveTextContent('catalogue');
     // SINGLE collapsed composition cell with the three aligned type tokens.
     expect(
-      summary.querySelectorAll('.alm-plan-panel__summary-type'),
+      summary.querySelectorAll('.pv-plan-panel__summary-type'),
     ).toHaveLength(3);
   });
 

@@ -150,7 +150,7 @@ export function Ingestion(_props: IngestionProps) {
           info={m.settings_ingestion_hashing_info()}
         >
           <select
-            className="alm-select"
+            className="pv-select"
             aria-label={m.settings_ingestion_hashing_mode()}
             value={settings.hashingMode}
             onChange={(e) => {

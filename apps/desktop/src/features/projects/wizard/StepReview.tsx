@@ -45,30 +45,30 @@ export function StepReview({ wizardState }: StepReviewProps) {
   } = wizardState;
 
   return (
-    <div className="alm-wizard-review">
+    <div className="pv-wizard-review">
       {/* ── Green success banner ── */}
-      <div className="alm-wizard-review__banner">
-        <div className="alm-wizard-review__banner-row">
-          <span className="alm-wizard-review__banner-icon">&#10003;</span>
-          <div className="alm-wizard-review__banner-text">
+      <div className="pv-wizard-review__banner">
+        <div className="pv-wizard-review__banner-row">
+          <span className="pv-wizard-review__banner-icon">&#10003;</span>
+          <div className="pv-wizard-review__banner-text">
             <strong>{m.projects_wizard_review_no_destructive()}</strong>{' '}
             {m.projects_wizard_review_safe_desc()}
           </div>
         </div>
       </div>
 
-      <div className="alm-wizard-review__grid">
+      <div className="pv-wizard-review__grid">
         {/* Left: real selections summary */}
         <Box title={m.projects_wizard_review_summary_title()}>
-          <table className="alm-simple-table">
+          <table className="pv-simple-table">
             <tbody>
               <tr>
                 <td>{m.projects_name_label()}</td>
-                <td className="alm-mono">{name}</td>
+                <td className="pv-mono">{name}</td>
               </tr>
               <tr>
                 <td>{m.projects_wizard_col_destination()}</td>
-                <td className="alm-mono">{path}</td>
+                <td className="pv-mono">{path}</td>
               </tr>
               <tr>
                 <td>{m.projects_wizard_workflow_label()}</td>
@@ -78,7 +78,7 @@ export function StepReview({ wizardState }: StepReviewProps) {
                 <td>{m.projects_create_target_label()}</td>
                 <td>
                   {targetLabel ?? (
-                    <span className="alm-wizard-review__source-none">
+                    <span className="pv-wizard-review__source-none">
                       &mdash;
                     </span>
                   )}
@@ -110,10 +110,10 @@ export function StepReview({ wizardState }: StepReviewProps) {
         </Box>
 
         {/* Right column */}
-        <div className="alm-wizard-review__right">
+        <div className="pv-wizard-review__right">
           {/* Always-identical top-level layout every project gets. */}
           <Box title={m.projects_wizard_disk_title()}>
-            <pre className="alm-mono alm-wizard-review__disk-tree">
+            <pre className="pv-mono pv-wizard-review__disk-tree">
               {
                 // eslint-disable-next-line alm/no-user-string -- ASCII directory-tree preview (folder names, not translatable prose); `path` is the real derived project path (#599)
                 `${path}/
@@ -127,27 +127,27 @@ export function StepReview({ wizardState }: StepReviewProps) {
 └── notes/`
               }
             </pre>
-            <div className="alm-wizard-review__disk-tree-note">
+            <div className="pv-wizard-review__disk-tree-note">
               {m.projects_wizard_review_plan_note()}
             </div>
           </Box>
 
           {/* After creating */}
           <Box title={m.projects_wizard_after_title()}>
-            <ol className="alm-wizard-review__after-list">
+            <ol className="pv-wizard-review__after-list">
               <li>
                 {m.projects_wizard_lifecycle_label()}{' '}
-                <span className="alm-mono">
+                <span className="pv-mono">
                   {m.projects_wizard_lifecycle_setup()}
                 </span>{' '}
                 &rarr;{' '}
-                <span className="alm-mono">
+                <span className="pv-mono">
                   {m.projects_wizard_lifecycle_prepared()}
                 </span>
               </li>
               <li>
                 {m.projects_wizard_open_in_wbpp()}{' '}
-                <span className="alm-mono">
+                <span className="pv-mono">
                   {m.projects_wizard_open_in_wbpp_target({ path })}
                 </span>{' '}
                 {m.projects_wizard_open_in_wbpp_app()}

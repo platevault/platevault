@@ -226,7 +226,7 @@ export function ProjectsPage() {
       // and docks to the side on a wide window (spec 054 / #936).
       detail={
         project ? (
-          <div className="alm-project-detail-stack">
+          <div className="pv-project-detail-stack">
             <ProjectDetailContent projectId={project.id} />
             <ProjectBottomDetail projectId={project.id} />
           </div>

@@ -251,7 +251,7 @@ const mockSettingsData: SettingsData = {
 // mock-mode exercise BOTH planner states — the no-site "set up your observing
 // site" prompt (spec 047 D7 / edge case) AND the with-site astronomy render —
 // this scope reflects a per-session values bag seeded from the
-// `alm-e2e-observing` localStorage key (set by a test before navigation):
+// `pv-e2e-observing` localStorage key (set by a test before navigation):
 //
 //   - key ABSENT  → empty observing values → no active site → planner GATED.
 //   - key PRESENT → seeded sites + active pointer → `activeSite() !== null` →
@@ -262,7 +262,7 @@ const mockSettingsData: SettingsData = {
 // `settings_update('observing', …)` merges into the same bag so a UI-driven
 // site creation (Settings → Observing Sites) round-trips like the real backend.
 // Non-observing scopes are untouched and still resolve to `mockSettingsData`.
-const E2E_OBSERVING_SEED_STORE_ID = 'alm-e2e-observing';
+const E2E_OBSERVING_SEED_STORE_ID = 'pv-e2e-observing';
 let mockObservingValues: Record<string, unknown> | null = null;
 
 function observingValues(): Record<string, unknown> {

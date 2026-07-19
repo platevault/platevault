@@ -81,9 +81,9 @@ export function OutputsSection({
   ];
 
   const rows = outputs.map((o) => ({
-    name: <span className="alm-project-detail__output-name">{o.name}</span>,
+    name: <span className="pv-project-detail__output-name">{o.name}</span>,
     format: (
-      <span className="alm-project-detail__output-format">{o.format}</span>
+      <span className="pv-project-detail__output-format">{o.format}</span>
     ),
     verified: (
       <Pill variant={verifiedPillVariant(o.verified)}>
@@ -103,7 +103,7 @@ export function OutputsSection({
         // STUB: no accepted-output backend model yet — teaching empty state.
         <EmptyState title={m.projects_outputs_empty_title()} />
       ) : (
-        <div className="alm-project-detail__outputs">
+        <div className="pv-project-detail__outputs">
           <Table columns={columns} rows={rows} />
         </div>
       )}
@@ -162,9 +162,9 @@ function candidateRow(candidate: CleanupCandidate, index: number) {
   const isProtected = parsed?.protection === 'protected';
   return {
     _testid: `cleanup-candidate-${index}`,
-    _rowClassName: isProtected ? 'alm-cleanup-scan__row--protected' : undefined,
+    _rowClassName: isProtected ? 'pv-cleanup-scan__row--protected' : undefined,
     file: (
-      <span className="alm-mono" title={candidate.reason}>
+      <span className="pv-mono" title={candidate.reason}>
         {candidate.filePath}
       </span>
     ),
@@ -175,7 +175,7 @@ function candidateRow(candidate: CleanupCandidate, index: number) {
       ? m.projects_cleanup_confidence_pct({ pct: parsed.confidencePct })
       : candidate.reason,
     protection: isProtected ? (
-      <span className="alm-cleanup-scan__protected-cell">
+      <span className="pv-cleanup-scan__protected-cell">
         <Lock reason={m.projects_cleanup_row_protected_hint()} />
         <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
       </span>
@@ -232,8 +232,8 @@ export function CleanupSection({
     >
       {/* Themed alert: cleanup is reviewable + reversible, never silent. */}
       <Banner variant="warn" role="status" aria-live="polite">
-        <div className="alm-project-detail__cleanup-preview">
-          <span className="alm-project-detail__cleanup-note">
+        <div className="pv-project-detail__cleanup-preview">
+          <span className="pv-project-detail__cleanup-note">
             {result
               ? m.projects_cleanup_candidate_count({
                   count: result.candidates.length,
@@ -244,7 +244,7 @@ export function CleanupSection({
       </Banner>
 
       {/* Scan is on-demand and read-only (D11 step 1). */}
-      <div className="alm-cleanup-scan__controls">
+      <div className="pv-cleanup-scan__controls">
         <Btn
           size="sm"
           onClick={() => scan.mutate(projectId)}
@@ -257,7 +257,7 @@ export function CleanupSection({
         </Btn>
         {hasCandidates && (
           <span
-            className="alm-cleanup-scan__reclaimable"
+            className="pv-cleanup-scan__reclaimable"
             data-testid="cleanup-reclaimable"
           >
             {m.projects_cleanup_reclaimable({
@@ -282,14 +282,14 @@ export function CleanupSection({
       {groups.map((group) => (
         <div
           key={group.dataType}
-          className="alm-cleanup-scan__group"
+          className="pv-cleanup-scan__group"
           data-testid={`cleanup-group-${group.dataType}`}
         >
-          <div className="alm-cleanup-scan__group-head">
-            <span className="alm-cleanup-scan__group-title">
+          <div className="pv-cleanup-scan__group-head">
+            <span className="pv-cleanup-scan__group-title">
               {dataTypeLabel(group.dataType)}
             </span>
-            <span className="alm-cleanup-scan__group-meta">
+            <span className="pv-cleanup-scan__group-meta">
               {m.projects_cleanup_group_meta({
                 count: group.candidates.length,
                 size: formatBytes(group.totalBytes),
@@ -307,9 +307,9 @@ export function CleanupSection({
 
       {/* Generate the reviewable plan (D11 step 2) — never applies anything. */}
       {hasCandidates && (
-        <div className="alm-cleanup-scan__generate">
-          <div className="alm-stack-1">
-            <span className="alm-cleanup-scan__dest-label">
+        <div className="pv-cleanup-scan__generate">
+          <div className="pv-stack-1">
+            <span className="pv-cleanup-scan__dest-label">
               {m.projects_cleanup_dest_label()}
             </span>
             <RadioGroup
@@ -353,13 +353,13 @@ export function CleanupSection({
 
       {/* Protected categories — always shown LOCKED (never proposed for cleanup). */}
       <div
-        className="alm-project-detail__cleanup-protected"
+        className="pv-project-detail__cleanup-protected"
         data-testid="cleanup-protected"
       >
-        <div className="alm-project-detail__cleanup-protected-head">
+        <div className="pv-project-detail__cleanup-protected-head">
           {m.projects_cleanup_protected_label()}
         </div>
-        <div className="alm-project-detail__cleanup-protected-list">
+        <div className="pv-project-detail__cleanup-protected-list">
           {protectedCategories().map((cat) => (
             <KV
               key={cat}

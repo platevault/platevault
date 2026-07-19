@@ -19,7 +19,7 @@ export interface TwoColDetailLayoutProps {
 }
 
 /**
- * The two-column-properties + third-slot detail layout (`.alm-session-detail2`,
+ * The two-column-properties + third-slot detail layout (`.pv-session-detail2`,
  * #813) shared by Sessions/Calibration/Inbox detail panes. Wraps the CSS
  * convention in one component so a future layout change (spacing, a11y
  * attribute, responsive behavior) is applied once instead of hand-copied.
@@ -30,24 +30,24 @@ export function TwoColDetailLayout({
   linked,
   linkedClassName,
 }: TwoColDetailLayoutProps) {
-  const linkedCls = ['alm-session-detail2__linked', linkedClassName]
+  const linkedCls = ['pv-session-detail2__linked', linkedClassName]
     .filter(Boolean)
     .join(' ');
   return (
-    <div className="alm-session-detail2">
-      <div className="alm-session-detail2__col">{colA}</div>
-      <div className="alm-session-detail2__col">{colB}</div>
+    <div className="pv-session-detail2">
+      <div className="pv-session-detail2__col">{colA}</div>
+      <div className="pv-session-detail2__col">{colB}</div>
       {linked != null && <div className={linkedCls}>{linked}</div>}
     </div>
   );
 }
 
 export interface DetailLinkedGroupProps {
-  /** Heading rendered above the content (`alm-session-detail2__head`). */
+  /** Heading rendered above the content (`pv-session-detail2__head`). */
   label: ReactNode;
   /** Renders `emptyLabel` instead of `children` — e.g. a zero-count list. */
   empty?: boolean;
-  /** Muted placeholder shown when `empty` (`alm-session-detail2__muted`). */
+  /** Muted placeholder shown when `empty` (`pv-session-detail2__muted`). */
   emptyLabel?: ReactNode;
   children?: ReactNode;
 }
@@ -67,9 +67,9 @@ export function DetailLinkedGroup({
 }: DetailLinkedGroupProps) {
   return (
     <div>
-      <div className="alm-session-detail2__head">{label}</div>
+      <div className="pv-session-detail2__head">{label}</div>
       {empty ? (
-        <span className="alm-session-detail2__muted">{emptyLabel}</span>
+        <span className="pv-session-detail2__muted">{emptyLabel}</span>
       ) : (
         children
       )}

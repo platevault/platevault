@@ -25,9 +25,9 @@ export interface StepSourcesProps {
  */
 export function StepSources({ data, onChange }: StepSourcesProps) {
   return (
-    <div className="alm-wizard-sources">
+    <div className="pv-wizard-sources">
       {data.selectedSessionIds.length === 0 && (
-        <div className="alm-wizard-sources__zero-hint">
+        <div className="pv-wizard-sources__zero-hint">
           {m.projects_wizard_zero_sources_hint()}
         </div>
       )}

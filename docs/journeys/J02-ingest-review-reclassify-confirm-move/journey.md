@@ -119,10 +119,10 @@ explicit, reviewed plan, and the action is visible in the audit history.
   cut off below the window — this was a real, previously-observed defect
   (the file list overflowed past the viewport and its bottom rows were
   unreachable) that the detail body's own scroll region
-  (`.alm-inbox-detail__scroll`) fixes, independent of side/bottom placement.
+  (`.pv-inbox-detail__scroll`) fixes, independent of side/bottom placement.
 - **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
   `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring,
-  `.alm-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
+  `.pv-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
   mixed-folder banner copy per PR #939 fixes #552, #569);
   `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
   Sessions-only — no `nativeReveal` call anywhere under

@@ -104,11 +104,11 @@ export function StepSite({ state, onChange }: StepSiteProps) {
   const error = siteStepError(state);
 
   return (
-    <div className="alm-step-site">
-      <p className="alm-step-site__intro">{m.setup_site_intro()}</p>
+    <div className="pv-step-site">
+      <p className="pv-step-site__intro">{m.setup_site_intro()}</p>
 
-      <div className="alm-step-site__map-section">
-        <span className="alm-field-label">{m.setup_site_map_label()}</span>
+      <div className="pv-step-site__map-section">
+        <span className="pv-field-label">{m.setup_site_map_label()}</span>
         <SiteLocationPicker
           latitudeDeg={parsedCoord(state.latitudeDegText)}
           longitudeDeg={parsedCoord(state.longitudeDegText)}
@@ -122,29 +122,29 @@ export function StepSite({ state, onChange }: StepSiteProps) {
         />
       </div>
 
-      <div className="alm-step-site__grid">
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-name">
+      <div className="pv-step-site__grid">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-name">
             {m.settings_observing_sites_field_name()}
           </label>
           <input
             id="setup-site-name"
             type="text"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_name()}
             value={state.name}
             onChange={(e) => onChange({ ...state, name: e.target.value })}
           />
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-lat">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-lat">
             {m.settings_observing_sites_field_latitude()}
           </label>
           <input
             id="setup-site-lat"
             type="text"
             inputMode="decimal"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_latitude()}
             value={state.latitudeDegText}
             onChange={(e) =>
@@ -152,15 +152,15 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             }
           />
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-lon">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-lon">
             {m.settings_observing_sites_field_longitude()}
           </label>
           <input
             id="setup-site-lon"
             type="text"
             inputMode="decimal"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_longitude()}
             value={state.longitudeDegText}
             onChange={(e) =>
@@ -168,15 +168,15 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             }
           />
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-elevation">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-elevation">
             {m.settings_observing_sites_field_elevation()}
           </label>
           <input
             id="setup-site-elevation"
             type="text"
             inputMode="decimal"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_elevation()}
             value={state.elevationMText}
             onChange={(e) =>
@@ -184,13 +184,13 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             }
           />
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-tz">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-tz">
             {m.settings_observing_sites_field_timezone()}
           </label>
           <select
             id="setup-site-tz"
-            className="alm-select"
+            className="pv-select"
             aria-label={m.settings_observing_sites_field_timezone()}
             value={state.timezone}
             onChange={(e) => onChange({ ...state, timezone: e.target.value })}
@@ -204,9 +204,9 @@ export function StepSite({ state, onChange }: StepSiteProps) {
         </div>
       </div>
 
-      {error && <span className="alm-field-error">{error}</span>}
+      {error && <span className="pv-field-error">{error}</span>}
 
-      <p className="alm-step-site__note">{m.setup_site_skip_note()}</p>
+      <p className="pv-step-site__note">{m.setup_site_skip_note()}</p>
     </div>
   );
 }

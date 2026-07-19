@@ -14,10 +14,10 @@
  *   4. Regression net for the removed `* { font-family !important }` blanket
  *      (reset.css): every rendered element's computed font-family either
  *      starts with Inter, or is an intentional mono surface
- *      (code/pre/kbd or `.alm-mono`).
+ *      (code/pre/kbd or `.pv-mono`).
  *
  * See apps/desktop/src/styles/reset.css (semantic base layer),
- * apps/desktop/src/styles/components/primitives.css (`.alm-mono`), and
+ * apps/desktop/src/styles/components/primitives.css (`.pv-mono`), and
  * specs/055-typography-rework/tasks.md Phase 3.
  */
 import {
@@ -33,7 +33,7 @@ import type { Page } from '@playwright/test';
 function seedObservingSite(page: Page): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      'alm-e2e-observing',
+      'pv-e2e-observing',
       JSON.stringify({
         observingSites: [
           {
@@ -57,7 +57,7 @@ function seedObservingSite(page: Page): void {
 
 /** Locate a target row by its designation text (mirrors targets_planner.spec.ts). */
 function targetRow(page: Page, designation: string) {
-  return page.locator('.alm-targets-table__row', { hasText: designation });
+  return page.locator('.pv-targets-table__row', { hasText: designation });
 }
 
 test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', () => {
@@ -124,8 +124,8 @@ test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', ()
 
     // A registered data-source root's path (real, mock-fixture-backed data —
     // apps/desktop/src/api/mocks.ts `mockRoots`) — not the fabricated Advanced
-    // pane db-path #601/#602 removed. Same `<code class="alm-mono">` mechanism.
-    const rootPath = page.locator('.alm-data-sources__root-path', {
+    // pane db-path #601/#602 removed. Same `<code class="pv-mono">` mechanism.
+    const rootPath = page.locator('.pv-data-sources__root-path', {
       hasText: '/astro/raw',
     });
     await expect(rootPath).toBeVisible();
@@ -155,9 +155,7 @@ test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', ()
     await expect(m31).toBeVisible({ timeout: 8_000 });
     await m31.click();
 
-    const radecValue = page.locator(
-      '.alm-property-table__cell--value.alm-mono',
-    );
+    const radecValue = page.locator('.pv-property-table__cell--value.pv-mono');
     await expect(radecValue.first()).toBeVisible({ timeout: 8_000 });
 
     const family = await radecValue
@@ -185,11 +183,11 @@ test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', ()
         if (!family) return;
         const tag = el.tagName.toLowerCase();
         const isMonoIntent =
-          (el as HTMLElement).classList?.contains('alm-mono') ||
+          (el as HTMLElement).classList?.contains('pv-mono') ||
           tag === 'code' ||
           tag === 'pre' ||
           tag === 'kbd' ||
-          !!el.closest('code, pre, kbd, .alm-mono');
+          !!el.closest('code, pre, kbd, .pv-mono');
         const isInter = family.includes('Inter');
         const isMono = family.toLowerCase().includes('mono');
         if (isMonoIntent ? !isMono : !isInter) {

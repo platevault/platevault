@@ -85,7 +85,7 @@ export function PlannerSettings() {
         >
           <input
             type="number"
-            className="alm-input alm-input--sm alm-settings__num-input"
+            className="pv-input pv-input--sm pv-settings__num-input"
             value={draft}
             min={ALTITUDE_THRESHOLD_MIN}
             max={ALTITUDE_THRESHOLD_MAX}
@@ -98,7 +98,7 @@ export function PlannerSettings() {
                 commit((e.target as HTMLInputElement).value);
             }}
           />
-          <span className="alm-settings__unit-label">
+          <span className="pv-settings__unit-label">
             {m.settings_planner_altitude_unit()}
           </span>
         </SettingsRow>
@@ -178,7 +178,7 @@ function MoonAvoidanceSettings() {
         label={m.settings_planner_moon_avoidance_band_col()}
         info={m.settings_planner_moon_avoidance_info()}
       >
-        <span className="alm-settings__unit-label">
+        <span className="pv-settings__unit-label">
           {m.settings_planner_moon_avoidance_distance_col()} ·{' '}
           {m.settings_planner_moon_avoidance_width_col()}
         </span>
@@ -187,7 +187,7 @@ function MoonAvoidanceSettings() {
         <SettingsRow key={band} label={band}>
           <input
             type="number"
-            className="alm-input alm-input--sm alm-settings__num-input"
+            className="pv-input pv-input--sm pv-settings__num-input"
             value={valueFor(band, 'distanceDeg')}
             min={DISTANCE_MIN}
             max={DISTANCE_MAX}
@@ -209,7 +209,7 @@ function MoonAvoidanceSettings() {
           />
           <input
             type="number"
-            className="alm-input alm-input--sm alm-settings__num-input"
+            className="pv-input pv-input--sm pv-settings__num-input"
             value={valueFor(band, 'widthDays')}
             min={WIDTH_MIN}
             max={WIDTH_MAX}

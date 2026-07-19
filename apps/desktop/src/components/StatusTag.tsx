@@ -11,7 +11,7 @@
  * callers need no extra mapping.
  *
  * Not for filled badges (use `Pill`) or multi-step flowcharts (use the
- * lifecycle stepper). CSS: `.alm-status-tag` in styles/components.
+ * lifecycle stepper). CSS: `.pv-status-tag` in styles/components.
  */
 
 import type { PillVariant } from '@/ui';
@@ -23,8 +23,8 @@ export interface StatusTagProps {
 
 export function StatusTag({ variant, children }: StatusTagProps) {
   return (
-    <span className={`alm-status-tag alm-status-tag--${variant}`}>
-      <span className="alm-status-tag__dot" aria-hidden="true" />
+    <span className={`pv-status-tag pv-status-tag--${variant}`}>
+      <span className="pv-status-tag__dot" aria-hidden="true" />
       {children}
     </span>
   );

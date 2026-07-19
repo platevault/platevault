@@ -401,7 +401,7 @@ describe('InboxDetail — FR-032: missing-attribute banner', () => {
     ).not.toBeInTheDocument();
   });
 
-  // #554: the banner used to be its own trailing `.alm-session-detail2__col`
+  // #554: the banner used to be its own trailing `.pv-session-detail2__col`
   // (a separate full-width alert competing with the property tables). It now
   // lives inline inside the Files column, right below the popover trigger it
   // explains.
@@ -416,9 +416,9 @@ describe('InboxDetail — FR-032: missing-attribute banner', () => {
     );
     const banner = screen.getByTestId('inbox-missing-attr-banner');
     const trigger = screen.getByTestId('inbox-files-popover-trigger');
-    // Same `.alm-session-detail2__col` ancestor as the Files trigger — i.e.
+    // Same `.pv-session-detail2__col` ancestor as the Files trigger — i.e.
     // the banner is NOT its own separate trailing column.
-    const filesCol = trigger.closest('.alm-session-detail2__col');
+    const filesCol = trigger.closest('.pv-session-detail2__col');
     expect(filesCol).not.toBeNull();
     expect(filesCol?.contains(banner)).toBe(true);
   });
@@ -540,12 +540,12 @@ describe('InboxDetail — task #34: mixed-folder banner + header confirm action'
 
 // ── Compact layout: SessionDetail-style left-packed col ───────────────────────
 //
-// The body is a .alm-session-detail2 flex row.
+// The body is a .pv-session-detail2 flex row.
 // Col A: PropertyTable with detection facts + mixed-summary line + Files popover trigger.
 // No breakdown table. No inline metadata col. No FileInspector in the row.
 
 describe('InboxDetail — compact layout: detection col + popover trigger', () => {
-  it('renders the alm-session-detail2 row wrapper', () => {
+  it('renders the pv-session-detail2 row wrapper', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem}
@@ -554,21 +554,21 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
         fileMetadata={fileMetadataFixture}
       />,
     );
-    expect(container.querySelector('.alm-session-detail2')).not.toBeNull();
+    expect(container.querySelector('.pv-session-detail2')).not.toBeNull();
     // No old 3-zone wrappers.
-    expect(container.querySelector('.alm-detailpanel__facts')).toBeNull();
-    expect(container.querySelector('.alm-detailpanel__aux')).toBeNull();
+    expect(container.querySelector('.pv-detailpanel__facts')).toBeNull();
+    expect(container.querySelector('.pv-detailpanel__aux')).toBeNull();
     // No inline metadata col (it lives in the popover).
-    expect(container.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
+    expect(container.querySelector('.pv-inbox-detail__meta-col')).toBeNull();
   });
 
   // #553: DetailPanel's content-only mode renders `children` with no scroll
   // wrapper (that mode assumes a self-scrolling child like a virtualized
   // Table). InboxDetail's body isn't one — it wraps everything in
-  // `.alm-inbox-detail__scroll`, the sole scroll region (see detail-panes.css
+  // `.pv-inbox-detail__scroll`, the sole scroll region (see detail-panes.css
   // `:has()` rule pinning the header above it), so FILES/Needs-review content
   // taller than the docked panel's max-height scrolls instead of being
-  // clipped by the ancestor `.alm-listpage__detail-body`'s `overflow:hidden`.
+  // clipped by the ancestor `.pv-listpage__detail-body`'s `overflow:hidden`.
   it('#553: wraps the body in the sole scroll region, containing the session-detail2 row', () => {
     const { container } = render(
       <InboxDetail
@@ -578,10 +578,10 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
         fileMetadata={fileMetadataFixture}
       />,
     );
-    const scroll = container.querySelector('.alm-inbox-detail__scroll');
+    const scroll = container.querySelector('.pv-inbox-detail__scroll');
     expect(scroll).not.toBeNull();
     expect(
-      scroll?.contains(container.querySelector('.alm-session-detail2')),
+      scroll?.contains(container.querySelector('.pv-session-detail2')),
     ).toBe(true);
   });
 
@@ -596,11 +596,11 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
     );
     // Left-packed multi-column body (Sessions convention): ≥2 columns.
     expect(
-      container.querySelectorAll('.alm-session-detail2__col').length,
+      container.querySelectorAll('.pv-session-detail2__col').length,
     ).toBeGreaterThanOrEqual(2);
     // The Files column carries a head label (scoped to the head element —
     // "Files" also appears as a PropertyTable row label).
-    const heads = [...container.querySelectorAll('.alm-session-detail2__head')];
+    const heads = [...container.querySelectorAll('.pv-session-detail2__head')];
     expect(heads.some((h) => h.textContent === 'Files')).toBe(true);
     // 'light' from frameType appears in the PropertyTable value.
     expect(screen.getAllByText(/light/).length).toBeGreaterThan(0);
@@ -614,7 +614,7 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
         classification={mixedClassification}
       />,
     );
-    const cols = [...container.querySelectorAll('.alm-session-detail2__col')];
+    const cols = [...container.querySelectorAll('.pv-session-detail2__col')];
     expect(cols.length).toBeGreaterThan(0);
     // Summary lives within one of the left-packed columns (the Files column).
     expect(
@@ -634,7 +634,7 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
         fileMetadata={fileMetadataFixture}
       />,
     );
-    const cols = [...container.querySelectorAll('.alm-session-detail2__col')];
+    const cols = [...container.querySelectorAll('.pv-session-detail2__col')];
     expect(
       cols.some(
         (c) =>
