@@ -42,10 +42,12 @@ import {
   screen,
   fireEvent,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
+import { m } from '@/lib/i18n';
 
 // TargetDetailV2 is now backed by TanStack Query (store.ts) — every render
 // needs a QueryClientProvider ancestor. Shadowing `render` here (instead of
@@ -273,9 +275,14 @@ describe('TargetDetailV2', () => {
 
   it('3. renders primaryDesignation in identity section', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
+    // Scoped to the identity PropertyTable's "Designation" row specifically
+    // (not "NGC 7000 appears somewhere on the page", which test 2 already
+    // covers for the header) — this fails if primaryDesignation stopped
+    // reaching the identity section even though the header still shows it.
     await waitFor(() => {
-      const dds = screen.getAllByText('NGC 7000');
-      expect(dds.length).toBeGreaterThanOrEqual(1);
+      const label = screen.getByText(m.targets_col_designation());
+      const row = label.closest('[role="row"]') as HTMLElement;
+      expect(within(row).getByRole('cell')).toHaveTextContent('NGC 7000');
     });
   });
 
@@ -555,6 +562,14 @@ describe('TargetDetailV2', () => {
         displayAlias: 'My NGC 7000',
       }),
     );
+    // The API call succeeding isn't the same as the UI reflecting it — assert
+    // the header actually re-renders with the new effectiveLabel (component
+    // applies mockSetDisplayAlias's response to loadState).
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
+        'My NGC 7000',
+      ),
+    );
   });
 
   it('18b. (#658) calls onMutated after setting a display alias, so the host list can refresh', async () => {
@@ -604,17 +619,22 @@ describe('TargetDetailV2', () => {
         targetId: TARGET_ID,
       }),
     );
+    // Assert the visible result, not just that the API was called — the
+    // header must actually revert to primaryDesignation once
+    // mockClearDisplayAlias's { displayAlias: null } response is applied.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
+        'NGC 7000',
+      ),
+    );
   });
 
   // ── US2: Linked sessions ───────────────────────────────────────────────────
 
-  it('20. (US2) sessions empty-state renders "No linked sessions yet."', async () => {
-    mockListTargetSessions.mockResolvedValue(ok([]));
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() =>
-      expect(screen.getByText(/No linked sessions yet/i)).toBeInTheDocument(),
-    );
-  });
+  // The former test 20 ("sessions empty-state renders 'No linked sessions
+  // yet.'") duplicated test 13 exactly: same default mock (ok([]) from
+  // beforeEach), same assertion. Deleted rather than kept — it added no
+  // coverage test 13 doesn't already provide.
 
   it('21. (US2) linked session rows render date and frameCount', async () => {
     mockListTargetSessions.mockResolvedValue(
@@ -681,15 +701,9 @@ describe('TargetDetailV2', () => {
 
   // ── US3: Linked projects ───────────────────────────────────────────────────
 
-  it('23. (US3) projects empty-state renders "No projects linked."', async () => {
-    mockListTargetProjects.mockResolvedValue(ok([]));
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() =>
-      expect(
-        screen.getAllByText(/No projects linked/i).length,
-      ).toBeGreaterThanOrEqual(1),
-    );
-  });
+  // The former test 23 ("projects empty-state renders 'No projects
+  // linked.'") duplicated test 14 exactly: same default mock (ok([]) from
+  // beforeEach), same assertion. Deleted for the same reason as test 20 above.
 
   it('24. (US3) linked project rows render name and lifecycle', async () => {
     mockListTargetProjects.mockResolvedValue(

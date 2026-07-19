@@ -24,10 +24,11 @@ import {
   act,
   fireEvent,
   render as rtlRender,
+  renderHook,
   screen,
   waitFor,
 } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // InboxDetail uses the TanStack-Query-backed `useInboxReclassify` hook (spec 042),
@@ -170,6 +171,23 @@ const sampleItem: InboxItemSummary = {
 
 import { InboxDetail } from '../InboxDetail';
 import { InboxList } from '../InboxList';
+import { useInboxConfirm } from '../store';
+
+// Raw source of InboxPage.tsx (compile-time glob, mirrors anchors.test.ts's
+// technique) so the toast-wiring test below reads the REAL `runConfirm`
+// implementation rather than a hand-copied mirror.
+const INBOX_PAGE_SOURCE = Object.values(
+  import.meta.glob('../InboxPage.tsx', { as: 'raw', eager: true }),
+)[0] as string;
+
+function queryClientWrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 // ── Tests: InboxDetail ────────────────────────────────────────────────────
 
@@ -397,25 +415,6 @@ describe('Confirm payload and toast', () => {
     vi.clearAllMocks();
   });
 
-  // Minimal stand-in for the relocated Confirm control (now in TopActionBar).
-  // These tests assert the confirm-payload + toast wiring that InboxPage.handleConfirm
-  // performs; the button itself is just a click target.
-  function ConfirmStub({
-    onConfirm,
-  }: {
-    onConfirm: () => void | Promise<void>;
-  }) {
-    return (
-      <button
-        type="button"
-        data-testid="inbox-confirm-btn"
-        onClick={() => void onConfirm()}
-      >
-        Confirm
-      </button>
-    );
-  }
-
   // spec 041 T071/T072 (FR-050): the backend "split" action for mixed
   // classifications is removed entirely — a mixed row is never confirmed at
   // all (InboxPage disables Confirm for it via `canConfirm`), so there is no
@@ -423,73 +422,68 @@ describe('Confirm payload and toast', () => {
   // what that unreachable-for-confirm shape looks like.
 
   it('calls inboxConfirm without an action field for single_type', async () => {
+    // Drives the REAL `useInboxConfirm` hook (store.ts) — the exact code
+    // InboxPage.handleConfirm calls — instead of a disconnected stub that
+    // called mockInboxConfirm directly. Catches a regression in the hook's
+    // own payload assembly (e.g. a reintroduced `action` field).
     mockInboxConfirm.mockResolvedValue({
-      planId: 'plan-def',
-      planState: 'ready_for_review',
-      itemsTotal: 18,
-      registeredAsMaster: false,
+      status: 'ok',
+      data: {
+        planId: 'plan-def',
+        planState: 'ready_for_review',
+        itemsTotal: 18,
+        registeredAsMaster: false,
+        destinations: [],
+      },
     });
 
-    const onConfirm = async () => {
-      await mockInboxConfirm({
+    const { result } = renderHook(() => useInboxConfirm(), {
+      wrapper: queryClientWrapper,
+    });
+
+    await act(async () => {
+      await result.current.confirm({
         inboxItemId: 'item-002',
         contentSignature: singleTypeClassification.contentSignature,
         rootAbsolutePath: '/astro/inbox',
         destructiveDestination: 'archive',
       });
-    };
-
-    render(<ConfirmStub onConfirm={onConfirm} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('inbox-confirm-btn'));
     });
 
     expect(mockInboxConfirm).toHaveBeenCalledWith(
       expect.objectContaining({
+        inboxItemId: 'item-002',
         contentSignature: 'sig-def',
+        rootAbsolutePath: '/astro/inbox',
+        destructiveDestination: 'archive',
       }),
     );
     expect(mockInboxConfirm.mock.calls[0]?.[0]).not.toHaveProperty('action');
   });
 
-  it('always shows the plan-created toast after confirm (masters now produce a plan too)', async () => {
-    // spec 041: the registeredAsMaster fast-path is gone — every confirm yields a
-    // reviewable plan that surfaces in the aggregate PlanPanel.
-    mockInboxConfirm.mockResolvedValue({
-      planId: 'plan-xyz',
-      planState: 'ready_for_review',
-      itemsTotal: 1,
-      registeredAsMaster: false,
-    });
+  // spec 041: the registeredAsMaster fast-path is gone — every confirm
+  // yields a reviewable plan surfaced via an unconditional toast. Mounting
+  // the full InboxPage to click its real Confirm button would exercise this
+  // for real, but this suite intentionally avoids that (see
+  // InboxPage.reclassifySelection.test.tsx's header comment: "no full-router
+  // InboxPage render... per its own comment" — a full page tree here OOMs
+  // the test worker). Instead this statically verifies the actual
+  // `runConfirm` success block in InboxPage.tsx: the plan-created toast
+  // fires unconditionally (no `if` between the confirm() call and the
+  // addToast() call, and no remaining `registeredAsMaster` gate).
+  it('runConfirm always toasts plan-created on success (masters now produce a plan too, no registeredAsMaster gate)', () => {
+    const start = INBOX_PAGE_SOURCE.indexOf('const runConfirm = useCallback(');
+    expect(start).toBeGreaterThan(-1);
+    const tryStart = INBOX_PAGE_SOURCE.indexOf('try {', start);
+    const catchStart = INBOX_PAGE_SOURCE.indexOf('} catch (e) {', tryStart);
+    const successBlock = INBOX_PAGE_SOURCE.slice(tryStart, catchStart);
 
-    const onConfirm = async () => {
-      const result = await mockInboxConfirm({
-        inboxItemId: 'item-master-001',
-        contentSignature: singleTypeClassification.contentSignature,
-        rootAbsolutePath: '/astro/inbox',
-        destructiveDestination: 'archive',
-      });
-      mockAddToast({
-        message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
-        variant: 'info',
-      });
-    };
-
-    render(<ConfirmStub onConfirm={onConfirm} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('inbox-confirm-btn'));
-    });
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Plan created'),
-        variant: 'info',
-      }),
-    );
-    expect(mockAddToast).not.toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Registered as calibration master.' }),
-    );
+    const toastIdx = successBlock.indexOf('addToast(');
+    expect(toastIdx).toBeGreaterThan(-1);
+    expect(successBlock.slice(0, toastIdx)).not.toMatch(/\bif\s*\(/);
+    expect(successBlock).toContain('inbox_toast_plan_created');
+    // spec 041: the old registeredAsMaster fast-path (skip the toast for
+    // masters) was removed entirely — it must not reappear as a new gate.
+    expect(successBlock).not.toContain('registeredAsMaster');
   });
 });

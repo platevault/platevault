@@ -112,8 +112,16 @@ describe('task 32: InboxRow classification-forward grid', () => {
         filterType="all"
       />,
     );
-    const darks = screen.getAllByText(/dark/i);
-    expect(darks.length).toBeGreaterThanOrEqual(1);
+    // Scoped to the classification cell specifically (not "any 'dark' text
+    // on the page") so this fails if masterFrameType stops reaching
+    // classificationLabel/the `.alm-inbox-row__classification` cell, even if
+    // another element on the row happened to contain "dark" too.
+    const row = screen.getByTestId('inbox-item-item-001');
+    const classificationCell = row.querySelector(
+      '.alm-inbox-row__classification',
+    );
+    expect(classificationCell).not.toBeNull();
+    expect(classificationCell?.textContent).toBe('dark');
   });
 
   it('renders the row path in its own element (not strong-wrapped)', () => {

@@ -35,19 +35,13 @@ const ANCHOR_SOURCES = import.meta.glob(
 );
 
 describe('T026 — anchor CI gate', () => {
-  it('ALL_ANCHOR_IDS has exactly three entries (matching the three flow steps)', () => {
-    expect(ALL_ANCHOR_IDS).toHaveLength(3);
-  });
-
-  it('exports the three expected anchor id constants', () => {
-    expect(ANCHOR_INBOX_CONFIRM_ROW).toBe('inbox.confirm-row');
-    expect(ANCHOR_PROJECTS_CREATE_CTA).toBe('projects.create-cta');
-    expect(ANCHOR_PROJECT_OPEN_IN_TOOL).toBe('project.open-in-tool');
-  });
-
-  it('GUIDE_ANCHOR_ATTR is the correct attribute name', () => {
-    expect(GUIDE_ANCHOR_ATTR).toBe('data-guide-anchor');
-  });
+  // The former "ALL_ANCHOR_IDS has exactly three entries", "exports the
+  // three expected anchor id constants", and "GUIDE_ANCHOR_ATTR is the
+  // correct attribute name" tests here asserted these real exports against
+  // literal copies of their own values — they could only fail if anchors.ts
+  // itself changed, and the same values are already exercised for real
+  // behavior below (glob-based presence in host components) and in
+  // GuidedOverlay.test.tsx (DOM targeting via these exact constants).
 
   it('anchor-host source files were found by glob', () => {
     const keys = Object.keys(ANCHOR_SOURCES);
