@@ -463,4 +463,142 @@ describe('alm/no-user-string', () => {
       0,
     );
   });
+
+  // ── Gap-corpus hardening (run-jc0717): JSXAttribute name gap, nested toast
+  // action.label, and the *Label/*Text/*Title/*Message return-statement blind
+  // spot found live in the codebase (TargetsPage.tsx detailLabel="Target
+  // details" reached CI green before this hardening). ──
+
+  it('flags a JSX attribute ending in `Label` (custom aria-label-passthrough props)', () => {
+    const out = lint(`
+      function P() {
+        return <ListPageLayout detailLabel="Target details" bottomDetailLabel="More info" />;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(2);
+    expect(hits.every((m) => m.messageId === 'attr')).toBe(true);
+  });
+
+  it('flags a JSX attribute using a LABEL_PROP_KEYS name (tooltip, confirmLabel, subtitle…)', () => {
+    const out = lint(`
+      function P() {
+        return <Dialog tooltip="Remove it" confirmLabel="Delete" subtitle="Cannot be undone" />;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(3);
+  });
+
+  it('does NOT flag a machine-named JSX attribute (value, variant, dangerValue)', () => {
+    const out = lint(`
+      function P() {
+        return <SegControl value="Delete" variant="primary" dangerValue="Delete" />;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
+  });
+
+  it('flags a hardcoded label inside a toast/dialog nested action object (already-generic LABEL_PROP_KEYS check)', () => {
+    const out = lint(`
+      function P() {
+        addToast({
+          message: m.saved(),
+          variant: 'error',
+          action: { label: 'Retry', onClick: retry },
+        });
+      }
+    `);
+    // The object-literal `label` key check already covers this — it applies
+    // to ANY object property named `label`, not just JSX/toast contexts.
+    // Confirmed NOT a gap; kept as a regression lock, not new behavior.
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('attr');
+  });
+
+  it('flags a prose string returned directly from a *Label-named helper function', () => {
+    const out = lint(`
+      function statusLabel(s) {
+        return s === 'ok' ? 'All good' : 'Needs review';
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('returnLiteral');
+  });
+
+  it('flags a prose string returned from a const-arrow *Text helper (concise body, no ReturnStatement)', () => {
+    const out = lint(`
+      const detailText = (e) => e.ok ? 'All good' : 'Needs attention';
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('returnLiteral');
+  });
+
+  it('flags a prose string returned from a *Label-named function inside a switch', () => {
+    const out = lint(`
+      function profileLabelFor(profile) {
+        switch (profile) {
+          case 'siril':
+            return 'Siril';
+          default:
+            return m.unknown();
+        }
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('returnLiteral');
+  });
+
+  // Known pre-existing heuristic limit (looksMachine's path/URL fragment
+  // rule), not introduced by this hardening: a slash makes the whole prose
+  // gate treat the string as a machine token, so a brand string containing
+  // "/" slips past every prose-gated check in this rule (Property,
+  // VariableDeclarator, setState, and this returnLiteral check alike).
+  it('does NOT flag a slash-containing string even from a *Label-named function (looksMachine limitation)', () => {
+    const out = lint(`
+      function profileLabelFor(profile) {
+        return profile === 'pixinsight' ? 'PixInsight/WBPP' : 'Other';
+      }
+    `);
+    // 'Other' alone is prose and WOULD normally be flagged too, but the
+    // ConditionalExpression prose gate requires only one branch to have
+    // prose, so this documents the slash branch is silently excused while
+    // the sibling branch still triggers the report.
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('returnLiteral');
+  });
+
+  it('does NOT flag a machine-token return from a *Label-named function (prose gate)', () => {
+    const out = lint(`
+      function classifyLabel(c) {
+        switch (c) {
+          case 'high':
+            return 'ok';
+          default:
+            return 'neutral';
+        }
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
+  });
+
+  it('does NOT flag a prose return from a function whose name is not a display-label helper', () => {
+    const out = lint(`
+      function buildQuery(term) {
+        return term ? 'Has term' : 'No term';
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
+  });
 });
