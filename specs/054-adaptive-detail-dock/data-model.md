@@ -32,7 +32,7 @@ each page's `detailLabel` (or explicit `dockId`) is stable and unique.
 
 | Key | Type | Rule |
 |---|---|---|
-| `alm-dock-placement-<dockId>` | `'side' \| 'bottom'` string, or absent | Absent/invalid ⇒ `null` (follow the width heuristic). Set on every pin-toggle click; **never cleared by the current UI** — the `alm-listpage__detail-pin` button only ever writes `'side'` or `'bottom'`, so once set this key persists until localStorage is cleared manually. This is the root cause of #1066. |
+| `alm-dock-placement-<dockId>` | `'side' \| 'bottom'` string, or absent | Absent/invalid ⇒ `null` (follow the width heuristic). Written on every pin-selection; **now reachable back to `null`** — `setOverride(null)` calls `localStorage.removeItem(key)` (`useAdaptiveDock.ts:119`), and the "Auto" option in `DetailDockPlacementControl` calls it. This closes #1066 (PR #1070); the old `alm-listpage__detail-pin` button that could only write `'side'`/`'bottom'` no longer exists. |
 | `alm-dock-width-<dockId>` | numeric string | Default `420` (`defaultWidth`). Clamped to `[minWidth=320, round(window.innerWidth * 0.5)]` on every write (`clampWidth`, `useAdaptiveDock.ts:95-102`) — including the initial read, since `readStoredWidth` is only guarded by `Number.isFinite`, and the *first* render's `width` state is the raw stored value until the next `setWidth` call re-clamps it. |
 
 ### What the original design's typed field would have added (not present)

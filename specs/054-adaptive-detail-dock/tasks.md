@@ -12,12 +12,20 @@ superseded by #1003), with every task given an honest status: **delivered**
 
 Do not treat `[ ]`/`[X]` checkboxes below as live SpecKit task state — this
 feature was not implemented via `speckit-implement` against this task list.
-Checkboxes reflect delivery status as verified in this reconciliation pass.
+Checkboxes reflect delivery status as verified in this reconciliation pass,
+under this convention: **`[x]` = the disposition is settled and needs no
+further action from a reader** (DELIVERED, WITHDRAWN, or SUPERSEDED with no
+outstanding gap); **`[ ]` = the disposition is NOT settled** (OPEN with a
+follow-up issue/PR still to land, an open product decision, or NOT CONFIRMED
+pending verification).
 
 ## Legend
 
 - **DELIVERED (#PR)** — confirmed present in `main` source, cites the PR.
 - **OPEN (#issue)** — not on `main`; a tracked follow-up issue exists.
+- **WITHDRAWN (#issue)** — designed, intentionally not built, and the product
+  decision that would have authorized building it has since been decided
+  against; do not build without a new product ask that reopens it.
 - **SUPERSEDED** — designed but not built; no tracked follow-up as of this
   reconciliation (the shipped architecture solved the underlying need
   differently, or the need turned out not to exist).
@@ -43,14 +51,14 @@ Checkboxes reflect delivery status as verified in this reconciliation pass.
   `localStorage`, untested by a dedicated unit-test file as of this
   reconciliation.
 - [x] T004 Component test: containment for a plain overflowing block, no
-  special internal scroll structure. **Note**: an untracked, uncommitted file
-  `apps/desktop/src/components/DetailPanel.containment.test.tsx` exists in
-  this worktree, explicitly referencing "spec 054 T004, issue #1069" in its
-  docstring, and documents the actual #816 fix mechanism (a direct-child CSS
-  selector in `redesign-detail.css`, from #1035). It predates this
-  documentation session, is not on `main` or any branch/commit, and was not
-  authored by this task — flagging its existence rather than claiming its
-  status either way; it is not yet shipped.
+  special internal scroll structure. **DELIVERED, PR #1076.** Landed as tests
+  19–20 in `DetailPanel.test.tsx:327-346` ("content-only children stay direct
+  children of `.alm-detail--fill`" / "the facts slot does NOT satisfy that
+  selector"), which pin the #816 fix mechanism (a direct-child CSS selector
+  in `redesign-detail.css`, from #1035). An earlier draft of this file
+  existed as an untracked, uncommitted stray in this worktree before #1076
+  merged it under the `DetailPanel.test.tsx` name instead of its own file —
+  that history is superseded by the committed version now on `main`.
 - [x] T005 Component test `ListPageLayout` placement mount. **DELIVERED
   (partial), #1003** — `ListPageLayout.test.tsx` covers the `'side-and-bottom'`
   variant; general adaptive-placement mounting is exercised indirectly by
@@ -63,31 +71,34 @@ Checkboxes reflect delivery status as verified in this reconciliation pass.
   **SUPERSEDED** — shipped as raw `localStorage` keys instead
   (`useAdaptiveDock.ts:58-71`). No tracked issue for adding typed persistence.
 - [x] T008 Container-level scroll containment in `DetailPanel.tsx` /
-  `tables-lists.css`. **DELIVERED (partial), #1035** — closes #816 for the
-  Target detail specifically, via a CSS direct-child selector contract (see
-  T004 note). The containment guarantee is proven for `DetailPanel`'s three
-  current adopters (Sessions/Calibration/Inbox); Archive/Projects/Targets
-  don't route through `DetailPanel` at all, so the guarantee doesn't apply to
-  them yet (#1067).
+  `tables-lists.css`. **DELIVERED, #1035 + PR #1072.** #1035 closed #816 for
+  the Target detail specifically, via a CSS direct-child selector contract
+  (see T004 note). PR #1072 migrated Archive/Projects/Targets onto
+  `DetailPanel` too, so the containment guarantee now applies uniformly
+  across all six adopters, not just Sessions/Calibration/Inbox.
 - [x] T009 Drive placement adaptively in `ListPageLayout.tsx`; delete the
   dead `'side-and-bottom'` dual path. **DELIVERED (partial), #1003** — the
   adaptive `'side'/'bottom'` wiring shipped
-  (`ListPageLayout.tsx:268-343`). The `'side-and-bottom'` path was **not
+  (`ListPageLayout.tsx:269-336`). The `'side-and-bottom'` path was **not
   deleted** — it remains a live, tested capability
-  (`ListPageLayout.tsx:207-266`, `ListPageLayout.test.tsx:102-176`), just
+  (`ListPageLayout.tsx:207-267`, `ListPageLayout.test.tsx:102-176`), just
   unused by any current page. No `forcedPlacement` prop was added.
 - [x] T010 Drag-resize handle, pointer-drag within `[320px, 50% window]`,
   persisted. **DELIVERED, #1003** — `useAdaptiveDock.ts:134-154`
   (`onResizeStart`), `ResizeHandle.tsx`, wired into
   `ListPageLayout.tsx:299-304`.
-- [ ] T011 Migrate `TargetDetailV2` to shared `DetailPanel`. **OPEN, #1067**
-  (PR #1072). Confirmed not on `main`: `TargetDetailV2`/`TargetsTable` do not
-  import `DetailPanel`.
-- [ ] T012 Migrate `ArchiveDetail` to shared `DetailPanel`. **OPEN, #1067**
-  (PR #1072). Confirmed not on `main`: `ArchiveDetail.tsx` does not import
-  `DetailPanel`.
-- [ ] T012a Shared-component guard (automated check + static grep script).
-  **OPEN, #1067** (PR #1072). Not found in `main`'s lint/test gate.
+- [x] T011 Migrate `TargetDetailV2` to shared `DetailPanel`. **DELIVERED,
+  #1067 (PR #1072).** Confirmed on `main`: `TargetDetailV2.tsx:941` renders
+  `<DetailPanel fill title={titleContent} ...>`.
+- [x] T012 Migrate `ArchiveDetail` to shared `DetailPanel`. **DELIVERED,
+  #1067 (PR #1072).** Confirmed on `main`: `ArchiveDetail.tsx:63-127` renders
+  `<DetailPanel>`.
+- [x] T012a Shared-component guard (automated check + static grep script).
+  **DELIVERED, #1067 (PR #1072).** `DetailPanel.shared-guard.test.ts`
+  statically asserts all six detail files (`SessionDetail.tsx`,
+  `MasterDetail.tsx`, `InboxDetail.tsx`, `ArchiveDetail.tsx`,
+  `TargetDetailV2.tsx`, `ProjectDetail.tsx`) render through `<DetailPanel`
+  and never render a raw `<DetailHeader` directly.
 
 ---
 
@@ -100,55 +111,68 @@ Checkboxes reflect delivery status as verified in this reconciliation pass.
 - [x] T014 `CalibrationPage.tsx` adopts adaptive placement. **DELIVERED,
   #1003** — same pattern as T013.
 - [x] T015 `ArchivePage.tsx` adopts adaptive placement (detail migration
-  assumed already done in T012). **DELIVERED (placement only), #1003** —
-  adaptive placement shipped; the T012 `DetailPanel` migration this task
-  assumed as a prerequisite did **not** ship (#1067 still open), so Archive's
-  detail panel is adaptive-placed but not routed through the shared
-  container.
+  assumed already done in T012). **DELIVERED, #1003 + #1067 (PR #1072).** —
+  adaptive placement shipped, and the T012 `DetailPanel` migration this task
+  assumed as a prerequisite has since shipped too, so Archive's detail panel
+  is both adaptive-placed and routed through the shared container.
 - [x] T016 `TargetsPage.tsx` adopts adaptive placement at threshold 1500px
-  (detail migration assumed done in T011). **DELIVERED (partial), #1003** —
-  adaptive placement shipped, but at the shared **1400px default**, not a
-  Targets-specific 1500px (no `adaptiveThreshold` override is passed in
-  `TargetsPage.tsx`). T011's prerequisite `DetailPanel` migration did not
-  ship (#1067).
-- [ ] T017 `ProjectsPage.tsx` unifies onto the adaptive mechanism, dropping
-  the bespoke `alm-project-detail-stack`. **DELIVERED for placement,
-  OPEN for the DetailPanel part (#1067).** `ProjectsPage.tsx` does pass no
-  `detailPlacement` (defaults to adaptive) and does render its detail
-  content as a single fill (`ProjectDetailContent` + `ProjectBottomDetail`
-  stacked in one `div`), which is a de-facto unification away from
-  `'side-and-bottom'`. However its own module docstring still claims
-  `detailPlacement="side-and-bottom"` — a stale comment, not matching the
-  actual JSX; see plan.md's note. It does not route through `DetailPanel`
-  (#1067).
+  (detail migration assumed done in T011). **DELIVERED (partial), #1003 +
+  #1067 (PR #1072)** — adaptive placement shipped, but at the shared
+  **1400px default**, not a Targets-specific 1500px (no `adaptiveThreshold`
+  override is passed in `TargetsPage.tsx`) — that gap is superseded, no
+  tracked issue. T011's prerequisite `DetailPanel` migration has since
+  shipped (#1067, PR #1072).
+- [x] T017 `ProjectsPage.tsx` unifies onto the adaptive mechanism, dropping
+  the bespoke `alm-project-detail-stack`. **DELIVERED, #1003 + #1067
+  (PR #1072).** `ProjectsPage.tsx` does pass no `detailPlacement` (defaults
+  to adaptive) and does render its detail content as a single fill
+  (`ProjectDetailContent` + `ProjectBottomDetail` stacked in one `div`),
+  which is a de-facto unification away from `'side-and-bottom'`. It now
+  routes through `DetailPanel` too (`ProjectDetail.tsx:477-829`). Its module
+  docstring still claims `detailPlacement="side-and-bottom"` — a stale
+  comment, not matching the actual JSX; tracked as **#1108** (open PR), see
+  plan.md's note.
 
 ---
 
 ## Phase 4: User Story 3 — Inbox detail-dominant permanent split
 
-- [ ] T018 `InboxPage.tsx` renders the permanent `'split'` shape.
-  **SUPERSEDED / OPEN PRODUCT DECISION, #1068.** Not built — Inbox uses the
-  same adaptive mechanism as every other page. #1068 is the open decision
-  between building this vs. keeping the Format column `main` shipped
-  instead. Do not build without a recorded decision there.
-- [ ] T019 `InboxList.tsx` narrowed presentation (name truncation, essential
-  columns only, Format column dropped). **SUPERSEDED / OPEN PRODUCT
-  DECISION, #1068.** `main` took the opposite direction: it **added** a
-  Format column (`InboxList.tsx:41,138,193-194,408-414,507`) rather than
-  dropping one. #1068 frames this as the explicit contradiction to resolve.
-- [ ] T020 Component/unit test: Inbox list-left/detail-right at both extremes.
-  **SUPERSEDED** — moot until/unless #1068 is decided in favor of building
-  the split.
+- [x] T018 `InboxPage.tsx` renders the permanent `'split'` shape.
+  **WITHDRAWN, #1068.** Not built, and no longer planned — Inbox uses the
+  same adaptive mechanism as every other page. #1068 existed to make the
+  Inbox FILES list reachable (#553), but #553 was already fixed a different
+  way by PR #939 (giving `InboxDetail`'s body its own scroll region), so the
+  driver for this task is spent. The owner decided to keep the adaptive dock
+  and the Format column instead of building the permanent split.
+- [x] T019 `InboxList.tsx` narrowed presentation (name truncation, essential
+  columns only, Format column dropped). **WITHDRAWN, #1068.** `main` took
+  the opposite direction: it **added** a Format column
+  (`InboxList.tsx:41,138,193-194,408-414,507`) rather than dropping one, and
+  the owner ratified that direction when #1068 was decided.
+- [x] T020 Component/unit test: Inbox list-left/detail-right at both extremes.
+  **WITHDRAWN** — moot now that #1068 decided against building the split.
 
 ---
 
 ## Phase 5: User Story 4 — Per-page pin + persisted resize
 
-- [ ] T021 Surface an Auto/Bottom/Right 3-state placement control (Settings +
-  in-page). **OPEN, #1066** (PR #1070). `main` ships only a 2-state pin
-  toggle (`ListPageLayout.tsx:307-325`, `alm-listpage__detail-pin`) that
-  flips `'side'`⇄`'bottom'` and has no path back to auto placement without
-  clearing `localStorage` — the exact bug #1066 describes.
+- [x] T021 Surface an Auto/Bottom/Right 3-state placement control (Settings +
+  in-page). **DELIVERED IN-PAGE ONLY, #1066 (PR #1070).**
+  `ListPageLayout.tsx:313` renders
+  `DetailDockPlacementControl` (`apps/desktop/src/components/
+  DetailDockPlacementControl.tsx`), a real 3-state Auto/Bottom/Right control
+  built on the shared `SegControl`, replacing the old 2-state
+  `alm-listpage__detail-pin` toggle (that class no longer exists anywhere in
+  the codebase). Selecting "Auto" calls `setOverride(null)`, which clears the
+  pin — the exact path #1066 was filed for.
+  The **"Settings" half of this task did NOT ship**: there is no placement
+  control anywhere under `features/settings/`. The control is rendered
+  per-page by `ListPageLayout` whenever placement is adaptive. Treated as a
+  deliberate outcome rather than a gap — the control acts on the panel it
+  sits beside, so a separate Settings surface would duplicate it. Journey J10
+  briefly documented a Settings-based control that never existed; corrected
+  in the same pass as this reconciliation. #1106 (open) makes the shipped
+  control icon-only.
 - [x] T022 Enforce a pin→bottom safety fallback when the window is too
   narrow. **DELIVERED (narrower than designed), #1003** — `useAdaptiveDock`
   has `sideAvailable = windowWidth >= minWidth * 2`
@@ -183,10 +207,10 @@ Checkboxes reflect delivery status as verified in this reconciliation pass.
   new work for this feature.** `ListPageLayout.tsx`'s Escape handler
   (`:175-193`) is one `document`-level listener regardless of
   `detailPlacement`; unaffected by which of `'side'`/`'bottom'` is active.
-- [ ] T028 E2E: keyboard flow identical across side/bottom/split. **DELIVERED
+- [x] T028 E2E: keyboard flow identical across side/bottom/split. **DELIVERED
   for side/bottom (implied by T027's pre-existing mechanism); N/A for split
-  (T018 not built).** No dedicated new E2E assertion was authored for this
-  feature specifically — existing J16 coverage predates #1003.
+  (T018 withdrawn, #1068).** No dedicated new E2E assertion was authored for
+  this feature specifically — existing J16 coverage predates #1003.
 
 ---
 
@@ -196,25 +220,32 @@ Checkboxes reflect delivery status as verified in this reconciliation pass.
   **DELIVERED (scoped to what shipped), #1003** —
   `tests/e2e/adaptive_detail_dock.spec.ts` (92 lines), two tests against
   Calibration: threshold flip side↔bottom at 1600×900 vs 1100×720, and
-  pin-persists-across-reload via `dock-placement-toggle`. Does not (and
-  cannot) cover Inbox-split or Targets-column assertions — those features
-  don't exist.
+  pin-persists-across-reload. **Correction**: this task previously cited a
+  `dock-placement-toggle` test id — that string does not exist anywhere in
+  the codebase. The actual pin test selects the 3-state control via
+  `page.getByRole("radio", { name: "Right" })`; the control's real test id is
+  `data-testid="dock-placement-control"` (`DetailDockPlacementControl.tsx:48`).
+  Does not (and cannot) cover
+  Inbox-split or Targets-column assertions — those features don't exist.
 - [ ] T030 Migrate existing `.alm-listpage__detail` E2E pins deliberately.
-  **N/A** — the Inbox-split migration these pins targeted (T018) was not
-  built, so there was nothing to migrate them to. Confirmed the new spec's
-  own docstring explicitly calls out non-interference with
+  **N/A** — the Inbox-split migration these pins targeted (T018, withdrawn
+  #1068) was not built, so there was nothing to migrate them to. Confirmed
+  the new spec's own docstring explicitly calls out non-interference with
   `calibration_masters_matching.spec.ts:157` and `inbox_ingest_confirm.spec.ts`.
 - [x] T031 Journey deltas in `docs/journeys/` (J02/J03/J04/J05/J07/J08/J09/
   J16). **DELIVERED, but see [Known drift](./spec.md#known-drift-journey-deltas-overstate-delivery),
   PR #966 (`8f464e87`).** All eight journey files exist and are committed.
   J04/J05/J07/J08 accurately describe the shipped adaptive side/bottom
   mechanism. **J02, J03, J09, and J16 describe FR-006–FR-009 (Targets pinned
-  columns) and FR-014/FR-015 (permanent Inbox split) as delivered — neither
-  is on `main`.** This is a real, pre-existing doc/code drift discovered
+  columns) and FR-014/FR-015 (permanent Inbox split) as delivered.**
+  FR-002/FR-006/FR-007/FR-008 and FR-014/FR-015 are still not on `main` (the
+  latter now formally withdrawn, #1068); FR-009 itself (scroll containment)
+  *is* now delivered (PR #1072), just not the pinned-column behavior J09
+  pairs it with. This is a real, pre-existing doc/code drift discovered
   during this reconciliation, distinct from the `specs/` gap #1069 targets;
   flagging it here rather than silently fixing `docs/journeys/`, which is
   out of this task's scope.
-- [ ] T032 `verify-on-windows` scenario + Layer-2 journey. **DELIVERED
+- [x] T032 `verify-on-windows` scenario + Layer-2 journey. **DELIVERED
   (this reconciliation), #1069** —
   `docs/development/windows-validation/054-adaptive-detail-dock.md`,
   rewritten for the shipped two-placement mechanism. No Layer-2 tauri-driver
@@ -243,14 +274,20 @@ Checkboxes reflect delivery status as verified in this reconciliation pass.
 
 ## Summary by disposition
 
-- **Delivered** (fully or partially, cites a PR): T004 (partial, uncommitted
-  local test only), T005, T008, T009, T010, T013–T017 (placement only),
-  T022, T027, T028 (partial), T029, T031 (partial — see drift note), T032,
-  T033.
-- **Open** (tracked follow-up issue): T011, T012, T012a → **#1067**; T021 →
-  **#1066**.
-- **Open product decision** (no implementation should proceed without it):
-  T018, T019, T020 → **#1068**.
+- **Delivered** (fully or partially, cites a PR): T004, T005, T008, T009
+  (partial — dual path not deleted), T010, T011, T012, T012a, T013–T017,
+  T021, T022, T027, T028, T029, T031 (partial — see drift note), T032, T033.
+- **Withdrawn** (designed, decided against — do not build without a new
+  product ask): T018, T019, T020 → **#1068**.
 - **Superseded** (no tracked follow-up as of this reconciliation): T001,
   T002, T003, T006, T007, T024, T025, T026, T030.
 - **Not confirmed** (verify before relying on): T023, T034.
+
+No task remains in the **Open** disposition as of this pass — #1066 (T021)
+and #1067 (T011/T012/T012a) both shipped (PR #1070, PR #1072). Three
+follow-up gaps found by real-app validation of the shipped mechanism are
+tracked outside this task list entirely, not against any T0xx here: **#1106**
+(icon-only placement control, detail-panel overflow, stable `dockId`s, open
+PR), **#1107** (vertical clipping of `.alm-listpage__detail-body`, open
+issue), **#1108** (stale `ProjectsPage.tsx` layout comments, open PR, see
+T017).
