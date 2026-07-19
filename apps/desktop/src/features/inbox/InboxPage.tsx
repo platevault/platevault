@@ -456,6 +456,19 @@ export function InboxPage() {
     }
   }, [rootPickItemId, selectedItemId]);
 
+  // #648: `selectedDestRootId` previously survived a selection change — the
+  // picker is filtered per item by frame-type category (InboxDetail's
+  // `applicableRoots`), so a calibration root chosen for a bias item is not
+  // among a subsequently-selected light item's options. The DOM <select>
+  // then fell back to its first option ("Auto") while this state still held
+  // the stale (invalid-for-this-item) root id, so a confirm sent the hidden
+  // stale value and the backend rejected it with `inbox.invalid_destination_
+  // root` for a picker that visibly read "Auto". Reset on every selection
+  // change so the picker always starts at the real "Auto" state.
+  useEffect(() => {
+    setSelectedDestRootId('');
+  }, [selectedItemId]);
+
   const mergeDestinations = useCallback(
     (destinations?: InboxConfirmDestination[] | null) => {
       if (!destinations || destinations.length === 0) return;

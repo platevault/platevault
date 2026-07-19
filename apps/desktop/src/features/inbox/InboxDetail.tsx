@@ -169,6 +169,39 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/** Second-to-last path segment (the basename's parent directory name). */
+function parentSegment(path: string): string {
+  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 2] : '';
+}
+
+/**
+ * Build destination-root option labels, disambiguating roots that share a
+ * basename (issue #866): two registered roots at different locations but the
+ * same folder name (e.g. two "Lights" folders) rendered identically as
+ * "Lights · raw" with no way to tell which one a pick actually targets.
+ * Duplicates get their parent directory appended; unique basenames are
+ * unaffected.
+ */
+function buildRootLabels(
+  roots: Array<{ id: string; path: string; category: string }>,
+): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const r of roots) {
+    const base = basename(r.path);
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+  const labels = new Map<string, string>();
+  for (const r of roots) {
+    const base = basename(r.path);
+    const parent = parentSegment(r.path);
+    const disambiguated =
+      (counts.get(base) ?? 0) > 1 && parent ? `${base} (${parent})` : base;
+    labels.set(r.id, `${disambiguated} · ${r.category}`);
+  }
+  return labels;
+}
+
 /**
  * Build a plain-language composition summary for a mixed classification.
  * Example: "12 light · 4 dark · 1 bias"
@@ -178,6 +211,17 @@ function buildMixedSummary(
 ): string {
   if (!breakdown || breakdown.length === 0) return '';
   return breakdown.map((e) => `${e.count} ${e.kind}`).join(' · ');
+}
+
+/**
+ * Format an exposure length in seconds for display (issue #789): raw FITS
+ * EXPTIME floats carry IEEE-754 noise (e.g. `6.92447668013071`) that reads as
+ * fabricated/slop rather than a real capture value. Whole-second exposures
+ * show no decimal; fractional exposures round to 2 decimal places.
+ */
+function formatExposureSeconds(s: number): string {
+  const rounded = Math.round(s * 100) / 100;
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded} s`;
 }
 
 // ── FileInspector ─────────────────────────────────────────────────────────────
@@ -473,6 +517,7 @@ export function InboxDetail({
       : applicableCategory && destinationRoots
         ? destinationRoots.filter((r) => r.category === applicableCategory)
         : (destinationRoots ?? []);
+  const rootLabels = buildRootLabels(applicableRoots);
 
   // Generic bulk-editable properties (FR-044/US11, issue #755): every
   // overridable registry entry other than frameType (which keeps its own
@@ -616,7 +661,7 @@ export function InboxDetail({
       exposure: renderValue(
         f.exposureS ?? null,
         { applicability: fieldApplicability(f.frameTypeEffective, 'exposure') },
-        (v) => `${v} s`,
+        (v) => formatExposureSeconds(Number(v)),
       ),
       binning: renderValue(
         f.binningX != null || f.binningY != null
@@ -669,10 +714,14 @@ export function InboxDetail({
     {
       key: 'files',
       label: m.inbox_col_files(),
+      // #653: the breakdown only tallies CLASSIFIED files — it excludes
+      // `unclassifiedFiles`, so a needs-review item (the one a user is most
+      // likely scrutinizing) undercounted here vs the list row's total
+      // `fileCount`. Add the unclassified count back in before falling back.
       value: classification
         ? String(
-            classification.breakdown?.reduce((s, e) => s + e.count, 0) ||
-              item.fileCount,
+            (classification.breakdown?.reduce((s, e) => s + e.count, 0) ?? 0) +
+              (classification.unclassifiedFiles?.length ?? 0) || item.fileCount,
           )
         : String(item.fileCount),
     },
@@ -698,7 +747,10 @@ export function InboxDetail({
     {
       key: 'exposure',
       label: m.inbox_col_exposure(),
-      value: repFile?.exposureS != null ? `${repFile.exposureS} s` : null,
+      value:
+        repFile?.exposureS != null
+          ? formatExposureSeconds(repFile.exposureS)
+          : null,
       source: 'fits',
       applicability: fieldApplicability(itemFrameType, 'exposure'),
     },
@@ -798,7 +850,7 @@ export function InboxDetail({
             <option value="">{m.projects_edit_channels_auto_tag()}</option>
             {applicableRoots.map((r) => (
               <option key={r.id} value={r.id}>
-                {basename(r.path)} · {r.category}
+                {rootLabels.get(r.id) ?? `${basename(r.path)} · ${r.category}`}
               </option>
             ))}
           </select>

@@ -129,6 +129,21 @@ function formatTag(item: InboxListItem): string {
 }
 
 /**
+ * The exact label rendered in the Format column cell (issue #649): a master
+ * row displays `"{type} master"`, not its raw `formatTag`. The sort
+ * comparator MUST compare this same displayed string — comparing the
+ * internal format tag instead (as before) let master rows interleave
+ * arbitrarily with FITS rows because "FITS" never equals "bias master" etc.
+ */
+function formatDisplayLabel(item: InboxListItem): string {
+  return item.isMaster
+    ? m.inbox_master_row_label({
+        type: item.masterFrameType ?? m.inbox_state_master_fallback(),
+      })
+    : formatTag(item);
+}
+
+/**
  * Trailing path segment of an absolute path, tolerating both `/` and `\`
  * (Windows roots) separators. Falls back to the whole string when there is
  * no separator (e.g. a bare drive letter).
@@ -176,7 +191,7 @@ function compareItems(
       cmp = a.fileCount - b.fileCount;
       break;
     case 'format':
-      cmp = formatTag(a).localeCompare(formatTag(b));
+      cmp = formatDisplayLabel(a).localeCompare(formatDisplayLabel(b));
       break;
   }
   return sort.dir === 'asc' ? cmp : -cmp;
@@ -489,11 +504,7 @@ export function InboxList({
             </span>
           ),
           count: m.inbox_list_file_count({ count: item.fileCount }),
-          format: item.isMaster
-            ? m.inbox_master_row_label({
-                type: item.masterFrameType ?? m.inbox_state_master_fallback(),
-              })
-            : formatTag(item),
+          format: formatDisplayLabel(item),
         };
       }),
     [visualRows, selectedId, onSelect, toggle],
