@@ -6,31 +6,53 @@
  */
 
 /**
- * Audit event emitted when the first-run wizard is successfully completed. Routed directly through crates/audit/ — this is NOT a spec 002 lifecycle transition event (R-E2). The event is append-only and must not be updated or deleted.
+ * Event emitted on the spec 002 event bus when the first-run wizard is successfully completed. Routed directly through crates/audit/ — this is NOT a spec 002 lifecycle transition event (R-E2). The durable `events` row is append-only and must not be updated or deleted; its `payload` column stores the `payload` object below, while `topic`, `source`, and `emittedAt` are carried as sibling columns. Projects `EventEnvelope<FirstRunCompleted>` (crates/audit-types/src/event_bus.rs); tests/contract/audit_first_run_completed_test.rs pins this document against those structs.
  */
 export interface AuditFirstRunCompleted {
-  event: "first_run.completed";
-  version: "1";
+  /**
+   * Contract version. Increment on breaking payload changes.
+   */
+  contractVersion: "1.0.0";
+  /**
+   * Event bus topic name.
+   */
+  topic: "first_run.completed";
+  /**
+   * Event source per spec 002 R-Source-1. Spec 003 always emits source='user' — wizard completion is an explicit operator action.
+   */
+  source: "user" | "restore" | "system";
+  /**
+   * Publish time, as [year, ordinalDay, hour, minute, second, nanosecond, offsetHours, offsetMinutes, offsetSeconds]. This is the `time` crate's default OffsetDateTime component encoding leaking through `Timestamp` (#[serde(transparent)], crates/domain/core/src/ids.rs) — NOT RFC 3339, and deliberately documented as-is rather than aspirationally: the durable `events.emitted_at` column holds the RFC 3339 form instead, because crates/audit/src/bus.rs formats it explicitly before the insert. See issue #1093 — normalising Timestamp's wire form is a cross-cutting change affecting every event and DTO that carries one, so it is out of scope here.
+   *
+   * @minItems 9
+   * @maxItems 9
+   */
+  emittedAt: [number, number, number, number, number, number, number, number, number];
   payload: {
     /**
      * RFC 3339 timestamp when the wizard was marked complete.
      */
-    completed_at: string;
+    completedAt: string;
     /**
-     * Count of RegisteredSource rows per kind at completion time.
+     * Count of RegisteredSource rows per kind at completion time. Every kind is always present — the producing struct has no optional fields.
      */
-    source_count_by_kind: {
+    sourceCountByKind: {
       /**
-       * Count of raw sources. Always >= 1 (required by firstrun.complete).
+       * Count of light-frame sources. Always >= 1 (required by firstrun.complete). Named `raw` before spec 030 unified the source-folder kinds.
        */
-      raw: number;
-      calibration?: number;
+      lightFrames: number;
+      /**
+       * Count of calibration sources. Per-image frame type is detected from image metadata, not from this source-folder kind.
+       */
+      calibration: number;
       /**
        * Count of project sources. Always >= 1 (required by firstrun.complete, R-Wiz-2).
        */
       project: number;
-      inbox?: number;
+      /**
+       * Count of inbox sources. Optional kind — spec 039 removed it from REQUIRED_KINDS.
+       */
+      inbox: number;
     };
   };
-  [k: string]: unknown;
 }

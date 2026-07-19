@@ -2,40 +2,56 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-library-manager.local/contracts/audit.first_run.completed.json",
   "title": "audit.first_run.completed",
-  "description": "Audit event emitted when the first-run wizard is successfully completed. Routed directly through crates/audit/ — this is NOT a spec 002 lifecycle transition event (R-E2). The event is append-only and must not be updated or deleted.",
+  "description": "Event emitted on the spec 002 event bus when the first-run wizard is successfully completed. Routed directly through crates/audit/ — this is NOT a spec 002 lifecycle transition event (R-E2). The durable `events` row is append-only and must not be updated or deleted; its `payload` column stores the `payload` object below, while `topic`, `source`, and `emittedAt` are carried as sibling columns. Projects `EventEnvelope<FirstRunCompleted>` (crates/audit-types/src/event_bus.rs); tests/contract/audit_first_run_completed_test.rs pins this document against those structs.",
   "type": "object",
+  "required": ["contractVersion", "topic", "source", "emittedAt", "payload"],
+  "additionalProperties": false,
   "properties": {
-    "event": {
-      "const": "first_run.completed"
+    "contractVersion": {
+      "const": "1.0.0",
+      "description": "Contract version. Increment on breaking payload changes."
     },
-    "version": {
+    "topic": {
+      "const": "first_run.completed",
+      "description": "Event bus topic name."
+    },
+    "source": {
       "type": "string",
-      "const": "1"
+      "enum": ["user", "restore", "system"],
+      "description": "Event source per spec 002 R-Source-1. Spec 003 always emits source='user' — wizard completion is an explicit operator action."
+    },
+    "emittedAt": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "minItems": 9,
+      "maxItems": 9,
+      "description": "Publish time, as [year, ordinalDay, hour, minute, second, nanosecond, offsetHours, offsetMinutes, offsetSeconds]. This is the `time` crate's default OffsetDateTime component encoding leaking through `Timestamp` (#[serde(transparent)], crates/domain/core/src/ids.rs) — NOT RFC 3339, and deliberately documented as-is rather than aspirationally: the durable `events.emitted_at` column holds the RFC 3339 form instead, because crates/audit/src/bus.rs formats it explicitly before the insert. See issue #1093 — normalising Timestamp's wire form is a cross-cutting change affecting every event and DTO that carries one, so it is out of scope here."
     },
     "payload": {
       "type": "object",
-      "required": ["completed_at", "source_count_by_kind"],
+      "required": ["completedAt", "sourceCountByKind"],
       "additionalProperties": false,
       "properties": {
-        "completed_at": {
+        "completedAt": {
           "type": "string",
           "format": "date-time",
           "description": "RFC 3339 timestamp when the wizard was marked complete."
         },
-        "source_count_by_kind": {
+        "sourceCountByKind": {
           "type": "object",
-          "required": ["raw", "project"],
+          "required": ["lightFrames", "calibration", "project", "inbox"],
           "additionalProperties": false,
-          "description": "Count of RegisteredSource rows per kind at completion time.",
+          "description": "Count of RegisteredSource rows per kind at completion time. Every kind is always present — the producing struct has no optional fields.",
           "properties": {
-            "raw": {
+            "lightFrames": {
               "type": "integer",
               "minimum": 1,
-              "description": "Count of raw sources. Always >= 1 (required by firstrun.complete)."
+              "description": "Count of light-frame sources. Always >= 1 (required by firstrun.complete). Named `raw` before spec 030 unified the source-folder kinds."
             },
             "calibration": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Count of calibration sources. Per-image frame type is detected from image metadata, not from this source-folder kind."
             },
             "project": {
               "type": "integer",
@@ -44,12 +60,12 @@
             },
             "inbox": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Count of inbox sources. Optional kind — spec 039 removed it from REQUIRED_KINDS."
             }
           }
         }
       }
     }
-  },
-  "required": ["event", "version", "payload"]
+  }
 }
