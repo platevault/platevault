@@ -135,7 +135,7 @@ pub struct SettingsState {
     pub remember_follow_logs: bool,
 
     // ── Source Protection ────────────────────────────────────────────────
-    /// Default protection level: `"protected"` | `"normal"` | `"unprotected"`.
+    /// Default protection level: `"protected"` | `"unprotected"`.
     pub default_protection: String,
     /// Routes destructive operations to archive/trash workflows.
     pub block_permanent_delete: bool,

@@ -214,7 +214,7 @@ pub async fn set_source_protection(
 
     let prior_level = prior_row
         .as_ref()
-        .map_or(ProtectionLevel::Normal, |r| ProtectionLevel::parse_level(&r.level));
+        .map_or(ProtectionLevel::Unprotected, |r| ProtectionLevel::parse_level(&r.level));
 
     let prior_bpd: Option<bool> =
         prior_row.as_ref().and_then(|r| r.block_permanent_delete.map(|v| v != 0));
@@ -289,7 +289,7 @@ pub async fn set_source_protection(
 
 /// Seed the initial per-source protection based on source kind.
 ///
-/// Inbox sources start at `normal`; all others start at `protected`.
+/// Inbox sources start at `unprotected`; all others start at `protected`.
 /// This is a best-effort operation — failures are logged but not propagated.
 ///
 /// # Errors
@@ -300,7 +300,7 @@ pub async fn seed_source_protection(
     source_id: &str,
     source_kind: &str,
 ) -> Result<(), ContractError> {
-    let level = if source_kind == "inbox" { "normal" } else { "protected" };
+    let level = if source_kind == "inbox" { "unprotected" } else { "protected" };
     prot_repo::upsert_source_protection(pool, source_id, level, None, None, "system")
         .await
         .map_err(db_err)?;
@@ -882,7 +882,7 @@ mod tests {
 
         let set_req = SourceProtectionSetRequest {
             source_id: source_id.to_owned(),
-            level: ProtectionLevel::Normal,
+            level: ProtectionLevel::Unprotected,
             block_permanent_delete: Some(false),
             categories: None,
         };
@@ -891,7 +891,7 @@ mod tests {
         let get_req = SourceProtectionGetRequest { source_id: Some(source_id.to_owned()) };
         let resp = get_source_protection(db.pool(), &get_req).await.unwrap();
 
-        assert_eq!(resp.level, ProtectionLevel::Normal);
+        assert_eq!(resp.level, ProtectionLevel::Unprotected);
         assert!(!resp.block_permanent_delete);
         assert!(!resp.inherits_default);
     }
@@ -968,7 +968,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn seed_source_protection_inbox_gets_normal() {
+    async fn seed_source_protection_inbox_gets_unprotected() {
         let (db, _bus, _lock) = setup().await;
         seed_source_protection(db.pool(), "src-inbox", "inbox").await.unwrap();
 
@@ -976,7 +976,7 @@ mod tests {
             .await
             .unwrap()
             .expect("row should exist");
-        assert_eq!(row.level, "normal");
+        assert_eq!(row.level, "unprotected");
     }
 
     #[tokio::test]
@@ -1239,17 +1239,17 @@ mod tests {
 
     // ── T042: a plan over a NON-protected source applies (gate is real, not always-on) ─
     //
-    // FR-016: the gate must not block plans whose items resolve to "normal" protection.
+    // FR-016: the gate must not block plans whose items resolve to non-gating protection.
 
     #[tokio::test]
     async fn t042_non_protected_source_plan_passes_gate() {
         let (db, bus, _lock) = setup().await;
 
-        // Set up a source explicitly marked as "normal" (e.g. an inbox source).
+        // Set up a source explicitly marked as "unprotected" (e.g. an inbox source).
         let source_id = "src-inbox-002";
         let set_req = SourceProtectionSetRequest {
             source_id: source_id.to_owned(),
-            level: ProtectionLevel::Normal,
+            level: ProtectionLevel::Unprotected,
             block_permanent_delete: Some(false),
             categories: None,
         };

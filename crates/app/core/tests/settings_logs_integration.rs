@@ -260,7 +260,7 @@ async fn global_protection_default_update_persists_and_emits_protection_event() 
     let pool = db.pool();
 
     for (key, value) in [
-        ("defaultProtection", serde_json::json!("normal")),
+        ("defaultProtection", serde_json::json!("unprotected")),
         ("blockPermanentDelete", serde_json::json!(false)),
         ("protectedCategories", serde_json::json!(["lights", "masters", "finals", "raw"])),
     ] {

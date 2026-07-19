@@ -638,13 +638,15 @@ async fn cleanup_plan_review() -> anyhow::Result<()> {
     // step below refuses every item with `protected.source` — not a bug,
     // the documented constitution-II gate — so a real cleanup flow always
     // sets this (or the global default) before a first-time cleanup.
+    // 2-level model (issue #506): "normal" is retired — "unprotected" is the
+    // non-gating override this test needs.
     let _: serde_json::Value = app
         .invoke(
             "source_protection_set",
             json!({
                 "request": {
                     "sourceId": project_id,
-                    "level": "normal",
+                    "level": "unprotected",
                     "blockPermanentDelete": null,
                     "categories": null,
                 }

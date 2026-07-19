@@ -38,7 +38,9 @@ export interface StepCatalogsProps {
   onSettingsChange: (settings: CatalogSettings) => void;
 }
 
-type DefaultProtection = 'protected' | 'normal' | 'unprotected';
+// 2-level model (issue #506): the third "normal" level is retired — absence
+// of a per-source override already means inherit-global.
+type DefaultProtection = 'protected' | 'unprotected';
 
 // ── Default source protection (spec 018, persisted via the settings backend) ──
 
@@ -82,7 +84,6 @@ function DefaultProtectionControl() {
       <option value="protected">
         {m.settings_cleanup_protection_protected()}
       </option>
-      <option value="normal">{m.settings_cleanup_protection_normal()}</option>
       <option value="unprotected">
         {m.settings_cleanup_protection_unprotected()}
       </option>

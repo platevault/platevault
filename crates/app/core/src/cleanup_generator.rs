@@ -667,6 +667,16 @@ mod tests {
         let lock = crate::protection::PROTECTION_DEFAULTS_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // FIX: a prior test's `set_global_protection_default` call (e.g.
+        // `category_protection_elevates_real_frame_type_not_fixed_pseudo_category`
+        // below) can leave the process-global cache holding a non-"protected"
+        // snapshot from ITS OWN (now-dropped) in-memory DB. The lock alone only
+        // serializes execution order — it does not reset the cache, so this
+        // fresh DB's real `protection_defaults` row (seeded "protected" by
+        // migration 0035) was previously shadowed by the stale cached value,
+        // intermittently zeroing `protected_item_count` here. Mirrors
+        // `protection.rs`'s own `setup()`, which already does this.
+        app_core_cache::invalidate_protection_defaults();
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
@@ -1159,14 +1169,14 @@ mod tests {
             .unwrap();
         insert_acquisition_session(db.pool(), "sess-1", &[&light]).await;
 
-        // Global default level is "normal" (not protected); only category
+        // Global default level is "unprotected" (not protected); only category
         // membership should elevate a light frame.
         protection::set_global_protection_default(
             db.pool(),
             &bus,
             "global",
             "defaultProtection",
-            serde_json::json!("normal"),
+            serde_json::json!("unprotected"),
         )
         .await
         .unwrap();

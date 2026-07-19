@@ -14,6 +14,15 @@
 // reads back — a real dual-source-of-truth. Removing it and routing
 // protection level exclusively through `SourceProtectionOverride`
 // (`source.protection.set`/`get`) removes that inconsistency at the root.
+//
+// Issue #623/#646: the remaining scan-behavior override widget
+// (`followSymlinks`/`hashOnScan`) duplicated the canonical `IngestionSettings`
+// document (Settings → Ingestion) and could never succeed for `hashOnScan`
+// (needs a string; the widget only ever offered a boolean). Both keys were
+// retired from the overridable set (`descriptors.rs`) — with `defaultProtection`
+// already excluded above, there is nothing left to render here, so the whole
+// contextual scan-override panel is removed rather than kept as always-empty
+// dead code.
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
@@ -25,8 +34,6 @@ import {
   reconcileRoot,
   setRootActive,
   deleteRoot,
-  settingsSourceOverrideSet,
-  settingsOverridableKeys,
 } from './settingsIpc';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
@@ -44,14 +51,10 @@ import { revealInOs } from '@/shared/native/reveal';
 import { revealLabel } from '@/lib/reveal-label';
 import { addToast } from '@/shared/toast';
 
-const SOURCES_KEYS = [
-  'followSymlinks',
-  'hashOnScan',
-  'alwaysPreviewBeforePlan',
-];
-
-// Fallback list used before the backend responds or if the call fails.
-const OVERRIDABLE_KEYS_FALLBACK = ['hashOnScan', 'followSymlinks'] as const;
+// Issue #623: followSymlinks/hashOnScan removed — retired from the
+// overridable/scan-behavior duplicate (see the module doc comment above);
+// resetting them here reset invisible keys with no control on this pane.
+const SOURCES_KEYS = ['alwaysPreviewBeforePlan'];
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -113,19 +116,6 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [deleteTarget, setDeleteTarget] = useState<LibraryRoot | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // ── Overridable keys — fetched from backend (T025) ──────────────────────────
-  const [overridableKeys, setOverridableKeys] = useState<string[]>([
-    ...OVERRIDABLE_KEYS_FALLBACK,
-  ]);
-
-  useEffect(() => {
-    settingsOverridableKeys()
-      .then(setOverridableKeys)
-      .catch(() => {
-        // Keep fallback list on failure.
-      });
-  }, []);
 
   const loadRoots = useCallback(() => {
     setLoading(true);
@@ -387,7 +377,6 @@ export function DataSources({ save: _save }: DataSourcesProps) {
                 togglingActive={togglingActiveId === root.id}
                 onDelete={requestDelete}
                 deleting={deletingId === root.id}
-                overridableKeys={overridableKeys}
               />
             ))}
           </div>
@@ -465,8 +454,6 @@ interface RootCardProps {
   togglingActive: boolean;
   onDelete: (root: LibraryRoot) => void;
   deleting: boolean;
-  /** Overridable scan-setting keys (T025), shared across every card. */
-  overridableKeys: string[];
 }
 
 function RootCard({
@@ -480,7 +467,6 @@ function RootCard({
   togglingActive,
   onDelete,
   deleting,
-  overridableKeys,
 }: RootCardProps) {
   const isOffline = !root.online;
 
@@ -581,12 +567,6 @@ function RootCard({
           )}
         </div>
         {meta && <div className="alm-data-sources__root-meta">{meta}</div>}
-        {editProtectionOpen && (
-          <SourceOverridePanel
-            sourceId={root.id}
-            overridableKeys={overridableKeys}
-          />
-        )}
         {/* spec 048 US4: per-root detection config only applies to roots that
             carry `file_record` rows (raw/calibration). */}
         {RECONCILABLE_CATEGORIES.includes(root.category) && (
@@ -704,121 +684,6 @@ function RootCard({
             </button>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-interface SourceOverridePanelProps {
-  sourceId: string;
-  overridableKeys: string[];
-}
-
-/**
- * Contextual scan-setting override editor (issue #562) — folds the former
- * detached bottom "Per-source setting override" panel into the per-card
- * "Edit protection…" panel. No source picker needed (the source is already
- * known from context), and `defaultProtection` is excluded here: protection
- * level is set exclusively via `SourceProtectionOverride` (`source.protection.set`)
- * so there is exactly one write path for it (issue #563).
- */
-function SourceOverridePanel({
-  sourceId,
-  overridableKeys,
-}: SourceOverridePanelProps) {
-  const scanKeys = overridableKeys.filter((k) => k !== 'defaultProtection');
-  const [key, setKey] = useState<string>(scanKeys[0] ?? 'hashOnScan');
-  const [value, setValue] = useState('true');
-  const [applying, setApplying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  if (scanKeys.length === 0) return null;
-
-  const handleApply = async () => {
-    setApplying(true);
-    setError(null);
-    setSaved(false);
-    try {
-      const coerced: unknown =
-        value === 'true' ? true : value === 'false' ? false : value;
-      await settingsSourceOverrideSet({ sourceId, key, value: coerced });
-      setSaved(true);
-    } catch (err: unknown) {
-      setError(errMessage(err));
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  return (
-    <div
-      className="alm-settings__group"
-      data-testid={`source-override-panel-${sourceId}`}
-    >
-      <div className="alm-settings__group-title">
-        {m.settings_datasources_source_override_title()}
-      </div>
-      <div className="alm-settings__row">
-        <div className="alm-settings__row-label">
-          {m.settings_datasources_source_override_key_aria()}
-        </div>
-        <div className="alm-settings__row-content">
-          <select
-            className="alm-select"
-            value={key}
-            onChange={(e) => {
-              setKey(e.target.value);
-              setSaved(false);
-            }}
-            aria-label={m.settings_datasources_source_override_key_aria()}
-          >
-            {scanKeys.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="alm-settings__row">
-        <div className="alm-settings__row-label">
-          {m.settings_datasources_source_override_value_aria()}
-        </div>
-        <div className="alm-settings__row-content">
-          <select
-            className="alm-select"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setSaved(false);
-            }}
-            aria-label={m.settings_datasources_source_override_value_aria()}
-          >
-            <option value="true">{m.common_true()}</option>
-            <option value="false">{m.common_false()}</option>
-          </select>
-        </div>
-      </div>
-      {error && (
-        <div className="alm-data-sources__add-error">
-          {m.settings_datasources_source_override_error({ error })}
-        </div>
-      )}
-      <div className="alm-settings__row">
-        <div className="alm-settings__row-label" />
-        <div className="alm-settings__row-content">
-          <Btn size="sm" onClick={() => void handleApply()} disabled={applying}>
-            {applying
-              ? m.common_saving()
-              : m.settings_datasources_source_override_apply()}
-          </Btn>
-          {saved && (
-            <span className="alm-source-protect__status">
-              {m.common_saved()}
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );

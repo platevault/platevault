@@ -99,13 +99,13 @@ beforeEach(() => {
   mockSourceProtectionGet.mockResolvedValue(
     ok({
       sourceId: 'root-1',
-      level: 'normal',
+      level: 'unprotected',
       blockPermanentDelete: false,
       categories: [],
       inheritsDefault: true,
     }),
   );
-  mockOverridableKeys.mockResolvedValue(ok(['hashOnScan', 'followSymlinks']));
+  mockOverridableKeys.mockResolvedValue(ok(['defaultProtection']));
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

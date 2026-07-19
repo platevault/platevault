@@ -118,7 +118,10 @@ describe('useAutoSave', () => {
 
   it('passes scope and values to updateSettings with correct shape', async () => {
     const { result } = renderHook(() => useAutoSave());
-    const values = { blockPermanentDelete: false, defaultProtection: 'normal' };
+    const values = {
+      blockPermanentDelete: false,
+      defaultProtection: 'unprotected',
+    };
 
     act(() => {
       result.current.save('cleanup', values);

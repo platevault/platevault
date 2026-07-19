@@ -33,9 +33,11 @@ interface SourceProtectionOverrideProps {
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
 
+// 2-level model (issue #506): the third "normal" level is retired — absence
+// of a per-source override already means inherit-global, so a distinct
+// explicit "normal" state added confusion without capability.
 const LEVEL_LABEL: Record<ProtectionLevel, () => string> = {
   protected: m.settings_cleanup_protection_protected,
-  normal: m.settings_cleanup_protection_normal,
   unprotected: m.settings_cleanup_protection_unprotected,
 };
 
@@ -44,7 +46,6 @@ const LEVEL_VARIANT: Record<
   'ok' | 'info' | 'warn' | 'danger' | 'neutral'
 > = {
   protected: 'ok',
-  normal: 'info',
   unprotected: 'warn',
 };
 
@@ -54,8 +55,6 @@ function levelHint(level: ProtectionLevel, inherits: boolean): string {
   switch (level) {
     case 'protected':
       return m.settings_source_protect_hint_protected({ prefix });
-    case 'normal':
-      return m.settings_source_protect_hint_normal({ prefix });
     case 'unprotected':
       return m.settings_source_protect_hint_unprotected({ prefix });
   }
@@ -168,9 +167,6 @@ export function SourceProtectionOverride({
             >
               <option value="protected">
                 {m.settings_cleanup_protection_protected()}
-              </option>
-              <option value="normal">
-                {m.settings_cleanup_protection_normal()}
               </option>
               <option value="unprotected">
                 {m.settings_cleanup_protection_unprotected()}

@@ -7839,8 +7839,14 @@ export type ProtectedPlanItem_Serialize = {
 	reason: string,
 };
 
-/**  Protection level enum (spec 016 data-model.md). */
-export type ProtectionLevel = "protected" | "normal" | "unprotected";
+/**
+ *  Protection level enum (spec 016 data-model.md; simplified to 2 levels per
+ *  issue #506 — the third "inherit-global via an explicit `normal` row" tier
+ *  added confusion without adding capability, since absence of an override
+ *  row already means inherit-global. Existing `normal` rows are remapped to
+ *  `unprotected` by migration 0070, non-destructively).
+ */
+export type ProtectionLevel = "protected" | "unprotected";
 
 /**  A provenance label/value pair for how an item was inferred. */
 export type ProvenanceEntry = {

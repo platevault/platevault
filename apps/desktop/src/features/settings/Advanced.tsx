@@ -140,13 +140,13 @@ export function Advanced({ save }: AdvancedProps) {
     try {
       const response = await restartFirstRun();
       // Prefill the wizard's working buffer with the currently registered
-      // sources (A7) — RegisterSourceResponse has no scanDepth, so default to
-      // 'recursive' per FR-017.
+      // sources (A7). `scanDepth` was retired from `SourceEntry` (#913) — this
+      // literal used to carry a dead `scanDepth: 'recursive'` field the type
+      // no longer declares.
       const prefilled: SourceEntry[] = response.prefilledSources.map(
         (source) => ({
           path: source.path,
           kind: source.kind,
-          scanDepth: 'recursive',
           organizationState: source.organizationState,
         }),
       );

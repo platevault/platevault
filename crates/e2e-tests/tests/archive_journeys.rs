@@ -112,13 +112,15 @@ async fn setup_archived_project(
     // safe-by-default level is "protected" (constitution II) — without
     // this, every archive item refuses apply with `protected.source`. A
     // real user sets this the same way before a first archive.
+    // 2-level model (issue #506): "normal" is retired — "unprotected" is the
+    // non-gating override this test needs.
     let _: serde_json::Value = app
         .invoke(
             "source_protection_set",
             json!({
                 "request": {
                     "sourceId": project_id,
-                    "level": "normal",
+                    "level": "unprotected",
                     "blockPermanentDelete": null,
                     "categories": null,
                 }
