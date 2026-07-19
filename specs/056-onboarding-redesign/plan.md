@@ -88,7 +88,7 @@ crates/
 │   ├── onboarding.rs                    # NEW: onboarding DTOs
 │   └── guided.rs                        # DELETED
 └── persistence/db/
-    ├── migrations/0071_onboarding.sql   # NEW: onboarding_state + onboarding_flags, drop guided_flow_state
+    ├── migrations/0072_onboarding.sql   # NEW: onboarding_state + onboarding_flags, drop guided_flow_state
     └── src/repositories/onboarding.rs   # NEW: repository boundary
 
 apps/desktop/

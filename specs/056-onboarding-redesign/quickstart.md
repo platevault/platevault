@@ -38,7 +38,7 @@ Three-layer onboarding replacing the spec 010 coach:
 5. No demo data, ever (FR-009). Every string via Paraglide
    (`apps/desktop/messages/en.json`). ONE parameterised checklist component +
    one CSS class family.
-6. Migration `0071_onboarding.sql` (renumber if taken at merge time); drops
+6. Migration `0072_onboarding.sql` (renumber if taken at merge time); drops
    `guided_flow_state`; leaves `0030_guided_flow.sql` untouched.
 
 ## Where things go

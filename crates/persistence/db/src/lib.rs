@@ -12,8 +12,8 @@
 //! Migration 0061 added `target_favourite` (spec 051 US2).
 //! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
 //! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
-//! Migration 0071 added `onboarding_state`/`onboarding_flags` (spec 056).
-//! Migration 0072 dropped the legacy spec-010 `guided_flow_state` table
+//! Migration 0072 added `onboarding_state`/`onboarding_flags` (spec 056).
+//! Migration 0073 dropped the legacy spec-010 `guided_flow_state` table
 //! (spec 056 deletion lane, T010).
 
 use std::str::FromStr;
@@ -117,7 +117,7 @@ impl Database {
     // 0066_session_notes.sql), again for its renumber to 0068 (a second
     // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
     // main independently), and again for spec 056's onboarding migrations —
-    // first as 0069/0070, then renumbered to 0071/0072 after main landed its
+    // first as 0069/0070, then renumbered again (0069/0070 -> 0071/0072 -> 0072/0073) as main landed its
     // own 0069_fix_processing_artifact_project_fk and 0070_protection_two_level
     // while this branch was open (a third independent collision) — to force
     // `sqlx::migrate!` re-embed each time (project memory: stale-embed guard).

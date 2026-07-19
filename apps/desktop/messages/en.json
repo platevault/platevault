@@ -1303,7 +1303,7 @@
   "onboarding_prerequisite_projects_launch_tool": "Unlocks once you open your project in a tool.",
   "onboarding_section_menu_aria": "Getting started options",
   "onboarding_find_label": "Show me where: {item}",
-  "onboarding_find_unavailable": "We can't point to \"{item}\" right now — its control isn't on screen. Open its page and try again.",
+  "onboarding_find_unavailable": "Nothing to point at for \"{item}\" yet — its control appears once there is something on this page to act on.",
   "onboarding_item_dismiss_label": "Dismiss: {item}",
   "inbox_toast_plan_created": "Plan created ({count} items). Review below before applying.",
   "inbox_toast_invalid_destination_root": "That destination root is not valid.",

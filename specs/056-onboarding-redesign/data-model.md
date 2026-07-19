@@ -1,6 +1,6 @@
 # Data Model: Onboarding Redesign (Spec 056)
 
-**Date**: 2026-07-18 | **Plan**: [plan.md](plan.md) | **Migration**: `0071_onboarding.sql` ([research R6](research.md))
+**Date**: 2026-07-18 | **Plan**: [plan.md](plan.md) | **Migration**: `0072_onboarding.sql` ([research R6](research.md))
 
 ## Tables
 
