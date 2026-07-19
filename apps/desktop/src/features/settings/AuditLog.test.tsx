@@ -144,6 +144,7 @@ beforeEach(() => {
 describe('AuditLog', () => {
   it('loads audit entries via auditList and renders them', async () => {
     render(<AuditLog />, { wrapper });
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // findBy, not getBy: rows render behind `{!loading && …}` (AuditLog.tsx)
     // and `loading` only clears once auditList's promise RESOLVES — the
@@ -388,6 +389,7 @@ describe('AuditLog', () => {
 
   it('renders the state-change column (#749)', async () => {
     render(<AuditLog />, { wrapper });
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // findBy: rows are gated on `loading` clearing, which the waitFor above
     // does not prove (#1083).
@@ -424,6 +426,7 @@ describe('AuditLog', () => {
 
   it('navigates to the entity page when a linked row is clicked (#831)', async () => {
     render(<AuditLog />, { wrapper });
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // ENTRIES[0] is entityType 'session', which has a real /sessions/:id route.
     // findBy: the row only exists once `loading` clears (#1083); clicking a
@@ -435,6 +438,7 @@ describe('AuditLog', () => {
 
   it('does not link entity types without a destination page (#626 reasoning, #831)', async () => {
     render(<AuditLog />, { wrapper });
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // ENTRIES[1] is entityType 'plan' — no /plans/:id route exists yet.
     // findBy: without it a still-loading table makes this pass vacuously —

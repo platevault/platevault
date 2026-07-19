@@ -68,9 +68,10 @@ beforeEach(() => {
 describe('ResolverSettingsControl', () => {
   it('loads settings and reflects the online toggle as checked', async () => {
     render(<ResolverSettingsControl />);
-    // findBy, not getBy + waitFor(mockGet called): `loaded` flips in a
-    // .finally() after the mockGet promise RESOLVES, so a sync getBy right
-    // after "called" races the loading skeleton on slow runners.
+    // findBy (not waitFor(mockGet called) + sync getBy): the mock being
+    // *called* races the `.then()` that flips `loaded` and swaps the
+    // skeleton for the real control — findBy polls until the labeled
+    // control actually exists, which is the state under test.
     const checkbox = (await screen.findByLabelText(
       'Enable online SIMBAD resolution',
     )) as HTMLInputElement;
