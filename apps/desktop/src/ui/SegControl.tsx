@@ -1,8 +1,8 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { forwardRef } from 'react';
-import type { HTMLAttributes } from 'react';
+import { forwardRef, useCallback } from 'react';
+import type { HTMLAttributes, KeyboardEvent } from 'react';
 
 /** A segmented-control option: a stable `value` and a display `label`. */
 export interface SegControlOption {
@@ -26,26 +26,54 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
     ref,
   ) {
     const cls = ['alm-seg', className].filter(Boolean).join(' ');
+
+    // WAI-ARIA radio-group pattern (#1010): Left/Up selects the previous
+    // option, Right/Down the next, wrapping at the ends. Moves both focus
+    // and selection together, matching how native radio inputs behave.
+    const handleKeyDown = useCallback(
+      (e: KeyboardEvent<HTMLButtonElement>) => {
+        const currentIndex = options.findIndex((o) => o.value === value);
+        let nextIndex: number | null = null;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          nextIndex = (currentIndex - 1 + options.length) % options.length;
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          nextIndex = (currentIndex + 1) % options.length;
+        }
+        if (nextIndex == null) return;
+        e.preventDefault();
+        onChange(options[nextIndex].value);
+      },
+      [options, value, onChange],
+    );
+
     return (
-      <div ref={ref} className={cls} {...rest}>
-        {options.map((o) => (
-          <button
-            key={o.value}
-            className={[
-              'alm-seg__btn',
-              value === o.value && 'alm-seg__btn--active',
-              danger &&
-                dangerValue != null &&
-                o.value === dangerValue &&
-                'alm-seg__btn--danger',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={() => onChange(o.value)}
-          >
-            {o.label}
-          </button>
-        ))}
+      <div ref={ref} className={cls} role="radiogroup" {...rest}>
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              tabIndex={active ? 0 : -1}
+              className={[
+                'alm-seg__btn',
+                active && 'alm-seg__btn--active',
+                danger &&
+                  dangerValue != null &&
+                  o.value === dangerValue &&
+                  'alm-seg__btn--danger',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => onChange(o.value)}
+              onKeyDown={handleKeyDown}
+            >
+              {o.label}
+            </button>
+          );
+        })}
       </div>
     );
   },
