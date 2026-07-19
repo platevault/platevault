@@ -971,6 +971,7 @@
   "settings_tools_path_aria": "Executable path for {name}",
   "settings_tools_path_placeholder": "Executable path…",
   "settings_tools_redetect_aria": "Re-run auto-detect for all tools",
+  "settings_tools_save_error": "Could not save the path for {name}: {error}",
   "settings_tools_title": "TOOL WORKFLOWS",
   "setup_add_folder": "+ Add folder…",
   "setup_choosing": "Choosing…",

@@ -220,12 +220,12 @@ const SAMPLE_METADATA = {
   target: 'NGC7000',
   filter: 'Ha',
   date: '2026-04-12',
-  frame_type: 'light' as const,
+  frameType: 'light' as const,
   camera: 'ASI2600MM',
   exposure: '300s',
   gain: '100',
   binning: '1x1',
-  set_temp: '-10C',
+  setTemp: '-10C',
 };
 
 // ── Per-type live preview (package P11: real backend resolver) ───────────────

@@ -34,6 +34,7 @@ export function ProcessingTools() {
   const [validating, setValidating] = useState<Record<string, boolean>>({});
   const [detecting, setDetecting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<Record<string, string>>({});
 
   // Load profiles on mount.
   useEffect(() => {
@@ -51,35 +52,55 @@ export function ProcessingTools() {
       });
   }, []);
 
-  const saveToolPath = useCallback(async (toolId: string, path: string) => {
-    setSaving((s) => ({ ...s, [toolId]: true }));
-    try {
-      const updated = await toolUpdate({
-        id: toolId,
-        path: path || null,
-        enabled: true,
+  const saveToolPath = useCallback(
+    async (toolId: string, path: string) => {
+      setSaving((s) => ({ ...s, [toolId]: true }));
+      setSaveError((e) => {
+        if (!(toolId in e)) return e;
+        const next = { ...e };
+        delete next[toolId];
+        return next;
       });
-      setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
-      // Validate existence after save
-      if (path) {
-        setValidating((v) => ({ ...v, [toolId]: true }));
-        try {
-          const v = await toolValidatePath(path);
-          setTools((prev) =>
-            prev.map((t) =>
-              t.id === toolId
-                ? { ...t, available: v.valid, configured: !!path }
-                : t,
-            ),
-          );
-        } finally {
-          setValidating((v) => ({ ...v, [toolId]: false }));
+      try {
+        // #656: preserve the tool's current enabled/disabled state — a path
+        // edit must never silently re-enable a disabled tool.
+        const current = tools.find((t) => t.id === toolId);
+        const updated = await toolUpdate({
+          id: toolId,
+          path: path || null,
+          enabled: current?.enabled ?? true,
+        });
+        setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
+        // Validate existence after save
+        if (path) {
+          setValidating((v) => ({ ...v, [toolId]: true }));
+          try {
+            const v = await toolValidatePath(path);
+            setTools((prev) =>
+              prev.map((t) =>
+                t.id === toolId
+                  ? { ...t, available: v.valid, configured: !!path }
+                  : t,
+              ),
+            );
+          } finally {
+            setValidating((v) => ({ ...v, [toolId]: false }));
+          }
         }
+      } catch (err) {
+        // #825: a rejected path save (e.g. non-absolute path) must be surfaced
+        // inline, not lost as an unhandled rejection — and the stale
+        // Available/Missing pill must not be left implying the save succeeded.
+        setSaveError((e) => ({
+          ...e,
+          [toolId]: err instanceof Error ? err.message : String(err),
+        }));
+      } finally {
+        setSaving((s) => ({ ...s, [toolId]: false }));
       }
-    } finally {
-      setSaving((s) => ({ ...s, [toolId]: false }));
-    }
-  }, []);
+    },
+    [tools],
+  );
 
   const handleToggle = useCallback(
     async (toolId: string, enabled: boolean) => {
@@ -218,6 +239,14 @@ export function ProcessingTools() {
                 aria-label={m.settings_tools_enable_aria({ name: tool.name })}
               />
             </div>
+            {saveError[tool.id] && (
+              <div className="alm-settings__error" role="alert">
+                {m.settings_tools_save_error({
+                  name: tool.name,
+                  error: saveError[tool.id],
+                })}
+              </div>
+            )}
           </SettingsRow>
         );
       })}
