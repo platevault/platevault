@@ -187,8 +187,10 @@ apps/desktop/
     └── store.ts             # query keys + invalidation
 
 crates/e2e-tests/tests/
-├── common/mod.rs            # rescan_and_wait_for_item, select_only_item (PG-2)
-└── inbox_ui_journeys.rs     # 5 affected journeys, incl. all 3 SC-005
+├── common/mod.rs            # E2eApp harness, invalidate_query
+└── inbox_ui_journeys.rs     # rescan_and_wait_for_item (:135-138) and
+                             #   select_only_item (:148-170) are HERE, not in
+                             #   common/; 5 affected journeys, all 3 SC-005
 ```
 
 **Structure Decision**: No new crate. This feature changes behaviour inside the
@@ -222,7 +224,7 @@ Ordered by what unblocks what, not by layer.
 | Risk | Detail | Mitigation |
 |---|---|---|
 | Harness assumes one selectable item per folder | 5 journeys, incl. all 3 SC-005 | PG-2; land with FR-015/016 |
-| Deleting suppression too early | Reproduces #1038, which blocked ~9 PRs | Sequence per phase 3 |
+| Deleting suppression too early | Reproduces #1038, which blocked ~9 PRs | Sequence per phase 3. Note **four** call sites, not three: `inbox.rs:1565`, `:1603`, `:1788` and `q_desktop.rs:184`. `research.md` says `count_unacknowledged_inbox_items` has no dedup clause and is "fixed for free" — that went stale when #1092 merged |
 | `mixed` sync signal | Journey hangs rather than fails | PG-1 names the replacement |
 | `target_recommendations.resolve_item_id` | `ids.next()` has no defensible meaning with no parent | **#1102 is `phase:design` and unresolved — this feature makes it live.** Must be decided before phase 3 |
 | Two interlocks, not one | Follow-on scope larger than recorded | PG-3 |
