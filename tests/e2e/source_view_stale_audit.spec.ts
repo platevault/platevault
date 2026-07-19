@@ -18,75 +18,85 @@
  *                        a synthetic removal + regeneration plan scoped to
  *                        `mock-sv-view-stale` via `originPath`.
  */
-import { test, expect, seedSetupComplete } from "./support/harness";
+import { test, expect, seedSetupComplete } from './support/harness';
 
 async function selectProject(
-  page: import("@playwright/test").Page,
+  page: import('@playwright/test').Page,
   name: string,
 ): Promise<void> {
   const row = page
-    .locator(".alm-projects-table__row")
+    .locator('.alm-projects-table__row')
     .filter({ hasText: name })
     .first();
   await expect(row).toBeVisible({ timeout: 8_000 });
   await row.click();
-  await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId('lifecycle-actions')).toBeVisible({
+    timeout: 5_000,
+  });
 }
 
-test.describe("source view stale-detection sweep + audit history (spec 026)", () => {
-  test("stale badge and broken-reference detail render without a Verify click", async ({
+test.describe('source view stale-detection sweep + audit history (spec 026)', () => {
+  test('stale badge and broken-reference detail render without a Verify click', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
-    await selectProject(page, "M31 LRGB");
+    await page.goto('/#/projects');
+    await selectProject(page, 'M31 LRGB');
 
-    const row = page.getByTestId("source-view-row-mock-sv-view-stale");
+    const row = page.getByTestId('source-view-row-mock-sv-view-stale');
     await expect(row).toBeVisible({ timeout: 8_000 });
-    await expect(row).toContainText("Stale");
+    await expect(row).toContainText('Stale');
 
     // Persisted stale-item summary — visible on load, no interaction needed.
-    const summary = page.getByTestId("stale-summary-mock-sv-view-stale");
+    const summary = page.getByTestId('stale-summary-mock-sv-view-stale');
     await expect(summary).toBeVisible();
-    await expect(summary).toContainText("1 item(s) need attention");
+    await expect(summary).toContainText('1 item(s) need attention');
 
     // Per-item broken-reference detail rides the sweep's last_observed_state.
     await row.getByText(/inventory ref/).click();
-    await expect(page.getByTestId("source-view-item-observed-mock-sv-item-stale-broken")).toContainText(
-      "missing",
-    );
     await expect(
-      page.getByTestId("source-view-item-observed-mock-sv-item-stale-ok"),
+      page.getByTestId('source-view-item-observed-mock-sv-item-stale-broken'),
+    ).toContainText('missing');
+    await expect(
+      page.getByTestId('source-view-item-observed-mock-sv-item-stale-ok'),
     ).toHaveCount(0);
 
     // Regenerate is offered for a stale view (repair path).
-    await expect(page.getByTestId("regenerate-view-mock-sv-view-stale")).toBeVisible();
+    await expect(
+      page.getByTestId('regenerate-view-mock-sv-view-stale'),
+    ).toBeVisible();
   });
 
-  test("audit history lists the view's removal and regeneration plans", async ({ page }) => {
+  test("audit history lists the view's removal and regeneration plans", async ({
+    page,
+  }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
-    await selectProject(page, "M31 LRGB");
+    await page.goto('/#/projects');
+    await selectProject(page, 'M31 LRGB');
 
-    const row = page.getByTestId("source-view-row-mock-sv-view-stale");
+    const row = page.getByTestId('source-view-row-mock-sv-view-stale');
     await expect(row).toBeVisible({ timeout: 8_000 });
 
-    await row.getByText("History").click();
+    await row.getByText('History').click();
 
-    const removalRow = page.getByTestId("view-history-row-mock-sv-plan-removal-1");
+    const removalRow = page.getByTestId(
+      'view-history-row-mock-sv-plan-removal-1',
+    );
     await expect(removalRow).toBeVisible({ timeout: 5_000 });
-    await expect(removalRow).toContainText("Removal");
-    await expect(removalRow).toContainText("applied");
-    await expect(removalRow).toContainText("1 applied, 0 failed");
+    await expect(removalRow).toContainText('Removal');
+    await expect(removalRow).toContainText('applied');
+    await expect(removalRow).toContainText('1 applied, 0 failed');
 
-    const regenRow = page.getByTestId("view-history-row-mock-sv-plan-regen-1");
+    const regenRow = page.getByTestId('view-history-row-mock-sv-plan-regen-1');
     await expect(regenRow).toBeVisible();
-    await expect(regenRow).toContainText("Regeneration");
-    await expect(regenRow).toContainText("partially_applied");
-    await expect(regenRow).toContainText("1 applied, 1 failed");
+    await expect(regenRow).toContainText('Regeneration');
+    await expect(regenRow).toContainText('partially_applied');
+    await expect(regenRow).toContainText('1 applied, 1 failed');
 
     // History is scoped to this view only — the clean view's plans (none in
     // this fixture) must not leak in.
-    await expect(page.getByTestId("view-history-row-mock-sv-plan-removal-1")).toHaveCount(1);
+    await expect(
+      page.getByTestId('view-history-row-mock-sv-plan-removal-1'),
+    ).toHaveCount(1);
   });
 });
