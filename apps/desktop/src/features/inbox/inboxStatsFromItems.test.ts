@@ -74,7 +74,7 @@ describe('deriveInboxStats', () => {
     expect(masterSum).toBe(stats.totals.masters);
   });
 
-  it('counts a mixed/untyped folder exactly once under a single "mixed" bucket', () => {
+  it('counts a mixed/untyped folder exactly once under a single "unresolved" bucket', () => {
     const items = [
       folder('a', 'Mixed', 5),
       folder('b', null, 5),
@@ -84,13 +84,22 @@ describe('deriveInboxStats', () => {
     const stats = deriveInboxStats(items);
 
     expect(stats.totals.folders).toBe(3);
-    const mixed = stats.perType.find((r) => r.frameType === 'mixed');
-    expect(mixed?.folderCount).toBe(2);
+    const unresolved = stats.perType.find((r) => r.frameType === 'unresolved');
+    expect(unresolved?.folderCount).toBe(2);
     const folderSum = stats.perType.reduce((n, r) => n + r.folderCount, 0);
     expect(folderSum).toBe(3);
   });
 
-  it('normalises frame-type case and orders "mixed" last', () => {
+  // #791: this bucket must NOT be named/labelled "mixed" — that word is
+  // reserved for the unrelated per-item "mixed folder" concept (a folder
+  // whose files genuinely span more than one frame type) shown in the detail
+  // pane. This bucket is items with NO resolved dominant type at all yet.
+  it('does not use the word "mixed" as a bucket key', () => {
+    const stats = deriveInboxStats([folder('a', 'Mixed', 5)]);
+    expect(stats.perType.map((r) => r.frameType)).not.toContain('mixed');
+  });
+
+  it('normalises frame-type case and orders "unresolved" last', () => {
     const stats = deriveInboxStats([
       folder('x', 'LIGHT', 1),
       folder('y', null, 1),
@@ -99,7 +108,7 @@ describe('deriveInboxStats', () => {
     expect(stats.perType.map((r) => r.frameType)).toEqual([
       'dark',
       'light',
-      'mixed',
+      'unresolved',
     ]);
   });
 

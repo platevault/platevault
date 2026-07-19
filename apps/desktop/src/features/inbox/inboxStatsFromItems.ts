@@ -25,18 +25,32 @@ import type {
   InboxStatsPerType,
 } from '@/bindings/index';
 
-/** Bucket key for a folder/master whose frame type is unknown or spans types. */
-const MIXED_KEY = 'mixed';
+/**
+ * Bucket key for a folder/master with no single resolved dominant frame type
+ * (`groupFrameType`/`masterFrameType` is null/empty, or the legacy cross-type
+ * sentinel string `"Mixed"`).
+ *
+ * #791: this was named `"mixed"`, which the status-bar chip renders verbatim
+ * (capitalised via CSS) as "Mixed N" — colliding with the UNRELATED per-item
+ * "mixed folder" concept shown in the detail pane (a folder whose files
+ * genuinely span more than one frame type). In practice a real mixed folder's
+ * dominant type usually DOES resolve (e.g. to "light"), so this bucket is
+ * actually dominated by items with no frame type at all yet (pending/
+ * unclassified). "Unresolved" names that population without reusing the
+ * "mixed" word.
+ */
+const UNRESOLVED_KEY = 'unresolved';
 
 /**
  * Normalise a frame-type value into a stable per-type bucket key. `null`,
- * empty, or the cross-type sentinel `"Mixed"` all collapse to a single
- * `"mixed"` bucket so a mixed folder is counted exactly once overall.
+ * empty, or the cross-type sentinel `"Mixed"` all collapse to the single
+ * {@link UNRESOLVED_KEY} bucket so such an item is counted exactly once
+ * overall.
  */
 function bucketKey(frameType: string | null | undefined): string {
-  if (frameType == null || frameType === '') return MIXED_KEY;
+  if (frameType == null || frameType === '') return UNRESOLVED_KEY;
   const lower = frameType.toLowerCase();
-  return lower === MIXED_KEY ? MIXED_KEY : lower;
+  return lower === 'mixed' ? UNRESOLVED_KEY : lower;
 }
 
 /**
@@ -76,10 +90,10 @@ export function deriveInboxStats(
     }
   }
 
-  // Stable display order: alphabetical by frame type, "mixed" last.
+  // Stable display order: alphabetical by frame type, "unresolved" last.
   const perType = [...byType.values()].sort((a, b) => {
-    if (a.frameType === MIXED_KEY) return 1;
-    if (b.frameType === MIXED_KEY) return -1;
+    if (a.frameType === UNRESOLVED_KEY) return 1;
+    if (b.frameType === UNRESOLVED_KEY) return -1;
     return a.frameType.localeCompare(b.frameType);
   });
 
