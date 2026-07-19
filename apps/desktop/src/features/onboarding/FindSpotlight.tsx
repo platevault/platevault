@@ -26,8 +26,11 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import type { EventData } from 'react-joyride';
-import type { OnboardingItemDto } from '@/bindings/index';
+import type { OnboardingItemDto, OnboardingPage } from '@/bindings/index';
+import { fetchFirstSessionId } from '@/features/sessions/store';
 import { m } from '@/lib/i18n';
 import { OnboardingJoyride, type OnboardingStep } from './joyrideAdapter';
 import { prefersReducedMotion } from './choreography';
@@ -48,22 +51,62 @@ const ITEM_ANCHORS: Record<string, string> = {
   'inbox.confirm_first': 'inbox.confirm-row',
   'projects.create_first': 'projects.create-cta',
   'projects.launch_tool': 'project.open-in-tool',
+  'targets.resolve_first': 'targets.resolve-cta',
   'targets.add_favourite': 'targets.favourite-toggle',
   'sessions.add_note': 'sessions.note-field',
   'calibration.match_master': 'calibration.match-assign',
 };
 
 /**
- * Whether this item has a control the spotlight could actually resolve.
+ * Whether this ITEM ID maps to a `data-guide-anchor` the spotlight can resolve.
  *
- * Callers MUST gate the find affordance on this. Offering "point me at it" on
- * an item with no anchor guaranteed a dead end: the spotlight could not
- * navigate (it early-returns without a selector) and simply apologised, and the
- * apology told the user to open a page that would never help. An affordance
- * that cannot succeed should not be offered at all.
+ * This is the raw anchor-map predicate. Row-level gating goes through
+ * {@link spotlightTargetFor}, which also covers the blocked case (where the
+ * control to point at belongs to the prerequisite, not the item itself).
  */
 export function canFindItem(itemId: string): boolean {
   return itemId in ITEM_ANCHORS;
+}
+
+/** The control a find activation should point at, and the page it lives on. */
+export interface SpotlightTarget {
+  /** Whose control this is — the item itself, or its prerequisite. */
+  itemId: string;
+  anchor: string;
+  page: OnboardingPage;
+  /** True when we are pointing at the prerequisite's control instead. */
+  viaPrerequisite: boolean;
+}
+
+/**
+ * Resolve what a find activation on `item` should spotlight, or `null` when
+ * nothing resolvable exists.
+ *
+ * A BLOCKED item is redirected to its prerequisite's control: its own control
+ * is unreachable until the upstream milestone exists, so pointing at it would
+ * be a dead end, while pointing at what to do first is exactly the answer to
+ * "show me where". Callers MUST gate the affordance on a non-null result —
+ * never offer an affordance that cannot succeed.
+ */
+export function spotlightTargetFor(
+  item: OnboardingItemDto,
+): SpotlightTarget | null {
+  const prereq = item.prerequisite;
+  if (prereq && !prereq.met) {
+    const anchor = ITEM_ANCHORS[prereq.upstreamItemId];
+    return anchor
+      ? {
+          itemId: prereq.upstreamItemId,
+          anchor,
+          page: prereq.jumpPage,
+          viaPrerequisite: true,
+        }
+      : null;
+  }
+  const anchor = ITEM_ANCHORS[item.itemId];
+  return anchor
+    ? { itemId: item.itemId, anchor, page: item.page, viaPrerequisite: false }
+    : null;
 }
 
 // ── Find toggle store ─────────────────────────────────────────────────────────
@@ -122,24 +165,66 @@ export function FindSpotlight(): React.ReactElement | null {
 
 type ResolveStatus = 'pending' | 'found' | 'missing';
 
+/**
+ * The route that puts `target`'s control on screen, or `null` when no such
+ * route exists right now.
+ *
+ * Almost every anchor sits on its page's own top level, so the page path is the
+ * answer. `sessions.note-field` is the exception: it lives on a session's
+ * DETAIL pane, so the list route can never resolve it — it needs a real session
+ * id. `/sessions/$id` is a redirect route that lands on `/sessions?selected=id`
+ * (see `router.tsx`), which keeps the pathname-based dismissal below working.
+ */
+async function resolveSpotlightPath(
+  target: SpotlightTarget,
+  queryClient: QueryClient,
+): Promise<string | null> {
+  const basePath = ONBOARDING_PAGE_PATHS[target.page];
+  if (target.anchor !== 'sessions.note-field') return basePath;
+  const sessionId = await fetchFirstSessionId(queryClient);
+  // No sessions yet ⇒ genuinely nothing to point at; fall to the apology
+  // rather than navigating to a route that cannot show the field.
+  return sessionId ? `${basePath}/${sessionId}` : null;
+}
+
 function SpotlightFor({
   item,
 }: {
   item: OnboardingItemDto;
 }): React.ReactElement | null {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const anchor = ITEM_ANCHORS[item.itemId];
-  const selector = anchor ? `[data-guide-anchor="${anchor}"]` : null;
-  const targetPath = ONBOARDING_PAGE_PATHS[item.page];
+  const target = spotlightTargetFor(item);
+  const selector = target ? `[data-guide-anchor="${target.anchor}"]` : null;
+  // Falls back to the item's own page so the route-change dismissal below still
+  // has a real path to compare against while the apology callout is showing.
+  const targetPath = ONBOARDING_PAGE_PATHS[target?.page ?? item.page];
   const [status, setStatus] = useState<ResolveStatus>('pending');
   const arrivedRef = useRef(false);
 
-  // Navigate to the item's page once (FR-022). Absent-anchor items skip this
-  // and fall straight to the unavailable state.
+  // Navigate to the target's page once (FR-022). Items with no resolvable
+  // control skip this and fall straight to the unavailable state, as do
+  // deep-link targets whose record does not exist yet.
   useEffect(() => {
-    if (!selector) return;
-    if (!pathname.startsWith(targetPath)) void navigate({ to: targetPath });
+    if (!target) return;
+    let cancelled = false;
+    void (async () => {
+      const path = await resolveSpotlightPath(target, queryClient);
+      if (cancelled) return;
+      if (path === null) {
+        setStatus('missing');
+        return;
+      }
+      // Deep links (path !== basePath) navigate even when already on the page:
+      // being on `/sessions` is not the same as having a session selected.
+      if (!pathname.startsWith(targetPath) || path !== targetPath) {
+        void navigate({ to: path });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot on mount
   }, []);
 
@@ -227,10 +312,15 @@ function SpotlightFor({
 
   if (status !== 'found') return null;
 
+  // Title always names the item the user asked about. When the spotlight was
+  // redirected to the prerequisite's control, the body says whose control this
+  // actually is and why we came here instead.
   const step: OnboardingStep = {
     target: selector,
     title: itemLabel(item.itemId),
-    content: itemTooltip(item.itemId),
+    content: target?.viaPrerequisite
+      ? m.onboarding_find_prerequisite_first({ item: itemLabel(target.itemId) })
+      : itemTooltip(item.itemId),
     placement: 'auto',
     // Open immediately on activation — a single-step tour would otherwise wait
     // on joyride's click-to-open beacon.

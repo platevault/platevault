@@ -6578,6 +6578,16 @@ export type OnboardingPageProgressDto = {
  *  (FR-010).
  */
 export type OnboardingPrerequisiteDto = {
+	/**
+	 *  Registry id of the upstream item that must be done first.
+	 * 
+	 *  The UI needs the id itself, not just the rendered reason: a blocked
+	 *  item's find affordance spotlights the UPSTREAM item's control, which
+	 *  means resolving the upstream item's anchor and label. Recovering it by
+	 *  stripping a prefix off `reason_key` would couple the UI to a message-key
+	 *  format.
+	 */
+	upstreamItemId: string,
 	/**  Whether the upstream milestone is currently satisfied. */
 	met: boolean,
 	/**  Paraglide message key for the human-readable reason. */

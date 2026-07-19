@@ -22,7 +22,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { canFindItem } from './FindSpotlight';
+import type { OnboardingItemDto } from '@/bindings/index';
+import { canFindItem, spotlightTargetFor } from './FindSpotlight';
 
 const DIR = join(__dirname);
 
@@ -46,6 +47,13 @@ const NEW_ANCHORS: Array<{
     anchor: 'calibration.match-assign',
     sourceFile: '../calibration/MatchCandidatesPanel.tsx',
   },
+  {
+    // The "Add target" CTA opens the SIMBAD resolve flow. Anchoring it is what
+    // lets the items that depend on `targets.resolve_first` spotlight it.
+    itemId: 'targets.resolve_first',
+    anchor: 'targets.resolve-cta',
+    sourceFile: '../targets/TargetsPage.tsx',
+  },
 ];
 
 describe('FindSpotlight ITEM_ANCHORS — targets/sessions/calibration', () => {
@@ -68,9 +76,65 @@ describe('FindSpotlight ITEM_ANCHORS — targets/sessions/calibration', () => {
       'projects.review_artifacts',
       'sessions.review_first',
       'calibration.review_masters',
-      'targets.resolve_first',
     ]) {
       expect(canFindItem(itemId)).toBe(false);
     }
+  });
+});
+
+describe('spotlightTargetFor — blocked items point at the prerequisite', () => {
+  const item = (
+    itemId: string,
+    prerequisite: OnboardingItemDto['prerequisite'],
+  ): OnboardingItemDto => ({
+    itemId,
+    page: 'targets',
+    state: 'unchecked',
+    at: '2026-01-01T00:00:00Z',
+    source: 'seed',
+    prerequisite,
+    hasAutoTick: false,
+  });
+
+  const unmet = {
+    upstreamItemId: 'targets.resolve_first',
+    met: false,
+    reasonKey: 'onboarding.prerequisite.targets.resolve_first',
+    jumpPage: 'targets' as const,
+  };
+
+  it('redirects a blocked item to the upstream control and page', () => {
+    expect(spotlightTargetFor(item('targets.add_favourite', unmet))).toEqual({
+      itemId: 'targets.resolve_first',
+      anchor: 'targets.resolve-cta',
+      page: 'targets',
+      viaPrerequisite: true,
+    });
+  });
+
+  it('uses the item’s own control once the prerequisite is met', () => {
+    expect(
+      spotlightTargetFor(
+        item('targets.add_favourite', { ...unmet, met: true }),
+      ),
+    ).toEqual({
+      itemId: 'targets.add_favourite',
+      anchor: 'targets.favourite-toggle',
+      page: 'targets',
+      viaPrerequisite: false,
+    });
+  });
+
+  it('returns null when neither the item nor its prerequisite is anchored', () => {
+    expect(
+      spotlightTargetFor(
+        item('projects.review_artifacts', {
+          upstreamItemId: 'sessions.review_first',
+          met: false,
+          reasonKey: 'onboarding.prerequisite.sessions.review_first',
+          jumpPage: 'sessions',
+        }),
+      ),
+    ).toBeNull();
   });
 });

@@ -526,7 +526,10 @@ mod tests {
         let pool = setup().await;
         upsert_if_unsettled(&pool, "inbox.confirm_first", "auto_checked", "event").await.unwrap();
 
-        assert_eq!(force_unchecked(&pool, "inbox.confirm_first").await.unwrap(), UpsertOutcome::Written);
+        assert_eq!(
+            force_unchecked(&pool, "inbox.confirm_first").await.unwrap(),
+            UpsertOutcome::Written
+        );
         assert_eq!(
             load_item(&pool, "inbox.confirm_first").await.unwrap().unwrap().state,
             "unchecked"

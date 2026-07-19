@@ -98,6 +98,14 @@ pub enum OnboardingPage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingPrerequisiteDto {
+    /// Registry id of the upstream item that must be done first.
+    ///
+    /// The UI needs the id itself, not just the rendered reason: a blocked
+    /// item's find affordance spotlights the UPSTREAM item's control, which
+    /// means resolving the upstream item's anchor and label. Recovering it by
+    /// stripping a prefix off `reason_key` would couple the UI to a message-key
+    /// format.
+    pub upstream_item_id: String,
     /// Whether the upstream milestone is currently satisfied.
     pub met: bool,
     /// Paraglide message key for the human-readable reason.

@@ -353,32 +353,107 @@ type MockOnboardingItemSeed = [
   itemId: string,
   page: OnboardingItemDto['page'],
   hasAutoTick: boolean,
+  /** Upstream registry item id, mirroring the Rust `PrerequisiteDef`. */
+  upstreamItemId?: string,
+  /** Page that satisfies the prerequisite (defaults to the upstream's page). */
+  jumpPage?: OnboardingItemDto['page'],
 ];
 
 const MOCK_ONBOARDING_ITEMS: MockOnboardingItemSeed[] = [
   ['inbox.confirm_first', 'inbox', true],
-  ['inbox.apply_first_plan', 'inbox', true],
-  ['sessions.review_first', 'sessions', false],
-  ['sessions.add_note', 'sessions', false],
-  ['calibration.match_master', 'calibration', false],
+  ['inbox.apply_first_plan', 'inbox', true, 'inbox.confirm_first', 'inbox'],
+  ['sessions.review_first', 'sessions', false, 'inbox.confirm_first', 'inbox'],
+  ['sessions.add_note', 'sessions', false, 'inbox.confirm_first', 'inbox'],
+  [
+    'calibration.match_master',
+    'calibration',
+    false,
+    'inbox.confirm_first',
+    'inbox',
+  ],
   ['calibration.review_masters', 'calibration', false],
   ['targets.resolve_first', 'targets', true],
-  ['targets.add_favourite', 'targets', false],
-  ['projects.create_first', 'projects', true],
-  ['projects.launch_tool', 'projects', true],
-  ['projects.review_artifacts', 'projects', false],
+  [
+    'targets.add_favourite',
+    'targets',
+    false,
+    'targets.resolve_first',
+    'targets',
+  ],
+  ['projects.create_first', 'projects', true, 'inbox.confirm_first', 'inbox'],
+  [
+    'projects.launch_tool',
+    'projects',
+    true,
+    'projects.create_first',
+    'projects',
+  ],
+  [
+    'projects.review_artifacts',
+    'projects',
+    false,
+    'projects.launch_tool',
+    'projects',
+  ],
 ];
 
+/**
+ * Item ids seeded as BLOCKED (`met: false`).
+ *
+ * The real backend computes `met` from library milestones, not from checklist
+ * state, and the mock library ships populated (confirmed inventory, resolved
+ * targets, a project) — so the faithful default is "satisfied", which is also
+ * what every pre-existing mock spec assumes. This escape hatch lets a spec seed
+ * a genuinely blocked row (`localStorage`, before boot) to exercise the
+ * prerequisite paths; `prerequisite` used to be flatly `null`, which made the
+ * blocked branch untestable in mock mode at all.
+ */
+const E2E_ONBOARDING_UNMET_STORE_ID = 'alm-e2e-onboarding-unmet';
+
+/** Boolean e2e toggle read from `localStorage`; false when unset/unavailable. */
+function isE2EFlagSet(key: string): boolean {
+  try {
+    return (
+      typeof localStorage !== 'undefined' && localStorage.getItem(key) === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Makes `inventory.list` report an empty library (see the handler below). */
+const E2E_EMPTY_INVENTORY_STORE_ID = 'alm-e2e-empty-inventory';
+
+function unmetPrerequisiteIds(): Set<string> {
+  try {
+    if (typeof localStorage === 'undefined') return new Set();
+    const raw = localStorage.getItem(E2E_ONBOARDING_UNMET_STORE_ID);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
 function freshMockOnboardingItems(): OnboardingItemDto[] {
-  return MOCK_ONBOARDING_ITEMS.map(([itemId, page, hasAutoTick]) => ({
-    itemId,
-    page,
-    state: 'unchecked',
-    at: new Date().toISOString(),
-    source: 'seed',
-    prerequisite: null,
-    hasAutoTick,
-  }));
+  const unmet = unmetPrerequisiteIds();
+  return MOCK_ONBOARDING_ITEMS.map(
+    ([itemId, page, hasAutoTick, upstreamItemId, jumpPage]) => ({
+      itemId,
+      page,
+      state: 'unchecked',
+      at: new Date().toISOString(),
+      source: 'seed',
+      prerequisite: upstreamItemId
+        ? {
+            upstreamItemId,
+            met: !unmet.has(itemId),
+            reasonKey: `onboarding.prerequisite.${upstreamItemId}`,
+            jumpPage: jumpPage ?? page,
+          }
+        : null,
+      hasAutoTick,
+    }),
+  );
 }
 
 let mockOnboardingItems: OnboardingItemDto[] = freshMockOnboardingItems();
@@ -2414,6 +2489,12 @@ export async function mockInvoke(
       const { INVENTORY_LIST_RESPONSE } = await import(
         '@/data/fixtures/inventory'
       );
+      // Empty-library toggle: lets a spec exercise the "no sessions exist yet"
+      // branches (e.g. the onboarding find spotlight's note-field deep link,
+      // which has no session to link to) without a second fixture.
+      if (isE2EFlagSet(E2E_EMPTY_INVENTORY_STORE_ID)) {
+        return { ...INVENTORY_LIST_RESPONSE, sources: [] };
+      }
       const req = (
         _args as
           | {

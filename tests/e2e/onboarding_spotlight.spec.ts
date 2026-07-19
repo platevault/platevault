@@ -20,12 +20,14 @@
  * would otherwise intercept every click on these surfaces.
  */
 
-import { test, expect, landOnMockRoute, openChecklist, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
+import { test, expect, landOnMockRoute, openChecklist, seedEmptyInventory, seedOnboardingUnmet, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
 import type { Page } from "@playwright/test";
 
 const OVERLAY = ".react-joyride__overlay";
 const SPOTLIGHT = ".react-joyride__spotlight";
 const CREATE_CTA = '[data-guide-anchor="projects.create-cta"]';
+const RESOLVE_CTA = '[data-guide-anchor="targets.resolve-cta"]';
+const NOTE_FIELD = '[data-guide-anchor="sessions.note-field"]';
 
 /**
  * Open the checklist flyout and wait for its body (no-op when already open).
@@ -153,14 +155,16 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 	test("unavailable-target items explain why instead of spotlighting nothing", async ({
 		page,
 	}) => {
+		// `sessions.add_note` used to be this test's example of an unresolvable
+		// target: its `sessions.note-field` anchor lives on a session DETAIL pane,
+		// and the spotlight only ever navigated to the sessions LIST, so it always
+		// timed out. It now deep-links to a real session, so the honest remaining
+		// unresolvable case is the one that no longer has a record to link TO: an
+		// empty library. That is a genuine dead end, not a weakened assertion —
+		// there is no note field anywhere to point at.
+		seedEmptyInventory(page);
 		await landOnMockRoute(page, "/#/sessions");
 		await openChecklist(page);
-		// `sessions.add_note` maps to the `sessions.note-field` anchor, but that
-		// control lives on a session DETAIL page — it is not on the sessions list
-		// the item navigates to, so the resolver times out and falls to the same
-		// unavailable branch as a genuinely anchor-less item. (The older comment
-		// here claimed the item had no anchor at all; it has one, it just cannot
-		// resolve from this page. Same user-visible outcome, different cause.)
 		await findBtn(page, "sessions.add_note").click();
 
 		const callout = page.locator(".alm-onb-spotlight-unavailable");
@@ -168,6 +172,64 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		await expect(callout).toContainText("Nothing to point at");
 		// No joyride spotlight was drawn.
 		await expect(page.locator(OVERLAY)).toHaveCount(0);
+	});
+
+	test("sessions.add_note deep-links to a session and spotlights its note field", async ({
+		page,
+	}) => {
+		await landOnMockRoute(page, "/#/sessions");
+		await openChecklist(page);
+
+		await findBtn(page, "sessions.add_note").click();
+
+		// The list route can never show the note field — the spotlight must select
+		// a real session first (`/sessions/$id` redirects to `?selected=<id>`).
+		await expect(page).toHaveURL(/selected=/, { timeout: 8_000 });
+		await expect(page.locator(OVERLAY)).toBeVisible();
+		await expect(page.locator(NOTE_FIELD)).toBeVisible();
+	});
+
+	test("a blocked item spotlights its prerequisite's control and says so", async ({
+		page,
+	}) => {
+		// `targets.add_favourite` is blocked on `targets.resolve_first`, whose
+		// control is the "Add target" CTA. Its own favourite toggle cannot help
+		// until a target exists, so "show me where" answers with what to do first.
+		seedOnboardingUnmet(page, ["targets.add_favourite"]);
+		await landOnMockRoute(page, "/#/targets");
+		await openChecklist(page);
+
+		const btn = findBtn(page, "targets.add_favourite");
+		// The affordance is offered on a blocked row — it used to be hidden.
+		await expect(btn).toBeVisible({ timeout: 8_000 });
+		await btn.click();
+
+		await expect(page.locator(OVERLAY)).toBeVisible();
+		await expect(page.locator(RESOLVE_CTA)).toBeVisible();
+		// The tooltip names the upstream item as the thing to do first, while its
+		// title still names the row the user actually asked about.
+		const tooltip = page.locator(".alm-onboarding-tooltip");
+		await expect(tooltip).toContainText("is required first");
+		await expect(tooltip.locator(".alm-onboarding-tooltip__title")).toHaveText(
+			"Add a favourite target",
+		);
+	});
+
+	test("an item with no resolvable control offers no find affordance at all", async ({
+		page,
+	}) => {
+		// `calibration.review_masters` has no prerequisite to fall back to and no
+		// anchor of its own, so nothing can be pointed at — the affordance stays
+		// hidden rather than promising something it cannot deliver. (Every
+		// prerequisite in the current registry IS anchored, so a blocked row
+		// always has somewhere to point; this is the remaining hidden case.)
+		await landOnMockRoute(page, "/#/calibration");
+		await openChecklist(page);
+
+		await expect(
+			page.locator('[data-item-id="calibration.review_masters"]'),
+		).toBeVisible({ timeout: 8_000 });
+		await expect(findBtn(page, "calibration.review_masters")).toHaveCount(0);
 	});
 
 	test("normal motion pulses the spotlight outline for the first seconds", async ({

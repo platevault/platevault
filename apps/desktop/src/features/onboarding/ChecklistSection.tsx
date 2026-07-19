@@ -61,8 +61,8 @@ import {
 import { useCompletionChoreography } from './choreography';
 import {
   FindSpotlight,
-  canFindItem,
   clearFind,
+  spotlightTargetFor,
   toggleFind,
   useActiveFindItem,
 } from './FindSpotlight';
@@ -500,12 +500,13 @@ function ChecklistItemRow({
   const label = itemLabel(item.itemId);
   const findActive = useActiveFindItem()?.itemId === item.itemId;
 
-  // Only offer "point me at it" when the spotlight can actually deliver: the
-  // item needs a resolvable anchor AND must not be blocked (a blocked item's
-  // control does not exist yet by definition — there is no plan row to point
-  // at before a plan exists). Everything else relies on the prerequisite line
-  // below, which states what to do first and links straight to it.
-  const findable = canFindItem(item.itemId) && !blocked;
+  // Only offer "point me at it" when the spotlight can actually deliver.
+  // A blocked row still qualifies: it points at the PREREQUISITE's control
+  // instead of its own (which does not exist yet by definition), so "show me
+  // where" answers with what to do first rather than refusing. `null` means
+  // neither the item nor its prerequisite has a resolvable anchor — then the
+  // affordance stays hidden and the prerequisite line below carries the story.
+  const findable = spotlightTargetFor(item) !== null;
 
   // Tooltip (FR-008 / WCAG 1.4.13) is the shared `Tooltip` primitive.
   //

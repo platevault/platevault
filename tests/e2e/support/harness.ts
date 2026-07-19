@@ -122,6 +122,29 @@ export function seedOnboarding(
 }
 
 /**
+ * Seed the given onboarding items as BLOCKED (their prerequisite unmet).
+ *
+ * The mock defaults every prerequisite to satisfied, because the mock library
+ * ships populated and the real backend derives `met` from library milestones
+ * rather than checklist state. This opts specific rows into the blocked branch.
+ */
+export function seedOnboardingUnmet(page: Page, itemIds: string[]): void {
+  page.addInitScript((ids) => {
+    window.localStorage.setItem(
+      "alm-e2e-onboarding-unmet",
+      JSON.stringify(ids),
+    );
+  }, itemIds);
+}
+
+/** Make the mock library report zero sessions (`inventory.list` → no sources). */
+export function seedEmptyInventory(page: Page): void {
+  page.addInitScript(() => {
+    window.localStorage.setItem("alm-e2e-empty-inventory", "true");
+  });
+}
+
+/**
  * Suppress all spec-056 onboarding surfaces (orientation walk, checklist
  * accordion auto-expand, find-it spotlights) so their overlays never intercept
  * clicks or steal focus from the surface under test.

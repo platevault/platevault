@@ -434,6 +434,7 @@ async fn prerequisite_dto(
         None => false,
     };
     Ok(OnboardingPrerequisiteDto {
+        upstream_item_id: def.upstream_item_id.to_owned(),
         met,
         reason_key: format!("onboarding.prerequisite.{}", def.upstream_item_id),
         jump_page: def.jump_page,
