@@ -142,7 +142,6 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
       {
         path: '/astro/lights',
         kind: 'light_frames',
-        scanDepth: 'recursive',
         organizationState: 'organized',
       },
     ]);
