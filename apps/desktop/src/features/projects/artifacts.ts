@@ -14,7 +14,9 @@
  * - `groupArtifactsByLaunch()` — pure grouping helper for the accordion (T023).
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type {
@@ -142,40 +144,25 @@ export interface ArtifactsState {
 /**
  * Reactive query hook for artifact list.
  *
- * Fetches `["present", "missing"]` states by default.
+ * Fetches `["present", "missing"]` states by default. `reload` replaces the
+ * old manual tick-based re-fetch with a plain `refetch()`.
  */
 export function useArtifacts(projectId: string): ArtifactsState {
-  const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const { data, isFetching, error, refetch } = useQuery({
+    queryKey: queryKeys.projects.artifacts(projectId),
+    queryFn: async () => {
+      const resp = await artifactList({ projectId, includeStates: [] });
+      return resp.artifacts ?? [];
+    },
+    enabled: !!projectId,
+  });
 
-  const reload = useCallback(() => setTick((t) => t + 1), []);
-
-  useEffect(() => {
-    if (!projectId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    artifactList({ projectId, includeStates: [] })
-      .then((resp: ArtifactListResponse) => {
-        if (!cancelled) {
-          setArtifacts(resp.artifacts ?? []);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(errMessage(err));
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, tick]);
-
-  return { artifacts, loading, error, reload };
+  return {
+    artifacts: data ?? [],
+    loading: isFetching,
+    error: error ? errMessage(error) : null,
+    reload: () => void refetch(),
+  };
 }
 
 // ── useProjectArtifactWatcher ─────────────────────────────────────────────────
@@ -228,42 +215,48 @@ export interface UseArtifactClassifyResult {
 export function useArtifactClassify(
   onSuccess?: () => void,
 ): UseArtifactClassifyResult {
-  const [working, setWorking] = useState(false);
-
-  const classify = useCallback(
-    async (request: ArtifactClassifyRequest) => {
-      setWorking(true);
-      try {
-        await artifactClassify(request);
-        onSuccess?.();
-      } finally {
-        setWorking(false);
-      }
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (request: ArtifactClassifyRequest) => artifactClassify(request),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.artifacts(variables.projectId),
+      });
+      onSuccess?.();
     },
-    [onSuccess],
-  );
+  });
 
-  return { state: { working }, classify };
+  const classify = async (request: ArtifactClassifyRequest) => {
+    await mutation.mutateAsync(request);
+  };
+
+  return { state: { working: mutation.isPending }, classify };
 }
 
 // ── useArtifactMarkResolved ────────────────────────────────────────────────────
 
 /** Mutation hook for marking a missing artifact as user-resolved. */
 export function useArtifactMarkResolved(onSuccess?: () => void) {
-  const [working, setWorking] = useState(false);
-
-  const markResolved = useCallback(
-    async (projectId: string, artifactId: string) => {
-      setWorking(true);
-      try {
-        await artifactMarkResolved({ projectId, artifactId });
-        onSuccess?.();
-      } finally {
-        setWorking(false);
-      }
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({
+      projectId,
+      artifactId,
+    }: {
+      projectId: string;
+      artifactId: string;
+    }) => artifactMarkResolved({ projectId, artifactId }),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.artifacts(variables.projectId),
+      });
+      onSuccess?.();
     },
-    [onSuccess],
-  );
+  });
 
-  return { working, markResolved };
+  const markResolved = async (projectId: string, artifactId: string) => {
+    await mutation.mutateAsync({ projectId, artifactId });
+  };
+
+  return { working: mutation.isPending, markResolved };
 }
