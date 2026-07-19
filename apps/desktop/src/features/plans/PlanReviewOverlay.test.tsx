@@ -616,6 +616,40 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     expect(approveBtn).toBeDisabled();
   });
 
+  // #603: a 0-item plan previously dead-ended on the disabled button above
+  // with no explanation; the caller-supplied `emptyReason` now renders.
+  it('#603: renders the generator-supplied diagnostic for a zero-item plan', async () => {
+    mockPlansGet.mockResolvedValue(
+      ok(plan({ items: [], itemsTotal: 0, itemsPending: 0 })),
+    );
+    mockProtectionCheck.mockResolvedValue(
+      ok(
+        protectionCheck({
+          hasProtectedItems: false,
+          protectedItems: [],
+          nonBlockingSummary: { normalCount: 0, unprotectedCount: 0 },
+        }),
+      ),
+    );
+    renderOverlay({
+      emptyReason:
+        "No files are linked to this project's sources — nothing to archive",
+    });
+    expect(
+      await screen.findByTestId('plan-review-empty-reason'),
+    ).toHaveTextContent(
+      "No files are linked to this project's sources — nothing to archive",
+    );
+  });
+
+  it('does not render the empty-reason banner for a non-empty plan even if emptyReason is stale', async () => {
+    renderOverlay({ emptyReason: 'stale reason from a prior generate call' });
+    await screen.findByText('light_001.xisf');
+    expect(
+      screen.queryByTestId('plan-review-empty-reason'),
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps Approve & apply disabled for a delete item until destructive-confirm succeeds (issue #741)', async () => {
     mockProtectionCheck.mockResolvedValue(
       ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
