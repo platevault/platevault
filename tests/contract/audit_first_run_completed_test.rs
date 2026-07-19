@@ -5,7 +5,7 @@
 //!
 //! Scope limitation: `tests/contract` does not depend on `audit_types`,
 //! which owns the real `FirstRunCompleted` / `SourceCountByKind` structs and
-//! `TOPIC_FIRST_RUN_COMPLETED` (crates/audit-types/src/event_bus.rs). Without
+//! `TOPIC_FIRST_RUN_COMPLETED` (`crates/audit-types/src/event_bus.rs`). Without
 //! that dev-dependency this file cannot serialize the actual payload and
 //! diff it against the schema below — the previous version of this file
 //! worked around that gap by hand-authoring a fixture JSON blob and then
@@ -20,14 +20,14 @@
 //! a test-only fix): the schema below still requires
 //! `source_count_by_kind.raw`, but the real struct was renamed
 //! `raw` -> `light_frames` in spec 030 (2026-05-26/27, see git history of
-//! crates/audit-types/src/event_bus.rs) and the schema was never updated.
+//! `crates/audit-types/src/event_bus.rs`) and the schema was never updated.
 //! The schema's top-level `{event, version, payload}` envelope also does
 //! not match anything production ever emits: the durable `events` row is
 //! `{topic, source, emitted_at, payload}` (`EventRow` in
-//! crates/persistence/db/src/repositories/events.rs) and the live broadcast
+//! `crates/persistence/db/src/repositories/events.rs`) and the live broadcast
 //! envelope is `EventEnvelope { contract_version, topic, source,
-//! emitted_at, payload }` (crates/audit/src/event_bus.rs). Adding
-//! `audit_types` as a dev-dependency to tests/contract/Cargo.toml would let
+//! emitted_at, payload }` (`crates/audit/src/event_bus.rs`). Adding
+//! `audit_types` as a dev-dependency to `tests/contract/Cargo.toml` would let
 //! a future revision of this file assert on the real serialized output and
 //! catch that drift directly.
 
