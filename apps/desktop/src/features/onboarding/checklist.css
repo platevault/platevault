@@ -182,26 +182,20 @@
   opacity: 0.5;
 }
 
+/* Round, not a rounded square: every row is now checkable (auto-tick items
+   included), and the circle reads as "tick this off" where the old inert
+   bullet read as decoration. */
 .alm-onb-checklist__checkbox {
   display: block;
   width: 14px;
   height: 14px;
   border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
+  border-radius: 50%;
   background: var(--alm-surface-raised);
 }
 
 .alm-onb-checklist__check:hover .alm-onb-checklist__checkbox {
   border-color: var(--alm-accent);
-}
-
-.alm-onb-checklist__auto-dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  margin: 5px 4px 0;
-  border-radius: 50%;
-  background: var(--alm-text-faint);
 }
 
 /*
@@ -213,10 +207,6 @@
  */
 .alm-onb-checklist__item--blocked .alm-onb-checklist__item-label {
   color: var(--alm-text-faint);
-}
-
-.alm-onb-checklist__item--blocked .alm-onb-checklist__auto-dot {
-  opacity: 0.5;
 }
 
 .alm-onb-checklist__prereq {
@@ -253,37 +243,6 @@
   color: var(--alm-accent);
   font-size: var(--alm-text-xs);
   text-decoration: underline;
-}
-
-/*
- * Tooltip (FR-008 / WCAG 1.4.13): revealed on pointer hover AND keyboard focus
- * within the row. `visibility` toggling (not opacity) so it is programmatically
- * hidden by default and reported visible to AT/tests only when shown.
- */
-.alm-onb-checklist__tooltip {
-  position: absolute;
-  left: var(--alm-sp-5);
-  top: 100%;
-  z-index: var(--alm-z-popover, 60);
-  max-width: 220px;
-  margin-top: var(--alm-sp-0);
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  visibility: hidden;
-  border-radius: var(--alm-radius-sm);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  box-shadow: var(--alm-shadow-sm);
-  color: var(--alm-text);
-  font-size: var(--alm-text-xs);
-  line-height: 1.35;
-}
-
-/* Visibility is owned by ChecklistItemRow, not by `:hover`/`:focus-within`.
- * The old CSS-only reveal left the tooltip pinned open after any click inside
- * the row (`:focus-within` stayed true) and could not honour Escape. See the
- * comment on the `tipOpen` state for the full rationale. */
-.alm-onb-checklist__tooltip[data-open='true'] {
-  visibility: visible;
 }
 
 /* Icon-collapsed progress-ring + non-modal popover (T020, FR-011). */

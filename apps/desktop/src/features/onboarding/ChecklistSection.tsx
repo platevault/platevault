@@ -20,7 +20,7 @@
  * check affordance the group-collapse behaviour (FR-031) needs.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Check,
@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
+import { Tooltip } from '@/ui';
 import type {
   OnboardingItemDto,
   OnboardingPage,
@@ -447,7 +448,7 @@ function ChecklistItemRow({
   onJump,
 }: ChecklistItemRowProps): React.ReactElement {
   const safeId = item.itemId.replaceAll('.', '_');
-  const tooltipId = `${idPrefix}-tt-${safeId}`;
+
   const labelId = `${idPrefix}-lbl-${safeId}`;
   const blocked = item.prerequisite != null && !item.prerequisite.met;
   const label = itemLabel(item.itemId);
@@ -460,34 +461,14 @@ function ChecklistItemRow({
   // below, which states what to do first and links straight to it.
   const findable = canFindItem(item.itemId) && !blocked;
 
-  // Tooltip visibility (FR-008 / WCAG 1.4.13).
+  // Tooltip (FR-008 / WCAG 1.4.13) is the shared `Tooltip` primitive.
   //
-  // This used to be pure CSS: `:hover, :focus-within { visibility: visible }`.
-  // Two defects came out of that. (1) STUCK TOOLTIPS: the row contains buttons
-  // (find, dismiss), so clicking one left `:focus-within` true and the tooltip
-  // pinned open after the pointer had long left the row — intermittent in a way
-  // that looked random, because it depended on whether you had clicked in that
-  // row. (2) NOT DISMISSABLE: CSS alone cannot honour Escape, the "Dismissable"
-  // half of 1.4.13, which was the known-open AA gap.
-  //
-  // So: pointer hover reveals, and focus reveals only when it is KEYBOARD focus
-  // (`:focus-visible`) — a mouse click focuses the button but no longer pins the
-  // tooltip. Escape hides it while the pointer/focus stays put, and the
-  // dismissal resets once the row is properly left, so it can be shown again.
-  const [hovered, setHovered] = useState(false);
-  const [keyboardFocused, setKeyboardFocused] = useState(false);
-  const [escapeDismissed, setEscapeDismissed] = useState(false);
-  const rowRef = useRef<HTMLLIElement>(null);
-  const tipOpen = (hovered || keyboardFocused) && !escapeDismissed;
-
-  useEffect(() => {
-    if (!tipOpen) return undefined;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setEscapeDismissed(true);
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [tipOpen]);
+  // It was a bespoke reveal twice over and both attempts were wrong. First pure
+  // CSS (`:hover, :focus-within`), which pinned the tooltip open after any click
+  // inside the row and could not honour Escape at all. Then hand-rolled hover +
+  // :focus-visible + Escape state here, which fixed the pinning but still felt
+  // clunky — no delay, no positioning, no collision handling. base-ui owns all
+  // of that, and it is what every other tooltip in the app already uses.
 
   const check = () =>
     void setOnboardingItemState(item.itemId, 'manually_checked');
@@ -515,11 +496,6 @@ function ChecklistItemRow({
   }
 
   return (
-    // Presentational tooltip reveal, not an interaction: the row exposes no
-    // behaviour of its own (every action lives in a real <button> child), and
-    // keyboard users get the same tooltip via :focus-visible on those children.
-    // Hover is tracked at row level because the tooltip describes the whole row.
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <li
       className={clsx(
         'alm-onb-checklist__item',
@@ -527,51 +503,40 @@ function ChecklistItemRow({
       )}
       data-item-id={item.itemId}
       data-blocked={blocked ? 'true' : undefined}
-      ref={rowRef}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => {
-        setHovered(false);
-        setEscapeDismissed(false);
-      }}
-      onFocus={(e) => {
-        // Keyboard focus only — a pointer click never matches :focus-visible,
-        // which is what stops clicks from pinning the tooltip open.
-        if (e.target.matches(':focus-visible')) setKeyboardFocused(true);
-      }}
-      onBlur={(e) => {
-        if (rowRef.current?.contains(e.relatedTarget as Node | null)) return;
-        setKeyboardFocused(false);
-        setEscapeDismissed(false);
-      }}
+      data-auto={item.hasAutoTick ? 'true' : undefined}
     >
-      {item.hasAutoTick ? (
-        <span
-          className="alm-onb-checklist__auto-dot"
-          aria-hidden
-          data-auto="true"
-        />
-      ) : (
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={false}
-          aria-labelledby={labelId}
-          aria-describedby={tooltipId}
-          className="alm-onb-checklist__check"
-          onClick={check}
-          disabled={blocked}
-        >
-          <span className="alm-onb-checklist__checkbox" aria-hidden />
-        </button>
-      )}
+      {/*
+        EVERY item gets a real, clickable checkbox — including auto-tick ones,
+        which used to render an inert bullet. `set_item_state` accepts a manual
+        check on any registry item (it does not special-case automatic ones), so
+        the inert bullet was a UI-only gap: the row looked actionable, described
+        a task, and could not be crossed off. Auto items still tick themselves
+        from real work; this just stops the checklist from refusing a check the
+        backend would happily accept.
+      */}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={false}
+        aria-labelledby={labelId}
+        className="alm-onb-checklist__check"
+        onClick={check}
+        disabled={blocked}
+      >
+        <span className="alm-onb-checklist__checkbox" aria-hidden />
+      </button>
       <span className="alm-onb-checklist__item-main">
-        <span
-          id={labelId}
-          className="alm-onb-checklist__item-label"
-          aria-describedby={item.hasAutoTick ? tooltipId : undefined}
-        >
-          {label}
-        </span>
+        {/*
+          Shared Tooltip (base-ui): portalled, positioned, with the app's
+          standard open/close delays and dismissal. Replaces a bespoke
+          CSS-plus-local-state reveal that felt clunky and had to hand-roll
+          hover, keyboard focus and Escape itself.
+        */}
+        <Tooltip content={itemTooltip(item.itemId)} sideOffset={6}>
+          <span id={labelId} className="alm-onb-checklist__item-label">
+            {label}
+          </span>
+        </Tooltip>
         {blocked && item.prerequisite && (
           <span className="alm-onb-checklist__prereq">
             <Lock
@@ -606,24 +571,14 @@ function ChecklistItemRow({
             <Search size={13} aria-hidden />
           </button>
         )}
-        {!item.hasAutoTick && (
-          <button
-            type="button"
-            className="alm-onb-checklist__dismiss"
-            aria-label={m.onboarding_item_dismiss_label({ item: label })}
-            onClick={dismiss}
-          >
-            <X size={13} aria-hidden />
-          </button>
-        )}
-      </span>
-      <span
-        role="tooltip"
-        id={tooltipId}
-        className="alm-onb-checklist__tooltip"
-        data-open={tipOpen ? 'true' : 'false'}
-      >
-        {itemTooltip(item.itemId)}
+        <button
+          type="button"
+          className="alm-onb-checklist__dismiss"
+          aria-label={m.onboarding_item_dismiss_label({ item: label })}
+          onClick={dismiss}
+        >
+          <X size={13} aria-hidden />
+        </button>
       </span>
     </li>
   );
