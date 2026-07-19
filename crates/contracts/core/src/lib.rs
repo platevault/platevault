@@ -366,7 +366,10 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "contracts_core");
+        // Ties CRATE_NAME to the actual Cargo.toml `name` (the real source of
+        // truth) instead of duplicating the literal, which would pass even if
+        // the two silently drifted apart.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 
     #[test]
