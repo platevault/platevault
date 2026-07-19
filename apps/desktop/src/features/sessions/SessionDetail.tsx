@@ -19,7 +19,9 @@
  * unrelated to the review lifecycle and is retained.
  */
 
+import { useState } from 'react';
 import type {
+  CalibrationType,
   InventorySession,
   InventorySourceState,
   SessionCalibrationMatch,
@@ -27,6 +29,7 @@ import type {
 import {
   DetailPane,
   DetailPanel,
+  Modal,
   PropertyTable,
   type PropertyDef,
 } from '@/components';
@@ -34,6 +37,8 @@ import { EmptyState, Btn, Section, Pill } from '@/ui';
 import { TwoColDetailLayout } from '@/components';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
+import { addToast } from '@/shared/toast';
+import { useCalibrationUnassign } from '@/features/calibration/useCalibration';
 import { SessionFrameInventory } from './SessionFrameInventory';
 import { SessionNotesSection } from './SessionNotesSection';
 import { RawFrameCleanupSection } from './RawFrameCleanupSection';
@@ -41,14 +46,55 @@ import { sessionDisplayName } from './displayName';
 import { integrationLabel } from './integration';
 import { connectivityLabel, connectivityVariant } from './connectivity';
 
-/** Read-only calibration-linkage list (#772). Renders an explicit
- * "no calibration match" state when a light session has no assignment yet
- * (and for calibration sessions, which never carry assignments). */
+/** `SessionCalibrationMatch.kind` is the wider `CalibrationKind` (adds
+ * `dark_flat`/`bad_pixel_map`, neither assignable per FR-001), while
+ * `calibration.match.unassign` accepts only the narrower `CalibrationType`
+ * (dark/flat/bias) DB assignments are actually constrained to. `null` for
+ * the two kinds that can never legitimately appear on a real assignment row. */
+function toUnassignType(kind: string): CalibrationType | null {
+  return kind === 'dark' || kind === 'flat' || kind === 'bias' ? kind : null;
+}
+
+/** Calibration-linkage list (#772) with an explicit un-assign action per row
+ * (#875): removes the session's assignment for that calibration type,
+ * returning it to "no master assigned" — previously only a same-type
+ * *replacement* assignment (S6) could clear a wrong match, never a plain
+ * removal. Renders an explicit "no calibration match" state when a light
+ * session has no assignment yet (and for calibration sessions, which never
+ * carry assignments). */
 function CalibrationLinkage({
+  sessionId,
   matches,
 }: {
+  sessionId: string;
   matches: SessionCalibrationMatch[];
 }) {
+  const { unassigning, unassign } = useCalibrationUnassign();
+  const [pendingUnassign, setPendingUnassign] =
+    useState<SessionCalibrationMatch | null>(null);
+
+  const handleConfirmUnassign = async () => {
+    const match = pendingUnassign;
+    setPendingUnassign(null);
+    const calType = match ? toUnassignType(match.kind) : null;
+    if (!match || !calType) return;
+    try {
+      const res = await unassign(sessionId, calType, match.masterId);
+      addToast({
+        message:
+          res.status === 'success'
+            ? m.sessions_calib_unassign_success()
+            : (res.error?.message ?? m.sessions_calib_unassign_failed()),
+        variant: res.status === 'success' ? 'info' : 'error',
+      });
+    } catch {
+      addToast({
+        message: m.sessions_calib_unassign_failed(),
+        variant: 'error',
+      });
+    }
+  };
+
   if (matches.length === 0) {
     return (
       <EmptyState
@@ -59,32 +105,73 @@ function CalibrationLinkage({
     );
   }
   return (
-    <div
-      className="alm-session-detail2__linked-list"
-      data-testid="session-calib-list"
-    >
-      {matches.map((match) => (
-        <div
-          key={`${match.kind}-${match.masterId}`}
-          className="alm-session-detail2__calib-row"
-        >
-          <Pill variant="info">{match.kind}</Pill>
-          <span className="alm-mono">{match.masterId}</span>
-          {match.score != null && (
-            <span className="alm-session-detail2__calib-note">
-              {m.sessions_calib_score({ pct: Math.round(match.score * 100) })}
-            </span>
-          )}
-          {match.softMismatches.length > 0 && (
-            <span className="alm-session-detail2__calib-note">
-              {m.sessions_calib_soft_mismatch({
-                dims: match.softMismatches.join(', '),
-              })}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
+    <>
+      <div
+        className="alm-session-detail2__linked-list"
+        data-testid="session-calib-list"
+      >
+        {matches.map((match) => (
+          <div
+            key={`${match.kind}-${match.masterId}`}
+            className="alm-session-detail2__calib-row"
+          >
+            <Pill variant="info">{match.kind}</Pill>
+            <span className="alm-mono">{match.masterId}</span>
+            {match.score != null && (
+              <span className="alm-session-detail2__calib-note">
+                {m.sessions_calib_score({
+                  pct: Math.round(match.score * 100),
+                })}
+              </span>
+            )}
+            {match.softMismatches.length > 0 && (
+              <span className="alm-session-detail2__calib-note">
+                {m.sessions_calib_soft_mismatch({
+                  dims: match.softMismatches.join(', '),
+                })}
+              </span>
+            )}
+            {toUnassignType(match.kind) && (
+              <Btn
+                size="sm"
+                variant="danger"
+                onClick={() => setPendingUnassign(match)}
+                data-testid={`session-calib-unassign-${match.kind}`}
+              >
+                {m.sessions_calib_unassign_btn()}
+              </Btn>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Confirm gate (#875, journey J11 "first-class action"): mirrors the
+          calibration Archive in-use-confirm modal (MasterDetail.tsx). */}
+      <Modal
+        open={pendingUnassign !== null}
+        onClose={() => setPendingUnassign(null)}
+        title={m.sessions_calib_unassign_confirm_title()}
+        size="sm"
+        ariaLabel={m.sessions_calib_unassign_confirm_title()}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setPendingUnassign(null)}>
+              {m.common_cancel()}
+            </Btn>
+            <Btn
+              variant="danger"
+              disabled={unassigning}
+              onClick={() => void handleConfirmUnassign()}
+              data-testid="session-calib-unassign-confirm-btn"
+            >
+              {m.sessions_calib_unassign_btn()}
+            </Btn>
+          </>
+        }
+      >
+        <p>{m.sessions_calib_unassign_confirm_desc()}</p>
+      </Modal>
+    </>
   );
 }
 
@@ -296,7 +383,10 @@ export function SessionDetail({
       {/* Calibration linkage (#772): the session's assigned calibration
           masters, or an explicit "no calibration match" state. */}
       <Section title={m.sessions_calib_heading()} defaultOpen>
-        <CalibrationLinkage matches={session.calibrationMatches ?? []} />
+        <CalibrationLinkage
+          sessionId={session.id}
+          matches={session.calibrationMatches ?? []}
+        />
       </Section>
 
       {/* Post-hoc notes (#773): debounced-autosave free-text editor.
