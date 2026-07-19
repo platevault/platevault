@@ -697,6 +697,14 @@
   margin-bottom: var(--alm-sp-2);
 }
 
+/* #807: honest always-shown notice — protection is permanent, this item will
+   not be applied regardless of any rewritten action or acknowledgement. */
+.alm-plan-gate__item-note {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-warn);
+  margin-bottom: var(--alm-sp-2);
+}
+
 /* Per-item acknowledge error */
 .alm-plan-gate__item-error {
   font-size: var(--alm-text-xs);
