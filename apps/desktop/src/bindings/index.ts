@@ -1795,9 +1795,11 @@ export const commands = {
 	 *  `project.manifest.reveal_in_os` — open the manifest file's folder in the
 	 *  OS file manager.
 	 * 
-	 *  Delegates to `tauri-plugin-opener::reveal_item_in_dir`. On Linux, if the
-	 *  opener plugin fails, falls back to `xdg-open` on the parent directory
-	 *  (matching the pattern from `native.reveal`).
+	 *  #716: routes through the shared spec-004 `native.reveal` core
+	 *  (`reveal_with_audit`) instead of reimplementing the opener/xdg-open
+	 *  fallback independently — path validation and `native.reveal.failed`
+	 *  audit-on-failure now apply here too, which the standalone reimplementation
+	 *  never had. The external `Result<(), String>` contract is unchanged.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
