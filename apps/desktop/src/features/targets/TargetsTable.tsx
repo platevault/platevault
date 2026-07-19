@@ -1321,6 +1321,8 @@ export function TargetsTable({
                           ? m.targets_star_remove_title()
                           : m.targets_star_add_title()
                       }
+                      // Onboarding find-it spotlight anchor (spec 056 FR-026).
+                      data-guide-anchor="targets.favourite-toggle"
                       onClick={(e) => {
                         e.stopPropagation();
                         resolvedToggle(t.id);
