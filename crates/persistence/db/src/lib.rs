@@ -106,25 +106,26 @@ impl Database {
 
     /// Run all pending migrations from `./migrations/`.
     ///
-    /// Also runs the spec 026 T006a `kind_diverged` reconciliation scan
-    /// (idempotent, no-op on a fresh DB) — this is data reconciliation over
-    /// existing rows, not a schema change, so it belongs here rather than as
-    /// a versioned `.sql` migration.
-    ///
     /// # Errors
     ///
-    /// Returns [`DbError::Migration`] if any migration script fails, or a
-    /// database error if the reconciliation scan fails.
+    /// Returns [`DbError::Migration`] if any migration script fails.
     // Touched for #773 (migration 0066), again for spec 008 Q27's migration
     // 0067 (renumbered from a 0066 collision with #773's own
     // 0066_session_notes.sql), and again for its renumber to 0068 (a second
     // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
     // main independently) — to force `sqlx::migrate!` re-embed each time
     // (project memory: stale-embed guard).
+    //
+    // #745 (spec 049 CL-2): this used to also run the spec 026 T006a
+    // `kind_diverged` reconciliation scan on every start, force-flipping any
+    // view whose items carried more than one recorded kind. CL-2 amended
+    // FR-008 to make that state VALID (per-item kind authoritative — exactly
+    // what a cross-drive project's drive-scope resolution legitimately
+    // produces), so the scan's only remaining effect was auto-corrupting
+    // real cross-drive projects into the dead-end `kind_diverged` state on
+    // every reopen. Removed along with `reconcile_kind_diverged_views`.
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
-        crate::repositories::prepared_source_views::reconcile_kind_diverged_views(&self.pool)
-            .await?;
         Ok(())
     }
 
