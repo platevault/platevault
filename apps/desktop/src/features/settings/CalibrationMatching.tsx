@@ -41,6 +41,10 @@ const DEFAULTS = {
   requireSameOffset: true,
   temperatureToleranceC: 5,
   agingLimitDays: 365,
+  // Not surfaced in this pane's UI, but exposureToleranceS is a non-optional
+  // f64 on the backend DTO (crates/contracts/core/calibration_tolerances.rs)
+  // — matches migration 0008's column default. #639.
+  exposureToleranceS: 2.0,
 };
 
 export function CalibrationMatching(_props: CalibrationMatchingProps) {
@@ -61,6 +65,11 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     DEFAULTS.temperatureToleranceC,
   );
   const [agingLimit, setAgingLimit] = useState<number>(DEFAULTS.agingLimitDays);
+  // Round-tripped but not editable in this pane (#639) — persist() must echo
+  // back the real value; the backend rejects null for this non-optional field.
+  const [exposureTolerance, setExposureTolerance] = useState<number>(
+    DEFAULTS.exposureToleranceS,
+  );
 
   // Guards against the initial calibrationTolerancesGet() fetch resolving
   // *after* the user has already edited a control — a real race (not just
@@ -84,6 +93,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
           setTempTolerance(tol.temperatureToleranceC);
         }
         setAgingLimit(tol.agingLimitDays);
+        if (tol.exposureToleranceS !== null) {
+          setExposureTolerance(tol.exposureToleranceS);
+        }
       })
       .catch(() => {
         // Backend unavailable in mock / dev mode — stay with in-code defaults.
@@ -100,7 +112,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       requireSameOffset: requireOffset,
       temperatureToleranceC: tempTolerance,
       agingLimitDays: agingLimit,
-      exposureToleranceS: null, // not surfaced in this pane
+      // Backend field is non-optional f64 — sending null fails deserialization
+      // and every update in this pane was silently rejected (#639).
+      exposureToleranceS: exposureTolerance,
       ...patch,
     };
     calibrationTolerancesUpdate(req).catch(() => {
@@ -152,6 +166,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     setRequireOffset(DEFAULTS.requireSameOffset);
     setTempTolerance(DEFAULTS.temperatureToleranceC);
     setAgingLimit(DEFAULTS.agingLimitDays);
+    setExposureTolerance(DEFAULTS.exposureToleranceS);
     await calibrationTolerancesUpdate({
       requireSameCamera: DEFAULTS.requireSameCamera,
       requireSameBinning: DEFAULTS.requireSameBinning,
@@ -159,7 +174,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       requireSameOffset: DEFAULTS.requireSameOffset,
       temperatureToleranceC: DEFAULTS.temperatureToleranceC,
       agingLimitDays: DEFAULTS.agingLimitDays,
-      exposureToleranceS: null, // not surfaced in this pane
+      exposureToleranceS: DEFAULTS.exposureToleranceS,
     });
   };
 
