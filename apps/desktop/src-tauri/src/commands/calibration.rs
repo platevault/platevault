@@ -146,3 +146,61 @@ pub async fn calibration_match_unassign(
     );
     cal_uc::unassign(state.repo.pool(), &state.bus, req).await.map_err(ContractError::internal)
 }
+
+// ── #886 — calibration master archive ─────────────────────────────────────────
+
+/// `calibration.masters.archive_plan_generate` — build a reviewable
+/// single-master archive plan (#886). Creates a `ready_for_review` plan;
+/// performs NO filesystem mutation and never auto-applies (constitution
+/// §II / FR-002). A master currently assigned to one or more sessions
+/// requires `confirm_in_use: true` — a first call without it returns
+/// `"calibration.master_in_use"` so the UI can show a confirm dialog before
+/// retrying.
+///
+/// # Errors
+/// Returns `Err` with `"master.not_found"`, `"plan.invalid_state"` (already
+/// archived), `"calibration.master_untracked"` (no tracked file), or
+/// `"calibration.master_in_use"` (needs confirm).
+#[tauri::command]
+#[specta::specta]
+pub async fn calibration_masters_archive_plan_generate(
+    state: State<'_, AppState>,
+    master_id: String,
+    title: Option<String>,
+    confirm_in_use: Option<bool>,
+) -> Result<contracts_core::archive::GenerateArchivePlanResult, ContractError> {
+    tracing::debug!("calibration.masters.archive_plan_generate master_id={master_id}");
+    app_core::calibration_archive_generator::generate(
+        state.repo.pool(),
+        &master_id,
+        title.as_deref(),
+        confirm_in_use.unwrap_or(false),
+    )
+    .await
+}
+
+/// `calibration.masters.archive_plan_generate_restore` — build a reviewable
+/// restore (un-archive) plan from a previously applied master-archive plan
+/// (#886). Creates a `ready_for_review` plan; performs NO filesystem
+/// mutation and never auto-applies (constitution §II / FR-002).
+///
+/// # Errors
+/// Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+/// applied master-archive plan), or `"archive.empty"` (nothing to restore).
+#[tauri::command]
+#[specta::specta]
+pub async fn calibration_masters_archive_plan_generate_restore(
+    state: State<'_, AppState>,
+    archived_plan_id: String,
+    title: Option<String>,
+) -> Result<contracts_core::archive::GenerateRestorePlanResult, ContractError> {
+    tracing::debug!(
+        "calibration.masters.archive_plan_generate_restore archived_plan_id={archived_plan_id}"
+    );
+    app_core::calibration_archive_generator::generate_restore(
+        state.repo.pool(),
+        &archived_plan_id,
+        title.as_deref(),
+    )
+    .await
+}

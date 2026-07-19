@@ -145,9 +145,13 @@ pub async fn plans_retry(
 
 // ── archive.list ────────────────────────────────────────────────────────────
 
-/// `archive.list` — list projects currently in the `archived` lifecycle state
-/// (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
-/// so the management commands act on the owning plan.
+/// `archive.list` — list archived projects (spec 017 C5) AND archived
+/// calibration masters (#886), each row carrying `archivedViaPlanId` so the
+/// management commands (`archive.send_to_trash`/`archive.permanently_delete`,
+/// already entity-agnostic — they act purely on a plan's items) work on
+/// either kind. The two listings are composed here rather than folded into
+/// one generator function, keeping each generator scoped to the entity it
+/// owns (`app_core::archive_generator` / `app_core::calibration_archive_generator`).
 ///
 /// # Errors
 ///
@@ -157,7 +161,10 @@ pub async fn plans_retry(
 pub async fn archive_list(
     state: State<'_, AppState>,
 ) -> Result<ArchiveListResponse, ContractError> {
-    list_archived(state.repo.pool()).await
+    let pool = state.repo.pool();
+    let mut entries = list_archived(pool).await?.entries;
+    entries.extend(app_core::calibration_archive_generator::list_archived(pool).await?);
+    Ok(ArchiveListResponse { entries })
 }
 
 // ── archive.plan.generate ─────────────────────────────────────────────────────

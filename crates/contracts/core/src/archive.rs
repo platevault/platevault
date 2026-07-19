@@ -12,25 +12,30 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-/// One archived entity row for the Archive page (C5 design: projects only).
+/// One archived entity row for the Archive page. `"project"` (C5 design) or
+/// `"master"` (#886) today — no session/target tabs until a real archival
+/// model for them is designed.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArchiveEntry {
-    /// Archived entity id (a project id in the current design).
+    /// Archived entity id (a project or calibration-master id).
     pub id: String,
-    /// Display name (project name).
+    /// Display name (project name, or the master's file name for `"master"`
+    /// rows).
     pub name: String,
-    /// Entity kind. Always `"project"` today (D7/D14: no session/master/target
-    /// tabs until a real archival model for them is designed).
+    /// Entity kind: `"project"` or `"master"`.
     pub entity_type: String,
-    /// When the entity reached the `archived` lifecycle state (ISO-8601).
+    /// When the entity was archived (ISO-8601). For a project, when it
+    /// reached the `archived` lifecycle state; masters have no lifecycle
+    /// state machine, so this is the plan-apply finalize timestamp.
     pub archived_at: String,
     /// Human-readable reason (the archive plan title). `None` when the owning
     /// plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
     /// sentinel standing in for absence).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    /// The entity's original on-disk location (project-relative library path).
+    /// The entity's original on-disk location (project-relative library path
+    /// for a project row; root-relative file path for a master row).
     pub original_path: String,
     /// Bytes moved into the app-managed archive by the owning plan. `None`
     /// when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").

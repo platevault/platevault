@@ -553,6 +553,48 @@ async fn finalize_restore_lifecycle(pool: &SqlitePool, bus: &EventBus, project_i
     }
 }
 
+// ── Calibration master archive lifecycle closure (#886) ──────────────────────
+
+/// Terminal step of a successful `origin = calibration_master_archive` plan
+/// apply: mark the master archived + record the owning plan, so
+/// `calibration.masters.list` drops it and `archive.list` picks it up.
+///
+/// Unlike [`finalize_archive_lifecycle`], masters have no lifecycle state
+/// machine (migration 0050 dropped `calibration_session.state`) — this is a
+/// plain flag+link set only from this call site (Constitution §II:
+/// reviewable-plan discipline gates the write, not a schema constraint).
+/// Idempotent: re-recording an already-archived master just overwrites the
+/// plan link.
+///
+/// Best-effort: the file is already archived, so a failure here must NOT
+/// fail the apply. Every failure is logged for an external watchdog (§II).
+async fn finalize_calibration_master_archive(pool: &SqlitePool, plan_id: &str, master_id: &str) {
+    use persistence_db::repositories::q_calibration;
+
+    let archived_at = Timestamp::now_iso();
+    if let Err(e) = q_calibration::set_master_archived(pool, master_id, plan_id, &archived_at).await
+    {
+        tracing::error!(
+            %master_id, %plan_id, error=%e,
+            "master archive closure: failed to record archived_at/archived_via_plan_id"
+        );
+    }
+}
+
+/// Terminal step of a successful `origin = calibration_master_restore` plan
+/// apply (#886): clear the archived flag so `calibration.masters.list`
+/// picks the master back up and `archive.list` drops it.
+///
+/// Best-effort: the file is already moved back, so a failure here must NOT
+/// fail the apply. Every failure is logged for an external watchdog (§II).
+async fn finalize_calibration_master_restore(pool: &SqlitePool, master_id: &str) {
+    use persistence_db::repositories::q_calibration;
+
+    if let Err(e) = q_calibration::clear_master_archived(pool, master_id).await {
+        tracing::error!(%master_id, error=%e, "master restore closure: failed to clear archived flag");
+    }
+}
+
 // ── Overlap check (FR-017, R-Concur-1) ────────────────────────────────────────
 
 /// Serializes the FR-017 overlap check with the registry insert so two
@@ -1453,6 +1495,22 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                 if terminal == "applied" && plan_origin == "restore" {
                     if let Some(project_id) = plan_project_id.as_deref() {
                         finalize_restore_lifecycle(&pool, &bus, project_id).await;
+                    }
+                }
+
+                // #886: on a fully-applied calibration-master archive/restore
+                // plan, close the master's archived flag the same way the
+                // project archive/restore closures do above — only a clean
+                // `applied` terminal qualifies (a partial apply leaves the
+                // file only partly moved).
+                if terminal == "applied" && plan_origin == "calibration_master_archive" {
+                    if let Some(master_id) = plan_project_id.as_deref() {
+                        finalize_calibration_master_archive(&pool, &plan_id, master_id).await;
+                    }
+                }
+                if terminal == "applied" && plan_origin == "calibration_master_restore" {
+                    if let Some(master_id) = plan_project_id.as_deref() {
+                        finalize_calibration_master_restore(&pool, master_id).await;
                     }
                 }
 
@@ -2947,6 +3005,50 @@ mod tests {
         let (db, bus) = setup().await;
         // No panic; nothing to assert beyond "returns".
         finalize_restore_lifecycle(db.pool(), &bus, "not-a-uuid").await;
+    }
+
+    // ── #886: calibration master archive lifecycle closure ──────────────────
+
+    async fn seed_calibration_master(db: &Database, id: &str) {
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES (?, 'k', 'dark', '2026-06-01T00:00:00Z')",
+        )
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn finalize_calibration_master_archive_records_flag_and_plan_link() {
+        use persistence_db::repositories::q_calibration;
+
+        let (db, _bus) = setup().await;
+        seed_calibration_master(&db, "m-arch-1").await;
+
+        finalize_calibration_master_archive(db.pool(), "plan-m-arch-1", "m-arch-1").await;
+
+        let row =
+            q_calibration::get_calibration_master(db.pool(), "m-arch-1").await.unwrap().unwrap();
+        assert!(row.archived_at.is_some());
+        assert_eq!(row.archived_via_plan_id.as_deref(), Some("plan-m-arch-1"));
+    }
+
+    #[tokio::test]
+    async fn finalize_calibration_master_restore_clears_flag() {
+        use persistence_db::repositories::q_calibration;
+
+        let (db, _bus) = setup().await;
+        seed_calibration_master(&db, "m-rest-1").await;
+        finalize_calibration_master_archive(db.pool(), "plan-m-rest-1", "m-rest-1").await;
+
+        finalize_calibration_master_restore(db.pool(), "m-rest-1").await;
+
+        let row =
+            q_calibration::get_calibration_master(db.pool(), "m-rest-1").await.unwrap().unwrap();
+        assert_eq!(row.archived_at, None);
+        assert_eq!(row.archived_via_plan_id, None);
     }
 
     #[tokio::test]

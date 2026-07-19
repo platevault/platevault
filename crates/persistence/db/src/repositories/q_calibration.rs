@@ -105,6 +105,12 @@ pub struct CalibrationMasterViewRow {
     /// #642: root-relative path of the master's own applied frame file
     /// (`calibration_session.frame_ids[0]` joined to `file_record`).
     pub frame_relative_path: Option<String>,
+    /// #886: when this master was archived (plan-apply finalize step only —
+    /// never set directly). `None` for an active master.
+    pub archived_at: Option<String>,
+    /// #886: the `calibration_master_archive` plan that archived this
+    /// master, so archive-management/restore can act on it in O(1).
+    pub archived_via_plan_id: Option<String>,
 }
 
 /// Whether an `acquisition_session` row exists for `session_id`.
@@ -213,7 +219,12 @@ pub async fn get_calibration_fingerprint(
 
 // ── Masters list / get (T037, FR-013) ──────────────────────────────────────
 
-/// List all `calibration_master_view` rows, newest first.
+/// List all non-archived `calibration_master_view` rows, newest first.
+///
+/// #886: `archived_at IS NULL` excludes archived masters from the normal
+/// Calibration page list (mirrors archived projects dropping off the
+/// Projects list) — the filter lives here, not on the view itself, so
+/// [`get_calibration_master`] can still resolve an archived master's detail.
 ///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
@@ -223,8 +234,10 @@ pub async fn list_calibration_masters(
     let rows = sqlx::query_as::<_, CalibrationMasterViewRow>(
         "SELECT id, kind, created_at, size_bytes,
                 fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
-                fp_optic_train, source_session_id, root_id, frame_relative_path
+                fp_optic_train, source_session_id, root_id, frame_relative_path,
+                archived_at, archived_via_plan_id
          FROM calibration_master_view
+         WHERE archived_at IS NULL
          ORDER BY created_at DESC",
     )
     .fetch_all(pool)
@@ -232,7 +245,8 @@ pub async fn list_calibration_masters(
     Ok(rows)
 }
 
-/// Load a single `calibration_master_view` row by id.
+/// Load a single `calibration_master_view` row by id — including an archived
+/// master, so its detail view / future unarchive can still see it.
 ///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
@@ -243,7 +257,8 @@ pub async fn get_calibration_master(
     let row = sqlx::query_as::<_, CalibrationMasterViewRow>(
         "SELECT id, kind, created_at, size_bytes,
                 fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
-                fp_optic_train, source_session_id, root_id, frame_relative_path
+                fp_optic_train, source_session_id, root_id, frame_relative_path,
+                archived_at, archived_via_plan_id
          FROM calibration_master_view
          WHERE id = ?",
     )
@@ -288,4 +303,118 @@ pub async fn list_assignment_project_ids(
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|(p,)| p).collect())
+}
+
+// ── Master archive (#886) ───────────────────────────────────────────────────
+
+/// Mark a `calibration_session` (master) archived, linking the owning plan.
+/// Called only from the plan-apply finalize step
+/// (`crate::calibration_archive_generator`) on a successfully applied
+/// `calibration_master_archive` plan — never by direct UI action
+/// (Constitution II: reviewable-plan discipline).
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn set_master_archived(
+    pool: &SqlitePool,
+    master_id: &str,
+    plan_id: &str,
+    archived_at: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE calibration_session SET archived_at = ?, archived_via_plan_id = ? WHERE id = ?",
+    )
+    .bind(archived_at)
+    .bind(plan_id)
+    .bind(master_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Clear the archived flag on a restored (un-archived) master. Counterpart
+/// to [`set_master_archived`]; called once a `calibration_master_restore`
+/// plan finishes applying.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn clear_master_archived(pool: &SqlitePool, master_id: &str) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE calibration_session SET archived_at = NULL, archived_via_plan_id = NULL \
+         WHERE id = ?",
+    )
+    .bind(master_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// One archived-master row for the Archive surface (#886), joined with the
+/// owning archive plan for the display reason + bytes moved — mirrors
+/// [`crate::repositories::projects::ArchivedProjectRow`].
+#[derive(Debug, Clone)]
+pub struct ArchivedMasterRow {
+    pub id: String,
+    pub kind: String,
+    pub root_id: Option<String>,
+    pub frame_relative_path: Option<String>,
+    pub archived_at: String,
+    pub archived_via_plan_id: Option<String>,
+    pub plan_title: Option<String>,
+    pub archived_bytes: Option<i64>,
+}
+
+/// List every `calibration_master_view` row currently archived.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn list_archived_masters(pool: &SqlitePool) -> DbResult<Vec<ArchivedMasterRow>> {
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+    )> = sqlx::query_as(
+        "SELECT m.id, m.kind, m.root_id, m.frame_relative_path, m.archived_at, \
+                m.archived_via_plan_id, pl.title, pl.total_bytes_required \
+         FROM calibration_master_view m \
+         LEFT JOIN plans pl ON pl.id = m.archived_via_plan_id \
+         WHERE m.archived_at IS NOT NULL \
+         ORDER BY m.archived_at DESC, m.id ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                kind,
+                root_id,
+                frame_relative_path,
+                archived_at,
+                archived_via_plan_id,
+                plan_title,
+                archived_bytes,
+            )| ArchivedMasterRow {
+                id,
+                kind,
+                root_id,
+                frame_relative_path,
+                // NOT NULL by the WHERE clause; the column stays Option at the
+                // SQL layer since `calibration_master_view` is a plain LEFT
+                // JOIN projection with no NOT NULL guarantee sqlx can see.
+                archived_at: archived_at.unwrap_or_default(),
+                archived_via_plan_id,
+                plan_title,
+                archived_bytes,
+            },
+        )
+        .collect())
 }

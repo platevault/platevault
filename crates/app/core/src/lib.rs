@@ -68,6 +68,9 @@ mod audit_ids;
 /// `source_protection_state`/defaults. See each accessor's doc comment for
 /// its owning write-site invalidation calls.
 pub mod caches;
+/// #886 calibration master archive plan generator (mirrors
+/// [`archive_generator`] for a single master instead of a whole project).
+pub mod calibration_archive_generator;
 pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
