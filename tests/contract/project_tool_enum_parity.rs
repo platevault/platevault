@@ -92,8 +92,7 @@ fn project_update_schema_tool_enum_matches_project_tool_dto() {
 
 #[test]
 fn project_tool_dto_matches_domain_validate_tools_list() {
-    let dto_values: BTreeSet<&str> =
-        all_project_tools().iter().map(|t| t.as_db_str()).collect();
+    let dto_values: BTreeSet<&str> = all_project_tools().iter().map(|t| t.as_db_str()).collect();
     let domain_values: BTreeSet<&str> = VALID_TOOLS.iter().copied().collect();
 
     assert_eq!(
