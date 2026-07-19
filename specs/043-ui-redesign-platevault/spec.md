@@ -60,12 +60,20 @@ Four shippable themes + System (follow-OS), user-switchable, persisted.
   file picker; no page-level/crumb info bubble — it clips in scroll panes).
   (mock done; component impl PENDING)
 - **One pill system** with semantic variants (neutral/accent/ok/warn/danger/
-  info) + sizes — replace ad-hoc category/flag/outcome pills. (PENDING)
+  info) + sizes — replace ad-hoc category/flag/outcome pills. (DONE —
+  `apps/desktop/src/ui/Pill.tsx`, used across Audit Log, Equipment, and
+  elsewhere; reconciliation note 2026-07-19, issue #764: this was marked
+  PENDING but shipped.)
 - **Bottom inspector** is a shared app-wide dock (Inbox file metadata, Session
   frames, etc.). (mock done; impl PENDING)
 - **Detail pane = overview-by-default** where it adds value; for queues that are
   empty a plain teaching prompt (no empty dashboards). Desktop **resizable
-  splitters** with remembered widths. (PENDING)
+  splitters** with remembered widths. (REVERSED, task #89 — reconciliation
+  note 2026-07-19, issue #764: `ListPageLayout.tsx`'s own doc comment
+  records the reversal — "the bottom panel is NON-resizable (task #89,
+  revising #86): it AUTO-SIZES to its content... There is no splitter, no
+  drag, and no persisted height" — but that reversal was never carried back
+  into this spec, which still lists it PENDING.)
 - Reference patterns to reuse (already good in-app): Audit Log (top filters +
   table + pagination), Advanced (good KV + DANGER ZONE), Target Resolution
   (form-row), Equipment (multi-table), Archive list (compact rows).
@@ -243,7 +251,10 @@ Gate after the round: `tsc` 0 · `check-tokens` pass · `eslint` 0 errors ·
 - **Settings — Calibration Matching**: toggleable criteria table (Camera/Binning/
   Gain/Offset required + Temp/Age tolerances) wired to real
   `calibrationTolerancesGet/Update`; Offset toggle is local `STUB-OFFSET-REQUIRED`
-  (needs a Rust `requireSameOffset` field).
+  (needs a Rust `requireSameOffset` field). *(Reconciliation note, 2026-07-19,
+  issue #764: shipped — `requireSameOffset` is a real `MatchingRuleConfig`
+  field consumed by `crates/calibration/core/src/rules/{dark,bias}.rs`;
+  `api/mocks.ts` itself notes "STUB-OFFSET-REQUIRED closed".)*
 - **Calibration rail**: master-fingerprint now uses shared `RailCard` + `KV`
   (was bespoke PropertyTable box) — matches TargetDetail; bespoke classes deleted.
 - **Sessions review-state**: Confirm/Reject live only in the top action bar;
@@ -253,12 +264,18 @@ Gate after the round: `tsc` 0 · `check-tokens` pass · `eslint` 0 errors ·
 - **Projects detail**: consolidated `MetricLine` (no hero-number blocks), Sources
   `Table`, RailCard rail; **Channels palette** (derived from source filters,
   `// STUB:` dedicated channel model); source-views = clickable source links, no
-  junction label (user override).
+  junction label (user override). *(Reconciliation note, 2026-07-19, issue
+  #764: shipped — `ProjectChannelDto` is a real generated backend DTO
+  (`project.channels.reinfer`/`dismiss_drift`, spec 008 FR-010), not a
+  client-derived stub.)*
 - **Targets**: dense/rich row density toggle (list endpoint lacks coords/mag/
   coverage → omitted + marked); **planner detail** = identity KV table + linked
   projects/sessions + per-filter coverage + a **Tonight altitude SVG graph**
   driven by a marked `altitudeCurve()` stub (placeholder 52.1°N) + Add-to-plan/
-  +New-project actions.
+  +New-project actions. *(Reconciliation note, 2026-07-19, issue #764: the
+  altitude curve now comes from real ephemeris — `astronomy-engine` via
+  `features/targets/astro/*` and `planner-astronomy.ts` (spec 044) — not the
+  placeholder-52.1°N stub.)*
 - **Inbox bottom inspector**: click metadata rows → docked inspector with the
   file's full fields; multi-select shows shared values + min→max ranges.
 - **Sessions sortable table**: dense table, clickable sortable headers (caret +

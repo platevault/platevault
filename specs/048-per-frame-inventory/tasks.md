@@ -117,6 +117,9 @@ description: "Task list for 048-per-frame-inventory"
 **Independent Test**: quickstart Scenario 4. **Depends on US1; benefits from US2.**
 
 All of US3 (T027–T031) is **in-flight on PR #500** (`048-complete-per-frame-inventory`, commit 48f76a26), not yet on `main` — left unchecked here rather than duplicated.
+*(Reconciliation note, 2026-07-19, issue #764: PR #500 merged 2026-07-12;
+this note is stale and contradicts the `[X]` marks immediately below it —
+US3 is on `main`.)*
 
 ### Tests (US3)
 - [X] T027 [P] [US3] Integration test: `cleanup.candidates.scan { session_id }` returns raw sub-frames grouped by session; `total_reclaimable_bytes` = Σ present sizes; generation performs no filesystem mutation.
@@ -165,6 +168,8 @@ All of US3 (T027–T031) is **in-flight on PR #500** (`048-complete-per-frame-in
 **Independent Test**: quickstart Scenario 6. **Depends on US2 (missing detection).**
 
 All of US5 (T037–T039) is **in-flight on PR #503** (`048-us5-calibration-missing-flag`, stacked on #500), not yet on `main` — left unchecked here rather than duplicated.
+*(Reconciliation note, 2026-07-19, issue #764: PR #503 merged 2026-07-13;
+US5 is on `main` — re-check T037–T039 or otherwise reconcile this note.)*
 
 ### Tests (US5)
 - [X] T037 [P] [US5] Integration test: referenced calibration frame goes missing → match flagged "source missing / unverifiable", still present; flag clears on recovery.
