@@ -885,3 +885,37 @@ pub struct CalibrationMatchSourceRecovered {
 }
 
 pub const TOPIC_CALIBRATION_MATCH_SOURCE_RECOVERED: &str = "calibration_match.source_recovered";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workflow_run_completed_envelope_emitted_at_is_rfc3339_string() {
+        // #1112: EventEnvelope.emitted_at (Timestamp) previously serialized as
+        // time::OffsetDateTime's default 9-int array instead of a string — fixed
+        // at the type level in domain_core::ids::Timestamp (#1093). Regression
+        // test against a concrete real event, not just the generic type.
+        let envelope = EventEnvelope::new(
+            TOPIC_WORKFLOW_RUN_COMPLETED,
+            Source::System,
+            WorkflowRunCompleted {
+                project_id: "proj-1".to_owned(),
+                tool_id: "pixinsight".to_owned(),
+                tool_launch_id: "launch-1".to_owned(),
+                completed_at: "2026-01-01T00:00:00Z".to_owned(),
+                artifact_ids: vec![],
+            },
+        );
+
+        let json = serde_json::to_value(&envelope).expect("serialize");
+        let emitted_at = json
+            .get("emittedAt")
+            .unwrap_or_else(|| panic!("envelope JSON missing emittedAt: {json}"));
+        let s = emitted_at
+            .as_str()
+            .unwrap_or_else(|| panic!("emittedAt must be a JSON string, got {emitted_at:?}"));
+        time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|e| panic!("emittedAt {s:?} is not RFC 3339: {e}"));
+    }
+}
