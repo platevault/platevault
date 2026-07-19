@@ -115,7 +115,16 @@ async fn stub_sessions_split() {
     let res = sessions_split("ses-001".to_owned(), 10).await;
     assert!(res.is_ok(), "sessions_split failed: {res:?}");
     let split = res.unwrap();
-    assert_eq!(split.original.frame_count, 10);
+    // `original.frame_count` merely echoes `split_at_index` (the input) —
+    // assert fields the command actually derives instead, so this test can
+    // fail if the stub's split/id wiring breaks.
+    assert_eq!(split.new.frame_count, 8, "new.frame_count must be 18 - split_at_index");
+    assert_eq!(split.new.id, "550e8400-e29b-41d4-a716-446655440099");
+    assert_eq!(
+        split.original.session_key.target, "NGC 7000",
+        "original must come from stub_sessions()[0]"
+    );
+    assert_eq!(split.new.session_key.target, "IC 1396", "new must come from stub_sessions()[1]");
 }
 
 #[tokio::test]
@@ -181,7 +190,14 @@ async fn stub_targets_list() {
 async fn stub_targets_get() {
     let res = targets_get("target-001".to_owned()).await;
     assert!(res.is_ok(), "targets_get failed: {res:?}");
-    assert_eq!(res.unwrap().id, "target-001");
+    let detail = res.unwrap();
+    // `id` is echoed straight from the argument — assert fields the command
+    // derives from stub_targets()[0] so this test can fail if that wiring breaks.
+    assert_eq!(detail.id, "target-001");
+    assert_eq!(detail.name, "NGC 7000");
+    assert_eq!(detail.session_count, 5);
+    assert_eq!(detail.projects.len(), 2);
+    assert_eq!(detail.projects[0].name, "NGC 7000 Narrowband");
 }
 
 // ─── Projects (spec 008 — real implementation with in-memory DB) ────────────
