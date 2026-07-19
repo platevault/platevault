@@ -27,6 +27,7 @@ use std::time::Duration;
 use anyhow::Context;
 use common::{write_minimal_fits, write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
+use thirtyfour::By;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -446,6 +447,142 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     anyhow::ensure!(
         !app.testid_exists("inbox-unclassified-alert").await?,
         "expected the 'frame types required' banner to clear after reclassify"
+    );
+
+    app.shutdown().await
+}
+
+/// Trimmed, lowercased text of every Type-column cell currently rendered in
+/// the Inbox list. That cell carries no `data-testid` of its own — it is the
+/// `span.alm-inbox-row__classification` inside each row (the `type:` cell in
+/// `apps/desktop/src/features/inbox/InboxList.tsx`), so it is located by class.
+///
+/// Callers MUST compare with exact equality, never `contains`: "unclassified"
+/// has "classified" as a substring, so a substring check cannot tell the fixed
+/// badge from the defective one.
+async fn classification_cell_labels(app: &E2eApp) -> Vec<String> {
+    let cells =
+        app.driver.find_all(By::Css(".alm-inbox-row__classification")).await.unwrap_or_default();
+    let mut labels = Vec::with_capacity(cells.len());
+    for cell in cells {
+        labels.push(cell.text().await.unwrap_or_default().trim().to_lowercase());
+    }
+    labels
+}
+
+/// Issue #711 Instance A (unsplit-folder variant): the Type-column badge of a
+/// folder that `classify()` could not resolve to any frame type must read
+/// "unclassified" — never "classified".
+///
+/// NOTE: written but NOT YET EXECUTED (authored alongside the fix without a
+/// Layer-2 run). Validate it on its first real run.
+///
+/// The defect this pins, end to end: `classify()` writes
+/// `inbox_classifications.result = "unclassified"` (step 8 — zero distinct
+/// frame types) and then unconditionally flips `inbox_items.state` to
+/// `"classified"` (step 9) for that SAME placeholder id, so a `state`-only
+/// badge renders a false "classified" beside a detail panel that correctly
+/// reports unclassified. The three sibling journeys above all passed
+/// identically with and without the fix — they assert on
+/// `inbox-unclassified-alert`, Confirm enablement, and move counts, and never
+/// read the Type column.
+///
+/// Fixture choice — the same unmapped-`IMAGETYP` file as
+/// `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`, written with
+/// [`write_minimal_fits`] (which deliberately omits `EXPTIME`). It is the only
+/// shape that can reach the new predicate at all:
+/// - Zero distinct frame types → folder result `"unclassified"`, and
+///   `materialize_sub_items` yields exactly ONE group (the `__needs_review__`
+///   sentinel). One group is not a split, so the placeholder row survives
+///   `exclude_split_placeholder!`'s `> 1` bound
+///   (`crates/persistence/db/src/repositories/inbox.rs`) and stays in
+///   `inbox.list`.
+/// - A MIXED folder (2+ types) also stores `"unclassified"`, but it genuinely
+///   SPLITS, so its placeholder is filtered out of `inbox.list` entirely and
+///   could never exercise this path.
+///
+/// The needs-review trap: `isNeedsReview` runs BEFORE the new predicate in
+/// `classificationLabel`, so a row in the sentinel bucket is labelled "needs
+/// review" and proves nothing here. The row under test is the PLACEHOLDER
+/// (`group_key = ""`, and `inbox.list` always returns an empty
+/// `missingMandatory` — the other `isNeedsReview` signal — see
+/// `apps/desktop/src-tauri/src/commands/inbox.rs`), which lists ALONGSIDE its
+/// one needs-review sub-item. Hence the assertions run over every Type cell
+/// rather than one row: "needs review" is expected and fine, "classified" is
+/// the defect.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn inbox_ui_unsplit_unclassified_folder_badge_is_not_classified() -> anyhow::Result<()> {
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
+
+    let (root_dir, root_id) = register_light_root(&app).await?;
+    let _project_dir = register_project_root(&app).await?;
+    let _: serde_json::Value = app
+        .invoke(
+            "sources_set_organization_state",
+            json!({ "sourceId": root_id, "organizationState": "unorganized" }),
+        )
+        .await?;
+
+    write_minimal_fits(
+        root_dir.path(),
+        "ambiguous_001.fits",
+        "Frame Unknown",
+        Some("M42"),
+        Some("Ha"),
+        Some("2026-01-10T22:00:00"),
+    )?;
+
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    app.complete_first_run_gate().await?;
+
+    app.goto_route("/inbox").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    rescan_and_wait_for_item(&app).await?;
+
+    // Only the placeholder exists before classify, so this selects it — and
+    // selecting is the real user action that triggers its first classify. The
+    // banner renders only from a LOADED classification, so its appearance is
+    // the proof that classify finished server-side.
+    select_only_item(&app).await?;
+    app.wait_testid("inbox-unclassified-alert", UI_TIMEOUT).await?;
+
+    // classify does not invalidate the list query, so re-read the list the way
+    // a user would (reload) until the post-classify rows land. The
+    // materialized "needs review" sub-item is the settle signal: it can only
+    // be rendered once classify ran AND the list refetched — which keeps a
+    // not-yet-refreshed list from being misreported as a badge regression.
+    let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
+    let labels = loop {
+        let labels = classification_cell_labels(&app).await;
+        if labels.iter().any(|l| l == "needs review") {
+            break labels;
+        }
+        anyhow::ensure!(
+            tokio::time::Instant::now() < deadline,
+            "the post-classify Inbox list never settled within {UI_TIMEOUT:?} (no \
+             materialized 'needs review' sub-item row appeared); Type cells were {labels:?}"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        app.driver
+            .refresh()
+            .await
+            .context("refresh while waiting for the post-classify list failed")?;
+        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    };
+
+    anyhow::ensure!(
+        !labels.iter().any(|l| l == "classified"),
+        "#711 Instance A: an unsplit folder that classify() resolved to NO frame type \
+         still renders a 'classified' Type badge, contradicting the detail panel's \
+         unclassified state. Type cells: {labels:?}"
+    );
+    anyhow::ensure!(
+        labels.iter().any(|l| l == "unclassified"),
+        "expected the unsplit placeholder row to render the 'unclassified' Type badge \
+         that agrees with inbox.classify and the detail panel. Type cells: {labels:?}"
     );
 
     app.shutdown().await
