@@ -700,6 +700,18 @@ function responseSchema(fullSchema, testId) {
   };
 }
 
+// Request-side counterpart of responseSchema(), for schemas (like the
+// native.* contracts below) whose request shape also needs standalone
+// validation rather than just the response.
+function requestSchema(fullSchema, testId) {
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: `urn:test:${testId}`,
+    ...fullSchema.properties.request,
+    $defs: fullSchema.$defs,
+  };
+}
+
 // T009: plan.apply response shape (success + failure).
 const planApplySchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.apply.json");
 const planApplyResponseSchema = responseSchema(planApplySchema, "plan-apply-response");
@@ -870,6 +882,149 @@ validate(
     contractVersion: "2.0.0",
     requestId,
     errors: [{ code: "item.still.stale", message: "source file changed again while paused" }],
+  },
+  true
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #717 SC-005 (spec 004): the 3 native.* contracts had zero Draft-2020-12
+// schema coverage in this harness — only syntax-level json-schema-to-typescript
+// generation exercised them. Covers request + both response variants for each.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const nativeReveal = loadSchema("specs/004-native-filesystem-controls/contracts/native.reveal.json");
+const nativeRevealRequestSchema = requestSchema(nativeReveal, "native-reveal-request");
+const nativeRevealResponseSchema = responseSchema(nativeReveal, "native-reveal-response");
+
+validate(
+  "native.reveal request valid",
+  nativeRevealRequestSchema,
+  {
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    path: "/mnt/library/M31/notes/manifest.md",
+    entityKind: "project_manifest",
+    entityId: "proj-1",
+  },
+  true
+);
+
+validate(
+  "native.reveal DRIFT: missing 'path' must be rejected",
+  nativeRevealRequestSchema,
+  { contractVersion: "2.0.0", requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+  false
+);
+
+validate(
+  "native.reveal success response valid",
+  nativeRevealResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    revealed: true,
+    selection: "target",
+  },
+  true
+);
+
+validate(
+  "native.reveal failure response valid (path.not_exists)",
+  nativeRevealResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    errors: [{ code: "path.not_exists", message: "Path does not exist" }],
+  },
+  true
+);
+
+const nativeDirPick = loadSchema(
+  "specs/004-native-filesystem-controls/contracts/native.directory.pick.json"
+);
+const nativeDirPickRequestSchema = requestSchema(nativeDirPick, "native-directory-pick-request");
+const nativeDirPickResponseSchema = responseSchema(nativeDirPick, "native-directory-pick-response");
+
+validate(
+  "native.directory.pick request valid (defaultPath omitted)",
+  nativeDirPickRequestSchema,
+  { contractVersion: "2.0.0", requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+  true
+);
+
+validate(
+  "native.directory.pick success response valid (cancelled)",
+  nativeDirPickResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    path: null,
+    cancelled: true,
+  },
+  true
+);
+
+validate(
+  "native.directory.pick failure response valid (picker.unavailable)",
+  nativeDirPickResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    errors: [{ code: "picker.unavailable", message: "No display server available" }],
+  },
+  true
+);
+
+const nativeFilePick = loadSchema(
+  "specs/004-native-filesystem-controls/contracts/native.file.pick.json"
+);
+const nativeFilePickRequestSchema = requestSchema(nativeFilePick, "native-file-pick-request");
+const nativeFilePickResponseSchema = responseSchema(nativeFilePick, "native-file-pick-response");
+
+validate(
+  "native.file.pick request valid",
+  nativeFilePickRequestSchema,
+  {
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    filters: [{ name: "FITS", extensions: ["fits", "fit"] }],
+  },
+  true
+);
+
+validate(
+  "native.file.pick DRIFT: empty filters array must be rejected",
+  nativeFilePickRequestSchema,
+  { contractVersion: "2.0.0", requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", filters: [] },
+  false
+);
+
+validate(
+  "native.file.pick success response valid",
+  nativeFilePickResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    path: "/mnt/library/masters/flat_L.fits",
+    selectedFilter: "FITS",
+    cancelled: false,
+  },
+  true
+);
+
+validate(
+  "native.file.pick failure response valid (filters.invalid)",
+  nativeFilePickResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    errors: [{ code: "filters.invalid", message: "'*' only valid in an 'All files' filter" }],
   },
   true
 );
