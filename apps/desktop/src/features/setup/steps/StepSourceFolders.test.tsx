@@ -230,7 +230,7 @@ describe('StepSourceFolders — manual path entry existence validation', () => {
   it('adds a manually typed path that exists, clearing the input', async () => {
     mockToolsValidatePath.mockResolvedValueOnce({
       status: 'ok',
-      data: { path: '/astro/lights', valid: true, reason: null },
+      data: { path: '/astro/lights', valid: true, reason: null, isDir: true },
     });
     const onAdd = vi.fn();
     renderStep([], onAdd);
@@ -243,5 +243,31 @@ describe('StepSourceFolders — manual path entry existence validation', () => {
       expect(onAdd).toHaveBeenCalledWith('/astro/lights', 'light_frames'),
     );
     expect(input).toHaveValue('');
+  });
+
+  // Issue #1056: a path that exists but points at a file (not a directory)
+  // must be rejected inline instead of deferring to Confirm-step flush.
+  it('rejects a manually typed path that points at a file, not a directory', async () => {
+    mockToolsValidatePath.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        path: '/astro/lights/frame.fits',
+        valid: true,
+        reason: null,
+        isDir: false,
+      },
+    });
+    const onAdd = vi.fn();
+    renderStep([], onAdd);
+
+    const input = screen.getByLabelText(/Light frames folder path/i);
+    fireEvent.change(input, { target: { value: '/astro/lights/frame.fits' } });
+    fireEvent.click(screen.getByTestId('manual-add-path-btn-light_frames'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /not a directory/i,
+    );
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(input).toHaveValue('/astro/lights/frame.fits');
   });
 });
