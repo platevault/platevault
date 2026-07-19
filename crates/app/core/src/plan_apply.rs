@@ -2864,6 +2864,91 @@ mod tests {
         assert!(archived.is_empty(), "no archive link may be recorded for a refused closure");
     }
 
+    // ── #885: restore lifecycle closure ──────────────────────────────────────
+
+    /// Happy path: an archived project's finalize_restore_lifecycle drives it
+    /// back to `ready` and clears `archived_via_plan_id` (also exercises
+    /// `clear_archived_via_plan_id`, persistence_db repositories/projects.rs).
+    #[tokio::test]
+    async fn finalize_restore_lifecycle_restores_archived_project() {
+        use persistence_db::repositories::projects as projects_repo;
+
+        let (db, bus) = setup().await;
+        let project_id = Uuid::new_v4().to_string();
+        projects_repo::insert_project(
+            db.pool(),
+            &projects_repo::InsertProject {
+                id: &project_id,
+                name: "M31 LRGB",
+                tool: "PixInsight",
+                lifecycle: "archived",
+                path: "projects/M31_LRGB",
+                notes: None,
+                canonical_target_id: None,
+                is_mosaic: false,
+            },
+        )
+        .await
+        .unwrap();
+        projects_repo::set_archived_via_plan_id(db.pool(), &project_id, "plan-arch-1")
+            .await
+            .unwrap();
+
+        finalize_restore_lifecycle(db.pool(), &bus, &project_id).await;
+
+        let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(project.lifecycle, "ready", "project must be driven to ready (R-Unarchive)");
+
+        let link: Option<String> =
+            sqlx::query_scalar("SELECT archived_via_plan_id FROM projects WHERE id = ?")
+                .bind(&project_id)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(link, None, "archived_via_plan_id must be cleared on restore");
+    }
+
+    /// Edge-legality guard: the only legal source for R-Unarchive is `archived`
+    /// itself — a project in any other state must be left unchanged.
+    #[tokio::test]
+    async fn finalize_restore_lifecycle_refuses_non_archived_source_state() {
+        use persistence_db::repositories::projects as projects_repo;
+
+        let (db, bus) = setup().await;
+        let project_id = Uuid::new_v4().to_string();
+        projects_repo::insert_project(
+            db.pool(),
+            &projects_repo::InsertProject {
+                id: &project_id,
+                name: "M31 Completed",
+                tool: "PixInsight",
+                lifecycle: "completed",
+                path: "projects/M31_Completed",
+                notes: None,
+                canonical_target_id: None,
+                is_mosaic: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        finalize_restore_lifecycle(db.pool(), &bus, &project_id).await;
+
+        let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(
+            project.lifecycle, "completed",
+            "illegal restore source must leave lifecycle unchanged"
+        );
+    }
+
+    /// A non-UUID project id must not panic (best-effort logging only).
+    #[tokio::test]
+    async fn finalize_restore_lifecycle_non_uuid_is_noop() {
+        let (db, bus) = setup().await;
+        // No panic; nothing to assert beyond "returns".
+        finalize_restore_lifecycle(db.pool(), &bus, "not-a-uuid").await;
+    }
+
     #[tokio::test]
     async fn cancel_plan_rejects_non_applying() {
         let (db, _bus) = setup().await;
