@@ -38,12 +38,30 @@
 
 import {
   configure,
-  render,
+  render as rtlRender,
   screen,
   fireEvent,
   waitFor,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
+
+// TargetDetailV2 is now backed by TanStack Query (store.ts) — every render
+// needs a QueryClientProvider ancestor. Shadowing `render` here (instead of
+// touching every one of this file's ~30 call sites) keeps the diff mechanical.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    ),
+  });
+}
 
 // Windows-CI headroom (same flake class as PR #412's settings hydration races):
 // every test in this file waits on content that only renders after mocked async

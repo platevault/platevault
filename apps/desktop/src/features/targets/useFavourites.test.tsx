@@ -12,6 +12,20 @@
 
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { queryClient } from '@/data/queryClient';
+
+// Every `useFavourites()` mount reads/writes the app-wide `queryClient`
+// singleton (matching production, where `main.tsx` mounts the same instance)
+// — `getFavouriteIds()`/`__resetFavouritesCacheForTests()` read that same
+// singleton directly, so tests must wrap with it too (not an ad-hoc client)
+// or the hook and the non-hook reads would diverge.
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 type MockIpc = (...args: unknown[]) => Promise<unknown>;
 
@@ -73,7 +87,7 @@ describe('useFavourites', () => {
   it('loads the favourite set from the backend on mount', async () => {
     mockTargetFavouritesList.mockReturnValue(okList(['id-a', 'id-b']));
 
-    const { result } = renderHook(() => useFavourites());
+    const { result } = renderHook(() => useFavourites(), { wrapper });
 
     await waitFor(() => expect(result.current.favouriteIds.size).toBe(2));
     expect(result.current.isFavourite('id-a')).toBe(true);
@@ -82,15 +96,17 @@ describe('useFavourites', () => {
   });
 
   it('toggle favourites an unfavourited target optimistically then confirms via the backend', async () => {
-    const { result } = renderHook(() => useFavourites());
+    const { result } = renderHook(() => useFavourites(), { wrapper });
     await waitFor(() => expect(mockTargetFavouritesList).toHaveBeenCalled());
 
     act(() => {
       result.current.toggle('id-x');
     });
 
-    // Optimistic update is synchronous.
-    expect(result.current.isFavourite('id-x')).toBe(true);
+    // Optimistic update: applied to the query cache synchronously, but
+    // TanStack Query's notifyManager batches the resulting re-render via a
+    // macrotask, so the hook's return value reflects it after a tick.
+    await waitFor(() => expect(result.current.isFavourite('id-x')).toBe(true));
 
     await waitFor(() =>
       expect(mockTargetFavouritesAdd).toHaveBeenCalledWith({
@@ -102,14 +118,14 @@ describe('useFavourites', () => {
 
   it('toggle unfavourites an already-favourited target', async () => {
     mockTargetFavouritesList.mockReturnValue(okList(['id-y']));
-    const { result } = renderHook(() => useFavourites());
+    const { result } = renderHook(() => useFavourites(), { wrapper });
     await waitFor(() => expect(result.current.isFavourite('id-y')).toBe(true));
 
     act(() => {
       result.current.toggle('id-y');
     });
 
-    expect(result.current.isFavourite('id-y')).toBe(false);
+    await waitFor(() => expect(result.current.isFavourite('id-y')).toBe(false));
     await waitFor(() =>
       expect(mockTargetFavouritesRemove).toHaveBeenCalledWith({
         targetId: 'id-y',
@@ -124,21 +140,26 @@ describe('useFavourites', () => {
         error: { code: 'internal.database', message: 'boom' },
       }),
     );
-    const { result } = renderHook(() => useFavourites());
+    const { result } = renderHook(() => useFavourites(), { wrapper });
     await waitFor(() => expect(mockTargetFavouritesList).toHaveBeenCalled());
 
+    // The mock backend call rejects on the SAME microtask turn as the
+    // optimistic cache write, and TanStack Query's notifyManager batches
+    // same-turn cache writes into one render — so the optimistic `true` and
+    // its revert can coalesce into a single visible update here (unlike a
+    // real IPC round-trip, which always takes longer than one tick). The end
+    // state — reverted to unfavourited — is what matters and is asserted below.
     act(() => {
       result.current.toggle('id-z');
     });
-    expect(result.current.isFavourite('id-z')).toBe(true);
 
     await waitFor(() => expect(result.current.isFavourite('id-z')).toBe(false));
   });
 
   it('shares the cache across multiple hook mounts', async () => {
     mockTargetFavouritesList.mockReturnValue(okList(['id-shared']));
-    const a = renderHook(() => useFavourites());
-    const b = renderHook(() => useFavourites());
+    const a = renderHook(() => useFavourites(), { wrapper });
+    const b = renderHook(() => useFavourites(), { wrapper });
 
     await waitFor(() =>
       expect(a.result.current.isFavourite('id-shared')).toBe(true),

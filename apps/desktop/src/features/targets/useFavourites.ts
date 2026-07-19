@@ -6,81 +6,35 @@
  *
  * Favourites are canonical, database-backed state (`target_favourite` table,
  * migration `0061`) — see `targets.favourites.list` / `.add` / `.remove` in
- * `apps/desktop/src-tauri/src/commands/target_favourites.rs`. This replaces
- * the previous `localStorage`-only stub (task #18, spec 043).
+ * `apps/desktop/src-tauri/src/commands/target_favourites.rs`. Backed by
+ * TanStack Query (spec `tiny/targets-tanstack-query-migration`): the
+ * `queryKeys.targets.favourites()` cache entry IS the shared store, so every
+ * `useFavourites()` mount reads/writes the same set without a bespoke
+ * `useSyncExternalStore` subscriber list.
  *
- * The old stub cited task #54 (FITS OBJECT → target_id linkage) as its own
- * blocker — that citation was specific to *storage location*, which this
- * feature resolves (favourites are keyed directly off canonical target ids,
- * independent of any FITS ingest linkage). Task #54 itself is broader than
- * favourites storage: it also covers the FITS-derived target list backing
- * `TargetsPage.tsx`'s stub filters and `ProjectsTable.tsx`'s target column
- * (both still marked STUB pending #54), which this feature does not close.
- *
-
- * API (unchanged shape from the stub):
+ * API (unchanged shape from the pre-migration hook):
  *   useFavourites() → { favouriteIds: Set<string>, toggle, isFavourite }
  *   getFavouriteIds()         — non-hook read (for tests / outside React;
- *                               returns the current in-memory cache, which is
- *                               empty until the first backend fetch resolves)
+ *                               returns the current cache, empty until the
+ *                               first backend fetch resolves)
  */
 
-import { useSyncExternalStore, useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
+import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 
-// ── Module-level cache + subscriber wiring ──────────────────────────────────
-//
-// A single shared cache backs every `useFavourites()` mount so all
-// subscribers (e.g. TargetsTable + a detail pane) stay in sync without each
-// mount re-fetching independently.
+const FAVOURITES_KEY = queryKeys.targets.favourites();
 
-let cachedIds: ReadonlySet<string> = new Set();
-let hasLoaded = false;
-let inFlightLoad: Promise<void> | null = null;
+// Stable empty-set reference (not a fresh `new Set()` per render) so
+// `isFavourite`'s useCallback dependency doesn't churn while data is loading.
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
-type Listener = () => void;
-const listeners = new Set<Listener>();
-
-function notify(): void {
-  for (const fn of listeners) fn();
-}
-
-function subscribe(fn: Listener): () => void {
-  listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
-}
-
-function getSnapshot(): ReadonlySet<string> {
-  return cachedIds;
-}
-
-function getServerSnapshot(): ReadonlySet<string> {
-  return new Set();
-}
-
-/** Fetch the current favourite set from the backend (de-duplicates concurrent calls). */
-function ensureLoaded(): Promise<void> {
-  if (hasLoaded) return Promise.resolve();
-  if (inFlightLoad) return inFlightLoad;
-  inFlightLoad = Promise.resolve()
-    .then(() => commands.targetFavouritesList())
-    .then(unwrap)
-    .then(({ targetIds }) => {
-      cachedIds = new Set(targetIds);
-      hasLoaded = true;
-      notify();
-    })
-    .catch(() => {
-      // Leave the cache empty on failure; a future call may retry via a
-      // fresh mount (hasLoaded stays false).
-    })
-    .finally(() => {
-      inFlightLoad = null;
-    });
-  return inFlightLoad;
+async function fetchFavouriteIds(): Promise<Set<string>> {
+  const { targetIds } = unwrap(await commands.targetFavouritesList());
+  return new Set(targetIds);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -99,51 +53,55 @@ export interface UseFavouritesResult {
  *
  * Provides `toggle` (stable across renders) to star/unstar a target, and
  * `isFavourite` for conditional rendering. Applies an optimistic update on
- * `toggle`, then reconciles with the backend call; a failed call reverts the
- * optimistic change.
+ * `toggle` directly against the shared query cache, then reconciles with the
+ * backend call; a failed call reverts the optimistic change.
  */
 export function useFavourites(): UseFavouritesResult {
-  const favouriteIds = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot,
-  );
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: FAVOURITES_KEY,
+    queryFn: fetchFavouriteIds,
+  });
+  const favouriteIds = data ?? EMPTY_SET;
 
-  useEffect(() => {
-    void ensureLoaded();
-  }, []);
+  const toggle = useCallback(
+    (targetId: string) => {
+      const current =
+        queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ??
+        new Set<string>();
+      const wasFavourited = current.has(targetId);
 
-  const toggle = useCallback((targetId: string) => {
-    const wasFavourited = cachedIds.has(targetId);
-
-    // Optimistic update.
-    const next = new Set(cachedIds);
-    if (wasFavourited) {
-      next.delete(targetId);
-    } else {
-      next.add(targetId);
-    }
-    cachedIds = next;
-    notify();
-
-    const call = Promise.resolve().then(() =>
-      wasFavourited
-        ? commands.targetFavouritesRemove({ targetId })
-        : commands.targetFavouritesAdd({ targetId }),
-    );
-
-    call.then(unwrap).catch(() => {
-      // Revert the optimistic change on failure.
-      const reverted = new Set(cachedIds);
+      // Optimistic update.
+      const next = new Set(current);
       if (wasFavourited) {
-        reverted.add(targetId);
+        next.delete(targetId);
       } else {
-        reverted.delete(targetId);
+        next.add(targetId);
       }
-      cachedIds = reverted;
-      notify();
-    });
-  }, []);
+      queryClient.setQueryData(FAVOURITES_KEY, next);
+
+      const call = wasFavourited
+        ? commands.targetFavouritesRemove({ targetId })
+        : commands.targetFavouritesAdd({ targetId });
+
+      Promise.resolve(call)
+        .then(unwrap)
+        .catch(() => {
+          // Revert the optimistic change on failure.
+          const reverted = new Set(
+            queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ??
+              new Set<string>(),
+          );
+          if (wasFavourited) {
+            reverted.add(targetId);
+          } else {
+            reverted.delete(targetId);
+          }
+          queryClient.setQueryData(FAVOURITES_KEY, reverted);
+        });
+    },
+    [queryClient],
+  );
 
   const isFavourite = useCallback(
     (targetId: string) => favouriteIds.has(targetId),
@@ -156,20 +114,20 @@ export function useFavourites(): UseFavouritesResult {
 /**
  * Non-hook read for use outside React (tests, initial render).
  *
- * Returns the current in-memory cache — empty until the first backend fetch
- * (triggered by a `useFavourites()` mount) resolves.
+ * Returns the current query-cache entry — empty until the first backend
+ * fetch (triggered by a `useFavourites()` mount) resolves. Reads the shared
+ * app-wide `queryClient` singleton (also mounted at the app root), matching
+ * the pattern in `data/queryClient.ts`'s module doc.
  */
 export function getFavouriteIds(): ReadonlySet<string> {
-  return cachedIds;
+  return sharedQueryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ?? new Set();
 }
 
 /**
- * Test-only reset of the module-level cache. Not part of the public hook
- * surface; exported so `useFavourites.test.ts` can isolate cases without
- * process-per-test isolation.
+ * Test-only reset of the shared favourites cache entry. Not part of the
+ * public hook surface; exported so `useFavourites.test.ts` can isolate cases
+ * without process-per-test isolation.
  */
 export function __resetFavouritesCacheForTests(): void {
-  cachedIds = new Set();
-  hasLoaded = false;
-  inFlightLoad = null;
+  sharedQueryClient.removeQueries({ queryKey: FAVOURITES_KEY });
 }
