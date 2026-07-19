@@ -83,7 +83,7 @@ beforeEach(() => {
     status: 'ok',
     data: {
       sourceId: 'root-1',
-      level: 'normal',
+      level: 'unprotected',
       blockPermanentDelete: false,
       categories: [],
       inheritsDefault: true,
@@ -91,7 +91,7 @@ beforeEach(() => {
   });
   mockOverridableKeys.mockResolvedValue({
     status: 'ok',
-    data: ['hashOnScan', 'followSymlinks'],
+    data: ['defaultProtection'],
   });
 });
 

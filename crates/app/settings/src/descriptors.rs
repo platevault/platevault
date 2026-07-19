@@ -130,9 +130,18 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         default: |s| Value::Bool(s.always_preview_before_plan),
     },
     Descriptor {
+        // Issue #623: no longer per-source overridable. This key duplicated
+        // the canonical `IngestionSettings.followSymlinks` (its own dedicated
+        // `ingestion.settings.*` document, rendered in the Ingestion pane) —
+        // this generic-settings copy was never read by any scan pipeline and
+        // its only UI surface was a per-source override widget that could
+        // never succeed for the sibling `hashOnScan` key (#646). The stable
+        // key itself is kept (some `SettingsState` consumer may still read
+        // the global value) but the confusing, non-functional per-source
+        // override path is removed at the root.
         key: "followSymlinks",
         noisy: false,
-        overridable: true,
+        overridable: false,
         validation: ValidationRule::Bool,
         apply: |v, s| {
             if let Some(b) = v.as_bool() {
@@ -142,9 +151,11 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         default: |s| Value::Bool(s.follow_symlinks),
     },
     Descriptor {
+        // Issue #623: see `followSymlinks` above — duplicates canonical
+        // `IngestionSettings.hashingMode`; per-source override removed.
         key: "hashOnScan",
         noisy: false,
-        overridable: true,
+        overridable: false,
         validation: ValidationRule::EnumStr {
             allowed: &["lazy", "eager", "off"],
             expected_msg: "must be \"lazy\", \"eager\", or \"off\"",
@@ -226,12 +237,15 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         default: |s| Value::Bool(s.remember_follow_logs),
     },
     Descriptor {
+        // 2-level model (issue #506): the third "normal" level is retired —
+        // absence of a per-source override already means inherit-global, so
+        // an explicit third state added confusion without capability.
         key: "defaultProtection",
         noisy: false,
         overridable: true,
         validation: ValidationRule::EnumStr {
-            allowed: &["protected", "normal", "unprotected"],
-            expected_msg: "must be \"protected\", \"normal\", or \"unprotected\"",
+            allowed: &["protected", "unprotected"],
+            expected_msg: "must be \"protected\" or \"unprotected\"",
         },
         apply: |v, s| {
             if let Some(x) = v.as_str() {

@@ -782,10 +782,13 @@ pub async fn restore_defaults(
 
 /// Set a per-source override for an overridable settings key (T023).
 ///
-/// Validates that `key` is one of `followSymlinks`, `hashOnScan`,
-/// `defaultProtection`. Validates the value type. The `source_id` existence
-/// check is best-effort: since the sources repository is in a different crate
-/// slice, callers may perform that check before calling this function.
+/// Validates that `key` is overridable per `descriptors::DESCRIPTORS`
+/// (currently just `defaultProtection` — issue #623 removed `followSymlinks`/
+/// `hashOnScan` from this list, since they duplicated the canonical
+/// `IngestionSettings` document and the per-source override never worked for
+/// either). Validates the value type. The `source_id` existence check is
+/// best-effort: since the sources repository is in a different crate slice,
+/// callers may perform that check before calling this function.
 ///
 /// # Errors
 ///
@@ -933,6 +936,13 @@ pub async fn resolve_setting(
 /// Called at session start and after the 5-minute inactivity debounce
 /// (the debounce timer is owned by the caller/command layer).
 ///
+/// Issue #668: a periodic snapshot whose noisy-key values are byte-identical
+/// to the last one PUBLISHED is a no-op heartbeat — it is skipped rather than
+/// published, mirroring `target.resolve_batch.completed`'s suppression on
+/// `considered == 0` (both stop a periodic internal event from flooding the
+/// activity log when there is nothing new to report). The first snapshot in a
+/// process (no prior published value) always publishes.
+///
 /// # Errors
 ///
 /// Returns `ContractError` on database or audit failure.
@@ -950,19 +960,23 @@ pub async fn emit_snapshot(
             .unwrap_or_else(|| default_value_for_key(key));
         noisy_values.insert(key.to_owned(), val);
     }
+    let noisy_keys = Value::Object(noisy_values);
+
+    // Skip the publish when nothing changed since the last one we actually
+    // published (#668).
+    if caches::last_snapshot_values().load().as_deref() == Some(&noisy_keys) {
+        return Ok(());
+    }
 
     let at = Timestamp::now_iso();
     bus.publish(
         TOPIC_SETTINGS_SNAPSHOT,
         Source::System,
-        SettingsSnapshot {
-            trigger: trigger.to_owned(),
-            noisy_keys: Value::Object(noisy_values),
-            at,
-        },
+        SettingsSnapshot { trigger: trigger.to_owned(), noisy_keys: noisy_keys.clone(), at },
     )
     .await
     .map_err(bus_err)?;
+    caches::store_last_snapshot_values(std::sync::Arc::new(noisy_keys));
 
     Ok(())
 }
@@ -1084,6 +1098,12 @@ mod tests {
         // silently serve another test's data. Mirrors the same caveat/fix in
         // `app_core_cache`'s `protection_defaults_*` test (crates/app/cache/src/lib.rs).
         caches::invalidate_settings_bag();
+        // Same hazard for the #668 last-published-snapshot cache: without
+        // this, a `emit_snapshot`-must-publish assertion here could
+        // false-negative if a sibling test already stored an
+        // identical-looking noisy-keys bag (fresh in-memory DBs share the
+        // same in-code defaults).
+        caches::invalidate_last_snapshot_values();
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
@@ -1306,12 +1326,12 @@ mod tests {
         let (db, bus) = setup().await;
         let req = SetSourceOverrideRequest {
             source_id: "src-abc".to_owned(),
-            key: "hashOnScan".to_owned(),
-            value: contracts_core::JsonAny::from(serde_json::json!("eager")),
+            key: "defaultProtection".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
         };
         let resp = set_source_override(db.pool(), &bus, &req).await.unwrap();
         assert_eq!(resp.source_id, "src-abc");
-        assert_eq!(resp.key, "hashOnScan");
+        assert_eq!(resp.key, "defaultProtection");
     }
 
     /// Review round 1 #1: `set_source_override`'s durable audit id resolves
@@ -1321,8 +1341,8 @@ mod tests {
         let (db, bus) = setup().await;
         let req = SetSourceOverrideRequest {
             source_id: "src-abc".to_owned(),
-            key: "hashOnScan".to_owned(),
-            value: contracts_core::JsonAny::from(serde_json::json!("eager")),
+            key: "defaultProtection".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
         };
         set_source_override(db.pool(), &bus, &req).await.unwrap();
 
@@ -1357,43 +1377,64 @@ mod tests {
         assert_eq!(row.1.as_deref(), Some("key.unoverridable"));
     }
 
+    /// Issue #623: `followSymlinks`/`hashOnScan` duplicated the canonical
+    /// `IngestionSettings` document and could never succeed as a per-source
+    /// override (`hashOnScan` needs a string, the UI only ever offered a
+    /// boolean — #646) — removed from the overridable set entirely.
+    #[rstest]
+    #[case("followSymlinks")]
+    #[case("hashOnScan")]
+    #[tokio::test]
+    async fn set_source_override_rejects_retired_scan_behavior_keys(#[case] key: &str) {
+        let (db, bus) = setup().await;
+        let req = SetSourceOverrideRequest {
+            source_id: "src-abc".to_owned(),
+            key: key.to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!(true)),
+        };
+        let err = set_source_override(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::KeyUnoverridable);
+    }
+
     // ── T022: resolution order ─────────────────────────────────────────
 
     #[tokio::test]
     async fn resolve_setting_prefers_source_override() {
         let (db, bus) = setup().await;
 
-        // Set global to "eager".
+        // Set global to "protected".
         let req = SettingsUpdateRequest {
-            key: "hashOnScan".to_owned(),
-            value: contracts_core::JsonAny::from(serde_json::json!("eager")),
+            key: "defaultProtection".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("protected")),
         };
         update_setting(db.pool(), &bus, &req).await.unwrap();
 
-        // Set source override to "off".
+        // Set source override to "unprotected".
         let ov_req = SetSourceOverrideRequest {
             source_id: "src-1".to_owned(),
-            key: "hashOnScan".to_owned(),
-            value: contracts_core::JsonAny::from(serde_json::json!("off")),
+            key: "defaultProtection".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
         };
         set_source_override(db.pool(), &bus, &ov_req).await.unwrap();
 
-        let resolved = resolve_setting(db.pool(), "hashOnScan", Some("src-1")).await.unwrap();
-        assert_eq!(resolved, serde_json::json!("off"));
+        let resolved =
+            resolve_setting(db.pool(), "defaultProtection", Some("src-1")).await.unwrap();
+        assert_eq!(resolved, serde_json::json!("unprotected"));
     }
 
     #[tokio::test]
     async fn resolve_setting_falls_back_to_global() {
         let (db, bus) = setup().await;
         let req = SettingsUpdateRequest {
-            key: "hashOnScan".to_owned(),
-            value: contracts_core::JsonAny::from(serde_json::json!("eager")),
+            key: "defaultProtection".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
         };
         update_setting(db.pool(), &bus, &req).await.unwrap();
 
         // No override for "src-2".
-        let resolved = resolve_setting(db.pool(), "hashOnScan", Some("src-2")).await.unwrap();
-        assert_eq!(resolved, serde_json::json!("eager"));
+        let resolved =
+            resolve_setting(db.pool(), "defaultProtection", Some("src-2")).await.unwrap();
+        assert_eq!(resolved, serde_json::json!("unprotected"));
     }
 
     #[tokio::test]
@@ -1538,7 +1579,6 @@ mod tests {
     #[case("logLevel", serde_json::json!("warn"))]
     #[case("logLevel", serde_json::json!("info"))]
     #[case("defaultProtection", serde_json::json!("protected"))]
-    #[case("defaultProtection", serde_json::json!("normal"))]
     #[case("defaultProtection", serde_json::json!("unprotected"))]
     #[case("calibrationDarkTempTolerance", serde_json::json!(0.0))]
     #[case("calibrationDarkTempTolerance", serde_json::json!(5.5))]
@@ -1599,6 +1639,8 @@ mod tests {
     #[case("darkMatchTolerance", serde_json::json!("fuzzy"))]
     #[case("flatMatching", serde_json::json!("auto"))]
     #[case("defaultProtection", serde_json::json!("locked"))]
+    // Retired third level (issue #506's 2-level collapse) — no longer valid.
+    #[case("defaultProtection", serde_json::json!("normal"))]
     #[case("calibrationDarkTempTolerance", serde_json::json!(-1.0))] // must be >= 0
     #[case("calibrationDarkTempTolerance", serde_json::json!("x"))] // not a number
     #[case("calibrationAgingThresholdDays", serde_json::json!(0))] // below [1,3650]
@@ -1971,6 +2013,48 @@ mod tests {
         assert!(msg.is_ok(), "emit_snapshot must publish a settings.snapshot event on the bus");
     }
 
+    /// Issue #668: a periodic no-op snapshot (nothing changed since the last
+    /// PUBLISHED one) must not flood the activity log — mirrors
+    /// `resolve_pending`'s `considered == 0` suppression for the target
+    /// resolve-batch heartbeat.
+    #[tokio::test]
+    async fn emit_snapshot_suppresses_unchanged_repeat() {
+        let (db, bus) = setup().await;
+
+        emit_snapshot(db.pool(), &bus, "first").await.unwrap();
+        let mut rx = bus.subscribe();
+
+        // Second call, nothing changed — must be a no-op (no publish).
+        emit_snapshot(db.pool(), &bus, "second").await.unwrap();
+        assert!(
+            rx.try_recv().is_err(),
+            "an unchanged repeat snapshot must not publish a second settings.snapshot event"
+        );
+    }
+
+    /// Issue #668: once a noisy key actually changes, the next snapshot must
+    /// still publish (suppression is value-sensitive, not a blanket mute).
+    #[tokio::test]
+    async fn emit_snapshot_publishes_again_after_a_real_change() {
+        let (db, bus) = setup().await;
+
+        emit_snapshot(db.pool(), &bus, "first").await.unwrap();
+
+        // `pattern` is a noisy key (descriptors::DESCRIPTORS) — change it.
+        let req = SettingsUpdateRequest {
+            key: "pattern".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!(["*.fits"])),
+        };
+        update_setting(db.pool(), &bus, &req).await.unwrap();
+
+        let mut rx = bus.subscribe();
+        emit_snapshot(db.pool(), &bus, "second").await.unwrap();
+        assert!(
+            rx.try_recv().is_ok(),
+            "a snapshot after a real noisy-key change must still publish"
+        );
+    }
+
     /// Table-driven structural-equality cases. `expected_eq` is whether the two
     /// values are considered deep-equal (array order is significant).
     #[rstest]
@@ -2024,9 +2108,18 @@ mod tests {
     #[test]
     fn overridable_keys_includes_expected_keys() {
         let keys = overridable_keys();
-        assert!(keys.contains(&"hashOnScan".to_owned()), "hashOnScan must be overridable");
-        assert!(keys.contains(&"followSymlinks".to_owned()), "followSymlinks must be overridable");
-        // defaultProtection is also overridable per the descriptor table.
+        // Issue #623: followSymlinks/hashOnScan retired from the overridable
+        // set — they duplicated the canonical IngestionSettings document and
+        // the override could never succeed for either.
+        assert!(
+            !keys.contains(&"hashOnScan".to_owned()),
+            "hashOnScan must no longer be overridable"
+        );
+        assert!(
+            !keys.contains(&"followSymlinks".to_owned()),
+            "followSymlinks must no longer be overridable"
+        );
+        // defaultProtection is the sole overridable key per the descriptor table.
         assert!(
             keys.contains(&"defaultProtection".to_owned()),
             "defaultProtection must be overridable"
