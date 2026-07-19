@@ -55,6 +55,10 @@ pub enum BrokenItemState {
     /// The on-disk materialization kind no longer matches the kind recorded
     /// for this item (spec 026 FR-008 mixed-kind concept, per-item).
     ChangedKind,
+    /// A copy-kind item's destination content no longer matches the
+    /// canonical source (a real file copy, unlike a symlink/hardlink, can
+    /// silently drift — spec 026 FR-009 / #746).
+    HashDiverged,
 }
 
 /// One broken/missing/stale item in a verified view.

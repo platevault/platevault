@@ -1329,6 +1329,7 @@
   "projects_source_views_verify_state_moved": "source moved or removed",
   "projects_source_views_verify_state_unresolved_link": "link does not resolve",
   "projects_source_views_verify_state_changed_kind": "materialization kind changed",
+  "projects_source_views_verify_state_hash_diverged": "content changed",
   "projects_source_views_observed_state_present": "present",
   "projects_source_views_observed_state_missing": "missing",
   "projects_source_views_observed_state_changed_kind": "kind changed",
