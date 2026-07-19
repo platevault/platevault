@@ -10,7 +10,7 @@
  * useCalibrationSettings  : reads prefill_suggestion from persisted settings.
  */
 
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
@@ -18,6 +18,8 @@ import type {
   CalibrationMatchSuggestResponse,
   CalibrationMatchAssignResponse,
   CalibrationType,
+  ContractError,
+  GenerateArchivePlanResult,
 } from '@/bindings/index';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
@@ -123,6 +125,48 @@ export function useCalibrationAssign(): UseAssignState {
     assigning: mutation.isPending,
     result: mutation.data,
     assign,
+  };
+}
+
+// ── Archive (#886) ───────────────────────────────────────────────────────────
+
+/**
+ * Materialise a reviewable single-master archive plan (#886). Mirrors
+ * `features/archive/store.ts`'s `useGenerateArchivePlan` shape so
+ * `MasterDetail` can open the same shared `PlanReviewOverlay`.
+ *
+ * `confirmInUse` must be `true` to proceed once a first call without it
+ * returns `calibration.master_in_use` (decisions.md: warn + require confirm
+ * before archiving an in-use master) — the caller re-invokes the mutation
+ * with it set after the user confirms.
+ */
+export function useGenerateMasterArchivePlan() {
+  return useMutation<
+    GenerateArchivePlanResult,
+    ContractError,
+    { masterId: string; confirmInUse?: boolean }
+  >({
+    mutationFn: async ({ masterId, confirmInUse }) =>
+      unwrap(
+        await commands.calibrationMastersArchivePlanGenerate(
+          masterId,
+          null,
+          confirmInUse ?? null,
+        ),
+      ),
+  });
+}
+
+/** Invalidate the masters list + this master's detail after its archive plan applies. */
+export function useInvalidateCalibrationMaster() {
+  const queryClient = useQueryClient();
+  return (masterId: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.calibration.masters(),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.calibration.master(masterId),
+    });
   };
 }
 

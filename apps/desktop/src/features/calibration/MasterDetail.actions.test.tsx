@@ -57,7 +57,19 @@ vi.mock('@/bindings/index', () => ({
       },
     }),
     nativeReveal: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    calibrationMastersArchivePlanGenerate: vi.fn(),
   },
+}));
+
+vi.mock('@/features/plans/PlanReviewOverlay', () => ({
+  PlanReviewOverlay: ({
+    planId,
+    open,
+  }: {
+    planId: string | null;
+    open: boolean;
+  }) =>
+    open ? <div data-testid="archive-plan-review-stub">{planId}</div> : null,
 }));
 
 function makeMaster(
@@ -159,5 +171,90 @@ describe('MasterDetail — header action buttons (#642)', () => {
     );
     const btn = screen.getByTestId('calibration-reveal-btn');
     expect(btn).toBeDisabled();
+  });
+
+  it('#886: Archive generates a plan and opens the review overlay', async () => {
+    const { commands } = await import('@/bindings/index');
+    vi.mocked(commands.calibrationMastersArchivePlanGenerate).mockResolvedValue(
+      {
+        status: 'ok',
+        data: { planId: 'arch-plan-1', itemCount: 1, protectedItemCount: 0 },
+      },
+    );
+    render(
+      <MasterDetail
+        master={makeMaster({
+          rootId: 'root-1',
+          relativePath: 'masters/masterDark_300s.xisf',
+        })}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
+    const btn = await screen.findByTestId('calibration-archive-btn');
+    await waitFor(() => expect(btn).not.toBeDisabled());
+
+    fireEvent.click(btn);
+
+    await waitFor(() =>
+      expect(
+        commands.calibrationMastersArchivePlanGenerate,
+      ).toHaveBeenCalledWith('m-1', null, null),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('archive-plan-review-stub')).toHaveTextContent(
+        'arch-plan-1',
+      ),
+    );
+  });
+
+  it('#886: Archive on an in-use master opens a confirm dialog, then re-calls with confirmInUse', async () => {
+    const { commands } = await import('@/bindings/index');
+    vi.mocked(commands.calibrationMastersArchivePlanGenerate)
+      .mockResolvedValueOnce({
+        status: 'error',
+        error: {
+          code: 'calibration.master_in_use',
+          message: 'in use',
+          severity: 'blocking',
+          retryable: false,
+          details: undefined,
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: { planId: 'arch-plan-2', itemCount: 1, protectedItemCount: 0 },
+      });
+    render(
+      <MasterDetail
+        master={makeMaster({
+          rootId: 'root-1',
+          relativePath: 'masters/masterDark_300s.xisf',
+        })}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
+    const btn = await screen.findByTestId('calibration-archive-btn');
+    await waitFor(() => expect(btn).not.toBeDisabled());
+
+    fireEvent.click(btn);
+    await screen.findByText('Archive an in-use master?');
+
+    // Confirm button in the modal footer.
+    fireEvent.click(
+      screen.getAllByText('Archive')[screen.getAllByText('Archive').length - 1],
+    );
+
+    await waitFor(() =>
+      expect(
+        commands.calibrationMastersArchivePlanGenerate,
+      ).toHaveBeenLastCalledWith('m-1', null, true),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('archive-plan-review-stub')).toHaveTextContent(
+        'arch-plan-2',
+      ),
+    );
   });
 });

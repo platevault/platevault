@@ -41,7 +41,7 @@
  *   master gets its first assignment instead of faked from stub data.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
@@ -52,6 +52,7 @@ import {
   DetailPanel,
   type PropertyDef,
   PropertyTable,
+  Modal,
 } from '@/components';
 import { Btn, EmptyState, Pill } from '@/ui';
 import type { CalibrationMatchMissingFlag } from '@/bindings/index';
@@ -70,9 +71,15 @@ import {
   resolveRevealPath,
   revealInventoryPath,
 } from '@/features/sessions/revealInventory';
+import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
-import { useCalibrationAssign, useCalibrationSuggest } from './useCalibration';
+import {
+  useCalibrationAssign,
+  useCalibrationSuggest,
+  useGenerateMasterArchivePlan,
+  useInvalidateCalibrationMaster,
+} from './useCalibration';
 import { masterFieldApplicability } from './master-applicability';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -178,6 +185,14 @@ export function MasterDetail({
   // action reads (`queryKeys.inventory.all`) — no private fetch.
   const sourcesQuery = useInventorySources();
 
+  // #886: single-master archive plan generation + review/apply.
+  const generateArchivePlan = useGenerateMasterArchivePlan();
+  const invalidateMaster = useInvalidateCalibrationMaster();
+  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
+    null,
+  );
+  const [inUseConfirmOpen, setInUseConfirmOpen] = useState(false);
+
   const detail: DetailState = useMemo(() => {
     const empty: DetailState = {
       confirmedNames: [],
@@ -272,6 +287,60 @@ export function MasterDetail({
         variant: 'error',
       });
     }
+  };
+
+  // #886: generate a reviewable single-master archive plan. A master
+  // assigned to one or more sessions comes back `calibration.master_in_use`
+  // on the first call (decisions.md: warn + require confirm) — that opens
+  // the confirm modal rather than a bare error toast; confirming re-invokes
+  // with `confirmInUse: true`.
+  const handleArchiveSuccess = (res: { planId: string; itemCount: number }) => {
+    addToast({
+      message: m.calibration_archive_plan_created_toast({
+        count: res.itemCount,
+      }),
+      variant: 'info',
+    });
+    setArchiveReviewPlanId(res.planId);
+  };
+  const handleArchive = () => {
+    generateArchivePlan.mutate(
+      { masterId: master.id },
+      {
+        onSuccess: handleArchiveSuccess,
+        onError: (err) => {
+          if (err.code === 'calibration.master_in_use') {
+            setInUseConfirmOpen(true);
+            return;
+          }
+          addToast({
+            message: err.message || m.calibration_archive_generate_failed(),
+            variant: 'error',
+          });
+        },
+      },
+    );
+  };
+  const handleConfirmArchiveInUse = () => {
+    setInUseConfirmOpen(false);
+    generateArchivePlan.mutate(
+      { masterId: master.id, confirmInUse: true },
+      {
+        onSuccess: handleArchiveSuccess,
+        onError: (err) => {
+          addToast({
+            message: err.message || m.calibration_archive_generate_failed(),
+            variant: 'error',
+          });
+        },
+      },
+    );
+  };
+  /** After the archive plan applies, the master drops out of masters.list
+   * (backend finalize_calibration_master_archive) — refresh so the stale
+   * selection cleans up (`CalibrationPage`'s `useStaleSelectionCleanup`). */
+  const handleArchivePlanApplied = () => {
+    invalidateMaster(master.id);
   };
 
   const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
@@ -391,6 +460,24 @@ export function MasterDetail({
           {m.calibration_action_replace_master()}
         </Btn>
       )}
+      {/* #886: builds a reviewable single-master archive plan and opens the
+          shared PlanReviewOverlay (same review→approve→apply kit the
+          Archive page's Restore action uses). Disabled once the master has
+          no tracked file to archive (same untracked case that disables
+          Reveal) — a plan with zero resolvable items has nothing to
+          review. */}
+      <Btn
+        size="sm"
+        variant="danger"
+        disabled={!revealTarget || generateArchivePlan.isPending}
+        title={
+          revealTarget ? undefined : m.calibration_reveal_unavailable_title()
+        }
+        onClick={handleArchive}
+        data-testid="calibration-archive-btn"
+      >
+        {m.calibration_action_archive()}
+      </Btn>
       {/* Platform-native label via the shared revealLabel() helper.
           #642: wired once the master's frame path resolves to an
           actionable source; falls back to disabled+explanatory title
@@ -418,46 +505,84 @@ export function MasterDetail({
   );
 
   return (
-    <DetailPanel
-      variant="calibration"
-      title={<strong>{masterTitle}</strong>}
-      titleExtra={actionButtons}
-    >
-      {/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible stacked]. */}
-      <div className="alm-session-detail2">
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" properties={colA} />
-        </div>
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" properties={colB} />
+    <>
+      <DetailPanel
+        variant="calibration"
+        title={<strong>{masterTitle}</strong>}
+        titleExtra={actionButtons}
+      >
+        {/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible stacked]. */}
+        <div className="alm-session-detail2">
+          <div className="alm-session-detail2__col">
+            <PropertyTable mode="view" properties={colA} />
+          </div>
+          <div className="alm-session-detail2__col">
+            <PropertyTable mode="view" properties={colB} />
+          </div>
+
+          {/* Single column with both session popovers stacked vertically. */}
+          <div className="alm-session-detail2__linked alm-session-detail2__linked--stack">
+            <SessionListPopover
+              label={m.calibration_used_by_label()}
+              names={detail.loading ? [] : detail.confirmedNames}
+            />
+            <SessionListPopover
+              label={m.calibration_compatible_label()}
+              names={detail.loading ? [] : detail.compatibleNames}
+            />
+          </div>
         </div>
 
-        {/* Single column with both session popovers stacked vertically. */}
-        <div className="alm-session-detail2__linked alm-session-detail2__linked--stack">
-          <SessionListPopover
-            label={m.calibration_used_by_label()}
-            names={detail.loading ? [] : detail.confirmedNames}
-          />
-          <SessionListPopover
-            label={m.calibration_compatible_label()}
-            names={detail.loading ? [] : detail.compatibleNames}
-          />
-        </div>
-      </div>
-
-      {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
+        {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
 			    the master's matching-context session, with assign/cancel. */}
-      <div className="alm-session-detail2__match">
-        <MatchCandidatesPanel
-          sessionId={matchSessionId ?? ''}
-          response={suggestResponse}
-          loading={suggestLoading}
-          error={suggestError}
-          onAssign={handleAssign}
-          assigning={assigning}
-          prefillSuggestion={prefillSuggestion}
-        />
-      </div>
-    </DetailPanel>
+        <div className="alm-session-detail2__match">
+          <MatchCandidatesPanel
+            sessionId={matchSessionId ?? ''}
+            response={suggestResponse}
+            loading={suggestLoading}
+            error={suggestError}
+            onAssign={handleAssign}
+            assigning={assigning}
+            prefillSuggestion={prefillSuggestion}
+          />
+        </div>
+      </DetailPanel>
+
+      {/* #886: in-use warn + confirm gate before archiving (decisions.md). */}
+      <Modal
+        open={inUseConfirmOpen}
+        onClose={() => setInUseConfirmOpen(false)}
+        title={m.calibration_archive_in_use_confirm_title()}
+        size="sm"
+        ariaLabel={m.calibration_archive_in_use_confirm_title()}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setInUseConfirmOpen(false)}>
+              {m.common_cancel()}
+            </Btn>
+            <Btn
+              variant="danger"
+              disabled={generateArchivePlan.isPending}
+              onClick={handleConfirmArchiveInUse}
+            >
+              {m.calibration_action_archive()}
+            </Btn>
+          </>
+        }
+      >
+        <p>{m.calibration_archive_in_use_confirm_desc()}</p>
+      </Modal>
+
+      {/* Archive plan review overlay (#886): shares the same review → approve
+          → apply kit every other plan-gated flow uses. */}
+      <PlanReviewOverlay
+        planId={archiveReviewPlanId}
+        open={archiveReviewPlanId !== null}
+        onClose={() => setArchiveReviewPlanId(null)}
+        title={m.calibration_archive_review_title()}
+        onApplied={handleArchivePlanApplied}
+        onRetryCreated={setArchiveReviewPlanId}
+      />
+    </>
   );
 }

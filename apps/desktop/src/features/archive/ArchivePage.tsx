@@ -128,23 +128,29 @@ export function ArchivePage() {
    */
   const handleGenerateRestorePlan = () => {
     if (!item?.archivedViaPlanId) return;
-    generateRestorePlan.mutate(item.archivedViaPlanId, {
-      onSuccess: (res) => {
-        addToast({
-          message: m.archive_restore_plan_created_toast({
-            count: res.itemCount,
-          }),
-          variant: 'info',
-        });
-        setRestoreReviewPlanId(res.planId);
+    generateRestorePlan.mutate(
+      {
+        archivedViaPlanId: item.archivedViaPlanId,
+        entityType: item.entityType,
       },
-      onError: () => {
-        addToast({
-          message: m.archive_restore_generate_failed(),
-          variant: 'error',
-        });
+      {
+        onSuccess: (res) => {
+          addToast({
+            message: m.archive_restore_plan_created_toast({
+              count: res.itemCount,
+            }),
+            variant: 'info',
+          });
+          setRestoreReviewPlanId(res.planId);
+        },
+        onError: () => {
+          addToast({
+            message: m.archive_restore_generate_failed(),
+            variant: 'error',
+          });
+        },
       },
-    });
+    );
   };
 
   /** After the restore plan applies, the project leaves `archived` (backend
@@ -200,8 +206,8 @@ export function ArchivePage() {
           <>
             {/* Restore (#756/#885, spec 043 §4 order): generates a
                 reviewable un-archive plan and opens the same review/apply
-                overlay the Archive-generation edge uses. C5 project-only
-                surface, so the project-specific label is correct today. */}
+                overlay the Archive-generation edge uses. Label picks the
+                entity-specific wording (#886 added the master row kind). */}
             <Btn
               size="sm"
               disabled={
@@ -210,7 +216,9 @@ export function ArchivePage() {
               onClick={handleGenerateRestorePlan}
               data-testid="archive-restore-btn"
             >
-              {m.archive_restore_project_btn()}
+              {item.entityType === 'master'
+                ? m.archive_restore_master_btn()
+                : m.archive_restore_project_btn()}
             </Btn>
             <Btn
               size="sm"
