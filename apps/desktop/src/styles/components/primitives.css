@@ -6,6 +6,20 @@
   max-width: 280px;
   white-space: normal;
   overflow-wrap: anywhere;
+
+  /* The popup renders in a PORTAL, so it inherits nothing from the surface it
+     floats over. Without its own background/border it drew as bare text on top
+     of whatever was underneath — unreadable over tables and panels. It carries
+     a full surface of its own, all token-driven so the four themes track it. */
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-rule);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  line-height: 1.5;
+  box-shadow: var(--alm-shadow-sm);
+  z-index: 60;
 }
 
 /* === PILL === */
