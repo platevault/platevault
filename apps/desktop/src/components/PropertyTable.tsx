@@ -205,6 +205,12 @@ export function PropertyTable({
               ) : prop.tooltip ? (
                 <Tooltip
                   content={prop.tooltip}
+                  // `tabIndex` makes the tooltip reachable without a pointer
+                  // (the shared Tooltip trigger is a bare <span>); `role` is
+                  // what actually exposes `aria-label` — naming is ignored on
+                  // a role-less <span>, so without it assistive tech hears the
+                  // value and never the tooltip. Same pairing as `ui/Lock`.
+                  role="note"
                   tabIndex={0}
                   data-testid={`proptable-tooltip-${prop.key}`}
                   aria-label={
