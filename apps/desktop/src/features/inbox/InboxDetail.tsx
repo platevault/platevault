@@ -1265,6 +1265,9 @@ export function InboxDetail({
                                   : null,
                               )
                             }
+                            aria-label={m.inbox_bulk_heterogeneous_ack_label({
+                              type: bulkFrameType,
+                            })}
                             data-testid="bulk-heterogeneous-ack"
                           />
                           {m.inbox_bulk_heterogeneous_ack_label({
