@@ -49,8 +49,16 @@ const BASELINED_RULES = new Set(['alm/no-user-string', 'alm/no-js-plural']);
 // baseline entry goes stale (and the check fails loudly, prompting a
 // --generate) if the surrounding code shifts — that's a feature: it forces a
 // human to re-look at the violation rather than let it silently ride along.
+//
+// relPath MUST be forward-slash-normalized: path.relative() returns
+// backslash-separated paths on Windows, which would never match the
+// forward-slash entries in the checked-in (cross-platform) baseline file.
+// Uses a literal backslash replace, NOT path.sep — path.sep is '/' when this
+// runs on POSIX, so splitting on path.sep would be a silent no-op there and
+// this exact bug would only ever be caught by CI actually running on
+// Windows.
 function baselineKey(relPath, message) {
-  return `${relPath}\t${message.line}\t${message.ruleId}`;
+  return `${relPath.replaceAll('\\', '/')}\t${message.line}\t${message.ruleId}`;
 }
 
 function loadBaseline() {
@@ -138,4 +146,11 @@ async function main() {
   process.exitCode = 1;
 }
 
-main();
+// Guarded so scripts/check-eslint-baseline.test.mjs can import baselineKey
+// without triggering a live ESLint run (which also needs the desktop
+// devDependency resolved above as a side effect of module load).
+if (import.meta.main) {
+  main();
+}
+
+export { baselineKey };
