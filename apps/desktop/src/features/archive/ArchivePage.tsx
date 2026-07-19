@@ -78,9 +78,9 @@ export function ArchivePage() {
   const sendToTrash = useSendToTrash();
   const permanentlyDelete = usePermanentlyDelete();
   const generateRestorePlan = useGenerateRestorePlan();
-  const [restoreReviewPlanId, setRestoreReviewPlanId] = useState<
-    string | null
-  >(null);
+  const [restoreReviewPlanId, setRestoreReviewPlanId] = useState<string | null>(
+    null,
+  );
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
   // #841: point the destructive confirm modal's initial focus directly at the
@@ -204,7 +204,9 @@ export function ArchivePage() {
                 surface, so the project-specific label is correct today. */}
             <Btn
               size="sm"
-              disabled={!item.archivedViaPlanId || generateRestorePlan.isPending}
+              disabled={
+                !item.archivedViaPlanId || generateRestorePlan.isPending
+              }
               onClick={handleGenerateRestorePlan}
               data-testid="archive-restore-btn"
             >

@@ -92,7 +92,9 @@
   "archive_col_type": "Type",
   "archive_sort_by_aria": "Sort by {col}",
   "archive_no_match": "No archived items match the current filters.",
-  "archive_reveal_unavailable_title": "Reveal isn't available yet — the archive location isn't exposed by the backend.",
+  "archive_reveal_unavailable_title": "Reveal isn't available — the archive location couldn't be resolved for this item.",
+  "archive_restore_review_title": "Review restore plan",
+  "archive_restore_generate_failed": "Could not generate the restore plan.",
   "reveal_label_windows": "Show in File Explorer",
   "reveal_label_macos": "Reveal in Finder",
   "reveal_label_linux": "Show in file manager",
@@ -2460,6 +2462,21 @@
       "match": {
         "pp=one": "Archive plan created with {count} item — review before anything is moved.",
         "pp=other": "Archive plan created with {count} items — review before anything is moved."
+      }
+    }
+  ],
+  "archive_restore_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Restore plan created with {count} item — review before anything is moved.",
+        "pp=other": "Restore plan created with {count} items — review before anything is moved."
       }
     }
   ],
