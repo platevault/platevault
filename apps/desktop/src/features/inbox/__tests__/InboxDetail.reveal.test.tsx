@@ -8,11 +8,19 @@
  * helper (same one ProjectDetail/ArchivePage/SessionDetail use) behind the
  * platform-native `revealLabel()` button.
  *
+ * `@/shared/native/reveal` is mocked directly (not the underlying
+ * `commands.nativeReveal` IPC binding) — that helper already owns the
+ * mock-stub-vs-real-Tauri branch (`isTauri()`) and is exercised by its own
+ * unit coverage; these tests assert InboxDetail's own responsibility: which
+ * path/context it passes in, and how it reacts to success/failure.
+ *
  * Tests:
  * 1. The Reveal button renders with the shared platform-native label.
- * 2. Clicking it calls `commands.nativeReveal` with the root+relativePath
- *    joined into a single absolute path and `entityKind: 'inbox_item'`.
- * 3. A reveal failure surfaces the inbox-scoped error banner (not a crash).
+ * 2. Clicking it calls `revealInOs` with the root+relativePath joined into a
+ *    single absolute path and `entityKind: 'inbox_item'`.
+ * 3. A reveal failure surfaces an error toast carrying a "Copy path" action
+ *    (#717 FR-010: `copyToClipboard` was exported with zero call sites).
+ * 4. Invoking that action copies the resolved path and confirms via toast.
  */
 import type React from 'react';
 import {
@@ -40,18 +48,18 @@ import type {
 
 import { InboxDetail } from '../InboxDetail';
 
-const mockNativeReveal = vi.fn();
+const mockRevealInOs = vi.fn();
+const mockCopyToClipboard = vi.fn();
+const mockAddToast = vi.fn();
 
-vi.mock('@/bindings/index', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/bindings/index')>();
-  return {
-    ...mod,
-    commands: {
-      ...mod.commands,
-      nativeReveal: async (...args: unknown[]) => await mockNativeReveal(...args),
-    },
-  };
-});
+vi.mock('@/shared/native/reveal', () => ({
+  revealInOs: (...args: unknown[]) => mockRevealInOs(...args),
+  copyToClipboard: (...args: unknown[]) => mockCopyToClipboard(...args),
+}));
+
+vi.mock('@/shared/toast', () => ({
+  addToast: (...args: unknown[]) => mockAddToast(...args),
+}));
 
 const sampleItem: InboxItemSummary = {
   inboxItemId: 'item-001',
@@ -67,13 +75,16 @@ const sampleItem: InboxItemSummary = {
   masterExposureS: null,
 };
 
+// frameType deliberately non-"light": a light classification mounts
+// `ConeSearchSuggestions`, which makes its own unrelated IPC call — avoiding
+// it here keeps this file scoped to the Reveal action alone.
 const sampleClassification: InboxClassifyResponse = {
   inboxItemId: 'item-001',
   type: 'single_type',
-  frameType: 'light',
+  frameType: 'dark',
   contentSignature: 'sig-002',
   breakdown: [
-    { kind: 'light', count: 4, destinationPreview: null, sampleFiles: [] },
+    { kind: 'dark', count: 4, destinationPreview: null, sampleFiles: [] },
   ],
   unclassifiedFiles: [],
   sampleFiles: [],
@@ -85,7 +96,9 @@ type ClassProp = Parameters<typeof InboxDetail>[0]['classification'];
 
 describe('InboxDetail — #715 Reveal-in-OS action', () => {
   beforeEach(() => {
-    mockNativeReveal.mockReset();
+    mockRevealInOs.mockReset();
+    mockCopyToClipboard.mockReset();
+    mockAddToast.mockReset();
   });
 
   it('renders the Reveal button with the shared platform-native label', () => {
@@ -103,11 +116,8 @@ describe('InboxDetail — #715 Reveal-in-OS action', () => {
     );
   });
 
-  it('clicking Reveal calls native.reveal with the joined absolute path and inbox_item context', async () => {
-    mockNativeReveal.mockResolvedValue({
-      status: 'ok',
-      data: { revealed: true, selection: 'target' },
-    });
+  it('clicking Reveal calls revealInOs with the joined absolute path and inbox_item context', async () => {
+    mockRevealInOs.mockResolvedValue({ revealed: true, selection: 'target' });
     render(
       <InboxDetail
         item={sampleItem as unknown as ItemProp}
@@ -117,20 +127,18 @@ describe('InboxDetail — #715 Reveal-in-OS action', () => {
     );
     fireEvent.click(screen.getByTestId('inbox-reveal-btn'));
 
-    await waitFor(() => expect(mockNativeReveal).toHaveBeenCalledTimes(1));
-    const [request] = mockNativeReveal.mock.calls[0] as [
-      { path: string; entityKind: string; entityId: string },
+    await waitFor(() => expect(mockRevealInOs).toHaveBeenCalledTimes(1));
+    const [path, ctx] = mockRevealInOs.mock.calls[0] as [
+      string,
+      { entityKind: string; entityId: string },
     ];
-    expect(request.path).toBe('/mnt/library/inbox/2025-11-01/NGC891');
-    expect(request.entityKind).toBe('inbox_item');
-    expect(request.entityId).toBe('item-001');
+    expect(path).toBe('/mnt/library/inbox/2025-11-01/NGC891');
+    expect(ctx.entityKind).toBe('inbox_item');
+    expect(ctx.entityId).toBe('item-001');
   });
 
-  it('surfaces a reveal failure as an inline error banner', async () => {
-    mockNativeReveal.mockResolvedValue({
-      status: 'error',
-      error: { code: 'os.command_failed', message: 'boom' },
-    });
+  it('surfaces a reveal failure as an error toast with a Copy-path action', async () => {
+    mockRevealInOs.mockRejectedValue(new Error('boom'));
     render(
       <InboxDetail
         item={sampleItem as unknown as ItemProp}
@@ -140,8 +148,43 @@ describe('InboxDetail — #715 Reveal-in-OS action', () => {
     );
     fireEvent.click(screen.getByTestId('inbox-reveal-btn'));
 
-    expect(await screen.findByTestId('inbox-reveal-error')).toHaveTextContent(
-      'Could not open the location.',
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledTimes(1));
+    const [toastArg] = mockAddToast.mock.calls[0] as [
+      { message: string; variant: string; action?: { label: string } },
+    ];
+    expect(toastArg.message).toBe('Could not open the location.');
+    expect(toastArg.variant).toBe('error');
+    expect(toastArg.action?.label).toBe('Copy path');
+  });
+
+  it('the Copy-path action copies the resolved absolute path', async () => {
+    mockRevealInOs.mockRejectedValue(new Error('boom'));
+    mockCopyToClipboard.mockResolvedValue(true);
+
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as ItemProp}
+        rootAbsolutePath="/mnt/library/inbox"
+        classification={sampleClassification as unknown as ClassProp}
+      />,
     );
+    fireEvent.click(screen.getByTestId('inbox-reveal-btn'));
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledTimes(1));
+
+    const [toastArg] = mockAddToast.mock.calls[0] as [
+      { action?: { onClick: () => void } },
+    ];
+    toastArg.action?.onClick();
+
+    await waitFor(() =>
+      expect(mockCopyToClipboard).toHaveBeenCalledWith(
+        '/mnt/library/inbox/2025-11-01/NGC891',
+      ),
+    );
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledTimes(2));
+    expect(mockAddToast.mock.calls[1][0]).toMatchObject({
+      message: 'Path copied to clipboard.',
+      variant: 'info',
+    });
   });
 });

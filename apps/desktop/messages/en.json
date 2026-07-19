@@ -1360,6 +1360,8 @@
   "calibration_master_singular": "master",
   "common_working": "Working…",
   "common_applying": "Applying…",
+  "common_copy_path": "Copy path",
+  "common_path_copied": "Path copied to clipboard.",
   "common_confirming": "Confirming…",
   "common_close": "Close",
   "common_rescan": "Rescan",

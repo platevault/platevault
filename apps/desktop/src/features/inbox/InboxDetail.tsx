@@ -43,7 +43,8 @@ import { errMessage } from '@/lib/errors';
 import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
-import { revealInOs } from '@/shared/native/reveal';
+import { copyToClipboard, revealInOs } from '@/shared/native/reveal';
+import { addToast } from '@/shared/toast';
 import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
 import type { InboxClassifyResponse } from './store';
@@ -610,17 +611,33 @@ export function InboxDetail({
   // Reveal this item's location in the OS file browser (#715, spec 004
   // FR-005/SC-002). No connectivity gate like Sessions (#889): the Inbox
   // root is the currently-scanned root, always reachable while this pane is
-  // shown.
-  const [revealError, setRevealError] = useState<string | null>(null);
+  // shown. On failure, the toast carries a "Copy path" action (#717 FR-010:
+  // `copyToClipboard` was exported with zero call sites anywhere in the app).
   const handleReveal = useCallback(async () => {
-    setRevealError(null);
+    const revealPath = resolveInboxRevealPath(
+      rootAbsolutePath,
+      item.relativePath,
+    );
     try {
-      await revealInOs(
-        resolveInboxRevealPath(rootAbsolutePath, item.relativePath),
-        { entityKind: 'inbox_item', entityId: item.inboxItemId },
-      );
+      await revealInOs(revealPath, {
+        entityKind: 'inbox_item',
+        entityId: item.inboxItemId,
+      });
     } catch {
-      setRevealError(m.inbox_toast_reveal_error());
+      addToast({
+        message: m.inbox_toast_reveal_error(),
+        variant: 'error',
+        action: {
+          label: m.common_copy_path(),
+          onClick: () => {
+            void copyToClipboard(revealPath).then((ok) => {
+              if (ok) {
+                addToast({ message: m.common_path_copied(), variant: 'info' });
+              }
+            });
+          },
+        },
+      });
     }
   }, [rootAbsolutePath, item.relativePath, item.inboxItemId]);
 
@@ -1016,15 +1033,6 @@ export function InboxDetail({
           was clipped by `.alm-listpage__detail-body`'s `overflow: hidden`
           (unreachable, not just unscrolled). */}
       <div className="alm-inbox-detail__scroll">
-        {revealError && (
-          <Banner
-            variant="danger"
-            className="alm-inbox-detail__banner-mt3"
-            data-testid="inbox-reveal-error"
-          >
-            {revealError}
-          </Banner>
-        )}
         {/* Mixed: advisory banner */}
         {classType === 'mixed' && (
           <Banner
