@@ -42,17 +42,25 @@
   transition: all var(--alm-transition-fast);
 }
 .alm-btn:hover { border-color: var(--alm-ink3); color: var(--alm-text); }
-.alm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* #628: disabled must read as unambiguously inert — lower opacity than
+   hover/active states use anywhere else, and strip the primary/danger fill so
+   a disabled CTA never still reads as "the" accent-colored action. */
+.alm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .alm-btn:disabled:hover { border-color: var(--alm-border); color: var(--alm-text-secondary); }
 /* Primary = theme accent. Was var(--alm-ink), which inverts to a light button
    in dark themes (ink is the light text color there). Accent stays correct in
-   every theme and unifies the previously-divergent primary/accent variants. */
+   every theme; the former separate `accent` variant was byte-identical to
+   `primary` (#627) and was removed rather than kept as a same-looking alias. */
 .alm-btn--primary { background: var(--alm-accent); color: var(--alm-on-accent); border-color: var(--alm-accent); }
 .alm-btn--primary:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
-.alm-btn--accent { background: var(--alm-accent); color: var(--alm-on-accent); border-color: var(--alm-accent); }
-.alm-btn--accent:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
 .alm-btn--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
 .alm-btn--danger:hover { background: var(--alm-danger-bg-hover); }
+.alm-btn--primary:disabled,
+.alm-btn--danger:disabled {
+  background: var(--alm-bg);
+  color: var(--alm-text-secondary);
+  border-color: var(--alm-border);
+}
 .alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
 
 /* === SECTION === */

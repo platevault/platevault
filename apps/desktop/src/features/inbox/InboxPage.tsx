@@ -1076,7 +1076,7 @@ export function InboxPage() {
           {showPlans && (
             <Btn
               size="sm"
-              variant="accent"
+              variant="ghost"
               onClick={() => setPlanOverlayOpen(true)}
               aria-label={m.inbox_review_plans_with_count({ count: planCount })}
               data-testid="inbox-review-plans-btn"
@@ -1090,7 +1090,7 @@ export function InboxPage() {
           {bulkEligibleItems.length > 0 && (
             <Btn
               size="sm"
-              variant="accent"
+              variant="primary"
               disabled={!canBulkConfirm}
               onClick={() => void handleBulkConfirm()}
               aria-label={m.inbox_confirm_all_classified_aria({
