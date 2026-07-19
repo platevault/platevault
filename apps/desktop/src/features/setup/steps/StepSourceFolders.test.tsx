@@ -26,6 +26,21 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn().mockResolvedValue(null),
 }));
 
+// Manual-entry add-time existence check (#662) round-trips through
+// `tools.validate_path` (commands.toolsValidatePath) — default to "exists" so
+// the picker-flow tests above (which never mock this) keep passing; override
+// per-test for the nonexistent-path coverage below.
+const mockToolsValidatePath = vi.fn().mockResolvedValue({
+  status: 'ok',
+  data: { path: '', valid: true, reason: null },
+});
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    toolsValidatePath: (path: string) => mockToolsValidatePath(path),
+  },
+}));
+
 import { StepSourceFolders } from './StepSourceFolders';
 import type { SourceEntry } from '../sources-store';
 
@@ -186,5 +201,47 @@ describe('StepSourceFolders — add-time validation', () => {
       expect(onAdd).toHaveBeenCalledWith('/astro/lights2', 'light_frames'),
     );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+// ── Manual path entry — existence validation (#662) ─────────────────────
+
+describe('StepSourceFolders — manual path entry existence validation', () => {
+  it('rejects a nonexistent path with an inline error and does not call onAdd, keeping the typed path', async () => {
+    mockToolsValidatePath.mockResolvedValueOnce({
+      status: 'ok',
+      data: { path: '/astro/ghost', valid: false, reason: 'missing' },
+    });
+    const onAdd = vi.fn();
+    renderStep([], onAdd);
+
+    const input = screen.getByLabelText(/Light frames folder path/i);
+    fireEvent.change(input, { target: { value: '/astro/ghost' } });
+    fireEvent.click(screen.getByTestId('manual-add-path-btn-light_frames'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /does not exist/i,
+    );
+    expect(onAdd).not.toHaveBeenCalled();
+    // The rejected path stays in the input so the user can see/fix it.
+    expect(input).toHaveValue('/astro/ghost');
+  });
+
+  it('adds a manually typed path that exists, clearing the input', async () => {
+    mockToolsValidatePath.mockResolvedValueOnce({
+      status: 'ok',
+      data: { path: '/astro/lights', valid: true, reason: null },
+    });
+    const onAdd = vi.fn();
+    renderStep([], onAdd);
+
+    const input = screen.getByLabelText(/Light frames folder path/i);
+    fireEvent.change(input, { target: { value: '/astro/lights' } });
+    fireEvent.click(screen.getByTestId('manual-add-path-btn-light_frames'));
+
+    await waitFor(() =>
+      expect(onAdd).toHaveBeenCalledWith('/astro/lights', 'light_frames'),
+    );
+    expect(input).toHaveValue('');
   });
 });

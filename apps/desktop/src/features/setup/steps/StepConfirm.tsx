@@ -80,7 +80,7 @@ export function StepConfirm({
                     <span className="alm-mono alm-setup-confirm__path">
                       {entry.path}
                     </span>
-                    <span className="alm-setup-confirm__scan-depth">
+                    <span className="alm-setup-confirm__org-state">
                       {entry.organizationState === 'organized'
                         ? m.setup_sources_org_organized()
                         : m.setup_sources_org_unorganized()}

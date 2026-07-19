@@ -1148,8 +1148,9 @@
   white-space: nowrap;
 }
 
-/* Scan depth label ("Recursive" / "Single level") */
-.alm-setup-confirm__scan-depth {
+/* Organization-state label ("Already organized" / "Needs organizing") — was
+   named __scan-depth before scan-depth was retired end-to-end (#913). */
+.alm-setup-confirm__org-state {
   white-space: nowrap;
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
