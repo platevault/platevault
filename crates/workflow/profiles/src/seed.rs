@@ -191,7 +191,10 @@ mod tests {
         // explicit layout of their own (siril, planetary_suite) all fall back
         // to the WBPP/PixInsight default.
         assert_eq!(resolve_source_view_layout(None), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
-        assert_eq!(resolve_source_view_layout(Some("photoshop")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
+        assert_eq!(
+            resolve_source_view_layout(Some("photoshop")),
+            crate::DEFAULT_SOURCE_VIEW_LAYOUT
+        );
         assert_eq!(resolve_source_view_layout(Some("siril")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
         assert_eq!(
             resolve_source_view_layout(Some("Planetary Suite")),
