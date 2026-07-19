@@ -97,6 +97,34 @@ pub fn recheck_disk_space(path: &Utf8Path, required_bytes: u64) -> Result<(), Pl
     Ok(())
 }
 
+/// Bytes currently free on the volume containing `path` (issue #876).
+///
+/// Unlike [`recheck_disk_space`] (a pass/fail gate against a required byte
+/// count, used for pause-resume re-validation), this returns the raw number
+/// so a caller can *report* a fit estimate — e.g. "plan needs 4.2 GB, 1.1 GB
+/// free at destination" — before the user approves a plan, rather than only
+/// discovering insufficient space after an apply attempt fails.
+///
+/// # Errors
+///
+/// Returns `Err(PlanItemFailure { code: VolumeUnavailable })` if `path` is
+/// inaccessible or its volume cannot be probed.
+pub fn available_space_bytes(path: &Utf8Path) -> Result<u64, PlanItemFailure> {
+    if !path_is_accessible(path) {
+        return Err(PlanItemFailure::with_code(
+            FailureCode::VolumeUnavailable,
+            format!("could not probe free space at {path}: path is not accessible"),
+        ));
+    }
+
+    fs4::available_space(path.as_std_path()).map_err(|e| {
+        PlanItemFailure::with_code(
+            FailureCode::VolumeUnavailable,
+            format!("could not probe free space at {path}: {e}"),
+        )
+    })
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -133,5 +161,19 @@ mod tests {
         // without needing to fabricate a full disk.
         let err = recheck_disk_space(&utf8(dir.path()), u64::MAX / 2).unwrap_err();
         assert_eq!(err.code, FailureCode::DiskFull);
+    }
+
+    #[test]
+    fn available_space_bytes_reports_a_positive_number_for_existing_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let bytes = available_space_bytes(&utf8(dir.path())).unwrap();
+        assert!(bytes > 0, "a real volume must report nonzero free space");
+    }
+
+    #[test]
+    fn available_space_bytes_fails_for_missing_path() {
+        let err = available_space_bytes(Utf8Path::new("/absolutely/does/not/exist/nested/path"))
+            .unwrap_err();
+        assert_eq!(err.code, FailureCode::VolumeUnavailable);
     }
 }
