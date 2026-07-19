@@ -224,6 +224,45 @@
   --pv-shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
 }
 
+/* Observatory Cool — cool DARK, blue-black neutrals + OIII teal accent. The app
+   counterpart to the docs "narrowband observatory" palette, rebuilt on the
+   --pv-* contract (flat, dense, no glow). Canonical (cool family). AA-clean. */
+[data-theme="observatory-cool"] {
+  --pv-ink: #eef2f7; --pv-ink2: #c5cdd8; --pv-ink3: #98a2b0; --pv-ink4: #8592a1;
+  --pv-rule: #303845; --pv-rule2: #252c37;
+  --pv-bg: #12151b; --pv-surface: #191d25; --pv-bg3: #212734; --pv-surface-raised: #1c212a;
+  --pv-on-accent: #0c1014;
+  --pv-input-recessed-bg: var(--pv-surface);
+  --pv-ok: #6fc191; --pv-warn: #d8b24e; --pv-danger: #e08a76; --pv-info: #86b3cc;
+  --pv-ok-bg: #16261d; --pv-ok-border: #2f4638;
+  --pv-warn-bg: #2a2415; --pv-warn-border: #4a3f24;
+  --pv-danger-bg: #2b1a16; --pv-danger-bg-hover: #38221c; --pv-danger-border: #4d2d25;
+  --pv-info-bg: #152331; --pv-info-border: #2f4658;
+  --pv-accent: #3fb2c2; --pv-accent-hover: #54c3d1; --pv-accent-deep: #2c8592;
+  --pv-accent-bg: #16303a; --pv-accent-text: #66cedb;
+  --pv-hover-bg: rgba(255,255,255,0.05); --pv-selected-bg: #1e2733;
+  --pv-shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+/* Observatory Cool · Light — cool LIGHT counterpart, deep teal accent. Matches
+   the docs light palette. Canonical (cool family). AA-clean. */
+[data-theme="observatory-cool-light"] {
+  --pv-ink: #191d24; --pv-ink2: #3a414b; --pv-ink3: #565e6a; --pv-ink4: #525a66;
+  --pv-rule: #cbd2dd; --pv-rule2: #dce1ea;
+  --pv-bg: #f2f4f8; --pv-surface: #e8ecf2; --pv-bg3: #dde3eb; --pv-surface-raised: #ffffff;
+  --pv-on-accent: #ffffff;
+  --pv-input-recessed-bg: var(--pv-bg);
+  --pv-ok: #3a6b48; --pv-warn: #7a5a1a; --pv-danger: #8a2a1a; --pv-info: #35566a;
+  --pv-ok-bg: #e6efe8; --pv-ok-border: #bcd0bf;
+  --pv-warn-bg: #f4edd6; --pv-warn-border: #ddce9e;
+  --pv-danger-bg: #f2e0db; --pv-danger-bg-hover: #ebcfc6; --pv-danger-border: #dfbdb3;
+  --pv-info-bg: #e5eef2; --pv-info-border: #bcd2dc;
+  --pv-accent: #276f7c; --pv-accent-hover: #215d68; --pv-accent-deep: #1a4a53;
+  --pv-accent-bg: #dbebef; --pv-accent-text: #1c6470;
+  --pv-hover-bg: rgba(0,0,0,0.04); --pv-selected-bg: #e0eaef;
+  --pv-shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+}
+
 /* Density modifiers */
 .density-compact { --pv-row-height: 24px; }
 .density-spacious { --pv-row-height: 40px; }

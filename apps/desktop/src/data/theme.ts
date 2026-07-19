@@ -52,13 +52,24 @@ export type ThemeId =
   | 'warm-clay'
   | 'warm-slate'
   | 'observatory-dark'
-  | 'espresso-dark';
+  | 'espresso-dark'
+  | 'observatory-cool-light'
+  | 'observatory-cool';
 export type ThemeChoice = ThemeId | 'system';
 
 export interface ThemeMeta {
   id: ThemeId;
   label: string;
   mode: 'light' | 'dark';
+  /** Picker grouping (handoff 03) — Warm Slate/Observatory Dark form the warm
+   *  family, the two Observatory Cool themes form the cool family. */
+  family: 'warm' | 'cool';
+  /** Canonical (picker-visible) vs. variant (registry-only, handoff 03): a
+   *  disabled theme is still a fully valid ThemeChoice — it stays in
+   *  VALID_CHOICES below and keeps resolving/applying/persisting exactly as
+   *  before for anyone with it already selected. Only the picker filters on
+   *  this flag. */
+  enabled: boolean;
   /** [bg, surface, accent] for swatch previews */
   swatch: [string, string, string];
 }
@@ -68,25 +79,49 @@ export const THEMES: ThemeMeta[] = [
     id: 'warm-clay',
     label: 'Warm Clay',
     mode: 'light',
+    family: 'warm',
+    enabled: false,
     swatch: ['#f6f4ef', '#efeae1', '#b25a35'],
   },
   {
     id: 'warm-slate',
     label: 'Warm Slate',
     mode: 'light',
+    family: 'warm',
+    enabled: true,
     swatch: ['#f5f4f1', '#ecebe6', '#3f6b7a'],
   },
   {
     id: 'observatory-dark',
     label: 'Observatory',
     mode: 'dark',
+    family: 'warm',
+    enabled: true,
     swatch: ['#1b1916', '#232019', '#d98a3d'],
   },
   {
     id: 'espresso-dark',
     label: 'Espresso',
     mode: 'dark',
+    family: 'warm',
+    enabled: false,
     swatch: ['#161412', '#1e1b18', '#cf9d63'],
+  },
+  {
+    id: 'observatory-cool-light',
+    label: 'Observatory Cool · Light',
+    mode: 'light',
+    family: 'cool',
+    enabled: true,
+    swatch: ['#f2f4f8', '#e8ecf2', '#276f7c'],
+  },
+  {
+    id: 'observatory-cool',
+    label: 'Observatory Cool',
+    mode: 'dark',
+    family: 'cool',
+    enabled: true,
+    swatch: ['#12151b', '#191d25', '#3fb2c2'],
   },
 ];
 
