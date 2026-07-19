@@ -383,6 +383,8 @@
   "inbox_frame_type_label": "Frame type",
   "inbox_frame_types_required_body": "No IMAGETYP headers could be read. Assign frame types below, then confirm.",
   "inbox_frame_types_required_title": "Frame types required",
+  "inbox_mandatory_attrs_required_body": "Frame type is set, but these files still need {attrs} before they can be confirmed. Assign the value(s) in “Needs review”, then confirm.",
+  "inbox_mandatory_attrs_required_title": "More detail needed: {attrs}",
   "inbox_mixed_folder_body": "Multiple frame types detected. This folder is automatically split into separate single-type items — find and confirm each one individually in the list.",
   "inbox_mixed_composition_summary_aria": "Mixed composition summary",
   "inbox_mixed_folder_title": "Mixed folder",
