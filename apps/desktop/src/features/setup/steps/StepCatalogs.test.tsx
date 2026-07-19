@@ -85,8 +85,11 @@ describe('StepCatalogs (Configuration)', () => {
   it('renders the SIMBAD online-resolution toggle', async () => {
     renderStep();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // findBy: the toggle comes from ResolverSettingsControl (compact), which
+    // renders a label-less <Skeleton> until `loaded` flips in a .finally()
+    // after mockGet resolves — the waitFor above only proves the call (#1083).
     expect(
-      screen.getByLabelText('Enable online SIMBAD resolution'),
+      await screen.findByLabelText('Enable online SIMBAD resolution'),
     ).toBeInTheDocument();
   });
 
