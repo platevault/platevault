@@ -52,6 +52,12 @@ import { Btn, EmptyState, Pill } from '@/ui';
 import type { CalibrationMatchMissingFlag } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
+import {
+  formatExposureSeconds,
+  formatTempC,
+  formatGain,
+  formatBinning,
+} from '@/lib/format';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 import { useCalibrationAssign, useCalibrationSuggest } from './useCalibration';
@@ -251,17 +257,23 @@ export function MasterDetail({
       label: m.settings_calmatch_camera(),
       value: fp.camera ?? null,
     },
-    { key: 'gain', label: m.settings_calmatch_gain(), value: fp.gain ?? null },
+    {
+      key: 'gain',
+      label: m.settings_calmatch_gain(),
+      value: fp.gain != null ? formatGain(fp.gain) : null,
+    },
     {
       key: 'exposure',
       label: m.calibration_fp_exposure(),
-      value: fp.exposureS != null ? `${fp.exposureS}s` : null,
+      // #811: shared formatter (consistent rounding/spacing with Calibration's
+      // MastersTable and Inbox), instead of the local `${v}s` ad hoc version.
+      value: fp.exposureS != null ? formatExposureSeconds(fp.exposureS) : null,
       applicability: masterFieldApplicability(master.kind, 'exposure'),
     },
     {
       key: 'temp',
       label: m.calibration_fp_temperature(),
-      value: fp.tempC != null ? `${fp.tempC}°C` : null,
+      value: fp.tempC != null ? formatTempC(fp.tempC) : null,
       applicability: masterFieldApplicability(master.kind, 'setTemp'),
     },
     {
@@ -278,12 +290,22 @@ export function MasterDetail({
     {
       key: 'binning',
       label: m.settings_calmatch_binning(),
-      value: fp.binning ?? null,
+      // #811: was raw `fp.binning`, unlike MastersTable's binningCell which
+      // already normalises the "x" separator to "×" — now consistent.
+      value: fp.binning != null ? formatBinning(fp.binning) : null,
     },
     {
       key: 'size',
       label: m.settings_advanced_db_size(),
       value: master.sizeBytes != null ? fmtBytes(master.sizeBytes) : null,
+    },
+    {
+      // #619: the row only shows ageDays conditionally, as a warning pill
+      // when the master is aging past the threshold — the actual age is
+      // otherwise invisible. The detail panel shows it unconditionally.
+      key: 'age',
+      label: m.calibration_fp_age(),
+      value: m.calibration_fp_age_value({ days: master.ageDays }),
     },
   ];
 

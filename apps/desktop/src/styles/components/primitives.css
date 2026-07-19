@@ -45,7 +45,7 @@
 /* === BUTTON === */
 .alm-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  gap: var(--alm-sp-1); height: 28px;
+  gap: var(--alm-sp-1); height: var(--alm-control-h);
   padding: 0 var(--alm-sp-3);
   font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
 
@@ -75,7 +75,7 @@
   color: var(--alm-text-secondary);
   border-color: var(--alm-border);
 }
-.alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
+.alm-btn--sm { height: var(--alm-control-h-sm); padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
 
 /* === SECTION === */
 .alm-section { margin-bottom: var(--alm-sp-4); }

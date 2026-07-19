@@ -365,8 +365,13 @@
   color: var(--alm-text-muted);
 }
 
-/* Textarea — resize handle only; theming via existing .alm-input */
+/* Textarea — resize handle only; theming via existing .alm-input. Overrides
+   .alm-input's fixed single-line control height (#616) back to a multi-line
+   minimum so notes stay a real textarea, not a clipped one-liner. */
 .alm-project-notes__textarea {
+  height: auto;
+  min-height: 80px;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
   resize: vertical;
 }
 

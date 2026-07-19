@@ -46,10 +46,15 @@ const UNRESOLVED_KEY = 'unresolved';
  * empty, or the cross-type sentinel `"Mixed"` all collapse to the single
  * {@link UNRESOLVED_KEY} bucket so such an item is counted exactly once
  * overall.
+ *
+ * #625: case AND underscore/hyphen/space variants of the same raw FITS
+ * IMAGETYP value must collapse into one bucket — an unnormalised "Dark_flat"
+ * vs "Darkflat" otherwise leaked into the status bar as two separate sibling
+ * categories ("Dark_flat 1 · Darkflat 6") instead of one normalized category.
  */
 function bucketKey(frameType: string | null | undefined): string {
   if (frameType == null || frameType === '') return UNRESOLVED_KEY;
-  const lower = frameType.toLowerCase();
+  const lower = frameType.toLowerCase().replace(/[\s_-]+/g, '');
   return lower === 'mixed' ? UNRESOLVED_KEY : lower;
 }
 
