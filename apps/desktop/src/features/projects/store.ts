@@ -22,7 +22,11 @@ import type {
   ProjectLifecycleState,
   LifecycleTransitionResponse,
 } from './lifecycleTransition';
-import type { ProjectSummaryDto, ProjectDetailDto } from '@/bindings/index';
+import type {
+  ProjectSummaryDto,
+  ProjectDetailDto,
+  AuditEntry,
+} from '@/bindings/index';
 import type {
   ProjectCreateRequest,
   ProjectCreateResult,
@@ -48,6 +52,21 @@ async function listProjects008(): Promise<ProjectSummaryDto[]> {
 
 async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
   return unwrap(await commands.projectsGet(args.id));
+}
+
+/**
+ * #833: reuses `audit.list` filtered to this project's entity id — the same
+ * query the archive feature's `useArchiveAudit` runs for archived projects
+ * (`features/archive/store.ts`) — rather than a bespoke project-history
+ * store. Newest-first ordering is a backend guarantee (`ORDER BY at DESC`,
+ * `persistence_db::repositories::audit::list_audit_entries`), not re-sorted
+ * here.
+ */
+async function listProjectAudit(id: string): Promise<AuditEntry[]> {
+  const res = unwrap(
+    await commands.auditList({ entityType: 'project', entityId: id }, null),
+  );
+  return res.entries;
 }
 
 async function createProject(
@@ -119,6 +138,27 @@ export function useProjectDetail(id: string): QueryState<ProjectDetailDto> {
     queryKey: queryKeys.projects.detail(id),
     queryFn: () => getProject008({ id }),
     enabled: !!id,
+  });
+  return {
+    data,
+    loading: isFetching,
+    error: error ?? undefined,
+  };
+}
+
+/**
+ * Subscribe to a project's lifecycle audit trail (#833). `id` is optional
+ * (matching `useArchiveAudit`'s `entityId: string | undefined` shape,
+ * `features/archive/store.ts`) — the query stays disabled until a caller
+ * resolves one.
+ */
+export function useProjectHistory(
+  id: string | undefined,
+): QueryState<AuditEntry[]> {
+  const { data, isFetching, error } = useQuery({
+    queryKey: queryKeys.projects.history(id ?? ''),
+    queryFn: () => listProjectAudit(id as string),
+    enabled: Boolean(id),
   });
   return {
     data,
