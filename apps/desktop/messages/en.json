@@ -535,6 +535,8 @@
   "projects_stepper_aria": "Project lifecycle",
   "projects_stepper_blocked_chip": "blocked",
   "projects_stepper_created": "Created",
+  "projects_stepper_history_empty": "No lifecycle history recorded.",
+  "projects_stepper_history_load_error": "Could not load project history.",
   "projects_stepper_history_title": "History",
   "projects_stepper_updated": "Updated",
   "projects_table_blocked_aria": "Blocked: {reason}",

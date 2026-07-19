@@ -13,6 +13,7 @@ export const queryKeys = {
     all: () => ['projects'] as const,
     detail: (id: string) => ['projects', id] as const,
     artifacts: (id: string) => ['projects', id, 'artifacts'] as const,
+    history: (id: string) => ['projects', id, 'history'] as const,
   },
   inventory: {
     // No filters → prefix-only key, so `invalidateQueries({ queryKey:
