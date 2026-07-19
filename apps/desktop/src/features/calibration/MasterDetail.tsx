@@ -53,6 +53,7 @@ import {
   type PropertyDef,
   PropertyTable,
   Modal,
+  TwoColDetailLayout,
 } from '@/components';
 import { Btn, EmptyState, Pill } from '@/ui';
 import type { CalibrationMatchMissingFlag } from '@/bindings/index';
@@ -511,27 +512,25 @@ export function MasterDetail({
         title={<strong>{masterTitle}</strong>}
         titleExtra={actionButtons}
       >
-        {/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible stacked]. */}
-        <div className="alm-session-detail2">
-          <div className="alm-session-detail2__col">
-            <PropertyTable mode="view" properties={colA} />
-          </div>
-          <div className="alm-session-detail2__col">
-            <PropertyTable mode="view" properties={colB} />
-          </div>
-
-          {/* Single column with both session popovers stacked vertically. */}
-          <div className="alm-session-detail2__linked alm-session-detail2__linked--stack">
-            <SessionListPopover
-              label={m.calibration_used_by_label()}
-              names={detail.loading ? [] : detail.confirmedNames}
-            />
-            <SessionListPopover
-              label={m.calibration_compatible_label()}
-              names={detail.loading ? [] : detail.compatibleNames}
-            />
-          </div>
-        </div>
+        {/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible
+            stacked] (#813: shared TwoColDetailLayout instead of hand-copied divs). */}
+        <TwoColDetailLayout
+          colA={<PropertyTable mode="view" properties={colA} />}
+          colB={<PropertyTable mode="view" properties={colB} />}
+          linkedClassName="alm-session-detail2__linked--stack"
+          linked={
+            <>
+              <SessionListPopover
+                label={m.calibration_used_by_label()}
+                names={detail.loading ? [] : detail.confirmedNames}
+              />
+              <SessionListPopover
+                label={m.calibration_compatible_label()}
+                names={detail.loading ? [] : detail.compatibleNames}
+              />
+            </>
+          }
+        />
 
         {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
 			    the master's matching-context session, with assign/cancel. */}

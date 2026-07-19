@@ -41,3 +41,38 @@ export function TwoColDetailLayout({
     </div>
   );
 }
+
+export interface DetailLinkedGroupProps {
+  /** Heading rendered above the content (`alm-session-detail2__head`). */
+  label: ReactNode;
+  /** Renders `emptyLabel` instead of `children` — e.g. a zero-count list. */
+  empty?: boolean;
+  /** Muted placeholder shown when `empty` (`alm-session-detail2__muted`). */
+  emptyLabel?: ReactNode;
+  children?: ReactNode;
+}
+
+/**
+ * A single labeled block inside a `linked` slot (#813): heading + either
+ * content or a muted empty placeholder. Same `__head`/`__muted` convention
+ * `SessionDetail`'s linked-projects block and `InboxDetail`'s Files column
+ * apply inline; extracted here so `SessionListPopover` doesn't hand-roll the
+ * two class names itself.
+ */
+export function DetailLinkedGroup({
+  label,
+  empty,
+  emptyLabel,
+  children,
+}: DetailLinkedGroupProps) {
+  return (
+    <div>
+      <div className="alm-session-detail2__head">{label}</div>
+      {empty ? (
+        <span className="alm-session-detail2__muted">{emptyLabel}</span>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}

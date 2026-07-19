@@ -57,8 +57,11 @@ export type { DetailGridProps, RailProps, RailCardProps } from './DetailGrid';
 
 // #813: the shared two-col-properties + linked-entity detail recipe
 // (`.alm-session-detail2`), wrapped once instead of hand-copied per feature.
-export { TwoColDetailLayout } from './TwoColDetailLayout';
-export type { TwoColDetailLayoutProps } from './TwoColDetailLayout';
+export { TwoColDetailLayout, DetailLinkedGroup } from './TwoColDetailLayout';
+export type {
+  TwoColDetailLayoutProps,
+  DetailLinkedGroupProps,
+} from './TwoColDetailLayout';
 export { Lifecycle } from './Lifecycle';
 export type { LifecycleProps } from './Lifecycle';
 
