@@ -31,13 +31,19 @@ import { prerequisiteReason } from './ChecklistSection';
 const REASON_KEYS: ReadonlyArray<readonly [string, string]> = [
   [
     'onboarding.prerequisite.inbox.confirm_first',
-    'Confirm an inventory item first.',
+    'Unlocks once you confirm an inventory item.',
   ],
-  ['onboarding.prerequisite.targets.resolve_first', 'Resolve a target first.'],
-  ['onboarding.prerequisite.projects.create_first', 'Create a project first.'],
+  [
+    'onboarding.prerequisite.targets.resolve_first',
+    'Unlocks once you resolve a target.',
+  ],
+  [
+    'onboarding.prerequisite.projects.create_first',
+    'Unlocks once you create a project.',
+  ],
   [
     'onboarding.prerequisite.projects.launch_tool',
-    'Open your project in a tool first.',
+    'Unlocks once you open your project in a tool.',
   ],
 ];
 

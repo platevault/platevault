@@ -204,6 +204,21 @@
   background: var(--alm-text-faint);
 }
 
+/*
+ * Blocked = the item's prerequisite is unmet, so it genuinely cannot be done
+ * yet. Dim the whole row so "not active yet" is readable at a glance instead of
+ * having to parse the reason line. Deliberately keyed on BLOCKED, never on
+ * "we have no anchor to point at": an item we merely cannot spotlight is still
+ * perfectly actionable, and greying it would claim otherwise.
+ */
+.alm-onb-checklist__item--blocked .alm-onb-checklist__item-label {
+  color: var(--alm-text-faint);
+}
+
+.alm-onb-checklist__item--blocked .alm-onb-checklist__auto-dot {
+  opacity: 0.5;
+}
+
 .alm-onb-checklist__prereq {
   display: flex;
   flex-wrap: wrap;
@@ -211,6 +226,26 @@
   gap: var(--alm-sp-1);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
+}
+
+.alm-onb-checklist__prereq-icon {
+  flex-shrink: 0;
+  /* Align to the first text line, not the box centre — the reason wraps to
+     two lines in a 264px flyout and a centred icon drifts away from it. */
+  align-self: flex-start;
+  margin-top: 2px;
+  color: var(--alm-text-faint);
+}
+
+/* Keep the reason on the icon's line and let it wrap in its own column. The
+   parent wraps, so without this the icon is pushed onto a line of its own
+   whenever the reason is longer than the remaining width. */
+.alm-onb-checklist__prereq-reason {
+  /* basis 0, NOT auto: with `auto` the basis is the text's own width, which
+     exceeds the space left beside the icon, so the wrapping parent pushes it
+     to a line of its own and the icon is stranded above it. */
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .alm-onb-checklist__prereq-jump {
@@ -327,10 +362,12 @@
   transition: stroke-dashoffset var(--alm-transition-base);
 }
 
+/* Portalled to <body> (see ChecklistPopover): `.alm-sidebar` is
+   `overflow: hidden`, which scissored the panel away entirely when it was
+   absolutely positioned beside the sidebar. `left`/`top` are supplied inline
+   from the trigger's measured rect. */
 .alm-onb-popover {
-  position: absolute;
-  left: calc(100% + var(--alm-sp-1));
-  bottom: 0;
+  position: fixed;
   z-index: var(--alm-z-popover, 200);
   width: 264px;
   max-height: 60vh;

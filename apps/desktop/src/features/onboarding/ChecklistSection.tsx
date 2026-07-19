@@ -26,6 +26,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Lock,
   MoreHorizontal,
   Search,
   X,
@@ -48,6 +49,7 @@ import {
 import { useCompletionChoreography } from './choreography';
 import {
   FindSpotlight,
+  canFindItem,
   clearFind,
   toggleFind,
   useActiveFindItem,
@@ -451,6 +453,13 @@ function ChecklistItemRow({
   const label = itemLabel(item.itemId);
   const findActive = useActiveFindItem()?.itemId === item.itemId;
 
+  // Only offer "point me at it" when the spotlight can actually deliver: the
+  // item needs a resolvable anchor AND must not be blocked (a blocked item's
+  // control does not exist yet by definition — there is no plan row to point
+  // at before a plan exists). Everything else relies on the prerequisite line
+  // below, which states what to do first and links straight to it.
+  const findable = canFindItem(item.itemId) && !blocked;
+
   // Tooltip visibility (FR-008 / WCAG 1.4.13).
   //
   // This used to be pure CSS: `:hover, :focus-within { visibility: visible }`.
@@ -512,8 +521,12 @@ function ChecklistItemRow({
     // Hover is tracked at row level because the tooltip describes the whole row.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <li
-      className="alm-onb-checklist__item"
+      className={clsx(
+        'alm-onb-checklist__item',
+        blocked && 'alm-onb-checklist__item--blocked',
+      )}
       data-item-id={item.itemId}
+      data-blocked={blocked ? 'true' : undefined}
       ref={rowRef}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => {
@@ -561,6 +574,11 @@ function ChecklistItemRow({
         </span>
         {blocked && item.prerequisite && (
           <span className="alm-onb-checklist__prereq">
+            <Lock
+              size={10}
+              aria-hidden
+              className="alm-onb-checklist__prereq-icon"
+            />
             <span className="alm-onb-checklist__prereq-reason">
               {prerequisiteReason(item.prerequisite.reasonKey)}
             </span>
@@ -577,15 +595,17 @@ function ChecklistItemRow({
         )}
       </span>
       <span className="alm-onb-checklist__actions">
-        <button
-          type="button"
-          className="alm-onb-checklist__find"
-          aria-label={m.onboarding_find_label({ item: label })}
-          aria-pressed={findActive}
-          onClick={() => toggleFind(item)}
-        >
-          <Search size={13} aria-hidden />
-        </button>
+        {findable && (
+          <button
+            type="button"
+            className="alm-onb-checklist__find"
+            aria-label={m.onboarding_find_label({ item: label })}
+            aria-pressed={findActive}
+            onClick={() => toggleFind(item)}
+          >
+            <Search size={13} aria-hidden />
+          </button>
+        )}
         {!item.hasAutoTick && (
           <button
             type="button"

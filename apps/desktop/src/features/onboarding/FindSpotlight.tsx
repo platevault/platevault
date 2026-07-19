@@ -49,6 +49,19 @@ const ITEM_ANCHORS: Record<string, string> = {
   'projects.launch_tool': 'project.open-in-tool',
 };
 
+/**
+ * Whether this item has a control the spotlight could actually resolve.
+ *
+ * Callers MUST gate the find affordance on this. Offering "point me at it" on
+ * an item with no anchor guaranteed a dead end: the spotlight could not
+ * navigate (it early-returns without a selector) and simply apologised, and the
+ * apology told the user to open a page that would never help. An affordance
+ * that cannot succeed should not be offered at all.
+ */
+export function canFindItem(itemId: string): boolean {
+  return itemId in ITEM_ANCHORS;
+}
+
 // ── Find toggle store ─────────────────────────────────────────────────────────
 
 let activeItem: OnboardingItemDto | null = null;

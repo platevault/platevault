@@ -21,7 +21,8 @@
  * and keeps the sidebar's vertical space for navigation.
  */
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
 import {
@@ -29,6 +30,9 @@ import {
   useVisibleOnboardingState,
 } from './ChecklistSection';
 import { useCompletionChoreography } from './choreography';
+
+/** Gap between the sidebar trigger and the portalled flyout, in px. */
+const FLYOUT_GAP = 4;
 
 const RING_SIZE = 24;
 const RING_STROKE = 3;
@@ -48,6 +52,27 @@ export function ChecklistPopover({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const gradientId = `onb-ring-grad-${useId().replaceAll(':', '')}`;
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // The flyout is PORTALLED to <body> and positioned from the trigger's rect.
+  //
+  // `.alm-sidebar` sets `overflow: hidden`, so an absolutely-positioned panel
+  // sitting beside the sidebar is scissored away entirely — it is in the DOM,
+  // `aria-expanded` is true, and nothing is visible. (This also silently broke
+  // the icon-collapsed popover, which has always lived in the same clipped
+  // container.) Portalling escapes the clip without having to relax the
+  // sidebar's overflow, which is what keeps long nav labels from spilling.
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const measure = () => {
+      const el = wrapRef.current;
+      if (el) setAnchorRect(el.getBoundingClientRect());
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
 
   // Dismiss on Escape and on a click outside the flyout (WCAG 1.4.13
   // dismissable; also the plain expectation for any popover). Registered only
@@ -62,7 +87,12 @@ export function ChecklistPopover({
       wrapRef.current?.querySelector('button')?.focus();
     };
     const onPointerDown = (e: PointerEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      // The panel is portalled, so it is NOT inside wrapRef — check both, or
+      // every click inside the flyout would dismiss it.
+      if (wrapRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onPointerDown);
@@ -153,15 +183,32 @@ export function ChecklistPopover({
           </>
         )}
       </button>
-      {open && (
-        <div
-          className="alm-onb-popover"
-          role="region"
-          aria-label={progressText}
-        >
-          <ChecklistSection idPrefix="onb-pop" />
-        </div>
-      )}
+      {open &&
+        anchorRect &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="alm-onb-popover"
+            role="region"
+            aria-label={progressText}
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: the panel is portalled out of the clipping sidebar, so its position must be computed from the trigger's measured rect at open time; no static class can express it.
+            style={{
+              left: anchorRect.right + FLYOUT_GAP,
+              // Bottom-aligned to the trigger via `bottom`, NOT `top` minus a
+              // measured height: on first render the panel is not yet mounted,
+              // so its offsetHeight is 0 and a top-based calculation drops the
+              // panel off the bottom of the window. Anchoring the bottom edge
+              // needs no measurement at all.
+              bottom: window.innerHeight - anchorRect.bottom,
+              // Never grow past the top of the window (still capped at 60vh by
+              // the stylesheet, whichever is smaller).
+              maxHeight: anchorRect.bottom - FLYOUT_GAP * 2,
+            }}
+          >
+            <ChecklistSection idPrefix="onb-pop" />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
