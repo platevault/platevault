@@ -195,4 +195,57 @@ describe('ResolverSettingsControl', () => {
       await screen.findByText('Could not clear the resolve cache: disk full'),
     ).toBeInTheDocument();
   });
+
+  // #822 regression: a mount-race clobber, same class as Framing's (4c39ec12)
+  // — the mount-time `target.resolution.settings` fetch can resolve in the
+  // gap between an onChange (uncommitted local state) and the later blur
+  // commit, reverting the typed value back to the fetched default before the
+  // blur ever fires — and the blur then persists that clobbered value.
+  it('does not let the mount-time fetch clobber an in-progress debounce edit, and blur persists the typed value', async () => {
+    let resolveGet!: (v: unknown) => void;
+    mockGet.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+    mockUpdate.mockImplementation((req: { settings: unknown }) =>
+      Promise.resolve({
+        status: 'ok',
+        data: {
+          contractVersion: '1.0',
+          requestId: 'r',
+          settings: req.settings,
+        },
+      }),
+    );
+
+    render(<ResolverSettingsControl />);
+
+    const input = (await screen.findByLabelText(
+      'Typeahead debounce (ms)',
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '500' } });
+    expect(input).toHaveValue(500);
+
+    // The stale mount fetch now resolves with the pre-edit default — it must
+    // not clobber the uncommitted edit.
+    await act(async () => {
+      resolveGet({
+        status: 'ok',
+        data: { contractVersion: '1.0', requestId: 'r', settings: SETTINGS },
+      });
+      await Promise.resolve();
+    });
+    expect(input).toHaveValue(500);
+
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({ debounceMs: 500 }),
+        }),
+      ),
+    );
+    expect(input).toHaveValue(500);
+  });
 });

@@ -15,7 +15,7 @@
 // In `compact` mode only the online toggle is shown (used by the wizard step),
 // with the endpoint / debounce / timeout fields deferred to full Settings.
 
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Btn, Skeleton, Toggle } from '@/ui';
 import {
   clearResolveCache,
@@ -54,12 +54,20 @@ export function ResolverSettingsControl({
   );
   const [cacheClearError, setCacheClearError] = useState<string | null>(null);
 
+  // #822: guards the two-phase (onChange local state, onBlur commit) endpoint/
+  // debounce/timeout fields against the same mount-race fixed for Framing
+  // (4c39ec12) — the mount fetch below can resolve in the gap between an
+  // onChange and its later blur commit, clobbering the typed value back to
+  // the fetched one before a blur ever fires. Marked true as soon as the user
+  // starts typing (onChange), not only once they commit.
+  const editedRef = useRef(false);
+
   // Load persisted settings on mount.
   useEffect(() => {
     let cancelled = false;
     getResolverSettings()
       .then((resp) => {
-        if (!cancelled) setSettings(resp.settings);
+        if (!cancelled && !editedRef.current) setSettings(resp.settings);
       })
       .catch(() => {
         // Backend unavailable — keep in-code defaults.
@@ -190,9 +198,10 @@ export function ResolverSettingsControl({
               type="text"
               value={settings.simbadEndpoint}
               disabled={!loaded || !settings.onlineEnabled}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }))
-              }
+              onChange={(e) => {
+                editedRef.current = true;
+                setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }));
+              }}
               onBlur={(e) =>
                 void persist({ simbadEndpoint: e.target.value.trim() })
               }
@@ -216,12 +225,13 @@ export function ResolverSettingsControl({
               step={50}
               value={settings.debounceMs}
               disabled={!loaded}
-              onChange={(e) =>
+              onChange={(e) => {
+                editedRef.current = true;
                 setSettings((s) => ({
                   ...s,
                   debounceMs: Number(e.target.value),
-                }))
-              }
+                }));
+              }}
               onBlur={(e) =>
                 void persist({ debounceMs: Number(e.target.value) })
               }
@@ -245,12 +255,13 @@ export function ResolverSettingsControl({
               step={1}
               value={settings.requestTimeoutSecs}
               disabled={!loaded || !settings.onlineEnabled}
-              onChange={(e) =>
+              onChange={(e) => {
+                editedRef.current = true;
                 setSettings((s) => ({
                   ...s,
                   requestTimeoutSecs: Number(e.target.value),
-                }))
-              }
+                }));
+              }}
               onBlur={(e) =>
                 void persist({ requestTimeoutSecs: Number(e.target.value) })
               }
