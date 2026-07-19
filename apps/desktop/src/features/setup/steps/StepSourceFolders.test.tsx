@@ -10,6 +10,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
+import { m } from '@/lib/i18n';
+
 const mockPick = vi.fn();
 
 vi.mock('@/shared/native', () => ({
@@ -265,7 +267,7 @@ describe('StepSourceFolders — manual path entry existence validation', () => {
     fireEvent.click(screen.getByTestId('manual-add-path-btn-light_frames'));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /not a directory/i,
+      m.err_path_not_directory(),
     );
     expect(onAdd).not.toHaveBeenCalled();
     expect(input).toHaveValue('/astro/lights/frame.fits');
