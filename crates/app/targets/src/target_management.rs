@@ -133,6 +133,7 @@ fn list_row_to_item(row: TargetListRow) -> TargetListItem {
         constellation: row.constellation,
         magnitude: row.magnitude,
         aliases: row.aliases,
+        session_count: 0, // filled in by list()'s session_counts_by_target pass
     }
 }
 
@@ -176,9 +177,33 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, ContractErro
         return Ok((*cached).clone());
     }
     let rows = cache::list_all(pool).await.map_err(db_err)?;
-    let items: Vec<TargetListItem> = rows.into_iter().map(list_row_to_item).collect();
+    // #877: attach real session counts (planner Sessions column) — a target
+    // with no linked session simply keeps the DTO default of 0.
+    let session_counts = session_counts_by_target(pool).await?;
+    let items: Vec<TargetListItem> = rows
+        .into_iter()
+        .map(|row| {
+            let mut item = list_row_to_item(row);
+            item.session_count = session_counts.get(&item.id).copied().unwrap_or_default();
+            item
+        })
+        .collect();
     crate::caches::store_catalog(std::sync::Arc::new(items.clone()));
     Ok(items)
+}
+
+/// `target_id -> session_count` map (#877), built from real
+/// `acquisition_session` rows via `q_targets_mgmt::session_counts_by_target`.
+async fn session_counts_by_target(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<String, u32>, ContractError> {
+    let rows = persistence_db::repositories::q_targets_mgmt::session_counts_by_target(pool)
+        .await
+        .map_err(db_err)?;
+    Ok(rows
+        .into_iter()
+        .map(|(tid, count)| (tid, u32::try_from(count.max(0)).unwrap_or(0)))
+        .collect())
 }
 
 /// `target.alias.add` — add a user alias to a target (gen-3).

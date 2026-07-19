@@ -90,6 +90,7 @@ mod tests {
             constellation: None,
             magnitude: None,
             aliases: vec![],
+            session_count: 0,
         }]));
         let loaded = catalog().load().expect("stored snapshot must load");
         assert_eq!(loaded.len(), 1);

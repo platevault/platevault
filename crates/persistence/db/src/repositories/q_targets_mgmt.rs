@@ -173,6 +173,29 @@ pub async fn get_alias_kind(
     Ok(row.map(|(kind,)| kind))
 }
 
+// ── acquisition_session ──────────────────────────────────────────────────────
+
+/// `(target_id, session_count)` pairs for every target with at least one
+/// linked `acquisition_session` (#877, planner Sessions column). A session
+/// links via the spec-035 `canonical_target_id` when set, else the legacy
+/// `target_id` (mirrors `app_core::sessions::list_sessions`'s own fallback) —
+/// never double-counted since at most one of the two is non-NULL per row.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn session_counts_by_target(pool: &SqlitePool) -> DbResult<Vec<(String, i64)>> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT COALESCE(canonical_target_id, target_id) AS tid, COUNT(*)
+         FROM acquisition_session
+         WHERE COALESCE(canonical_target_id, target_id) IS NOT NULL
+         GROUP BY tid",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 // ── audit_log_entry ──────────────────────────────────────────────────────────
 
 /// Insert a durable `audit_log_entry` row for a resolution outcome
@@ -310,6 +333,53 @@ mod tests {
         );
         assert!(get_alias_kind(db.pool(), "a-1", "t-002").await.unwrap().is_none());
         assert!(get_alias_kind(db.pool(), "a-missing", "t-001").await.unwrap().is_none());
+    }
+
+    // ── acquisition_session ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn session_counts_by_target_prefers_canonical_and_falls_back_to_legacy() {
+        let db = setup().await;
+        insert_target(db.pool(), "canon-1").await;
+        sqlx::query(
+            "INSERT INTO target (id, primary_designation, created_at)
+             VALUES ('legacy-1', 'Legacy Target', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, canonical_target_id, created_at)
+             VALUES ('s-1', 'K1', '[]', 'canon-1', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, canonical_target_id, created_at)
+             VALUES ('s-2', 'K2', '[]', 'canon-1', '2026-01-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, target_id, created_at)
+             VALUES ('s-3', 'K3', '[]', 'legacy-1', '2026-01-03T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+             VALUES ('s-unlinked', 'K4', '[]', '2026-01-04T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let mut counts = session_counts_by_target(db.pool()).await.unwrap();
+        counts.sort();
+        assert_eq!(counts, vec![("canon-1".to_owned(), 2), ("legacy-1".to_owned(), 1)]);
     }
 
     // ── audit_log_entry ───────────────────────────────────────────────────────

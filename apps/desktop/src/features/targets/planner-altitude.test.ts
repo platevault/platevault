@@ -52,6 +52,7 @@ function item(
     raDeg,
     decDeg,
     aliases: [],
+    sessionCount: 0,
     ...overrides,
   };
 }
