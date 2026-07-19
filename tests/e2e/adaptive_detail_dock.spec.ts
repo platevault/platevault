@@ -20,73 +20,73 @@
  * adaptive threshold) and is unaffected by this change.
  */
 import {
-	test,
-	expect,
-	seedSetupComplete,
-	disableGuidedTourOverlay,
-} from "./support/harness";
+  test,
+  expect,
+  seedSetupComplete,
+  disableGuidedTourOverlay,
+} from './support/harness';
 
-test.describe("adaptive detail-panel dock (spec 054 / #936)", () => {
-	test("docks to the side at a wide viewport and falls back to the bottom at 1100x720", async ({
-		page,
-	}) => {
-		seedSetupComplete(page);
-		await page.setViewportSize({ width: 1600, height: 900 });
-		await page.goto("/#/calibration");
-		await disableGuidedTourOverlay(page);
-		await expect(page.locator(".alm-calib-table")).toBeVisible({
-			timeout: 8_000,
-		});
+test.describe('adaptive detail-panel dock (spec 054 / #936)', () => {
+  test('docks to the side at a wide viewport and falls back to the bottom at 1100x720', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/#/calibration');
+    await disableGuidedTourOverlay(page);
+    await expect(page.locator('.alm-calib-table')).toBeVisible({
+      timeout: 8_000,
+    });
 
-		const darkRow = page
-			.locator(".alm-calib-table__row")
-			.filter({ hasText: "Master Dark · 120s" });
-		await darkRow.click();
-		const detail = page.locator(".alm-listpage__detail");
-		await expect(detail).toBeVisible({ timeout: 5_000 });
-		await expect(detail).toHaveClass(/alm-listpage__detail--side/);
-		await expect(page.getByTestId("dock-resize-handle")).toBeVisible();
+    const darkRow = page
+      .locator('.alm-calib-table__row')
+      .filter({ hasText: 'Master Dark · 120s' });
+    await darkRow.click();
+    const detail = page.locator('.alm-listpage__detail');
+    await expect(detail).toBeVisible({ timeout: 5_000 });
+    await expect(detail).toHaveClass(/alm-listpage__detail--side/);
+    await expect(page.getByTestId('dock-resize-handle')).toBeVisible();
 
-		// Shrink to the shell's enforced minimum — bottom is the universal
-		// narrow fallback (decision #8); the resize handle disappears with it.
-		await page.setViewportSize({ width: 1100, height: 720 });
-		await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
-		await expect(page.getByTestId("dock-resize-handle")).not.toBeVisible();
-		// The panel itself, and its content, remain intact through the switch.
-		await expect(detail).toContainText("Poseidon-C PRO");
-	});
+    // Shrink to the shell's enforced minimum — bottom is the universal
+    // narrow fallback (decision #8); the resize handle disappears with it.
+    await page.setViewportSize({ width: 1100, height: 720 });
+    await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
+    await expect(page.getByTestId('dock-resize-handle')).not.toBeVisible();
+    // The panel itself, and its content, remain intact through the switch.
+    await expect(detail).toContainText('Poseidon-C PRO');
+  });
 
-	test("pinning to side persists the placement across a reload", async ({
-		page,
-	}) => {
-		seedSetupComplete(page);
-		await page.setViewportSize({ width: 1024, height: 768 });
-		await page.goto("/#/calibration");
-		await disableGuidedTourOverlay(page);
-		await expect(page.locator(".alm-calib-table")).toBeVisible({
-			timeout: 8_000,
-		});
+  test('pinning to side persists the placement across a reload', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/#/calibration');
+    await disableGuidedTourOverlay(page);
+    await expect(page.locator('.alm-calib-table')).toBeVisible({
+      timeout: 8_000,
+    });
 
-		await page
-			.locator(".alm-calib-table__row")
-			.filter({ hasText: "Master Dark · 120s" })
-			.click();
-		const detail = page.locator(".alm-listpage__detail");
-		await expect(detail).toBeVisible({ timeout: 5_000 });
-		await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
+    await page
+      .locator('.alm-calib-table__row')
+      .filter({ hasText: 'Master Dark · 120s' })
+      .click();
+    const detail = page.locator('.alm-listpage__detail');
+    await expect(detail).toBeVisible({ timeout: 5_000 });
+    await expect(detail).not.toHaveClass(/alm-listpage__detail--side/);
 
-		await page.getByRole("radio", { name: "Right" }).click();
-		await expect(detail).toHaveClass(/alm-listpage__detail--side/);
+    await page.getByRole('radio', { name: 'Right' }).click();
+    await expect(detail).toHaveClass(/alm-listpage__detail--side/);
 
-		await page.reload();
-		await disableGuidedTourOverlay(page);
-		await page
-			.locator(".alm-calib-table__row")
-			.filter({ hasText: "Master Dark · 120s" })
-			.click();
-		const detailAfterReload = page.locator(".alm-listpage__detail");
-		await expect(detailAfterReload).toBeVisible({ timeout: 5_000 });
-		// The pin survives the reload even though 1024 is below the auto threshold.
-		await expect(detailAfterReload).toHaveClass(/alm-listpage__detail--side/);
-	});
+    await page.reload();
+    await disableGuidedTourOverlay(page);
+    await page
+      .locator('.alm-calib-table__row')
+      .filter({ hasText: 'Master Dark · 120s' })
+      .click();
+    const detailAfterReload = page.locator('.alm-listpage__detail');
+    await expect(detailAfterReload).toBeVisible({ timeout: 5_000 });
+    // The pin survives the reload even though 1024 is below the auto threshold.
+    await expect(detailAfterReload).toHaveClass(/alm-listpage__detail--side/);
+  });
 });

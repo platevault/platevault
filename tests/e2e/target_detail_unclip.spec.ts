@@ -26,69 +26,69 @@
  *
  * Verification layer: PE — Playwright mocks-UI (run in WSL).
  */
-import type { Locator } from "@playwright/test";
+import type { Locator } from '@playwright/test';
 import {
-	disableGuidedTourOverlay,
-	expect,
-	seedSetupComplete,
-	test,
-} from "./support/harness";
+  disableGuidedTourOverlay,
+  expect,
+  seedSetupComplete,
+  test,
+} from './support/harness';
 
 /** `locator.boundingBox()` types as nullable; every call site here expects the
  * element to be laid out (it's already asserted present), so fail loudly
  * instead of asserting away the null. */
 async function requireBox(locator: Locator) {
-	const box = await locator.boundingBox();
-	if (box === null) {
-		throw new Error("expected a bounding box, element is not laid out");
-	}
-	return box;
+  const box = await locator.boundingBox();
+  if (box === null) {
+    throw new Error('expected a bounding box, element is not laid out');
+  }
+  return box;
 }
 
-test.describe("Regression · Target detail pane content unclipped (#816)", () => {
-	test("mouse-wheel scrolling the detail pane reveals the back button below the altitude graph", async ({
-		page,
-	}) => {
-		// Short enough that the header + pill row + altitude graph alone fill the
-		// pane — pre-fix this pushed the back button out under overflow:hidden
-		// with no scrollable region to wheel it back into view.
-		await page.setViewportSize({ width: 1100, height: 620 });
-		seedSetupComplete(page);
-		await page.goto("/#/targets");
-		await disableGuidedTourOverlay(page);
+test.describe('Regression · Target detail pane content unclipped (#816)', () => {
+  test('mouse-wheel scrolling the detail pane reveals the back button below the altitude graph', async ({
+    page,
+  }) => {
+    // Short enough that the header + pill row + altitude graph alone fill the
+    // pane — pre-fix this pushed the back button out under overflow:hidden
+    // with no scrollable region to wheel it back into view.
+    await page.setViewportSize({ width: 1100, height: 620 });
+    seedSetupComplete(page);
+    await page.goto('/#/targets');
+    await disableGuidedTourOverlay(page);
 
-		const m31 = page.locator(".alm-targets-table__row", { hasText: "M 31" });
-		await expect(m31).toBeVisible({ timeout: 8_000 });
-		await m31.click();
+    const m31 = page.locator('.alm-targets-table__row', { hasText: 'M 31' });
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+    await m31.click();
 
-		const pane = page.locator(".alm-detail--fill");
-		const scrollRegion = page.locator(".alm-planner__scroll");
-		await expect(scrollRegion).toBeVisible();
+    const pane = page.locator('.alm-detail--fill');
+    const scrollRegion = page.locator('.alm-planner__scroll');
+    await expect(scrollRegion).toBeVisible();
 
-		const backBtn = page.getByRole("button", { name: "← All targets" });
-		const beforeBox = await requireBox(backBtn);
-		const paneBox = await requireBox(pane);
-		// Before scrolling, the back button (last element in the region) sits
-		// below the pane's own clipped bottom edge — this holds both pre- and
-		// post-fix, since it's the natural (unscrolled) layout position.
-		expect(beforeBox.y).toBeGreaterThan(paneBox.y + paneBox.height);
+    const backBtn = page.getByRole('button', { name: '← All targets' });
+    const beforeBox = await requireBox(backBtn);
+    const paneBox = await requireBox(pane);
+    // Before scrolling, the back button (last element in the region) sits
+    // below the pane's own clipped bottom edge — this holds both pre- and
+    // post-fix, since it's the natural (unscrolled) layout position.
+    expect(beforeBox.y).toBeGreaterThan(paneBox.y + paneBox.height);
 
-		// Real wheel scroll over the scroll region, as an actual user would do.
-		const scrollBox = await requireBox(scrollRegion);
-		await page.mouse.move(
-			scrollBox.x + scrollBox.width / 2,
-			scrollBox.y + scrollBox.height / 2,
-		);
-		await page.mouse.wheel(0, 3000);
+    // Real wheel scroll over the scroll region, as an actual user would do.
+    const scrollBox = await requireBox(scrollRegion);
+    await page.mouse.move(
+      scrollBox.x + scrollBox.width / 2,
+      scrollBox.y + scrollBox.height / 2,
+    );
+    await page.mouse.wheel(0, 3000);
 
-		// Post-fix, the wheel scroll moves the button up into the pane's
-		// clipped viewport — it now overlaps the pane's own bounding box.
-		await expect(async () => {
-			const afterBox = await requireBox(backBtn);
-			expect(afterBox.y).toBeLessThan(paneBox.y + paneBox.height);
-			expect(afterBox.y + afterBox.height).toBeGreaterThan(paneBox.y);
-		}).toPass({ timeout: 2_000 });
-		await expect(backBtn).toBeVisible();
-		await expect(backBtn).toBeEnabled();
-	});
+    // Post-fix, the wheel scroll moves the button up into the pane's
+    // clipped viewport — it now overlaps the pane's own bounding box.
+    await expect(async () => {
+      const afterBox = await requireBox(backBtn);
+      expect(afterBox.y).toBeLessThan(paneBox.y + paneBox.height);
+      expect(afterBox.y + afterBox.height).toBeGreaterThan(paneBox.y);
+    }).toPass({ timeout: 2_000 });
+    await expect(backBtn).toBeVisible();
+    await expect(backBtn).toBeEnabled();
+  });
 });
