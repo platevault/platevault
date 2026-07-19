@@ -1132,6 +1132,7 @@ export function InboxPage() {
     <>
       <ListPageLayout
         topBar={topBar}
+        dockId="inbox"
         detailLabel={m.inbox_detection_details()}
         detail={
           selectedItem != null ? (

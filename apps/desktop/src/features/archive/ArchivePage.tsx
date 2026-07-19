@@ -257,6 +257,7 @@ export function ArchivePage() {
     <>
       <ListPageLayout
         topBar={topBar}
+        dockId="archive"
         detailLabel={m.common_details()}
         detail={item != null ? <ArchiveDetail item={item} /> : undefined}
         onCloseDetail={item != null ? () => void clearSelection() : undefined}

@@ -293,6 +293,7 @@ export function SessionsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockId="sessions"
       detail={
         selectedSession != null ? (
           <SessionDetail
