@@ -153,7 +153,7 @@ export function ArchivePage() {
     void sharedQueryClient.invalidateQueries({
       queryKey: queryKeys.archive.list(),
     });
-    clearSelection();
+    void clearSelection();
   };
 
   /** Reveal the app-managed archive folder in the OS file manager (#874). */

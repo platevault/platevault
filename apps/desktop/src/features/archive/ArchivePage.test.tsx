@@ -35,7 +35,13 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ArchiveEntry } from '@/bindings/index';
+import type { ArchiveEntry, GenerateRestorePlanResult } from '@/bindings/index';
+
+/** Matches `useMutation().mutate`'s options-object shape (mirrors ArchivePage's call). */
+interface MutateOpts {
+  onSuccess?: (res: GenerateRestorePlanResult) => void;
+  onError?: (err: Error) => void;
+}
 
 const {
   mockSendToTrash,
@@ -298,13 +304,15 @@ describe('ArchivePage — spec 043 single-column layout', () => {
   it('16. Restore generates a restore plan and opens the review overlay (#756/#885)', async () => {
     archiveListState.data = [makeEntry({ id: 'proj-1' })];
     mockSelectedId.current = 'proj-1';
-    mockGenerateRestorePlan.mockImplementation((_planId, opts) => {
-      opts?.onSuccess?.({
-        planId: 'restore-plan-1',
-        itemCount: 2,
-        protectedItemCount: 0,
-      });
-    });
+    mockGenerateRestorePlan.mockImplementation(
+      (_planId: string, opts?: MutateOpts) => {
+        opts?.onSuccess?.({
+          planId: 'restore-plan-1',
+          itemCount: 2,
+          protectedItemCount: 0,
+        });
+      },
+    );
     render(<ArchivePage />);
     fireEvent.click(screen.getByTestId('archive-restore-btn'));
     expect(mockGenerateRestorePlan).toHaveBeenCalledWith(
@@ -327,9 +335,11 @@ describe('ArchivePage — spec 043 single-column layout', () => {
   it('17. Restore surfaces an error toast when plan generation fails', () => {
     archiveListState.data = [makeEntry({ id: 'proj-1' })];
     mockSelectedId.current = 'proj-1';
-    mockGenerateRestorePlan.mockImplementation((_planId, opts) => {
-      opts?.onError?.(new Error('db failure'));
-    });
+    mockGenerateRestorePlan.mockImplementation(
+      (_planId: string, opts?: MutateOpts) => {
+        opts?.onError?.(new Error('db failure'));
+      },
+    );
     render(<ArchivePage />);
     fireEvent.click(screen.getByTestId('archive-restore-btn'));
     expect(mockAddToast).toHaveBeenCalledWith(
