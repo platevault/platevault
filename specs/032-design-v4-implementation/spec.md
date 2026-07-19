@@ -42,7 +42,11 @@ single coherent product.
   row (by state); the detail header carries no buttons.
 - **Density:** compact is the default (toggle retained).
 - **Window:** minimum size raised to **1280×800** so the rail always fits — no
-  responsive collapse needed.
+  responsive collapse needed. *(Reconciliation note, 2026-07-19, issue #764:
+  this locked decision was walked back without a recorded reversal —
+  `apps/desktop/src-tauri/tauri.conf.json` ships `minWidth: 1100,
+  minHeight: 720`. Treat the shipped 1100×720 minimum as current; whoever
+  changed it should file the reversal rationale.)*
 - **Sidebar:** 1-line brand, workflow groups (Capture/Library/Work), count
   badges, Settings pinned at the bottom.
 - **Status bar:** zoned — operation (left) / storage & cleanup health (right) /
