@@ -256,8 +256,17 @@ pub async fn generate_restore(
     archived_plan_id: &str,
     title: Option<&str>,
 ) -> Result<GenerateRestorePlanResult, ContractError> {
+    // A missing plan gets the domain-specific `plan.not_found` code (matching
+    // this function's documented contract) rather than the generic
+    // `db_err`/`internal.database` mapping — mirrors `plans.rs`'s local
+    // `db_err` shadow for the same lookup-by-id NotFound case.
     let archived_plan =
-        plans_repo::get_plan(pool, archived_plan_id, false).await.map_err(db_err)?;
+        plans_repo::get_plan(pool, archived_plan_id, false).await.map_err(|e| match e {
+            persistence_db::DbError::NotFound(msg) => {
+                ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
+            }
+            other => db_err(other),
+        })?;
 
     if archived_plan.origin != "archive" || archived_plan.state != "applied" {
         return Err(ContractError::new(
@@ -600,9 +609,11 @@ mod tests {
         // finalize_restore_lifecycle (R-Unarchive).
         assert_eq!(plan.origin_path.as_deref(), Some("p1"));
 
-        let restore_items = plans_repo::list_plan_items(db.pool(), &restore_resp.plan_id).await.unwrap();
+        let restore_items =
+            plans_repo::list_plan_items(db.pool(), &restore_resp.plan_id).await.unwrap();
         assert_eq!(restore_items.len(), 1);
-        let archive_items = plans_repo::list_plan_items(db.pool(), &archive_resp.plan_id).await.unwrap();
+        let archive_items =
+            plans_repo::list_plan_items(db.pool(), &archive_resp.plan_id).await.unwrap();
         // Reversed: the restore item's source is the archived item's
         // destination, and its destination is the archived item's original source.
         assert_eq!(restore_items[0].from_relative_path, archive_items[0].to_relative_path);
