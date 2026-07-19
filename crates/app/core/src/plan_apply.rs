@@ -3052,6 +3052,82 @@ mod tests {
         assert_eq!(items[0].item_state, "succeeded");
     }
 
+    /// Sibling of the trash-routing regression above, guarding the inverse:
+    /// a plan whose `destructive_destination` stays `"archive"` must still
+    /// route its `action = "archive"` item through `ExecutorItemAction::Archive`
+    /// (file lands under the archive path, never removed). Without this, a
+    /// guard bug matching plain `"archive"` (routing every archive item to
+    /// Trash regardless of `destructive_destination`) would pass the trash
+    /// test above undetected — no existing `item_row_to_executor_item` test
+    /// asserts on `item.action`.
+    #[tokio::test]
+    async fn archive_action_item_with_archive_destination_stays_archived() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("intermediate.fits");
+        std::fs::write(&file_path, b"data").unwrap();
+        let abs = file_path.to_str().unwrap();
+        let archive_dest_path = dir.path().join(".astro-plan-archive/p-archive-e2e-item-0.fits");
+        let archive_dest = archive_dest_path.to_str().unwrap();
+
+        let (db, bus) = setup().await;
+        repo::insert_plan(
+            db.pool(),
+            &repo::InsertPlan {
+                id: "p-archive-e2e",
+                title: "Test",
+                origin: "cleanup",
+                origin_path: None,
+                plan_type: "cleanup",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "p-archive-e2e-item-0",
+                plan_id: "p-archive-e2e",
+                item_index: 1,
+                name: "intermediate.fits",
+                action: "archive",
+                from_root_id: None,
+                from_relative_path: abs,
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: Some(archive_dest),
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        repo::update_plan_state(db.pool(), "p-archive-e2e", "ready_for_review").await.unwrap();
+        repo::set_approved(db.pool(), "p-archive-e2e", "2026-06-01T00:00:00Z", "test-token")
+            .await
+            .unwrap();
+
+        apply_plan(db.pool(), &bus, "p-archive-e2e", "test-token", None).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+
+        assert!(!file_path.exists(), "source must be gone after a successful archive move");
+        assert!(
+            archive_dest_path.exists(),
+            "an archive-destination plan's archive-action item must land at the archive path, not be trashed/deleted"
+        );
+        let plan = repo::get_plan(db.pool(), "p-archive-e2e", false).await.unwrap();
+        assert_eq!(plan.state, "applied");
+        let items = repo::list_plan_items(db.pool(), "p-archive-e2e").await.unwrap();
+        assert_eq!(items[0].item_state, "succeeded");
+    }
+
     /// #766: one durable `audit_log_entry` row per succeeded plan_item
     /// (query DB, not the live EventBus) — the exact SUCCESS criterion from
     /// the issue repro.
