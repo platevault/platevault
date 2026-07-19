@@ -1,0 +1,11 @@
+# alm/* i18n-rule baseline — grandfathered PRE-EXISTING violations.
+# scripts/check-eslint-baseline.mjs fails CI on any alm/* error NOT
+# listed here; every other rule still fails eslint normally. Entries
+# drain via the i18n refactor sweep — do not add rules other than
+# alm/no-user-string / alm/no-js-plural (fix those for real, or use the
+# rule's own `// eslint-disable-next-line alm/no-user-string -- <reason>`
+# for a genuinely non-user-facing string).
+# Regenerate with: node scripts/check-eslint-baseline.mjs --generate
+src/features/calibration/MastersTable.tsx	101	alm/no-user-string
+src/features/projects/wizard/WizardPage.tsx	157	alm/no-user-string
+src/features/targets/TargetsPage.tsx	562	alm/no-user-string
