@@ -273,6 +273,54 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     );
   });
 
+  // #607: per-item plan-apply failures were counted but discarded — only an
+  // aggregate "N failed" reached the UI, with no way to tell WHICH item
+  // failed or WHY without re-running the plan. `plans.get` already persists
+  // `state`/`failureReason` per item; the Result column surfaces it.
+  it('#607: shows the persisted per-item failure reason, diagnosable without re-running the plan', async () => {
+    mockPlansGet.mockResolvedValue(
+      ok(
+        plan({
+          state: 'partially_applied',
+          itemsApplied: 1,
+          itemsFailed: 1,
+          itemsPending: 0,
+          items: [
+            item({ state: 'succeeded' }),
+            item({
+              id: 'item-1',
+              index: 1,
+              name: 'master_dark.xisf',
+              from: 'masters/master_dark.xisf',
+              protection: 'protected',
+              state: 'failed',
+              failureReason:
+                'protected.source: item is protected by source policy',
+            }),
+          ],
+        }),
+      ),
+    );
+    renderOverlay();
+
+    const failedRow = await screen.findByTestId('plan-review-item-1');
+    expect(failedRow).toHaveTextContent('failed');
+    expect(failedRow).toHaveTextContent(
+      'protected.source: item is protected by source policy',
+    );
+
+    const succeededRow = screen.getByTestId('plan-review-item-0');
+    expect(succeededRow).toHaveTextContent('succeeded');
+  });
+
+  it('shows a muted placeholder in the Result column for an item never applied', async () => {
+    renderOverlay();
+    await screen.findByTestId('plan-review-item-0');
+    expect(screen.getByTestId('plan-review-item-result-0')).toHaveTextContent(
+      'None',
+    );
+  });
+
   it('keeps Approve & apply disabled until protected items are acknowledged', async () => {
     renderOverlay();
     const approveBtn = await screen.findByTestId('plan-review-approve-apply');

@@ -66,6 +66,29 @@ function actionPillVariant(action: PlanItemDetail_Serialize['action']) {
   return action === 'delete' ? ('danger' as const) : ('info' as const);
 }
 
+/**
+ * #607: per-item apply outcome pill variant. `plans.get` already persists
+ * `state`/`failureReason` per item (`plan_items.item_state`/`failure_reason`,
+ * written by `apply_repo::item_failed`) — durable and survives reopening the
+ * plan later, unlike the transient live-progress event stream. Only the
+ * table never rendered it.
+ */
+function resultPillVariant(state: PlanItemDetail_Serialize['state']) {
+  switch (state) {
+    case 'succeeded':
+      return 'ok' as const;
+    case 'failed':
+      return 'danger' as const;
+    case 'applying':
+      return 'info' as const;
+    case 'skipped':
+    case 'cancelled':
+      return 'warn' as const;
+    default:
+      return 'ghost' as const;
+  }
+}
+
 function destinationLabel(plan: PlanDetail_Serialize): string {
   // DTO enum is `archive | os_trash` (the DB canonical vocabulary is
   // `archive | trash`; plans.get maps trash → os_trash).
@@ -312,6 +335,7 @@ export function PlanReviewOverlay({
     { key: 'from', label: m.plans_review_col_from() },
     { key: 'to', label: m.plans_review_col_to() },
     { key: 'protection', label: m.plans_review_col_protection() },
+    { key: 'result', label: m.plans_review_col_result() },
     { key: 'reason', label: m.plans_review_col_reason() },
     { key: 'linked', label: m.plans_review_col_linked() },
   ];
@@ -342,6 +366,33 @@ export function PlanReviewOverlay({
         <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
       ) : (
         <Pill variant="ghost">{m.settings_cleanup_protection_normal()}</Pill>
+      ),
+    // #607: per-item apply outcome, so a partial failure is diagnosable
+    // without re-running the plan. `pending` (never attempted, e.g. the plan
+    // hasn't been applied yet) shows a muted dash rather than a pill.
+    result:
+      item.state === 'pending' ? (
+        <span
+          className="alm-cell--muted"
+          data-testid={`plan-review-item-result-${item.index}`}
+        >
+          {m.common_none()}
+        </span>
+      ) : (
+        <span
+          className="alm-plan-review__result"
+          data-testid={`plan-review-item-result-${item.index}`}
+        >
+          <Pill variant={resultPillVariant(item.state)}>{item.state}</Pill>
+          {item.failureReason && (
+            <span
+              className="alm-plan-review__failure-reason"
+              title={item.failureReason}
+            >
+              {item.failureReason}
+            </span>
+          )}
+        </span>
       ),
     reason: item.reason,
     linked: item.linked ?? (

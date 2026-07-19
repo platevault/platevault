@@ -70,17 +70,19 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 
 		// ── Richer inbox queue statistics (US6): 3 non-master folders (item-001/
 		//    002/003) + 1 master (item-master-dark), broken down per frame type by
-		//    `deriveInboxStats` (dark: 1 master, mixed: 3 folders — none of the
-		//    fixture items set `groupFrameType`, so all three fall into the
-		//    "mixed" bucket; the master alone carries `masterFrameType: "dark"`). ──
+		//    `deriveInboxStats` (dark: 1 master, unresolved: 3 folders — none of
+		//    the fixture items set `groupFrameType`, so all three fall into the
+		//    "unresolved" bucket (issue #791 renamed this from "mixed", which
+		//    collided with the unrelated per-item mixed-folder concept below);
+		//    the master alone carries `masterFrameType: "dark"`). ──
 		const statusSummary = page.getByTestId("statusbar-inbox-summary");
 		await expect(statusSummary).toContainText(/3 folders/i);
 		await expect(statusSummary).toContainText(/1 master/i);
 
 		const statsSummary = page.getByTestId("inbox-stats-summary");
 		await expect(statsSummary.getByTestId("inbox-stats-type-dark")).toBeVisible();
-		await expect(statsSummary.getByTestId("inbox-stats-type-mixed")).toBeVisible();
-		await expect(statsSummary.getByTestId("inbox-stats-type-mixed")).toContainText("3");
+		await expect(statsSummary.getByTestId("inbox-stats-type-unresolved")).toBeVisible();
+		await expect(statsSummary.getByTestId("inbox-stats-type-unresolved")).toContainText("3");
 	});
 
 	test("grouping the list by source then format nests items under their originating root (US2 FR-009 multi-level grouping)", async ({

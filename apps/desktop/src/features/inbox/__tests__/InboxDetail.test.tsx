@@ -17,7 +17,12 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  within,
+} from '@testing-library/react';
 import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type {
@@ -764,5 +769,108 @@ describe('InboxDetail — missing-value semantics (Q16 / #620)', () => {
     expect(
       instrumeRow.querySelector('[data-testid="unresolved-chip"]'),
     ).not.toBeNull();
+  });
+});
+
+// ── #653: Files property row must include unclassified files ────────────────
+
+describe('InboxDetail — #653 Files count includes unclassified files', () => {
+  it("sums breakdown + unclassifiedFiles, matching the list row's total fileCount", () => {
+    const needsReviewClassification: InboxClassifyResponse = {
+      inboxItemId: 'item-001',
+      type: 'mixed',
+      frameType: null,
+      contentSignature: 'sig-001',
+      breakdown: [
+        {
+          kind: 'flat',
+          count: 4,
+          destinationPreview: 'calib/flat/',
+          sampleFiles: [],
+        },
+      ],
+      unclassifiedFiles: ['unk_0001.fits', 'unk_0002.fits'],
+      sampleFiles: [],
+      computedAt: '2025-10-10T22:00:00Z',
+    };
+    render(
+      <InboxDetail
+        item={{ ...sampleItem, fileCount: 6 }}
+        rootAbsolutePath="/astro/inbox"
+        classification={needsReviewClassification}
+      />,
+    );
+    const filesRow = screen
+      .getByRole('rowheader', { name: m.inbox_col_files() })
+      .closest('[role="row"]') as HTMLElement;
+    // First cell is the value; the second is the (empty here) source badge cell.
+    expect(within(filesRow).getAllByRole('cell')[0]).toHaveTextContent('6');
+  });
+});
+
+// ── #789: exposure renders at a sensible precision, not raw float noise ──────
+
+describe('InboxDetail — #789 exposure formatting', () => {
+  it('rounds a noisy raw float exposure in the per-file metadata table', () => {
+    const noisyFileMetadata: InboxFileMetadata[] = [
+      {
+        ...fileMetadataFixture[0],
+        exposureS: 6.92447668013071,
+      },
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={noisyFileMetadata}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
+    const popup = screen.getByTestId('inbox-files-popup');
+    expect(within(popup).getByText('6.92 s')).toBeInTheDocument();
+    expect(
+      within(popup).queryByText('6.92447668013071 s'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a whole-second exposure with no decimal', () => {
+    const wholeSecondMetadata: InboxFileMetadata[] = [
+      { ...fileMetadataFixture[0], exposureS: 300 },
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={wholeSecondMetadata}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
+    const popup = screen.getByTestId('inbox-files-popup');
+    expect(within(popup).getByText('300 s')).toBeInTheDocument();
+  });
+
+  it('rounds the noisy exposure in the detection property table too', () => {
+    const noisyFileMetadata: InboxFileMetadata[] = [
+      {
+        ...fileMetadataFixture[0],
+        exposureS: 6.92447668013071,
+      },
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={noisyFileMetadata}
+      />,
+    );
+    const exposureRow = screen
+      .getByRole('rowheader', { name: m.inbox_col_exposure() })
+      .closest('[role="row"]') as HTMLElement;
+    expect(within(exposureRow).getAllByRole('cell')[0]).toHaveTextContent(
+      '6.92 s',
+    );
   });
 });

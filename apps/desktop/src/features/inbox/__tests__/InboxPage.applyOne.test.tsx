@@ -46,6 +46,7 @@ const {
   mockPlansApprove,
   mockApplyPlan,
   mockAddToast,
+  mockNavigate,
 } = vi.hoisted(() => ({
   mockRootsList: vi.fn(),
   mockInboxList: vi.fn(),
@@ -53,6 +54,7 @@ const {
   mockPlansApprove: vi.fn(),
   mockApplyPlan: vi.fn(),
   mockAddToast: vi.fn(),
+  mockNavigate: vi.fn(),
 }));
 
 vi.mock('@/bindings/index', () => ({
@@ -72,7 +74,7 @@ vi.mock('@/features/plans/planApply', () => ({
 }));
 
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useSearch: () => ({ selected: undefined, type: undefined }),
 }));
 
@@ -152,6 +154,39 @@ describe('InboxPage.handleApplyOne — approve before apply (#769, #609)', () =>
         approvalToken: 'tok-abc',
       }),
     );
+  });
+
+  // #871: after a completed apply, offer a direct way to reach the moved
+  // items instead of leaving the user to find them manually.
+  it('offers a "View in Sessions" toast action that navigates to /sessions', async () => {
+    mockPlansApprove.mockResolvedValue(
+      ok({
+        planId: openPlan.planId,
+        newState: 'approved',
+        approvalToken: 'tok-abc',
+        approvedAt: '2026-07-17T00:00:00Z',
+      }),
+    );
+    mockApplyPlan.mockResolvedValue({
+      results: [{ inboxItemId: openPlan.inboxItemId, planId: openPlan.planId }],
+    });
+
+    await openOverlayAndClickApply();
+
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'info',
+          action: expect.objectContaining({ label: 'View in Sessions' }),
+        }),
+      ),
+    );
+
+    const call = mockAddToast.mock.calls.find(
+      (c) => c[0].action?.label === 'View in Sessions',
+    );
+    call?.[0].action.onClick();
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/sessions' });
   });
 
   it('never calls apply and shows an error toast when approve fails', async () => {

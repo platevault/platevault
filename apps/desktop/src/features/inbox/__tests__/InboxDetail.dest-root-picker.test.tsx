@@ -109,3 +109,49 @@ describe('InboxDetail destination-root picker (#768)', () => {
     expect(screen.getByTestId('inbox-dest-root-select')).toBeInTheDocument();
   });
 });
+
+describe('InboxDetail destination-root option labels (#866)', () => {
+  it('disambiguates two roots that share a basename by appending the parent directory', () => {
+    const sameBasenameRoots = [
+      { id: 'root-a', path: 'D:/Astro/2024/Lights', category: 'raw' },
+      { id: 'root-b', path: 'D:/Astro/2025/Lights', category: 'raw' },
+    ];
+    render(
+      <InboxDetail
+        item={makeItem({ organizationState: 'unorganized' })}
+        rootAbsolutePath="/astro/lights/1"
+        classification={singleTypeLight}
+        onConfirm={vi.fn()}
+        destinationRoots={sameBasenameRoots}
+        selectedRootId=""
+        onSelectRoot={vi.fn()}
+      />,
+    );
+    const select = screen.getByTestId('inbox-dest-root-select');
+    const optionTexts = Array.from(select.querySelectorAll('option')).map(
+      (o) => o.textContent,
+    );
+    expect(optionTexts).toContain('Lights (2024) · raw');
+    expect(optionTexts).toContain('Lights (2025) · raw');
+  });
+
+  it('leaves unique-basename roots unchanged', () => {
+    render(
+      <InboxDetail
+        item={makeItem({ organizationState: 'unorganized' })}
+        rootAbsolutePath="/astro/lights/1"
+        classification={singleTypeLight}
+        onConfirm={vi.fn()}
+        destinationRoots={twoRawRoots}
+        selectedRootId=""
+        onSelectRoot={vi.fn()}
+      />,
+    );
+    const select = screen.getByTestId('inbox-dest-root-select');
+    const optionTexts = Array.from(select.querySelectorAll('option')).map(
+      (o) => o.textContent,
+    );
+    expect(optionTexts).toContain('1 · raw');
+    expect(optionTexts).toContain('2 · raw');
+  });
+});

@@ -28,9 +28,18 @@ interface PlanProtectionGateProps {
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * #807: previously suffixed a rewritten action with "(rewritten by
+ * protection policy)", implying the SOFTER action (e.g. delete → archive)
+ * would actually run. It never does: the apply-time protection gate
+ * (`fs/executor/run.rs`) unconditionally refuses ANY mutating action —
+ * rewritten or not — on a protected item; only NoOp/Catalogue pass. Showing
+ * the rewrite is still useful context (what the plan WOULD have done absent
+ * protection), but the wording must not imply it will be applied.
+ */
 function actionLabel(item: ProtectedPlanItem): string {
   if (item.rewrittenAction) {
-    return `${item.originalAction} → ${item.rewrittenAction} (rewritten by protection policy)`;
+    return `${item.originalAction} → ${item.rewrittenAction}`;
   }
   return item.originalAction;
 }
@@ -169,6 +178,13 @@ export function PlanProtectionGate({
 
             <div className="alm-plan-gate__item-action">
               {m.plans_gate_action_label()} <strong>{actionLabel(item)}</strong>
+            </div>
+
+            {/* #807: state the truth plainly — protection is permanent, so
+                this item will never be archived/moved/deleted regardless of
+                the action shown above or of acknowledging below. */}
+            <div className="alm-plan-gate__item-note">
+              {m.plans_protected_item_note()}
             </div>
 
             {item.matchedCategories.length > 0 && (

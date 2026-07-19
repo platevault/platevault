@@ -154,3 +154,41 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe('InboxList — Format column sort matches the displayed value (#649)', () => {
+  it('sorts master rows by their displayed "{type} master" label, not the internal format tag', () => {
+    // Displayed labels, ascending (locale compare): "bias master" <
+    // "dark master" < "FITS". Sorting by the internal `formatTag` (always
+    // "FITS" for masters, ignoring the displayed "{type} master" swap) left
+    // masters interleaved arbitrarily with plain FITS rows instead.
+    const items = [
+      makeItem({
+        inboxItemId: 'dark-master',
+        isMaster: true,
+        masterFrameType: 'dark',
+      }),
+      makeItem({ inboxItemId: 'plain-fits' }),
+      makeItem({
+        inboxItemId: 'bias-master',
+        isMaster: true,
+        masterFrameType: 'bias',
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        sort={{ col: 'format', dir: 'asc' }}
+      />,
+    );
+    const rows = screen.getAllByTestId(/^inbox-item-/);
+    const order = rows.map((r) => r.getAttribute('data-testid'));
+    expect(order).toEqual([
+      'inbox-item-bias-master',
+      'inbox-item-dark-master',
+      'inbox-item-plain-fits',
+    ]);
+  });
+});

@@ -224,6 +224,18 @@ export function InboxPage() {
     refreshOpenPlans();
   }, [refreshList, refreshOpenPlans]);
 
+  // #871: after a plan apply completes, offer a direct link to the updated
+  // inventory instead of leaving the user to find the moved items manually.
+  // Sessions is the library's browsable inventory view; apply has no
+  // per-plan destination id to deep-link further than that.
+  const viewResultAction = useCallback(
+    () => ({
+      label: m.inbox_view_result_action(),
+      onClick: () => void navigate({ to: '/sessions' }),
+    }),
+    [navigate],
+  );
+
   // All registered library roots, fetched once (roots are optional UI sugar —
   // a fetch failure just leaves both derived views empty, per the prior
   // per-effect `.catch()` no-ops) and filtered client-side into the two views
@@ -455,6 +467,19 @@ export function InboxPage() {
       setRootPickItemId(null);
     }
   }, [rootPickItemId, selectedItemId]);
+
+  // #648: `selectedDestRootId` previously survived a selection change — the
+  // picker is filtered per item by frame-type category (InboxDetail's
+  // `applicableRoots`), so a calibration root chosen for a bias item is not
+  // among a subsequently-selected light item's options. The DOM <select>
+  // then fell back to its first option ("Auto") while this state still held
+  // the stale (invalid-for-this-item) root id, so a confirm sent the hidden
+  // stale value and the backend rejected it with `inbox.invalid_destination_
+  // root` for a picker that visibly read "Auto". Reset on every selection
+  // change so the picker always starts at the real "Auto" state.
+  useEffect(() => {
+    setSelectedDestRootId('');
+  }, [selectedItemId]);
 
   const mergeDestinations = useCallback(
     (destinations?: InboxConfirmDestination[] | null) => {
@@ -693,6 +718,11 @@ export function InboxPage() {
             count: String(result.results.length),
           }),
           variant: 'info',
+          // #871: no direct way to reach the moved items/updated inventory
+          // after apply — the user had to find it manually. Both bulk apply
+          // commands complete synchronously (no live progress channel), so
+          // the plans ARE already applied by the time this toast shows.
+          action: viewResultAction(),
         });
       }
       refreshAll();
@@ -719,6 +749,7 @@ export function InboxPage() {
             count: String(result.results.length),
           }),
           variant: 'info',
+          action: viewResultAction(),
         });
       }
       refreshAll();
@@ -754,7 +785,11 @@ export function InboxPage() {
     }
     const response = await runPlanApply({ id: planId, approvalToken });
     if (response) {
-      addToast({ message: m.inbox_plan_applied_toast(), variant: 'info' });
+      addToast({
+        message: m.inbox_plan_applied_toast(),
+        variant: 'info',
+        action: viewResultAction(),
+      });
       refreshAll();
     } else {
       addToast({
