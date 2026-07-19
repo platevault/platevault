@@ -284,7 +284,7 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/inbox");
-		await disableGuidedTourOverlay(page);
+		await disableOnboarding(page);
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		const reviewBtn = page.getByTestId("inbox-review-plans-btn");

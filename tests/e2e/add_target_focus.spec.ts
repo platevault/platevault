@@ -13,7 +13,7 @@
  *
  * Verification layer: PE — Playwright mocks-UI (run in WSL).
  */
-import { test, expect, seedSetupComplete, disableGuidedTourOverlay } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
 
 test.describe("Regression · Add target dialog focus (#856)", () => {
   test("opening Add target focuses the search input, not the close button", async ({
@@ -21,7 +21,7 @@ test.describe("Regression · Add target dialog focus (#856)", () => {
   }) => {
     seedSetupComplete(page);
     await page.goto("/#/targets");
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await page.getByRole("button", { name: "Add target" }).click();
 

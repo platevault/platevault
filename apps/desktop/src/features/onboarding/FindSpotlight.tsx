@@ -237,7 +237,6 @@ function SpotlightFor({
       disableFocusTrap
       overlayClickAction="close"
       blockTargetInteraction={false}
-      spotlightStyle={{ stroke: 'var(--alm-accent)', strokeWidth: 3 }}
       onEvent={onEvent}
     />
   );

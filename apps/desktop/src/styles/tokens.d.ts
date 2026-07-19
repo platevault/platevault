@@ -39,6 +39,7 @@ export type AlmTokenName =
   | 'alm-ok-bg'
   | 'alm-ok-border'
   | 'alm-on-accent'
+  | 'alm-onb-spotlight-stroke'
   | 'alm-radius-lg'
   | 'alm-radius-md'
   | 'alm-radius-sm'

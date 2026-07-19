@@ -443,9 +443,16 @@
   }
 }
 
-/* ── Find spotlight (T026): static outline via inline styles.spotlight; the
+/* ── Find spotlight (T026): static outline, tokens-only. The stroke colour is
+ * theme-scoped so it stays ≥3:1 against the dimmed overlay field (WCAG 1.4.11,
+ * R11 — see `--alm-onb-spotlight-stroke` in tokens.css). The
  * pulse-for-a-few-seconds animation is keyed off a root data-attribute the
  * component toggles (portal-safe; suppressed under reduced motion). ─────────── */
+.react-joyride__spotlight {
+  stroke: var(--alm-onb-spotlight-stroke);
+  stroke-width: 3px;
+}
+
 html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
   animation: alm-onb-spotlight-pulse 1s ease-in-out infinite;
 }

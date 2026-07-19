@@ -1200,6 +1200,23 @@ impl E2eApp {
     ///    read in module state (`apps/desktop/src/data/preferences.ts`), so
     ///    a direct localStorage write is invisible until a fresh page load.
     pub async fn complete_first_run_gate(&self) -> Result<()> {
+        self.complete_first_run_gate_impl(true).await
+    }
+
+    /// Like [`Self::complete_first_run_gate`] but LEAVES spec-056 onboarding
+    /// enabled, so the orientation walk auto-runs and the Getting-started
+    /// checklist renders. Only `onboarding_journey.rs` (VC-004) needs this;
+    /// every other journey suppresses onboarding so the walk's modal overlay
+    /// never intercepts its own UI interactions.
+    pub async fn complete_first_run_gate_onboarding(&self) -> Result<()> {
+        self.complete_first_run_gate_impl(false).await
+    }
+
+    /// Shared first-run gate completion. When `suppress_onboarding` is true the
+    /// deterministic onboarding suppression flag is set before the reload so
+    /// neither the walk nor the checklist renders (`isOnboardingSuppressed()`,
+    /// `apps/desktop/src/features/onboarding/store.ts`).
+    async fn complete_first_run_gate_impl(&self, suppress_onboarding: bool) -> Result<()> {
         let _: Value = self
             .invoke("firstrun_complete", json!({}))
             .await
@@ -1216,6 +1233,16 @@ impl E2eApp {
             .execute(script, vec![])
             .await
             .context("failed to persist setupCompleted preference")?;
+
+        if suppress_onboarding {
+            // Set BEFORE the reload so the onboarding store reads it at boot;
+            // otherwise the spec-056 US1 walk auto-runs and its modal overlay
+            // intercepts every subsequent `goto_route`/click in the journey.
+            self.driver
+                .execute(r#"localStorage.setItem('alm-onboarding-suppressed', 'true');"#, vec![])
+                .await
+                .context("failed to set onboarding suppression flag")?;
+        }
 
         self.driver.refresh().await.context("page refresh after first-run completion failed")?;
         self.wait_document_ready(Duration::from_secs(10)).await?;
