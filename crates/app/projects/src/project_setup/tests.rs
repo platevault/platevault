@@ -527,6 +527,21 @@ async fn list_projects_returns_summary() {
     create(&pool, &bus, &empty_cache(), &make_create_req("B", ProjectTool::Siril)).await.unwrap();
     let list = list(&pool).await.unwrap();
     assert_eq!(list.len(), 2);
+
+    // Verify summary content is real, not just row count — each summary
+    // must carry its own name/tool/path, not a copy or a default.
+    // `path` is resolved against the project root at create time (not a
+    // literal echo of the request path), so check the suffix rather than
+    // an exact match.
+    let a = list.iter().find(|p| p.name == "A").expect("project A must be in the list");
+    assert_eq!(a.tool, ProjectTool::PixInsight);
+    assert!(a.path.ends_with("projects/A"), "path must resolve under project A's name: {}", a.path);
+
+    let b = list.iter().find(|p| p.name == "B").expect("project B must be in the list");
+    assert_eq!(b.tool, ProjectTool::Siril);
+    assert!(b.path.ends_with("projects/B"), "path must resolve under project B's name: {}", b.path);
+
+    assert_ne!(a.id, b.id, "summaries must carry distinct project ids");
 }
 
 // ── Constitution II: folder plan tests ────────────────────────────────────
