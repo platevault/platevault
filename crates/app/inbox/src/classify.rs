@@ -342,6 +342,37 @@ pub async fn classify(
         }
     }
 
+    // spec 041 FR-046 / R-4: detect `inbox_file_overrides` staleness — the
+    // generic-property counterpart to the `mark_override_stale` snapshot pass
+    // above (which only covers the fixed evidence columns). Each override row
+    // carries the file identity recorded when it was set; compare it against
+    // the file's current on-disk stat and flag drift. One stat per file
+    // (property rows share identity), so dedupe by path first.
+    if let Some(sg_id) = item.source_group_id.as_deref() {
+        let mut checked_paths: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for ov in &group_overrides {
+            let (Some(stored_size), Some(stored_mtime)) =
+                (ov.file_size_bytes, ov.file_mtime.as_deref())
+            else {
+                continue; // no recorded identity yet — nothing to compare against
+            };
+            if !checked_paths.insert(ov.relative_file_path.as_str()) {
+                continue;
+            }
+            let abs = req.root_absolute_path.join(&ov.relative_file_path);
+            if let Ok(md) = std::fs::metadata(&abs) {
+                let cur_size = i64::try_from(md.len()).ok();
+                let cur_mtime = md
+                    .modified()
+                    .ok()
+                    .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
+                if cur_size != Some(stored_size) || cur_mtime.as_deref() != Some(stored_mtime) {
+                    repo::mark_file_override_stale(pool, sg_id, &ov.relative_file_path).await.ok();
+                }
+            }
+        }
+    }
+
     // Folder tallies from the layered (effective) records.
     for (rel, ft_opt, _) in &file_records {
         match ft_opt {
@@ -1693,6 +1724,86 @@ mod tests {
         );
         // The override values must also survive the rescan.
         assert_eq!(row.override_filter.as_deref(), Some("Ha"));
+    }
+
+    /// spec 041 FR-046: a generic `inbox_file_overrides` entry (set via
+    /// `set_file_override`, the reclassify_v2/cone_search path — not the
+    /// legacy `set_overrides` evidence columns exercised above) must be
+    /// flagged `override_stale` once classify observes the file's on-disk
+    /// identity has drifted from what was recorded when the override was set.
+    #[tokio::test]
+    async fn classify_marks_generic_file_override_stale_on_changed_file() {
+        use persistence_db::repositories::inbox as inbox_repo;
+        use std::io::Write;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("light_001.fits");
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-fovr-stale", "item-fovr-stale", "root-fovr", "")
+            .await;
+
+        // First classify records the file's identity in inbox_file_metadata.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-fovr-stale".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let identity =
+            inbox_repo::list_inbox_file_metadata(db.pool(), "item-fovr-stale").await.unwrap();
+        let (size, mtime) = identity
+            .iter()
+            .find(|m| m.relative_file_path == "light_001.fits")
+            .map(|m| (m.file_size_bytes, m.file_mtime.clone()))
+            .expect("identity recorded by first classify");
+
+        // Set a generic override carrying that identity (mirrors what
+        // reclassify_v2/cone_search now do).
+        inbox_repo::set_file_override(
+            db.pool(),
+            "sg-fovr-stale",
+            "light_001.fits",
+            "gain",
+            "100",
+            size,
+            mtime.as_deref(),
+        )
+        .await
+        .unwrap();
+
+        let before =
+            inbox_repo::list_file_overrides_for_group(db.pool(), "sg-fovr-stale").await.unwrap();
+        assert_eq!(before[0].override_stale, 0, "override freshly set, not yet stale");
+
+        // Mutate the file so its size changes.
+        {
+            let mut f = std::fs::OpenOptions::new().append(true).open(&file_path).unwrap();
+            f.write_all(b"extra bytes that change size").unwrap();
+        }
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-fovr-stale".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let after =
+            inbox_repo::list_file_overrides_for_group(db.pool(), "sg-fovr-stale").await.unwrap();
+        let ov = after.iter().find(|o| o.relative_file_path == "light_001.fits").unwrap();
+        assert_eq!(ov.override_stale, 1, "override_stale must be 1 after file size changed");
+        assert_eq!(ov.value, "100", "override value must survive being marked stale");
     }
 
     // ── T066: sub-item materialization tests ─────────────────────────────────

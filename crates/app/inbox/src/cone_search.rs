@@ -15,6 +15,8 @@
 //! in-use promotion — no duplicate write path, constitution §V).
 #![allow(clippy::doc_markdown)] // RA/Dec/FOV/WCS are domain terms
 
+use std::collections::HashMap;
+
 use sqlx::SqlitePool;
 
 use contracts_core::cone_search::{
@@ -509,16 +511,31 @@ pub async fn confirm(
     // downstream apply/session propagation. Never fails the confirm itself —
     // the durable canonical_target write above already succeeded.
     if let Some(source_group_id) = &item.source_group_id {
+        // File identity (size/mtime) recorded by the last classify (spec 041
+        // FR-046) — threaded through so the durable override has a baseline
+        // to compare against for staleness, same as `reclassify_v2`.
+        let file_identity: HashMap<String, (Option<i64>, Option<String>)> =
+            repo::list_inbox_file_metadata(pool, &req.frameset_id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| (m.relative_file_path, (m.file_size_bytes, m.file_mtime)))
+                .collect();
+
         if let Ok(rows) = repo::list_inbox_pointing(pool, &req.frameset_id).await {
             for row in rows {
+                let (id_size, id_mtime) = file_identity
+                    .get(row.relative_file_path.as_str())
+                    .cloned()
+                    .unwrap_or((None, None));
                 let _ = repo::set_file_override(
                     pool,
                     source_group_id,
                     &row.relative_file_path,
                     "target",
                     &req.candidate.primary_designation,
-                    None,
-                    None,
+                    id_size,
+                    id_mtime.as_deref(),
                 )
                 .await;
             }

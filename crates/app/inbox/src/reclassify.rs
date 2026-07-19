@@ -449,12 +449,27 @@ pub async fn reclassify_v2(
 
     // Build a flat map: relative_file_path → inbox_item_id
     let mut path_to_item: HashMap<String, String> = HashMap::new();
+    // File identity (size/mtime) most recently recorded by classify's own
+    // `stat` (spec 041 FR-046) — reclassify has no root path to stat files
+    // itself, but `inbox_file_metadata` already carries the identity from the
+    // classify run that produced this evidence. Threading it through here is
+    // what lets `set_file_override` (step 7) persist a real identity instead
+    // of `None, None`, which is required for staleness detection to have
+    // anything to compare against at the next classify.
+    let mut file_identity: HashMap<String, (Option<i64>, Option<String>)> = HashMap::new();
     for item_id in &evidence_item_ids {
         let evidence = inbox_repo::list_evidence(pool, item_id)
             .await
             .map_err(|e| db_internal_ctx(e, "list evidence for sub-item"))?;
         for ev in evidence {
             path_to_item.insert(ev.relative_file_path, item_id.clone());
+        }
+
+        let metadata_rows = inbox_repo::list_inbox_file_metadata(pool, item_id)
+            .await
+            .map_err(|e| db_internal_ctx(e, "list file metadata for sub-item"))?;
+        for m in metadata_rows {
+            file_identity.insert(m.relative_file_path, (m.file_size_bytes, m.file_mtime));
         }
     }
     let all_paths: std::collections::HashSet<&str> =
@@ -546,6 +561,12 @@ pub async fn reclassify_v2(
             )
         })?;
 
+        // Identity recorded at the last classify for this file, if any (spec
+        // 041 FR-046) — `None` for files never classified yet, which leaves
+        // the override with no comparison baseline until the next classify.
+        let (id_size, id_mtime) =
+            file_identity.get(file_path.as_str()).cloned().unwrap_or((None, None));
+
         if property_key == "frameType" {
             // Frame-type correction: write manual_override on the evidence row.
             let frame_type_str = match json_val {
@@ -577,8 +598,8 @@ pub async fn reclassify_v2(
                 file_path,
                 "frameType",
                 frame_type_str,
-                None, // size: caller doesn't stat files
-                None, // mtime: same
+                id_size,
+                id_mtime.as_deref(),
             )
             .await
             .map_err(|e| db_internal_ctx(e, "write durable frameType override"))?;
@@ -594,8 +615,8 @@ pub async fn reclassify_v2(
                 file_path,
                 property_key,
                 &value_str,
-                None, // size: caller doesn't stat files; staleness detected at classify time
-                None, // mtime: same
+                id_size,
+                id_mtime.as_deref(),
             )
             .await
             .map_err(|e| db_internal_ctx(e, "write generic file override"))?;
@@ -1300,6 +1321,60 @@ mod tests {
         assert!(gain_ov.is_some(), "gain override must be persisted");
         // String JSON values: the implementation stores the inner string (unwrapped from quotes).
         assert_eq!(gain_ov.unwrap().value, "100");
+    }
+
+    /// spec 041 FR-046: when `inbox_file_metadata` already carries a file's
+    /// identity (recorded by a prior classify), `reclassify_v2` must thread it
+    /// through to `set_file_override` instead of writing `None, None` — the
+    /// baseline required for staleness detection to have anything to compare
+    /// against at the next classify.
+    #[tokio::test]
+    async fn v2_generic_override_persists_known_file_identity() {
+        let db = test_db().await;
+        setup_source_group(&db, "sg-identity", "item-identity").await;
+
+        inbox_repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &persistence_db::repositories::inbox::UpsertFileMetadata {
+                inbox_item_id: "item-identity",
+                relative_file_path: "inbox_folder/frame_001.fits",
+                file_size_bytes: Some(4_194_304),
+                file_mtime: Some("2025-10-10T22:00:00Z"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: Some("sg-identity".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![InboxReclassifyFileOverride {
+                    file_path: "inbox_folder/frame_001.fits".to_owned(),
+                    properties: {
+                        let mut m = std::collections::HashMap::new();
+                        m.insert("gain".to_owned(), serde_json::json!("100").into());
+                        m
+                    },
+                }],
+                bulk: vec![],
+            },
+        )
+        .await
+        .unwrap();
+
+        let overrides =
+            inbox_repo::list_file_overrides_for_group(db.pool(), "sg-identity").await.unwrap();
+        let gain_ov = overrides
+            .iter()
+            .find(|o| {
+                o.property_key == "gain" && o.relative_file_path == "inbox_folder/frame_001.fits"
+            })
+            .unwrap();
+        assert_eq!(gain_ov.file_size_bytes, Some(4_194_304), "identity must be threaded through");
+        assert_eq!(gain_ov.file_mtime.as_deref(), Some("2025-10-10T22:00:00Z"));
     }
 
     /// T068: bulk set-all — apply one value across all files in the group when
