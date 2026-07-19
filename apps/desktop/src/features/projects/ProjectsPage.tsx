@@ -21,13 +21,19 @@
  * project is selected — so they are, by construction, shown only on selection
  * and carry the canonical `transition-btn-*` / `lifecycle-actions` testids.
  *
- * Dual-panel layout (task #104): the Projects page uses `detailPlacement=
- * "side-and-bottom"`. The SIDE panel (ProjectDetailContent) shows the primary
- * project identity — header, actions, metrics, stepper, target, Sources table,
- * and Channels palette. The BOTTOM panel (ProjectBottomDetail) shows the
- * secondary/operational sections that benefit from full-width horizontal room:
- * Notes, Manifests, Calibration, Source views, Outputs, and Cleanup preview.
- * Both panels mount when a project is selected and close together.
+ * Single adaptive detail panel. This page once used the task #104 dual
+ * `detailPlacement="side-and-bottom"` layout, with project identity in a side
+ * panel and the operational sections in a separate bottom strip. It no longer
+ * does: `be2ecedf` dropped the right side panel, and the page now passes no
+ * `detailPlacement` at all, so it takes `ListPageLayout`'s `'adaptive'`
+ * default (spec 054 / #936) — the detail docks to the side on a wide window
+ * and to the bottom on a narrow one, and the user can pin that per page.
+ *
+ * Both content blocks still render, stacked inside that ONE panel:
+ * `ProjectDetailContent` (header, actions, metrics, stepper, target, Sources
+ * table, Channels palette) above `ProjectBottomDetail` (Notes, Manifests,
+ * Calibration, Source views, Outputs, Cleanup preview). They mount and close
+ * together with the selection.
  *
  * URL state:
  *   - `selected`: project UUID string (spec 023 caveat fix — was numeric index).
@@ -212,10 +218,11 @@ export function ProjectsPage() {
     <ListPageLayout
       topBar={topBar}
       dockId="projects"
-      // Standardised bottom-docked detail (Sessions/Calibration convention): the
-      // project identity (ProjectDetailContent) stacks above the operational
-      // sections (ProjectBottomDetail) in ONE full-width bottom panel — no right
-      // side panel. Keeps the projects table full-width and column layout stable.
+      // ONE detail panel, not the old side+bottom pair: project identity
+      // (ProjectDetailContent) stacks above the operational sections
+      // (ProjectBottomDetail). Placement itself is NOT fixed to the bottom —
+      // no `detailPlacement` is passed, so this takes the `'adaptive'` default
+      // and docks to the side on a wide window (spec 054 / #936).
       detail={
         project ? (
           <div className="alm-project-detail-stack">
