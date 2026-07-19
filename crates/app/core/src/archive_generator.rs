@@ -50,9 +50,14 @@
 
 #![allow(clippy::doc_markdown)] // domain terminology not appropriate for backticks
 
-use contracts_core::archive::{ArchiveEntry, ArchiveListResponse, GenerateArchivePlanResult};
-use contracts_core::ContractError;
+use camino::Utf8Path;
+use contracts_core::archive::{
+    ArchiveEntry, ArchiveListResponse, GenerateArchivePlanResult, GenerateRestorePlanResult,
+};
+use contracts_core::error_code::ErrorCode;
+use contracts_core::{ContractError, ErrorSeverity};
 use persistence_db::repositories::artifacts as artifacts_repo;
+use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as projects_repo;
 use sqlx::SqlitePool;
 
@@ -126,6 +131,13 @@ pub async fn generate(
         .collect();
 
     let item_count = u32::try_from(items.len()).unwrap_or(u32::MAX);
+    // #603: an empty plan is silent by default (a disabled "Approve & apply"
+    // with no explanation) — the generator is the only place that knows WHY
+    // (zero `present` processing artifacts recorded for this project), so
+    // compute the diagnostic here rather than leaving the review UI to guess.
+    let empty_reason = (item_count == 0).then(|| {
+        "No files are linked to this project's sources — nothing to archive".to_owned()
+    });
 
     let resp = protection::generate_plan(
         pool,
@@ -147,7 +159,28 @@ pub async fn generate(
         plan_id: resp.plan_id,
         item_count,
         protected_item_count: u32::try_from(resp.protected_item_count).unwrap_or(u32::MAX),
+        empty_reason,
     })
+}
+
+/// Resolve the app-managed archive folder for the Reveal action (#874).
+///
+/// Takes the first plan item that actually has an `archive_path` (some items
+/// may have failed to resolve one) and returns its parent directory — the
+/// `.astro-plan-archive/<planId>/` folder itself, since `archive_path` points
+/// at `<folder>/<itemId>-<fileName>` (see `protection::compute_archive_destination`).
+///
+/// Only handles the un-rooted (`from_root_id: None`) convention `archive_generator`
+/// itself produces; a rooted `archive_path` (root-relative, set by the
+/// cleanup-generator archive path) is left unresolved (`None`) rather than
+/// guessing a root, since this generator has no root context to resolve it —
+/// a real gap only if cleanup-driven archives ever reach `archive.list`, which
+/// C5's projects-only surface does not do today.
+async fn resolve_archive_folder_path(pool: &SqlitePool, plan_id: &str) -> Option<String> {
+    let items = plans_repo::list_plan_items(pool, plan_id).await.ok()?;
+    let item = items.iter().find(|i| i.archive_path.is_some() && i.from_root_id.is_none())?;
+    let archive_path = item.archive_path.as_deref()?;
+    Utf8Path::new(archive_path).parent().map(|p| p.to_string())
 }
 
 /// `archive.list` — every project currently in the `archived` lifecycle state.
@@ -161,9 +194,16 @@ pub async fn generate(
 pub async fn list_archived(pool: &SqlitePool) -> Result<ArchiveListResponse, ContractError> {
     let rows = projects_repo::list_archived_projects(pool).await.map_err(db_err)?;
 
-    let entries = rows
-        .into_iter()
-        .map(|r| ArchiveEntry {
+    // N+1 per-entry lookup (one `list_plan_items` per archived project) to
+    // resolve #874's Reveal folder — acceptable for the Archive listing's
+    // low cardinality; revisit with a joined query if that stops holding.
+    let mut entries = Vec::with_capacity(rows.len());
+    for r in rows {
+        let archive_folder_path = match r.archived_via_plan_id.as_deref() {
+            Some(plan_id) => resolve_archive_folder_path(pool, plan_id).await,
+            None => None,
+        };
+        entries.push(ArchiveEntry {
             id: r.id,
             name: r.name,
             entity_type: "project".to_owned(),
@@ -175,10 +215,118 @@ pub async fn list_archived(pool: &SqlitePool) -> Result<ArchiveListResponse, Con
             original_path: r.path,
             size_bytes: r.archived_bytes,
             archived_via_plan_id: r.archived_via_plan_id,
-        })
-        .collect();
+            archive_folder_path,
+        });
+    }
 
     Ok(ArchiveListResponse { entries })
+}
+
+/// Materialise a reviewable restore (un-archive) plan (#885, decision D15).
+///
+/// Reverses a previously **applied** archive plan: every archived item (one
+/// whose `archive_path` was actually resolved) becomes a `move`-action item
+/// whose source is the archive location and whose destination is the item's
+/// original recorded location (`from_relative_path`) — the exact mirror of
+/// what the archive plan moved. Reuses the shared protection tail
+/// ([`crate::protection::generate_plan`]), so the restore plan gets the same
+/// reviewable-mutation discipline (constitution II): persisted in
+/// `ready_for_review`, protected items gate approval, no filesystem mutation
+/// happens until an explicit approve + apply.
+///
+/// Collision handling (an original path now occupied) and partially-missing
+/// archives are NOT special-cased here: the shared apply-time move primitive
+/// already refuses to silently overwrite an occupied destination
+/// (`conflict.destination_exists`) and already treats a missing source as a
+/// per-item failure rather than aborting the whole plan (the same
+/// partial-apply model every other plan type uses) — a bespoke pre-check
+/// here would only duplicate that enforcement.
+///
+/// The project id carried in the archive plan's `origin_path` is reused as
+/// this plan's `origin_path` too, so a successful apply can drive the
+/// R-Unarchive lifecycle closure (`crate::plan_apply::finalize_restore_lifecycle`).
+///
+/// # Errors
+///
+/// Returns `ContractError` with code:
+/// - `plan.not_found` — no matching archive plan.
+/// - `plan.invalid_state` — the referenced plan is not an *applied* `archive` plan.
+/// - `archive.empty` — the archive plan has no items to restore.
+pub async fn generate_restore(
+    pool: &SqlitePool,
+    archived_plan_id: &str,
+    title: Option<&str>,
+) -> Result<GenerateRestorePlanResult, ContractError> {
+    let archived_plan = plans_repo::get_plan(pool, archived_plan_id, false).await.map_err(db_err)?;
+
+    if archived_plan.origin != "archive" || archived_plan.state != "applied" {
+        return Err(ContractError::new(
+            ErrorCode::PlanInvalidState,
+            format!(
+                "plan {archived_plan_id} is not an applied archive plan (origin={}, state={})",
+                archived_plan.origin, archived_plan.state
+            ),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    let source_items = plans_repo::list_plan_items(pool, archived_plan_id).await.map_err(db_err)?;
+    let archived_items: Vec<_> = source_items.into_iter().filter(|i| i.archive_path.is_some()).collect();
+
+    if archived_items.is_empty() {
+        return Err(ContractError::new(
+            ErrorCode::ArchiveEmpty,
+            format!("plan {archived_plan_id} has no archived items to restore"),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    let plan_id = new_id();
+    let resolved_title = title
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("Restore: {}", archived_plan.title));
+
+    let items: Vec<CleanupPlanItem> = archived_items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, row)| CleanupPlanItem {
+            id: format!("{plan_id}-item-{idx}"),
+            name: file_name(&row.from_relative_path).to_owned(),
+            action: "move".to_owned(),
+            source_id: row.source_id.unwrap_or_default(),
+            category: row.category.unwrap_or_default(),
+            // Reversed: the archived file's current location is the source,
+            // its originally-recorded location is the destination.
+            from_relative_path: row.archive_path.unwrap_or_default(),
+            from_root_id: row.from_root_id,
+            to_relative_path: row.from_relative_path,
+        })
+        .collect();
+    let item_count = u32::try_from(items.len()).unwrap_or(u32::MAX);
+
+    let resp = protection::generate_plan(
+        pool,
+        &GeneratePlanRequest {
+            plan_id: plan_id.clone(),
+            title: resolved_title,
+            origin: "restore".to_owned(),
+            plan_type: "restore".to_owned(),
+            origin_path: archived_plan.origin_path,
+            destructive_destination: "archive".to_owned(),
+            reason: "restore".to_owned(),
+            total_bytes_required: 0,
+            items,
+        },
+    )
+    .await?;
+
+    Ok(GenerateRestorePlanResult {
+        plan_id: resp.plan_id,
+        item_count,
+        protected_item_count: u32::try_from(resp.protected_item_count).unwrap_or(u32::MAX),
+    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────

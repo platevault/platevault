@@ -487,6 +487,72 @@ async fn finalize_archive_lifecycle(
     }
 }
 
+/// Terminal step of a successful `origin = restore` plan apply (#885): drive
+/// the owning project back out of `archived` (R-Unarchive, `archived → ready`)
+/// and clear `archived_via_plan_id` so the Archive listing (which filters on
+/// `lifecycle = 'archived'`) drops the row. Mirrors
+/// [`finalize_archive_lifecycle`]'s shape; the only legal source state here is
+/// `archived` itself, so this closure is never idempotent-on-already-restored
+/// the way the archive closure is idempotent-on-already-archived.
+///
+/// Best-effort: the files are already moved back, so a failure here must NOT
+/// fail the apply. Every failure is logged for an external watchdog (§II).
+async fn finalize_restore_lifecycle(pool: &SqlitePool, bus: &EventBus, project_id: &str) {
+    use crate::lifecycle::lifecycle_use_case::{transition_lifecycle, TransitionCommand};
+    use domain_core::ids::EntityId;
+    use domain_core::lifecycle::data_asset::EntityType;
+    use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
+    use persistence_db::repositories::projects as projects_repo;
+
+    let uuid = match uuid::Uuid::parse_str(project_id) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::error!(%project_id, error=%e, "restore lifecycle closure: project id is not a uuid");
+            return;
+        }
+    };
+
+    let current = match projects_repo::get_project(pool, project_id).await {
+        Ok(p) => p.lifecycle,
+        Err(e) => {
+            tracing::error!(%project_id, error=%e, "restore lifecycle closure: project not found");
+            return;
+        }
+    };
+
+    // Edge-legality guard (Constitution §II): the only legal source for
+    // R-Unarchive is `archived` itself (domain_core::lifecycle::project).
+    if current != "archived" {
+        tracing::error!(
+            %project_id, from_state = %current,
+            "restore lifecycle closure: refusing illegal edge out of a non-archived state; leaving lifecycle unchanged"
+        );
+        return;
+    }
+
+    let repo = SqliteLifecycleRepository::new(pool.clone(), bus.clone());
+    let cmd = TransitionCommand {
+        entity_id: EntityId::from_uuid(uuid),
+        entity_type: EntityType::Project,
+        from_state: current,
+        to_state: "ready".to_owned(),
+        trigger: "archive.plan.restore.applied".to_owned(),
+        actor: "user".to_owned(),
+        request_id: EntityId::new(),
+    };
+
+    match transition_lifecycle(&repo, bus, cmd).await {
+        Ok(_) => {
+            if let Err(e) = projects_repo::clear_archived_via_plan_id(pool, project_id).await {
+                tracing::error!(%project_id, error=%e, "restore lifecycle closure: transition succeeded but clearing archived_via_plan_id failed");
+            }
+        }
+        Err(e) => {
+            tracing::error!(%project_id, error=%e, "restore lifecycle closure: transition to ready failed");
+        }
+    }
+}
+
 // ── Overlap check (FR-017, R-Concur-1) ────────────────────────────────────────
 
 /// Serializes the FR-017 overlap check with the registry insert so two
@@ -1376,6 +1442,17 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                 if terminal == "applied" && plan_origin == "archive" {
                     if let Some(project_id) = plan_project_id.as_deref() {
                         finalize_archive_lifecycle(&pool, &bus, &plan_id, project_id).await;
+                    }
+                }
+
+                // #885: on a fully-applied restore (un-archive) plan, drive the
+                // owning project back out of `archived`. Only a clean `applied`
+                // terminal qualifies — a partial/failed apply leaves files only
+                // partly moved back, so the project must stay `archived` until a
+                // retry plan finishes the job (mirrors the archive closure guard).
+                if terminal == "applied" && plan_origin == "restore" {
+                    if let Some(project_id) = plan_project_id.as_deref() {
+                        finalize_restore_lifecycle(&pool, &bus, project_id).await;
                     }
                 }
 

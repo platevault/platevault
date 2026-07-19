@@ -40,6 +40,13 @@ pub struct ArchiveEntry {
     /// (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
     /// for legacy rows archived before this column existed.
     pub archived_via_plan_id: Option<String>,
+    /// Absolute on-disk path to the app-managed archive folder holding this
+    /// entity's files (`<parent-of-first-item>/.astro-plan-archive/
+    /// <planId>/`, #874). Derived from the owning plan's first archived item
+    /// at read time; `None` when the owning plan is missing or has no
+    /// archived items to derive a folder from — never a fabricated path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archive_folder_path: Option<String>,
 }
 
 /// Response for `archive.list` — every project currently in `archived`.
@@ -57,6 +64,29 @@ pub struct GenerateArchivePlanResult {
     /// Id of the newly created archive plan (in `ready_for_review` state).
     pub plan_id: String,
     /// Total number of archive items placed on the plan.
+    pub item_count: u32,
+    /// Number of items that resolved to a protected protection level and will
+    /// gate plan approval until acknowledged (constitution II).
+    pub protected_item_count: u32,
+    /// Diagnostic sentence explaining an empty plan (#603): set only when
+    /// `item_count == 0`, so the review UI can render a reason instead of a
+    /// bare disabled "Approve & apply" button. `None` whenever the plan has
+    /// items — never a filler string standing in for "everything's fine".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub empty_reason: Option<String>,
+}
+
+/// Result of `archive.plan.generate_restore` (#885) — a reviewable
+/// un-archive plan created in `ready_for_review`, moving a project's
+/// previously archived files back to their recorded original locations.
+/// Never auto-applied (constitution II).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateRestorePlanResult {
+    /// Id of the newly created restore plan (in `ready_for_review` state).
+    pub plan_id: String,
+    /// Total number of restore items placed on the plan (one per archived
+    /// item the original archive plan actually moved).
     pub item_count: u32,
     /// Number of items that resolved to a protected protection level and will
     /// gate plan approval until acknowledged (constitution II).

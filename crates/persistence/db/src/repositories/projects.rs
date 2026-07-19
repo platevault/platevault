@@ -598,6 +598,22 @@ pub async fn set_archived_via_plan_id(
     Ok(())
 }
 
+/// Clear the archive-plan link on a restored (un-archived) project (#885).
+/// Counterpart to [`set_archived_via_plan_id`]; called once the R-Unarchive
+/// lifecycle transition succeeds so the Archive listing (`lifecycle =
+/// 'archived'` filter) drops the row.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn clear_archived_via_plan_id(pool: &SqlitePool, project_id: &str) -> DbResult<()> {
+    sqlx::query("UPDATE projects SET archived_via_plan_id = NULL WHERE id = ?")
+        .bind(project_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// One archived-project row for the Archive surface (spec 017 `archive.list`).
 ///
 /// Joined with the owning archive plan so the row can surface the plan title
