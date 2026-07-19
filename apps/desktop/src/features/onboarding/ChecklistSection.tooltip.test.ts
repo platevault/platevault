@@ -61,7 +61,41 @@ describe('checklist tooltip — WCAG 1.4.13 conformance contract', () => {
     // The two previous non-conformant implementations, in their exact shapes.
     expect(code).not.toMatch(/:focus-within/);
     expect(code).not.toMatch(/data-open=/);
-    expect(code).not.toMatch(/key === 'Escape'/);
     expect(code).not.toMatch(/role="tooltip"/);
+  });
+
+  /**
+   * #1103: the shared `Tooltip`'s trigger is a bare, non-focusable span, so
+   * delegating alone left the copy pointer-only — conformant plumbing wired to
+   * an element no keyboard user can reach. Delegation is necessary but not
+   * sufficient, and the original guard could not see the difference.
+   *
+   * The reveal is now owned by the row's checkbox: it drives the controlled
+   * `open`, and carries `aria-describedby` so the text reaches assistive tech
+   * even with the popup shut.
+   */
+  it('gives keyboard users a reveal, not just pointer users', () => {
+    // The checkbox owns the open state.
+    expect(code).toMatch(/onFocus=\{\(\) => setTipOpen\(true\)\}/);
+    expect(code).toMatch(/onBlur=\{\(\) => setTipOpen\(false\)\}/);
+    // …and is programmatically associated with the popup.
+    expect(code).toMatch(/aria-describedby=\{tooltipId\}/);
+    expect(code).toMatch(/popupId=\{tooltipId\}/);
+    // Fully controlled: `open={x || undefined}` silently flips base-ui back to
+    // its own internal state and broke Escape.
+    expect(code).toMatch(/open=\{tipOpen\}/);
+    expect(code).not.toMatch(/open=\{\w+ \|\| undefined\}/);
+  });
+
+  /**
+   * Escape is the one key bridged by hand, because base-ui's `useDismiss`
+   * only listens on ITS trigger and the reveal is owned by a sibling control.
+   * Removing this handler makes the e2e Escape assertion fail — so the guard
+   * asserts it is PRESENT rather than banning it as hand-rolling. Everything
+   * else (popup, positioning, delays, hoverable safe-polygon) stays base-ui's.
+   */
+  it('bridges Escape from the control that owns the open state', () => {
+    expect(code).toMatch(/key === 'Escape' && tipOpen/);
+    expect(code).toMatch(/setTipOpen\(false\)/);
   });
 });

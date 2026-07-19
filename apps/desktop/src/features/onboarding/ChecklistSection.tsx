@@ -480,6 +480,25 @@ function ChecklistItemRow({
   // :focus-visible + Escape state here, which fixed the pinning but still felt
   // clunky — no delay, no positioning, no collision handling. base-ui owns all
   // of that, and it is what every other tooltip in the app already uses.
+  //
+  // #1103: the shared Tooltip's trigger is a bare, NON-focusable span, so
+  // delegating to it made the text pointer-only — keyboard and screen-reader
+  // users got nothing, failing 1.4.13 and T017's "hover AND focus".
+  //
+  // The reveal is therefore owned by the row's CHECKBOX, which is already in the
+  // tab order: focusing it opens the popup, blurring or Escape closes it, and it
+  // carries `aria-describedby` so assistive tech reads the explanation without
+  // depending on the visual popup at all. Driving it from the checkbox rather
+  // than making the label span focusable keeps the tab order at one stop per
+  // row — a focusable label would have added a second stop per item.
+  //
+  // Fully controlled, never partly: passing `open={x || undefined}` flips the
+  // popup between controlled and uncontrolled, and base-ui then keeps its own
+  // internal state — which silently broke Escape. One boolean owns it, with
+  // base-ui reporting its hover transitions through `onOpenChange`, so hover
+  // and keyboard both flow through the same state.
+  const [tipOpen, setTipOpen] = useState(false);
+  const tooltipId = `${idPrefix}-tt-${safeId}`;
 
   const check = () =>
     void setOnboardingItemState(item.itemId, 'manually_checked');
@@ -529,9 +548,35 @@ function ChecklistItemRow({
         role="checkbox"
         aria-checked={false}
         aria-labelledby={labelId}
+        aria-describedby={tooltipId}
         className="alm-onb-checklist__check"
         onClick={check}
         disabled={blocked}
+        // #1103: this control owns the tooltip reveal for keyboard users.
+        //
+        // Reveals on ANY focus, deliberately not gated on `:focus-visible`.
+        // Gating on it was tried first and is wrong here: `:focus-visible` does
+        // not match focus moved programmatically after pointer input, which is
+        // exactly how assistive tech and `element.focus()` arrive — so the
+        // people this fix exists for were the ones it silently skipped. The
+        // cost is that a pointer click also pops the tooltip briefly; that is
+        // acceptable, since hovering to reach the checkbox already showed it.
+        onFocus={() => setTipOpen(true)}
+        onBlur={() => setTipOpen(false)}
+        onKeyDown={(e) => {
+          // 1.4.13 "dismissible". base-ui's own `useDismiss` handles Escape for
+          // ITS trigger — but the reveal here is owned by this checkbox, which
+          // is not that trigger, so Escape never reaches it. Verified by
+          // removing this handler: the e2e Escape assertion fails.
+          //
+          // This is NOT a hand-rolled reveal: base-ui still owns the popup,
+          // positioning, delays and hoverable safe-polygon. Only the dismiss
+          // key is bridged from the control that owns the open state.
+          if (e.key === 'Escape' && tipOpen) {
+            e.stopPropagation();
+            setTipOpen(false);
+          }
+        }}
       >
         <span className="alm-onb-checklist__checkbox" aria-hidden />
       </button>
@@ -542,7 +587,13 @@ function ChecklistItemRow({
           CSS-plus-local-state reveal that felt clunky and had to hand-roll
           hover, keyboard focus and Escape itself.
         */}
-        <Tooltip content={itemTooltip(item.itemId)} sideOffset={6}>
+        <Tooltip
+          content={itemTooltip(item.itemId)}
+          sideOffset={6}
+          popupId={tooltipId}
+          open={tipOpen}
+          onOpenChange={setTipOpen}
+        >
           <span id={labelId} className="alm-onb-checklist__item-label">
             {label}
           </span>

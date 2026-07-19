@@ -76,31 +76,47 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		).toHaveCount(0);
 	});
 
-	test("item tooltip reveals on pointer hover (FR-008)", async ({ page }) => {
+	test("item tooltip reveals on pointer hover AND keyboard focus (WCAG 1.4.13)", async ({
+		page,
+	}) => {
 		seedSetupComplete(page);
 		await page.goto("/#/sessions");
 		await openChecklist(page);
 
-		// The bespoke `#onb-tt-<id>` reveal is gone; the row now wraps its label in
-		// the shared base-ui `Tooltip`, which portals its popup as `.alm-tooltip`.
+		// The bespoke `#onb-tt-<id>` reveal is gone; the row wraps its label in the
+		// shared base-ui `Tooltip`, which portals its popup as `.alm-tooltip`.
 		//
-		// KEYBOARD GAP (real, not a stale expectation): the base-ui trigger renders
-		// as a plain `<span>` with no tabindex, so the tooltip cannot be reached or
-		// revealed by keyboard at all — the item's explanatory text is pointer-only
-		// and is not wired to the row's checkbox via aria-describedby either. This
-		// spec therefore asserts the hover behaviour that actually ships; the
-		// keyboard/AT path (the original WCAG 1.4.13 intent) is filed separately.
+		// #1103: that trigger span is not focusable, so the reveal is owned by the
+		// row's CHECKBOX (already in the tab order). BOTH paths are asserted here —
+		// asserting only hover is exactly how the keyboard path regressed unnoticed.
 		const tooltip = page.locator(".alm-tooltip");
+		const row = page.locator('[data-item-id="sessions.review_first"]');
+		const checkbox = row.locator('[role="checkbox"]');
+
 		await expect(tooltip).toHaveCount(0);
 
-		await page
-			.locator(
-				'[data-item-id="sessions.review_first"] .alm-onb-checklist__item-label',
-			)
-			.hover();
-
+		// 1. Pointer hover on the label.
+		await row.locator(".alm-onb-checklist__item-label").hover();
 		await expect(tooltip).toBeVisible();
 		await expect(tooltip).toHaveText(/session/i);
+
+		// Move the pointer away so the hover reveal cannot mask the keyboard one.
+		await page.mouse.move(0, 0);
+		await expect(tooltip).toHaveCount(0);
+
+		// 2. Keyboard focus on the checkbox reveals the same text.
+		await checkbox.focus();
+		await expect(tooltip).toBeVisible();
+		await expect(tooltip).toHaveText(/session/i);
+
+		// 3. Dismissible without moving focus (1.4.13).
+		await page.keyboard.press("Escape");
+		await expect(tooltip).toHaveCount(0);
+		await expect(checkbox).toBeFocused();
+
+		// 4. Programmatically associated, so assistive tech gets the explanation
+		//    even when the visual popup is closed.
+		await expect(checkbox).toHaveAttribute("aria-describedby", /.+/);
 	});
 
 	test("group header toggles aria-expanded on manual click", async ({

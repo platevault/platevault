@@ -12,6 +12,16 @@ export interface TooltipProps
   children: ReactNode;
   /** Popup offset from the trigger, in px. */
   sideOffset?: number;
+  /**
+   * Force the popup open. Use when a DIFFERENT element owns the reveal — e.g.
+   * a row whose focusable control is a sibling checkbox rather than the trigger
+   * span itself. Uncontrolled (hover/focus on the trigger) when omitted.
+   */
+  open?: boolean;
+  /** Controlled-open change handler; pairs with `open`. */
+  onOpenChange?: (open: boolean) => void;
+  /** Popup id, so another element can point `aria-describedby` at it. */
+  popupId?: string;
 }
 
 /**
@@ -19,23 +29,33 @@ export interface TooltipProps
  * `<span>` so it can wrap inline affordances (Lock glyph, InfoTip icon);
  * `className` and any extra span attributes (aria-label, tabIndex, data-*)
  * pass through to that trigger span. Popup styling lives in `.alm-tooltip`.
+ *
+ * ACCESSIBILITY: that trigger span is NOT focusable — base-ui adds no
+ * `tabIndex` and a bare span has none. So a tooltip whose only reveal is this
+ * trigger is pointer-only, which fails WCAG 1.4.13 (#1103). Callers must give
+ * keyboard users a path: either pass `tabIndex={0}` through to the trigger, or
+ * drive `open` from a real focusable control nearby and point that control's
+ * `aria-describedby` at `popupId`.
  */
 export function Tooltip({
   content,
   children,
   className,
   sideOffset = 4,
+  open,
+  onOpenChange,
+  popupId,
   ...rest
 }: TooltipProps) {
   return (
     <BaseTooltip.Provider>
-      <BaseTooltip.Root>
+      <BaseTooltip.Root open={open} onOpenChange={onOpenChange}>
         <BaseTooltip.Trigger className={className} render={<span {...rest} />}>
           {children}
         </BaseTooltip.Trigger>
         <BaseTooltip.Portal>
           <BaseTooltip.Positioner sideOffset={sideOffset}>
-            <BaseTooltip.Popup className="alm-tooltip">
+            <BaseTooltip.Popup id={popupId} className="alm-tooltip">
               {content}
             </BaseTooltip.Popup>
           </BaseTooltip.Positioner>
