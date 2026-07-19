@@ -100,4 +100,23 @@ describe('SegControl a11y (#1010)', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Gamma' }));
     expect(onChange).toHaveBeenCalledWith('c');
   });
+
+  it('applies alm-seg__btn--active to the selected option only (CI-red regression guard)', () => {
+    // The role="radio" migration broke consumer e2e locators that queried
+    // by role="button" (getByRole('radio', ...) is the correct query now),
+    // but the visual active-class contract itself must be unaffected —
+    // every consumer (Cleanup keep/archive/trash, TargetList density,
+    // future dock-placement control) still styles the selected option via
+    // this class, not the ARIA role.
+    render(<Harness initial="b" />);
+    expect(screen.getByRole('radio', { name: 'Alpha' })).not.toHaveClass(
+      'alm-seg__btn--active',
+    );
+    expect(screen.getByRole('radio', { name: 'Beta' })).toHaveClass(
+      'alm-seg__btn--active',
+    );
+    expect(screen.getByRole('radio', { name: 'Gamma' })).not.toHaveClass(
+      'alm-seg__btn--active',
+    );
+  });
 });
