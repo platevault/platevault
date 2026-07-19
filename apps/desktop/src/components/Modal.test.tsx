@@ -10,9 +10,9 @@
  * unless a caller opts a specific element in via `initialFocus`.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Modal } from './Modal';
 
 describe('Modal initial focus', () => {
@@ -39,6 +39,33 @@ describe('Modal initial focus', () => {
     render(<Harness />);
     await waitFor(() => {
       expect(screen.getByLabelText('body field')).toHaveFocus();
+    });
+  });
+});
+
+describe('Modal final focus (#844)', () => {
+  it('returns focus to the invoking control on close', async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open dialog</button>
+          <Modal open={open} onClose={() => setOpen(false)} title="Test">
+            <input aria-label="body field" />
+          </Modal>
+        </>
+      );
+    }
+    render(<Harness />);
+    const openBtn = screen.getByRole('button', { name: 'Open dialog' });
+    openBtn.focus();
+    fireEvent.click(openBtn);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(openBtn).toHaveFocus();
     });
   });
 });

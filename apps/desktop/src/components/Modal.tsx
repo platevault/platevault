@@ -27,7 +27,7 @@
  * is the canonical replacement for the ad-hoc per-feature dialog wrappers.
  */
 
-import type { ReactNode, RefObject } from 'react';
+import { useRef, type ReactNode, type RefObject } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { m } from '@/lib/i18n';
 
@@ -89,6 +89,23 @@ export function Modal({
 }: ModalProps) {
   const label = ariaLabel ?? (typeof title === 'string' ? title : undefined);
 
+  // Captures whichever element invoked the dialog, so Dialog.Popup's
+  // `finalFocus` (base-ui's own return-focus mechanism) has somewhere to
+  // send focus back to on close (#844). This component is used without a
+  // registered `Dialog.Trigger` (controlled `open`/`onClose`), so base-ui
+  // has no trigger to fall back to on its own. Captured on the open-rising-
+  // edge during render (not an effect): base-ui's own initial-focus effect
+  // fires before any effect Modal could register on `open`, so by the time
+  // an effect ran here the invoker would already have lost focus to the
+  // dialog's first tabbable element; reading `document.activeElement`
+  // synchronously during this render still sees the pre-dialog focus.
+  const invokerRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  if (open && !wasOpenRef.current && typeof document !== 'undefined') {
+    invokerRef.current = document.activeElement as HTMLElement | null;
+  }
+  wasOpenRef.current = open;
+
   return (
     <Dialog.Root
       open={open}
@@ -112,6 +129,7 @@ export function Modal({
           aria-label={label}
           data-testid={testId}
           initialFocus={initialFocus}
+          finalFocus={invokerRef}
         >
           <div className="alm-modal__header">
             {title != null ? (
