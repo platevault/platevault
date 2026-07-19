@@ -82,7 +82,10 @@ vi.mock('@/bindings/index', () => ({
     targetFavouritesList: () =>
       Promise.resolve({ status: 'ok', data: { targetIds: [] } }),
     targetFavouritesAdd: () =>
-      Promise.resolve({ status: 'ok', data: { targetId: '', favouritedAt: '' } }),
+      Promise.resolve({
+        status: 'ok',
+        data: { targetId: '', favouritedAt: '' },
+      }),
     targetFavouritesRemove: () =>
       Promise.resolve({ status: 'ok', data: { targetId: '' } }),
   },

@@ -120,7 +120,9 @@ export function useFavourites(): UseFavouritesResult {
  * the pattern in `data/queryClient.ts`'s module doc.
  */
 export function getFavouriteIds(): ReadonlySet<string> {
-  return sharedQueryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ?? new Set();
+  return (
+    sharedQueryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ?? new Set()
+  );
 }
 
 /**

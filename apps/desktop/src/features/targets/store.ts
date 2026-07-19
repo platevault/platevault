@@ -216,7 +216,10 @@ export function useSetTargetDisplayAlias() {
     mutationFn: async (req) =>
       unwrap(await commands.targetDisplayAliasSet(req)) as TargetDetailV3,
     onSuccess: (data, variables) => {
-      queryClient.setQueryData(queryKeys.targets.detail(variables.targetId), data);
+      queryClient.setQueryData(
+        queryKeys.targets.detail(variables.targetId),
+        data,
+      );
     },
   });
 }
@@ -227,7 +230,10 @@ export function useClearTargetDisplayAlias() {
     mutationFn: async (req) =>
       unwrap(await commands.targetDisplayAliasClear(req)) as TargetDetailV3,
     onSuccess: (data, variables) => {
-      queryClient.setQueryData(queryKeys.targets.detail(variables.targetId), data);
+      queryClient.setQueryData(
+        queryKeys.targets.detail(variables.targetId),
+        data,
+      );
     },
   });
 }

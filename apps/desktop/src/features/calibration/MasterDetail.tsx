@@ -170,7 +170,11 @@ export function MasterDetail({
     }
     // Mirrors the pre-migration catch-and-swallow: a failed detail or
     // sessions fetch degrades to the empty state rather than an error banner.
-    if (masterDetailQuery.error || sessionsQuery.error || !masterDetailQuery.data) {
+    if (
+      masterDetailQuery.error ||
+      sessionsQuery.error ||
+      !masterDetailQuery.data
+    ) {
       return empty;
     }
     const masterDetail = masterDetailQuery.data;

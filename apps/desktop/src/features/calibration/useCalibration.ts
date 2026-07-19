@@ -155,6 +155,7 @@ export function useCalibrationSettings(): {
 
   return {
     prefillSuggestion: data?.prefillSuggestion ?? true,
-    agingThresholdDays: data?.agingThresholdDays ?? DEFAULT_AGING_THRESHOLD_DAYS,
+    agingThresholdDays:
+      data?.agingThresholdDays ?? DEFAULT_AGING_THRESHOLD_DAYS,
   };
 }
