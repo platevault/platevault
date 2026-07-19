@@ -98,6 +98,7 @@ interface ReclassifyV2Args {
  */
 function useInboxReclassifyV2(
   inboxItemId: string,
+  rootAbsolutePath: string,
   sourceGroupId?: string | null,
 ) {
   const queryClient = useQueryClient();
@@ -115,6 +116,10 @@ function useInboxReclassifyV2(
               ...(sourceGroupId ? { sourceGroupId } : { inboxItemId }),
               overrides: args.overrides ?? [],
               bulk: args.bulk ?? [],
+              // Lets the re-split hash the group's real files, so each
+              // re-materialized sub-item gets a per-group content signature
+              // the confirm staleness guard can actually compare.
+              rootAbsolutePath,
             }),
           ),
         );
@@ -134,7 +139,7 @@ function useInboxReclassifyV2(
         setLoading(false);
       }
     },
-    [inboxItemId, sourceGroupId, queryClient],
+    [inboxItemId, rootAbsolutePath, sourceGroupId, queryClient],
   );
 
   return { reclassifyV2, loading };
@@ -406,6 +411,7 @@ export function InboxDetail({
 }: InboxDetailProps) {
   const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
     item.inboxItemId,
+    rootAbsolutePath,
     sourceGroupId,
   );
 

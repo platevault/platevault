@@ -5378,6 +5378,16 @@ export type InboxReclassifyV2Request_Deserialize = {
 	overrides?: InboxReclassifyFileOverride[],
 	/**  Bulk operations applied after per-file overrides. Processed in order. */
 	bulk?: InboxReclassifyBulk_Deserialize[],
+	/**
+	 *  Absolute path to the inbox root on disk. Not in the JSON Schema
+	 *  (transport detail), mirroring `InboxClassifyRequest`.
+	 * 
+	 *  Required, not optional: without it the re-split cannot hash the group's
+	 *  files, so every re-materialized sub-item inherits the signature of the
+	 *  empty set — a fixed constant that compares equal across unrelated items
+	 *  and silently disables the confirm staleness guard (spec 058 Q-5).
+	 */
+	rootAbsolutePath: string,
 };
 
 /**
@@ -5400,6 +5410,16 @@ export type InboxReclassifyV2Request_Serialize = {
 	overrides: InboxReclassifyFileOverride[],
 	/**  Bulk operations applied after per-file overrides. Processed in order. */
 	bulk?: InboxReclassifyBulk_Serialize[],
+	/**
+	 *  Absolute path to the inbox root on disk. Not in the JSON Schema
+	 *  (transport detail), mirroring `InboxClassifyRequest`.
+	 * 
+	 *  Required, not optional: without it the re-split cannot hash the group's
+	 *  files, so every re-materialized sub-item inherits the signature of the
+	 *  empty set — a fixed constant that compares equal across unrelated items
+	 *  and silently disables the confirm staleness guard (spec 058 Q-5).
+	 */
+	rootAbsolutePath: string,
 };
 
 /**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */

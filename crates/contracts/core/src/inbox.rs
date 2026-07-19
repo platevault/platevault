@@ -859,6 +859,14 @@ pub struct InboxReclassifyV2Request {
     /// Bulk operations applied after per-file overrides. Processed in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bulk: Vec<InboxReclassifyBulk>,
+    /// Absolute path to the inbox root on disk. Not in the JSON Schema
+    /// (transport detail), mirroring `InboxClassifyRequest`.
+    ///
+    /// Required, not optional: without it the re-split cannot hash the group's
+    /// files, so every re-materialized sub-item inherits the signature of the
+    /// empty set — a fixed constant that compares equal across unrelated items
+    /// and silently disables the confirm staleness guard (spec 058 Q-5).
+    pub root_absolute_path: String,
 }
 
 /// Summary of one re-materialized sub-item returned after reclassify (T068).

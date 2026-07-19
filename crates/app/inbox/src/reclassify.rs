@@ -639,16 +639,17 @@ pub async fn reclassify_v2(
     }
     .to_owned();
 
-    // Build file_records from persisted metadata. We have no abs paths here
-    // (reclassify carries no root path), so we pass an empty file_paths slice
-    // and build minimal file_records from inbox_file_metadata.
+    // Build file_records from persisted metadata (inbox_file_metadata), then
+    // reconstruct the matching absolute paths from the request's root so
+    // materialize_sub_items can hash each group's real files.
     //
     // materialize_sub_items uses file_paths only for per-sub-group content
-    // signature computation (per-file sha2 hashes). Since we have no abs paths,
-    // the signatures will be zero-length (no hashes), yielding an empty
-    // sub-group sig. This is acceptable: the sub-item identity
-    // (root_id, relative_path, group_key) is stable regardless of the sig, and
-    // the sig is refreshed on the next full classify (when files are accessible).
+    // signature computation (per-file sha2 hashes), positionally aligned with
+    // file_records. Passing no paths does NOT yield an "empty" signature: it
+    // yields folder_signature(vec![]) — sha256 of empty input, the fixed
+    // constant e3b0c442…b855. Every re-split item in every library would then
+    // carry that same value, so confirm.rs's TOCTOU guard would compare equal
+    // unconditionally and never fire (spec 058 Q-5).
 
     // Load ALL generic overrides for the group once and index them by
     // (relative_file_path, property_key) → value. This covers every property
@@ -817,15 +818,23 @@ pub async fn reclassify_v2(
         }
     }
 
-    // Call materialize_sub_items with an empty file_paths (no abs paths available).
-    // Signatures will be empty (no file I/O); refreshed on next full classify.
+    // Absolute paths positionally aligned with `file_records`, so each group's
+    // content_signature hashes its real files. `relative_file_path` is stored
+    // root-relative (classify.rs strips the root prefix), so joining the root
+    // reconstructs the original absolute path. Files that have moved or been
+    // deleted since classify are skipped by `file_signature`, which changes the
+    // group signature — exactly the staleness confirm must refuse to plan from.
+    let root_abs = std::path::PathBuf::from(&req.root_absolute_path);
+    let file_paths: Vec<std::path::PathBuf> =
+        file_records.iter().map(|(rel, _, _)| root_abs.join(rel)).collect();
+
     super::classify::materialize_sub_items(
         pool,
         &source_group_id,
         &root_id,
         &relative_path,
         &lane,
-        &[], // no abs paths — sigs left empty until next classify
+        &file_paths,
         &file_records,
     )
     .await;
@@ -1362,6 +1371,7 @@ mod tests {
         let resp = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-arb".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![InboxReclassifyFileOverride {
@@ -1427,6 +1437,7 @@ mod tests {
         reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-identity".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![InboxReclassifyFileOverride {
@@ -1465,6 +1476,7 @@ mod tests {
         reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-bulk".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![],
@@ -1503,6 +1515,7 @@ mod tests {
         reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-ft".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![
@@ -1561,6 +1574,7 @@ mod tests {
         reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-fmo".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![InboxReclassifyFileOverride {
@@ -1606,6 +1620,7 @@ mod tests {
         let resp = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-split".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![
@@ -1733,6 +1748,7 @@ mod tests {
         let resp = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
                 source_group_id: Some(sg_id.to_owned()),
                 inbox_item_id: None,
                 overrides: vec![],
@@ -1857,6 +1873,7 @@ mod tests {
         let resp = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
                 source_group_id: Some(sg_id.to_owned()),
                 inbox_item_id: None,
                 overrides: vec![],
@@ -1993,6 +2010,7 @@ mod tests {
         let apply1 = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
                 source_group_id: Some(sg_id.to_owned()),
                 inbox_item_id: None,
                 overrides: vec![],
@@ -2015,6 +2033,7 @@ mod tests {
         let apply2 = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
                 source_group_id: Some(sg_id.to_owned()),
                 inbox_item_id: None,
                 overrides: vec![],
@@ -2127,6 +2146,7 @@ mod tests {
         let apply = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
                 source_group_id: None,
                 inbox_item_id: Some(placeholder_id.to_owned()),
                 overrides: vec![],
@@ -2175,6 +2195,7 @@ mod tests {
         let apply2 = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
                 source_group_id: None,
                 inbox_item_id: Some(placeholder_id.to_owned()),
                 overrides: vec![],
@@ -2218,6 +2239,7 @@ mod tests {
         let resp = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-offset-temp".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![
@@ -2285,6 +2307,7 @@ mod tests {
         let err = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-unk".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![InboxReclassifyFileOverride {
@@ -2318,6 +2341,7 @@ mod tests {
         let err = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-noo".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![InboxReclassifyFileOverride {
@@ -2347,6 +2371,7 @@ mod tests {
         let resp = reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: None,
                 inbox_item_id: Some("item-lkup".to_owned()),
                 overrides: vec![],
@@ -2369,6 +2394,7 @@ mod tests {
         reclassify_v2(
             db.pool(),
             InboxReclassifyV2Request {
+                root_absolute_path: "/nonexistent-root".to_owned(),
                 source_group_id: Some("sg-bexp".to_owned()),
                 inbox_item_id: None,
                 overrides: vec![],
@@ -2389,5 +2415,178 @@ mod tests {
         // Only frame_001.fits must have a gain override.
         assert_eq!(gain_overrides.len(), 1, "only the named file must have a gain override");
         assert_eq!(gain_overrides[0].relative_file_path, "inbox_folder/frame_001.fits");
+    }
+
+    // ── Confirm staleness guard: per-item signatures (spec 058 Q-5) ───────────
+
+    /// `folder_signature(vec![])` — sha256 of empty input. The value every
+    /// re-split sub-item carried while `reclassify_v2` passed no file paths.
+    const EMPTY_SET_SIGNATURE: &str =
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    /// Minimal FITS header with an unmapped IMAGETYP, so classify yields
+    /// `unclassified` and the bulk reclassify below drives the re-split.
+    /// `pad` varies the file's byte length to give it distinct content.
+    fn write_ambiguous_fits(path: &std::path::Path, object: &str, pad: usize) {
+        let mut data = vec![b' '; 2880 + pad];
+        let cards = [
+            "IMAGETYP= 'Frame Unknown'".to_owned(),
+            format!("OBJECT  = '{object}'"),
+            "FILTER  = 'Ha'".to_owned(),
+        ];
+        for (i, c) in cards.iter().enumerate() {
+            let card = format!("{c:<80}");
+            data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
+        }
+        data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+        std::fs::write(path, &data).unwrap();
+    }
+
+    /// Seed a source group + placeholder item and run the real classify pass.
+    async fn seed_and_classify(
+        pool: &sqlx::SqlitePool,
+        root: &std::path::Path,
+        sg_id: &str,
+        item_id: &str,
+        root_id: &str,
+    ) {
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: sg_id,
+                root_id,
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("fits"),
+            },
+        )
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, group_label, \
+              frame_type, file_count, discovered_at, last_scanned_at, \
+              content_signature, state, lane) \
+             VALUES (?, ?, '', ?, '', NULL, NULL, 1, \
+                     datetime('now'), datetime('now'), 'sig', 'pending_classification', 'fits')",
+        )
+        .bind(item_id)
+        .bind(root_id)
+        .bind(sg_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        crate::classify::classify(
+            pool,
+            crate::classify::ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: root.to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    /// Run `reclassify_v2` over the whole group and return the re-materialized
+    /// sub-items' stored `content_signature`s — the exact values `confirm.rs`
+    /// compares the request's signature against.
+    async fn resplit_signatures(
+        pool: &sqlx::SqlitePool,
+        root: &std::path::Path,
+        sg_id: &str,
+    ) -> Vec<String> {
+        reclassify_v2(
+            pool,
+            InboxReclassifyV2Request {
+                root_absolute_path: root.to_string_lossy().into_owned(),
+                source_group_id: Some(sg_id.to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("light").into(),
+                        file_paths: None,
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: None,
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut sigs: Vec<String> = inbox_repo::list_inbox_sub_items(pool, sg_id)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|r| r.content_signature)
+            .collect();
+        sigs.sort();
+        sigs
+    }
+
+    /// Two-direction control for the confirm staleness guard (spec 058 Q-5).
+    ///
+    /// `reclassify_v2` used to call `materialize_sub_items` with an empty
+    /// `file_paths` slice, so every re-split sub-item's `content_signature`
+    /// became `folder_signature(vec![])` — the fixed constant
+    /// [`EMPTY_SET_SIGNATURE`], identical in every folder and every library.
+    /// `confirm.rs`'s TOCTOU guard therefore compared equal unconditionally and
+    /// could never fire on the reclassify path; it would also have compared
+    /// equal between two entirely unrelated items.
+    ///
+    /// Asserts both properties the guard depends on: signatures distinguish
+    /// distinct items, and they track the files' actual bytes on disk.
+    #[tokio::test]
+    async fn v2_resplit_signatures_are_per_item_and_track_file_content() {
+        let db = test_db().await;
+
+        let root_a = tempfile::tempdir().unwrap();
+        let file_a = root_a.path().join("frame_a.fits");
+        write_ambiguous_fits(&file_a, "M42", 0);
+        seed_and_classify(db.pool(), root_a.path(), "sg-sig-a", "item-sig-a", "root-sig-a").await;
+        let sigs_a = resplit_signatures(db.pool(), root_a.path(), "sg-sig-a").await;
+
+        let root_b = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root_b.path().join("frame_b.fits"), "M31", 1024);
+        seed_and_classify(db.pool(), root_b.path(), "sg-sig-b", "item-sig-b", "root-sig-b").await;
+        let sigs_b = resplit_signatures(db.pool(), root_b.path(), "sg-sig-b").await;
+
+        assert!(!sigs_a.is_empty(), "re-split must materialize at least one sub-item");
+
+        // Direction 1: the empty-set constant is gone — signatures hash real files.
+        for sig in sigs_a.iter().chain(&sigs_b) {
+            assert_ne!(
+                sig, EMPTY_SET_SIGNATURE,
+                "re-split sub-item still carries the signature of the empty set — \
+                 reclassify_v2 is not hashing its files"
+            );
+        }
+
+        // Direction 2: two unrelated items no longer collide.
+        assert_ne!(
+            sigs_a, sigs_b,
+            "two items that have both been through reclassify_v2 share an identical \
+             signature — the confirm staleness guard cannot distinguish them"
+        );
+
+        // Direction 3: a genuine file change is detected. Evidence is served
+        // from the DB cache, so only the on-disk bytes move here — precisely
+        // the TOCTOU the guard exists to catch.
+        write_ambiguous_fits(&file_a, "M42", 2880);
+        let sigs_a_after = resplit_signatures(db.pool(), root_a.path(), "sg-sig-a").await;
+        assert_ne!(
+            sigs_a, sigs_a_after,
+            "sub-item signature did not change after its file changed on disk — \
+             confirm would build a plan from a stale picture"
+        );
     }
 }

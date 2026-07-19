@@ -259,6 +259,10 @@ describe('InboxDetail', () => {
           { filePath: 'mystery.fits', properties: { frameType: 'dark' } },
         ],
         bulk: [],
+        // Required so reclassify hashes the real files instead of writing
+        // folder_signature([]) — the empty-set constant that made the confirm
+        // staleness guard compare equal unconditionally.
+        rootAbsolutePath: '/astro/inbox',
       });
     });
   });

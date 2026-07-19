@@ -171,26 +171,24 @@ request's. For a parent that is the folder signature written by scan/classify;
 for a sibling it is the per-group signature from `materialize_sub_items`
 (`classify.rs:935`, `:959`).
 
-Reclassify passes no file paths (`reclassify.rs:643-651`, `:820-831`), so the
-per-group signature it writes is **not empty** — it is `folder_signature([])`
-(`crates/app/inbox/src/signature.rs:69-76`), which hex-encodes the SHA-256 of
-empty input. That is a fixed 64-character constant, identical for every
-reclassified item in every folder in every library.
+**Corrected (was wrong in the original draft, and the same error was stated in
+two `reclassify.rs` comments).** Reclassify did not write an *empty* signature.
+Passing no file paths produced `folder_signature(vec![])` — the SHA-256 of empty
+input, the fixed 64-char constant `e3b0c442…b855`. Every item that had been
+through `reclassify_v2` carried that identical value, in every folder and every
+library, so the guard compared equal unconditionally and could never fire — it
+would also have compared equal between two entirely unrelated items. That was a
+live hole, not a latent one, and it did not depend on the parent row.
 
-The consequence is sharper than an empty value comparing equal to an empty
-request value: the guard passes trivially, and would pass across unrelated
-items. **The guard is therefore already vacuous on the reclassify path on
-`main` today**, independent of this feature. With the parent gone the per-group
-signature becomes the sole confirm anchor, promoting that vacuous path from a
-secondary case to the only case.
+Because the value was never empty, an "empty means stale" rule was never
+implementable as an emptiness check — which is why Q-5 was not resolved that
+way.
 
-An "empty means stale" rule cannot be implemented as an emptiness check,
-because the value is not empty. Resolved by Q-5.
-
-**Two in-tree comments state the same false premise** and must be corrected
-alongside the fix: `reclassify.rs:648-649` ("the signatures will be zero-length
-(no hashes), yielding an empty sub-group sig") and `reclassify.rs:821` ("Signatures
-will be empty (no file I/O)").
+Resolved ahead of this spec along Q-5's first option: `reclassify_v2` now takes
+`rootAbsolutePath` (matching `inbox.classify`) and computes real per-group
+signatures. With the parent gone the per-group signature becomes the sole
+confirm anchor, which is now a genuine anchor. Q-5 is answered for the guard
+itself; the D-005 re-scan invalidation signal it was coupled to remains open.
 
 ### 4.3 Source-group-to-item resolution
 
