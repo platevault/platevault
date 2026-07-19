@@ -51,7 +51,7 @@ See `docs/journeys/` for the full set of supported user workflows.
 
 ## Download
 
-Builds are published on [GitHub Releases](https://github.com/nightwatch-astro/alm/releases/latest).
+Builds are published on [GitHub Releases](https://github.com/platevault/platevault/releases/latest).
 
 | Platform | Package |
 |---|---|
