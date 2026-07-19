@@ -275,6 +275,73 @@ pub async fn write(
     Ok(relative_path)
 }
 
+// ── Source-map / calibration snapshot (#740) ───────────────────────────────────
+
+/// Build the `source_map`/`calibration` snapshot for a manifest body from the
+/// project's currently-linked sources and their calibration assignments.
+///
+/// FR-001 requires manifests to "document project source mappings [and]
+/// calibration choices" — `spawn_workflow_run_subscriber` previously always
+/// passed `None` for both, the only trigger a real user ever exercises
+/// (#665 tracks the other 4 triggers being unwired).
+async fn build_source_calibration_snapshot(
+    pool: &SqlitePool,
+    project_id: &str,
+) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
+    use persistence_db::repositories::{calibration_assignment, projects as projects_repo};
+
+    let sources = match projects_repo::list_project_sources(pool, project_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!("manifest snapshot: failed to list project sources: {e}");
+            return (None, None);
+        }
+    };
+    if sources.is_empty() {
+        return (None, None);
+    }
+
+    let source_map = serde_json::Value::Array(
+        sources
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "sourceId": s.id,
+                    "inventorySessionId": s.inventory_session_id,
+                    "name": s.name_snapshot,
+                })
+            })
+            .collect(),
+    );
+
+    let mut calibration_entries = Vec::new();
+    for s in &sources {
+        match calibration_assignment::list_for_session(pool, &s.inventory_session_id).await {
+            Ok(assignments) => {
+                calibration_entries.extend(assignments.into_iter().map(|a| {
+                    serde_json::json!({
+                        "sessionId": a.session_id,
+                        "calibrationType": a.calibration_type,
+                        "masterId": a.master_id,
+                        "confidence": a.confidence,
+                        "wasOverride": a.was_override,
+                    })
+                }));
+            }
+            Err(e) => {
+                tracing::debug!(
+                    "manifest snapshot: failed to list calibration for session {}: {e}",
+                    s.inventory_session_id
+                );
+            }
+        }
+    }
+    let calibration =
+        (!calibration_entries.is_empty()).then_some(serde_json::Value::Array(calibration_entries));
+
+    (Some(source_map), calibration)
+}
+
 // ── workflow_run_completed subscriber ─────────────────────────────────────────
 
 /// Spawn an event-bus subscriber that listens for `workflow.run_completed`
@@ -306,9 +373,12 @@ pub fn spawn_workflow_run_subscriber(
                         env.payload.get("toolId").and_then(|v| v.as_str()).map(str::to_owned);
 
                     if let Some(pid) = project_id {
-                        // Async DB lookup: resolve project root from projects.path.
-                        let project_root = match get_project(&pool, &pid).await {
-                            Ok(row) => Some(std::path::PathBuf::from(&row.path)),
+                        // Async DB lookup: resolve project root + real lifecycle
+                        // state from the project row (#740 — this used to be
+                        // hardcoded "unknown", the one manifest a real user can
+                        // ever get failing FR-001's lifecycle-state requirement).
+                        let project_row = match get_project(&pool, &pid).await {
+                            Ok(row) => Some(row),
                             Err(e) => {
                                 tracing::debug!(
                                     "workflow.run_completed: could not look up project {pid}: {e}; skipping manifest"
@@ -317,7 +387,10 @@ pub fn spawn_workflow_run_subscriber(
                             }
                         };
 
-                        if let Some(project_root) = project_root {
+                        if let Some(row) = project_row {
+                            let project_root = std::path::PathBuf::from(&row.path);
+                            let (source_map, calibration) =
+                                build_source_calibration_snapshot(&pool, &pid).await;
                             // Best-effort: log but do not crash the subscriber.
                             let result = write(
                                 &pool,
@@ -326,9 +399,9 @@ pub fn spawn_workflow_run_subscriber(
                                     project_id: &pid,
                                     reason: DtoManifestReason::WorkflowRun,
                                     project_root: &project_root,
-                                    lifecycle_state: "unknown",
-                                    source_map: None,
-                                    calibration: None,
+                                    lifecycle_state: &row.lifecycle,
+                                    source_map,
+                                    calibration,
                                     workflow_profile: tool_id,
                                 },
                             )
@@ -591,7 +664,98 @@ mod tests {
                 assert_eq!(rows[0].reason, "workflow_run");
                 let abs_path = dir.path().join(&rows[0].path);
                 assert!(abs_path.exists(), "manifest file should exist at {}", abs_path.display());
+                // #740: lifecycle_state must be the project's REAL lifecycle
+                // ("ready", from the inserted row), never the hardcoded "unknown".
+                let resp = get(&pool, &rows[0].id).await.unwrap();
+                assert_eq!(resp.manifest.body.lifecycle_state, "ready");
                 return; // success
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "manifest row not found within 2 s after workflow.run_completed event"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
+    /// #740: a project with a linked source (and a calibration assignment for
+    /// that source's session) must produce a manifest whose body actually
+    /// documents them, not `source_map: null, calibration: null` forever.
+    #[tokio::test]
+    async fn workflow_run_subscriber_documents_source_map_and_calibration() {
+        let pool = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
+             VALUES (?,?,?,?,?,?,?,?,?)",
+        )
+        .bind("proj-snap-1")
+        .bind("SnapTest")
+        .bind("PixInsight")
+        .bind("ready")
+        .bind(dir.path().to_str().unwrap())
+        .bind::<Option<String>>(None)
+        .bind(false)
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO project_sources (id, project_id, inventory_session_id, name_snapshot, frames_snapshot, filter_snapshot, exposure_snapshot, linked_at)
+             VALUES ('src-1', 'proj-snap-1', 'sess-1', 'M31 Lum', 42, 'L', '300', '2026-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        persistence_db::repositories::calibration_assignment::upsert(
+            &pool,
+            persistence_db::repositories::calibration_assignment::UpsertParams {
+                id: "calib-1",
+                session_id: "sess-1",
+                calibration_type: "dark",
+                master_id: "master-1",
+                confidence: 0.95,
+                was_override: false,
+                mismatched_dimensions: &[],
+                assigned_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let bus = make_bus(&pool);
+        let _handle = spawn_workflow_run_subscriber(pool.clone(), bus.clone());
+        let _ = bus
+            .publish(
+                "workflow.run_completed",
+                audit::event_bus::Source::System,
+                serde_json::json!({
+                    "projectId": "proj-snap-1",
+                    "toolId": "pixinsight",
+                    "toolLaunchId": "tl-snap-1",
+                    "completedAt": "2026-06-01T10:00:00Z",
+                    "artifactIds": [],
+                }),
+            )
+            .await;
+
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let (rows, _) =
+                list_manifests_for_project(&pool, "proj-snap-1", None, 10).await.unwrap();
+            if !rows.is_empty() {
+                let resp = get(&pool, &rows[0].id).await.unwrap();
+                let source_map =
+                    resp.manifest.body.source_map.expect("source_map must be populated").0;
+                assert_eq!(source_map[0]["name"], "M31 Lum");
+                let calibration =
+                    resp.manifest.body.calibration.expect("calibration must be populated").0;
+                assert_eq!(calibration[0]["calibrationType"], "dark");
+                assert_eq!(calibration[0]["masterId"], "master-1");
+                return;
             }
             assert!(
                 tokio::time::Instant::now() < deadline,
