@@ -149,7 +149,13 @@ async function main() {
 // Guarded so scripts/check-eslint-baseline.test.mjs can import baselineKey
 // without triggering a live ESLint run (which also needs the desktop
 // devDependency resolved above as a side effect of module load).
-if (import.meta.main) {
+//
+// `import.meta.main` is NOT usable here — it's only available on Node
+// >=22.18/24.2, and CI pins node-version: 20 (ci.yml:170,:309); on Node 20
+// it's `undefined` (falsy), so `main()` would silently never run and this
+// entire lint gate would no-op green on every CI leg. The URL-comparison
+// form below works on every Node version back to ESM's introduction.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
 
