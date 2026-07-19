@@ -1607,6 +1607,7 @@
   "inbox_state_pending": "pending",
   "inbox_state_plan_open": "plan open",
   "inbox_state_resolved": "resolved",
+  "inbox_state_unclassified": "unclassified",
   "inbox_row_plan_pending": "Plan pending review",
   "inbox_sort_detection_aria": "Sort by Path",
   "inbox_sort_type_aria": "Sort by Type",

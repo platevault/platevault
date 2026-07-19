@@ -4997,6 +4997,19 @@ export type InboxListItem_Deserialize = {
 	 *  until classified.
 	 */
 	frameType: string | null,
+	/**
+	 *  Cached classification result, DB vocabulary (`"classified"` /
+	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
+	 *  item. `None` when the item has never been classified.
+	 * 
+	 *  Issue #711 Instance A (unsplit-folder variant): `state` is
+	 *  unconditionally `"classified"` once a folder has been scanned even
+	 *  when it has no dominant frame type (empty/mixed/needs-review), so the
+	 *  list's classification badge must not fall back to `state` alone —
+	 *  this field lets it agree with `inbox.classify`/the detail panel by
+	 *  construction instead.
+	 */
+	classificationResult: string | null,
 };
 
 /**
@@ -5086,6 +5099,19 @@ export type InboxListItem_Serialize = {
 	 *  until classified.
 	 */
 	frameType?: string | null,
+	/**
+	 *  Cached classification result, DB vocabulary (`"classified"` /
+	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
+	 *  item. `None` when the item has never been classified.
+	 * 
+	 *  Issue #711 Instance A (unsplit-folder variant): `state` is
+	 *  unconditionally `"classified"` once a folder has been scanned even
+	 *  when it has no dominant frame type (empty/mixed/needs-review), so the
+	 *  list's classification badge must not fall back to `state` alone —
+	 *  this field lets it agree with `inbox.classify`/the detail panel by
+	 *  construction instead.
+	 */
+	classificationResult?: string | null,
 };
 
 /**  Response from `inbox.list`. */

@@ -68,6 +68,30 @@ function isNeedsReview(item: InboxListItem): boolean {
 }
 
 /**
+ * `true` when the item's own cached classification (`classificationResult`
+ * — the SAME `inbox_classifications` row `inbox.classify`/the detail panel
+ * read) has not resolved to a single type, and no dominant frame type is
+ * otherwise known.
+ *
+ * Issue #711 Instance A (unsplit-folder variant): `classify()`
+ * unconditionally sets `inbox_items.state = "classified"` once a folder has
+ * been scanned, regardless of whether it actually resolved to one type —
+ * for an empty/mixed/needs-review unsplit folder (no `frameType`/
+ * `groupFrameType`, not the `__needs_review__` sentinel), `state` alone
+ * would misleadingly render as "classified" while the detail panel/
+ * `inbox.classify` correctly show "unclassified". `classificationResult` is
+ * the only remaining signal that still agrees with them in that case.
+ * Scoped to pre-confirm states only — a `plan_open`/`resolved` item is never
+ * relabeled by this.
+ */
+function isUnresolvedClassification(item: InboxListItem): boolean {
+  return (
+    item.classificationResult === 'unclassified' &&
+    (item.state === 'pending_classification' || item.state === 'classified')
+  );
+}
+
+/**
  * Classification label shown in the Type column. For classified / plan-open
  * items we show the dominant frame type when available so the column is
  * frame-type-forward rather than state-forward. A needs-review sub-item has
@@ -89,6 +113,7 @@ function classificationLabel(item: InboxListItem): string {
   if (item.frameType) return item.frameType;
   if (item.groupFrameType) return item.groupFrameType;
   if (isNeedsReview(item)) return m.inbox_state_needs_review();
+  if (isUnresolvedClassification(item)) return m.inbox_state_unclassified();
   switch (item.state) {
     case 'pending_classification':
       return m.inbox_state_pending();
@@ -106,6 +131,7 @@ function classificationLabel(item: InboxListItem): string {
 /** CSS colour modifier for the Type cell. */
 function classificationMod(item: InboxListItem): string {
   if (isNeedsReview(item)) return 'needs_review';
+  if (isUnresolvedClassification(item)) return 'pending';
   switch (item.state) {
     case 'pending_classification':
       return 'pending';
