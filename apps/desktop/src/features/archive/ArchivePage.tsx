@@ -222,7 +222,7 @@ export function ArchivePage() {
             </Btn>
             <Btn
               size="sm"
-              variant="danger"
+              variant="destructive"
               disabled={!item.archivedViaPlanId || sendToTrash.isPending}
               onClick={handleSendToTrash}
             >
@@ -230,7 +230,7 @@ export function ArchivePage() {
             </Btn>
             <Btn
               size="sm"
-              variant="danger"
+              variant="destructive"
               disabled={!item.archivedViaPlanId}
               onClick={() => setDeleteModalOpen(true)}
             >
@@ -310,7 +310,7 @@ export function ArchivePage() {
                 {m.common_cancel()}
               </Btn>
               <Btn
-                variant="danger"
+                variant="destructive"
                 disabled={
                   confirmInput !== DELETE_CONFIRM_TEXT ||
                   permanentlyDelete.isPending

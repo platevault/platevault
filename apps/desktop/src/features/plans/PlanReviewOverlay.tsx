@@ -468,7 +468,7 @@ export function PlanReviewOverlay({
         {m.plans_review_discard_btn()}
       </Btn>
       <Btn
-        variant="danger"
+        variant="destructive"
         onClick={() => void handleApproveAndApply()}
         disabled={
           busy ||

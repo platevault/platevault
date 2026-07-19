@@ -561,7 +561,7 @@ export function MasterDetail({
               {m.common_cancel()}
             </Btn>
             <Btn
-              variant="danger"
+              variant="destructive"
               disabled={generateArchivePlan.isPending}
               onClick={handleConfirmArchiveInUse}
             >

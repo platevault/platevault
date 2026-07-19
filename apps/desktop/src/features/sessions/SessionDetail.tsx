@@ -159,7 +159,7 @@ function CalibrationLinkage({
               {m.common_cancel()}
             </Btn>
             <Btn
-              variant="danger"
+              variant="destructive"
               disabled={unassigning}
               onClick={() => void handleConfirmUnassign()}
               data-testid="session-calib-unassign-confirm-btn"
