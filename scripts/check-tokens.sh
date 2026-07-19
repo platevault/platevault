@@ -107,6 +107,16 @@ else
   PASS=false
 fi
 
+# ── Check 6: Text/surface token pairs meet WCAG AA contrast (handoff 02) ─────
+echo ""
+echo "6. Checking text/surface token contrast (WCAG AA)..."
+if node "$REPO_ROOT/apps/desktop/scripts/check-contrast.mjs"; then
+  echo "  OK: All contrast pairs meet AA."
+else
+  echo "FAIL: A text/surface pair is below AA contrast (see above)."
+  PASS=false
+fi
+
 # ── Result ────────────────────────────────────────────────────────────────────
 echo ""
 if [ "$PASS" = true ]; then
