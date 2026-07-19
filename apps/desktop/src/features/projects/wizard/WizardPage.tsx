@@ -489,15 +489,15 @@ export function WizardPage() {
           />
           <SummaryRow
             label={m.projects_wizard_summary_darks_label()}
-            value={m.inbox_count_masters({ count: darkSelected })}
+            value={m.projects_wizard_summary_master_count({ count: darkSelected })}
           />
           <SummaryRow
             label={m.projects_wizard_flats_label()}
-            value={m.inbox_count_masters({ count: flatsMapped })}
+            value={m.projects_wizard_summary_master_count({ count: flatsMapped })}
           />
           <SummaryRow
             label={m.projects_wizard_bias_label()}
-            value={m.inbox_count_masters({ count: biasSelected })}
+            value={m.projects_wizard_summary_master_count({ count: biasSelected })}
           />
         </div>
       </div>

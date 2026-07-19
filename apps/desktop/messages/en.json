@@ -625,6 +625,21 @@
   "projects_wizard_summary_coming_up": "Coming up",
   "projects_wizard_summary_darks_label": "Darks",
   "projects_wizard_summary_lights_label": "Lights",
+  "projects_wizard_summary_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} master",
+        "pp=other": "{count} masters"
+      }
+    }
+  ],
   "projects_wizard_summary_selected": "Selected",
   "projects_wizard_summary_title": "Project summary",
   "projects_wizard_target_unresolved": "Unresolved target",
