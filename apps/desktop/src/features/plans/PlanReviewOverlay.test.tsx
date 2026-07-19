@@ -35,6 +35,7 @@ const {
   mockPlansApplyStatus,
   mockPlansCancel,
   mockPlansConfirmDestructive,
+  mockPlansFreeSpaceEstimate,
   mockProtectionCheck,
   mockAcknowledge,
   mockApplyPlan,
@@ -47,6 +48,7 @@ const {
   mockPlansApplyStatus: vi.fn(),
   mockPlansCancel: vi.fn(),
   mockPlansConfirmDestructive: vi.fn(),
+  mockPlansFreeSpaceEstimate: vi.fn(),
   mockProtectionCheck: vi.fn(),
   mockAcknowledge: vi.fn(),
   mockApplyPlan: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock('@/bindings/index', () => ({
     plansApplyStatus: mockPlansApplyStatus,
     plansCancel: mockPlansCancel,
     plansConfirmDestructive: mockPlansConfirmDestructive,
+    plansFreeSpaceEstimate: mockPlansFreeSpaceEstimate,
     planProtectionCheckCmd: mockProtectionCheck,
     protectionPlanAcknowledged: mockAcknowledge,
   },
@@ -196,6 +199,9 @@ beforeEach(() => {
   );
   mockPlansConfirmDestructive.mockResolvedValue(
     ok({ planId: 'plan-1', itemsConfirmed: 1 }),
+  );
+  mockPlansFreeSpaceEstimate.mockResolvedValue(
+    ok({ requiredBytes: 3000, availableBytes: 5000 }),
   );
   // Default apply: streams item events then a completed terminal event.
   mockApplyPlan.mockImplementation(
@@ -777,6 +783,56 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     if (expectedAction !== 'Close') {
       expect(screen.getByText('Close')).toBeInTheDocument();
     }
+  });
+
+  // #876: a destination free-space estimate, surfaced at review time before
+  // approval, rather than only discovering insufficient space after apply.
+  it('#876: shows the free-space estimate when the destination has enough room', async () => {
+    mockPlansFreeSpaceEstimate.mockResolvedValue(
+      ok({ requiredBytes: 3000, availableBytes: 50_000 }),
+    );
+    renderOverlay();
+    const banner = await screen.findByTestId('plan-review-free-space');
+    expect(banner).toHaveTextContent('free at the destination');
+    expect(banner).not.toHaveTextContent('may not have enough free space');
+  });
+
+  it('#876: warns when the destination free-space estimate is insufficient, without disabling approval', async () => {
+    mockPlansFreeSpaceEstimate.mockResolvedValue(
+      ok({ requiredBytes: 3000, availableBytes: 1000 }),
+    );
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    renderOverlay();
+
+    const banner = await screen.findByTestId('plan-review-free-space');
+    expect(banner).toHaveTextContent('may not have enough free space');
+
+    // Advisory only — never gates "Approve & apply".
+    const approveBtn = await screen.findByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+  });
+
+  it('#876: renders no free-space banner for a zero-item plan (nothing to probe a destination from)', async () => {
+    mockPlansGet.mockResolvedValue(
+      ok(plan({ items: [], itemsTotal: 0, itemsPending: 0 })),
+    );
+    mockProtectionCheck.mockResolvedValue(
+      ok(
+        protectionCheck({
+          hasProtectedItems: false,
+          protectedItems: [],
+          nonBlockingSummary: { normalCount: 0, unprotectedCount: 0 },
+        }),
+      ),
+    );
+    renderOverlay();
+    await screen.findByText(/No protected items/);
+    expect(mockPlansFreeSpaceEstimate).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId('plan-review-free-space'),
+    ).not.toBeInTheDocument();
   });
 
   it('retries a reopened cancelled plan\'s cancelled items, not "failed" (issue #733)', async () => {

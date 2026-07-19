@@ -2459,6 +2459,8 @@
   "plans_review_load_error": "Could not load the plan.",
   "plans_review_no_mutation_note": "Nothing has been changed on disk. Review every proposed item below; applying requires explicit approval.",
   "plans_review_bytes_required": "Requires {size} at the destination.",
+  "plans_review_free_space_available": "{size} free at the destination.",
+  "plans_review_free_space_insufficient": "The destination may not have enough free space: {required} required, only {available} free.",
   "plans_review_col_item": "Item",
   "plans_review_col_action": "Action",
   "plans_review_col_from": "Source path",
