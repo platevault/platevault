@@ -128,6 +128,15 @@ export interface RestoreDefaultsBtnProps {
    * `keys`/`scope`/`onRestored` are unused.
    */
   onRestore?: () => Promise<void>;
+  /**
+   * What this button resets, e.g. "moon-avoidance defaults" (#837) — several
+   * panes scope a "Restore defaults" button to only PART of the pane (a
+   * sub-table, not the whole settings section), and the bare label gives no
+   * indication of that. Rendered as the button's `aria-label`/`title` so
+   * screen readers and hover both disambiguate scope; the visible label
+   * stays the short "Restore defaults" text.
+   */
+  scopeLabel?: string;
 }
 
 type RestoreState = 'idle' | 'restoring' | 'done';
@@ -144,6 +153,7 @@ export function RestoreDefaultsBtn({
   onRestored,
   scope,
   onRestore,
+  scopeLabel,
 }: RestoreDefaultsBtnProps) {
   const [state, setState] = useState<RestoreState>('idle');
 
@@ -179,6 +189,8 @@ export function RestoreDefaultsBtn({
       variant="ghost"
       disabled={state === 'restoring'}
       onClick={() => void handleClick()}
+      title={scopeLabel}
+      aria-label={scopeLabel ? `${label} — ${scopeLabel}` : undefined}
     >
       {label}
     </Btn>

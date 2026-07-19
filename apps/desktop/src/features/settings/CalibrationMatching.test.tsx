@@ -222,3 +222,41 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     expect(offsetToggleInput()).not.toBeChecked();
   });
 });
+
+describe('CalibrationMatching — exposureToleranceS never sent as null (#639)', () => {
+  it('round-trips the fetched exposureToleranceS instead of sending null', async () => {
+    // Backend DTO field is a non-optional f64; a null payload fails Tauri arg
+    // deserialization and the pane's own catch swallowed every rejection,
+    // making all updates in this pane silently no-op.
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ exposureToleranceS: 3.5 }),
+    });
+    mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances() });
+
+    render(<CalibrationMatching save={vi.fn()} />);
+    await waitFor(() => expect(offsetToggleInput()).toBeChecked());
+
+    fireEvent.click(offsetToggleInput());
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    const call = mockUpdate.mock.calls[0][0] as { exposureToleranceS: number };
+    expect(call.exposureToleranceS).toBe(3.5);
+  });
+
+  it('restore-defaults sends the migration default (2.0), not null', async () => {
+    mockGet.mockResolvedValue({ status: 'ok', data: makeTolerances() });
+    mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances() });
+
+    render(<CalibrationMatching save={vi.fn()} />);
+    await waitFor(() => expect(offsetToggleInput()).toBeChecked());
+
+    fireEvent.click(screen.getByRole('button', { name: /restore/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ exposureToleranceS: 2.0 }),
+      );
+    });
+  });
+});

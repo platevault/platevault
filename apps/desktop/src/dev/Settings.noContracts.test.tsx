@@ -19,6 +19,7 @@ import { render, screen, within } from '@testing-library/react';
 
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({}),
+  useNavigate: () => vi.fn(),
 }));
 
 vi.mock('@/features/settings/useAutoSave', () => ({

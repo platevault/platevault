@@ -1,8 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState } from 'react';
-import { useParams } from '@tanstack/react-router';
+import { useParams, useNavigate } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { m } from '@/lib/i18n';
 import { useAutoSave } from './useAutoSave';
@@ -163,10 +162,18 @@ function renderPane(
 
 export function SettingsPage() {
   const params = useParams({ strict: false });
-  const initialPane = PANES.find((p) => p.id === params.pane)?.id ?? 'sources';
-  const [activePane, setActivePane] = useState<PaneId>(initialPane);
+  // #799: the active pane is derived from the `/settings/$pane` URL param
+  // rather than tracked in local state, so deep links and the address bar
+  // stay in sync with the pane shown; nav clicks push a new `$pane` param.
+  const activePane: PaneId =
+    PANES.find((p) => p.id === params.pane)?.id ?? 'sources';
+  const navigate = useNavigate();
   const { save, saved } = useAutoSave();
   const meta = PANE_META[activePane];
+
+  const selectPane = (id: PaneId) => {
+    void navigate({ to: '/settings/$pane', params: { pane: id } });
+  };
 
   return (
     <PageShell>
@@ -205,7 +212,7 @@ export function SettingsPage() {
                       key={pane.id}
                       type="button"
                       className={`alm-settings__nav-item${activePane === pane.id ? ' alm-settings__nav-item--active' : ''}`}
-                      onClick={() => setActivePane(pane.id)}
+                      onClick={() => selectPane(pane.id)}
                       aria-current={activePane === pane.id ? 'page' : undefined}
                     >
                       {pane.label()}

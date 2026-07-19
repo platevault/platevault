@@ -170,6 +170,7 @@ function MoonAvoidanceSettings() {
             await restoreGuidanceDefaults();
             setDrafts({});
           }}
+          scopeLabel={m.settings_planner_moon_avoidance_restore_scope()}
         />
       }
     >

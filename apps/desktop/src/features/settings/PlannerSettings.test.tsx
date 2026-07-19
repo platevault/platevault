@@ -29,10 +29,16 @@ vi.mock('@/api/ipc', () => ({ unwrap: (v: unknown) => v }));
 import { PlannerSettings } from './PlannerSettings';
 import { __resetGuidanceParamsForTest } from '@/features/targets/guidance-settings';
 import { DEFAULT_MOON_AVOIDANCE } from '@/features/targets/astro/moon-avoidance';
+import {
+  __setObservingStateForTest,
+  USABLE_ALTITUDE_KEY,
+  OBSERVING_SCOPE,
+} from '@/features/targets/observing-sites/site-store';
 
 beforeEach(() => {
   vi.clearAllMocks();
   __resetGuidanceParamsForTest();
+  __setObservingStateForTest({});
   settingsUpdate.mockResolvedValue(null);
   settingsRestoreDefaults.mockResolvedValue({
     restored: ['plannerMoonAvoidance'],
@@ -41,6 +47,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   __resetGuidanceParamsForTest();
+  __setObservingStateForTest({});
 });
 
 describe('PlannerSettings — moon avoidance (spec 047 T015)', () => {
@@ -101,6 +108,35 @@ describe('PlannerSettings — moon avoidance (spec 047 T015)', () => {
     fireEvent.click(resetBtn);
     expect(settingsRestoreDefaults).toHaveBeenCalledWith({
       keys: ['plannerMoonAvoidance'],
+    });
+  });
+});
+
+describe('PlannerSettings — usable altitude threshold (#823)', () => {
+  function altitudeInput(): HTMLInputElement {
+    return screen.getByLabelText(
+      'Usable altitude threshold in degrees',
+    ) as HTMLInputElement;
+  }
+
+  it('persists a valid in-range edit via settings.update under observing/usableAltitudeDeg', async () => {
+    render(<PlannerSettings />);
+    fireEvent.change(altitudeInput(), { target: { value: '45' } });
+    fireEvent.blur(altitudeInput());
+
+    expect(settingsUpdate).toHaveBeenCalledWith(OBSERVING_SCOPE, {
+      [USABLE_ALTITUDE_KEY]: 45,
+    });
+  });
+
+  it('clamps an out-of-range commit (150) to the max (90) in the displayed field', async () => {
+    render(<PlannerSettings />);
+    fireEvent.change(altitudeInput(), { target: { value: '150' } });
+    fireEvent.blur(altitudeInput());
+
+    expect(altitudeInput().value).toBe('90');
+    expect(settingsUpdate).toHaveBeenCalledWith(OBSERVING_SCOPE, {
+      [USABLE_ALTITUDE_KEY]: 90,
     });
   });
 });
