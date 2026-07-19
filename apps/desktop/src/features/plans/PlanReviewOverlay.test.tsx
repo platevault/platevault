@@ -316,9 +316,9 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
   it('shows a muted placeholder in the Result column for an item never applied', async () => {
     renderOverlay();
     await screen.findByTestId('plan-review-item-0');
-    expect(
-      screen.getByTestId('plan-review-item-result-0'),
-    ).toHaveTextContent('None');
+    expect(screen.getByTestId('plan-review-item-result-0')).toHaveTextContent(
+      'None',
+    );
   });
 
   it('keeps Approve & apply disabled until protected items are acknowledged', async () => {

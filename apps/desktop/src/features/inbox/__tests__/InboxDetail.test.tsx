@@ -829,7 +829,9 @@ describe('InboxDetail — #789 exposure formatting', () => {
     fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
     const popup = screen.getByTestId('inbox-files-popup');
     expect(within(popup).getByText('6.92 s')).toBeInTheDocument();
-    expect(within(popup).queryByText('6.92447668013071 s')).not.toBeInTheDocument();
+    expect(
+      within(popup).queryByText('6.92447668013071 s'),
+    ).not.toBeInTheDocument();
   });
 
   it('shows a whole-second exposure with no decimal', () => {
