@@ -52,7 +52,9 @@ describe('orientation walk tooltip styling contract', () => {
 
   it('reuses the shared Btn primitive instead of restyling buttons', () => {
     // The one-component/one-class rule: no per-feature button CSS clone.
-    expect(css).not.toMatch(/\.alm-onboarding-tooltip__(skip|back|primary|close)\s*\{/);
+    expect(css).not.toMatch(
+      /\.alm-onboarding-tooltip__(skip|back|primary|close)\s*\{/,
+    );
     expect(adapter).toMatch(/<Btn/);
   });
 
