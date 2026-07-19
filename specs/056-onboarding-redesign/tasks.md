@@ -103,15 +103,15 @@ re-seeds from DB state (FR-013, FR-014).
 - [X] T032 Layer-2 tauri-driver E2E journey in `crates/e2e-tests/`: orientation walk (real UI) → real inventory confirm → assert live auto-tick renders (VC-004); wire into `just test-e2e`
 - [ ] T033 Reference the journey-lane deliverables: journey **J18** in `docs/journeys/` is the behavioral contract (VC-001) and the coverage-matrix row in `specs/037-e2e-integration-testing/contracts/coverage-matrix.md` (VC-005) — both authored by the validation lane; verify they exist and match before closing the spec
 - [X] T034 File follow-up issues for missing milestone events (`calibration.master.registered`, site-saved) per research R4 — one issue each, referencing campaign tracker #881; no new events in v1
-- [ ] T035 A11y pass over all three layers (accessibility-compliance/wcag-audit checklist, research R11): keyboard-only completion of every flow, focus return on close, announcer text sanity, contrast tokens, tooltip persistence — fix findings
+- [X] T035 A11y pass over all three layers (accessibility-compliance/wcag-audit checklist, research R11): keyboard-only completion of every flow, focus return on close, announcer text sanity, contrast tokens, tooltip persistence — fix findings
 - [X] T036 Full gates: `just lint`, `just test`, `just typecheck`, `scripts/css-dup-sniff.mjs`, Playwright mock suite green; verify no `guided`/`tour_complete_step`/`tourCompleted` references remain (`rg -i "guided|tourCompleted|tour_complete_step"` clean outside specs/docs history)
 
 ## Reconciliation (2026-07-19)
 
 Task state was reconciled against the implementation after the fact — the boxes
-were never ticked during the build. 32 of 36 are verified complete against real
+were never ticked during the build. 33 of 36 are verified complete against real
 code; each was confirmed by reading the cited file, not inferred from the commit
-log. The four below stay open because the shipped behaviour diverges from what
+log. The three below stay open because the shipped behaviour diverges from what
 the task describes, and that divergence is worth carrying rather than papering
 over with a tick.
 
@@ -138,7 +138,8 @@ over with a tick.
   its steps S6/S14 describe the inline expanded-by-default accordion that the
   T018 pivot replaced. The journey needs amending to the flyout design plus a
   first validation run before this task can close.
-- **T035 — re-opened. The a11y pass has a live WCAG 1.4.13 failure (#1103).**
+- **T035 — RESOLVED 2026-07-19. Was re-opened for a live WCAG 1.4.13 failure
+  (#1103), now fixed; kept here as the record of what the a11y pass missed.**
   Checklist item tooltips reveal on pointer hover only. `ui/Tooltip.tsx` renders
   the base-ui trigger as a bare `<span {...rest} />`, which is not focusable and
   gets no `tabIndex` from base-ui, and `ChecklistSection.tsx` passes neither
@@ -149,6 +150,8 @@ over with a tick.
   base-ui component; the e2e guard had been passing against the old DOM and could
   no longer pass, so it now asserts the real pointer behaviour. **The 1.4.13
   guard is therefore currently absent** and restoring it is part of #1103.
+  RESOLVED: the checkbox now owns the reveal and carries `aria-describedby`, and
+  the e2e guard asserts hover AND keyboard focus AND Escape-without-losing-focus.
 
 Documentation drift found during the same pass, not blocking: the Playwright
 spec files for T016, T025 and T031 carry stale docstrings claiming tests are
