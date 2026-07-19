@@ -25,7 +25,7 @@ export interface LifecycleAction {
   /** True when the backend will return plan.required for this edge. */
   requiresPlan: boolean;
   /** Button variant for the primary action. */
-  variant: 'primary' | 'accent' | 'danger' | 'ghost';
+  variant: 'primary' | 'danger' | 'ghost';
   /** If true, this is the primary (most prominent) footer action. */
   primary: boolean;
 }

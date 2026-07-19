@@ -678,7 +678,7 @@ export function PlanPanel({
               : m.inbox_apply_selected_plans({ count: selectedArray.length })}
           </Btn>
           <Btn
-            variant="accent"
+            variant="ghost"
             onClick={onApplyAll}
             disabled={applyAllDisabled}
             data-testid="plan-apply-all"

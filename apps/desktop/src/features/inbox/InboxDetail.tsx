@@ -1279,7 +1279,7 @@ export function InboxDetail({
 
                     <button
                       type="button"
-                      className="alm-btn alm-btn--sm alm-btn--accent"
+                      className="alm-btn alm-btn--sm alm-btn--primary"
                       onClick={handleBulkApply}
                       disabled={reclassifyLoading || !heterogeneousAcked}
                       aria-label={m.inbox_bulk_override_apply_aria({
@@ -1353,7 +1353,7 @@ export function InboxDetail({
                   <div className="alm-inbox-detail__apply-row">
                     <button
                       type="button"
-                      className="alm-btn alm-btn--sm alm-btn--accent"
+                      className="alm-btn alm-btn--sm alm-btn--primary"
                       onClick={handleApplyOverrides}
                       disabled={
                         Object.keys(pendingOverrides).length === 0 ||
