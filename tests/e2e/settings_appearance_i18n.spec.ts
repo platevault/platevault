@@ -141,11 +141,24 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
 
 // ── Scenario 2 — Appearance / 4 themes (spec 043) ───────────────────────────
 
-const THEME_CASES: { name: string; dataTheme: string }[] = [
-  { name: 'Warm Clay', dataTheme: 'warm-clay' },
-  { name: 'Warm Slate', dataTheme: 'warm-slate' },
-  { name: 'Observatory', dataTheme: 'observatory-dark' },
-  { name: 'Espresso', dataTheme: 'espresso-dark' },
+// Handoff 03 (design refresh): the picker now shows only the 4 canonical
+// themes (2 warm + 2 cool families) — Warm Clay/Espresso Dark are disabled
+// (registry-only) variants, hidden from the picker DOM entirely
+// (apps/desktop/src/features/settings/General.tsx WARM_CHOICES/COOL_CHOICES).
+// Swatch buttons' accessible name concatenates the theme-name span and the
+// mode span with no guaranteed literal space between them (differs slightly
+// between jsdom/testing-library and a real Chromium AX tree) — every case
+// below is a RegExp with an optional `\s*` at the join point so it matches
+// either rendering, anchored so e.g. "Observatory" (warm, dark) can't
+// accidentally match "Observatory Cool" (cool, dark/light).
+const THEME_CASES: { name: RegExp; dataTheme: string }[] = [
+  { name: /^Warm Slate\s*light$/i, dataTheme: 'warm-slate' },
+  { name: /^Observatory\s*dark$/i, dataTheme: 'observatory-dark' },
+  {
+    name: /^Observatory Cool · Light\s*light$/i,
+    dataTheme: 'observatory-cool-light',
+  },
+  { name: /^Observatory Cool\s*dark$/i, dataTheme: 'observatory-cool' },
 ];
 
 test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
@@ -156,13 +169,13 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     await page.goto('/#/settings/general');
     await expect(page.getByText('Theme', { exact: true })).toBeVisible();
 
-    // System + 4 named themes = 5 swatch cards.
+    // System + the 4 canonical (warm × 2, cool × 2) themes = 5 swatch cards.
+    // Warm Clay/Espresso Dark stay in the registry (still resolve/persist if
+    // already chosen — see theme.persistence.test.ts) but no longer render.
     const swatches = page.locator('.pv-theme-swatch');
     await expect(swatches).toHaveCount(5);
 
     for (const theme of THEME_CASES) {
-      // Swatch buttons' accessible name is "<Theme name> <mode>" (e.g. "Warm
-      // Clay Light"); match by the brand-name substring (not exact).
       await page.getByRole('button', { name: theme.name }).click();
       // The appearance runtime writes data-theme on the document root.
       await expect(page.locator('html')).toHaveAttribute(
@@ -182,10 +195,15 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/settings/general');
-    await page.getByRole('button', { name: 'Warm Clay' }).click();
+    // Warm Clay is a disabled (picker-hidden) variant as of handoff 03 —
+    // Observatory Cool (canonical, cool/dark) exercises the same non-default
+    // explicit-choice path.
+    await page
+      .getByRole('button', { name: /^Observatory Cool\s*dark$/i })
+      .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
-      'warm-clay',
+      'observatory-cool',
     );
 
     // #794 repro: switch theme, then navigate away — the choice must not
@@ -194,7 +212,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     await expect(page.locator('.pv-sidebar')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
-      'warm-clay',
+      'observatory-cool',
     );
   });
 
@@ -203,17 +221,22 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/settings/general');
-    await page.getByRole('button', { name: 'Espresso' }).click();
+    // Espresso Dark is a disabled (picker-hidden) variant as of handoff 03 —
+    // Observatory Cool · Light (canonical, cool/light) exercises the same
+    // reload-survival path.
+    await page
+      .getByRole('button', { name: 'Observatory Cool · Light' })
+      .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
-      'espresso-dark',
+      'observatory-cool-light',
     );
 
     await page.reload();
     // Boot-time initAppearance() re-applies the persisted theme before render.
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
-      'espresso-dark',
+      'observatory-cool-light',
     );
   });
 });
@@ -463,10 +486,15 @@ test.describe('Journey 10 · Appearance Restore defaults (#802)', () => {
     await page.goto('/#/settings/general');
     await expect(page.getByText('Theme', { exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Espresso' }).click();
+    // Espresso Dark is a disabled (picker-hidden) variant as of handoff 03 —
+    // Observatory Cool (canonical, cool/dark) exercises the same
+    // restore-to-System path.
+    await page
+      .getByRole('button', { name: /^Observatory Cool\s*dark$/i })
+      .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
-      'espresso-dark',
+      'observatory-cool',
     );
 
     await page
