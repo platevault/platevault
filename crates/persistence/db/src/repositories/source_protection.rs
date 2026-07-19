@@ -325,7 +325,7 @@ mod tests {
         let db = setup().await;
         let source_id = "src-001";
 
-        upsert_source_protection(db.pool(), source_id, "normal", Some(false), None, "user")
+        upsert_source_protection(db.pool(), source_id, "unprotected", Some(false), None, "user")
             .await
             .unwrap();
 
@@ -334,7 +334,7 @@ mod tests {
             .unwrap()
             .expect("row should exist");
 
-        assert_eq!(row.level, "normal");
+        assert_eq!(row.level, "unprotected");
         assert_eq!(row.block_permanent_delete, Some(0));
         assert!(row.categories.is_none());
     }
@@ -365,7 +365,9 @@ mod tests {
         let db = setup().await;
         let source_id = "src-003";
 
-        upsert_source_protection(db.pool(), source_id, "normal", None, None, "user").await.unwrap();
+        upsert_source_protection(db.pool(), source_id, "unprotected", None, None, "user")
+            .await
+            .unwrap();
         delete_source_protection(db.pool(), source_id).await.unwrap();
 
         let row = get_source_protection_row(db.pool(), source_id).await.unwrap();
@@ -378,7 +380,7 @@ mod tests {
         let source_id = "src-004";
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
 
-        upsert_source_protection(db.pool(), source_id, "normal", Some(false), None, "user")
+        upsert_source_protection(db.pool(), source_id, "unprotected", Some(false), None, "user")
             .await
             .unwrap();
 
@@ -393,8 +395,8 @@ mod tests {
         .await
         .unwrap();
 
-        // Override wins — level is "normal" even though "lights" is in protected categories.
-        assert_eq!(resolved.level, "normal");
+        // Override wins — level is "unprotected" even though "lights" is in protected categories.
+        assert_eq!(resolved.level, "unprotected");
         assert!(!resolved.block_permanent_delete);
         assert!(!resolved.inherits_default);
     }
@@ -406,10 +408,16 @@ mod tests {
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
 
         // No override row.
-        let resolved =
-            resolve_protection(db.pool(), source_id, Some("lights"), "normal", true, &global_cats)
-                .await
-                .unwrap();
+        let resolved = resolve_protection(
+            db.pool(),
+            source_id,
+            Some("lights"),
+            "unprotected",
+            true,
+            &global_cats,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(resolved.level, "protected");
         assert!(resolved.inherits_default);
@@ -422,11 +430,11 @@ mod tests {
         let global_cats: Vec<String> = vec![];
 
         let resolved =
-            resolve_protection(db.pool(), source_id, None, "normal", false, &global_cats)
+            resolve_protection(db.pool(), source_id, None, "unprotected", false, &global_cats)
                 .await
                 .unwrap();
 
-        assert_eq!(resolved.level, "normal");
+        assert_eq!(resolved.level, "unprotected");
         assert!(!resolved.block_permanent_delete);
         assert!(resolved.inherits_default);
     }
@@ -449,9 +457,10 @@ mod tests {
         .unwrap();
 
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
-        let resolved = resolve_protection(db.pool(), source_id, None, "normal", true, &global_cats)
-            .await
-            .unwrap();
+        let resolved =
+            resolve_protection(db.pool(), source_id, None, "unprotected", true, &global_cats)
+                .await
+                .unwrap();
 
         assert_eq!(resolved.categories, vec!["finals".to_owned()]);
         assert!(!resolved.inherits_default);

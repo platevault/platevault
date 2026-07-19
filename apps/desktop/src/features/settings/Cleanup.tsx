@@ -33,7 +33,8 @@ const CLEANUP_KEYS = [
 ];
 
 type CleanupAction = CleanupTypeFixture['action'];
-type DefaultProtection = 'protected' | 'normal' | 'unprotected';
+// 2-level model (issue #506): the third "normal" level is retired.
+type DefaultProtection = 'protected' | 'unprotected';
 
 /** Default per-type actions (from the CLEANUP_TYPES fixture). */
 function defaultActions(): Record<number, CleanupAction> {
@@ -182,9 +183,6 @@ export function Cleanup({ save }: CleanupProps) {
           >
             <option value="protected">
               {m.settings_cleanup_protection_protected()}
-            </option>
-            <option value="normal">
-              {m.settings_cleanup_protection_normal()}
             </option>
             <option value="unprotected">
               {m.settings_cleanup_protection_unprotected()}

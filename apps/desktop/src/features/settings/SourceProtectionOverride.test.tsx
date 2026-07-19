@@ -119,7 +119,7 @@ describe('SourceProtectionOverride', () => {
   it('shows the override pill for a non-default level when not open', async () => {
     mockGet.mockResolvedValue({
       status: 'ok',
-      data: makeGetResponse({ inheritsDefault: false, level: 'normal' }),
+      data: makeGetResponse({ inheritsDefault: false, level: 'unprotected' }),
     });
     render(
       <SourceProtectionOverride
@@ -130,7 +130,7 @@ describe('SourceProtectionOverride', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Normal')).toBeTruthy();
+      expect(screen.getByText('Unprotected')).toBeTruthy();
     });
   });
 
@@ -174,7 +174,7 @@ describe('SourceProtectionOverride', () => {
       data: {
         sourceId: 'src-1',
         priorLevel: 'protected',
-        newLevel: 'normal',
+        newLevel: 'unprotected',
         priorBlockPermanentDelete: null,
         newBlockPermanentDelete: null,
         priorCategories: null,
@@ -189,18 +189,18 @@ describe('SourceProtectionOverride', () => {
     const select = await screen.findByRole('combobox', {
       name: /Protection level override/i,
     });
-    fireEvent.change(select, { target: { value: 'normal' } });
+    fireEvent.change(select, { target: { value: 'unprotected' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Save override/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('Normal')).toBeTruthy();
+      expect(screen.getByText('Unprotected')).toBeTruthy();
     });
     expect(mockSet).toHaveBeenCalledWith({
       sourceId: 'src-1',
-      level: 'normal',
+      level: 'unprotected',
     });
-    expect(onSaved).toHaveBeenCalledWith('normal');
+    expect(onSaved).toHaveBeenCalledWith('unprotected');
     // Closed after save — editor no longer rendered.
     expect(screen.queryByRole('button', { name: /Save override/i })).toBeNull();
   });
