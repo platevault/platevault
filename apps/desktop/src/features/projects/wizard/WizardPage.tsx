@@ -376,12 +376,25 @@ export function WizardPage() {
       // - true  → folders exist on disk: confirm.
       // - false → creation failed; the plan record remains reviewable.
       // - null/undefined → plan needs manual review (non-mkdir actions).
+      //
+      // #604: every toast carries a "View project" navigation affordance —
+      // the project record exists in all three outcomes above, even when
+      // folder scaffolding failed.
+      const viewProjectAction = {
+        label: m.projects_wizard_toast_view_project(),
+        onClick: () =>
+          void navigate({
+            to: '/projects',
+            search: { selected: result.projectId },
+          }),
+      };
       if (result.scaffoldApplied === false) {
         addToast({
           message: m.projects_wizard_toast_folders_failed({
             name: trimmedName,
           }),
           variant: 'error',
+          action: viewProjectAction,
         });
       } else if (result.scaffoldApplied) {
         addToast({
@@ -389,11 +402,13 @@ export function WizardPage() {
             name: trimmedName,
           }),
           variant: 'success',
+          action: viewProjectAction,
         });
       } else {
         addToast({
           message: m.projects_wizard_toast_created({ name: trimmedName }),
           variant: 'success',
+          action: viewProjectAction,
         });
       }
 

@@ -36,8 +36,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+const { mockNavigate } = vi.hoisted(() => ({
+  mockNavigate: vi.fn().mockReturnValue(undefined),
+}));
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn().mockReturnValue(undefined),
+  useNavigate: () => mockNavigate,
   useSearch: () => ({}),
 }));
 
@@ -397,6 +400,43 @@ describe('T078c: create project end-to-end', () => {
         expect.objectContaining({ variant: 'success' }),
       );
     });
+  });
+
+  it('#604: success toast carries a "View project" navigation action', async () => {
+    mockCallCreateProject.mockResolvedValue({
+      projectId: 'proj-new-002b',
+      lifecycle: 'setup_incomplete',
+      planId: null,
+      channels: [],
+      auditId: 'audit-002b',
+      createdAt: '2026-06-17T00:00:00Z',
+    });
+
+    renderWizard();
+    await advanceToReview('M31 LRGB');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('wizard-create-btn'));
+    });
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: expect.objectContaining({ label: 'View project' }),
+        }),
+      );
+    });
+
+    const call = mockAddToast.mock.calls.find(
+      ([opts]) => opts.action?.label === 'View project',
+    );
+    call?.[0].action?.onClick();
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/projects',
+        search: { selected: 'proj-new-002b' },
+      }),
+    );
   });
 
   it('confirms folder creation when the scaffolding plan auto-applied (scaffoldApplied: true)', async () => {
