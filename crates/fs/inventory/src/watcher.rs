@@ -223,10 +223,22 @@ mod tests {
     }
 
     #[test]
-    fn subscribe_returns_receiver() {
+    fn subscribe_receives_broadcast_events_without_active_watcher() {
+        // `tx` is private but visible from this child module — used here to
+        // drive the broadcast channel directly so the test can assert the
+        // receiver actually gets events (the "receiver is valid" property),
+        // not merely that `subscribe()` doesn't panic.
         let svc = WatcherService::new();
-        let _rx = svc.subscribe();
-        // Should not panic — receiver is valid even without active watcher.
+        let mut rx = svc.subscribe();
+        assert!(!svc.is_running(), "subscribing before start() should still work");
+
+        let evt = InboxFileEvent::Added { path: "/inbox/test.fits".to_owned() };
+        svc.tx.send(evt).expect("subscribed receiver keeps the channel open");
+
+        match rx.try_recv().expect("subscribed receiver should observe the broadcast event") {
+            InboxFileEvent::Added { path } => assert_eq!(path, "/inbox/test.fits"),
+            other => panic!("expected Added event, got {other:?}"),
+        }
     }
 
     #[test]

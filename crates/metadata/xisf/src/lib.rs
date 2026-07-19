@@ -363,9 +363,24 @@ mod tests {
 
     #[test]
     fn bad_signature_returns_error() {
+        // Exercises the local extract() -> map_err() path (not
+        // Header::parse() in isolation) so a regression in this crate's
+        // error mapping — e.g. `map_err` dropped or misrouting the
+        // signature-failure variant — is actually caught.
         let mut data = build_xisf(&[]);
         data[0..8].copy_from_slice(b"NOTXISF!");
-        assert!(Header::parse(&data).is_err());
+
+        let path = std::env::temp_dir()
+            .join(format!("xisf_bad_signature_test_{}.xisf", std::process::id()));
+        std::fs::write(&path, &data).expect("write test fixture");
+
+        let result = XisfExtractor.extract(&path);
+        let _ = std::fs::remove_file(&path);
+
+        match result {
+            Err(MetadataExtractError::Io { .. }) => {}
+            other => panic!("expected Io error for bad signature, got {other:?}"),
+        }
     }
 
     #[test]

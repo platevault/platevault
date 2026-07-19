@@ -99,12 +99,22 @@ mod tests {
 
     #[test]
     fn m31_messier_id_matches_expected_constant() {
-        // Pin a known value so accidental changes in derivation are caught.
-        // Computed once: UUIDv5(NAMESPACE, "messier:M31")
+        // Pin the literal value computed once via UUIDv5(NAMESPACE,
+        // "messier:M31") — NOT recomputed via the same derivation path,
+        // which would make this pass regardless of what the derivation
+        // actually does. If the namespace, format string, or hash algorithm
+        // ever changes, this hardcoded value must change too, which is the
+        // point: it is a real regression pin, not a self-check.
         let id = target_id("messier", "M31");
-        // Recompute the expected value to avoid hardcoding bytes.
-        let ns = target_namespace();
-        let expected = Uuid::new_v5(&ns, b"messier:M31");
+        let expected = Uuid::parse_str("0f6abf97-e34f-59cd-998a-940c021a617b").unwrap();
         assert_eq!(id, expected);
+    }
+
+    #[test]
+    fn namespace_uuid_matches_expected_constant() {
+        // Same rationale as m31_messier_id_matches_expected_constant: pin
+        // the literal NAMESPACE value rather than recomputing it.
+        let expected = Uuid::parse_str("b83f6123-043f-569d-bf50-ab3a74c86897").unwrap();
+        assert_eq!(target_namespace(), expected);
     }
 }

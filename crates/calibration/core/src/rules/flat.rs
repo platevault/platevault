@@ -322,22 +322,45 @@ mod tests {
 
     #[test]
     fn rotation_circular_distance_property_bounded_and_correct() {
-        // The exact function `evaluate` calls for the rotation delta: any
-        // pair of angles must be within [0, 180], and match the textbook
-        // shortest-arc formula — the naive `(a - b).abs()` this replaces
-        // (issue #921) can exceed 180 and blow past 360 near the seam.
+        // Drives evaluate() itself (not skymath::circular_distance in
+        // isolation) so a regression that swaps evaluate()'s rotation delta
+        // for a naive `(a - b).abs()` — the bug issue #921 fixed — is caught
+        // here across a grid of angle pairs, not just the handful of fixed
+        // examples in the other rotation_* tests.
         let angles = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
         for &a in &angles {
             for &b in &angles {
-                let d = skymath::circular_distance(
-                    skymath::Angle::from_degrees(a),
-                    skymath::Angle::from_degrees(b),
+                let s = SessionInfo { rotation_deg: Some(a), ..session() };
+                let r = evaluate(
+                    &s,
+                    &master_flat("Ha", "1x1", "train-a", 100.0, b, "2026-01-15"),
+                    &MatchingRuleConfig::default(),
                 )
-                .degrees();
-                assert!((0.0..=180.0).contains(&d), "distance {d} out of [0,180] for ({a}, {b})");
+                .expect("hard rules all satisfied");
+                let matched_delta = r
+                    .dimensions_matched
+                    .iter()
+                    .find(|d| d.dimension == "rotation")
+                    .and_then(|d| d.delta);
+                let mismatched_delta = r
+                    .dimensions_mismatched
+                    .iter()
+                    .find(|d| d.dimension == "rotation")
+                    .and_then(|d| d.delta);
+                let delta = matched_delta
+                    .or(mismatched_delta)
+                    .expect("rotation dimension always carries a delta when both angles are Some");
+
+                assert!(
+                    (0.0..=180.0).contains(&delta),
+                    "evaluate() rotation delta {delta} out of [0,180] for ({a}, {b})"
+                );
                 let raw = (a - b).abs().rem_euclid(360.0);
                 let expected = raw.min(360.0 - raw);
-                assert!((d - expected).abs() < 1e-9, "({a}, {b}): got {d}, expected {expected}");
+                assert!(
+                    (delta - expected).abs() < 1e-9,
+                    "({a}, {b}): evaluate() gave {delta}, expected {expected}"
+                );
             }
         }
     }
