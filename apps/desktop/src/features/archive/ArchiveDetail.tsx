@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { DetailPane, DetailHeader } from '@/components';
+import { DetailPanel } from '@/components';
 import { m } from '@/lib/i18n';
 import { Pill, Section, Table, EmptyState, Skeleton } from '@/ui';
 import { useArchiveAudit } from './store';
@@ -60,22 +60,21 @@ export function ArchiveDetail({ item }: Props) {
   const { data: history = [], loading, error } = useArchiveAudit(item.id);
 
   return (
-    <DetailPane fill>
-      <DetailHeader
-        title={item.name}
-        titleExtra={
-          <>
-            <Pill variant="info">{item.entityType}</Pill>
-            <Pill variant="ghost">{m.archive_status_pill()}</Pill>
-          </>
-        }
-        subtitle={
-          item.originalPath !== '—'
-            ? item.originalPath
-            : m.archive_subtitle_no_path()
-        }
-      />
-
+    <DetailPanel
+      fill
+      title={item.name}
+      titleExtra={
+        <>
+          <Pill variant="info">{item.entityType}</Pill>
+          <Pill variant="ghost">{m.archive_status_pill()}</Pill>
+        </>
+      }
+      subtitle={
+        item.originalPath !== '—'
+          ? item.originalPath
+          : m.archive_subtitle_no_path()
+      }
+    >
       {/* Single column — no rail. The old rail (Status/Storage/Audit trail)
           duplicated the Details table and the Audit history table, so it was
           dropped along with the hero MetricLine. The "Details" table that
@@ -125,6 +124,6 @@ export function ArchiveDetail({ item }: Props) {
           />
         )}
       </Section>
-    </DetailPane>
+    </DetailPanel>
   );
 }

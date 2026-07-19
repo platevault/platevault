@@ -43,7 +43,12 @@ import {
   useUpdateTargetNotes,
 } from './store';
 import type { TargetDetailV3 } from './store';
-import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
+import {
+  DetailPane,
+  DetailPanel,
+  PropertyTable,
+  type PropertyDef,
+} from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import {
@@ -881,63 +886,73 @@ export function TargetDetailV2({
       ]
     : [];
 
-  return (
-    <DetailPane fill>
-      {/* ── Planner header ──────────────────────────────────────────────── */}
-      <div className="alm-planner__header">
-        <div className="alm-planner__header-left">
-          {/* Title + actions inline-left (matches Sessions); pills below. */}
-          <div className="alm-planner__titlebar">
-            <h2 className="alm-planner__title">
-              {detail.effectiveLabel}
-              {commonName && commonName !== detail.effectiveLabel && (
-                <span className="alm-planner__subtitle"> — {commonName}</span>
-              )}
-            </h2>
-            <div className="alm-planner__actions">
-              {/* Primary/contextual action FIRST (Sessions convention: the
-                  highlight action leads the inline-left group). */}
-              <Btn
-                size="sm"
-                variant="primary"
-                onClick={() => {
-                  setNewProjectOpen(true);
-                  void navigate({
-                    to: '/projects/new',
-                    search: { targetId: detail.id },
-                  });
-                }}
-              >
-                {m.targets_detail_new_project()}
-              </Btn>
-            </div>
-          </div>
-          <div className="alm-planner__pill-row">
-            <Pill variant="neutral">
-              {detail.objectType.replace(/_/g, ' ')}
-            </Pill>
-            {catalogPills.map((a) => (
-              <Pill key={a.id} variant="ghost">
-                <span
-                  title={m.targets_detail_alias_kind_title({ kind: a.kind })}
-                >
-                  <span className="alm-target-detail__alias-kind">
-                    [{kindLabel(a.kind)}]
-                  </span>
-                  {a.alias}
-                </span>
-              </Pill>
-            ))}
-          </div>
-        </div>
-      </div>
+  // Title identity (h2, unchanged content/markup — just relocated into
+  // DetailPanel's `title` slot, spec 054 T011/#1067).
+  const titleContent = (
+    <h2 className="alm-planner__title">
+      {detail.effectiveLabel}
+      {commonName && commonName !== detail.effectiveLabel && (
+        <span className="alm-planner__subtitle"> — {commonName}</span>
+      )}
+    </h2>
+  );
 
+  // Pills + "New project" action, inline-left beside the title. Both go in
+  // `titleExtra` (not the `actions` slot): SessionDetail/MasterDetail already
+  // established this idiom — `actions` renders far-right in the header
+  // (`.alm-detail__actions`), which would break the "inline-left, matches
+  // Sessions" grouping this file's own header CSS documents.
+  const titleExtraContent = (
+    <>
+      <div className="alm-planner__actions">
+        {/* Primary/contextual action FIRST (Sessions convention: the
+            highlight action leads the inline-left group). */}
+        <Btn
+          size="sm"
+          variant="primary"
+          onClick={() => {
+            setNewProjectOpen(true);
+            void navigate({
+              to: '/projects/new',
+              search: { targetId: detail.id },
+            });
+          }}
+        >
+          {m.targets_detail_new_project()}
+        </Btn>
+      </div>
+      <div className="alm-planner__pill-row">
+        <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
+        {catalogPills.map((a) => (
+          <Pill key={a.id} variant="ghost">
+            <span title={m.targets_detail_alias_kind_title({ kind: a.kind })}>
+              <span className="alm-target-detail__alias-kind">
+                [{kindLabel(a.kind)}]
+              </span>
+              {a.alias}
+            </span>
+          </Pill>
+        ))}
+      </div>
+    </>
+  );
+
+  return (
+    <DetailPanel fill title={titleContent} titleExtra={titleExtraContent}>
       {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
       {newProjectOpen && null}
 
       {/* #816: DetailPane fill-mode contract (primitives.css .alm-detail--fill)
-          requires ONE descendant establishing overflow-y:auto — the header
-          above stays pinned, everything else (identity/tonight, coverage,
+          requires ONE descendant establishing overflow-y:auto. DetailPanel is
+          deliberately used in "content-only" mode here (no facts/aux slots) —
+          that mode renders `children` as a direct sibling of DetailHeader
+          inside `.alm-detail--fill` (see DetailPanel.tsx), identical to the
+          pre-migration structure this comment originally documented. facts/
+          aux were NOT used for the identity columns below: that would nest
+          this region under `.alm-detailpanel__cols` > `.alm-detailpanel__content`
+          instead of as a direct child of `.alm-detail--fill`, breaking the
+          `.alm-detail--fill > .alm-planner__scroll` CSS rule (redesign-detail.css)
+          this fix depends on — everything below (identity/tonight, coverage,
           links, display label, aliases, projects, notes, back button) lives
           in this single scrollable region so it isn't silently clipped by
           the pane's own overflow:hidden. */}
@@ -1381,6 +1396,6 @@ export function TargetDetailV2({
           {m.targets_detail_back()}
         </button>
       </div>
-    </DetailPane>
+    </DetailPanel>
   );
 }
