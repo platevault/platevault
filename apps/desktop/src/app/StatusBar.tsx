@@ -74,15 +74,18 @@ export function StatusBar() {
           or dev-status placeholder was deliberately removed (fix ef364dfc). */}
       <div className="alm-statusbar__lib" data-testid="statusbar-library-stats">
         <span title={m.status_sessions_title()}>
-          {formatCount(status.sessionCount)} {m.status_sessions_label()}
+          {formatCount(status.sessionCount)}{' '}
+          {m.status_sessions_label({ count: status.sessionCount })}
         </span>
         <span className="alm-statusbar__sep">·</span>
         <span title={m.status_projects_title()}>
-          {formatCount(status.projectCount)} {m.status_projects_label()}
+          {formatCount(status.projectCount)}{' '}
+          {m.status_projects_label({ count: status.projectCount })}
         </span>
         <span className="alm-statusbar__sep">·</span>
         <span title={m.status_masters_title()}>
-          {formatCount(status.calibrationCount)} {m.status_masters_label()}
+          {formatCount(status.calibrationCount)}{' '}
+          {m.status_masters_label({ count: status.calibrationCount })}
         </span>
       </div>
 

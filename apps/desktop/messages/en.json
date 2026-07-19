@@ -1163,13 +1163,40 @@
   "picker_filter_all_files": "All files",
   "status_log_label": "Log",
   "status_log_toggle_aria": "Toggle log panel",
-  "status_masters_label": "masters",
+  "status_masters_label": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "master",
+        "pp=other": "masters"
+      }
+    }
+  ],
   "status_masters_title": "Total calibration masters",
-  "status_projects_label": "projects",
+  "status_projects_label": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "project",
+        "pp=other": "projects"
+      }
+    }
+  ],
   "status_projects_title": "Total projects",
   "status_ready": "Ready",
   "status_reclaimable": "reclaimable",
-  "status_sessions_label": "sessions",
+  "status_sessions_label": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "session",
+        "pp=other": "sessions"
+      }
+    }
+  ],
   "status_sessions_title": "Total acquisition sessions",
   "targets_add_target": "Add target",
   "targets_add_target_desc": "Search for an astronomical target to add it to your library.",
@@ -1262,7 +1289,16 @@
     }
   ],
   "targets_table_no_match": "No targets match the current filters.",
-  "targets_table_target_count": "{count} targets",
+  "targets_table_target_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} target",
+        "countPlural=other": "{count} targets"
+      }
+    }
+  ],
   "ui_dir_picker_choose": "Choose folder…",
   "ui_dir_picker_error": "Couldn’t open the folder picker.",
   "ui_dir_picker_manual_path_aria": "Folder path",
