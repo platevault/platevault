@@ -10,7 +10,7 @@
 // screen: a few defaults the user can set up front (all changeable later in
 // Settings).
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
 import { usePreference } from '@/data/preferences';
 import { useThemeChoice, THEMES, type ThemeChoice } from '@/data/theme';
@@ -47,6 +47,16 @@ type DefaultProtection = 'protected' | 'unprotected';
 function DefaultProtectionControl() {
   const [value, setValue] = useState<DefaultProtection>('protected');
 
+  // Set once the user picks a value, so the mount read below can never
+  // overwrite a deliberate choice. `cancelled` only covers unmount, not the
+  // still-mounted case where the user has already chosen.
+  const chosenRef = useRef(false);
+
+  // Load the persisted value on mount. This resolves asynchronously, so on a
+  // slow backend it can land AFTER the user has already picked from the select
+  // — and `onChange` has by then persisted their pick, so applying the read
+  // would show a value the backend no longer holds. Same defect as the
+  // Settings → Cleanup pane guards with `editedRef`.
   useEffect(() => {
     let cancelled = false;
     commands
@@ -55,7 +65,7 @@ function DefaultProtectionControl() {
       .then((data) => {
         const vals = data?.values as Record<string, unknown> | undefined;
         const v = vals?.defaultProtection;
-        if (!cancelled && typeof v === 'string')
+        if (!cancelled && !chosenRef.current && typeof v === 'string')
           setValue(v as DefaultProtection);
       })
       .catch(() => {
@@ -67,6 +77,9 @@ function DefaultProtectionControl() {
   }, []);
 
   const onChange = (v: DefaultProtection) => {
+    // Claim the setting before the mount read can answer (see the effect
+    // above) — from here on the user owns it for this session.
+    chosenRef.current = true;
     setValue(v);
     void commands
       .settingsUpdate('cleanup', { defaultProtection: v })
