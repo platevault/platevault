@@ -1,6 +1,6 @@
 # Research: Inbox — Drop Parent Items
 
-**Feature**: 057-inbox-drop-parent-items
+**Feature**: 058-inbox-drop-parent-items
 
 **Created**: 2026-07-19
 

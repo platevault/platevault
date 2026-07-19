@@ -1,4 +1,4 @@
-# Pending Review Questions — 057 Inbox Drop Parent Items
+# Pending Review Questions — 058 Inbox Drop Parent Items
 
 Questions raised during specification. **Five are now answered** (2026-07-19) —
 Q-1, Q-2, Q-4 and Q-8 by the product owner, Q-3 by events. Answers are recorded
