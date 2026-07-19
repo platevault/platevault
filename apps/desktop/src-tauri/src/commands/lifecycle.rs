@@ -212,6 +212,12 @@ pub async fn provenance_read(
 
 /// `lifecycle.transition.apply` Tauri command.
 ///
+/// #665: on a successful `Project` entity transition, fires the
+/// `LifecycleTransition` manifest trigger — this and the source add/remove
+/// trigger were the last of the 4 unwired manifest emitters (project create
+/// and source add/remove are wired in `app_core_projects`; `workflow_run` was
+/// the only one that ever existed).
+///
 /// # Errors
 /// Never returns `Err`; refusal / persistence errors fold into
 /// `TransitionResponse::error(...)` per the contract.
@@ -221,7 +227,26 @@ pub async fn lifecycle_transition_apply(
     state: State<'_, AppState>,
     request: TransitionRequest,
 ) -> Result<TransitionResponse, String> {
-    Ok(apply_transition(state.repo.as_ref(), &state.bus, request).await)
+    let project_id = match &request {
+        TransitionRequest::Project(req) => Some(req.entity_id.to_string()),
+        _ => None,
+    };
+
+    let response = apply_transition(state.repo.as_ref(), &state.bus, request).await;
+
+    if let Some(project_id) = project_id {
+        if response.status == contracts_core::lifecycle::TransitionStatus::Success {
+            app_core::project_manifests::write_lifecycle_manifest(
+                state.repo.pool(),
+                &state.bus,
+                &project_id,
+                contracts_core::manifests::ManifestReason::LifecycleTransition,
+            )
+            .await;
+        }
+    }
+
+    Ok(response)
 }
 
 /// `lifecycle.transition.preview` — read-only dry-run for UI button enabling.

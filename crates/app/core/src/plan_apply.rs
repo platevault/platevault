@@ -202,9 +202,6 @@ fn db_err(e: DbError) -> ContractError {
 /// Best-effort: the project already exists, so a manifest failure here must
 /// NOT fail the apply. Every failure is logged for an external watchdog (§II).
 async fn finalize_project_create_manifest(pool: &SqlitePool, bus: &EventBus, project_path: &str) {
-    use app_core_projects::project_manifests::{
-        build_source_calibration_snapshot, write, WriteManifestParams,
-    };
     use contracts_core::manifests::ManifestReason as DtoManifestReason;
     use persistence_db::repositories::projects as projects_repo;
 
@@ -219,31 +216,13 @@ async fn finalize_project_create_manifest(pool: &SqlitePool, bus: &EventBus, pro
             return;
         }
     };
-    let lifecycle = match projects_repo::get_project(pool, &project_id).await {
-        Ok(row) => row.lifecycle,
-        Err(e) => {
-            tracing::warn!(%project_id, error=%e, "project_create manifest: project lookup failed");
-            return;
-        }
-    };
-    let (source_map, calibration) = build_source_calibration_snapshot(pool, &project_id).await;
-    let result = write(
+    app_core_projects::project_manifests::write_lifecycle_manifest(
         pool,
         bus,
-        WriteManifestParams {
-            project_id: &project_id,
-            reason: DtoManifestReason::Created,
-            project_root: std::path::Path::new(project_path),
-            lifecycle_state: &lifecycle,
-            source_map,
-            calibration,
-            workflow_profile: None,
-        },
+        &project_id,
+        DtoManifestReason::Created,
     )
     .await;
-    if let Err(e) = result {
-        tracing::warn!(%project_id, error=%e, "project_create manifest write failed");
-    }
 }
 
 /// Terminal step of a `prepared_view_generation` plan apply: write the

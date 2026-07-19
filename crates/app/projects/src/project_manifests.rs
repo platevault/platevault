@@ -346,6 +346,57 @@ pub async fn build_source_calibration_snapshot(
     (Some(source_map), calibration)
 }
 
+/// Load the project's current path + lifecycle, build its source/calibration
+/// snapshot, and write a manifest for `reason` (#665).
+///
+/// Best-effort: logs and swallows failure rather than propagating it — the
+/// triggering mutation (source add/remove, lifecycle transition, project
+/// create) has already succeeded by the time this runs; a manifest write
+/// failure must never roll it back or surface as the mutation's own error.
+///
+/// Shared by every #665 trigger site so they can't drift on what a manifest
+/// snapshot contains: `project_setup::add_source`/`remove_source`
+/// (`SourceChange`), `app_core::plan_apply`'s project-create-plan completion
+/// (`Created`), and the `lifecycle.transition.apply` Tauri command
+/// (`LifecycleTransition`, `apps/desktop/src-tauri/src/commands/lifecycle.rs`).
+///
+/// Reads the project row fresh rather than taking a lifecycle string from
+/// the caller: every call site here runs strictly after its own mutation
+/// has already committed the new lifecycle to the DB, so a fresh read is
+/// always the correct post-mutation value.
+pub async fn write_lifecycle_manifest(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+    reason: DtoManifestReason,
+) {
+    let row = match persistence_db::repositories::projects::get_project(pool, project_id).await {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::debug!("manifest snapshot: could not load project {project_id}: {e}");
+            return;
+        }
+    };
+    let (source_map, calibration) = build_source_calibration_snapshot(pool, project_id).await;
+    if let Err(e) = write(
+        pool,
+        bus,
+        WriteManifestParams {
+            project_id,
+            reason,
+            project_root: std::path::Path::new(&row.path),
+            lifecycle_state: &row.lifecycle,
+            source_map,
+            calibration,
+            workflow_profile: None,
+        },
+    )
+    .await
+    {
+        tracing::warn!("manifest write failed for project {project_id}: {e}");
+    }
+}
+
 // ── workflow_run_completed subscriber ─────────────────────────────────────────
 
 /// Spawn an event-bus subscriber that listens for `workflow.run_completed`

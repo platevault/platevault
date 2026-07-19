@@ -251,34 +251,19 @@ async fn maybe_regress_to_incomplete(
 /// Best-effort: a manifest write failure must never fail the source
 /// add/remove use case itself (Constitution V — the DB row for the mutation
 /// itself already succeeded; the manifest is a documentation side-effect).
-async fn write_source_change_manifest(
-    pool: &SqlitePool,
-    bus: &EventBus,
-    project_id: &str,
-    project_path: &str,
-    effective_lifecycle: &str,
-) {
-    use crate::project_manifests::{build_source_calibration_snapshot, write, WriteManifestParams};
+/// Delegates to the shared `project_manifests::write_lifecycle_manifest`
+/// (re-reads the project row, so the just-applied lifecycle change from
+/// `maybe_auto_ready`/`maybe_regress_to_incomplete` is already reflected).
+async fn write_source_change_manifest(pool: &SqlitePool, bus: &EventBus, project_id: &str) {
     use contracts_core::manifests::ManifestReason as DtoManifestReason;
 
-    let (source_map, calibration) = build_source_calibration_snapshot(pool, project_id).await;
-    if let Err(e) = write(
+    crate::project_manifests::write_lifecycle_manifest(
         pool,
         bus,
-        WriteManifestParams {
-            project_id,
-            reason: DtoManifestReason::SourceChange,
-            project_root: std::path::Path::new(project_path),
-            lifecycle_state: effective_lifecycle,
-            source_map,
-            calibration,
-            workflow_profile: None,
-        },
+        project_id,
+        DtoManifestReason::SourceChange,
     )
-    .await
-    {
-        tracing::warn!(%project_id, error=%e, "source-change manifest write failed");
-    }
+    .await;
 }
 
 // ── Path anchoring (Constitution I) ───────────────────────────────────────────
@@ -904,14 +889,7 @@ pub async fn add_source(
     .await
     .map_err(bus_err)?;
 
-    write_source_change_manifest(
-        pool,
-        bus,
-        &req.project_id,
-        &row.path,
-        new_lifecycle.as_deref().unwrap_or(&row.lifecycle),
-    )
-    .await;
+    write_source_change_manifest(pool, bus, &req.project_id).await;
 
     let added_row = repo::ProjectSourceRow {
         id: src_id,
@@ -1028,14 +1006,7 @@ pub async fn remove_source(
     .await
     .map_err(bus_err)?;
 
-    write_source_change_manifest(
-        pool,
-        bus,
-        &req.project_id,
-        &row.path,
-        new_lifecycle.as_deref().unwrap_or(&row.lifecycle),
-    )
-    .await;
+    write_source_change_manifest(pool, bus, &req.project_id).await;
 
     Ok(ProjectSourceRemoveResult {
         project_id: req.project_id.clone(),
