@@ -20,6 +20,11 @@
 // macro". `include!` splices this file's tokens into `lib.rs`'s crate-root
 // module instead, keeping the macro scope intact while still separating
 // the file on disk.
+//
+// Consequence: `cargo fmt` discovers files by walking `mod` declarations, so
+// it never reaches this one. `just lint` and the CI "Rust format" step check
+// it with an explicit `rustfmt` invocation — keep those in sync if this file
+// is renamed or moved.
 
 use tauri_specta::{collect_commands, Builder};
 

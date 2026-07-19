@@ -210,9 +210,14 @@ jobs:
         run: pnpm --filter @astro-plan/desktop run lint
 
       # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
+      # `cargo fmt` only walks `mod` declarations, so it never reaches
+      # bootstrap/specta.rs, which is `include!`d rather than `mod`-declared
+      # (see that file's header). Check it explicitly so it cannot drift.
       - name: Rust format
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all --check
+          rustfmt --edition 2021 --check apps/desktop/src-tauri/src/bootstrap/specta.rs
 
       # Self-test the changed-crate scoping helper's mapping/closure logic
       # (runs once, on Linux, under the Rust lane).
