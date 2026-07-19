@@ -17,6 +17,12 @@ export const commands = {
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
 	 * 
+	 *  #665: on a successful `Project` entity transition, fires the
+	 *  `LifecycleTransition` manifest trigger — this and the source add/remove
+	 *  trigger were the last of the 4 unwired manifest emitters (project create
+	 *  and source add/remove are wired in `app_core_projects`; `workflow_run` was
+	 *  the only one that ever existed).
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
