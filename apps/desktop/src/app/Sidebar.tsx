@@ -17,7 +17,6 @@ import {
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
 import { useStatusSummary, type StatusSummary } from './useStatusSummary';
-import { ChecklistSection } from '@/features/onboarding/ChecklistSection';
 import { ChecklistPopover } from '@/features/onboarding/ChecklistPopover';
 
 interface NavItem {
@@ -202,9 +201,12 @@ export function Sidebar() {
 
       {/* Getting-started checklist (spec 056, US2), above the pinned Settings
           entry. The orientation walk's L1→L2 bridge spotlights this element via
-          the guide anchor — keep the attribute string exact. */}
+          the guide anchor — keep the attribute string exact.
+          Both sidebar widths use the flyout: only the trigger differs (labelled
+          row vs bare ring). Rendering the list inline made it blend into the
+          sidebar's own surface — see ChecklistPopover's header. */}
       <div data-guide-anchor="onboarding.getting-started">
-        {collapsed ? <ChecklistPopover /> : <ChecklistSection />}
+        <ChecklistPopover labelled={!collapsed} />
       </div>
 
       {/* Settings pinned at the bottom, separated from the workflow nav */}

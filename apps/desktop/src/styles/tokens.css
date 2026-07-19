@@ -166,6 +166,7 @@
   --alm-onb-spotlight-stroke: #ffffff;
   --alm-hover-bg: rgba(0,0,0,0.04); --alm-selected-bg: #e6ecee;
   --alm-shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+  --alm-shadow-lg: 0 8px 24px rgba(0,0,0,0.14);
 }
 
 /* Warm Clay — warm light, terracotta accent */
@@ -185,6 +186,7 @@
   --alm-onb-spotlight-stroke: #ffffff;
   --alm-hover-bg: rgba(0,0,0,0.04); --alm-selected-bg: #f1e6da;
   --alm-shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+  --alm-shadow-lg: 0 8px 24px rgba(0,0,0,0.14);
 }
 
 /* Observatory Dark — warm charcoal, amber accent (default dark + OS-dark) */
@@ -204,6 +206,7 @@
   --alm-onb-spotlight-stroke: var(--alm-accent);
   --alm-hover-bg: rgba(255,255,255,0.05); --alm-selected-bg: #332a1d;
   --alm-shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --alm-shadow-lg: 0 8px 24px rgba(0,0,0,0.55);
 }
 
 /* Espresso Dark — deep near-black, caramel accent */
@@ -223,6 +226,7 @@
   --alm-onb-spotlight-stroke: var(--alm-accent);
   --alm-hover-bg: rgba(255,255,255,0.05); --alm-selected-bg: #2e271d;
   --alm-shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+  --alm-shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
 }
 
 /* Density modifiers */

@@ -20,7 +20,7 @@
  * check affordance the group-collapse behaviour (FR-031) needs.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Check,
@@ -451,6 +451,35 @@ function ChecklistItemRow({
   const label = itemLabel(item.itemId);
   const findActive = useActiveFindItem()?.itemId === item.itemId;
 
+  // Tooltip visibility (FR-008 / WCAG 1.4.13).
+  //
+  // This used to be pure CSS: `:hover, :focus-within { visibility: visible }`.
+  // Two defects came out of that. (1) STUCK TOOLTIPS: the row contains buttons
+  // (find, dismiss), so clicking one left `:focus-within` true and the tooltip
+  // pinned open after the pointer had long left the row — intermittent in a way
+  // that looked random, because it depended on whether you had clicked in that
+  // row. (2) NOT DISMISSABLE: CSS alone cannot honour Escape, the "Dismissable"
+  // half of 1.4.13, which was the known-open AA gap.
+  //
+  // So: pointer hover reveals, and focus reveals only when it is KEYBOARD focus
+  // (`:focus-visible`) — a mouse click focuses the button but no longer pins the
+  // tooltip. Escape hides it while the pointer/focus stays put, and the
+  // dismissal resets once the row is properly left, so it can be shown again.
+  const [hovered, setHovered] = useState(false);
+  const [keyboardFocused, setKeyboardFocused] = useState(false);
+  const [escapeDismissed, setEscapeDismissed] = useState(false);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const tipOpen = (hovered || keyboardFocused) && !escapeDismissed;
+
+  useEffect(() => {
+    if (!tipOpen) return undefined;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEscapeDismissed(true);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [tipOpen]);
+
   const check = () =>
     void setOnboardingItemState(item.itemId, 'manually_checked');
   const dismiss = () => void setOnboardingItemState(item.itemId, 'dismissed');
@@ -477,7 +506,31 @@ function ChecklistItemRow({
   }
 
   return (
-    <li className="alm-onb-checklist__item" data-item-id={item.itemId}>
+    // Presentational tooltip reveal, not an interaction: the row exposes no
+    // behaviour of its own (every action lives in a real <button> child), and
+    // keyboard users get the same tooltip via :focus-visible on those children.
+    // Hover is tracked at row level because the tooltip describes the whole row.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <li
+      className="alm-onb-checklist__item"
+      data-item-id={item.itemId}
+      ref={rowRef}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => {
+        setHovered(false);
+        setEscapeDismissed(false);
+      }}
+      onFocus={(e) => {
+        // Keyboard focus only — a pointer click never matches :focus-visible,
+        // which is what stops clicks from pinning the tooltip open.
+        if (e.target.matches(':focus-visible')) setKeyboardFocused(true);
+      }}
+      onBlur={(e) => {
+        if (rowRef.current?.contains(e.relatedTarget as Node | null)) return;
+        setKeyboardFocused(false);
+        setEscapeDismissed(false);
+      }}
+    >
       {item.hasAutoTick ? (
         <span
           className="alm-onb-checklist__auto-dot"
@@ -548,6 +601,7 @@ function ChecklistItemRow({
         role="tooltip"
         id={tooltipId}
         className="alm-onb-checklist__tooltip"
+        data-open={tipOpen ? 'true' : 'false'}
       >
         {itemTooltip(item.itemId)}
       </span>
