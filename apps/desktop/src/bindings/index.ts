@@ -1633,7 +1633,8 @@ export const commands = {
 	 *  header is returned only as a display hint, never used for matching. The
 	 *  chosen target is written separately via `inbox.reclassify` (T068).
 	 * 
-	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+	 *  Identify the sub-group by `inboxItemId`. The request's legacy
+	 *  `sourceGroupId` is no longer accepted (spec 058 D-002).
 	 * 
 	 *  # Errors
 	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
@@ -5571,38 +5572,37 @@ export type InboxTargetCandidate = {
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsRequest_Serialize | InboxTargetRecommendationsRequest_Deserialize;
 
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest_Deserialize = {
 	/**  The single-type inbox item (light sub-group) to resolve a target for. */
 	inboxItemId?: string | null,
-	/**  Alternatively, the originating source group (R-12 provenance). */
-	sourceGroupId?: string | null,
 };
 
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest_Serialize = {
 	/**  The single-type inbox item (light sub-group) to resolve a target for. */
 	inboxItemId?: string | null,
-	/**  Alternatively, the originating source group (R-12 provenance). */
-	sourceGroupId?: string | null,
 };
 
 /**

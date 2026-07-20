@@ -578,18 +578,16 @@ pub struct InboxStatsResponse {
 
 /// Request for `inbox.target_recommendations`.
 ///
-/// Identify a light sub-group by **either** its `inboxItemId` **or** its
-/// `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
-/// one should be set; if both are present, `inboxItemId` takes precedence.
+/// Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+/// homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+/// in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+/// a source group is no longer a resolvable target.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxTargetRecommendationsRequest {
     /// The single-type inbox item (light sub-group) to resolve a target for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inbox_item_id: Option<String>,
-    /// Alternatively, the originating source group (R-12 provenance).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_group_id: Option<String>,
 }
 
 /// The sky pointing a recommendation set was computed from (decimal degrees).

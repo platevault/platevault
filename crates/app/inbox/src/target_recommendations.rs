@@ -571,11 +571,15 @@ mod tests {
         assert_eq!(resp.object_hint.as_deref(), Some("M42"), "OBJECT only a hint");
     }
 
-    /// Spec 058 / #1102 regression: a source group with N>1 siblings yields one
-    /// recommendation **per sibling**, computed from that sibling's own
-    /// pointing. The removed `resolve_item_id` collapsed a source group to
-    /// `ids.next()`, so both siblings below would have been answered with the
-    /// arbitrary first sibling's target — designating it primary (FR-006/D-002).
+    /// Spec 058 / #1102 (FR-006/D-002): a source group with N>1 siblings yields
+    /// one recommendation **per sibling**, computed from that sibling's own
+    /// pointing — no sibling is designated primary for the others.
+    ///
+    /// This guards the per-item invariant, not the removed source-group entry
+    /// point. That regression is now a compile error instead: the
+    /// `RecommendationTarget::SourceGroup` arm which collapsed a group to
+    /// `ids.next()` was deleted, not fixed. Resolution by item id was unchanged
+    /// by that deletion, so this test would also pass on the pre-change code.
     #[tokio::test]
     async fn siblings_of_one_source_group_each_get_their_own_recommendation() {
         let db = test_db().await;

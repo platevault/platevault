@@ -19,8 +19,7 @@ use app_core::inbox::reclassify::{
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedInboxItem, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use app_core::inbox::target_recommendations::{
-    target_recommendations as target_recommendations_uc, RecommendationTarget,
-    DEFAULT_FIXED_RADIUS_DEG,
+    target_recommendations as target_recommendations_uc, DEFAULT_FIXED_RADIUS_DEG,
 };
 use app_core::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
@@ -256,7 +255,8 @@ pub async fn inbox_item_metadata(
 /// header is returned only as a display hint, never used for matching. The
 /// chosen target is written separately via `inbox.reclassify` (T068).
 ///
-/// Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+/// Identify the sub-group by `inboxItemId`. The request's legacy
+/// `sourceGroupId` is no longer accepted (spec 058 D-002).
 ///
 /// # Errors
 /// `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
@@ -266,21 +266,18 @@ pub async fn inbox_target_recommendations(
     req: InboxTargetRecommendationsRequest,
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<InboxTargetRecommendationsResponse, ContractError> {
-    // inboxItemId takes precedence when both are supplied (contract semantics).
-    let target = if let Some(item_id) = req.inbox_item_id {
-        RecommendationTarget::InboxItem(item_id)
-    } else if let Some(sg_id) = req.source_group_id {
-        RecommendationTarget::SourceGroup(sg_id)
-    } else {
+    // Spec 058 D-002: recommendations belong to exactly one inbox item, so a
+    // `sourceGroupId`-only request is no longer serviceable.
+    let Some(item_id) = req.inbox_item_id else {
         return Err(ContractError::new(
             contracts_core::error_code::ErrorCode::InboxItemNotFound,
-            "target_recommendations requires inboxItemId or sourceGroupId".to_owned(),
+            "target_recommendations requires inboxItemId".to_owned(),
             contracts_core::ErrorSeverity::Blocking,
             false,
         ));
     };
 
-    target_recommendations_uc(&pool, &target, DEFAULT_FIXED_RADIUS_DEG).await
+    target_recommendations_uc(&pool, &item_id, DEFAULT_FIXED_RADIUS_DEG).await
 }
 
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────
