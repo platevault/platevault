@@ -606,7 +606,12 @@ pub async fn confirm(
         .await
         .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
 
-    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
+    // Load-bearing (#1101): the plan and its link were just committed above, so
+    // an item left off `plan_open` contradicts them — same class as the two
+    // propagating writes it follows.
+    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open")
+        .await
+        .map_err(|e| db_internal_ctx(e, "mark inbox item plan_open"))?;
 
     // 14. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
     // plan now exists, so the pick can be persisted (`plans.chosen_framing_id`)
