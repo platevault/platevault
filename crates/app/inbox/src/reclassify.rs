@@ -2702,29 +2702,24 @@ mod tests {
         );
     }
 
-    /// Spec 058 T012 blocker, pinned executable: **nothing today can turn a
-    /// bare source group into item rows.**
+    /// Spec 058 T012: **a bare source group — scan-time placeholder removed
+    /// per FR-015 — materializes sub-items directly, with no `inbox_items`
+    /// row ever required.**
     ///
-    /// FR-015 wants scan to create the source group and no inbox item, and
-    /// `data-model.md`'s state diagram then has classification materialize the
-    /// item rows. But the only two callers of `materialize_sub_items` both
-    /// require an item row to already exist:
-    ///
-    /// - `classify()` is keyed on `inbox_item_id` and fails with
-    ///   `InboxItemNotFound` without one (`classify.rs:87`);
-    /// - `reclassify_v2()` takes a `sourceGroupId`, but rebuilds its
-    ///   `file_records` from persisted `inbox_classification_evidence` /
-    ///   `inbox_file_metadata`, which are only ever written against an item id.
-    ///
-    /// So removing the scan-time placeholder without adding a group-scoped
-    /// classification entry point that reads headers from disk leaves the
-    /// folder permanently unclassifiable: no item, therefore no evidence,
-    /// therefore no item. This test asserts the missing capability from the
-    /// outside — real FITS on disk, a real source group, no item row — and
-    /// must be INVERTED (into "materializes >= 1 sub-item") by whoever builds
-    /// that entry point.
+    /// Previously pinned (as `source_group_without_items_cannot_be_classified_today_058`)
+    /// asserting the OPPOSITE: neither `classify()` (keyed on `inbox_item_id`,
+    /// fails `InboxItemNotFound` without one) nor `reclassify_v2()` (rebuilds
+    /// `file_records` from `inbox_classification_evidence`/
+    /// `inbox_file_metadata`, which are only ever written against an item id)
+    /// could turn a bare source group into item rows — so removing the
+    /// placeholder would have left every scanned folder permanently
+    /// unclassifiable. `classify_source_group` (`classify.rs`) closes that
+    /// gap: it loads the source group row, enumerates the folder's FITS/XISF
+    /// files straight from disk, and calls `materialize_sub_items` with the
+    /// group's own identity — no item row, no evidence, no cache read
+    /// required. Inverted here now that the entry point exists.
     #[tokio::test]
-    async fn source_group_without_items_cannot_be_classified_today_058() {
+    async fn classify_source_group_materializes_sub_items_from_a_bare_group_058() {
         let db = test_db().await;
         let root = tempfile::tempdir().unwrap();
         write_ambiguous_fits(&root.path().join("frame.fits"), "M42", 0);
@@ -2745,12 +2740,25 @@ mod tests {
         .unwrap();
 
         // Deliberately NO inbox_items row — this is the post-FR-015 shape.
-        let sigs = resplit_signatures(db.pool(), root.path(), "sg-bare").await;
+        let resp = crate::classify::classify_source_group(db.pool(), "sg-bare", root.path())
+            .await
+            .unwrap();
 
         assert!(
-            sigs.is_empty(),
-            "reclassify_v2 materialized sub-items for a source group with no prior \
-             item rows — the T012 blocker is gone and this test must be inverted"
+            resp.materialized_sub_item_count >= 1,
+            "classify_source_group materialized no sub-items for a bare source group \
+             with a real FITS file on disk"
+        );
+
+        let sigs: Vec<String> = inbox_repo::list_inbox_sub_items(db.pool(), "sg-bare")
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|r| r.content_signature)
+            .collect();
+        assert!(
+            !sigs.is_empty(),
+            "no inbox_items sub-item rows were actually persisted for the bare source group"
         );
     }
 

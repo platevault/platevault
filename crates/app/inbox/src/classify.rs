@@ -19,13 +19,16 @@ use std::path::{Path, PathBuf};
 use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput};
 use camino::Utf8Path;
-use metadata_core::{v1_normalization_table, EvidenceSource, FrameType};
+use metadata_core::{
+    v1_normalization_table, EvidenceSource, FrameType, ImageTypNormalizationTable,
+};
 
 use super::grouping::{group_file, FrameMetadata, GroupingConfig};
 use super::signature::folder_signature;
 use persistence_db::repositories::inbox::{
     self as repo, InsertEvidence, UpsertClassification, UpsertInboxSubItem,
 };
+use persistence_db::repositories::q_inbox;
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -161,92 +164,42 @@ pub async fn classify(
         Vec::new();
 
     for abs_path in &file_paths {
-        // Lossless path → wire-string conversion (camino). `abs_path` descends
-        // from a UTF-8 root supplied by the contract, so `Utf8Path::from_path`
-        // succeeds; the `to_string_lossy` arms are defensive fallbacks only and
-        // replace the previous always-lossy conversions.
-        let rel = match abs_path.strip_prefix(&req.root_absolute_path) {
-            Ok(p) => Utf8Path::from_path(p).map_or_else(
-                || p.to_string_lossy().replace('\\', "/"),
-                |u| u.as_str().replace('\\', "/"),
-            ),
-            Err(_) => Utf8Path::from_path(abs_path)
-                .map_or_else(|| abs_path.display().to_string(), |u| u.as_str().to_owned()),
-        };
+        let fc = classify_one_file(abs_path, &req.root_absolute_path, &norm_table);
 
-        let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-
-        // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size).
-        let raw_meta = cached_extract(abs_path).ok();
-
-        let image_typ_raw = raw_meta.as_ref().and_then(|m| m.image_typ.as_deref());
-        let stack_count = raw_meta.as_ref().and_then(|m| m.stack_count);
-        let file_name = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-
-        // Run master detection first (spec 040 FR-004).
-        // detect_master provides both frame_type and is_master when it matches.
-        let detect_input =
-            DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path: &rel };
-        let master_result = detect_master(&detect_input);
-
-        let (frame_type, evidence_source, raw_value, is_unclassified, is_master, master_detector) =
-            if let Some(ref det) = master_result {
-                // Detector produced a classification — use it directly.
-                let src = if ext == "xisf" {
-                    EvidenceSource::XisfProperty
-                } else {
-                    EvidenceSource::ImagetypHeader
-                };
-                (
-                    Some(det.frame_type),
-                    src,
-                    image_typ_raw.map(str::to_owned),
-                    false,
-                    det.is_master,
-                    Some(det.detector),
-                )
-            } else if let Some(raw) = image_typ_raw {
-                // No master detector matched; fall back to the normalization table.
-                match norm_table.normalize(raw) {
-                    Some(ft) => {
-                        let src = if ext == "xisf" {
-                            EvidenceSource::XisfProperty
-                        } else {
-                            EvidenceSource::ImagetypHeader
-                        };
-                        (Some(ft), src, Some(raw.to_owned()), false, false, None)
-                    }
-                    None => (None, EvidenceSource::None, Some(raw.to_owned()), true, false, None),
-                }
-            } else {
-                (None, EvidenceSource::None, None, true, false, None)
-            };
-
-        // Persist evidence
+        // Persist evidence (item-keyed — this is why `build_file_records`,
+        // used by the group-scoped `classify_source_group`, calls
+        // `classify_one_file` directly instead of going through this loop).
         let ev_id = Uuid::new_v4().to_string();
         let ev = InsertEvidence {
             id: &ev_id,
             inbox_item_id: &req.inbox_item_id,
-            relative_file_path: &rel,
-            frame_type: frame_type.map(FrameType::as_str),
-            evidence_source: evidence_source.as_str(),
-            raw_value: raw_value.as_deref(),
-            unclassified: is_unclassified,
+            relative_file_path: &fc.relative_path,
+            frame_type: fc.frame_type.map(FrameType::as_str),
+            evidence_source: fc.evidence_source.as_str(),
+            raw_value: fc.raw_value.as_deref(),
+            unclassified: fc.is_unclassified,
             manual_override: None,
-            is_master,
-            master_detector,
+            is_master: fc.is_master,
+            master_detector: fc.master_detector,
         };
         repo::insert_evidence(pool, &ev).await.ok();
 
         // spec 041 US2/T016: persist per-file extracted header metadata. The
         // raw extractor returns string fields; we parse the numeric ones here
         // (gain stays a string — some cameras report scaled/non-integer gain).
-        persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref()).await;
+        persist_file_metadata(
+            pool,
+            &req.inbox_item_id,
+            &fc.relative_path,
+            abs_path,
+            fc.raw_meta.as_ref(),
+        )
+        .await;
 
         // T066: collect for sub-item grouping and the folder tallies — both
         // computed AFTER the loop, once user overrides are layered on top of
         // this extraction-only record.
-        file_records.push((rel, frame_type, raw_meta));
+        file_records.push((fc.relative_path, fc.frame_type, fc.raw_meta));
     }
 
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
@@ -500,7 +453,215 @@ pub async fn classify(
     })
 }
 
+// ── classify_source_group ────────────────────────────────────────────────────
+
+/// Response from the group-scoped classify entry point (spec 058 T012).
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ClassifySourceGroupResponse {
+    pub source_group_id: String,
+    pub materialized_sub_item_count: usize,
+}
+
+/// Classify a bare `inbox_source_groups` row directly — keyed on the group,
+/// not an `inbox_items` row (spec 058 T012).
+///
+/// Spec 058 removes the scan-time folder placeholder item (T020), which until
+/// now was the ONLY route to `materialize_sub_items`: `classify()` requires
+/// an `inbox_item_id`, and `reclassify_v2` rebuilds its `file_records` from
+/// `inbox_classification_evidence`/`inbox_file_metadata` rows that are
+/// themselves only ever written against an item id. A bare source group has
+/// none of that — no evidence, no overrides, no cache row — so this entry
+/// point deliberately SKIPS every item-keyed step `classify()` performs:
+/// `snapshot_overrides` (nothing to snapshot), the `delete_*_for_item` wipes
+/// (nothing to delete), the `get_classification` cache-hit check, and the
+/// classification cache write (all keyed on an item id that does not exist).
+/// It goes straight from the source group's own file list to
+/// `materialize_sub_items`, which is already fully group-keyed.
+///
+/// An empty folder returns `MetadataUnreadable`, mirroring `classify()`'s own
+/// behaviour for the same condition — no caller needs a typed "empty" result
+/// yet (YAGNI).
+///
+/// # Errors
+/// Returns `ContractError` when the source group row is missing or the
+/// folder has no FITS/XISF files.
+pub async fn classify_source_group(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    root_absolute_path: &Path,
+) -> Result<ClassifySourceGroupResponse, ContractError> {
+    let sg = q_inbox::get_source_group_by_id(pool, source_group_id)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?
+        .ok_or_else(|| {
+            ContractError::new(
+                ErrorCode::InboxItemNotFound,
+                format!("Source group not found: {source_group_id}"),
+                ErrorSeverity::Blocking,
+                false,
+            )
+        })?;
+
+    let folder_abs = root_absolute_path.join(&sg.relative_path);
+    let file_paths = enumerate_fits_files(&folder_abs);
+    if file_paths.is_empty() {
+        return Err(ContractError::new(
+            ErrorCode::MetadataUnreadable,
+            format!("No FITS/XISF files found for source group: {}", folder_abs.display()),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    let file_records = build_file_records(&file_paths, root_absolute_path);
+
+    // `inbox_source_groups.lane` is the move-vs-catalogue lane, NOT the
+    // fits/video lane `inbox_items` requires (CHECK(lane IN ('fits',
+    // 'video'))) — see `reclassify_v2`'s identical derivation and its #854
+    // fix comment. Deriving from `format` mirrors scan's own assignment
+    // (video-only folders → 'video', everything else → 'fits'); passing
+    // `sg.lane` straight through would fail that CHECK for any 'move'/
+    // 'catalogue'-lane group and silently drop every materialized sub-item.
+    let lane = match sg.format.as_deref() {
+        Some("video") => "video",
+        _ => "fits",
+    };
+
+    materialize_sub_items(
+        pool,
+        &sg.id,
+        &sg.root_id,
+        &sg.relative_path,
+        lane,
+        &file_paths,
+        &file_records,
+    )
+    .await;
+
+    let materialized_sub_item_count =
+        repo::list_inbox_sub_items(pool, &sg.id).await.map_or(0, |rows| rows.len());
+
+    Ok(ClassifySourceGroupResponse { source_group_id: sg.id, materialized_sub_item_count })
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Per-file classification outcome, shared by `classify()`'s item-keyed
+/// evidence-persist loop and `build_file_records` (spec 058 T012's
+/// `classify_source_group`, which has no `inbox_item_id` to persist evidence
+/// against). Carries every field `classify()` needs for `InsertEvidence`;
+/// `build_file_records` keeps only `relative_path`/`frame_type`/`raw_meta`.
+pub(crate) struct FileClassification {
+    pub relative_path: String,
+    pub frame_type: Option<FrameType>,
+    pub raw_meta: Option<metadata_core::RawFileMetadata>,
+    pub evidence_source: EvidenceSource,
+    pub raw_value: Option<String>,
+    pub is_unclassified: bool,
+    pub is_master: bool,
+    pub master_detector: Option<&'static str>,
+}
+
+/// Classify one file: master detection first (spec 040 FR-004), then
+/// IMAGETYP normalization fallback (T014/T016). Pure — no DB writes; callers
+/// persist evidence themselves (only `classify()` has an item id to persist
+/// it against).
+pub(crate) fn classify_one_file(
+    abs_path: &Path,
+    root_absolute_path: &Path,
+    norm_table: &ImageTypNormalizationTable,
+) -> FileClassification {
+    // Lossless path → wire-string conversion (camino). `abs_path` descends
+    // from a UTF-8 root supplied by the contract, so `Utf8Path::from_path`
+    // succeeds; the `to_string_lossy` arms are defensive fallbacks only and
+    // replace the previous always-lossy conversions.
+    let rel = match abs_path.strip_prefix(root_absolute_path) {
+        Ok(p) => Utf8Path::from_path(p).map_or_else(
+            || p.to_string_lossy().replace('\\', "/"),
+            |u| u.as_str().replace('\\', "/"),
+        ),
+        Err(_) => Utf8Path::from_path(abs_path)
+            .map_or_else(|| abs_path.display().to_string(), |u| u.as_str().to_owned()),
+    };
+
+    let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+
+    // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size).
+    let raw_meta = cached_extract(abs_path).ok();
+
+    let image_typ_raw = raw_meta.as_ref().and_then(|m| m.image_typ.as_deref());
+    let stack_count = raw_meta.as_ref().and_then(|m| m.stack_count);
+    let file_name = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+    // Run master detection first (spec 040 FR-004).
+    // detect_master provides both frame_type and is_master when it matches.
+    let detect_input =
+        DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path: &rel };
+    let master_result = detect_master(&detect_input);
+
+    let (frame_type, evidence_source, raw_value, is_unclassified, is_master, master_detector) =
+        if let Some(ref det) = master_result {
+            // Detector produced a classification — use it directly.
+            let src = if ext == "xisf" {
+                EvidenceSource::XisfProperty
+            } else {
+                EvidenceSource::ImagetypHeader
+            };
+            (
+                Some(det.frame_type),
+                src,
+                image_typ_raw.map(str::to_owned),
+                false,
+                det.is_master,
+                Some(det.detector),
+            )
+        } else if let Some(raw) = image_typ_raw {
+            // No master detector matched; fall back to the normalization table.
+            match norm_table.normalize(raw) {
+                Some(ft) => {
+                    let src = if ext == "xisf" {
+                        EvidenceSource::XisfProperty
+                    } else {
+                        EvidenceSource::ImagetypHeader
+                    };
+                    (Some(ft), src, Some(raw.to_owned()), false, false, None)
+                }
+                None => (None, EvidenceSource::None, Some(raw.to_owned()), true, false, None),
+            }
+        } else {
+            (None, EvidenceSource::None, None, true, false, None)
+        };
+
+    FileClassification {
+        relative_path: rel,
+        frame_type,
+        raw_meta,
+        evidence_source,
+        raw_value,
+        is_unclassified,
+        is_master,
+        master_detector,
+    }
+}
+
+/// Build `(relative_path, frame_type, raw_meta)` records for a set of files
+/// with no item-keyed persistence (spec 058 T012). Used by
+/// `classify_source_group`, which has no `inbox_item_id` to persist evidence
+/// against; `classify()` calls `classify_one_file` directly instead, since it
+/// also needs the fields this drops in order to write `InsertEvidence` rows.
+pub(crate) fn build_file_records(
+    file_paths: &[PathBuf],
+    root_absolute_path: &Path,
+) -> Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> {
+    let norm_table = v1_normalization_table();
+    file_paths
+        .iter()
+        .map(|abs_path| {
+            let fc = classify_one_file(abs_path, root_absolute_path, &norm_table);
+            (fc.relative_path, fc.frame_type, fc.raw_meta)
+        })
+        .collect()
+}
 
 /// Map extracted `RawFileMetadata` → an `inbox_file_metadata` upsert and write
 /// it (spec 041 US2/T016).
