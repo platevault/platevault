@@ -38,8 +38,10 @@ export function ProcessingTools() {
 
   // Load profiles on mount.
   useEffect(() => {
+    let cancelled = false;
     toolProfileList()
       .then((resp) => {
+        if (cancelled) return;
         setTools(resp.tools);
         const drafts: Record<string, string> = {};
         for (const t of resp.tools) {
@@ -48,8 +50,12 @@ export function ProcessingTools() {
         setPathDraft(drafts);
       })
       .catch((e: unknown) => {
+        if (cancelled) return;
         setLoadError(String(e));
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const saveToolPath = useCallback(

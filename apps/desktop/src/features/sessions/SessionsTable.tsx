@@ -323,7 +323,7 @@ export function SessionsTable({
           ),
           filter: s.filter ?? '—',
           frames: s.frames,
-          integration: integrationLabel(s) ?? '—',
+          integration: integrationLabel(s),
           night: s.capturedOn ?? '—',
           camera: s.camera ?? '—',
           projects:
