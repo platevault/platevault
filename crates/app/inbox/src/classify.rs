@@ -934,8 +934,17 @@ pub(crate) async fn materialize_sub_items(
             .collect();
         let sub_sig = folder_signature(file_sigs);
 
+        // Spec 058 FR-028: needs-review is its own field, not a group_key
+        // value. It is still DERIVED from the sentinel here because T007 has
+        // not yet narrowed `group_key` to classification identity; once it
+        // has, this reads the grouping result directly and the sentinel is
+        // gone. Writing the column now means the read side can migrate onto
+        // it (T008) before the sentinel is removed, rather than both flipping
+        // in one landing.
+        let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
+
         // Determine frame_type from the group_key prefix (type=<value>).
-        let frame_type_str: Option<&str> = if group_key == SENTINEL_NEEDS_REVIEW {
+        let frame_type_str: Option<&str> = if is_needs_review {
             None
         } else {
             // group_key starts with "type=<ft>·..." — extract the type token.
@@ -959,6 +968,7 @@ pub(crate) async fn materialize_sub_items(
             content_signature: &sub_sig,
             file_count,
             lane,
+            needs_review: is_needs_review,
         };
 
         // Use the id that ACTUALLY persisted, not the freshly-generated

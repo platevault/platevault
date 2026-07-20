@@ -494,6 +494,13 @@ pub struct UpsertInboxSubItem<'a> {
     /// Number of files in this group.
     pub file_count: i64,
     pub lane: &'a str,
+    /// Whether this item still needs user review (spec 058 FR-028).
+    ///
+    /// Distinct from `group_key`, which after spec 058 carries classification
+    /// identity and nothing else. An item is needs-review when its files could
+    /// not be classified from their headers — it is NOT a kind of group key,
+    /// and it is not a uniqueness discriminator.
+    pub needs_review: bool,
 }
 
 /// Upsert one single-type `inbox_items` sub-item row (spec 041 T066, R-9/R-11).
@@ -521,15 +528,16 @@ pub async fn upsert_inbox_sub_item(
         "INSERT INTO inbox_items
             (id, root_id, relative_path, source_group_id, group_key, group_label,
              frame_type, file_count, discovered_at, last_scanned_at,
-             content_signature, state, lane)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'classified', ?)
+             content_signature, state, lane, needs_review)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'classified', ?, ?)
          ON CONFLICT(root_id, relative_path, group_key) DO UPDATE SET
              group_label        = excluded.group_label,
              frame_type         = excluded.frame_type,
              file_count         = excluded.file_count,
              last_scanned_at    = excluded.last_scanned_at,
              content_signature  = excluded.content_signature,
-             state              = 'classified'
+             state              = 'classified',
+             needs_review       = excluded.needs_review
          RETURNING id",
     )
     .bind(item.id)
@@ -544,6 +552,7 @@ pub async fn upsert_inbox_sub_item(
     .bind(&now)
     .bind(item.content_signature)
     .bind(item.lane)
+    .bind(i64::from(item.needs_review))
     .fetch_one(pool)
     .await?;
     Ok(persisted_id)
@@ -2252,6 +2261,125 @@ mod tests {
         );
     }
 
+    /// Spec 058 FR-028/FR-029 (T005, T011): `needs_review` is its own column,
+    /// and resolving an item out of needs-review moves the flag, the frame
+    /// type and the state in ONE statement — there is no observable moment at
+    /// which the row reports `classified` without a frame type (SC-003).
+    ///
+    /// The last assertion is the one that matters for T006: the resolve
+    /// converges onto the item's NATURAL classification key via `ON CONFLICT`,
+    /// leaving exactly one row. That is why `clear_needs_review_sentinel`'s
+    /// synthetic `type=<ft>·resolved=<item-id>` key can be deleted rather than
+    /// replaced — it existed only to dodge the UNIQUE constraint that this
+    /// convergence is supposed to enforce.
+    #[tokio::test]
+    async fn needs_review_resolves_atomically_onto_its_natural_key_058() {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        let batch_resp = crate::repositories::first_run::register_source_batch(
+            pool,
+            &RegisterSourceBatchRequest {
+                sources: vec![RegisterSourceRequest {
+                    kind: SourceKind::Inbox,
+                    path: "/astro/inbox".to_owned(),
+                    kind_subtype: None,
+                    scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Unorganized,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-nr",
+                root_id: &source_id,
+                relative_path: "lights",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        // An unresolved needs-review item. Its group_key is already the
+        // classification identity it will eventually resolve to; needs_review
+        // carries the review status separately (FR-028).
+        let unresolved = UpsertInboxSubItem {
+            id: "sub-nr",
+            root_id: &source_id,
+            relative_path: "lights",
+            source_group_id: "sg-nr",
+            group_key: "type=light",
+            group_label: "(root) · light",
+            frame_type: None,
+            content_signature: "sig-sub",
+            file_count: 1,
+            lane: "fits",
+            needs_review: true,
+        };
+        let first_id = upsert_inbox_sub_item(pool, &unresolved).await.unwrap();
+
+        let (nr, ft): (i64, Option<String>) =
+            sqlx::query_as("SELECT needs_review, frame_type FROM inbox_items WHERE id = ?")
+                .bind(&first_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(nr, 1, "needs_review must persist as its own field, not as a group_key value");
+        assert_eq!(ft, None, "an unresolved needs-review item carries no frame type");
+
+        // The user supplies the missing attributes; re-materialization writes
+        // the resolved item with a DIFFERENT freshly-generated id but the SAME
+        // natural key.
+        let resolved = UpsertInboxSubItem {
+            id: "sub-nr-regenerated",
+            frame_type: Some("light"),
+            needs_review: false,
+            ..unresolved.clone()
+        };
+        let persisted_id = upsert_inbox_sub_item(pool, &resolved).await.unwrap();
+
+        assert_eq!(
+            persisted_id, first_id,
+            "ON CONFLICT must converge onto the pre-existing row — two rows sharing a \
+             classification identity in one folder ARE the same item (T006)"
+        );
+
+        let (nr, ft, state): (i64, Option<String>, String) =
+            sqlx::query_as("SELECT needs_review, frame_type, state FROM inbox_items WHERE id = ?")
+                .bind(&persisted_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(nr, 0, "resolving must clear needs_review");
+        assert_eq!(ft.as_deref(), Some("light"), "resolving must record the frame type");
+        assert_eq!(state, "classified", "resolving must record the classified state");
+
+        let rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM inbox_items WHERE root_id = ? AND relative_path = 'lights'",
+        )
+        .bind(&source_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows, 1,
+            "the resolve must not leave a second row behind — no synthetic \
+             `resolved=<id>` discriminator is needed to avoid the UNIQUE constraint"
+        );
+    }
+
     /// #711 (Instance A): once a folder placeholder (`group_key = ''`) has been
     /// SPLIT into two or more materialized sub-items, `classify()` flips the
     /// placeholder's state to `'classified'` but never updates its
@@ -2329,6 +2457,7 @@ mod tests {
                     content_signature: "sig-sub",
                     file_count: 1,
                     lane: "fits",
+                    needs_review: false,
                 },
             )
             .await
@@ -2364,6 +2493,7 @@ mod tests {
                 content_signature: "sig-sub",
                 file_count: 2,
                 lane: "fits",
+                needs_review: false,
             },
         )
         .await
@@ -2487,6 +2617,7 @@ mod tests {
                     content_signature: "sig-sub",
                     file_count: 1,
                     lane: "fits",
+                    needs_review: false,
                 },
             )
             .await
@@ -2610,6 +2741,7 @@ mod tests {
                     content_signature: "sig-sub",
                     file_count: 1,
                     lane: "fits",
+                    needs_review: false,
                 },
             )
             .await

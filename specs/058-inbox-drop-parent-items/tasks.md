@@ -63,8 +63,8 @@ the needs-review field and the scan/classify boundary land first.
 
 ### FR-028/029/030 — needs-review becomes its own field
 
-- [ ] T004 Add migration `NNNN_inbox_needs_review.sql` in `crates/persistence/db/migrations/`: `ALTER TABLE inbox_items ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0 CHECK (needs_review IN (0, 1));`. Additive, metadata-only, **no backfill** — D-004 greenfield
-- [ ] T005 Extend `upsert_inbox_sub_item` in `crates/persistence/db/src/repositories/inbox.rs` to write `needs_review` alongside `group_key`, `frame_type` and `state` in the **same statement**, preserving FR-029's atomicity
+- [X] T004 Add migration `0074_inbox_needs_review.sql` in `crates/persistence/db/migrations/`: `ALTER TABLE inbox_items ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0 CHECK (needs_review IN (0, 1));`. Additive, metadata-only, **no backfill** — D-004 greenfield
+- [X] T005 Extend `upsert_inbox_sub_item` in `crates/persistence/db/src/repositories/inbox.rs` to write `needs_review` alongside `group_key`, `frame_type` and `state` in the **same statement**, preserving FR-029's atomicity
 - [ ] T006 Route the sentinel-resolve path through materialisation rather than in-place rewrite, and **delete** `clear_needs_review_sentinel` (`crates/persistence/db/src/repositories/inbox.rs:~584-600`). Its uniqueness-discriminator role is removed, not replaced — two rows sharing a classification identity in one folder are the same item, and the existing `ON CONFLICT(root_id, relative_path, group_key)` already converges them
 - [ ] T007 [P] Narrow `group_key` to classification identity only in `crates/app/inbox/src/classify.rs` and `reclassify.rs`; stop writing `__needs_review__` and the synthetic `type=<ft>·resolved=<id>` key
 - [ ] T008 [P] Update `isNeedsReview` in `apps/desktop/src/features/inbox/InboxList.tsx` to read the new field rather than the `__needs_review__` sentinel

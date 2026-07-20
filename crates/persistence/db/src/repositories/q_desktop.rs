@@ -322,6 +322,7 @@ mod tests {
                     content_signature: "sig-sub",
                     file_count: 5,
                     lane: "fits",
+                    needs_review: false,
                 },
             )
             .await

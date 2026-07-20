@@ -853,6 +853,7 @@ mod tests {
                 content_signature: "sig-sub",
                 file_count: 1,
                 lane: "fits",
+                needs_review: false,
             },
         )
         .await
