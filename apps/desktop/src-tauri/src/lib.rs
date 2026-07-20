@@ -248,14 +248,28 @@ pub fn build_app() -> tauri::App {
 fn instance_context() -> tauri::Context {
     let mut context = tauri::generate_context!();
 
-    if let (true, Some(subdir)) = (cfg!(target_os = "windows"), crate::data_dir::webview_subdir()) {
+    let subdir = crate::data_dir::webview_subdir();
+
+    if let (true, Some(subdir)) = (cfg!(target_os = "windows"), subdir.as_ref()) {
         for window in &mut context.config_mut().app.windows {
             window.data_directory = Some(subdir.clone());
         }
-        tracing::info!(
-            webview_data_directory = %subdir.display(),
-            "per-instance webview user-data folder in effect (ALM_DATA_DIR is set)"
+    }
+
+    // `eprintln!`, deliberately, not `tracing`: `build_app()` runs BEFORE
+    // `main.rs` installs the tracing subscriber, so anything logged from here
+    // is dropped on the floor. A first attempt at this used `tracing::info!`
+    // and produced no line in CI — which said nothing about whether the code
+    // had run, and cost a full Windows round-trip to find out. stderr is
+    // captured by the E2E harness's `ProcLog`, so this always shows up.
+    if let Some(dir) = &subdir {
+        eprintln!(
+            "ALM_DATA_DIR is set; webview data_directory = {} (applied: {})",
+            dir.display(),
+            cfg!(target_os = "windows")
         );
+    } else {
+        eprintln!("ALM_DATA_DIR is unset; webview data_directory left at Tauri's default");
     }
 
     context
