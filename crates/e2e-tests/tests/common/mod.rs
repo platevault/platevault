@@ -469,7 +469,45 @@ impl E2eApp {
             return Err(e).context("failed to set explicit WebDriver timeouts");
         }
 
+        // The plugin binds a new session to `webview_windows().keys().first()`
+        // (`tauri-plugin-webdriver-0.2.1/src/server/handlers/session.rs:24`) —
+        // a `HashMap` key order, and the splash window now exists BEFORE
+        // `main` does (the app builds `main` only after migrations). Without
+        // an explicit switch the session can hold the splash, whose document
+        // has no `__ALM_E2E__` bridge, and every journey would fail in
+        // `wait_bridge_ready` with no indication why.
+        if let Err(e) = Self::switch_to_main_window(&driver, deadline).await {
+            blocking_session_delete(env.proxy_port);
+            kill_driver_proc(&mut driver_proc);
+            return Err(e).context(proc_log.dump());
+        }
+
         Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
+    }
+
+    /// Bind the session to the `main` window, waiting for the app to create it.
+    ///
+    /// The plugin's window handles ARE the Tauri window labels
+    /// (`webview_windows().keys()`), so `main` is matched by name, not by
+    /// position.
+    async fn switch_to_main_window(driver: &WebDriver, deadline: Instant) -> Result<()> {
+        let deadline = deadline.max(Instant::now() + Duration::from_secs(60));
+        let main = WindowHandle::from("main");
+        loop {
+            let handles = driver.windows().await.unwrap_or_default();
+            if handles.contains(&main) {
+                return driver
+                    .switch_to_window(main)
+                    .await
+                    .context("failed to switch the session to the `main` window");
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "the app never created its `main` window; handles seen: {handles:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
     }
 
     /// Resize the real OS window and return the viewport actually ACHIEVED,
