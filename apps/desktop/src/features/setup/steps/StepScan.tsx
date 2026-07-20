@@ -103,8 +103,15 @@ interface SourceSummaryProps {
 }
 
 function SourceSummary({ state }: SourceSummaryProps) {
-  const { source, rootId, phase, items, classifications, classifyFailures, error } =
-    state;
+  const {
+    source,
+    rootId,
+    phase,
+    items,
+    classifications,
+    classifyFailures,
+    error,
+  } = state;
   const [expanded, setExpanded] = useState(false);
 
   // Spec 048 US4 T035: the wizard's Scan step is the earliest point a newly

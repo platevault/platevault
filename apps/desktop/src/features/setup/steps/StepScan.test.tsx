@@ -296,7 +296,9 @@ describe('StepScan', () => {
       expandSource('/astro/lights');
 
       const row = screen.getByTestId('scan-item-item-001');
-      expect(within(row).getByText(/could not read types/i)).toBeInTheDocument();
+      expect(
+        within(row).getByText(/could not read types/i),
+      ).toBeInTheDocument();
       expect(within(row).queryByText('—')).not.toBeInTheDocument();
     });
   });
