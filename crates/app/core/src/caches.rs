@@ -18,7 +18,9 @@
 
 use std::sync::OnceLock;
 
-use app_core_cache::{CacheConfig, TtlCache};
+use app_core_cache::{CacheConfig, DebounceCache, TtlCache};
+
+use crate::project_health::DebounceKey;
 
 // ── library_root: root_id → path (`first_run.rs`) ──────────────────────────
 
@@ -73,6 +75,23 @@ pub fn source_protection_state(
 /// Remove the cached resolved protection for `source_id`.
 pub fn invalidate_source_protection_state(source_id: &str) {
     source_protection_state().invalidate(&source_id.to_owned());
+}
+
+// ── project_block_debounce: (project_id, condition_kind) → last-signal instant ──
+
+/// Process-global debounce table for `project_health::emit_block_transition`
+/// (P7). One long-lived cache shared by every call site, matching the
+/// `LIBRARY_ROOT`/`SOURCE_PROTECTION_STATE` pattern above — a fresh
+/// `DebounceCache` per call would defeat the debounce window entirely, since
+/// nothing would remember the prior signal.
+static PROJECT_BLOCK_DEBOUNCE: OnceLock<DebounceCache<DebounceKey>> = OnceLock::new();
+
+/// Return the process-global debounce cache used to suppress duplicate
+/// `* → blocked` signals for the same `(project_id, condition_kind)` pair
+/// within [`crate::project_health::DEBOUNCE_WINDOW`].
+pub fn project_block_debounce() -> &'static DebounceCache<DebounceKey> {
+    PROJECT_BLOCK_DEBOUNCE
+        .get_or_init(|| DebounceCache::new(crate::project_health::DEBOUNCE_WINDOW))
 }
 
 // Note: the `protection_defaults` global-defaults snapshot cache lives in
