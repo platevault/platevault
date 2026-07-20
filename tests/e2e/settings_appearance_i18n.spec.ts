@@ -54,14 +54,30 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     await expect(
       page.getByText('Scan defaults', { exact: true }),
     ).toBeVisible();
-    const hashing = page.getByLabel('Hashing mode');
-    // Current (seeded) value from mockIngestionSettings.
-    await expect(hashing).toHaveValue('lazy');
 
-    // Edit → auto-save (FR-004: no global Save button). Selecting the option
-    // fires `ingestion_settings_update`, which mutates the mock fixture.
-    await hashing.selectOption('eager');
-    await expect(hashing).toHaveValue('eager');
+    // Issue #878: only followSymlinks has a scan-pipeline consumer
+    // (`inbox.scan.folder` → `app_core::inbox_scan::resolve_scan_options`).
+    // The other three controls (scan on startup, follow NTFS junctions,
+    // hashing mode) render disabled — they must not misrepresent themselves
+    // as working settings — so the round-trip proof below exercises
+    // followSymlinks instead of the now-disabled hashing-mode selector.
+    const hashing = page.getByLabel('Hashing mode');
+    await expect(hashing).toBeDisabled();
+
+    const followSymlinks = page.getByLabel('Follow symbolic links');
+    // Current (seeded) value from mockIngestionSettings: default-off, per the
+    // product rule that scans must not follow symlinks/junctions unless the
+    // user explicitly opts in.
+    await expect(followSymlinks).not.toBeChecked();
+
+    // Edit → auto-save (FR-004: no global Save button). The underlying
+    // checkbox is zero-size and visually hidden
+    // (`.pv-toggle input { opacity: 0; width: 0; height: 0 }`) behind the
+    // track/thumb it drives, so a real click lands on the wrapping
+    // `<label class="pv-toggle">`, not the input itself. Toggling fires
+    // `ingestion_settings_update`, which mutates the mock fixture.
+    await followSymlinks.locator('xpath=..').click();
+    await expect(followSymlinks).toBeChecked();
 
     // Round-trip proof: leave the pane (Ingestion unmounts) and return
     // (it re-mounts and re-fetches via `ingestion_settings_get`). The value
@@ -71,9 +87,9 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     await expect(page.getByText('Theme', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Ingestion', exact: true }).click();
 
-    const hashingAfter = page.getByLabel('Hashing mode');
-    await expect(hashingAfter).toBeVisible();
-    await expect(hashingAfter).toHaveValue('eager');
+    const followSymlinksAfter = page.getByLabel('Follow symbolic links');
+    await expect(followSymlinksAfter).toBeAttached();
+    await expect(followSymlinksAfter).toBeChecked();
   });
 
   test('Cleanup pane edits the real cleanup policy and persists it via the cleanup_policy mock round-trip', async ({
