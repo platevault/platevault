@@ -29,7 +29,22 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on branches, but never on `main` (#1203).
+  #
+  # Every main push shares one concurrency group, because `github.ref` is
+  # `refs/heads/main` for all of them. A blanket `true` therefore made each
+  # merge cancel the previous merge's run, and during a merge campaign no main
+  # run survived to report: `6e624adc` and `67f48ee9` landed five minutes apart
+  # and both concluded `cancelled,cancelled`.
+  #
+  # That silently emptied main's gate for unit, integration and mock-mode UI —
+  # the suites this workflow owns. It is worse than a plain outage because it is
+  # merge-rate dependent: when merges space out a run completes and main looks
+  # green, so the gap only opens during periods of highest change velocity,
+  # which is exactly when verification matters most.
+  #
+  # e2e.yml took the same fix in #1268; this is the other half.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
 env:

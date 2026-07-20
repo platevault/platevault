@@ -318,13 +318,8 @@
   background: var(--pv-accent-bg);
 }
 
-/* Master cell: kind pill + readable label + optional aging pill. */
-.pv-calib-cell__master {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pv-sp-2);
-  flex-wrap: wrap;
-}
+/* Master cell (kind pill + readable label + optional aging pill) lays out via
+   the shared `.pv-table__cell-inline` in primitives.css. */
 .pv-calib-cell__master-label {
   font-weight: var(--pv-weight-medium);
   color: var(--pv-text);

@@ -972,6 +972,101 @@ mod tests {
         assert_eq!(count2, 1);
     }
 
+    /// #1294: confirming a cone-search match must clear the `target`
+    /// mandatory-attribute gate the Inbox UI reads via
+    /// `metadata::get_inbox_item_metadata` — not just write the durable
+    /// `canonical_target` link. Before the fix, `get_inbox_item_metadata`
+    /// read `inbox_file_metadata.object` directly and never saw the `target`
+    /// override `confirm` writes at cone_search.rs:509-540, so the frameset
+    /// kept reporting its target as missing until an unrelated reclassify
+    /// happened to re-run the override rebuild.
+    #[tokio::test]
+    async fn confirm_clears_the_target_mandatory_gate_for_the_confirmed_frameset() {
+        let db = test_db().await;
+        let item_id = "item-1294";
+        seed_item(&db, item_id, None, None, None, None, None, None, None).await;
+
+        // Wire the item into a source group (as classify normally does) so
+        // confirm's best-effort override write (cone_search.rs:509-540) has
+        // somewhere to land, and classify the sole file as a light frame with
+        // the other mandatory attributes present so `target` is isolated as
+        // the only variable.
+        sqlx::query(
+            "INSERT INTO inbox_source_groups \
+             (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+             VALUES ('sg-1294', 'root-1', 'lights-item-1294', \
+                     '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', 1)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET source_group_id = 'sg-1294' WHERE id = ?")
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let relative_file_path = format!("lights-{item_id}/light_001.fits");
+        repo::insert_evidence(
+            db.pool(),
+            &repo::InsertEvidence {
+                id: "ev-1294",
+                inbox_item_id: item_id,
+                relative_file_path: &relative_file_path,
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+        repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &UpsertFileMetadata {
+                inbox_item_id: item_id,
+                relative_file_path: &relative_file_path,
+                filter: Some("Ha"),
+                exposure_s: Some(300.0),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let files_before =
+            crate::metadata::get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert!(
+            files_before[0].missing_mandatory.iter().any(|k| k == "target"),
+            "sanity: target starts out missing"
+        );
+
+        let cache = seeded_cache_with_m31().await;
+        let req = ConeSearchConfirmRequest {
+            frameset_id: item_id.to_owned(),
+            candidate: contracts_core::cone_search::ConeSearchConfirmCandidate {
+                canonical_target_id: None,
+                primary_designation: "M 31".to_owned(),
+                simbad_oid: Some(1_575_544),
+            },
+        };
+        confirm(db.pool(), &cache, &req).await.unwrap();
+
+        let files_after =
+            crate::metadata::get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert!(
+            !files_after[0].missing_mandatory.iter().any(|k| k == "target"),
+            "confirming the cone-search match must clear the target mandatory gate"
+        );
+        assert_eq!(
+            files_after[0].object.as_deref(),
+            Some("M 31"),
+            "the confirmed designation must become the effective OBJECT"
+        );
+    }
+
     #[tokio::test]
     async fn confirm_unresolvable_candidate_is_candidate_invalid() {
         let db = test_db().await;
