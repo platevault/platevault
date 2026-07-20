@@ -290,10 +290,12 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   }, [addBusy, addSelection, linkedSessionIds, project.id]);
 
   return (
-    <div
-      className="pv-edit-project-pane"
-      aria-label={m.projects_edit_pane_aria()}
-    >
+    // No aria-label here: ProjectDetail always renders this pane inside a
+    // Modal, which already supplies role=dialog + aria-label from the same
+    // string (m.projects_edit_pane_aria()). A second aria-label on this root
+    // would duplicate the accessible name and break getByLabel() queries with
+    // a strict-mode violation (two matching elements).
+    <div className="pv-edit-project-pane">
       {/* Channel drift banner (US1c / US4) */}
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
