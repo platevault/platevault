@@ -44,3 +44,21 @@ update_calibration_session_root_id
 validate_seeds
 video_record
 write_session_snapshot
+
+# astro-plan-bc4e: the pub-use-stripping fix to check-dead-callers.sh removed
+# a false "has a caller" signal that a `pub use` re-export line was producing
+# for each of these. All confirmed dead by manual review at fix time: reached
+# only from an inline `#[cfg(test)] mod tests { ... }` in the same file, except
+# get_project_source (no test reaches it at all; only mention besides its own
+# def was the `pub use sources::{...}` re-export in repositories/projects/mod.rs)
+# and mark_recovered/reattribute (only reached from an already-excluded
+# crates/app/core/tests/ integration test).
+circular_mean_deg
+count_canonical_targets
+derive_clustering
+effective_pattern
+flat_light_rotation_match
+get_project_source
+get_resolver_settings_online
+mark_recovered
+reattribute
