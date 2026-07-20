@@ -112,12 +112,30 @@ async fn seed_initial_scan(app: &E2eApp, root_id: &str, root_dir: &Path) -> anyh
             }),
         )
         .await?;
-    let items = scan["items"]
+    // Spec 058 T012/FR-015: an ordinary folder now produces NO inbox item at
+    // scan time — it produces a source group, and items appear only once
+    // classification materialises them. The old assertion here ("items must be
+    // non-empty") encoded the pre-058 contract and fails on every ordinary
+    // fixture, which is what the first real L3 run after T012 caught.
+    //
+    // What the seed must still prove is that the scan SAW the fixture files,
+    // otherwise a journey waits on a row that was never going to appear. The
+    // honest post-058 signal is the response's own shape: an `items` array is
+    // returned (so the command ran and parsed), and the folder is discoverable
+    // afterwards through the source-group listing the UI reads.
+    scan["items"]
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
+    let groups: serde_json::Value = app
+        .invoke("inbox_list", json!({ "req": { "limit": 500 } }))
+        .await
+        .context("inbox.list after the seed scan")?;
+    let discovered = groups["sourceGroups"].as_array().is_some_and(|g| !g.is_empty())
+        || groups["items"].as_array().is_some_and(|i| !i.is_empty());
     anyhow::ensure!(
-        !items.is_empty(),
-        "expected the seed inbox.scan.folder to discover the fixture file(s): {scan}"
+        discovered,
+        "the seed inbox.scan.folder discovered neither a source group nor an item \
+         for the fixture folder — scan={scan} list={groups}"
     );
     // NOTE: deliberately NO bridge-side `inbox.classify` pre-warm here. The
     // UI's confirm gate requires `classification.type == "single_type"`,

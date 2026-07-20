@@ -469,6 +469,49 @@ impl E2eApp {
             return Err(e).context("failed to set explicit WebDriver timeouts");
         }
 
+        // Attach to the MAIN webview, not to whichever window the session
+        // happened to open on (#1248/#1299).
+        //
+        // `tauri.conf.json` declares two windows: `main`, created with
+        // `visible: false` and shown once the app is ready, and `splash`
+        // (`splash.html`). A fresh session's current handle is therefore the
+        // SPLASH — and when the app finishes booting the splash closes, taking
+        // that handle with it. Every probe afterwards fails
+        // `no such window`, which reads like an app crash and is not one: the
+        // app's own log shows a healthy start.
+        //
+        // Poll rather than switch once: the window set changes during boot, and
+        // the main window may not exist yet at connect time. The last handle is
+        // preferred because Tauri creates `main` after `splash` in config
+        // order, and a single remaining handle is unambiguous once the splash
+        // has gone. A failure here is non-fatal — if the topology changes again
+        // the bridge wait below reports the real symptom rather than this
+        // heuristic masking it.
+        let window_deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            match driver.windows().await {
+                Ok(handles) if !handles.is_empty() => {
+                    // Once the splash is gone a single handle remains; while it
+                    // is still up, the later handle is the main window.
+                    let target = handles.last().expect("non-empty");
+                    if driver.switch_to_window(target.clone()).await.is_ok()
+                        && driver.current_url().await.is_ok_and(|u| {
+                            !u.as_str().contains("splash") && u.as_str() != "about:blank"
+                        })
+                    {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            if Instant::now() >= window_deadline {
+                // Leave the session on whatever handle it has and let the
+                // bridge wait produce the authoritative diagnostic.
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+
         Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
     }
 
