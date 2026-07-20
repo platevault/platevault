@@ -660,3 +660,122 @@ describe('ListPageLayout', () => {
     });
   });
 });
+
+/**
+ * T023 (spec 054, #1257) — the two halves the remount tests deliberately
+ * left uncovered: width set by DRAGGING the handle rather than calling
+ * `setWidth`, and the value actually reaching storage rather than only the
+ * in-memory cache.
+ *
+ * Why the second matters. `getPreferences()` returns a module-level
+ * `cachedPreferences` when one exists, and `persistPreferences()` assigns
+ * that cache BEFORE its `localStorage.setItem`, whose failure is swallowed
+ * ("state is still in memory"). A remount therefore re-reads the CACHE, not
+ * storage — so every existing remount assertion would still pass if the
+ * write never landed at all. Asserting the serialized bytes is what closes
+ * that gap; a real reload (the Layer-2 half of T023) is what proves the
+ * cold read.
+ */
+describe('adaptive dock — drag + real persistence (T023)', () => {
+  /** The real on-disk key from `data/preferences.ts`. Deliberately a
+   * literal: it is not exported, and this test's whole point is to assert
+   * the actual stored bytes rather than to re-derive them from the module
+   * under test. */
+  const STORAGE_KEY = 'alm-preferences';
+
+  function storedDock(dockId: string) {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return undefined;
+    return JSON.parse(raw)?.detailDock?.[dockId];
+  }
+
+  beforeEach(() => {
+    resetPreferences();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    resetPreferences();
+    localStorage.clear();
+  });
+
+  it('a drag on the resize handle really resizes the side panel', () => {
+    resizeWindowTo(1600);
+    const { getByTestId, container } = render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        dockId="drag-page"
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+
+    const handle = getByTestId('dock-resize-handle');
+    // The side panel sits on the RIGHT edge, so dragging LEFT grows it:
+    // delta = startX - currentX = 1000 - 900 = 100, on the 420px default.
+    fireEvent.pointerDown(handle, { clientX: 1000 });
+    fireEvent.pointerMove(window, { clientX: 900 });
+    fireEvent.pointerUp(window);
+
+    const styled = container.querySelector('[style*="--pv-side-detail-w"]');
+    expect(styled?.getAttribute('style')).toContain('520px');
+  });
+
+  it('the dragged width reaches localStorage, not just the in-memory cache', () => {
+    resizeWindowTo(1600);
+    const { getByTestId } = render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        dockId="drag-persist"
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+
+    fireEvent.pointerDown(getByTestId('dock-resize-handle'), { clientX: 1000 });
+    fireEvent.pointerMove(window, { clientX: 940 });
+    fireEvent.pointerUp(window);
+
+    // Read the serialized bytes, NOT getPreferences() — going through the
+    // module would consult the cache and assert nothing about persistence.
+    expect(storedDock('drag-persist')?.width).toBe(480);
+  });
+
+  it('a drag is clamped to the window fraction before it is persisted', () => {
+    resizeWindowTo(1600);
+    const { getByTestId } = render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        dockId="drag-clamp"
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+
+    // Drag far past the ceiling: maxWidthFraction 0.5 of 1600 = 800px.
+    fireEvent.pointerDown(getByTestId('dock-resize-handle'), { clientX: 1000 });
+    fireEvent.pointerMove(window, { clientX: 0 });
+    fireEvent.pointerUp(window);
+
+    // The CLAMPED value must be what persists — storing the raw drag target
+    // would restore an over-wide dock on the next cold start.
+    expect(storedDock('drag-clamp')?.width).toBe(800);
+  });
+
+  it('a pinned placement reaches localStorage too', () => {
+    resizeWindowTo(1024);
+    const { result } = renderHook(() =>
+      useAdaptiveDock({ dockId: 'pin-persist' }),
+    );
+    expect(result.current.placement).toBe('bottom');
+
+    act(() => {
+      result.current.setOverride('side');
+    });
+
+    expect(storedDock('pin-persist')?.placement).toBe('side');
+  });
+});
