@@ -714,9 +714,14 @@ const MOCK_PLAN_REQUIRED_EDGES = new Set<string>([
  *
  * Returns `Promise<unknown>`: the caller (`invoke<T>` in `ipc.ts` /
  * `source-views.ts`) supplies the concrete `T` from the generated bindings and
- * narrows at its own boundary.  Internally there are no blind `as T` casts —
- * every returned fixture is checked against its generated binding type, so a
- * contract change that the mock fails to mirror is a compile error.
+ * asserts it with `as Promise<T>` — the assertion is NOT checked.
+ *
+ * NO TYPE SAFETY: nothing here ties a fixture to its generated binding type.
+ * Roughly half the cases carry a `satisfies` clause; the rest are unanchored,
+ * and a mock that has drifted from the real contract still compiles green.
+ * Because mock-mode Playwright specs are the only coverage for several
+ * surfaces, a drifted fixture makes those specs vacuous — they pass against a
+ * payload shape the app will never receive. See issue #1221.
  */
 export async function mockInvoke(
   cmd: string,
