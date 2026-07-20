@@ -3,6 +3,11 @@
     "$value": "280px",
     "$type": "dimension"
   },
+  "list-min-width": {
+    "$value": "220px",
+    "$type": "dimension",
+    "$description": "Floor for the list pane as it is resized. Deliberately NOT --pv-sidebar-width, which is also 220px: that one is the NAV sidebar, sized in #962 against its own header content. The two coincide today by accident, and tying them together would move the nav rail whenever the list floor changed."
+  },
   "rail-width": {
     "$value": "300px",
     "$type": "dimension"

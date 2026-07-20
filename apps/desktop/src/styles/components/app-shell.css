@@ -190,7 +190,7 @@
   flex-shrink: 0; display: flex; flex-direction: column;
   border-right: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-bg);
-  min-width: 220px;
+  min-width: var(--pv-list-min-width);
 }
 .pv-list-sidebar__search {
   padding: var(--pv-sp-2) var(--pv-sp-3);

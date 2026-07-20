@@ -112,6 +112,7 @@
   --pv-control-h: 26px; /** Control height (#616) — single source of truth for toolbar-adjacent controls (buttons, text inputs, selects, SegControl) so they line up in the same row instead of drifting per-component (measured: input 27px, select 25px, button 24px, Settings select 28px, all in one chrome). */
   --pv-control-h-sm: 24px;
   --pv-list-width: 280px;
+  --pv-list-min-width: 220px; /** Floor for the list pane as it is resized. Deliberately NOT --pv-sidebar-width, which is also 220px: that one is the NAV sidebar, sized in #962 against its own header content. The two coincide today by accident, and tying them together would move the nav rail whenever the list floor changed. */
   --pv-rail-width: 300px;
   --pv-inbox-inspector-width: 320px; /** Inbox inspector pane. Was referenced as var(--pv-inbox-inspector-width, 320px) against a token that never existed, so the fallback was the only value it ever had. */
   --pv-inbox-breakdown-width: 340px; /** Inbox breakdown pane; same phantom-reference history as the inspector width. */
