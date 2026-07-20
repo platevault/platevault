@@ -2697,6 +2697,19 @@ mod tests {
     ///
     /// Asserted in both enumeration orders because the defect this pins was
     /// filename-order-dependent.
+    ///
+    /// The cardinality is asserted deliberately. On `main` the sentinel
+    /// `__needs_review__` key made this folder TWO sub-items — the resolved
+    /// sibling stayed independently confirmable, and only the offender was
+    /// gated. Folding onto the shared natural key makes it ONE, which gates
+    /// the resolved frames too and drops the folder out of
+    /// `exclude_split_placeholder!`'s `COUNT(DISTINCT group_key) > 1` bound.
+    /// That is a real behaviour change, accepted because the sentinel's
+    /// uniqueness-discriminator role is what let a file missing a mandatory
+    /// attribute become confirmable on filename order alone. Separating the two
+    /// again needs a grouping dimension for the missing attribute, which is a
+    /// spec decision (CHK003), not a local fix — so pin the number here and
+    /// make any future change to it deliberate.
     #[tokio::test]
     async fn light_missing_target_keeps_needs_review_beside_a_resolved_sibling() {
         for (ok_name, bad_name) in
@@ -2750,6 +2763,14 @@ mod tests {
                 sub_items.iter().any(|s| s.needs_review == 1),
                 "a light missing its mandatory OBJECT must stay flagged when a resolved sibling \
                  shares its group_key (order: {ok_name} / {bad_name}); got {:?}",
+                sub_items.iter().map(|s| (&s.group_key, s.needs_review)).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                sub_items.len(),
+                1,
+                "the two files share one classification identity, so they are ONE sub-item — \
+                 changing this changes whether the folder counts as split (order: {ok_name} / \
+                 {bad_name}); got {:?}",
                 sub_items.iter().map(|s| (&s.group_key, s.needs_review)).collect::<Vec<_>>()
             );
         }
