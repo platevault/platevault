@@ -1270,6 +1270,9 @@ async fn build_breakdown(
     // Load the active pattern once; if it is unset/invalid every preview is None.
     let active_pattern = super::confirm::load_active_pattern(pool).await.ok();
     let norm_table = v1_normalization_table();
+    // The same registry confirm resolves against, so a preview shows the
+    // directory a confirm would actually produce.
+    let cameras = app_core_calibration::equipment::list_cameras(pool).await.unwrap_or_default();
 
     let mut entries = Vec::new();
 
@@ -1282,7 +1285,8 @@ async fn build_breakdown(
         let destination_preview = active_pattern.as_ref().and_then(|pattern| {
             let first_rel = files.first()?;
             let abs_path = root_absolute_path.join(first_rel);
-            let bundle = super::confirm::build_metadata_bundle(&abs_path, kind, &norm_table);
+            let bundle =
+                super::confirm::build_metadata_bundle(&abs_path, kind, &norm_table, &cameras);
             patterns::resolve_v1(pattern, &bundle).ok().map(|r| r.relative_path)
         });
 
