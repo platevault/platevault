@@ -27,7 +27,11 @@ trace:
   - e2e-agentic-test/041-inbox-plan-surface/plan-overlay-apply-audit/scenario.md
   - e2e-agentic-test/025-filesystem-plan-application/plan-overlap-guard/scenario.md
   - e2e-agentic-test/journeys/grand-inbox-journey/scenario.md
-  - spec-054-adaptive-detail-dock (FR-014, FR-015 — permanent Inbox split)
+  - spec-054-adaptive-detail-dock (FR-001, FR-003, FR-005 — shared adaptive
+    dock: Inbox uses the same side-≥1400px/bottom-below placement, per-page
+    Auto/Bottom/Right override, and drag-resizable side width as every other
+    list page; FR-014/FR-015's permanent Inbox split was never built and was
+    withdrawn in #1068)
 ---
 
 ## Goal
@@ -59,11 +63,18 @@ explicit, reviewed plan, and the action is visible in the audit history.
   contents using one normalized name per frame type. The inbox badge counts
   a split folder once per resulting single-type item — the superseded source
   folder is hidden from the queue and must not be counted, so the badge and
-  the visible rows always agree.
+  the visible rows always agree. A folder whose files resolve to NO frame
+  type at all (e.g. an unrecognized `IMAGETYP`) does not split, so its folder
+  row stays in the queue alongside the needs-review item its files landed in;
+  that folder row's Type column reads "unclassified", matching what the
+  detail panel says about the same item.
 - **Expect (negative):** No queue item is shown as an undifferentiated
   "mixed" type when its files can be split by detected frame type. The badge
   never reads higher than the number of visible queue rows — a split folder
-  must not be counted as its items *plus* its own hidden source folder.
+  must not be counted as its items *plus* its own hidden source folder. A
+  queue row never reports "classified" in the Type column while its own
+  detail panel reports the item unclassified — the two surfaces never
+  disagree about the same item.
   Opening the Inbox page and leaving it open never spins the page in a runaway
   re-render loop (previously the page re-rendered continuously the entire
   time it was open, driven by an unstable page-status node identity and a
@@ -75,16 +86,15 @@ explicit, reviewed plan, and the action is visible in the audit history.
 
 ### S2 — Inspect an item's per-file detail {#S2}
 - **Do:** Select a queue item and open its detail.
-- **Expect:** The Inbox is a permanent, non-collapsing split at every window
-  width: a narrow item list (~360px default) on the LEFT showing only
-  essential status columns, with a long item name truncated and its full
-  name available via a tooltip on hover/focus; the full-height detail
-  (per-file metadata, inspector, and the plan surface) fills the RIGHT side.
-  This is a fixed left/right split, never a bottom dock, and does not change
-  with window width (unlike the adaptive side/bottom dock on other list
-  pages — see J09/S3). The divider between list and detail is
-  drag-resizable, and the chosen width persists across an app restart. The
-  detail body (property tables, mixed-summary line, Files popover trigger,
+- **Expect:** Inbox uses the same shared adaptive dock as every other list
+  page (see J09/S3): the item list is the page's primary full-width
+  content, with a long item name truncated and its full name available via
+  a tooltip on hover/focus, and the detail (per-file metadata, inspector,
+  and the plan surface) docks to the SIDE (full-height, drag-resizable,
+  width persists across an app restart) when the window is ≥1400px wide,
+  and to the BOTTOM below that width. A per-page Auto/Bottom/Right override
+  (see J10/S11) pins the placement regardless of window width; Auto follows
+  the automatic width rule. The detail body (property tables, mixed-summary line, Files popover trigger,
   needs-review controls) is its own scroll region within that full-height
   right pane, so content taller than the pane scrolls into view rather than
   being clipped by the pane's outer overflow. The detail shows the same
@@ -110,19 +120,28 @@ explicit, reviewed plan, and the action is visible in the audit history.
   than an empty or stale one, and Confirm stays disabled. The source
   folder is NOT revealable from this detail today — `nativeReveal` is
   wired only into the Sessions feature, not Inbox; corrected from the
-  legacy doc's unconditional reveal claim. The Inbox detail never renders
-  as a short bottom strip, and its per-file list is never cut off below the
-  window — this was a real, previously-observed defect (the file list
-  overflowed past the viewport and its bottom rows were unreachable)
-  that the full-height right-pane layout with internal scrolling fixes.
+  legacy doc's unconditional reveal claim. Below 1400px window width the
+  Inbox detail renders as a bottom dock, same as any other adopting page —
+  that is expected, not a defect. At any width, its per-file list is never
+  cut off below the window — this was a real, previously-observed defect
+  (the file list overflowed past the viewport and its bottom rows were
+  unreachable) that the detail body's own scroll region
+  (`.pv-inbox-detail__scroll`) fixes, independent of side/bottom placement.
 - **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
   `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring,
-  `.alm-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
+  `.pv-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
   mixed-folder banner copy per PR #939 fixes #552, #569);
   `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
   Sessions-only — no `nativeReveal` call anywhere under
-  `features/inbox/`); spec-054/FR-014, FR-015 (permanent Inbox split,
-  resizable/persistent divider, full-height file-list scrolling).
+  `features/inbox/`); `apps/desktop/src/ui/useAdaptiveDock.ts`,
+  `apps/desktop/src/features/inbox/InboxPage.tsx` (passes no
+  `detailPlacement` to `ListPageLayout`, so it inherits the default
+  `'adaptive'` placement — same mechanism as every other list page);
+  spec-054/FR-001 (adaptive side/bottom placement), FR-005
+  (resizable/persistent side width). FR-014/FR-015 (a distinct, permanent
+  Inbox split) were never delivered and were withdrawn in #1068: the FILES
+  reachability they existed to fix was already solved by PR #939, which made
+  the detail body its own scroll region.
 
 ### S3 — Resolve missing metadata via bulk reclassify {#S3}
 - **Do:** For an item flagged as needing review (missing a mandatory
@@ -309,11 +328,13 @@ explicit, reviewed plan, and the action is visible in the audit history.
   Evidence: PR #938 (fixes #557), PR #939 (fixes #552, #553, #554, #569) ·
   by: journey-scribe (intent-gated)
 
-- **Δ4** 2026-07-17 · S2 · behavior-change
-  The Inbox is now a permanent, non-adaptive left/right split at every
-  window width (narrow item list, full-height detail on the right) —
-  never a bottom dock. The divider is drag-resizable and its width
-  persists across restarts; the detail's own file list now scrolls within
-  the full-height right pane instead of overflowing past the viewport.
-  Evidence: spec-054-adaptive-detail-dock (FR-014, FR-015) · by:
+- **Δ4** 2026-07-19 · S1 · behavior-change
+  A folder row whose files resolve to no frame type no longer reports
+  "classified" in the Type column. It now reads "unclassified", agreeing
+  with what the detail panel already said about that same item — the list
+  badge is read from the item's own cached classification instead of from
+  its scan state, which is set to "classified" for every scanned folder
+  regardless of the result.
+  Evidence: commit 4a96389b (fix(inbox): list badge no longer reports
+  Classified for an unsplit folder), issue #711 Instance A · by:
   journey-scribe (intent-gated)

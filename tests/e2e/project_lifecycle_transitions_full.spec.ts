@@ -43,134 +43,154 @@
  * The Tauri `Channel` polyfill the approve-and-apply path needs is installed
  * globally by the shared harness `test` (tests/e2e/support/harness.ts).
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
-
-async function selectProject(
-  page: import("@playwright/test").Page,
-  name: string,
-): Promise<void> {
-  const row = page
-    .locator(".alm-projects-table__row")
-    .filter({ hasText: name })
-    .first();
-  await expect(row).toBeVisible({ timeout: 8_000 });
-  await row.click();
-  await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
-}
+import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);
 });
 
-test.describe("project lifecycle · full state machine (Journey 5)", () => {
-  test("each state surfaces its correct contextual footer transitions", async ({
+async function selectProject(
+  page: import('@playwright/test').Page,
+  name: string,
+): Promise<void> {
+  const row = page
+    .locator('.pv-projects-table__row')
+    .filter({ hasText: name })
+    .first();
+  await expect(row).toBeVisible({ timeout: 8_000 });
+  await row.click();
+  await expect(page.getByTestId('lifecycle-actions')).toBeVisible({
+    timeout: 5_000,
+  });
+}
+
+test.describe('project lifecycle · full state machine (Journey 5)', () => {
+  test('each state surfaces its correct contextual footer transitions', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await page.goto('/#/projects');
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
 
     // ready → { Prepare (plan-gated), Mark as Processing }
-    await selectProject(page, "M31 LRGB");
-    await expect(page.getByTestId("transition-btn-prepared")).toHaveText("Prepare");
-    await expect(page.getByTestId("transition-btn-processing")).toHaveText(
-      "Mark as Processing",
+    await selectProject(page, 'M31 LRGB');
+    await expect(page.getByTestId('transition-btn-prepared')).toHaveText(
+      'Prepare',
+    );
+    await expect(page.getByTestId('transition-btn-processing')).toHaveText(
+      'Mark as Processing',
     );
 
     // prepared → { Mark as Processing, Revert to Ready (plan-gated) }
-    await selectProject(page, "Heart Nebula SHO");
-    await expect(page.getByTestId("transition-btn-processing")).toHaveText(
-      "Mark as Processing",
+    await selectProject(page, 'Heart Nebula SHO');
+    await expect(page.getByTestId('transition-btn-processing')).toHaveText(
+      'Mark as Processing',
     );
-    await expect(page.getByTestId("transition-btn-ready")).toHaveText("Revert to Ready");
+    await expect(page.getByTestId('transition-btn-ready')).toHaveText(
+      'Revert to Ready',
+    );
 
     // processing → { Mark as Completed }
-    await selectProject(page, "NGC 7000 Narrowband");
-    await expect(page.getByTestId("transition-btn-completed")).toHaveText(
-      "Mark as Completed",
+    await selectProject(page, 'NGC 7000 Narrowband');
+    await expect(page.getByTestId('transition-btn-completed')).toHaveText(
+      'Mark as Completed',
     );
 
     // completed → { Archive (plan-gated), Re-open }
-    await selectProject(page, "Rosette Nebula HOO");
-    await expect(page.getByTestId("transition-btn-archived")).toHaveText("Archive");
-    await expect(page.getByTestId("transition-btn-processing")).toHaveText("Re-open");
+    await selectProject(page, 'Rosette Nebula HOO');
+    await expect(page.getByTestId('transition-btn-archived')).toHaveText(
+      'Archive',
+    );
+    await expect(page.getByTestId('transition-btn-processing')).toHaveText(
+      'Re-open',
+    );
 
     // archived → { Unarchive (plan-gated), Unarchive and Resume (plan-gated) }
-    await selectProject(page, "Veil Nebula (legacy)");
-    await expect(page.getByTestId("transition-btn-ready")).toHaveText("Unarchive");
-    await expect(page.getByTestId("transition-btn-processing")).toHaveText(
-      "Unarchive and Resume",
+    await selectProject(page, 'Veil Nebula (legacy)');
+    await expect(page.getByTestId('transition-btn-ready')).toHaveText(
+      'Unarchive',
+    );
+    await expect(page.getByTestId('transition-btn-processing')).toHaveText(
+      'Unarchive and Resume',
     );
 
     // blocked → BlockedBanner + { Archive (blocked escape) }
-    await selectProject(page, "Cave Nebula attempt");
-    await expect(page.getByTestId("transition-btn-archived")).toHaveText(
-      "Archive (blocked escape)",
+    await selectProject(page, 'Cave Nebula attempt');
+    await expect(page.getByTestId('transition-btn-archived')).toHaveText(
+      'Archive (blocked escape)',
     );
   });
 
-  test("non-plan edge (prepared → processing) applies immediately with a success toast", async ({
+  test('non-plan edge (prepared → processing) applies immediately with a success toast', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
+    await page.goto('/#/projects');
 
-    await selectProject(page, "Heart Nebula SHO");
-    await page.getByTestId("transition-btn-processing").click();
+    await selectProject(page, 'Heart Nebula SHO');
+    await page.getByTestId('transition-btn-processing').click();
 
     // projects_toast_transitioned → "Project processing."
-    await expect(page.getByText(/Project processing\./i)).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(page.getByText(/Project processing\./i)).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 
-  test("plan-gated non-archive edge (ready → prepared) surfaces the plan-required info toast, no overlay", async ({
+  test('plan-gated non-archive edge (ready → prepared) surfaces the plan-required info toast, no overlay', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
+    await page.goto('/#/projects');
 
-    await selectProject(page, "M31 LRGB");
-    await page.getByTestId("transition-btn-prepared").click();
+    await selectProject(page, 'M31 LRGB');
+    await page.getByTestId('transition-btn-prepared').click();
 
     await expect(
       page.getByText(/A filesystem plan is required before this transition/i),
     ).toBeVisible({ timeout: 5_000 });
     // ready → prepared has no archive generator, so no review overlay opens.
-    await expect(page.getByTestId("plan-review-overlay")).toHaveCount(0);
+    await expect(page.getByTestId('plan-review-overlay')).toHaveCount(0);
   });
 
-  test("completed → archived drives the full plan.required → review overlay → approve & apply path", async ({
+  test('completed → archived drives the full plan.required → review overlay → approve & apply path', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
+    await page.goto('/#/projects');
 
-    await selectProject(page, "Rosette Nebula HOO");
+    await selectProject(page, 'Rosette Nebula HOO');
 
     // ── Archive (plan-gated) → plan.required info toast + archive plan created ─
-    await page.getByTestId("transition-btn-archived").click();
+    await page.getByTestId('transition-btn-archived').click();
 
     await expect(
       page.getByText(/A filesystem plan is required before this transition/i),
     ).toBeVisible({ timeout: 5_000 });
     await expect(
-      page.getByText(/Archive plan created with 4 items — review before anything is moved/i),
+      page.getByText(
+        /Archive plan created with 4 items — review before anything is moved/i,
+      ),
     ).toBeVisible({ timeout: 5_000 });
 
     // ── The shared review overlay opens with the archive title ────────────────
-    const overlay = page.getByTestId("plan-review-overlay");
+    const overlay = page.getByTestId('plan-review-overlay');
     await expect(overlay).toBeVisible({ timeout: 5_000 });
-    await expect(overlay.getByText("Review archive plan")).toBeVisible();
+    await expect(overlay.getByText('Review archive plan')).toBeVisible();
     await expect(
       overlay.getByText(/Nothing has been changed on disk/),
     ).toBeVisible();
     // Every proposed item is reviewable before approval (FR-003/SC-001).
-    await expect(overlay.getByTestId("plan-review-items")).toBeVisible();
+    await expect(overlay.getByTestId('plan-review-items')).toBeVisible();
 
     // ── Spec-016 protection gate blocks approval until acknowledged ──────────
-    const approveBtn = overlay.getByTestId("plan-review-approve-apply");
+    const approveBtn = overlay.getByTestId('plan-review-approve-apply');
     await expect(approveBtn).toBeDisabled();
-    await overlay.getByRole("button", { name: "Acknowledge" }).click();
+    await overlay.getByRole('button', { name: 'Acknowledge' }).click();
 
     // ── Destructive-confirm gate (FR-003, D9, issue #741): the shared plan
     //    fixture carries `delete` items, so approval also stays locked
@@ -178,16 +198,22 @@ test.describe("project lifecycle · full state machine (Journey 5)", () => {
     // `.click()` (not `.check()`) — the checkbox's `onChange` awaits a mock
     // IPC round-trip before flipping `checked`, and `.check()`'s single
     // post-click snapshot races that async update.
-    await overlay.getByTestId("plan-review-confirm-destructive").click();
+    await overlay.getByTestId('plan-review-confirm-destructive').click();
     await expect(
-      overlay.getByTestId("plan-review-confirm-destructive"),
+      overlay.getByTestId('plan-review-confirm-destructive'),
     ).toBeChecked({ timeout: 5_000 });
     await expect(approveBtn).toBeEnabled({ timeout: 5_000 });
 
     // ── Approve & apply → plans.approve → plans.apply, live progress ─────────
     await approveBtn.click();
-    await expect(overlay.getByTestId("plan-review-progress")).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText("Cleanup plan applied.")).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(overlay.getByTestId('plan-review-progress')).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByText('Cleanup plan applied.')).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 });

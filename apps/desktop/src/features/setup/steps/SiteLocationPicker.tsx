@@ -126,7 +126,7 @@ export function SiteLocationPicker({
 
   if (unavailable) {
     return (
-      <p className="alm-step-site__map-unavailable">
+      <p className="pv-step-site__map-unavailable">
         {m.setup_site_map_unavailable()}
       </p>
     );
@@ -135,7 +135,7 @@ export function SiteLocationPicker({
   return (
     <div
       ref={containerRef}
-      className="alm-step-site__map"
+      className="pv-step-site__map"
       data-testid="site-location-map"
       role="application"
       aria-label={m.setup_site_map_label()}

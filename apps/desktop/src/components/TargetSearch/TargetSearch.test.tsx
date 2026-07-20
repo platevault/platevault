@@ -330,7 +330,7 @@ describe('TargetSearch', () => {
 
     const option = screen.getByRole('option');
     expect(option).toHaveTextContent('IC 1396');
-    expect(option.querySelector('.alm-target-search__secondary')).toBeNull();
+    expect(option.querySelector('.pv-target-search__secondary')).toBeNull();
   });
 
   it('calls onSelect with the suggestion (targetId) on click', async () => {
@@ -386,7 +386,9 @@ describe('TargetSearch', () => {
     render(<TargetSearch onSelect={vi.fn()} />);
     await typeAndFlush(screen.getByRole('combobox'), 'm31');
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Target search failed');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not search for targets',
+    );
   });
 
   // ── US3 (T022/T023): SIMBAD long-tail merge + dedupe + cancel-in-flight ──────

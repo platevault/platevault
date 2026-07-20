@@ -114,16 +114,16 @@ export function SessionSourcePicker({
 
   if (loading) {
     return (
-      <div className="alm-source-picker__loading">
+      <div className="pv-source-picker__loading">
         {m.projects_wizard_sources_loading()}
       </div>
     );
   }
 
   return (
-    <div className="alm-source-picker">
+    <div className="pv-source-picker">
       {/* Filter row */}
-      <div className="alm-source-picker__filter-row">
+      <div className="pv-source-picker__filter-row">
         <input
           type="text"
           placeholder={m.projects_wizard_filter_target_placeholder()}
@@ -136,7 +136,7 @@ export function SessionSourcePicker({
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.preventDefault();
           }}
-          className="alm-source-picker__filter-input"
+          className="pv-source-picker__filter-input"
         />
         <input
           type="text"
@@ -147,12 +147,12 @@ export function SessionSourcePicker({
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.preventDefault();
           }}
-          className="alm-source-picker__filter-input"
+          className="pv-source-picker__filter-input"
         />
       </div>
 
       {/* Summary */}
-      <div className="alm-source-picker__summary">
+      <div className="pv-source-picker__summary">
         <span>
           <strong>{selectedSessionIds.length}</strong>{' '}
           {m.projects_wizard_sessions_selected()}
@@ -164,11 +164,11 @@ export function SessionSourcePicker({
       </div>
 
       {/* Session list */}
-      <div className="alm-source-picker__list">
+      <div className="pv-source-picker__list">
         {/* Header */}
-        <div className="alm-source-picker__list-header">
+        <div className="pv-source-picker__list-header">
           <Checkbox.Root
-            className="alm-checkbox"
+            className="pv-checkbox"
             checked={
               filtered.length > 0 &&
               selectedSessionIds.length === filtered.length
@@ -176,7 +176,7 @@ export function SessionSourcePicker({
             onCheckedChange={toggleAll}
             aria-label={m.projects_wizard_select_all_aria()}
           >
-            <Checkbox.Indicator className="alm-checkbox__indicator">
+            <Checkbox.Indicator className="pv-checkbox__indicator">
               &#x2713;
             </Checkbox.Indicator>
           </Checkbox.Root>
@@ -199,22 +199,22 @@ export function SessionSourcePicker({
             <label
               key={session.id}
               className={
-                'alm-source-picker__row' +
+                'pv-source-picker__row' +
                 (selectedSessionIds.includes(session.id)
-                  ? ' alm-source-picker__row--selected'
+                  ? ' pv-source-picker__row--selected'
                   : '')
               }
               data-testid={`session-picker-row-${session.id}`}
             >
               <Checkbox.Root
-                className="alm-checkbox"
+                className="pv-checkbox"
                 checked={selectedSessionIds.includes(session.id)}
                 onCheckedChange={() => toggleSession(session.id)}
                 aria-label={m.projects_wizard_select_session_aria({
                   target: targetLabel,
                 })}
               >
-                <Checkbox.Indicator className="alm-checkbox__indicator">
+                <Checkbox.Indicator className="pv-checkbox__indicator">
                   &#x2713;
                 </Checkbox.Indicator>
               </Checkbox.Root>
@@ -228,7 +228,7 @@ export function SessionSourcePicker({
               <span>
                 {formatIntegration(session.totalIntegrationSeconds ?? 0)}
               </span>
-              <span className="alm-source-picker__train-id">
+              <span className="pv-source-picker__train-id">
                 {session.opticalTrainId.slice(0, 8)}
               </span>
             </label>
@@ -236,7 +236,7 @@ export function SessionSourcePicker({
         })}
 
         {filtered.length === 0 && (
-          <div className="alm-source-picker__empty">
+          <div className="pv-source-picker__empty">
             {emptyMessage ?? m.projects_wizard_sessions_empty()}
           </div>
         )}

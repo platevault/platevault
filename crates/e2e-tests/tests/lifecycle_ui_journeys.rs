@@ -196,6 +196,11 @@ async fn find_project_name_input_with_reload_retry(app: &E2eApp) -> anyhow::Resu
     }
 
     // Not there after 10s of polling: attempt the one-shot reload recovery.
+    //
+    // KEEP the reload (#1113 reviewed): the reload IS the mechanism under
+    // test here — recovering a stalled WebView2 first paint. There is no
+    // query to invalidate; the document itself is what has to be rebuilt, and
+    // every element used afterwards is re-found post-reload.
     app.driver.refresh().await.context("page refresh after a #project-name stall failed")?;
     app.wait_document_ready(Duration::from_secs(10))
         .await

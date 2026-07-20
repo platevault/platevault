@@ -113,13 +113,8 @@ export function ManifestsAccordion({
     setRevealWorking(manifest.id);
     try {
       await revealManifestInOs({ path: manifest.path });
-    } catch (err: unknown) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ??
-            m.projects_manifests_reveal_failed_fallback());
-      addToast({ message: msg, variant: 'error' });
+    } catch {
+      addToast({ message: m.common_reveal_error(), variant: 'error' });
     } finally {
       setRevealWorking(null);
     }
@@ -128,7 +123,7 @@ export function ManifestsAccordion({
   if (loading) {
     return (
       <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
-        <div data-testid="manifests-loading" className="alm-manifests__status">
+        <div data-testid="manifests-loading" className="pv-manifests__status">
           {m.common_loading()}
         </div>
       </Section>
@@ -140,7 +135,7 @@ export function ManifestsAccordion({
       <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-error"
-          className="alm-manifests__status--error"
+          className="pv-manifests__status--error"
         >
           {m.projects_manifests_load_error()}
         </div>
@@ -155,25 +150,25 @@ export function ManifestsAccordion({
       defaultOpen={defaultOpen}
     >
       {manifests.length === 0 ? (
-        <div data-testid="manifests-empty" className="alm-manifests__status">
+        <div data-testid="manifests-empty" className="pv-manifests__status">
           {m.projects_manifests_empty()}
         </div>
       ) : (
         <div data-testid="manifests-list">
           {manifests.map((manifest) => (
-            <div key={manifest.id} className="alm-manifests__item">
+            <div key={manifest.id} className="pv-manifests__item">
               {/* Row header */}
-              <div className="alm-manifests__row-header">
+              <div className="pv-manifests__row-header">
                 <button
                   data-testid={`manifest-row-${manifest.id}`}
                   onClick={() => void handleToggle(manifest.id)}
-                  className="alm-manifests__toggle-btn"
+                  className="pv-manifests__toggle-btn"
                   aria-expanded={expandedId === manifest.id}
                 >
-                  <span className="alm-manifests__reason-label">
+                  <span className="pv-manifests__reason-label">
                     {manifestReasonLabel(manifest.reason)}
                   </span>
-                  <span className="alm-manifests__timestamp">
+                  <span className="pv-manifests__timestamp">
                     {formatManifestTimestamp(manifest.timestamp)}
                   </span>
                 </button>
@@ -193,7 +188,7 @@ export function ManifestsAccordion({
               {expandedId === manifest.id && (
                 <div
                   data-testid={`manifest-body-${manifest.id}`}
-                  className="alm-manifests__body-panel"
+                  className="pv-manifests__body-panel"
                 >
                   {bodyLoading === manifest.id ? (
                     <span>{m.projects_manifests_body_loading()}</span>
@@ -214,14 +209,14 @@ export function ManifestsAccordion({
                         </div>
                       )}
                       {bodyMap[manifest.id].notes && (
-                        <div className="alm-manifests__notes-block">
+                        <div className="pv-manifests__notes-block">
                           <strong>{m.projects_manifests_notes_label()}</strong>
-                          <div className="alm-manifests__notes-content">
+                          <div className="pv-manifests__notes-content">
                             {bodyMap[manifest.id].notes}
                           </div>
                         </div>
                       )}
-                      <div className="alm-manifests__path">{manifest.path}</div>
+                      <div className="pv-manifests__path">{manifest.path}</div>
                     </div>
                   ) : null}
                 </div>

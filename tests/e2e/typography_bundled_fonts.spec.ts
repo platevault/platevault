@@ -14,50 +14,55 @@
  * See apps/desktop/src/styles/tokens.css (@font-face blocks) and
  * apps/desktop/src/assets/fonts/FONTS.md (asset provenance).
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);
 });
 
-test.describe("Spec 055 · bundled hinted fonts (Phase 1)", () => {
-  test("no network requests reach fonts.googleapis.com or fonts.gstatic.com during app load", async ({
+test.describe('Spec 055 · bundled hinted fonts (Phase 1)', () => {
+  test('no network requests reach fonts.googleapis.com or fonts.gstatic.com during app load', async ({
     page,
   }) => {
     const fontCdnRequests: string[] = [];
-    page.on("request", (request) => {
+    page.on('request', (request) => {
       const url = request.url();
-      if (url.includes("fonts.googleapis.com") || url.includes("fonts.gstatic.com")) {
+      if (
+        url.includes('fonts.googleapis.com') ||
+        url.includes('fonts.gstatic.com')
+      ) {
         fontCdnRequests.push(url);
       }
     });
 
     seedSetupComplete(page);
-    await page.goto("/#/sessions");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/sessions');
+    await page.waitForLoadState('networkidle');
 
     expect(fontCdnRequests).toEqual([]);
   });
 
-  test("document.fonts contains the six bundled Inter faces after load", async ({ page }) => {
+  test('document.fonts contains the six bundled Inter faces after load', async ({
+    page,
+  }) => {
     seedSetupComplete(page);
-    await page.goto("/#/sessions");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/sessions');
+    await page.waitForLoadState('networkidle');
 
     const faces = await page.evaluate(async () => {
       await document.fonts.ready;
       return Array.from(document.fonts)
-        .filter((face) => face.family === "Inter")
+        .filter((face) => face.family === 'Inter')
         .map((face) => ({ weight: face.weight, style: face.style }));
     });
 
     const expected = [
-      { weight: "400", style: "normal" },
-      { weight: "400", style: "italic" },
-      { weight: "500", style: "normal" },
-      { weight: "500", style: "italic" },
-      { weight: "600", style: "normal" },
-      { weight: "600", style: "italic" },
+      { weight: '400', style: 'normal' },
+      { weight: '400', style: 'italic' },
+      { weight: '500', style: 'normal' },
+      { weight: '500', style: 'italic' },
+      { weight: '600', style: 'normal' },
+      { weight: '600', style: 'italic' },
     ];
 
     for (const face of expected) {
@@ -68,14 +73,14 @@ test.describe("Spec 055 · bundled hinted fonts (Phase 1)", () => {
     }
   });
 
-  test("computed body font-family resolves to Inter", async ({ page }) => {
+  test('computed body font-family resolves to Inter', async ({ page }) => {
     seedSetupComplete(page);
-    await page.goto("/#/sessions");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/sessions');
+    await page.waitForLoadState('networkidle');
 
     const fontFamily = await page.evaluate(
       () => getComputedStyle(document.body).fontFamily,
     );
-    expect(fontFamily).toContain("Inter");
+    expect(fontFamily).toContain('Inter');
   });
 });

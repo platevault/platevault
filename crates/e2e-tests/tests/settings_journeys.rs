@@ -180,19 +180,23 @@ async fn settings_ui_theme_applies_live_and_persists_to_settings_db() -> anyhow:
     app.goto_route("/settings/general").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
 
-    // "Espresso" (`THEMES` id `espresso-dark`) — a real, non-default theme
-    // swatch, matched by its visible name (the swatch button's full text
-    // also includes its light/dark mode label, so an exact-match helper
-    // would be wrong here — use `contains`).
+    // "Observatory" (`THEMES` id `observatory-dark`) — a real, non-default,
+    // canonical theme swatch (handoff 03: Espresso Dark is now a disabled,
+    // picker-hidden variant — see apps/desktop/src/data/theme.ts `enabled`),
+    // matched by its visible name (the swatch button's full text also
+    // includes its light/dark mode label, so an exact-match helper would be
+    // wrong here — use `contains`). The predicate excludes "Cool" so this
+    // can't accidentally match the new "Observatory Cool" / "Observatory
+    // Cool · Light" swatches, which also contain the substring "Observatory".
     // Poll for the swatch to actually mount: it opens asynchronously
     // after the navigation, same route/render race `E2eApp::find_waiting`
     // documents.
-    let xpath = "//button[contains(., 'Espresso')]";
-    app.find_waiting(By::XPath(xpath), "the 'Espresso' theme swatch button")
+    let xpath = "//button[contains(., 'Observatory') and not(contains(., 'Cool'))]";
+    app.find_waiting(By::XPath(xpath), "the 'Observatory' theme swatch button")
         .await?
         .click()
         .await
-        .context("click the Espresso theme swatch failed")?;
+        .context("click the Observatory theme swatch failed")?;
 
     // Live apply: no reload needed.
     let theme: String = app
@@ -203,7 +207,7 @@ async fn settings_ui_theme_applies_live_and_persists_to_settings_db() -> anyhow:
         .convert()
         .context("failed to deserialise data-theme")?;
     anyhow::ensure!(
-        theme == "espresso-dark",
+        theme == "observatory-dark",
         "expected the theme to apply live with no reload, got data-theme={theme:?}"
     );
 
@@ -217,8 +221,8 @@ async fn settings_ui_theme_applies_live_and_persists_to_settings_db() -> anyhow:
         .convert()
         .context("failed to deserialise localStorage['alm.theme']")?;
     anyhow::ensure!(
-        stored == serde_json::json!("espresso-dark"),
-        "expected localStorage['alm.theme']=\"espresso-dark\" to be written on click, got {stored:?}"
+        stored == serde_json::json!("observatory-dark"),
+        "expected localStorage['alm.theme']=\"observatory-dark\" to be written on click, got {stored:?}"
     );
 
     // The settings DB write-through (theme-settings-db) is fire-and-forget,
@@ -228,14 +232,14 @@ async fn settings_ui_theme_applies_live_and_persists_to_settings_db() -> anyhow:
             "settings_get",
             json!({ "scope": "general" }),
             UI_TIMEOUT,
-            |v: &serde_json::Value| v["values"]["theme"] == json!("espresso-dark"),
+            |v: &serde_json::Value| v["values"]["theme"] == json!("observatory-dark"),
         )
         .await
         .map_err(|e| {
             anyhow::anyhow!("expected the theme choice to persist to the settings DB: {e}")
         })?;
     anyhow::ensure!(
-        settings["values"]["theme"] == json!("espresso-dark"),
+        settings["values"]["theme"] == json!("observatory-dark"),
         "unexpected persisted settings.theme: {settings}"
     );
 

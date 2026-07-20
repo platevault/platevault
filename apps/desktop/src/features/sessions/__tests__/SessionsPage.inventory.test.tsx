@@ -146,12 +146,12 @@ describe('SessionsTable — target group headers and rows', () => {
   it('1. renders a target group header for each distinct target', () => {
     const { container } = renderList();
     // Scoped to the actual group-header label cell (SessionsTable.tsx's
-    // `.alm-listgroup__label`, `data-testid="sessions-group-target-<key>"`)
+    // `.pv-listgroup__label`, `data-testid="sessions-group-target-<key>"`)
     // rather than "this text appears anywhere on the page" — the prior
     // version would still pass even if grouping broke entirely and targets
-    // only ever rendered in the per-row `.alm-sessions-cell--target` cell.
+    // only ever rendered in the per-row `.pv-sessions-cell--target` cell.
     const groupLabels = Array.from(
-      container.querySelectorAll('.alm-listgroup__label'),
+      container.querySelectorAll('.pv-listgroup__label'),
     ).map((el) => el.textContent);
     for (const target of ['NGC 7000', 'IC 1396', 'M31', 'M42']) {
       expect(groupLabels.some((label) => label?.includes(target))).toBe(true);
@@ -358,7 +358,7 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     // Scoped to the group-header label cell — see test 1's comment above for
     // why "appears anywhere on the page" isn't sufficient here.
     const groupLabels = Array.from(
-      container.querySelectorAll('.alm-listgroup__label'),
+      container.querySelectorAll('.pv-listgroup__label'),
     ).map((el) => el.textContent);
     for (const target of ['NGC 7000', 'M31', 'M42']) {
       expect(groupLabels.some((label) => label?.includes(target))).toBe(true);
@@ -369,7 +369,7 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ selected: session.id });
     const selectedRow = container.querySelector(
-      '.alm-sessions-table__row--selected',
+      '.pv-sessions-table__row--selected',
     );
     expect(selectedRow).not.toBeNull();
   });
@@ -378,7 +378,7 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     const onSelect = vi.fn();
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ onSelect });
-    const row = container.querySelector('.alm-sessions-table__row');
+    const row = container.querySelector('.pv-sessions-table__row');
     expect(row).not.toBeNull();
     fireEvent.click(row as Element);
     expect(onSelect).toHaveBeenCalled();
@@ -392,7 +392,7 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
       sources: INVENTORY_LIST_RESPONSE.sources,
       loading: true,
     });
-    expect(container.querySelector('.alm-sessions-table__footer')).toBeNull();
+    expect(container.querySelector('.pv-sessions-table__footer')).toBeNull();
     expect(screen.queryByText('Loading…')).toBeNull();
   });
 
@@ -432,7 +432,7 @@ describe('SessionsTable — Inbox-parity (spec 043 §4)', () => {
     ).toBeInTheDocument();
   });
 
-  it('23. renders inside the shared .alm-listtable viewport with a windowed scroll container', () => {
+  it('23. renders inside the shared .pv-listtable viewport with a windowed scroll container', () => {
     renderList({ dims: [] });
     expect(screen.getByTestId('sessions-list')).toBeInTheDocument();
     // The shared Table's virtualized scroll wrapper (padding-spacer windowing).

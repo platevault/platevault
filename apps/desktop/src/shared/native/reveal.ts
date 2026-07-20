@@ -108,7 +108,9 @@ export async function revealInOs(
     );
   } catch (err: unknown) {
     const code = isContractError(err) ? err.code : '';
-    const message = isContractError(err) ? err.message : errMessage(err);
+    // errMessage() routes a ContractError through the catalog (FR-009) rather
+    // than leaking its raw `.message` diagnostic to the user.
+    const message = errMessage(err);
     if (
       code === 'path.not_exists' ||
       message.includes('not found') ||

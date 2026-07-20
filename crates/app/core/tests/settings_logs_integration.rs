@@ -227,7 +227,10 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         .await
         .expect("snapshot count query");
 
-    settings::emit_snapshot(pool, &bus, "test").await.expect("emit_snapshot must not error");
+    let dedupe = settings::SnapshotDedupe::new();
+    settings::emit_snapshot(pool, &bus, "test", &dedupe)
+        .await
+        .expect("emit_snapshot must not error");
 
     let after_snap: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
         .bind(TOPIC_SETTINGS_SNAPSHOT)

@@ -15,7 +15,7 @@ import {
   THEMES,
   ZOOM_STEPS,
 } from '@/data/theme';
-import type { FontSizeChoice, ZoomPercent } from '@/data/theme';
+import type { FontSizeChoice, ThemeId, ZoomPercent } from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
@@ -26,17 +26,36 @@ import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
  *  RestoreDefaultsBtn control). */
 const DEFAULT_DENSITY: Density = 'comfortable';
 
+interface ThemeSwatchChoice {
+  id: ThemeId | 'system';
+  label: () => string;
+  mode: 'light' | 'dark' | 'auto';
+}
+
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 // THEMES carry static brand names (not translatable) — wrap them as thunks so
-// every CHOICES entry exposes the same `() => string` label shape.
-const CHOICES = [
-  {
-    id: 'system' as const,
-    label: () => m.settings_general_theme_system(),
-    mode: 'auto' as const,
-  },
-  ...THEMES.map((t) => ({ ...t, label: () => t.label })),
-];
+// every choice exposes the same `() => string` label shape.
+const SYSTEM_CHOICE: ThemeSwatchChoice = {
+  id: 'system',
+  label: () => m.settings_general_theme_system(),
+  mode: 'auto',
+};
+
+// Picker (handoff 03): only canonical (`enabled`) themes are offered, grouped
+// by family (warm/cool) and, within a family, light before dark. Warm
+// Clay/Espresso Dark stay in THEMES (registry) so an already-persisted choice
+// keeps resolving/applying — they are simply omitted here.
+const MODE_ORDER: Record<'light' | 'dark', number> = { light: 0, dark: 1 };
+const WARM_CHOICES: ThemeSwatchChoice[] = THEMES.filter(
+  (t) => t.enabled && t.family === 'warm',
+)
+  .sort((a, b) => MODE_ORDER[a.mode] - MODE_ORDER[b.mode])
+  .map((t) => ({ id: t.id, label: () => t.label, mode: t.mode }));
+const COOL_CHOICES: ThemeSwatchChoice[] = THEMES.filter(
+  (t) => t.enabled && t.family === 'cool',
+)
+  .sort((a, b) => MODE_ORDER[a.mode] - MODE_ORDER[b.mode])
+  .map((t) => ({ id: t.id, label: () => t.label, mode: t.mode }));
 
 export function General() {
   const [choice, setChoice] = useThemeChoice();
@@ -52,63 +71,74 @@ export function General() {
     setDensity(DEFAULT_DENSITY);
   };
 
+  const renderSwatch = (t: ThemeSwatchChoice) => {
+    const isActive = choice === t.id;
+    // `system` card mirrors the resolved palette so it isn't a blank tile.
+    const previewTheme = t.id === 'system' ? resolved : t.id;
+    return (
+      <button
+        key={t.id}
+        type="button"
+        className={clsx(
+          'pv-theme-swatch',
+          isActive && 'pv-theme-swatch--active',
+        )}
+        onClick={() => setChoice(t.id)}
+        aria-pressed={isActive}
+      >
+        <span className="pv-theme-swatch__prev" data-theme={previewTheme}>
+          <i className="pv-theme-swatch__bg" />
+          <i className="pv-theme-swatch__surface" />
+          <i className="pv-theme-swatch__accent" />
+        </span>
+        <span className="pv-theme-swatch__name">{t.label()}</span>
+        <span className="pv-theme-swatch__mode">
+          {t.id === 'system'
+            ? resolved.includes('dark')
+              ? m.settings_theme_mode_auto_dark()
+              : m.settings_theme_mode_auto_light()
+            : t.mode === 'dark'
+              ? m.settings_theme_mode_dark()
+              : m.settings_theme_mode_light()}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <>
       <SettingsSection
         title={m.settings_general_theme()}
         action={<RestoreDefaultsBtn onRestore={handleRestoreDefaults} />}
       >
-        <div className="alm-theme-swatches">
-          {CHOICES.map((t) => {
-            const isActive = choice === t.id;
-            // `system` card mirrors the resolved palette so it isn't a blank tile.
-            const previewTheme = t.id === 'system' ? resolved : t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                className={clsx(
-                  'alm-theme-swatch',
-                  isActive && 'alm-theme-swatch--active',
-                )}
-                onClick={() => setChoice(t.id)}
-                aria-pressed={isActive}
-              >
-                <span
-                  className="alm-theme-swatch__prev"
-                  data-theme={previewTheme}
-                >
-                  <i className="alm-theme-swatch__bg" />
-                  <i className="alm-theme-swatch__surface" />
-                  <i className="alm-theme-swatch__accent" />
-                </span>
-                <span className="alm-theme-swatch__name">{t.label()}</span>
-                <span className="alm-theme-swatch__mode">
-                  {t.id === 'system'
-                    ? resolved.includes('dark')
-                      ? m.settings_theme_mode_auto_dark()
-                      : m.settings_theme_mode_auto_light()
-                    : t.mode === 'dark'
-                      ? m.settings_theme_mode_dark()
-                      : m.settings_theme_mode_light()}
-                </span>
-              </button>
-            );
-          })}
+        <div className="pv-theme-swatches">{renderSwatch(SYSTEM_CHOICE)}</div>
+
+        <div className="pv-settings__group-title">
+          {m.settings_general_theme_group_warm()}
+        </div>
+        <div className="pv-theme-swatches">
+          {WARM_CHOICES.map(renderSwatch)}
+        </div>
+
+        <div className="pv-settings__group-title">
+          {m.settings_general_theme_group_cool()}
+        </div>
+        <div className="pv-theme-swatches">
+          {COOL_CHOICES.map(renderSwatch)}
         </div>
       </SettingsSection>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">
+      <div className="pv-settings__group">
+        <div className="pv-settings__group-title">
           {m.settings_general_fontsize_title()}
         </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">
+        <div className="pv-settings__row">
+          <div className="pv-settings__row-label">
             {m.settings_general_fontsize_title()}
           </div>
-          <div className="alm-settings__row-content">
+          <div className="pv-settings__row-content">
             <select
-              className="alm-select"
+              className="pv-select"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSizeChoice)}
             >
@@ -126,17 +156,17 @@ export function General() {
         </div>
       </div>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">
+      <div className="pv-settings__group">
+        <div className="pv-settings__group-title">
           {m.settings_general_zoom_title()}
         </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">
+        <div className="pv-settings__row">
+          <div className="pv-settings__row-label">
             {m.settings_general_zoom_label()}
           </div>
-          <div className="alm-settings__row-content">
+          <div className="pv-settings__row-content">
             <select
-              className="alm-select"
+              className="pv-select"
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value) as ZoomPercent)}
             >
@@ -151,20 +181,20 @@ export function General() {
             </select>
           </div>
         </div>
-        <p className="alm-calmatch__help">{m.settings_general_zoom_hint()}</p>
+        <p className="pv-calmatch__help">{m.settings_general_zoom_hint()}</p>
       </div>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">
+      <div className="pv-settings__group">
+        <div className="pv-settings__group-title">
           {m.settings_general_density_title()}
         </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">
+        <div className="pv-settings__row">
+          <div className="pv-settings__row-label">
             {m.settings_general_density_label()}
           </div>
-          <div className="alm-settings__row-content">
+          <div className="pv-settings__row-content">
             <select
-              className="alm-select"
+              className="pv-select"
               value={density}
               onChange={(e) => setDensity(e.target.value as Density)}
             >

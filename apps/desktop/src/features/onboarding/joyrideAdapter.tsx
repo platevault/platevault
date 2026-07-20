@@ -86,8 +86,8 @@ function OnboardingTooltip({
 }: TooltipRenderProps): ReactNode {
   const title = typeof step.title === 'string' ? step.title : undefined;
   return (
-    <div className="alm-onboarding-tooltip" role="region" aria-label={title}>
-      <div className="alm-visually-hidden" role="status" aria-live="polite">
+    <div className="pv-onboarding-tooltip" role="region" aria-label={title}>
+      <div className="pv-visually-hidden" role="status" aria-live="polite">
         {m.onboarding_announcer_progress({
           current: index + 1,
           total: size,
@@ -95,14 +95,14 @@ function OnboardingTooltip({
         {title ? ` — ${title}` : ''}
       </div>
 
-      <div className="alm-onboarding-tooltip__header">
+      <div className="pv-onboarding-tooltip__header">
         {step.title ? (
-          <h2 className="alm-onboarding-tooltip__title">{step.title}</h2>
+          <h2 className="pv-onboarding-tooltip__title">{step.title}</h2>
         ) : null}
         <Btn
           variant="ghost"
           size="sm"
-          className="alm-onboarding-tooltip__close"
+          className="pv-onboarding-tooltip__close"
           aria-label={closeProps['aria-label']}
           onClick={closeProps.onClick}
         >
@@ -110,23 +110,23 @@ function OnboardingTooltip({
         </Btn>
       </div>
 
-      <div className="alm-onboarding-tooltip__body">{step.content}</div>
+      <div className="pv-onboarding-tooltip__body">{step.content}</div>
 
-      <div className="alm-onboarding-tooltip__footer">
+      <div className="pv-onboarding-tooltip__footer">
         <Btn
           variant="ghost"
           size="sm"
-          className="alm-onboarding-tooltip__skip"
+          className="pv-onboarding-tooltip__skip"
           onClick={skipProps.onClick}
         >
           {m.onboarding_walk_skip()}
         </Btn>
-        <div className="alm-onboarding-tooltip__nav">
+        <div className="pv-onboarding-tooltip__nav">
           {index > 0 ? (
             <Btn
               variant="ghost"
               size="sm"
-              className="alm-onboarding-tooltip__back"
+              className="pv-onboarding-tooltip__back"
               onClick={backProps.onClick}
             >
               {m.onboarding_walk_back()}
@@ -136,7 +136,7 @@ function OnboardingTooltip({
             variant="primary"
             size="sm"
             data-action="primary"
-            className="alm-onboarding-tooltip__primary"
+            className="pv-onboarding-tooltip__primary"
             onClick={primaryProps.onClick}
           >
             {isLastStep ? m.onboarding_walk_finish() : m.onboarding_walk_next()}

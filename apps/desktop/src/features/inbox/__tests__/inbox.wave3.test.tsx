@@ -114,11 +114,11 @@ describe('task 32: InboxRow classification-forward grid', () => {
     );
     // Scoped to the classification cell specifically (not "any 'dark' text
     // on the page") so this fails if masterFrameType stops reaching
-    // classificationLabel/the `.alm-inbox-row__classification` cell, even if
+    // classificationLabel/the `.pv-inbox-row__classification` cell, even if
     // another element on the row happened to contain "dark" too.
     const row = screen.getByTestId('inbox-item-item-001');
     const classificationCell = row.querySelector(
-      '.alm-inbox-row__classification',
+      '.pv-inbox-row__classification',
     );
     expect(classificationCell).not.toBeNull();
     expect(classificationCell?.textContent).toBe('dark');
@@ -135,13 +135,13 @@ describe('task 32: InboxRow classification-forward grid', () => {
       />,
     );
     const row = screen.getByTestId('inbox-item-item-001');
-    expect(row.querySelector('.alm-inbox-cell__path')).not.toBeNull();
-    expect(row.querySelector('.alm-inbox-cell__path')?.textContent).toBe(
+    expect(row.querySelector('.pv-inbox-cell__path')).not.toBeNull();
+    expect(row.querySelector('.pv-inbox-cell__path')?.textContent).toBe(
       'lights/NGC7000',
     );
   });
 
-  it('applies the shared-Table inbox row class (not the old alm-list-item)', () => {
+  it('applies the shared-Table inbox row class (not the old pv-list-item)', () => {
     const item = makeListItem();
     rtlRender(
       <InboxList
@@ -152,11 +152,11 @@ describe('task 32: InboxRow classification-forward grid', () => {
       />,
     );
     const row = screen.getByTestId('inbox-item-item-001');
-    expect(row.classList.contains('alm-inbox-table__row')).toBe(true);
-    expect(row.classList.contains('alm-list-item')).toBe(false);
+    expect(row.classList.contains('pv-inbox-table__row')).toBe(true);
+    expect(row.classList.contains('pv-list-item')).toBe(false);
   });
 
-  it('adds alm-inbox-table__row--selected when item is selected', () => {
+  it('adds pv-inbox-table__row--selected when item is selected', () => {
     const item = makeListItem();
     rtlRender(
       <InboxList
@@ -167,10 +167,10 @@ describe('task 32: InboxRow classification-forward grid', () => {
       />,
     );
     const row = screen.getByTestId('inbox-item-item-001');
-    expect(row.classList.contains('alm-inbox-table__row--selected')).toBe(true);
+    expect(row.classList.contains('pv-inbox-table__row--selected')).toBe(true);
   });
 
-  it('adds alm-inbox-table__row--muted for plan_open items', () => {
+  it('adds pv-inbox-table__row--muted for plan_open items', () => {
     const item = makeListItem({ state: 'plan_open' });
     rtlRender(
       <InboxList
@@ -181,6 +181,6 @@ describe('task 32: InboxRow classification-forward grid', () => {
       />,
     );
     const row = screen.getByTestId('inbox-item-item-001');
-    expect(row.classList.contains('alm-inbox-table__row--muted')).toBe(true);
+    expect(row.classList.contains('pv-inbox-table__row--muted')).toBe(true);
   });
 });

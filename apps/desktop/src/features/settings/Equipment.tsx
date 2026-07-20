@@ -188,7 +188,7 @@ function filterCategoryLabel(category: FilterCategory): string {
 
 function autoDetectedBadge(autoDetected: boolean) {
   return (
-    <span className="alm-equipment__badges">
+    <span className="pv-equipment__badges">
       {autoDetected ? (
         <Pill variant="info">{m.settings_equipment_auto_detected()}</Pill>
       ) : (
@@ -612,10 +612,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
         }
       >
         {trainsError && (
-          <p className="alm-equipment__load-error">{trainsError}</p>
+          <p className="pv-equipment__load-error">{trainsError}</p>
         )}
         {trainsLoading && (
-          <p className="alm-equipment__empty">{m.common_loading()}</p>
+          <p className="pv-equipment__empty">{m.common_loading()}</p>
         )}
 
         {!trainsLoading && (
@@ -636,14 +636,14 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 camera: cameraName(t.cameraId),
                 telescope: telescopeName(t.telescopeId),
                 focalLength: (
-                  <code className="alm-mono">
+                  <code className="pv-mono">
                     {m.settings_equipment_focal_length_value({
                       mm: t.focalLengthMm,
                     })}
                   </code>
                 ),
                 actions: (
-                  <span className="alm-equipment__row-actions">
+                  <span className="pv-equipment__row-actions">
                     <Btn
                       size="sm"
                       variant="ghost"
@@ -673,7 +673,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!trainsLoading && trains.length === 0 && !trainsError && (
-          <p className="alm-equipment__empty">
+          <p className="pv-equipment__empty">
             {m.settings_equipment_trains_empty()}
           </p>
         )}
@@ -685,14 +685,14 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onCancel={() => setTrainForm(null)}
             onSave={handleTrainSubmit}
           >
-            <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-train-name">
+            <div className="pv-stack-1">
+              <label className="pv-field-label" htmlFor="equipment-train-name">
                 {m.settings_equipment_col_name()}
               </label>
               <input
                 id="equipment-train-name"
                 type="text"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={trainForm.name}
                 onChange={(e) =>
@@ -700,16 +700,16 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-train-camera"
               >
                 {m.settings_equipment_field_camera()}
               </label>
               <select
                 id="equipment-train-camera"
-                className="alm-select"
+                className="pv-select"
                 value={trainForm.cameraId}
                 onChange={(e) =>
                   setTrainForm({ ...trainForm, cameraId: e.target.value })
@@ -723,16 +723,16 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 ))}
               </select>
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-train-telescope"
               >
                 {m.settings_equipment_field_telescope()}
               </label>
               <select
                 id="equipment-train-telescope"
-                className="alm-select"
+                className="pv-select"
                 value={trainForm.telescopeId}
                 onChange={(e) =>
                   setTrainForm({ ...trainForm, telescopeId: e.target.value })
@@ -746,9 +746,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 ))}
               </select>
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-train-focal-length"
               >
                 {m.settings_equipment_field_focal_length()}
@@ -757,7 +757,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 id="equipment-train-focal-length"
                 type="text"
                 inputMode="numeric"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_field_focal_length()}
                 value={trainForm.focalLengthMmText}
                 onChange={(e) =>
@@ -793,17 +793,17 @@ export function Equipment({ save: _save }: EquipmentProps) {
         }
       >
         {camerasError && (
-          <p className="alm-equipment__load-error">{camerasError}</p>
+          <p className="pv-equipment__load-error">{camerasError}</p>
         )}
         {camerasLoading && (
-          <p className="alm-equipment__empty">{m.common_loading()}</p>
+          <p className="pv-equipment__empty">{m.common_loading()}</p>
         )}
 
         {!camerasLoading && (
           <Table
             columns={[
               { key: 'name', label: m.settings_equipment_col_name() },
-              { key: 'aliases', label: m.settings_equipment_col_aliases() },
+              { key: 'aliases', label: m.common_aliases() },
               { key: 'sensor', label: m.settings_equipment_col_sensor() },
               { key: 'source', label: m.settings_equipment_col_source() },
               { key: 'actions', label: '', style: { width: 140 } },
@@ -815,7 +815,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 sensor: sensorSummary(c),
                 source: autoDetectedBadge(c.autoDetected),
                 actions: (
-                  <span className="alm-equipment__row-actions">
+                  <span className="pv-equipment__row-actions">
                     <Btn
                       size="sm"
                       variant="ghost"
@@ -849,7 +849,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!camerasLoading && cameras.length === 0 && !camerasError && (
-          <p className="alm-equipment__empty">
+          <p className="pv-equipment__empty">
             {m.settings_equipment_cameras_empty()}
           </p>
         )}
@@ -861,17 +861,14 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onCancel={() => setCameraForm(null)}
             onSave={handleCameraSubmit}
           >
-            <div className="alm-stack-1">
-              <label
-                className="alm-field-label"
-                htmlFor="equipment-camera-name"
-              >
+            <div className="pv-stack-1">
+              <label className="pv-field-label" htmlFor="equipment-camera-name">
                 {m.settings_equipment_col_name()}
               </label>
               <input
                 id="equipment-camera-name"
                 type="text"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={cameraForm.name}
                 onChange={(e) =>
@@ -879,13 +876,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-camera-aliases"
               >
                 {m.common_aliases()}
-                <span className="alm-field-hint">
+                <span className="pv-field-hint">
                   {' '}
                   ({m.settings_equipment_field_aliases_hint()})
                 </span>
@@ -893,7 +890,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
               <input
                 id="equipment-camera-aliases"
                 type="text"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.common_aliases()}
                 value={cameraForm.aliasesText}
                 onChange={(e) =>
@@ -904,16 +901,16 @@ export function Equipment({ save: _save }: EquipmentProps) {
             {/* FR-035: sensor-type dimension. Unknown stays selectable and
                 behaves as mono downstream (FR-038) — additive, never a
                 required migration step for existing cameras. */}
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-camera-sensor"
               >
                 {m.settings_equipment_field_sensor()}
               </label>
               <select
                 id="equipment-camera-sensor"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_field_sensor()}
                 value={cameraForm.sensorType}
                 onChange={(e) =>
@@ -933,16 +930,16 @@ export function Equipment({ save: _save }: EquipmentProps) {
               </select>
             </div>
             {cameraForm.sensorType === 'osc' && (
-              <div className="alm-stack-1">
+              <div className="pv-stack-1">
                 <label
-                  className="alm-field-label"
+                  className="pv-field-label"
                   htmlFor="equipment-camera-passband"
                 >
                   {m.settings_equipment_field_passband()}
                 </label>
                 <select
                   id="equipment-camera-passband"
-                  className="alm-input"
+                  className="pv-input"
                   aria-label={m.settings_equipment_field_passband()}
                   value={cameraForm.passband}
                   onChange={(e) =>
@@ -984,17 +981,17 @@ export function Equipment({ save: _save }: EquipmentProps) {
         }
       >
         {telescopesError && (
-          <p className="alm-equipment__load-error">{telescopesError}</p>
+          <p className="pv-equipment__load-error">{telescopesError}</p>
         )}
         {telescopesLoading && (
-          <p className="alm-equipment__empty">{m.common_loading()}</p>
+          <p className="pv-equipment__empty">{m.common_loading()}</p>
         )}
 
         {!telescopesLoading && (
           <Table
             columns={[
               { key: 'name', label: m.settings_equipment_col_name() },
-              { key: 'aliases', label: m.settings_equipment_col_aliases() },
+              { key: 'aliases', label: m.common_aliases() },
               {
                 key: 'focalLength',
                 label: m.settings_equipment_col_focal_length(),
@@ -1007,7 +1004,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 name: t.name,
                 aliases: formatAliases(t.aliases),
                 focalLength: (
-                  <code className="alm-mono">
+                  <code className="pv-mono">
                     {t.focalLengthMm != null
                       ? m.settings_equipment_focal_length_value({
                           mm: t.focalLengthMm,
@@ -1017,7 +1014,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 ),
                 source: autoDetectedBadge(t.autoDetected),
                 actions: (
-                  <span className="alm-equipment__row-actions">
+                  <span className="pv-equipment__row-actions">
                     <Btn
                       size="sm"
                       variant="ghost"
@@ -1051,7 +1048,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!telescopesLoading && telescopes.length === 0 && !telescopesError && (
-          <p className="alm-equipment__empty">
+          <p className="pv-equipment__empty">
             {m.settings_equipment_telescopes_empty()}
           </p>
         )}
@@ -1063,9 +1060,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onCancel={() => setTelescopeForm(null)}
             onSave={handleTelescopeSubmit}
           >
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-telescope-name"
               >
                 {m.settings_equipment_col_name()}
@@ -1073,7 +1070,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
               <input
                 id="equipment-telescope-name"
                 type="text"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={telescopeForm.name}
                 onChange={(e) =>
@@ -1081,13 +1078,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-telescope-aliases"
               >
                 {m.common_aliases()}
-                <span className="alm-field-hint">
+                <span className="pv-field-hint">
                   {' '}
                   ({m.settings_equipment_field_aliases_hint()})
                 </span>
@@ -1095,7 +1092,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
               <input
                 id="equipment-telescope-aliases"
                 type="text"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.common_aliases()}
                 value={telescopeForm.aliasesText}
                 onChange={(e) =>
@@ -1106,9 +1103,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-telescope-focal-length"
               >
                 {m.settings_equipment_field_focal_length()}
@@ -1117,7 +1114,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 id="equipment-telescope-focal-length"
                 type="text"
                 inputMode="numeric"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_field_focal_length()}
                 value={telescopeForm.focalLengthMmText}
                 onChange={(e) =>
@@ -1134,7 +1131,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
 
       {/* Filters */}
       <SettingsSection
-        title={m.settings_equipment_filters_title()}
+        title={m.common_filters()}
         action={
           <Btn
             size="sm"
@@ -1147,10 +1144,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
         }
       >
         {filtersError && (
-          <p className="alm-equipment__load-error">{filtersError}</p>
+          <p className="pv-equipment__load-error">{filtersError}</p>
         )}
         {filtersLoading && (
-          <p className="alm-equipment__empty">{m.common_loading()}</p>
+          <p className="pv-equipment__empty">{m.common_loading()}</p>
         )}
 
         {!filtersLoading && (
@@ -1167,7 +1164,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 category: filterCategoryLabel(f.category),
                 source: autoDetectedBadge(f.autoDetected),
                 actions: (
-                  <span className="alm-equipment__row-actions">
+                  <span className="pv-equipment__row-actions">
                     <Btn
                       size="sm"
                       variant="ghost"
@@ -1195,7 +1192,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!filtersLoading && filters.length === 0 && !filtersError && (
-          <p className="alm-equipment__empty">
+          <p className="pv-equipment__empty">
             {m.settings_equipment_filters_empty()}
           </p>
         )}
@@ -1207,17 +1204,14 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onCancel={() => setFilterForm(null)}
             onSave={handleFilterSubmit}
           >
-            <div className="alm-stack-1">
-              <label
-                className="alm-field-label"
-                htmlFor="equipment-filter-name"
-              >
+            <div className="pv-stack-1">
+              <label className="pv-field-label" htmlFor="equipment-filter-name">
                 {m.settings_equipment_col_name()}
               </label>
               <input
                 id="equipment-filter-name"
                 type="text"
-                className="alm-input"
+                className="pv-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={filterForm.name}
                 onChange={(e) =>
@@ -1225,16 +1219,16 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
-            <div className="alm-stack-1">
+            <div className="pv-stack-1">
               <label
-                className="alm-field-label"
+                className="pv-field-label"
                 htmlFor="equipment-filter-category"
               >
                 {m.settings_equipment_field_category()}
               </label>
               <select
                 id="equipment-filter-category"
-                className="alm-select"
+                className="pv-select"
                 value={filterForm.category}
                 onChange={(e) =>
                   setFilterForm({
@@ -1269,7 +1263,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
         confirmLabel={deleteBusy ? m.common_removing() : m.common_remove()}
         confirmVariant="danger"
       >
-        {deleteError && <span className="alm-field-error">{deleteError}</span>}
+        {deleteError && <span className="pv-field-error">{deleteError}</span>}
       </ConfirmOverlay>
     </>
   );

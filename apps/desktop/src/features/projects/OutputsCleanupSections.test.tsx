@@ -178,7 +178,7 @@ describe('CleanupSection (spec 017 WP-E)', () => {
 
     const masters = screen.getByTestId('cleanup-group-master');
     const protectedRow = within(masters).getByTestId('cleanup-candidate-0');
-    expect(protectedRow).toHaveClass('alm-cleanup-scan__row--protected');
+    expect(protectedRow).toHaveClass('pv-cleanup-scan__row--protected');
     expect(within(protectedRow).getByText('Protected')).toBeInTheDocument();
 
     // NOT selectable (constitution II): no checkboxes/switches anywhere in the

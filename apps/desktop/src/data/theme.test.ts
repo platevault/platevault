@@ -62,6 +62,11 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
     { id: 'warm-slate', mode: 'light' },
     { id: 'observatory-dark', mode: 'dark' },
     { id: 'espresso-dark', mode: 'dark' },
+    // Handoff 03 — the two new cool-family canonical themes; warm-clay and
+    // espresso-dark stay above as proof a disabled (picker-hidden) variant
+    // still resolves/applies exactly as before.
+    { id: 'observatory-cool-light', mode: 'light' },
+    { id: 'observatory-cool', mode: 'dark' },
   ];
 
   for (const { id, mode } of CASES) {

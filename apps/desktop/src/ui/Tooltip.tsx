@@ -28,7 +28,7 @@ export interface TooltipProps
  * Single token-styled tooltip wrapper over base-ui. The trigger renders as a
  * `<span>` so it can wrap inline affordances (Lock glyph, InfoTip icon);
  * `className` and any extra span attributes (aria-label, tabIndex, data-*)
- * pass through to that trigger span. Popup styling lives in `.alm-tooltip`.
+ * pass through to that trigger span. Popup styling lives in `.pv-tooltip`.
  *
  * ACCESSIBILITY: that trigger span is NOT focusable — base-ui adds no
  * `tabIndex` and a bare span has none. So a tooltip whose only reveal is this
@@ -55,7 +55,7 @@ export function Tooltip({
         </BaseTooltip.Trigger>
         <BaseTooltip.Portal>
           <BaseTooltip.Positioner sideOffset={sideOffset}>
-            <BaseTooltip.Popup id={popupId} className="alm-tooltip">
+            <BaseTooltip.Popup id={popupId} className="pv-tooltip">
               {content}
             </BaseTooltip.Popup>
           </BaseTooltip.Positioner>

@@ -112,25 +112,25 @@ const COLUMNS: Array<{
     key: 'tool',
     label: () => m.projects_col_tool(),
     sort: 'tool',
-    className: 'alm-projects-table__cell--muted',
+    className: 'pv-projects-table__cell--muted',
   },
   {
     key: 'target',
     label: () => m.projects_create_target_label(),
-    className: 'alm-projects-table__cell--muted',
+    className: 'pv-projects-table__cell--muted',
   },
   { key: 'state', label: () => m.sessions_col_state(), sort: 'state' },
   {
     key: 'sources',
     label: () => m.common_sources(),
     sort: 'sources',
-    className: 'alm-projects-table__cell--num',
+    className: 'pv-projects-table__cell--num',
   },
   {
     key: 'updated',
     label: () => m.projects_stepper_updated(),
     sort: 'updated',
-    className: 'alm-projects-table__cell--mono',
+    className: 'pv-projects-table__cell--mono',
   },
 ];
 
@@ -148,6 +148,12 @@ export interface ProjectsTableProps {
    * When empty the table renders a flat sorted list.
    */
   dims?: string[];
+  /**
+   * True when a search/lifecycle filter is active, so an empty `projects`
+   * list means "no matches" rather than "no projects exist yet" — the two
+   * cases need different empty-state copy (empty-state canon).
+   */
+  isFiltered?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -160,6 +166,7 @@ export function ProjectsTable({
   sort,
   onSort,
   dims = [],
+  isFiltered = false,
 }: ProjectsTableProps) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
@@ -192,7 +199,7 @@ export function ProjectsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        ariaLabel={m.projects_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ) : (
       c.label()
@@ -210,14 +217,14 @@ export function ProjectsTable({
   function projectItemRow(project: ProjectSummaryDto, indentPx = 0): TableRow {
     return {
       _rowClassName:
-        'alm-projects-table__row' +
-        (project.id === selectedId ? ' alm-projects-table__row--selected' : ''),
+        'pv-projects-table__row' +
+        (project.id === selectedId ? ' pv-projects-table__row--selected' : ''),
       _onClick: () => onSelect(project.id),
       _selected: project.id === selectedId,
       _indent: indentPx || undefined,
       _testid: `project-row-${project.id}`,
       name: (
-        <span className="alm-projects-table__name">
+        <span className="pv-projects-table__name">
           {project.lifecycle === 'blocked' &&
             (() => {
               const reason = deriveBlockedReason(
@@ -233,7 +240,7 @@ export function ProjectsTable({
                     aria-label={m.projects_table_blocked_aria({
                       reason: reasonText,
                     })}
-                    className="alm-projects-table__blocked-icon"
+                    className="pv-projects-table__blocked-icon"
                   />
                 </span>
               );
@@ -241,7 +248,7 @@ export function ProjectsTable({
           {project.name}
           {project.channelDrift && (
             <span
-              className="alm-projects-table__drift-badge"
+              className="pv-projects-table__drift-badge"
               title={m.projects_table_channel_drift_title()}
             >
               <AlertTriangle size={11} aria-hidden="true" />{' '}
@@ -251,22 +258,22 @@ export function ProjectsTable({
         </span>
       ),
       tool: (
-        <span className="alm-projects-table__cell--muted">{project.tool}</span>
+        <span className="pv-projects-table__cell--muted">{project.tool}</span>
       ),
       // STUB: target — omitted until FITS OBJECT → target_id linkage lands (#54).
-      target: <span className="alm-projects-table__dash">—</span>,
+      target: <span className="pv-projects-table__dash">—</span>,
       state: (
         <ProjectStatusTag variant={projectStateVariant(project.lifecycle)}>
           {projectStateLabel(project.lifecycle)}
         </ProjectStatusTag>
       ),
       sources: (
-        <span className="alm-projects-table__cell--num">
+        <span className="pv-projects-table__cell--num">
           {project.sourceCount > 0 ? project.sourceCount : '—'}
         </span>
       ),
       updated: (
-        <span className="alm-projects-table__cell--mono">
+        <span className="pv-projects-table__cell--mono">
           {formatDateTime(project.updatedAt)}
         </span>
       ),
@@ -275,7 +282,7 @@ export function ProjectsTable({
 
   if (loading && projects.length === 0) {
     return (
-      <div className="alm-projects-table__empty">
+      <div className="pv-projects-table__empty">
         <Skeleton
           variant="block"
           count={6}
@@ -287,8 +294,10 @@ export function ProjectsTable({
 
   if (projects.length === 0) {
     return (
-      <div className="alm-projects-table__empty">
-        {m.projects_table_empty()}
+      <div className="pv-projects-table__empty">
+        {isFiltered
+          ? m.projects_table_empty_filtered()
+          : m.projects_table_empty()}
       </div>
     );
   }
@@ -301,21 +310,21 @@ export function ProjectsTable({
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
-          _rowClassName: 'alm-listgroup',
+          _rowClassName: 'pv-listgroup',
           _indent: tableIndent(depth),
           name: (
             <button
               type="button"
-              className="alm-listgroup__cell"
+              className="pv-listgroup__cell"
               data-testid={`projects-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
             >
-              <span className="alm-listgroup__caret" aria-hidden="true">
+              <span className="pv-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
               </span>
-              <span className="alm-listgroup__label">{node.label}</span>
-              <span className="alm-listgroup__count">{node.count}</span>
+              <span className="pv-listgroup__label">{node.label}</span>
+              <span className="pv-listgroup__count">{node.count}</span>
             </button>
           ),
           ...EMPTY_PROJECT_CELLS,
@@ -332,5 +341,5 @@ export function ProjectsTable({
 
   // The project count moved to the bottom status bar (top-bar convention,
   // task #80) — no in-table footer count line.
-  return <Table className="alm-projects-table" columns={columns} rows={rows} />;
+  return <Table className="pv-projects-table" columns={columns} rows={rows} />;
 }

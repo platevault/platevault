@@ -21,6 +21,7 @@
  * `match.*` / `session.*`, and must be matched as such, not bare).
  */
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { Section, Pill, EmptyState } from '@/ui';
@@ -28,6 +29,7 @@ import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from './calibrationMatch';
 import type { CalibrationMatchType } from './calibrationMatch';
 import type { BatchSessionResultDto } from '@/bindings/index';
+import { useEntityNames, entityNameKey } from '@/hooks/useEntityNames';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 
@@ -75,18 +77,11 @@ interface Props {
   sessionIds: string[];
   /** Whether the collapsible section starts open. Default true. */
   defaultOpen?: boolean;
-  /**
-   * Session id → human-readable name lookup (#663 — the panel previously
-   * always rendered a truncated raw UUID, unlike Sessions/the sources
-   * table which resolve real names).
-   */
-  sessionNames?: Map<string, string>;
 }
 
 export function CalibrationMatchPanel({
   sessionIds,
   defaultOpen = true,
-  sessionNames,
 }: Props) {
   // Batch key is the joined session-id list — matches the `matches(sid)` key
   // shape while distinguishing one panel's session set from another's.
@@ -104,6 +99,15 @@ export function CalibrationMatchPanel({
       }),
     enabled: sessionIds.length > 0,
   });
+
+  // Session id → human-readable name (#663, #809 — resolved via the shared
+  // entity-name hook instead of a prop-drilled ad hoc map, so this panel and
+  // Audit Log/Projects Sources use one resolver).
+  const sessionRefs = useMemo(
+    () => sessionIds.map((id) => ({ entityType: 'session', entityId: id })),
+    [sessionIds],
+  );
+  const sessionNames = useEntityNames(sessionRefs);
 
   const fetchError =
     data?.status === 'error'
@@ -125,7 +129,7 @@ export function CalibrationMatchPanel({
         defaultOpen={defaultOpen}
       >
         <div
-          className="alm-calib-match-panel__loading"
+          className="pv-calib-match-panel__loading"
           data-testid="cal-panel-loading"
         >
           {m.projects_calib_checking()}
@@ -141,7 +145,7 @@ export function CalibrationMatchPanel({
         defaultOpen={defaultOpen}
       >
         <div
-          className="alm-calib-match-panel__error"
+          className="pv-calib-match-panel__error"
           data-testid="cal-panel-error"
         >
           {fetchError}
@@ -180,23 +184,25 @@ export function CalibrationMatchPanel({
       defaultOpen={defaultOpen}
       data-testid="cal-panel"
     >
-      <div className="alm-calib-match-panel__list">
+      <div className="pv-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
             key={sid}
-            className="alm-calib-match-panel__session"
+            className="pv-calib-match-panel__session"
             data-testid={`cal-session-${sid}`}
           >
-            <div className="alm-calib-match-panel__session-id">
-              {sessionNames?.get(sid) ?? `${sid.slice(0, 12)}…`}
+            <div className="pv-calib-match-panel__session-id">
+              {sessionNames.get(
+                entityNameKey({ entityType: 'session', entityId: sid }),
+              ) ?? `${sid.slice(0, 12)}…`}
             </div>
-            <div className="alm-calib-match-panel__type-row">
+            <div className="pv-calib-match-panel__type-row">
               {typeResults.map((r) => {
                 const topConfidence = r.candidates?.[0]?.confidence;
                 return (
                   <div
                     key={r.calibrationType}
-                    className="alm-calib-match-panel__type-item"
+                    className="pv-calib-match-panel__type-item"
                     data-testid={`cal-type-${r.calibrationType}-${sid}`}
                   >
                     <Pill
@@ -215,7 +221,7 @@ export function CalibrationMatchPanel({
                     </Pill>
                     {topConfidence != null && (
                       <span
-                        className="alm-mono alm-calib-match-panel__confidence"
+                        className="pv-mono pv-calib-match-panel__confidence"
                         data-testid={`cal-confidence-${r.calibrationType}-${sid}`}
                       >
                         {Math.round(topConfidence * 100)}%
@@ -228,7 +234,7 @@ export function CalibrationMatchPanel({
           </div>
         ))}
       </div>
-      <div className="alm-calib-match-panel__hint">
+      <div className="pv-calib-match-panel__hint">
         {m.projects_calib_assign_hint()}
       </div>
     </Section>

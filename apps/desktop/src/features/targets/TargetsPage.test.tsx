@@ -290,7 +290,7 @@ describe('TargetsPage', () => {
     mockListTargets.mockRejectedValue(new Error('db error'));
     render(<TargetsPage />);
     await waitFor(() =>
-      expect(screen.getByText('Failed to load targets.')).toBeInTheDocument(),
+      expect(screen.getByText('Could not load targets.')).toBeInTheDocument(),
     );
   });
 
@@ -355,7 +355,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'NGC' } });
 
     expect(screen.getByText('NGC 7000')).toBeInTheDocument();
@@ -366,7 +366,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('M 31'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'm 31' } });
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
@@ -377,7 +377,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'NGC' } });
     expect(screen.queryByText('M 31')).not.toBeInTheDocument();
 
@@ -390,7 +390,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('M 31'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'M31' } });
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
@@ -401,7 +401,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('M 31'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'm31' } });
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
@@ -613,7 +613,7 @@ describe('TargetsPage — progressive reveal (#573)', () => {
 
       // NGC 7349 is index 349 — past REVEAL_CHUNK (300) — but search must
       // still find it immediately, not wait for reveal to catch up.
-      const search = screen.getByPlaceholderText('Search targets...');
+      const search = screen.getByPlaceholderText('Search targets…');
       fireEvent.change(search, { target: { value: 'NGC 7349' } });
       await flushLoad();
 

@@ -6,7 +6,7 @@
 //!
 //! Real UI → real IPC → real backend, no mocks:
 //!  1. Finish the real first-run gate, then assert the orientation walk
-//!     auto-renders in the real webview (`.alm-onboarding-tooltip`) and
+//!     auto-renders in the real webview (`.pv-onboarding-tooltip`) and
 //!     completes via its real Skip control (FR-001/FR-003).
 //!  2. On `/inbox`, the sidebar "Getting started" checklist renders with the
 //!     `inbox.confirm_first` auto-tick item still unchecked.
@@ -87,10 +87,10 @@ async fn walk_gate_diagnostics(app: &E2eApp) -> String {
             out.setupCompleted = raw ? JSON.parse(raw).setupCompleted === true : false;
         } catch (e) { out.setupCompleted = 'read-failed: ' + e; }
         out.suppressedFlag = localStorage.getItem('alm-onboarding-suppressed');
-        out.shellMounted = !!document.querySelector('.alm-frame');
-        out.pageAnchorPresent = !!document.querySelector('.alm-frame__main');
+        out.shellMounted = !!document.querySelector('.pv-frame');
+        out.pageAnchorPresent = !!document.querySelector('.pv-frame__main');
         out.joyrideOverlay = !!document.querySelector('.react-joyride__overlay');
-        out.checklistPresent = !!document.querySelector('.alm-onb-checklist');
+        out.checklistPresent = !!document.querySelector('.pv-onb-checklist');
         out.route = location.hash;
         out.uncaughtErrors = (window.__e2eErrors || []).slice(0, 5);
         return JSON.stringify(out);
@@ -111,8 +111,8 @@ async fn walk_gate_diagnostics(app: &E2eApp) -> String {
 /// Open the Getting-started flyout and wait for the checklist inside it.
 ///
 /// The checklist is NOT inline in the sidebar: `ChecklistPopover` portals it to
-/// `document.body`, so nothing matching `.alm-onb-checklist` (or any
-/// `[data-item-id]`) exists until the `.alm-onb-ring` trigger is clicked. This
+/// `document.body`, so nothing matching `.pv-onb-checklist` (or any
+/// `[data-item-id]`) exists until the `.pv-onb-ring` trigger is clicked. This
 /// test predated that redesign and queried the checklist directly, which is why
 /// it failed with "checklist item `inbox.confirm_first` did not render".
 ///
@@ -126,17 +126,17 @@ async fn open_checklist(app: &E2eApp) -> anyhow::Result<()> {
     let opened = wait_dom_true(
         app,
         r#"
-        var ring = document.querySelector('.alm-onb-ring');
+        var ring = document.querySelector('.pv-onb-ring');
         if (!ring) return false;
         if (ring.getAttribute('aria-expanded') !== 'true') { ring.click(); }
-        return !!document.querySelector('.alm-onb-checklist');
+        return !!document.querySelector('.pv-onb-checklist');
         "#,
         UI_TIMEOUT,
     )
     .await?;
     anyhow::ensure!(
         opened,
-        "Getting-started flyout did not open (trigger `.alm-onb-ring` missing or click ignored); {}",
+        "Getting-started flyout did not open (trigger `.pv-onb-ring` missing or click ignored); {}",
         walk_gate_diagnostics(app).await
     );
     Ok(())
@@ -149,7 +149,7 @@ async fn read_progress_done(app: &E2eApp) -> anyhow::Result<i64> {
         .driver
         .execute(
             r#"
-            var pb = document.querySelector('.alm-onb-checklist__progress[role="progressbar"]');
+            var pb = document.querySelector('.pv-onb-checklist__progress[role="progressbar"]');
             return pb ? Number(pb.getAttribute('aria-valuenow')) : -1;
             "#,
             vec![],
@@ -216,7 +216,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     // !orientationDone && not suppressed).
     let walk_present = wait_dom_true(
         &app,
-        r#"return !!document.querySelector('.alm-onboarding-tooltip');"#,
+        r#"return !!document.querySelector('.pv-onboarding-tooltip');"#,
         UI_TIMEOUT,
     )
     .await?;
@@ -242,7 +242,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     app.driver
         .execute(
             r#"
-            var btn = document.querySelector('.alm-onboarding-tooltip__skip');
+            var btn = document.querySelector('.pv-onboarding-tooltip__skip');
             if (btn) { btn.click(); }
             return !!btn;
             "#,
@@ -251,7 +251,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
         .await?;
     let walk_gone = wait_dom_true(
         &app,
-        r#"return !document.querySelector('.alm-onboarding-tooltip');"#,
+        r#"return !document.querySelector('.pv-onboarding-tooltip');"#,
         UI_TIMEOUT,
     )
     .await?;
@@ -349,7 +349,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
         &app,
         &format!(
             r#"
-            var pb = document.querySelector('.alm-onb-checklist__progress[role="progressbar"]');
+            var pb = document.querySelector('.pv-onb-checklist__progress[role="progressbar"]');
             return !!pb && Number(pb.getAttribute('aria-valuenow')) > {done_before};
             "#
         ),

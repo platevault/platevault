@@ -68,6 +68,9 @@ mod audit_ids;
 /// `source_protection_state`/defaults. See each accessor's doc comment for
 /// its owning write-site invalidation calls.
 pub mod caches;
+/// #886 calibration master archive plan generator (mirrors
+/// [`archive_generator`] for a single master instead of a whole project).
+pub mod calibration_archive_generator;
 pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
@@ -94,6 +97,10 @@ pub mod onboarding;
 pub mod path_set;
 pub mod patterns;
 pub mod plan_apply;
+/// `plans.free_space_estimate` (issue #876) — split out of `plans.rs` to stay
+/// clear of the in-flight #979 split on that file; depends only on
+/// `plans::get_plan`.
+pub mod plan_free_space;
 pub mod plans;
 /// Project-create orchestration (create + mkdir-only scaffolding auto-apply,
 /// user decision 2026-07-04). Lives in `app_core` (not `app_core_projects`)

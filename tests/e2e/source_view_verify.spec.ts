@@ -23,67 +23,75 @@
  *   sourceview_verify → `mock-sv-view-broken` reports one broken item
  *                        (state `moved`); every other view id reports clean.
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
-
-async function selectProject(
-  page: import("@playwright/test").Page,
-  name: string,
-): Promise<void> {
-  const row = page
-    .locator(".alm-projects-table__row")
-    .filter({ hasText: name })
-    .first();
-  await expect(row).toBeVisible({ timeout: 8_000 });
-  await row.click();
-  await expect(page.getByTestId("lifecycle-actions")).toBeVisible({ timeout: 5_000 });
-}
+import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);
 });
 
-test.describe("source view verify (spec 049 US4)", () => {
-  test("clean view: verify reports safe-to-process with zero broken items", async ({
+async function selectProject(
+  page: import('@playwright/test').Page,
+  name: string,
+): Promise<void> {
+  const row = page
+    .locator('.pv-projects-table__row')
+    .filter({ hasText: name })
+    .first();
+  await expect(row).toBeVisible({ timeout: 8_000 });
+  await row.click();
+  await expect(page.getByTestId('lifecycle-actions')).toBeVisible({
+    timeout: 5_000,
+  });
+}
+
+test.describe('source view verify (spec 049 US4)', () => {
+  test('clean view: verify reports safe-to-process with zero broken items', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
-    await selectProject(page, "M31 LRGB");
+    await page.goto('/#/projects');
+    await selectProject(page, 'M31 LRGB');
 
-    await expect(page.getByTestId("source-view-row-mock-sv-view-clean")).toBeVisible({
+    await expect(
+      page.getByTestId('source-view-row-mock-sv-view-clean'),
+    ).toBeVisible({
       timeout: 8_000,
     });
 
-    await page.getByTestId("verify-view-mock-sv-view-clean").click();
+    await page.getByTestId('verify-view-mock-sv-view-clean').click();
 
-    const result = page.getByTestId("verify-view-result-mock-sv-view-clean");
+    const result = page.getByTestId('verify-view-result-mock-sv-view-clean');
     await expect(result).toBeVisible({ timeout: 5_000 });
-    await expect(result).toContainText("Clean");
-    await expect(result).toContainText("Safe to process");
+    await expect(result).toContainText('Clean');
+    await expect(result).toContainText('Safe to process');
   });
 
-  test("broken view: verify reports the broken item, no mutation affordance", async ({
+  test('broken view: verify reports the broken item, no mutation affordance', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
-    await selectProject(page, "M31 LRGB");
+    await page.goto('/#/projects');
+    await selectProject(page, 'M31 LRGB');
 
-    await expect(page.getByTestId("source-view-row-mock-sv-view-broken")).toBeVisible({
+    await expect(
+      page.getByTestId('source-view-row-mock-sv-view-broken'),
+    ).toBeVisible({
       timeout: 8_000,
     });
 
-    await page.getByTestId("verify-view-mock-sv-view-broken").click();
+    await page.getByTestId('verify-view-mock-sv-view-broken').click();
 
-    const result = page.getByTestId("verify-view-result-mock-sv-view-broken");
+    const result = page.getByTestId('verify-view-result-mock-sv-view-broken');
     await expect(result).toBeVisible({ timeout: 5_000 });
-    await expect(result).toContainText("1 broken item");
-    await expect(result).toContainText("light_002.fits");
-    await expect(result).toContainText("source moved or removed");
+    await expect(result).toContainText('1 broken item');
+    await expect(result).toContainText('light_002.fits');
+    await expect(result).toContainText('source moved or removed');
 
     // No auto-repair affordance inside the verify report itself — repair is
     // only reachable via the row's own Regenerate button (FR-015).
-    await expect(result.getByRole("button")).toHaveCount(0);
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(result.getByRole('button')).toHaveCount(0);
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 });

@@ -261,7 +261,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       <SettingsSection
         title={m.common_sources()}
         action={
-          <div className="alm-datasources__action-row">
+          <div className="pv-datasources__action-row">
             <RestoreDefaultsBtn
               scope="sources"
               keys={SOURCES_KEYS}
@@ -283,16 +283,16 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         }
       >
         {showAdd && (
-          <div className="alm-data-sources__add-form">
+          <div className="pv-data-sources__add-form">
             <DirPicker
               value={addingPath}
               onChange={setAddingPath}
               label={m.settings_datasources_folder_label()}
               lastPathKind="inbox"
             />
-            <div className="alm-data-sources__add-controls">
+            <div className="pv-data-sources__add-controls">
               <select
-                className="alm-select"
+                className="pv-select"
                 value={addingCategory}
                 onChange={(e) =>
                   setAddingCategory(e.target.value as RootCategory)
@@ -332,36 +332,36 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               </Btn>
             </div>
             {addError && (
-              <div className="alm-data-sources__add-error">{addError}</div>
+              <div className="pv-data-sources__add-error">{addError}</div>
             )}
           </div>
         )}
 
         {loading && (
-          <div className="alm-data-sources__status">{m.common_loading()}</div>
+          <div className="pv-data-sources__status">{m.common_loading()}</div>
         )}
 
         {loadError && (
-          <div className="alm-data-sources__load-error">
+          <div className="pv-data-sources__load-error">
             {m.settings_datasources_load_error({ error: loadError })}
           </div>
         )}
 
         {!loading && !loadError && roots.length === 0 && (
-          <div className="alm-data-sources__status">
+          <div className="pv-data-sources__status">
             {m.settings_datasources_empty()}
           </div>
         )}
 
         {reconcileError && (
-          <div className="alm-data-sources__add-error">
+          <div className="pv-data-sources__add-error">
             {m.settings_datasources_reconcile_error({ error: reconcileError })}
           </div>
         )}
 
         {grouped.map(({ category, roots: groupRoots }) => (
-          <div key={category} className="alm-data-sources__group">
-            <h4 className="alm-data-sources__group-label">
+          <div key={category} className="pv-data-sources__group">
+            <h4 className="pv-data-sources__group-label">
               {categoryLabel(category)}
             </h4>
             {groupRoots.map((root) => (
@@ -408,7 +408,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         confirmVariant="danger"
       >
         {toggleActiveError && (
-          <span className="alm-field-error">{toggleActiveError}</span>
+          <span className="pv-field-error">{toggleActiveError}</span>
         )}
       </ConfirmOverlay>
 
@@ -431,7 +431,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         }
         confirmVariant="danger"
       >
-        {deleteError && <span className="alm-field-error">{deleteError}</span>}
+        {deleteError && <span className="pv-field-error">{deleteError}</span>}
       </ConfirmOverlay>
     </>
   );
@@ -528,8 +528,7 @@ function RootCard({
       });
     } catch (err: unknown) {
       addToast({
-        message:
-          typeof err === 'string' ? err : m.sessions_toast_reveal_error(),
+        message: typeof err === 'string' ? err : m.common_reveal_error(),
         variant: 'error',
       });
     }
@@ -538,16 +537,16 @@ function RootCard({
   return (
     <div
       className={
-        'alm-data-sources__root-card' +
-        (isOffline ? ' alm-data-sources__root-card--offline' : '') +
-        (root.active ? '' : ' alm-data-sources__root-card--disabled')
+        'pv-data-sources__root-card' +
+        (isOffline ? ' pv-data-sources__root-card--offline' : '') +
+        (root.active ? '' : ' pv-data-sources__root-card--disabled')
       }
     >
       {/* Row 1: path + compact protection pill + offline/disabled pills.
           Row 2: humanized meta line. */}
-      <div className="alm-data-sources__root-info">
-        <div className="alm-data-sources__root-path-row">
-          <code className="alm-mono alm-data-sources__root-path">
+      <div className="pv-data-sources__root-info">
+        <div className="pv-data-sources__root-path-row">
+          <code className="pv-mono pv-data-sources__root-path">
             {root.path}
           </code>
           <SourceProtectionOverride
@@ -556,17 +555,17 @@ function RootCard({
             onOpenChange={setEditProtectionOpen}
           />
           {isOffline && (
-            <Pill variant="warn" className="alm-data-sources__offline-pill">
+            <Pill variant="warn" className="pv-data-sources__offline-pill">
               {m.nav_roots_offline_suffix()}
             </Pill>
           )}
           {!root.active && (
-            <Pill variant="neutral" className="alm-data-sources__disabled-pill">
+            <Pill variant="neutral" className="pv-data-sources__disabled-pill">
               {m.settings_datasources_disabled_pill()}
             </Pill>
           )}
         </div>
-        {meta && <div className="alm-data-sources__root-meta">{meta}</div>}
+        {meta && <div className="pv-data-sources__root-meta">{meta}</div>}
         {/* spec 048 US4: per-root detection config only applies to roots that
             carry `file_record` rows (raw/calibration). */}
         {RECONCILABLE_CATEGORIES.includes(root.category) && (
@@ -576,11 +575,11 @@ function RootCard({
 
       {/* Right: kebab (⋯) menu — issue #562 consolidates every per-source
           action here instead of a scattered button row. */}
-      <div className="alm-data-sources__root-actions" ref={menuRef}>
+      <div className="pv-data-sources__root-actions" ref={menuRef}>
         <Btn
           size="sm"
           variant="ghost"
-          className="alm-data-sources__kebab-btn"
+          className="pv-data-sources__kebab-btn"
           aria-label={m.settings_datasources_actions_aria()}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
@@ -589,12 +588,12 @@ function RootCard({
           ⋯
         </Btn>
         {menuOpen && (
-          <div className="alm-data-sources__kebab-menu" role="menu">
+          <div className="pv-data-sources__kebab-menu" role="menu">
             {!isOffline && (
               <button
                 type="button"
                 role="menuitem"
-                className="alm-data-sources__kebab-item"
+                className="pv-data-sources__kebab-item"
                 disabled={rescanning}
                 // Stays open while in flight (unlike the other items) so the
                 // disabled/relabeled "Rescanning…" state remains visible —
@@ -608,7 +607,7 @@ function RootCard({
               <button
                 type="button"
                 role="menuitem"
-                className="alm-data-sources__kebab-item"
+                className="pv-data-sources__kebab-item"
                 data-testid={`reconcile-now-${root.id}`}
                 disabled={reconciling}
                 onClick={() => onReconcile(root)}
@@ -619,7 +618,7 @@ function RootCard({
             <button
               type="button"
               role="menuitem"
-              className="alm-data-sources__kebab-item"
+              className="pv-data-sources__kebab-item"
               onClick={() => {
                 setMenuOpen(false);
                 onRemap(root);
@@ -630,7 +629,7 @@ function RootCard({
             <button
               type="button"
               role="menuitem"
-              className="alm-data-sources__kebab-item"
+              className="pv-data-sources__kebab-item"
               onClick={() => {
                 setMenuOpen(false);
                 setEditProtectionOpen(true);
@@ -642,7 +641,7 @@ function RootCard({
               <button
                 type="button"
                 role="menuitem"
-                className="alm-data-sources__kebab-item"
+                className="pv-data-sources__kebab-item"
                 disabled={togglingActive}
                 onClick={() => {
                   setMenuOpen(false);
@@ -661,7 +660,7 @@ function RootCard({
             <button
               type="button"
               role="menuitem"
-              className="alm-data-sources__kebab-item"
+              className="pv-data-sources__kebab-item"
               onClick={() => void handleReveal()}
             >
               {revealLabel()}
@@ -673,7 +672,7 @@ function RootCard({
             <button
               type="button"
               role="menuitem"
-              className="alm-data-sources__kebab-item alm-data-sources__kebab-item--danger"
+              className="pv-data-sources__kebab-item pv-data-sources__kebab-item--danger"
               disabled={deleting}
               onClick={() => {
                 setMenuOpen(false);

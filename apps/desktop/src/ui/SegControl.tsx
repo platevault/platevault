@@ -2,12 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { forwardRef, useCallback } from 'react';
-import type { HTMLAttributes, KeyboardEvent } from 'react';
+import type { HTMLAttributes, KeyboardEvent, ReactNode } from 'react';
 
 /** A segmented-control option: a stable `value` and a display `label`. */
 export interface SegControlOption {
   value: string;
   label: string;
+  /**
+   * When set, rendered instead of the `label` text (icon-only button).
+   * `label` still supplies the button's accessible name (`aria-label`) and
+   * hover tooltip so the option stays screen-reader- and hover-discoverable
+   * without visible text (#1068).
+   */
+  icon?: ReactNode;
 }
 
 export interface SegControlProps
@@ -25,7 +32,7 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
     { options, value, onChange, danger, dangerValue, className, ...rest },
     ref,
   ) {
-    const cls = ['alm-seg', className].filter(Boolean).join(' ');
+    const cls = ['pv-seg', className].filter(Boolean).join(' ');
 
     // WAI-ARIA radio-group pattern (#1010): Left/Up selects the previous
     // option, Right/Down the next, wrapping at the ends. Moves both focus
@@ -58,19 +65,21 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
               aria-checked={active}
               tabIndex={active ? 0 : -1}
               className={[
-                'alm-seg__btn',
-                active && 'alm-seg__btn--active',
+                'pv-seg__btn',
+                active && 'pv-seg__btn--active',
                 danger &&
                   dangerValue != null &&
                   o.value === dangerValue &&
-                  'alm-seg__btn--danger',
+                  'pv-seg__btn--danger',
               ]
                 .filter(Boolean)
                 .join(' ')}
               onClick={() => onChange(o.value)}
               onKeyDown={handleKeyDown}
+              aria-label={o.icon ? o.label : undefined}
+              title={o.label}
             >
-              {o.label}
+              {o.icon ?? o.label}
             </button>
           );
         })}

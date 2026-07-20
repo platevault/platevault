@@ -66,7 +66,7 @@ const SOURCE_LABELS: Record<ValueSource, () => string> = {
 export function SourceBadge({ source }: { source: ValueSource }) {
   return (
     <span
-      className={`alm-property-table__source-badge alm-property-table__source-badge--${source}`}
+      className={`pv-property-table__source-badge pv-property-table__source-badge--${source}`}
     >
       {SOURCE_LABELS[source]()}
     </span>

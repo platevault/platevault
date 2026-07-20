@@ -9,7 +9,7 @@
  * completed area, the automatic-tick progress pulse, and the polite per-tick
  * aria-live announcement, plus reduced-motion parity.
  *
- * The checklist is only mounted inside the `.alm-onb-ring` flyout (portalled to
+ * The checklist is only mounted inside the `.pv-onb-ring` flyout (portalled to
  * `document.body`), so every test opens it first — see `openChecklist`.
  *
  * ── Mock-mode coverage limit (VC-002) ───────────────────────────────────────
@@ -59,7 +59,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		// Then it settles into the greyed, checked completed area of its group.
 		await expect(
 			page.locator(
-				`.alm-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+				`.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
 			),
 		).toBeVisible();
 	});
@@ -71,7 +71,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 		await openChecklist(page);
 
 		const done = page.locator(
-			`.alm-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+			`.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
 		);
 
 		await page.getByRole("checkbox", { name: "Review a session" }).click();
@@ -106,7 +106,7 @@ test.describe("onboarding completion choreography (spec 056 US3)", () => {
 			// … the item is in its final completed-area state immediately.
 			await expect(
 				page.locator(
-					`.alm-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+					`.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
 				),
 			).toBeVisible();
 		});

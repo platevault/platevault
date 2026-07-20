@@ -1063,11 +1063,13 @@ dependencies = [
 name = "contract_tests"
 version = "0.1.0"
 dependencies = [
+ "audit_types",
  "contracts_core",
  "domain_core",
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "time",
 ]
 
 [[package]]

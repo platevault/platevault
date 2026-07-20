@@ -57,7 +57,7 @@ export function ChecklistPopover({
 
   // The flyout is PORTALLED to <body> and positioned from the trigger's rect.
   //
-  // `.alm-sidebar` sets `overflow: hidden`, so an absolutely-positioned panel
+  // `.pv-sidebar` sets `overflow: hidden`, so an absolutely-positioned panel
   // sitting beside the sidebar is scissored away entirely — it is in the DOM,
   // `aria-expanded` is true, and nothing is visible. (This also silently broke
   // the icon-collapsed popover, which has always lived in the same clipped
@@ -109,13 +109,13 @@ export function ChecklistPopover({
   const progressText = m.onboarding_section_progress({ done, total });
 
   return (
-    <div className="alm-onb-ring-wrap" ref={wrapRef}>
+    <div className="pv-onb-ring-wrap" ref={wrapRef}>
       <button
         type="button"
         className={clsx(
-          'alm-onb-ring',
-          labelled && 'alm-onb-ring--labelled',
-          choreo.pulseActive && 'alm-onb-ring--pulse',
+          'pv-onb-ring',
+          labelled && 'pv-onb-ring--labelled',
+          choreo.pulseActive && 'pv-onb-ring--pulse',
         )}
         aria-label={progressText}
         aria-expanded={open}
@@ -145,12 +145,12 @@ export function ChecklistPopover({
                 x2="100%"
                 y2="0%"
               >
-                <stop offset="0%" className="alm-onb-ring__grad-from" />
-                <stop offset="100%" className="alm-onb-ring__grad-to" />
+                <stop offset="0%" className="pv-onb-ring__grad-from" />
+                <stop offset="100%" className="pv-onb-ring__grad-to" />
               </linearGradient>
             </defs>
             <circle
-              className="alm-onb-ring__track"
+              className="pv-onb-ring__track"
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
@@ -158,7 +158,7 @@ export function ChecklistPopover({
               strokeWidth={RING_STROKE}
             />
             <circle
-              className="alm-onb-ring__fill"
+              className="pv-onb-ring__fill"
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
@@ -174,10 +174,10 @@ export function ChecklistPopover({
         </span>
         {labelled && (
           <>
-            <span className="alm-onb-ring__label">
+            <span className="pv-onb-ring__label">
               {m.onboarding_section_title()}
             </span>
-            <span className="alm-onb-ring__count" aria-hidden>
+            <span className="pv-onb-ring__count" aria-hidden>
               {done}/{total}
             </span>
           </>
@@ -188,7 +188,7 @@ export function ChecklistPopover({
         createPortal(
           <div
             ref={panelRef}
-            className="alm-onb-popover"
+            className="pv-onb-popover"
             role="region"
             aria-label={progressText}
             // eslint-disable-next-line no-restricted-syntax -- dynamic: the panel is portalled out of the clipping sidebar, so its position must be computed from the trigger's measured rect at open time; no static class can express it.

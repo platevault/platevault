@@ -10,59 +10,59 @@
  * skipping it leaves our custom tooltip with NO styling of its own — it
  * rendered as bare text over the dim overlay with OS-default buttons until
  * this file existed. Presence-only e2e assertions
- * (`document.querySelector('.alm-onboarding-tooltip')`) cannot catch that, so
+ * (`document.querySelector('.pv-onboarding-tooltip')`) cannot catch that, so
  * `walk.contract.test.tsx` asserts the card rule is actually loaded.
  *
- * Surface tokens mirror `.alm-onb-popover` in checklist.css (raised surface +
+ * Surface tokens mirror `.pv-onb-popover` in checklist.css (raised surface +
  * border + shadow + radius) so the walk and the checklist read as one system.
- * Controls reuse the shared `Btn` primitive (`.alm-btn`, primitives.css) — no
+ * Controls reuse the shared `Btn` primitive (`.pv-btn`, primitives.css) — no
  * button styling is redeclared here, per the one-component/one-class rule.
  * Tokens only, no raw colours.
  */
 
-.alm-onboarding-tooltip {
+.pv-onboarding-tooltip {
   width: 320px;
-  max-width: calc(100vw - var(--alm-sp-6));
-  padding: var(--alm-sp-4);
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  box-shadow: var(--alm-shadow-sm);
-  color: var(--alm-text);
-  font-size: var(--alm-text-sm);
+  max-width: calc(100vw - var(--pv-sp-6));
+  padding: var(--pv-sp-4);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  box-shadow: var(--pv-shadow-sm);
+  color: var(--pv-text);
+  font-size: var(--pv-text-sm);
 }
 
-.alm-onboarding-tooltip__header {
+.pv-onboarding-tooltip__header {
   display: flex;
   align-items: flex-start;
-  gap: var(--alm-sp-2);
-  margin-bottom: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-2);
 }
 
-.alm-onboarding-tooltip__title {
+.pv-onboarding-tooltip__title {
   flex: 1;
   margin: 0;
-  font-size: var(--alm-text-md);
-  font-weight: var(--alm-weight-semibold);
-  line-height: var(--alm-leading-tight);
-  color: var(--alm-text);
+  font-size: var(--pv-text-md);
+  font-weight: var(--pv-weight-semibold);
+  line-height: var(--pv-leading-tight);
+  color: var(--pv-text);
 }
 
-.alm-onboarding-tooltip__body {
-  margin-bottom: var(--alm-sp-4);
-  color: var(--alm-text-secondary);
-  line-height: var(--alm-leading-normal, 1.5);
+.pv-onboarding-tooltip__body {
+  margin-bottom: var(--pv-sp-4);
+  color: var(--pv-text-secondary);
+  line-height: var(--pv-leading-normal, 1.5);
 }
 
-.alm-onboarding-tooltip__footer {
+.pv-onboarding-tooltip__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-onboarding-tooltip__nav {
+.pv-onboarding-tooltip__nav {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }

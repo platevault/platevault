@@ -89,6 +89,13 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
 /// polling deadline (CI: both ubuntu and windows hung on
 /// `wait_testid_prefix_present("sessions-row-", ..)`, ruling out a timing
 /// flake). An explicit `driver.refresh()` is unambiguous.
+///
+/// KEPT as a reload (#1113 reviewed) rather than converted to
+/// `invalidate_query`: this helper is route-generic — it re-enters whatever
+/// route the app is on and has no single query key to invalidate — and its
+/// callers re-find every element afterwards, so no handle survives the
+/// reload. A caller that needs to settle ONE query before asserting on the
+/// DOM should use `E2eApp::invalidate_query` instead of this.
 async fn reload_current_route(app: &E2eApp) -> anyhow::Result<()> {
     app.driver.refresh().await.context("page refresh failed")?;
     app.wait_document_ready(Duration::from_secs(10)).await?;

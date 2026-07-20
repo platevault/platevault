@@ -556,7 +556,7 @@ export function TargetSearch({
   );
 
   return (
-    <div className="alm-target-search">
+    <div className="pv-target-search">
       <Combobox.Root<TargetSuggestion>
         items={suggestions}
         // Selection stays uncontrolled: we react via `onValueChange` and keep
@@ -585,7 +585,7 @@ export function TargetSearch({
         {}
         <label
           className={
-            hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'
+            hideLabel ? 'pv-target-search__label--sr' : 'pv-field-label'
           }
           htmlFor={id}
         >
@@ -594,7 +594,7 @@ export function TargetSearch({
         <Combobox.Input
           ref={inputRef}
           id={id}
-          className="alm-input alm-target-search__input"
+          className="pv-input pv-target-search__input"
           autoComplete="off"
           spellCheck={false}
           aria-label={label}
@@ -629,18 +629,18 @@ export function TargetSearch({
 
         {showFilters && (
           <div
-            className="alm-target-search__filters"
+            className="pv-target-search__filters"
             role="group"
             aria-label={m.cmp_target_search_filters_aria()}
           >
             <label
-              className="alm-target-search__filter-label"
+              className="pv-target-search__filter-label"
               htmlFor={typeFilterId}
             >
               {m.cmp_target_search_type_label()}
               <select
                 id={typeFilterId}
-                className="alm-select alm-target-search__filter-select"
+                className="pv-select pv-target-search__filter-select"
                 value={typeSel}
                 onChange={(e) =>
                   setTypeSel(e.target.value as TargetObjectType | '')
@@ -655,13 +655,13 @@ export function TargetSearch({
               </select>
             </label>
             <label
-              className="alm-target-search__filter-label"
+              className="pv-target-search__filter-label"
               htmlFor={catalogFilterId}
             >
               {m.cmp_target_search_catalogue_label()}
               <select
                 id={catalogFilterId}
-                className="alm-select alm-target-search__filter-select"
+                className="pv-select pv-target-search__filter-select"
                 value={catalogSel}
                 onChange={(e) =>
                   setCatalogSel(e.target.value as TargetCatalogId | '')
@@ -679,7 +679,7 @@ export function TargetSearch({
         )}
 
         {error && (
-          <span id={`${id}-error`} role="alert" className="alm-field-error">
+          <span id={`${id}-error`} role="alert" className="pv-field-error">
             {error}
           </span>
         )}
@@ -710,19 +710,19 @@ export function TargetSearch({
          */}
         <Combobox.Portal keepMounted>
           <Combobox.Positioner
-            className="alm-target-search__positioner"
+            className="pv-target-search__positioner"
             sideOffset={4}
             align="start"
           >
-            <Combobox.Popup className="alm-target-search__popup">
+            <Combobox.Popup className="pv-target-search__popup">
               <Combobox.List
                 ref={scrollRef}
-                className="alm-target-search__list alm-virtual-scroll"
+                className="pv-target-search__list pv-virtual-scroll"
                 data-virtual-scroll="true"
                 aria-label={m.cmp_target_search_suggestions_aria()}
               >
                 {loading && suggestions.length === 0 && (
-                  <Combobox.Status className="alm-target-search__status">
+                  <Combobox.Status className="pv-target-search__status">
                     {m.cmp_target_search_searching()}
                   </Combobox.Status>
                 )}
@@ -736,7 +736,7 @@ export function TargetSearch({
                   !resolving &&
                   suggestions.length === 0 &&
                   query.trim().length < MIN_RESOLVE_LEN && (
-                    <Combobox.Status className="alm-target-search__status">
+                    <Combobox.Status className="pv-target-search__status">
                       {m.cmp_target_search_type_more()}
                     </Combobox.Status>
                   )}
@@ -750,13 +750,13 @@ export function TargetSearch({
                  * click or the Enter accelerator below invokes it.
                  */}
                 {harderOffered && (
-                  <div className="alm-target-search__status alm-target-search__no-match">
+                  <div className="pv-target-search__status pv-target-search__no-match">
                     <Combobox.Status>
                       {m.cmp_target_search_no_results_hint()}
                     </Combobox.Status>
                     <button
                       type="button"
-                      className="alm-target-search__override"
+                      className="pv-target-search__override"
                       onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -779,23 +779,23 @@ export function TargetSearch({
                  * say so instead of rendering nothing.
                  */}
                 {offlineNoticeOffered && (
-                  <Combobox.Status className="alm-target-search__status">
+                  <Combobox.Status className="pv-target-search__status">
                     {m.settings_resolver_online_off_info()}
                   </Combobox.Status>
                 )}
                 {harderState === 'searching' && (
-                  <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
+                  <Combobox.Status className="pv-target-search__status pv-target-search__status--resolving">
                     {m.cmp_target_search_search_harder_searching()}
                   </Combobox.Status>
                 )}
                 {harderState === 'no-results' && (
-                  <Combobox.Status className="alm-target-search__status">
+                  <Combobox.Status className="pv-target-search__status">
                     {m.cmp_target_search_search_harder_no_results()}
                   </Combobox.Status>
                 )}
                 {suggestions.length > 0 && (
                   <div
-                    className="alm-virtual-inner"
+                    className="pv-virtual-inner"
                     // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (totalSize)
                     style={{ height: `${totalSize}px`, position: 'relative' }}
                   >
@@ -810,7 +810,7 @@ export function TargetSearch({
                           value={s}
                           ref={virtualizer.measureElement}
                           data-index={i}
-                          className="alm-target-search__option"
+                          className="pv-target-search__option"
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per suggestion row
                           style={{
                             position: 'absolute',
@@ -820,15 +820,15 @@ export function TargetSearch({
                             transform: `translateY(${virtualRow.start}px)`,
                           }}
                         >
-                          <span className="alm-target-search__primary">
+                          <span className="pv-target-search__primary">
                             {s.primaryDesignation}
                           </span>
                           {secondary && secondary !== s.primaryDesignation && (
-                            <span className="alm-target-search__secondary">
+                            <span className="pv-target-search__secondary">
                               {secondary}
                             </span>
                           )}
-                          <span className="alm-target-search__badges">
+                          <span className="pv-target-search__badges">
                             <Pill variant="info">
                               {objectTypeLabel(s.objectType)}
                             </Pill>
@@ -844,7 +844,7 @@ export function TargetSearch({
                             {enableOverride && (
                               <button
                                 type="button"
-                                className="alm-target-search__override"
+                                className="pv-target-search__override"
                                 aria-label={m.cmp_target_search_set_primary_aria(
                                   {
                                     query: query.trim(),
@@ -878,7 +878,7 @@ export function TargetSearch({
                   </div>
                 )}
                 {resolving && (
-                  <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
+                  <Combobox.Status className="pv-target-search__status pv-target-search__status--resolving">
                     {m.cmp_target_search_searching_simbad()}
                   </Combobox.Status>
                 )}

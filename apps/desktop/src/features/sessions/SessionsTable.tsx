@@ -17,7 +17,7 @@
  * existing SessionDetail in the bottom detail panel on SessionsPage.
  *
  * Inbox-parity (spec 043 §4): the table renders inside the shared
- * `.alm-listtable` viewport, windows its rows via the shared Table's
+ * `.pv-listtable` viewport, windows its rows via the shared Table's
  * `virtualized` padding-spacer mode (sticky header included), carries a
  * per-row `sessions-row-<id>` testid, shows the row's target identity in the
  * Target cell even when flat (the default), and pins a grouping-hint footer
@@ -149,25 +149,25 @@ const COLUMNS: Array<{
     key: 'frames',
     label: () => m.projects_wizard_col_frames(),
     sort: 'frames',
-    className: 'alm-cell--num',
+    className: 'pv-cell--num',
   },
   {
     key: 'integration',
     label: () => m.projects_wizard_col_integration(),
     sort: 'exposure',
-    className: 'alm-cell--mono',
+    className: 'pv-cell--mono',
   },
   {
     key: 'night',
     label: () => m.sessions_col_night(),
     sort: 'night',
-    className: 'alm-cell--mono',
+    className: 'pv-cell--mono',
   },
   {
     key: 'camera',
     label: () => m.settings_calmatch_camera(),
     sort: 'camera',
-    className: 'alm-cell--muted',
+    className: 'pv-cell--muted',
   },
   { key: 'projects', label: () => m.common_projects() },
 ];
@@ -257,7 +257,7 @@ export function SessionsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as SessionSortCol)}
-        ariaLabel={m.sessions_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ) : (
       c.label()
@@ -270,21 +270,21 @@ export function SessionsTable({
         if (row.kind === 'header') {
           const { node, depth, path, collapsed: isCollapsed } = row;
           return {
-            _rowClassName: 'alm-listgroup',
+            _rowClassName: 'pv-listgroup',
             _indent: tableIndent(depth),
             target: (
               <button
                 type="button"
-                className="alm-listgroup__cell"
+                className="pv-listgroup__cell"
                 data-testid={`sessions-group-${node.dimension}-${node.key}`}
                 aria-expanded={!isCollapsed}
                 onClick={() => toggle(path)}
               >
-                <span className="alm-listgroup__caret" aria-hidden="true">
+                <span className="pv-listgroup__caret" aria-hidden="true">
                   {isCollapsed ? '▸' : '▾'}
                 </span>
-                <span className="alm-listgroup__label">{node.label}</span>
-                <span className="alm-listgroup__count">{node.count}</span>
+                <span className="pv-listgroup__label">{node.label}</span>
+                <span className="pv-listgroup__count">{node.count}</span>
               </button>
             ),
             ...EMPTY_CELLS,
@@ -303,13 +303,13 @@ export function SessionsTable({
         return {
           _testid: `sessions-row-${s.id}`,
           _rowClassName:
-            'alm-sessions-table__row' +
-            (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
+            'pv-sessions-table__row' +
+            (selected === s.id ? ' pv-sessions-table__row--selected' : ''),
           _onClick: () => onSelect(s.id),
           _selected: selected === s.id,
           _indent: indentPx || undefined,
           target: (
-            <span className="alm-sessions-cell--target">
+            <span className="pv-sessions-cell--target">
               {sessionDisplayName(s)}
               {connLabel && sourceState && (
                 <Pill
@@ -328,7 +328,7 @@ export function SessionsTable({
           camera: s.camera ?? '—',
           projects:
             projects.length > 0 ? (
-              <span className="alm-sessions-cell__projects">
+              <span className="pv-sessions-cell__projects">
                 {projects.map((p) => (
                   <Pill key={p.id} variant="info">
                     {p.name}
@@ -336,7 +336,7 @@ export function SessionsTable({
                 ))}
               </span>
             ) : (
-              <span className="alm-cell--muted">—</span>
+              <span className="pv-cell--muted">—</span>
             ),
         };
       }),
@@ -351,27 +351,27 @@ export function SessionsTable({
     : null;
 
   return (
-    <div className="alm-listtable" data-testid="sessions-list">
+    <div className="pv-listtable" data-testid="sessions-list">
       {visualRows.length === 0 && loading ? (
-        <div className="alm-listtable__empty">
+        <div className="pv-listtable__empty">
           <Skeleton variant="block" count={8} label={m.common_loading()} />
         </div>
       ) : visualRows.length === 0 && !loading ? (
-        <div className="alm-listtable__empty">{m.sessions_no_match()}</div>
+        <div className="pv-listtable__empty">{m.sessions_no_match()}</div>
       ) : (
         <Table
-          className="alm-sessions-table"
+          className="pv-sessions-table"
           columns={columns}
           rows={rows}
           virtualized
           estimateRowHeight={36}
-          scrollClassName="alm-listtable__scroll"
+          scrollClassName="pv-listtable__scroll"
           scrollTestId="sessions-virtual-sizer"
         />
       )}
       {groupingHint && (
         <div
-          className="alm-listtable__foot"
+          className="pv-listtable__foot"
           data-testid="sessions-grouping-hint"
         >
           {groupingHint}

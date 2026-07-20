@@ -3,55 +3,55 @@
  * Targets — My Targets vs Planner split (task #40, spec 043 §4).
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
  * no raw hex/rgb/ms.
  *
- * Layout: the Targets list column (the left pane of .alm-two-pane) gains a
+ * Layout: the Targets list column (the left pane of .pv-two-pane) gains a
  * fixed tab strip on top ("My Targets" | "Planner") with the existing
  * ListSidebar (search + density + virtualized rows) filling the rest below it.
- * .alm-targets-list IS the flex-column child of .alm-two-pane, so it owns the
- * list-column width and lets the inner .alm-list-sidebar stretch to fill.
+ * .pv-targets-list IS the flex-column child of .pv-two-pane, so it owns the
+ * list-column width and lets the inner .pv-list-sidebar stretch to fill.
  * ======================================================================== */
 
-.alm-targets-list {
-  width: var(--alm-list-width);
+.pv-targets-list {
+  width: var(--pv-list-width);
   min-width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--alm-border);
-  background: var(--alm-bg);
+  border-right: 1px solid var(--pv-border);
+  background: var(--pv-bg);
 }
 
 /* Tab strip pinned above the list; never scrolls. */
-.alm-targets-list__tabs {
+.pv-targets-list__tabs {
   flex-shrink: 0;
   display: flex;
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border);
-  background: var(--alm-surface);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border-bottom: 1px solid var(--pv-border);
+  background: var(--pv-surface);
 }
 
 /* The SegControl should fill the strip width so the two tabs split evenly. */
-.alm-targets-list__tabs .alm-seg {
+.pv-targets-list__tabs .pv-seg {
   flex: 1;
 }
-.alm-targets-list__tabs .alm-seg__btn {
+.pv-targets-list__tabs .pv-seg__btn {
   flex: 1;
 }
 
 /* Inner ListSidebar / EmptyState fill the remaining height; the wrapper now
    owns the column width, so the nested sidebar stretches rather than keeping
-   its own fixed --alm-list-width. */
-.alm-targets-list .alm-list-sidebar {
+   its own fixed --pv-list-width. */
+.pv-targets-list .pv-list-sidebar {
   width: 100%;
   min-width: 0;
   flex: 1;
   min-height: 0;
   border-right: none;
 }
-.alm-targets-list .alm-empty {
+.pv-targets-list .pv-empty {
   flex: 1;
 }
 
@@ -61,10 +61,10 @@
  * usage count (task #39, spec 043 §4).
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
  * no raw hex/rgb/ms.
  *
- * The existing `.alm-match-candidates__*` rules (status row, confidence bar,
+ * The existing `.pv-match-candidates__*` rules (status row, confidence bar,
  * dimension breakdown, assign column) already live in components.css and are
  * reused unchanged — only the NEW selectors below are added here.
  * ======================================================================== */
@@ -72,16 +72,16 @@
 /* --- List row usage count -------------------------------------------------
  * "3 sessions · 1 project" / "unused" appended to a master row's meta line.
  * Quiet, secondary — it is reuse context, not the row's identity. */
-.alm-masters-list__usage {
-  color: var(--alm-text-muted);
+.pv-masters-list__usage {
+  color: var(--pv-text-muted);
 }
 
 /* --- Compatible-sessions match table (detail hero) ------------------------
  * Session identifier cell. Monospace + truncation already supplied by the
- * shared `.alm-mono`; this only constrains width and color so the table stays
+ * shared `.pv-mono`; this only constrains width and color so the table stays
  * readable when session ids are long. */
-.alm-match-candidates__session-id {
-  color: var(--alm-text-secondary);
+.pv-match-candidates__session-id {
+  color: var(--pv-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -96,32 +96,32 @@
  * spec mock (target · integration · size · cleanup) are NOT on the list DTO
  * and are intentionally omitted (see // STUB: notes in ProjectsList.tsx).
  *
- * Token-only (--alm-*). Do NOT import; the parent merges these into the
+ * Token-only (--pv-*). Do NOT import; the parent merges these into the
  * compiled stylesheet during the components.css split (task #60).
  */
 
 /* Rich meta line: wraps to a second line on a narrow sidebar instead of
    truncating, so every present field stays scannable. */
-.alm-projects-list__meta {
+.pv-projects-list__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--alm-sp-1);
-  row-gap: var(--alm-sp-0);
+  gap: var(--pv-sp-1);
+  row-gap: var(--pv-sp-0);
 }
 
 /* A single labelled field segment (e.g. tool, sources, updated). */
-.alm-projects-list__meta-field {
+.pv-projects-list__meta-field {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
   white-space: nowrap;
 }
 
 /* The leading tool segment reads as the row's secondary identity. */
-.alm-projects-list__meta-tool {
-  color: var(--alm-text-muted);
-  font-weight: var(--alm-weight-medium);
+.pv-projects-list__meta-tool {
+  color: var(--pv-text-muted);
+  font-weight: var(--pv-weight-medium);
 }
 
 /* === merged from .cssblocks/inbox-warn.css (wave 2, spec-043) === */
@@ -131,10 +131,10 @@
  * 043 §4 Inbox).
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
  * no raw hex/rgb/ms.
  *
- * The shared `.alm-banner` / `.alm-banner--warn|danger` rules already live in
+ * The shared `.pv-banner` / `.pv-banner--warn|danger` rules already live in
  * components.css and supply the alert chrome (bg, color, border, padding,
  * radius). These NEW selectors layer the alert's internal structure on top:
  * a message column and an inline-action region so the call-to-action lives
@@ -143,9 +143,9 @@
 
 /* The alert becomes a flex row: message takes the available width, the inline
  * action sits at the trailing edge and never shrinks. Wraps to a new line on
- * narrow panes so the button is never clipped. `.alm-banner` already sets
+ * narrow panes so the button is never clipped. `.pv-banner` already sets
  * display:flex + gap; we only override alignment/wrapping here. */
-.alm-inbox-alert {
+.pv-inbox-alert {
   align-items: flex-start;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -154,35 +154,35 @@
 /* Message column: stacked title + body text. Flex-grows so the action is
  * pushed to the trailing edge; min-width:0 lets long text wrap rather than
  * overflow the alert. */
-.alm-inbox-alert__msg {
+.pv-inbox-alert__msg {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex: 1 1 16rem;
   min-width: 0;
 }
 
 /* Alert title — slightly stronger than the body so the alert reads as a
- * heading + explanation pair. Inherits the variant color from `.alm-banner`. */
-.alm-inbox-alert__title {
-  font-weight: var(--alm-weight-semibold);
+ * heading + explanation pair. Inherits the variant color from `.pv-banner`. */
+.pv-inbox-alert__title {
+  font-weight: var(--pv-weight-semibold);
 }
 
 /* Alert body — the explanation / why-blocked sentence. Quieter than the title
  * but still inherits the variant color for contrast within the tinted alert. */
-.alm-inbox-alert__body {
-  font-size: var(--alm-text-xs);
-  line-height: var(--alm-leading-normal);
+.pv-inbox-alert__body {
+  font-size: var(--pv-text-xs);
+  line-height: var(--pv-leading-normal);
 }
 
 /* Inline-action region: holds the call-to-action button(s) inside the alert.
  * Does not shrink, so the action stays a stable hit target as the message
  * column flexes. */
-.alm-inbox-alert__action {
+.pv-inbox-alert__action {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* === merged from .cssblocks/projects-detail.css (wave 2, spec-043) === */
@@ -190,43 +190,43 @@
  * projects-detail.css — spec 043 §4 (task #44)
  *
  * CSS block for the Projects detail Outputs + Cleanup-preview sections.
- * Token-only (--alm-*). NOT imported here — the parent build merges
+ * Token-only (--pv-*). NOT imported here — the parent build merges
  * apps/desktop/.cssblocks/* into the stylesheet. Do not add raw hex/rgb/ms.
  *
  * Classes already owned by src/styles/components.css and reused as-is (NOT
- * redefined here): .alm-project-detail__outputs, .alm-project-detail__cleanup-preview,
- * .alm-project-detail__cleanup-note, .alm-project-detail__cleanup-protected.
+ * redefined here): .pv-project-detail__outputs, .pv-project-detail__cleanup-preview,
+ * .pv-project-detail__cleanup-note, .pv-project-detail__cleanup-protected.
  * Only the NEW classes introduced by OutputsCleanupSections.tsx live below.
  */
 
 /* ── Outputs table cells ──────────────────────────────────────────────────── */
-.alm-project-detail__output-name {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
+.pv-project-detail__output-name {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
 }
 
-.alm-project-detail__output-format {
+.pv-project-detail__output-format {
 
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
+  letter-spacing: var(--pv-tracking-normal);
 }
 
 /* ── Cleanup: protected-category block ────────────────────────────────────── */
-.alm-project-detail__cleanup-protected-head {
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-medium);
+.pv-project-detail__cleanup-protected-head {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
-  color: var(--alm-text-muted);
-  padding: var(--alm-sp-2) 0 var(--alm-sp-1);
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
+  padding: var(--pv-sp-2) 0 var(--pv-sp-1);
 }
 
-.alm-project-detail__cleanup-protected-list {
+.pv-project-detail__cleanup-protected-list {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
 /* === merged from .cssblocks/naming.css (wave 2, spec-043) === */
@@ -235,120 +235,120 @@
  * Spec 043 §4: pattern editor + buttons on SEPARATE lines, plus a working
  * live preview row per frame type.
  *
- * Token-only (--alm-*). Do NOT import — the parent merges .cssblocks/*.css
+ * Token-only (--pv-*). Do NOT import — the parent merges .cssblocks/*.css
  * into the compiled stylesheet. These classes supersede the side-by-side
- * `.alm-naming__pertype-row-inner` layout in src/styles/components.css.
+ * `.pv-naming__pertype-row-inner` layout in src/styles/components.css.
  */
 
 /* Stack the chip editor, live preview, and actions vertically. */
-.alm-naming__pertype-stack {
+.pv-naming__pertype-stack {
 	display: flex;
 	flex-direction: column;
-	gap: var(--alm-sp-2);
+	gap: var(--pv-sp-2);
 	align-items: stretch;
 }
 
 /* Live preview row: resolved sample path for this frame type. */
-.alm-naming__pertype-preview {
-	font-size: var(--alm-text-xs);
-	color: var(--alm-text-muted);
-	padding: var(--alm-sp-1) var(--alm-sp-2);
-	background: var(--alm-surface-raised);
-	border: 1px solid var(--alm-border-subtle);
-	border-radius: var(--alm-radius-sm);
+.pv-naming__pertype-preview {
+	font-size: var(--pv-text-xs);
+	color: var(--pv-text-muted);
+	padding: var(--pv-sp-1) var(--pv-sp-2);
+	background: var(--pv-surface-raised);
+	border: 1px solid var(--pv-border-subtle);
+	border-radius: var(--pv-radius-sm);
 }
 
-.alm-naming__pertype-preview-label {
-	color: var(--alm-text-faint);
+.pv-naming__pertype-preview-label {
+	color: var(--pv-text-faint);
 }
 
-.alm-naming__pertype-preview-code {
-	font-size: var(--alm-text-xs);
-	color: var(--alm-text-secondary);
+.pv-naming__pertype-preview-code {
+	font-size: var(--pv-text-xs);
+	color: var(--pv-text-secondary);
 }
 
-.alm-naming__pertype-preview-default {
-	margin-left: var(--alm-sp-1);
-	color: var(--alm-text-faint);
+.pv-naming__pertype-preview-default {
+	margin-left: var(--pv-sp-1);
+	color: var(--pv-text-faint);
 	font-style: italic;
 }
 
 /* Buttons line — sits below the editor + preview. */
-.alm-naming__pertype-actions {
+.pv-naming__pertype-actions {
 	display: flex;
-	gap: var(--alm-sp-2);
+	gap: var(--pv-sp-2);
 }
 
 /* === merged from .cssblocks/calibration-layout.css (adoption wave, spec-043) === */
 /*
  * calibration-layout.css — spec 043 §4 Calibration shared-layout adoption (#73).
  *
- * Token-only (--alm-*) styling for the full-width MastersTable that replaced the
+ * Token-only (--pv-*) styling for the full-width MastersTable that replaced the
  * narrow MastersList sidebar. Mirrors the SessionsTable surface conventions so
  * Calibration reads identically to Sessions. DO NOT @import — the parent build
  * merges these blocks into the shared stylesheet.
  */
 
 /* === MASTERS TABLE (full-width, grouped by kind) === */
-.alm-calib-table {
-  /* Inherits .alm-table base; tighten cell padding for density. */
+.pv-calib-table {
+  /* Inherits .pv-table base; tighten cell padding for density. */
   table-layout: auto;
 }
-.alm-calib-table th {
+.pv-calib-table th {
   user-select: none;
 }
-.alm-calib-table td,
-.alm-calib-table th {
-  padding: var(--alm-sp-1) var(--alm-sp-3);
+.pv-calib-table td,
+.pv-calib-table th {
+  padding: var(--pv-sp-1) var(--pv-sp-3);
 }
 
-/* Sortable column header consolidated into the shared .alm-sorth
+/* Sortable column header consolidated into the shared .pv-sorth
  * (tables-lists.css) — used via the <SortHeader> component. */
 
-/* Group-header rows use the shared .alm-listgroup class (tables-lists.css). */
+/* Group-header rows use the shared .pv-listgroup class (tables-lists.css). */
 
 /* Selectable master rows. */
-.alm-calib-table__row {
+.pv-calib-table__row {
   cursor: pointer;
 }
-.alm-calib-table__row:hover td {
-  background: var(--alm-surface);
+.pv-calib-table__row:hover td {
+  background: var(--pv-surface);
 }
-.alm-calib-table__row--selected td {
-  background: var(--alm-accent-bg);
+.pv-calib-table__row--selected td {
+  background: var(--pv-accent-bg);
 }
 
 /* Master cell: kind pill + readable label + optional aging pill. */
-.alm-calib-cell__master {
+.pv-calib-cell__master {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-wrap: wrap;
 }
-.alm-calib-cell__master-label {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
+.pv-calib-cell__master-label {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
 }
 
 /* Cell helpers (token-only). */
-.alm-calib-cell--num {
+.pv-calib-cell--num {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-.alm-calib-cell--mono {
-  font-family: var(--alm-font-mono);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
+.pv-calib-cell--mono {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
 }
-.alm-calib-cell--muted {
-  color: var(--alm-text-muted);
+.pv-calib-cell--muted {
+  color: var(--pv-text-muted);
 }
 
 /* Status surfaces (loading / error / empty) shown in place of the table. */
-.alm-calib-table__status {
-  padding: var(--alm-sp-5);
+.pv-calib-table__status {
+  padding: var(--pv-sp-5);
   text-align: center;
-  color: var(--alm-text-muted);
+  color: var(--pv-text-muted);
 }
 
 /* === merged from .cssblocks/projects-layout.css (adoption wave, spec-043) === */
@@ -358,174 +358,174 @@
  * stepper (#74).
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
  * no raw hex/rgb/ms. No JSX inline styles — every selector here backs a
  * className used by ProjectsTable.tsx / ProjectLifecycleStepper.tsx /
  * ProjectDetail.tsx.
  *
- * Reuses the already-merged shared list-page primitives (.alm-topbar*,
- * .alm-filterbar*, .alm-listpage__*) — those are NOT redefined here. Also
- * reuses .alm-project-detail__target-info / __target-name / __target-common
+ * Reuses the already-merged shared list-page primitives (.pv-topbar*,
+ * .pv-filterbar*, .pv-listpage__*) — those are NOT redefined here. Also
+ * reuses .pv-project-detail__target-info / __target-name / __target-common
  * (owned by components.css) for the inline target block; only the NEW
  * __target-label child is added below.
  * ======================================================================== */
 
-/* --- Projects dense sortable table (mirrors .alm-sessions-table) ---------- */
-.alm-projects-table {
+/* --- Projects dense sortable table (mirrors .pv-sessions-table) ---------- */
+.pv-projects-table {
   table-layout: auto;
 }
-.alm-projects-table th { user-select: none; }
-.alm-projects-table td,
-.alm-projects-table th {
-  padding: var(--alm-sp-1) var(--alm-sp-3);
+.pv-projects-table th { user-select: none; }
+.pv-projects-table td,
+.pv-projects-table th {
+  padding: var(--pv-sp-1) var(--pv-sp-3);
 }
 
 /* Selectable project rows. */
-.alm-projects-table__row { cursor: pointer; }
-.alm-projects-table__row:hover td { background: var(--alm-surface); }
-.alm-projects-table__row--selected td {
-  background: var(--alm-accent-bg);
+.pv-projects-table__row { cursor: pointer; }
+.pv-projects-table__row:hover td { background: var(--pv-surface); }
+.pv-projects-table__row--selected td {
+  background: var(--pv-accent-bg);
 }
 
 /* Name cell: primary identity + optional blocked icon + drift badge. */
-.alm-projects-table__name {
+.pv-projects-table__name {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
+  gap: var(--pv-sp-1);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
 }
-.alm-projects-table__blocked-icon {
-  color: var(--alm-danger);
+.pv-projects-table__blocked-icon {
+  color: var(--pv-danger);
   flex-shrink: 0;
 }
-.alm-projects-table__drift-badge {
+.pv-projects-table__drift-badge {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-0);
-  margin-left: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-normal);
-  color: var(--alm-warn);
+  gap: var(--pv-sp-0);
+  margin-left: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-normal);
+  color: var(--pv-warn);
 }
 
 /* Cell helpers (token-only). */
-.alm-projects-table__cell--muted { color: var(--alm-text-muted); }
-.alm-projects-table__cell--num {
+.pv-projects-table__cell--muted { color: var(--pv-text-muted); }
+.pv-projects-table__cell--num {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-.alm-projects-table__cell--mono {
-  font-family: var(--alm-font-mono);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
+.pv-projects-table__cell--mono {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
 }
-.alm-projects-table__dash { color: var(--alm-text-muted); }
+.pv-projects-table__dash { color: var(--pv-text-muted); }
 
-/* Sortable column header consolidated into the shared .alm-sorth (see
+/* Sortable column header consolidated into the shared .pv-sorth (see
  * tables-lists.css) — used via the <SortHeader> component. */
 
 /* Empty + footer states. */
-.alm-projects-table__empty {
-  padding: var(--alm-sp-5);
+.pv-projects-table__empty {
+  padding: var(--pv-sp-5);
   text-align: center;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }
-.alm-projects-table__footer {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  border-top: 1px solid var(--alm-border-subtle);
+.pv-projects-table__footer {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  border-top: 1px solid var(--pv-border-subtle);
 }
 
 /* --- Compact horizontal lifecycle stepper (#74) --------------------------- */
-/* Replaces the vertical .alm-lifecycle rail inside the Projects detail. Stage
+/* Replaces the vertical .pv-lifecycle rail inside the Projects detail. Stage
  * chips flow horizontally (wrapping on narrow panes); the current chip is
  * highlighted, prior chips read as done, and an off-track project gets a
  * trailing danger chip. A single next-action line sits beneath. */
-.alm-stepper {
+.pv-stepper {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border-subtle);
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-3);
+  border-bottom: 1px solid var(--pv-border-subtle);
 }
-.alm-stepper__track {
+.pv-stepper__track {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.alm-stepper__chip {
+.pv-stepper__chip {
   display: inline-flex;
   align-items: center;
-  padding: var(--alm-sp-0) var(--alm-sp-2);
-  font-size: var(--alm-text-xs);
+  padding: var(--pv-sp-0) var(--pv-sp-2);
+  font-size: var(--pv-text-xs);
   text-transform: capitalize;
-  color: var(--alm-text-muted);
-  background: var(--alm-surface);
-  border: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-lg);
+  color: var(--pv-text-muted);
+  background: var(--pv-surface);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-lg);
   white-space: nowrap;
 }
-.alm-stepper__chip--done {
-  color: var(--alm-text-secondary);
-  border-color: var(--alm-border);
+.pv-stepper__chip--done {
+  color: var(--pv-text-secondary);
+  border-color: var(--pv-border);
 }
-.alm-stepper__chip--active {
-  color: var(--alm-accent-text);
-  background: var(--alm-accent-bg);
-  border-color: var(--alm-accent);
-  font-weight: var(--alm-weight-semibold);
+.pv-stepper__chip--active {
+  color: var(--pv-accent-text);
+  background: var(--pv-accent-bg);
+  border-color: var(--pv-accent);
+  font-weight: var(--pv-weight-semibold);
 }
-.alm-stepper__chip--blocked {
-  color: var(--alm-danger);
-  background: var(--alm-danger-bg);
-  border-color: var(--alm-danger);
-  font-weight: var(--alm-weight-semibold);
+.pv-stepper__chip--blocked {
+  color: var(--pv-danger);
+  background: var(--pv-danger-bg);
+  border-color: var(--pv-danger);
+  font-weight: var(--pv-weight-semibold);
 }
-.alm-stepper__next {
+.pv-stepper__next {
   margin: 0;
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
-.alm-stepper__history {
+.pv-stepper__history {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
 }
-.alm-stepper__history-row {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-stepper__history-row {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* --- Detail single-column sections wrapper -------------------------------- */
 /* The detail pane no longer uses the two-column dashboard grid; sections stack
  * in one column beneath the stepper + target block. */
-.alm-project-detail__sections {
+.pv-project-detail__sections {
   display: flex;
   flex-direction: column;
 }
 
 /* Inline target block (under the stepper) — reuses __target-info layout; only
  * the leading uppercase label is new. */
-.alm-project-detail__target-info {
-  padding: 0 var(--alm-sp-3) var(--alm-sp-2);
+.pv-project-detail__target-info {
+  padding: 0 var(--pv-sp-3) var(--pv-sp-2);
   cursor: pointer;
 }
-.alm-project-detail__target-info:hover .alm-project-detail__target-name {
+.pv-project-detail__target-info:hover .pv-project-detail__target-name {
   text-decoration: underline;
 }
-.alm-project-detail__target-label {
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-medium);
+.pv-project-detail__target-label {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
-  color: var(--alm-text-muted);
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
 }
 
 /* === merged from .cssblocks/targets-layout.css (adoption wave, spec-043) === */
@@ -533,76 +533,76 @@
  * Targets — shared list-page layout adoption (task #73, spec 043).
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
  * no raw hex/rgb/ms.
  *
  * Targets adopts the Sessions surface pattern: the pinned PageTopBar (title +
- * summary + FilterToolbar + actions) lives in .alm-page__bar, and the body is
- * the shared .alm-listpage__body split — a dense FULL-WIDTH sortable
- * .alm-targets-table on the left, with TargetDetailV2 in the detail pane that
- * mounts on selection. The old `.alm-targets-list*` sidebar rules are now dead
+ * summary + FilterToolbar + actions) lives in .pv-page__bar, and the body is
+ * the shared .pv-listpage__body split — a dense FULL-WIDTH sortable
+ * .pv-targets-table on the left, with TargetDetailV2 in the detail pane that
+ * mounts on selection. The old `.pv-targets-list*` sidebar rules are now dead
  * (parent removes them on merge).
  * ======================================================================== */
 
 /* --- Dense sortable table ------------------------------------------------- */
 /* Row density follows the GLOBAL density setting (task #82): row vertical
- * rhythm is keyed off `--alm-row-height` (set by the `.density-*` class on
+ * rhythm is keyed off `--pv-row-height` (set by the `.density-*` class on
  * <html> in tokens.css), so there is no per-page density toggle. */
-.alm-targets-table {
-  /* Inherits .alm-table base; tighten cell padding for density. */
+.pv-targets-table {
+  /* Inherits .pv-table base; tighten cell padding for density. */
   table-layout: auto;
 }
-.alm-targets-table th { user-select: none; }
-.alm-targets-table td,
-.alm-targets-table th {
-  padding: var(--alm-sp-1) var(--alm-sp-3);
+.pv-targets-table th { user-select: none; }
+.pv-targets-table td,
+.pv-targets-table th {
+  padding: var(--pv-sp-1) var(--pv-sp-3);
 }
-.alm-targets-table tbody td { height: var(--alm-row-height); }
+.pv-targets-table tbody td { height: var(--pv-row-height); }
 
-/* Sortable column header consolidated into the shared .alm-sorth (see
+/* Sortable column header consolidated into the shared .pv-sorth (see
  * tables-lists.css) — used via the <SortHeader> component. */
 
 /* Selectable target rows. */
-.alm-targets-table__row { cursor: pointer; }
-.alm-targets-table__row:hover td { background: var(--alm-surface); }
-.alm-targets-table__row--selected td {
-  background: var(--alm-accent-bg);
+.pv-targets-table__row { cursor: pointer; }
+.pv-targets-table__row:hover td { background: var(--pv-surface); }
+.pv-targets-table__row--selected td {
+  background: var(--pv-accent-bg);
 }
-/* Spanning group-header rows use the shared .alm-listgroup class
+/* Spanning group-header rows use the shared .pv-listgroup class
  * (tables-lists.css) — one look across every list-page table (task #82). */
 
 /* Designation cell — primary label + optional secondary designation. */
-.alm-targets-cell__desig {
+.pv-targets-cell__desig {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   min-width: 0;
 }
-.alm-targets-cell__label {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
+.pv-targets-cell__label {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
 }
-.alm-targets-cell__alt {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-targets-cell__alt {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* Cell helpers (token-only). */
-.alm-targets-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
-.alm-targets-cell--muted { color: var(--alm-text-muted); }
+.pv-targets-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
+.pv-targets-cell--muted { color: var(--pv-text-muted); }
 
 /* Empty + footer states. */
-.alm-targets-table__empty {
-  padding: var(--alm-sp-5);
+.pv-targets-table__empty {
+  padding: var(--pv-sp-5);
   text-align: center;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }
-.alm-targets-table__footer {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  border-top: 1px solid var(--alm-border-subtle);
+.pv-targets-table__footer {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  border-top: 1px solid var(--pv-border-subtle);
 }
 
 /* === merged from .cssblocks/sessions-detail.css (refine wave, spec-043) === */
@@ -615,24 +615,24 @@
  * Context: the SessionDetail header now uses the full panel width — the target
  * is the heading and a single acquisition line replaces the cramped repeated
  * pills. Review actions sit in the header's actions slot (shared
- * .alm-detail__actions, already defined). The acquisition summary is plain
+ * .pv-detail__actions, already defined). The acquisition summary is plain
  * prose, not a filesystem path, so it overrides the mono/break-all path styling
- * the default .alm-detail__subtitle uses.
+ * the default .pv-detail__subtitle uses.
  */
 
 /* Heading: target name (+ optional lock) as the full-width identity line. */
-.alm-session-detail__heading {
+.pv-session-detail__heading {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   min-width: 0;
 }
 
 /* Acquisition summary line — prose, not a path. Override the default
  * mono/break-all subtitle treatment with readable body text that truncates. */
-.alm-session-detail__summary.alm-detail__subtitle {
-  font-family: var(--alm-font-sans);
-  font-size: var(--alm-text-sm);
+.pv-session-detail__summary.pv-detail__subtitle {
+  font-family: var(--pv-font-sans);
+  font-size: var(--pv-text-sm);
   word-break: normal;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -643,7 +643,7 @@
 /* ── Projects detail header overlap fix (task #81) ────────────────────────── */
 /* Symptom (1100×720): the contextual action cluster (Reveal in Explorer ·    */
 /* Open in {tool} · Mark as Completed) was forced into the shared action       */
-/* bar's single fixed-height (--alm-toolbar-height) non-wrapping flex row.     */
+/* bar's single fixed-height (--pv-toolbar-height) non-wrapping flex row.     */
 /* When the tool + path breadcrumb is wide, the buttons overflowed the 40px    */
 /* box and rendered ON TOP of the MetricLine and the path line below.          */
 /*                                                                             */
@@ -654,29 +654,29 @@
 /* so actions can never overlap the breadcrumb or the MetricLine.              */
 /* Token-only; merged into components.css by the parent — not imported.        */
 
-.alm-project-detail__action-bar .alm-action-bar {
+.pv-project-detail__action-bar .pv-action-bar {
   /* Relax the fixed single-row height: let the bar grow for a second row. */
   height: auto;
-  min-height: var(--alm-toolbar-height);
+  min-height: var(--pv-toolbar-height);
   flex-wrap: wrap;
   align-items: center;
-  row-gap: var(--alm-sp-2);
-  padding-top: var(--alm-sp-2);
-  padding-bottom: var(--alm-sp-2);
+  row-gap: var(--pv-sp-2);
+  padding-top: var(--pv-sp-2);
+  padding-bottom: var(--pv-sp-2);
 }
 
 /* Force the action cluster onto its own row: a full-width flex spacer wraps,  */
 /* pushing everything after it (the actions) to the next line.                 */
-.alm-project-detail__action-bar .alm-action-bar__spacer {
+.pv-project-detail__action-bar .pv-action-bar__spacer {
   flex-basis: 100%;
 }
 
 /* Action cluster owns its row; right-align to match the bar convention. */
-.alm-project-detail__action-bar .alm-action-bar__actions {
+.pv-project-detail__action-bar .pv-action-bar__actions {
   flex: 1 1 100%;
   justify-content: flex-end;
   flex-wrap: wrap;
-  row-gap: var(--alm-sp-1);
+  row-gap: var(--pv-sp-1);
 }
 
 /* === merged from .cssblocks/inbox-layout.css (refine wave, spec-043) === */
@@ -685,7 +685,7 @@
  * Inbox — shared list-page layout adoption.
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
  * no raw hex/rgb/ms.
  *
  * The Inbox now uses the shared ListPageLayout + PageTopBar + FilterToolbar
@@ -700,28 +700,28 @@
  * ======================================================================== */
 
 /* The stats strip is a SECOND pinned bar in the page header zone (#61). It
- * carries `.alm-page__bar` (flex-shrink:0) so it sits above `.alm-listpage__body`
+ * carries `.pv-page__bar` (flex-shrink:0) so it sits above `.pv-listpage__body`
  * and never scrolls out of view. A subtle top rule separates it from the
  * PageTopBar above it. */
-.alm-inbox-statsbar {
+.pv-inbox-statsbar {
   flex-shrink: 0;
 }
 
 /* In the top bar the grouping/sort/filter controls lay out INLINE (a single
  * row that wraps) rather than stacked, and drop the sidebar padding since the
  * FilterToolbar already supplies the row gap. */
-.alm-inbox-list__controls--toolbar {
+.pv-inbox-list__controls--toolbar {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   padding: 0;
 }
 
 /* The detail-pane content stack: per-detection detail, then (when present) the
  * plan surface. It owns no scroll of its own — the shared
- * `.alm-listpage__detail-body` is the single scroll region for the pane. */
-.alm-inbox-detail-pane {
+ * `.pv-listpage__detail-body` is the single scroll region for the pane. */
+.pv-inbox-detail-pane {
   display: flex;
   flex-direction: column;
 }
@@ -730,16 +730,16 @@
  * It must not be a full-width bottom strip — it now flows inside the right-hand
  * detail pane's scroll region (#76). A top rule separates it from the detail
  * above it. */
-.alm-inbox-detail-plans {
-  border-top: 1px solid var(--alm-border);
-  margin-top: var(--alm-sp-3);
-  padding-top: var(--alm-sp-2);
+.pv-inbox-detail-plans {
+  border-top: 1px solid var(--pv-border);
+  margin-top: var(--pv-sp-3);
+  padding-top: var(--pv-sp-2);
 }
 
 /* When no detection is selected but plans exist, the plan surface owns the
  * detail pane on its own — drop the separating rule so it does not read as a
  * detached fragment. */
-.alm-inbox-detail-plans--solo {
+.pv-inbox-detail-plans--solo {
   border-top: none;
   margin-top: 0;
   padding-top: 0;
@@ -748,15 +748,15 @@
 /* Within the (narrower) detail pane the plan-panel group rows wrap rather than
  * clip, and the per-file destination paths break instead of forcing horizontal
  * overflow. */
-.alm-listpage__detail-body .alm-plan-panel__bar {
+.pv-listpage__detail-body .pv-plan-panel__bar {
   flex-wrap: wrap;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
-.alm-listpage__detail-body .alm-plan-panel__bar-actions {
+.pv-listpage__detail-body .pv-plan-panel__bar-actions {
   flex-wrap: wrap;
 }
-.alm-listpage__detail-body .alm-plan-panel__summary-dest,
-.alm-listpage__detail-body .alm-plan-panel__dest {
+.pv-listpage__detail-body .pv-plan-panel__summary-dest,
+.pv-listpage__detail-body .pv-plan-panel__dest {
   word-break: break-all;
 }
 
@@ -764,11 +764,11 @@
  * GLOBAL library inventory totals in the status bar (replaces the per-page
  * summary of task #80). Stable across routes; sits between the operation zone
  * and the right-aligned storage/log zone. */
-.alm-statusbar__lib {
+.pv-statusbar__lib {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  color: var(--alm-text-secondary);
+  gap: var(--pv-sp-2);
+  color: var(--pv-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -779,14 +779,14 @@
  * Shown left-of-center when the active page populates PageStatusContext.
  * Inbox uses it for folder/master count + per-frame-type breakdown chips.
  * Inherits the same muted secondary style as the global lib totals. */
-.alm-statusbar__page {
+.pv-statusbar__page {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  color: var(--alm-text-secondary);
+  gap: var(--pv-sp-2);
+  color: var(--pv-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   min-width: 0;
-  padding-right: var(--alm-sp-3);
-  border-right: 1px solid var(--alm-border-subtle);
+  padding-right: var(--pv-sp-3);
+  border-right: 1px solid var(--pv-border-subtle);
 }

@@ -1,0 +1,68 @@
+/* foundation.css — shared `--pv-*` design foundation (handoff 04).
+ *
+ * Consumed by both platevault/platevault (apps/desktop/src/styles/tokens.css)
+ * and platevault/platevault.github.io (src/styles/theme.css, vendored copy —
+ * separate repos, no package sharing). Declares spacing, type scale,
+ * tracking, weights, leading, radius, motion durations, and the two font
+ * stacks that both surfaces share. Values are extracted byte-identical from
+ * the app's prior tokens.css (this is extraction, not a redesign) —
+ * `theme.tokens-drift.test.ts` pins the spacing/type numbers.
+ *
+ * Zero color values live here by design (issue #1153 guardrail): app (warm)
+ * and docs (cool) keep divergent palettes (`--pv-*` raw/semantic color in the
+ * app, `--sl-*` in docs) — a shared color token earns its own review, it does
+ * not get smuggled in here.
+ *
+ * `--pv-font-display` has no bundled font-face in the app today (the app
+ * only self-hosts Inter, spec 055); each host's own font-face/CDN setup is
+ * responsible for actually serving the Space Grotesk + Inter faces this
+ * stack names. Value is the docs repo's existing declaration (canonical).
+ */
+
+:root {
+  /* Fonts */
+  --pv-font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --pv-font-display: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+
+  /* Type scale — rem, derived from a 14px root. */
+  --pv-text-xs: 0.7857rem; /* 11px @14 (floor) */
+  --pv-text-sm: 0.8571rem; /* 12px @14 */
+  --pv-text-base: 1rem; /* 14px @14 */
+  --pv-text-md: 1.1429rem; /* 16px @14 */
+  --pv-text-lg: 1.2857rem; /* 18px @14 */
+  --pv-text-xl: 1.4286rem; /* 20px @14 */
+  --pv-text-2xl: 1.7143rem; /* 24px @14 */
+
+  /* Letter-spacing scale */
+  --pv-tracking-tight: 0.03em;
+  --pv-tracking-normal: 0.04em;
+  --pv-tracking-wide: 0.08em;
+
+  --pv-weight-normal: 400;
+  --pv-weight-medium: 500;
+  --pv-weight-semibold: 600;
+
+  --pv-leading-tight: 1.2;
+  --pv-leading-normal: 1.5;
+  --pv-leading-relaxed: 1.6;
+
+  /* Spacing — geometric base-4 */
+  --pv-sp-0: 2px;
+  --pv-sp-1: 4px;
+  --pv-sp-2: 8px;
+  --pv-sp-3: 12px;
+  --pv-sp-4: 16px;
+  --pv-sp-5: 24px;
+  --pv-sp-6: 32px;
+  --pv-sp-7: 48px;
+
+  /* Transitions */
+  --pv-transition-fast: 100ms ease;
+  --pv-transition-base: 150ms ease;
+  --pv-transition-slow: 250ms ease;
+
+  /* Radius */
+  --pv-radius-sm: 3px;
+  --pv-radius-md: 5px;
+  --pv-radius-lg: 8px;
+}

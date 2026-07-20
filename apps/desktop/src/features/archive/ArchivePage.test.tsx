@@ -305,7 +305,10 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     archiveListState.data = [makeEntry({ id: 'proj-1' })];
     mockSelectedId.current = 'proj-1';
     mockGenerateRestorePlan.mockImplementation(
-      (_planId: string, opts?: MutateOpts) => {
+      (
+        _args: { archivedViaPlanId: string; entityType: string },
+        opts?: MutateOpts,
+      ) => {
         opts?.onSuccess?.({
           planId: 'restore-plan-1',
           itemCount: 2,
@@ -316,7 +319,7 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     render(<ArchivePage />);
     fireEvent.click(screen.getByTestId('archive-restore-btn'));
     expect(mockGenerateRestorePlan).toHaveBeenCalledWith(
-      'plan-001',
+      { archivedViaPlanId: 'plan-001', entityType: 'project' },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),
@@ -336,7 +339,10 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     archiveListState.data = [makeEntry({ id: 'proj-1' })];
     mockSelectedId.current = 'proj-1';
     mockGenerateRestorePlan.mockImplementation(
-      (_planId: string, opts?: MutateOpts) => {
+      (
+        _args: { archivedViaPlanId: string; entityType: string },
+        opts?: MutateOpts,
+      ) => {
         opts?.onError?.(new Error('db failure'));
       },
     );

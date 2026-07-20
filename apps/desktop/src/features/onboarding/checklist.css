@@ -3,7 +3,7 @@
 
 /*
  * Getting-started checklist (spec 056, US2 T017). ONE class family
- * (`.alm-onb-checklist*`), reused verbatim by the sidebar section and the
+ * (`.pv-onb-checklist*`), reused verbatim by the sidebar section and the
  * icon-collapsed popover (research R10). Tokens only — no raw colours/motion.
  * Feature-local (imported from ChecklistSection.tsx); run
  *   node scripts/css-dup-sniff.mjs src/styles/components.css \
@@ -11,100 +11,100 @@
  * to prove no duplication against the shared component stylesheet.
  */
 
-.alm-onb-checklist {
-  border-top: 1px solid var(--alm-border-subtle);
-  padding: var(--alm-sp-2) var(--alm-sp-1);
-  font-size: var(--alm-text-sm);
+.pv-onb-checklist {
+  border-top: 1px solid var(--pv-border-subtle);
+  padding: var(--pv-sp-2) var(--pv-sp-1);
+  font-size: var(--pv-text-sm);
 }
 
 /* While a find spotlight is active, sit above the joyride overlay (z 100) so
  * the toggle-off find affordance stays clickable (FR-023). */
-.alm-onb-checklist--spotlighting {
+.pv-onb-checklist--spotlighting {
   position: relative;
-  z-index: var(--alm-z-popover, 200);
+  z-index: var(--pv-z-popover, 200);
 }
 
-.alm-onb-checklist__head {
+.pv-onb-checklist__head {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
-  padding: 0 var(--alm-sp-2);
+  gap: var(--pv-sp-1);
+  padding: 0 var(--pv-sp-2);
 }
 
 /* Shared button reset for the family — extracted so no per-control rule
  * re-declares it (keeps css-dup-sniff clone-free, the R10 rule). `cursor` and
  * `font: inherit` already come from the global reset (styles/reset.css). Kept
  * low-specificity (no color/font) so each control's own rule still wins. */
-.alm-onb-checklist button {
+.pv-onb-checklist button {
   border: none;
   background: none;
 }
 
-.alm-onb-checklist__section-toggle {
+.pv-onb-checklist__section-toggle {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   width: 100%;
-  padding: var(--alm-sp-1) 0;
-  color: var(--alm-text-faint);
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-semibold);
-  letter-spacing: var(--alm-tracking-wide);
+  padding: var(--pv-sp-1) 0;
+  color: var(--pv-text-faint);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-wide);
   text-transform: uppercase;
 }
 
-.alm-onb-checklist__title {
+.pv-onb-checklist__title {
   flex: 1;
   text-align: left;
 }
 
-.alm-onb-checklist__progress {
+.pv-onb-checklist__progress {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
-.alm-onb-checklist__progress-text {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-onb-checklist__progress-text {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.alm-onb-checklist__progress-track {
+.pv-onb-checklist__progress-track {
   height: 3px;
-  border-radius: var(--alm-radius-sm);
-  background: var(--alm-bg3);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-bg3);
   overflow: hidden;
 }
 
-.alm-onb-checklist__progress-fill {
+.pv-onb-checklist__progress-fill {
   display: block;
   height: 100%;
-  background: var(--alm-accent);
-  transition: width var(--alm-transition-base);
+  background: var(--pv-accent);
+  transition: width var(--pv-transition-base);
 }
 
-.alm-onb-checklist__groups {
-  margin-top: var(--alm-sp-2);
+.pv-onb-checklist__groups {
+  margin-top: var(--pv-sp-2);
 }
 
-.alm-onb-checklist__group-header {
+.pv-onb-checklist__group-header {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   width: 100%;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  color: var(--alm-text-secondary);
-  font-size: var(--alm-text-sm);
-  font-weight: var(--alm-weight-medium);
-  border-radius: var(--alm-radius-sm);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  color: var(--pv-text-secondary);
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-medium);
+  border-radius: var(--pv-radius-sm);
 }
 
-.alm-onb-checklist__group-header:hover {
-  background: var(--alm-hover-bg);
+.pv-onb-checklist__group-header:hover {
+  background: var(--pv-hover-bg);
 }
 
-.alm-onb-checklist__group-label {
+.pv-onb-checklist__group-label {
   flex: 1;
   text-align: left;
   overflow: hidden;
@@ -112,72 +112,72 @@
   white-space: nowrap;
 }
 
-.alm-onb-checklist__group-done {
-  color: var(--alm-accent);
+.pv-onb-checklist__group-done {
+  color: var(--pv-accent);
 }
 
-.alm-onb-checklist__group--complete .alm-onb-checklist__group-label {
-  color: var(--alm-text-muted);
+.pv-onb-checklist__group--complete .pv-onb-checklist__group-label {
+  color: var(--pv-text-muted);
 }
 
-.alm-onb-checklist__group-count {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-faint);
+.pv-onb-checklist__group-count {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
   font-variant-numeric: tabular-nums;
 }
 
-.alm-onb-checklist__items {
+.pv-onb-checklist__items {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.alm-onb-checklist__item {
+.pv-onb-checklist__item {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-1) var(--alm-sp-2) var(--alm-sp-1) var(--alm-sp-5);
-  color: var(--alm-text-secondary);
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-1) var(--pv-sp-2) var(--pv-sp-1) var(--pv-sp-5);
+  color: var(--pv-text-secondary);
 }
 
-.alm-onb-checklist__item-main {
+.pv-onb-checklist__item-main {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
   min-width: 0;
 }
 
-.alm-onb-checklist__item-label {
+.pv-onb-checklist__item-label {
   line-height: 1.3;
 }
 
-.alm-onb-checklist__item--done {
-  color: var(--alm-text-faint);
+.pv-onb-checklist__item--done {
+  color: var(--pv-text-faint);
 }
 
-.alm-onb-checklist__item--done .alm-onb-checklist__item-label {
+.pv-onb-checklist__item--done .pv-onb-checklist__item-label {
   text-decoration: line-through;
 }
 
-.alm-onb-checklist__check-icon {
-  color: var(--alm-accent);
+.pv-onb-checklist__check-icon {
+  color: var(--pv-accent);
   flex-shrink: 0;
 }
 
-.alm-onb-checklist__completed {
-  margin-top: var(--alm-sp-1);
-  padding-top: var(--alm-sp-1);
-  border-top: 1px dashed var(--alm-border-subtle);
+.pv-onb-checklist__completed {
+  margin-top: var(--pv-sp-1);
+  padding-top: var(--pv-sp-1);
+  border-top: 1px dashed var(--pv-border-subtle);
 }
 
-.alm-onb-checklist__check {
+.pv-onb-checklist__check {
   flex-shrink: 0;
   padding: 0;
   margin-top: 1px;
 }
 
-.alm-onb-checklist__check:disabled {
+.pv-onb-checklist__check:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -187,32 +187,32 @@
    click landing on a crossed-out row that did nothing would read as broken.
    Muted at rest so the row still looks settled; full strength on hover/focus
    so the affordance is discoverable. */
-.alm-onb-checklist__check--done {
+.pv-onb-checklist__check--done {
   cursor: pointer;
   background: none;
   border: none;
   opacity: 0.75;
 }
 
-.alm-onb-checklist__check--done:hover,
-.alm-onb-checklist__check--done:focus-visible {
+.pv-onb-checklist__check--done:hover,
+.pv-onb-checklist__check--done:focus-visible {
   opacity: 1;
 }
 
 /* Round, not a rounded square: every row is now checkable (auto-tick items
    included), and the circle reads as "tick this off" where the old inert
    bullet read as decoration. */
-.alm-onb-checklist__checkbox {
+.pv-onb-checklist__checkbox {
   display: block;
   width: 14px;
   height: 14px;
-  border: 1px solid var(--alm-border);
+  border: 1px solid var(--pv-border);
   border-radius: 50%;
-  background: var(--alm-surface-raised);
+  background: var(--pv-surface-raised);
 }
 
-.alm-onb-checklist__check:hover .alm-onb-checklist__checkbox {
-  border-color: var(--alm-accent);
+.pv-onb-checklist__check:hover .pv-onb-checklist__checkbox {
+  border-color: var(--pv-accent);
 }
 
 /*
@@ -222,32 +222,32 @@
  * "we have no anchor to point at": an item we merely cannot spotlight is still
  * perfectly actionable, and greying it would claim otherwise.
  */
-.alm-onb-checklist__item--blocked .alm-onb-checklist__item-label {
-  color: var(--alm-text-faint);
+.pv-onb-checklist__item--blocked .pv-onb-checklist__item-label {
+  color: var(--pv-text-faint);
 }
 
-.alm-onb-checklist__prereq {
+.pv-onb-checklist__prereq {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+  gap: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
-.alm-onb-checklist__prereq-icon {
+.pv-onb-checklist__prereq-icon {
   flex-shrink: 0;
   /* Align to the first text line, not the box centre — the reason wraps to
      two lines in a 264px flyout and a centred icon drifts away from it. */
   align-self: flex-start;
   margin-top: 2px;
-  color: var(--alm-text-faint);
+  color: var(--pv-text-faint);
 }
 
 /* Keep the reason on the icon's line and let it wrap in its own column. The
    parent wraps, so without this the icon is pushed onto a line of its own
    whenever the reason is longer than the remaining width. */
-.alm-onb-checklist__prereq-reason {
+.pv-onb-checklist__prereq-reason {
   /* basis 0, NOT auto: with `auto` the basis is the text's own width, which
      exceeds the space left beside the icon, so the wrapping parent pushes it
      to a line of its own and the icon is stranded above it. */
@@ -255,35 +255,35 @@
   min-width: 0;
 }
 
-.alm-onb-checklist__prereq-jump {
+.pv-onb-checklist__prereq-jump {
   padding: 0;
-  color: var(--alm-accent);
-  font-size: var(--alm-text-xs);
+  color: var(--pv-accent);
+  font-size: var(--pv-text-xs);
   text-decoration: underline;
 }
 
 /* Icon-collapsed progress-ring + non-modal popover (T020, FR-011). */
-.alm-onb-ring-wrap {
+.pv-onb-ring-wrap {
   position: relative;
   display: flex;
   justify-content: center;
-  padding: var(--alm-sp-1) 0;
+  padding: var(--pv-sp-1) 0;
 }
 
-.alm-onb-ring {
+.pv-onb-ring {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--alm-sp-1);
+  padding: var(--pv-sp-1);
   border: none;
   background: none;
   cursor: pointer;
-  border-radius: var(--alm-radius-sm);
-  color: var(--alm-accent);
+  border-radius: var(--pv-radius-sm);
+  color: var(--pv-accent);
 }
 
-.alm-onb-ring:hover {
-  background: var(--alm-hover-bg);
+.pv-onb-ring:hover {
+  background: var(--pv-hover-bg);
 }
 
 /*
@@ -291,21 +291,21 @@
  * as a sidebar row rather than a button-looking control, so it sits with the
  * nav it belongs beside; the flyout it opens carries the panel treatment.
  */
-.alm-onb-ring--labelled {
+.pv-onb-ring--labelled {
   justify-content: flex-start;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   width: 100%;
-  padding: var(--alm-sp-1) var(--alm-sp-3);
-  color: var(--alm-text-secondary);
-  font-size: var(--alm-text-sm);
+  padding: var(--pv-sp-1) var(--pv-sp-3);
+  color: var(--pv-text-secondary);
+  font-size: var(--pv-text-sm);
   text-align: left;
 }
 
-.alm-onb-ring--labelled:hover {
-  color: var(--alm-text);
+.pv-onb-ring--labelled:hover {
+  color: var(--pv-text);
 }
 
-.alm-onb-ring__label {
+.pv-onb-ring__label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -313,162 +313,162 @@
   white-space: nowrap;
 }
 
-.alm-onb-ring__count {
-  color: var(--alm-text-faint);
-  font-size: var(--alm-text-xs);
+.pv-onb-ring__count {
+  color: var(--pv-text-faint);
+  font-size: var(--pv-text-xs);
   font-variant-numeric: tabular-nums;
 }
 
-.alm-onb-ring__track {
-  stroke: var(--alm-bg3);
+.pv-onb-ring__track {
+  stroke: var(--pv-bg3);
 }
 
 /* Gradient stops for the progress donut. Set via `stop-color` on classed
    <stop> elements so both ends stay themeable tokens (all 4 themes define the
    accent pair) rather than hard-coded SVG attributes. */
-.alm-onb-ring__grad-from {
-  stop-color: var(--alm-accent-deep);
+.pv-onb-ring__grad-from {
+  stop-color: var(--pv-accent-deep);
 }
 
-.alm-onb-ring__grad-to {
-  stop-color: var(--alm-accent-hover);
+.pv-onb-ring__grad-to {
+  stop-color: var(--pv-accent-hover);
 }
 
-.alm-onb-ring__fill {
-  transition: stroke-dashoffset var(--alm-transition-base);
+.pv-onb-ring__fill {
+  transition: stroke-dashoffset var(--pv-transition-base);
 }
 
-/* Portalled to <body> (see ChecklistPopover): `.alm-sidebar` is
+/* Portalled to <body> (see ChecklistPopover): `.pv-sidebar` is
    `overflow: hidden`, which scissored the panel away entirely when it was
    absolutely positioned beside the sidebar. `left`/`top` are supplied inline
    from the trigger's measured rect. */
-.alm-onb-popover {
+.pv-onb-popover {
   position: fixed;
-  z-index: var(--alm-z-popover, 200);
+  z-index: var(--pv-z-popover, 200);
   width: 264px;
   max-height: 60vh;
   overflow-y: auto;
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
   /* Deliberately the LARGE elevation: this panel floats over the page beside
      the sidebar, and the 1px `shadow-sm` used for inline surfaces left it
      reading as part of the sidebar rather than above it. */
-  box-shadow: var(--alm-shadow-lg);
+  box-shadow: var(--pv-shadow-lg);
 }
 
 /* The popover already frames the section — drop its inline top border there. */
-.alm-onb-popover .alm-onb-checklist {
+.pv-onb-popover .pv-onb-checklist {
   border-top: none;
 }
 
 /* ── Header overflow menu (T029, remove getting started) ──────────────────── */
-.alm-onb-checklist__head {
+.pv-onb-checklist__head {
   position: relative;
 }
 
-.alm-onb-checklist__menu-wrap {
+.pv-onb-checklist__menu-wrap {
   position: absolute;
-  top: var(--alm-sp-1);
-  right: var(--alm-sp-2);
+  top: var(--pv-sp-1);
+  right: var(--pv-sp-2);
 }
 
-.alm-onb-checklist__menu-btn {
+.pv-onb-checklist__menu-btn {
   display: flex;
   align-items: center;
-  padding: var(--alm-sp-0);
-  color: var(--alm-text-faint);
-  border-radius: var(--alm-radius-sm);
+  padding: var(--pv-sp-0);
+  color: var(--pv-text-faint);
+  border-radius: var(--pv-radius-sm);
 }
 
-.alm-onb-checklist__menu-btn:hover {
-  color: var(--alm-text-secondary);
-  background: var(--alm-hover-bg);
+.pv-onb-checklist__menu-btn:hover {
+  color: var(--pv-text-secondary);
+  background: var(--pv-hover-bg);
 }
 
-.alm-onb-checklist__menu {
+.pv-onb-checklist__menu {
   position: absolute;
   right: 0;
   top: 100%;
-  z-index: var(--alm-z-popover, 200);
+  z-index: var(--pv-z-popover, 200);
   min-width: 220px;
-  margin-top: var(--alm-sp-0);
-  padding: var(--alm-sp-1);
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  box-shadow: var(--alm-shadow-sm);
+  margin-top: var(--pv-sp-0);
+  padding: var(--pv-sp-1);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  box-shadow: var(--pv-shadow-sm);
 }
 
-.alm-onb-checklist__menu-item {
+.pv-onb-checklist__menu-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  color: var(--alm-text-secondary);
-  border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-sm);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  color: var(--pv-text-secondary);
+  border-radius: var(--pv-radius-sm);
+  font-size: var(--pv-text-sm);
 }
 
-.alm-onb-checklist__menu-item:hover {
-  background: var(--alm-hover-bg);
+.pv-onb-checklist__menu-item:hover {
+  background: var(--pv-hover-bg);
 }
 
-.alm-onb-checklist__menu-confirm {
-  padding: var(--alm-sp-1) var(--alm-sp-2);
+.pv-onb-checklist__menu-confirm {
+  padding: var(--pv-sp-1) var(--pv-sp-2);
 }
 
-.alm-onb-checklist__menu-confirm-text {
-  margin: 0 0 var(--alm-sp-2);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-onb-checklist__menu-confirm-text {
+  margin: 0 0 var(--pv-sp-2);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
   line-height: 1.35;
 }
 
-.alm-onb-checklist__menu-confirm-actions {
+.pv-onb-checklist__menu-confirm-actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   justify-content: flex-end;
 }
 
-.alm-onb-checklist__menu-confirm-yes {
-  color: var(--alm-danger);
-  font-size: var(--alm-text-sm);
-  font-weight: var(--alm-weight-medium);
+.pv-onb-checklist__menu-confirm-yes {
+  color: var(--pv-danger);
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-medium);
 }
 
-.alm-onb-checklist__menu-confirm-no {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+.pv-onb-checklist__menu-confirm-no {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }
 
 /* ── Per-row actions: find spotlight (T027) ───────────────────────────────── */
-.alm-onb-checklist__actions {
+.pv-onb-checklist__actions {
   display: flex;
   flex-shrink: 0;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
 }
 
-.alm-onb-checklist__find,
-.alm-onb-checklist__find:hover,
-.alm-onb-checklist__find[aria-pressed='true'] {
-  color: var(--alm-accent);
-  background: var(--alm-hover-bg);
+.pv-onb-checklist__find,
+.pv-onb-checklist__find:hover,
+.pv-onb-checklist__find[aria-pressed='true'] {
+  color: var(--pv-accent);
+  background: var(--pv-hover-bg);
 }
 
 /* ── Completion choreography (T024) ───────────────────────────────────────── */
-.alm-onb-checklist__item--completing {
-  color: var(--alm-accent);
-  font-weight: var(--alm-weight-medium);
-  animation: alm-onb-tick-pop var(--alm-transition-base) ease-out;
+.pv-onb-checklist__item--completing {
+  color: var(--pv-accent);
+  font-weight: var(--pv-weight-medium);
+  animation: pv-onb-tick-pop var(--pv-transition-base) ease-out;
 }
 
-.alm-onb-checklist__progress--pulse .alm-onb-checklist__progress-fill,
-.alm-onb-ring--pulse .alm-onb-ring__fill {
-  animation: alm-onb-progress-pulse 0.6s ease-in-out 2;
+.pv-onb-checklist__progress--pulse .pv-onb-checklist__progress-fill,
+.pv-onb-ring--pulse .pv-onb-ring__fill {
+  animation: pv-onb-progress-pulse 0.6s ease-in-out 2;
 }
 
-@keyframes alm-onb-tick-pop {
+@keyframes pv-onb-tick-pop {
   0% {
     transform: scale(0.8);
     opacity: 0.4;
@@ -482,7 +482,7 @@
   }
 }
 
-@keyframes alm-onb-progress-pulse {
+@keyframes pv-onb-progress-pulse {
   0%,
   100% {
     opacity: 1;
@@ -494,19 +494,19 @@
 
 /* ── Find spotlight (T026): static outline, tokens-only. The stroke colour is
  * theme-scoped so it stays ≥3:1 against the dimmed overlay field (WCAG 1.4.11,
- * R11 — see `--alm-onb-spotlight-stroke` in tokens.css). The
+ * R11 — see `--pv-onb-spotlight-stroke` in tokens.css). The
  * pulse-for-a-few-seconds animation is keyed off a root data-attribute the
  * component toggles (portal-safe; suppressed under reduced motion). ─────────── */
 .react-joyride__spotlight {
-  stroke: var(--alm-onb-spotlight-stroke);
+  stroke: var(--pv-onb-spotlight-stroke);
   stroke-width: 3px;
 }
 
 html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
-  animation: alm-onb-spotlight-pulse 1s ease-in-out infinite;
+  animation: pv-onb-spotlight-pulse 1s ease-in-out infinite;
 }
 
-@keyframes alm-onb-spotlight-pulse {
+@keyframes pv-onb-spotlight-pulse {
   0%,
   100% {
     stroke-opacity: 1;
@@ -517,42 +517,42 @@ html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
 }
 
 /* Unavailable-target explanation when an item's real control is not on screen. */
-.alm-onb-spotlight-unavailable {
+.pv-onb-spotlight-unavailable {
   position: fixed;
   left: 50%;
-  bottom: var(--alm-sp-6);
+  bottom: var(--pv-sp-6);
   transform: translateX(-50%);
-  z-index: var(--alm-z-popover, 200);
+  z-index: var(--pv-z-popover, 200);
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
   max-width: 360px;
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  box-shadow: var(--alm-shadow-sm);
-  color: var(--alm-text);
-  font-size: var(--alm-text-sm);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  box-shadow: var(--pv-shadow-sm);
+  color: var(--pv-text);
+  font-size: var(--pv-text-sm);
   line-height: 1.35;
 }
 
-.alm-onb-spotlight-unavailable__close {
+.pv-onb-spotlight-unavailable__close {
   flex-shrink: 0;
   border: none;
   background: none;
-  color: var(--alm-accent);
-  font-size: var(--alm-text-sm);
+  color: var(--pv-accent);
+  font-size: var(--pv-text-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .alm-onb-checklist__progress-fill,
-  .alm-onb-ring__fill {
+  .pv-onb-checklist__progress-fill,
+  .pv-onb-ring__fill {
     transition: none;
   }
-  .alm-onb-checklist__item--completing,
-  .alm-onb-checklist__progress--pulse .alm-onb-checklist__progress-fill,
-  .alm-onb-ring--pulse .alm-onb-ring__fill,
+  .pv-onb-checklist__item--completing,
+  .pv-onb-checklist__progress--pulse .pv-onb-checklist__progress-fill,
+  .pv-onb-ring--pulse .pv-onb-ring__fill,
   html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
     animation: none;
   }

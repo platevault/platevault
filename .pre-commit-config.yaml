@@ -15,9 +15,13 @@ repos:
       # Generated outputs (specta bindings, seed catalog) must keep their
       # generator-emitted bytes — CI's `just check-generated` drift gate
       # regenerates and `git diff --exit-code`s them, so whitespace "fixes"
-      # here would fail CI.
+      # here would fail CI. signatures/cla.json is written by the CLA
+      # Assistant GitHub Action, not by humans; it ships without a trailing
+      # newline, and the bot rewrites it without one on every signature, so
+      # a locally-added newline would never stick — excluded rather than
+      # "fixed" once.
       - id: end-of-file-fixer
-        exclude: '^(apps/desktop/src/bindings/|assets/seed/)'
+        exclude: '^(apps/desktop/src/bindings/|assets/seed/|signatures/cla\.json)'
       - id: trailing-whitespace
         exclude: '^(apps/desktop/src/bindings/|assets/seed/)'
 

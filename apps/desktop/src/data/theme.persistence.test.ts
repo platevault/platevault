@@ -181,3 +181,70 @@ describe('hydrateThemeFromSettings — reconcile the boot cache from the setting
     expect(localStorage.getItem('alm.theme')).toBe('warm-clay');
   });
 });
+
+describe('THEMES registry — canonical vs. variant (handoff 03)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    isTauriMock.mockReset();
+    settingsUpdateMock.mockReset();
+    settingsUpdateMock.mockResolvedValue({ status: 'ok', data: null });
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('marks exactly the four canonical themes enabled, keeping the two variants in the registry', async () => {
+    const { THEMES } = await import('./theme');
+
+    const enabled = THEMES.filter((t) => t.enabled)
+      .map((t) => t.id)
+      .sort();
+    const disabled = THEMES.filter((t) => !t.enabled)
+      .map((t) => t.id)
+      .sort();
+
+    expect(enabled).toEqual(
+      [
+        'observatory-cool',
+        'observatory-cool-light',
+        'observatory-dark',
+        'warm-slate',
+      ].sort(),
+    );
+    expect(disabled).toEqual(['espresso-dark', 'warm-clay'].sort());
+  });
+
+  it('groups the two new cool themes under the cool family, light before dark', async () => {
+    const { THEMES } = await import('./theme');
+    const cool = THEMES.filter((t) => t.family === 'cool');
+
+    expect(cool.map((t) => t.id)).toEqual(
+      expect.arrayContaining(['observatory-cool', 'observatory-cool-light']),
+    );
+    const light = cool.find((t) => t.id === 'observatory-cool-light');
+    const dark = cool.find((t) => t.id === 'observatory-cool');
+    expect(light?.mode).toBe('light');
+    expect(dark?.mode).toBe('dark');
+  });
+
+  it('a disabled (picker-hidden) variant already chosen still resolves, applies, and persists', async () => {
+    isTauriMock.mockReturnValue(true);
+    const { setThemeChoice, getThemeChoice, resolveTheme } = await import(
+      './theme'
+    );
+
+    setThemeChoice('espresso-dark');
+
+    expect(getThemeChoice()).toBe('espresso-dark');
+    expect(resolveTheme('espresso-dark')).toBe('espresso-dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe(
+      'espresso-dark',
+    );
+    await waitForCall(settingsUpdateMock);
+    expect(settingsUpdateMock).toHaveBeenCalledWith('general', {
+      theme: 'espresso-dark',
+    });
+  });
+});

@@ -55,113 +55,127 @@
 // The Tauri `Channel` polyfill this journey's approve-and-apply path needs is
 // installed globally by the shared harness `test` (see
 // `tests/e2e/support/harness.ts`) — no per-spec shim required.
-import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
+import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);
 });
 
-test.describe("cleanup review (spec 017 WP-E / Journey 6)", () => {
-  test("scan → review candidates with confidence + protection → generate plan → protection gate → approve & apply", async ({
+test.describe('cleanup review (spec 017 WP-E / Journey 6)', () => {
+  test('scan → review candidates with confidence + protection → generate plan → protection gate → approve & apply', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
+    await page.goto('/#/projects');
 
     // ── 1. Page renders without error boundary ────────────────────────────────
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
 
     // ── 2. Select the fixture project → bottom detail panel mounts ───────────
     const projectRow = page
-      .locator(".alm-projects-table__row")
-      .filter({ hasText: "NGC 7000 Narrowband" })
+      .locator('.pv-projects-table__row')
+      .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
     await projectRow.click();
 
-    const cleanupSection = page.getByTestId("project-cleanup-preview");
+    const cleanupSection = page.getByTestId('project-cleanup-preview');
     await expect(cleanupSection).toBeVisible({ timeout: 8_000 });
 
     // ── 3. Protected categories are ALWAYS documented, even pre-scan
     //       (constitution II — protected categories/cleanup exclusions MUST
     //       be documented before any cleanup plan can be generated) ──────────
-    const protectedBlock = cleanupSection.getByTestId("cleanup-protected");
+    const protectedBlock = cleanupSection.getByTestId('cleanup-protected');
     await expect(protectedBlock).toBeVisible();
-    await expect(protectedBlock.getByText("Accepted outputs")).toBeVisible();
-    await expect(protectedBlock.getByText("Master calibration frames")).toBeVisible();
-    await expect(protectedBlock.getByText("Source acquisition frames")).toBeVisible();
+    await expect(protectedBlock.getByText('Accepted outputs')).toBeVisible();
+    await expect(
+      protectedBlock.getByText('Master calibration frames'),
+    ).toBeVisible();
+    await expect(
+      protectedBlock.getByText('Source acquisition frames'),
+    ).toBeVisible();
 
     // Before any scan, the section shows the scan prompt, not candidates.
     await expect(
-      cleanupSection.getByText("Scan this project to preview cleanup candidates."),
+      cleanupSection.getByText(
+        'Scan this project to preview cleanup candidates.',
+      ),
     ).toBeVisible();
 
     // ── 4. Scan (read-only preview, D11 step 1) ───────────────────────────────
-    const scanBtn = cleanupSection.getByTestId("cleanup-scan-btn");
+    const scanBtn = cleanupSection.getByTestId('cleanup-scan-btn');
     await expect(scanBtn).toBeVisible();
     await scanBtn.click();
 
     // Reclaimable total renders once the scan resolves (1_073_741_824 B = 1.0 GB).
-    await expect(cleanupSection.getByTestId("cleanup-reclaimable")).toHaveText(
-      "1.0 GB reclaimable",
+    await expect(cleanupSection.getByTestId('cleanup-reclaimable')).toHaveText(
+      '1.0 GB reclaimable',
       { timeout: 5_000 },
     );
 
     // ── 5. Candidates render grouped by classification with parsed confidence ─
-    const intermediateGroup = cleanupSection.getByTestId("cleanup-group-intermediate");
+    const intermediateGroup = cleanupSection.getByTestId(
+      'cleanup-group-intermediate',
+    );
     await expect(intermediateGroup).toBeVisible();
     // Two intermediate candidates, both 90% confidence, normal protection.
-    await expect(intermediateGroup.getByText("90%")).toHaveCount(2);
+    await expect(intermediateGroup.getByText('90%')).toHaveCount(2);
 
-    const masterGroup = cleanupSection.getByTestId("cleanup-group-master");
+    const masterGroup = cleanupSection.getByTestId('cleanup-group-master');
     await expect(masterGroup).toBeVisible();
-    await expect(masterGroup.getByText("95%")).toBeVisible();
+    await expect(masterGroup.getByText('95%')).toBeVisible();
 
     // The master candidate is protected: locked, NO affordance to include it,
     // clearly marked with the shared protected pill.
-    const protectedRow = masterGroup.getByTestId("cleanup-candidate-0");
-    await expect(protectedRow).toHaveClass(/alm-cleanup-scan__row--protected/);
-    await expect(protectedRow.getByText("Protected")).toBeVisible();
+    const protectedRow = masterGroup.getByTestId('cleanup-candidate-0');
+    await expect(protectedRow).toHaveClass(/pv-cleanup-scan__row--protected/);
+    await expect(protectedRow.getByText('Protected')).toBeVisible();
 
     // ── 6. Destructive-destination picker uses canonical archive|trash vocab
     //       (spec 033 vocab split) — never the legacy "os_trash" wording ──────
     // exact:true — the destination hint text ("App-managed archive
     // folder — reversible…") also contains the substring "archive folder".
     await expect(
-      cleanupSection.getByText("Archive folder", { exact: true }),
+      cleanupSection.getByText('Archive folder', { exact: true }),
     ).toBeVisible();
     await expect(
-      cleanupSection.getByText("System trash", { exact: true }),
+      cleanupSection.getByText('System trash', { exact: true }),
     ).toBeVisible();
     await expect(cleanupSection.getByText(/os_trash/i)).toHaveCount(0);
 
     // ── 7. Generate the reviewable plan (D11 step 2) — no mutation yet ───────
-    const generateBtn = cleanupSection.getByTestId("cleanup-generate-btn");
+    const generateBtn = cleanupSection.getByTestId('cleanup-generate-btn');
     await generateBtn.click();
 
     await expect(
-      page.getByText("Cleanup plan created with 3 items — review before anything is applied."),
+      page.getByText(
+        'Cleanup plan created with 3 items — review before anything is applied.',
+      ),
     ).toBeVisible({ timeout: 5_000 });
 
     // ── 8. The shared PlanReviewOverlay opens automatically ──────────────────
-    const overlay = page.getByTestId("plan-review-overlay");
+    const overlay = page.getByTestId('plan-review-overlay');
     await expect(overlay).toBeVisible({ timeout: 5_000 });
-    await expect(overlay.getByText("Archive folder")).toBeVisible();
-    await expect(overlay.getByText(/Nothing has been changed on disk/)).toBeVisible();
+    await expect(overlay.getByText('Archive folder')).toBeVisible();
+    await expect(
+      overlay.getByText(/Nothing has been changed on disk/),
+    ).toBeVisible();
 
     // Every proposed item is listed before approval (FR-003/SC-001).
-    await expect(overlay.getByTestId("plan-review-items")).toBeVisible();
+    await expect(overlay.getByTestId('plan-review-items')).toBeVisible();
     // exact:true — the item's "from" path cell also contains this filename
     // as a substring (…/registered/Ha_300s_r_0001.xisf).
     await expect(
-      overlay.getByText("Ha_300s_r_0001.xisf", { exact: true }),
+      overlay.getByText('Ha_300s_r_0001.xisf', { exact: true }),
     ).toBeVisible();
 
     // ── 9. Spec-016 protection gate blocks approval until acknowledged ───────
-    const approveBtn = overlay.getByTestId("plan-review-approve-apply");
+    const approveBtn = overlay.getByTestId('plan-review-approve-apply');
     await expect(approveBtn).toBeDisabled();
 
-    await overlay.getByRole("button", { name: "Acknowledge" }).click();
+    await overlay.getByRole('button', { name: 'Acknowledge' }).click();
 
     // ── 9b. Destructive-confirm gate (FR-003, D9, issue #741): the shared
     //        plan fixture carries `delete` items, so approval also stays
@@ -169,17 +183,21 @@ test.describe("cleanup review (spec 017 WP-E / Journey 6)", () => {
     // `.click()` (not `.check()`) — the checkbox's `onChange` awaits a mock
     // IPC round-trip before flipping `checked`, and `.check()`'s single
     // post-click snapshot races that async update.
-    await overlay.getByTestId("plan-review-confirm-destructive").click();
+    await overlay.getByTestId('plan-review-confirm-destructive').click();
     await expect(
-      overlay.getByTestId("plan-review-confirm-destructive"),
+      overlay.getByTestId('plan-review-confirm-destructive'),
     ).toBeChecked({ timeout: 5_000 });
     await expect(approveBtn).toBeEnabled({ timeout: 5_000 });
 
     // ── 10. Approve & apply → plans.approve → plans.apply, live progress ────
     await approveBtn.click();
 
-    await expect(overlay.getByTestId("plan-review-progress")).toBeVisible({ timeout: 5_000 });
-    await expect(overlay.getByText("1 item applied")).toBeVisible();
-    await expect(page.getByText("Cleanup plan applied.")).toBeVisible({ timeout: 5_000 });
+    await expect(overlay.getByTestId('plan-review-progress')).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(overlay.getByText('1 item applied')).toBeVisible();
+    await expect(page.getByText('Cleanup plan applied.')).toBeVisible({
+      timeout: 5_000,
+    });
   });
 });

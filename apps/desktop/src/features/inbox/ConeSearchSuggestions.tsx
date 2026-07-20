@@ -144,13 +144,13 @@ export function ConeSearchSuggestions({
         </Banner>
       ) : null}
       {confirmError ? <Banner variant="danger">{confirmError}</Banner> : null}
-      <ul className="alm-cone-search__list">
+      <ul className="pv-cone-search__list">
         {response.suggestions.map((s) => (
           <li
             key={`${s.candidate.primaryDesignation}-${s.separationDeg ?? 0}`}
-            className="alm-cone-search__row"
+            className="pv-cone-search__row"
           >
-            <span className="alm-cone-search__name">
+            <span className="pv-cone-search__name">
               {candidateLabel(s.candidate)}
             </span>
             <Pill variant={confidenceVariant(s.confidence)}>
@@ -160,7 +160,7 @@ export function ConeSearchSuggestions({
               <Pill variant="warn">{m.inbox_cone_search_excluded()}</Pill>
             ) : null}
             {s.separationDeg != null ? (
-              <span className="alm-meta-sm">
+              <span className="pv-meta-sm">
                 {separationLabel(s.separationDeg)}
               </span>
             ) : null}

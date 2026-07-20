@@ -33,7 +33,7 @@ const NOTE_FIELD = '[data-guide-anchor="sessions.note-field"]';
  * Open the checklist flyout and wait for its body (no-op when already open).
  *
  * The checklist — and therefore every row find affordance — is only mounted
- * inside the `.alm-onb-ring` flyout, portalled to `document.body`.
+ * inside the `.pv-onb-ring` flyout, portalled to `document.body`.
  */
 function findBtn(page: Page, itemId: string) {
 	return page
@@ -141,7 +141,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		// The projects group is a one-line header off its own page — expand it so
 		// its rows (and their find affordances) render.
 		await page
-			.locator(".alm-onb-checklist__group-header")
+			.locator(".pv-onb-checklist__group-header")
 			.filter({ hasText: "Projects" })
 			.click();
 
@@ -167,7 +167,7 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		await openChecklist(page);
 		await findBtn(page, "sessions.add_note").click();
 
-		const callout = page.locator(".alm-onb-spotlight-unavailable");
+		const callout = page.locator(".pv-onb-spotlight-unavailable");
 		await expect(callout).toBeVisible({ timeout: 8_000 });
 		await expect(callout).toContainText("Nothing to point at");
 		// No joyride spotlight was drawn.
@@ -208,9 +208,9 @@ test.describe("onboarding find-it spotlight (spec 056 US4)", () => {
 		await expect(page.locator(RESOLVE_CTA)).toBeVisible();
 		// The tooltip names the upstream item as the thing to do first, while its
 		// title still names the row the user actually asked about.
-		const tooltip = page.locator(".alm-onboarding-tooltip");
+		const tooltip = page.locator(".pv-onboarding-tooltip");
 		await expect(tooltip).toContainText("is required first");
-		await expect(tooltip.locator(".alm-onboarding-tooltip__title")).toHaveText(
+		await expect(tooltip.locator(".pv-onboarding-tooltip__title")).toHaveText(
 			"Add a favourite target",
 		);
 	});

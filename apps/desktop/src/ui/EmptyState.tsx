@@ -19,11 +19,11 @@ export const EmptyState = forwardRef<HTMLDivElement, EmptyStateProps>(
     ref,
   ) {
     const body = description ?? desc;
-    const cls = ['alm-empty', className].filter(Boolean).join(' ');
+    const cls = ['pv-empty', className].filter(Boolean).join(' ');
     return (
       <div ref={ref} className={cls} {...rest}>
-        <div className="alm-empty__title">{title}</div>
-        {body && <div className="alm-empty__desc">{body}</div>}
+        <div className="pv-empty__title">{title}</div>
+        {body && <div className="pv-empty__desc">{body}</div>}
         {action}
       </div>
     );

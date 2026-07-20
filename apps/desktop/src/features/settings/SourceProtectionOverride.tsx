@@ -125,20 +125,20 @@ export function SourceProtectionOverride({
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <span className="alm-source-protect__status">{m.common_loading()}</span>
+      <span className="pv-source-protect__status">{m.common_loading()}</span>
     );
   }
 
   if (loadState === 'error' && !open) {
     return (
-      <span className="alm-source-protect__status">
+      <span className="pv-source-protect__status">
         {errorMsg || m.settings_protection_load_error()}
       </span>
     );
   }
 
   return (
-    <div className="alm-source-protect__root">
+    <div className="pv-source-protect__root">
       <Pill
         variant={LEVEL_VARIANT[level]}
         title={levelHint(level, inheritsDefault)}
@@ -147,18 +147,18 @@ export function SourceProtectionOverride({
       </Pill>
 
       {open && (
-        <div className="alm-source-protect__edit-col">
-          <div className="alm-source-protect__edit-row">
+        <div className="pv-source-protect__edit-col">
+          <div className="pv-source-protect__edit-row">
             {}
             <label
               htmlFor={`protection-level-${sourceId}`}
-              className="alm-source-protect__label"
+              className="pv-source-protect__label"
             >
               {m.settings_source_protect_level_label()}
             </label>
             <select
               id={`protection-level-${sourceId}`}
-              className="alm-select alm-source-protect__select"
+              className="pv-select pv-source-protect__select"
               value={pendingLevel}
               onChange={(e) =>
                 setPendingLevel(e.target.value as ProtectionLevel)
@@ -172,14 +172,14 @@ export function SourceProtectionOverride({
                 {m.settings_cleanup_protection_unprotected()}
               </option>
             </select>
-            <div className="alm-source-protect__hint">
+            <div className="pv-source-protect__hint">
               {levelHint(pendingLevel, false)}
             </div>
           </div>
           {errorMsg && (
-            <div className="alm-source-protect__error">{errorMsg}</div>
+            <div className="pv-source-protect__error">{errorMsg}</div>
           )}
-          <div className="alm-source-protect__actions">
+          <div className="pv-source-protect__actions">
             <Btn
               size="sm"
               onClick={handleSave}

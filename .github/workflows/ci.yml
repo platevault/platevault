@@ -9,14 +9,18 @@ name: CI
 # desktop_shell under the `e2e` feature flag — no external per-OS WebDriver
 # binary required. WebdriverIO has been retired.
 #
-# Path-aware gating (see the `changes` job): heavy Rust/frontend/E2E steps are
-# skipped for changes that cannot affect them (e.g. docs-only PRs), while every
-# job STILL RUNS and reports success. We deliberately gate *inside* the jobs
-# rather than skipping whole jobs, so each job name keeps reporting a green
-# status check on every PR (this repo's merge flow keys on all status checks
-# being green; a skipped job/workflow would leave a check pending/absent and
-# block the merge). Full-suite triggers (workflows, Cargo/lockfiles, package
-# manifests, justfile, scripts) force everything to run via `force_full`.
+# Path-aware gating (see the `changes` job): work that a change cannot affect is
+# skipped. Full-suite triggers (workflows, Cargo/lockfiles, package manifests,
+# justfile, scripts) force everything to run via `force_full`.
+#
+# A job that would have NOTHING meaningful left to do must be skipped at JOB
+# level, never step-by-step. A job whose every step is skipped still concludes
+# `success`, making "this passed" and "this never ran" indistinguishable in the
+# UI, the checks API and to automated pollers. A job skipped by a job-level
+# `if:` concludes `skipped` — a distinct conclusion that still lets a docs-only
+# PR merge. Step-level `if:` is legitimate only where the job as a whole still
+# runs real work (the `integration` matrix interleaves a Rust lane and a
+# frontend lane; its job-level gate fires only when BOTH lanes are idle).
 
 on:
   pull_request:
@@ -118,9 +122,17 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "changes: rust=$rust frontend=$frontend docs_only=$docs_only scripts=${{ steps.filter.outputs.scripts }}"
 
+  # Two lanes share this matrix (Rust and frontend), each with its own step-level
+  # gate, so it is NOT split into two jobs: whenever either lane is active every
+  # OS leg still runs real work — `Rust tests` + `Generated contract/binding
+  # drift` are OS-agnostic under the Rust lane, as are the frontend lint / unit
+  # test / typecheck steps under the frontend lane. The job-level gate below
+  # therefore fires only when BOTH lanes are idle, which is exactly the case
+  # where the job had nothing to do and must not report `success`.
   integration:
     name: Integration (Layer 1) — ${{ matrix.os }}
     needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
     strategy:
       fail-fast: false # report each platform distinctly (FR-011)
       matrix:
@@ -196,6 +208,15 @@ jobs:
       - name: Frontend lint (Biome + ESLint gates + tokens)
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint
+
+      # `tests/` is outside the pnpm workspace globs (`apps/*`, `packages/*`),
+      # so `pnpm -r lint` never reaches it and `apps/desktop/biome.json` scopes
+      # itself to `src/**`. Without this step the E2E suite is unlinted and
+      # unformatted. Runs off the root biome.json, which is scoped to `tests/**`
+      # so it cannot shadow the nested desktop config.
+      - name: Test-suite lint (Biome over tests/)
+        if: needs.changes.outputs.frontend == 'true'
+        run: pnpm run lint:tests
 
       # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
       - name: Rust format
@@ -291,29 +312,26 @@ jobs:
   # backend/Tauri build). The real UI->IPC->backend journeys run in the dedicated
   # WebdriverIO + tauri-driver workflow (e2e.yml). Not gated on `integration` so
   # UI regressions surface even when the Rust workspace gate is unrelatedly red.
-  # Heavy steps skip when the change cannot affect the frontend; the job still
-  # runs and reports success.
+  # Single-lane job: every step is frontend work, so the whole job is gated on
+  # the frontend lane and a change that cannot affect the frontend skips it
+  # outright rather than reporting a green check for an empty run.
   ui-e2e:
     name: UI E2E (mock-mode Playwright)
     needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        if: needs.changes.outputs.frontend == 'true'
         with:
           version: 10.33.0
       - uses: actions/setup-node@v4
-        if: needs.changes.outputs.frontend == 'true'
         with:
           node-version: 20
           cache: pnpm
       - name: Install JS deps
-        if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
       - name: Install Playwright chromium
-        if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop exec playwright install --with-deps chromium
       - name: Mock-mode UI tests
-        if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop test:e2e

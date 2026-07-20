@@ -128,10 +128,10 @@ function ShellInner() {
   }, [navigate]);
 
   return (
-    <div className={`alm-frame density-${prefs.density}`}>
-      <div className="alm-frame__body">
+    <div className={`pv-frame density-${prefs.density}`}>
+      <div className="pv-frame__body">
         <Sidebar />
-        <main className="alm-frame__main">
+        <main className="pv-frame__main">
           <Outlet />
         </main>
       </div>

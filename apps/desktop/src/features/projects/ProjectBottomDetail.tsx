@@ -29,7 +29,7 @@
 
 import { Banner, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
-import { useProjectDetail, useSessionNames } from './store';
+import { useProjectDetail } from './store';
 import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
@@ -47,11 +47,10 @@ export interface ProjectBottomDetailProps {
 
 export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
   const { data: project, loading, error } = useProjectDetail(projectId);
-  const sessionNames = useSessionNames();
 
   if (loading && !project) {
     return (
-      <div className="alm-project-bottom__loading">
+      <div className="pv-project-bottom__loading">
         <Skeleton count={4} label={m.common_loading()} />
       </div>
     );
@@ -59,7 +58,7 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
 
   if (error || !project) {
     return (
-      <div className="alm-project-bottom__error">
+      <div className="pv-project-bottom__error">
         <Banner variant="danger">{m.projects_bottom_load_error()}</Banner>
       </div>
     );
@@ -72,10 +71,10 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
   const sourceIds = project.sources.map((s) => s.inventoryId);
 
   return (
-    <div className="alm-project-bottom">
-      <div className="alm-project-bottom__grid">
+    <div className="pv-project-bottom">
+      <div className="pv-project-bottom__grid">
         {/* ── Notes — widest: spans two columns on wider displays ───────── */}
-        <div className="alm-project-bottom__cell alm-project-bottom__cell--notes">
+        <div className="pv-project-bottom__cell pv-project-bottom__cell--notes">
           <ProjectNotesSection
             projectId={projectId}
             readOnly={lifecycle === 'archived'}
@@ -84,38 +83,34 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
 
         {/* ── Calibration match panel ───────────────────────────────────── */}
         {sourceIds.length > 0 && (
-          <div className="alm-project-bottom__cell">
-            <CalibrationMatchPanel
-              sessionIds={sourceIds}
-              defaultOpen={true}
-              sessionNames={sessionNames}
-            />
+          <div className="pv-project-bottom__cell">
+            <CalibrationMatchPanel sessionIds={sourceIds} defaultOpen={true} />
           </div>
         )}
 
         {/* ── Manifests accordion ───────────────────────────────────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <ManifestsAccordion projectId={projectId} defaultOpen={true} />
         </div>
 
         {/* ── Tool Launches — observed processing artifacts (spec 012 FR-009,
             #728: previously built and tested but never mounted) ──────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <ToolLaunchesAccordion projectId={projectId} defaultOpen={true} />
         </div>
 
         {/* ── Generated source views (spec 026) ────────────────────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <SourceViewsSection projectId={projectId} defaultOpen={true} />
         </div>
 
         {/* ── Outputs — stub; no backend data yet ──────────────────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <OutputsSection defaultOpen={true} />
         </div>
 
         {/* ── Cleanup — live two-step scan → plan → review flow (017 WP-E) ── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <CleanupSection projectId={projectId} defaultOpen={true} />
         </div>
       </div>

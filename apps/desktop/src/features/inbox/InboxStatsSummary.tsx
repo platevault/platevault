@@ -35,7 +35,7 @@ export function InboxStatsSummary({ stats }: InboxStatsSummaryProps) {
   if (perType.length === 0) return null;
 
   return (
-    <span className="alm-inbox-stats" data-testid="inbox-stats-summary">
+    <span className="pv-inbox-stats" data-testid="inbox-stats-summary">
       {perType.map((row: InboxStatsPerType) => (
         <PerTypeChip key={row.frameType} row={row} />
       ))}
@@ -49,7 +49,7 @@ function PerTypeChip({ row }: { row: InboxStatsPerType }) {
   const count = row.folderCount > 0 ? row.folderCount : row.masterCount;
   return (
     <span
-      className="alm-inbox-stats__per-type"
+      className="pv-inbox-stats__per-type"
       data-testid={`inbox-stats-type-${row.frameType}`}
       title={m.inbox_stats_per_type_title({
         folderCount: row.folderCount,
@@ -57,11 +57,11 @@ function PerTypeChip({ row }: { row: InboxStatsPerType }) {
         imageCount: row.imageCount,
       })}
     >
-      <span className="alm-inbox-stats__type">{row.frameType}</span>
-      <span className="alm-inbox-stats__num">{count}</span>
+      <span className="pv-inbox-stats__type">{row.frameType}</span>
+      <span className="pv-inbox-stats__num">{count}</span>
       {row.masterCount > 0 && row.folderCount > 0 && (
         // eslint-disable-next-line alm/no-user-string -- "m" is a unit abbreviation for "masters", not a translatable word
-        <span className="alm-inbox-stats__label">+{row.masterCount}m</span>
+        <span className="pv-inbox-stats__label">+{row.masterCount}m</span>
       )}
     </span>
   );

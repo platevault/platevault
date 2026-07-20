@@ -224,15 +224,15 @@ export async function landOnMockRoute(page: Page, hash: string): Promise<void> {
 }
 
 /** Sidebar trigger that opens the Getting-started flyout. */
-export const ONB_RING = ".alm-onb-ring";
+export const ONB_RING = ".pv-onb-ring";
 /** The checklist itself — only in the DOM while the flyout is open. */
-export const ONB_SECTION = ".alm-onb-checklist";
+export const ONB_SECTION = ".pv-onb-checklist";
 
 /**
  * Open the Getting-started flyout and wait for the checklist inside it.
  *
  * The checklist is NOT inline in the sidebar: `ChecklistPopover` portals it to
- * `document.body`, so `.alm-onb-checklist` does not exist until the ring
+ * `document.body`, so `.pv-onb-checklist` does not exist until the ring
  * trigger is clicked. Any spec asserting on checklist content must call this
  * after landing on its route — four spec files failed precisely because they
  * assumed the pre-redesign inline host.

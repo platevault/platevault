@@ -16,7 +16,7 @@ export interface ResizeHandleProps {
 export function ResizeHandle({ onPointerDown, label }: ResizeHandleProps) {
   return (
     <div
-      className="alm-resize-handle"
+      className="pv-resize-handle"
       role="separator"
       aria-orientation="vertical"
       aria-label={label}

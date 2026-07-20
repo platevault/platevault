@@ -23,6 +23,7 @@ import { Btn, Pill } from '@/ui';
 import { Modal, TargetSearch } from '@/components';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import type { TargetSuggestion } from '@/bindings/aliases';
 
 export interface AddTargetDialogProps {
@@ -86,9 +87,7 @@ export function AddTargetDialog({
         );
       }
     } catch (err: unknown) {
-      const code =
-        typeof err === 'string' ? err : ((err as Error)?.message ?? 'unknown');
-      setError(m.targets_add_failed({ code }));
+      setError(m.targets_add_failed({ message: errMessage(err) }));
     } finally {
       setResolving(false);
     }
@@ -101,7 +100,7 @@ export function AddTargetDialog({
       title={m.targets_add_target()}
       subtitle={m.targets_add_target_desc()}
       size="md"
-      className="alm-add-target__popup"
+      className="pv-add-target__popup"
       ariaLabel={m.targets_add_target()}
       initialFocus={searchInputRef}
       footer={
@@ -125,16 +124,16 @@ export function AddTargetDialog({
         </>
       }
     >
-      <div className="alm-add-target__body">
+      <div className="pv-add-target__body">
         {pending ? (
           <div>
-            <span className="alm-field-label">
+            <span className="pv-field-label">
               {m.targets_add_target_selected()}
             </span>
-            <div className="alm-add-target__selected-row">
+            <div className="pv-add-target__selected-row">
               <Pill variant="accent">{pending.primaryDesignation}</Pill>
               {pending.commonName && (
-                <span className="alm-field-hint">{pending.commonName}</span>
+                <span className="pv-field-hint">{pending.commonName}</span>
               )}
               <Btn type="button" variant="ghost" onClick={reset}>
                 {m.common_change()}
@@ -151,7 +150,7 @@ export function AddTargetDialog({
         )}
 
         {error && (
-          <span role="alert" className="alm-field-error">
+          <span role="alert" className="pv-field-error">
             {error}
           </span>
         )}

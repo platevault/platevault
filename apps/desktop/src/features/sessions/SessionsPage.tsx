@@ -221,7 +221,7 @@ export function SessionsPage() {
         sessionId: selected,
       });
     } catch {
-      addToast({ message: m.sessions_toast_reveal_error(), variant: 'error' });
+      addToast({ message: m.common_reveal_error(), variant: 'error' });
     }
   }, [selected, revealTarget]);
 
@@ -256,9 +256,9 @@ export function SessionsPage() {
               value: kindFilter,
               options: [
                 { value: 'light', label: m.sessions_kind_light_label() },
-                { value: 'dark', label: m.inbox_kind_dark() },
+                { value: 'dark', label: m.common_dark() },
                 { value: 'flat', label: m.inbox_kind_flat() },
-                { value: 'bias', label: m.inbox_kind_bias() },
+                { value: 'bias', label: m.common_bias() },
               ],
               allLabel: m.common_all(),
               onChange: (v) => setKindFilter(v as InventoryFrameType | ''),
@@ -293,6 +293,7 @@ export function SessionsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockId="sessions"
       detail={
         selectedSession != null ? (
           <SessionDetail
@@ -310,7 +311,7 @@ export function SessionsPage() {
       detailLabel={m.cmp_listpage_close_session_details_aria()}
     >
       {error != null ? (
-        <div className="alm-listtable__empty">{m.sessions_load_error()}</div>
+        <div className="pv-listtable__empty">{m.sessions_load_error()}</div>
       ) : (
         <SessionsTable
           sources={sources}

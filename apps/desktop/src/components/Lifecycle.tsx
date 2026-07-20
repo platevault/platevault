@@ -23,39 +23,39 @@ export function Lifecycle({ state }: LifecycleProps) {
   const isBlocked = state === 'blocked';
 
   return (
-    <div className="alm-lifecycle">
+    <div className="pv-lifecycle">
       {PROJECT_LIFECYCLE.map((step, i) => {
         const isDone = !isBlocked && i < currentIdx;
         const isCurrent = !isBlocked && i === currentIdx;
 
         const dotClass = [
-          'alm-lifecycle__dot',
-          isDone && 'alm-lifecycle__dot--done',
-          isCurrent && 'alm-lifecycle__dot--active',
+          'pv-lifecycle__dot',
+          isDone && 'pv-lifecycle__dot--done',
+          isCurrent && 'pv-lifecycle__dot--active',
         ]
           .filter(Boolean)
           .join(' ');
 
         const labelClass = [
-          'alm-lifecycle__label',
-          isDone && 'alm-lifecycle__label--done',
-          isCurrent && 'alm-lifecycle__label--active',
+          'pv-lifecycle__label',
+          isDone && 'pv-lifecycle__label--done',
+          isCurrent && 'pv-lifecycle__label--active',
         ]
           .filter(Boolean)
           .join(' ');
 
         return (
-          <div key={step} className="alm-lifecycle__step">
-            <div className="alm-lifecycle__connector">
+          <div key={step} className="pv-lifecycle__step">
+            <div className="pv-lifecycle__connector">
               {i > 0 && (
                 <div
-                  className={`alm-lifecycle__line${isDone || isCurrent ? ' alm-lifecycle__line--done' : ''}`}
+                  className={`pv-lifecycle__line${isDone || isCurrent ? ' pv-lifecycle__line--done' : ''}`}
                 />
               )}
               <div className={dotClass} />
               {i < PROJECT_LIFECYCLE.length - 1 && (
                 <div
-                  className={`alm-lifecycle__line${isDone ? ' alm-lifecycle__line--done' : ''}`}
+                  className={`pv-lifecycle__line${isDone ? ' pv-lifecycle__line--done' : ''}`}
                 />
               )}
             </div>
@@ -64,12 +64,12 @@ export function Lifecycle({ state }: LifecycleProps) {
         );
       })}
       {isBlocked && (
-        <div className="alm-lifecycle__step">
-          <div className="alm-lifecycle__connector">
-            <div className="alm-lifecycle__line" />
-            <div className="alm-lifecycle__dot alm-lifecycle__dot--blocked" />
+        <div className="pv-lifecycle__step">
+          <div className="pv-lifecycle__connector">
+            <div className="pv-lifecycle__line" />
+            <div className="pv-lifecycle__dot pv-lifecycle__dot--blocked" />
           </div>
-          <span className="alm-lifecycle__label alm-lifecycle__label--danger">
+          <span className="pv-lifecycle__label pv-lifecycle__label--danger">
             {m.projects_stepper_blocked_chip()}
           </span>
         </div>

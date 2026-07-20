@@ -554,6 +554,10 @@ pub fn validate_path(path: &str) -> ToolPathValidation {
     let p = std::path::Path::new(path);
     let exists = p.exists();
     let valid = exists && p.is_absolute();
+    // Only meaningful once the path exists; `is_dir()` is false for a
+    // nonexistent path, which would be indistinguishable from "exists and is
+    // a file" without gating on `exists` first (issue #1056).
+    let is_dir = exists.then(|| p.is_dir());
     ToolPathValidation {
         path: path.to_owned(),
         valid,
@@ -564,6 +568,7 @@ pub fn validate_path(path: &str) -> ToolPathValidation {
         } else {
             Some("Path does not exist".to_owned())
         },
+        is_dir,
     }
 }
 
@@ -931,6 +936,36 @@ mod tests {
         let v = validate_path(missing);
         assert!(!v.valid);
         assert!(v.reason.unwrap().contains("exist"));
+    }
+
+    #[tokio::test]
+    async fn validate_path_is_dir_true_for_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = validate_path(dir.path().to_str().unwrap());
+        assert!(v.valid);
+        assert_eq!(v.is_dir, Some(true));
+    }
+
+    #[tokio::test]
+    async fn validate_path_is_dir_false_for_file() {
+        // Issue #1056: a file path (not a directory) must be distinguishable
+        // so the manual source-path entry UI can reject it inline.
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("not-a-dir.txt");
+        std::fs::write(&file_path, b"x").unwrap();
+        let v = validate_path(file_path.to_str().unwrap());
+        assert!(v.valid);
+        assert_eq!(v.is_dir, Some(false));
+    }
+
+    #[tokio::test]
+    async fn validate_path_is_dir_none_for_nonexistent() {
+        #[cfg(windows)]
+        let missing = "C:\\no\\such\\binary";
+        #[cfg(not(windows))]
+        let missing = "/no/such/binary";
+        let v = validate_path(missing);
+        assert_eq!(v.is_dir, None);
     }
 
     #[test]

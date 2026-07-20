@@ -47,7 +47,7 @@ import { useHotkeys } from '@/lib/useHotkeys';
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 const LEVEL_CHIPS: { value: LevelFilter; label: () => string }[] = [
-  { value: 'all', label: () => m.log_level_all() },
+  { value: 'all', label: () => m.common_all() },
   { value: 'error', label: () => m.settings_advanced_log_error() },
   { value: 'warn', label: () => m.settings_advanced_log_warn() },
   { value: 'info', label: () => m.settings_advanced_log_info() },
@@ -302,17 +302,17 @@ export function LogPanel() {
     <Collapsible.Root
       open={expanded}
       onOpenChange={toggle}
-      className="alm-logpanel"
+      className="pv-logpanel"
       role="log"
       aria-label={m.logpanel_aria_label()}
     >
-      <div className="alm-logpanel__header">
-        <span className="alm-logpanel__title">{m.logpanel_title()}</span>
+      <div className="pv-logpanel__header">
+        <span className="pv-logpanel__title">{m.logpanel_title()}</span>
 
         {/* Idle preview line (collapsed state) */}
         {!expanded && previewEntry && (
           <span
-            className={`alm-logpanel__preview alm-logpanel__event-level--${previewEntry.level}`}
+            className={`pv-logpanel__preview pv-logpanel__event-level--${previewEntry.level}`}
             aria-label={m.logpanel_preview_aria()}
           >
             {formatTimeOfDay(previewEntry.time)} {previewEntry.message}
@@ -322,7 +322,7 @@ export function LogPanel() {
         {/* Level filter chips (expanded state) */}
         {expanded && (
           <div
-            className="alm-logpanel__filters"
+            className="pv-logpanel__filters"
             role="group"
             aria-label={m.logpanel_level_filter_aria()}
           >
@@ -330,10 +330,8 @@ export function LogPanel() {
               <button
                 key={chip.value}
                 type="button"
-                className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
-                  levelFilter === chip.value
-                    ? ' alm-logpanel__chip--active'
-                    : ''
+                className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
+                  levelFilter === chip.value ? ' pv-logpanel__chip--active' : ''
                 }`}
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
@@ -353,8 +351,8 @@ export function LogPanel() {
             {logLevel === 'debug' && (
               <button
                 type="button"
-                className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
-                  showDiagnostics ? ' alm-logpanel__chip--active' : ''
+                className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
+                  showDiagnostics ? ' pv-logpanel__chip--active' : ''
                 }`}
                 onClick={() => setShowDiagnostics((v) => !v)}
                 aria-pressed={showDiagnostics}
@@ -368,28 +366,28 @@ export function LogPanel() {
         {/* Category/source filter chips (#666) */}
         {expanded && (
           <div
-            className="alm-logpanel__filters"
+            className="pv-logpanel__filters"
             role="group"
             aria-label={m.logpanel_source_filter_aria()}
           >
             <button
               type="button"
-              className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
-                sourceFilter.length === 0 ? ' alm-logpanel__chip--active' : ''
+              className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
+                sourceFilter.length === 0 ? ' pv-logpanel__chip--active' : ''
               }`}
               onClick={() => setSourceFilter([])}
               aria-pressed={sourceFilter.length === 0}
               aria-label={m.logpanel_source_all_aria()}
             >
-              {m.log_level_all()}
+              {m.common_all()}
             </button>
             {ALL_LOG_SOURCES.map((source) => (
               <button
                 key={source}
                 type="button"
-                className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
+                className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
                   sourceFilter.length === 0 || sourceFilter.includes(source)
-                    ? ' alm-logpanel__chip--active'
+                    ? ' pv-logpanel__chip--active'
                     : ''
                 }`}
                 onClick={() =>
@@ -415,7 +413,7 @@ export function LogPanel() {
         {expanded && (
           <button
             type="button"
-            className={`alm-btn alm-btn--ghost alm-btn--xs${followLogs ? ' alm-logpanel__chip--active' : ''}`}
+            className={`pv-btn pv-btn--ghost pv-btn--xs${followLogs ? ' pv-logpanel__chip--active' : ''}`}
             onClick={() => {
               const next = !followLogs;
               setFollowLogs(next);
@@ -449,7 +447,7 @@ export function LogPanel() {
         {expanded && (
           <button
             type="button"
-            className="alm-btn alm-btn--ghost alm-btn--xs"
+            className="pv-btn pv-btn--ghost pv-btn--xs"
             onClick={() => void handleExport()}
             aria-label={m.logpanel_export_aria()}
           >
@@ -458,7 +456,7 @@ export function LogPanel() {
         )}
 
         <Collapsible.Trigger
-          className="alm-btn alm-btn--ghost alm-btn--sm"
+          className="pv-btn pv-btn--ghost pv-btn--sm"
           aria-label={
             expanded ? m.log_collapse_panel_aria() : m.log_expand_panel_aria()
           }
@@ -468,15 +466,15 @@ export function LogPanel() {
       </div>
 
       {exportError && (
-        <div className="alm-logpanel__export-error" role="alert">
+        <div className="pv-logpanel__export-error" role="alert">
           {m.logpanel_export_failed({ error: exportError ?? '' })}
         </div>
       )}
 
-      <Collapsible.Panel className="alm-logpanel__body">
+      <Collapsible.Panel className="pv-logpanel__body">
         {/* Truncation marker (A4) */}
         {truncated && (
-          <div className="alm-logpanel__truncation-marker" role="note">
+          <div className="pv-logpanel__truncation-marker" role="note">
             {truncatedCount != null
               ? m.logpanel_history_gap_count({ count: String(truncatedCount) })
               : m.logpanel_history_gap()}
@@ -484,13 +482,13 @@ export function LogPanel() {
         )}
 
         <ul
-          className="alm-logpanel__events alm-virtual-scroll"
+          className="pv-logpanel__events pv-virtual-scroll"
           ref={listRef}
           onScroll={handleScroll}
           data-virtual-scroll="true"
         >
           {visibleEntries.length === 0 ? (
-            <li className="alm-logpanel__empty">
+            <li className="pv-logpanel__empty">
               {/* #669: a filtered-to-empty view must not read as "nothing
                   was ever recorded" when entries exist but the active
                   filter excludes all of them. */}
@@ -500,7 +498,7 @@ export function LogPanel() {
             </li>
           ) : (
             <div
-              className="alm-virtual-inner"
+              className="pv-virtual-inner"
               // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
               style={{
                 height: `${virtualizer.getTotalSize()}px`,
@@ -592,7 +590,7 @@ function LogEntryRow({
       data-index={index}
       // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer row style passthrough (absolute + translateY)
       style={style}
-      className={`alm-logpanel__event${isClickable ? ' alm-logpanel__event--link' : ''}`}
+      className={`pv-logpanel__event${isClickable ? ' pv-logpanel__event--link' : ''}`}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : 'listitem'}
       // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- only focusable when clickable, where role becomes button
@@ -616,28 +614,28 @@ function LogEntryRow({
           : undefined
       }
     >
-      <span className="alm-logpanel__event-time">
+      <span className="pv-logpanel__event-time">
         {formatTimeOfDay(entry.time)}
       </span>
       <span
-        className={`alm-logpanel__event-level alm-logpanel__event-level--${entry.level}`}
+        className={`pv-logpanel__event-level pv-logpanel__event-level--${entry.level}`}
         aria-label={entry.level}
       >
         {entry.level}
       </span>
       <span
-        className={`alm-logpanel__event-source alm-logpanel__event-source--${entry.source}`}
+        className={`pv-logpanel__event-source pv-logpanel__event-source--${entry.source}`}
       >
         {entry.source}
       </span>
       {contextLabel && (
-        <span className="alm-logpanel__event-context" title={contextLabel}>
+        <span className="pv-logpanel__event-context" title={contextLabel}>
           {contextLabel}
         </span>
       )}
-      <span className="alm-logpanel__event-msg">{entry.message}</span>
+      <span className="pv-logpanel__event-msg">{entry.message}</span>
       {hasEntityLink && (
-        <span className="alm-logpanel__event-link-indicator" aria-hidden="true">
+        <span className="pv-logpanel__event-link-indicator" aria-hidden="true">
           →
         </span>
       )}

@@ -450,11 +450,11 @@ export function WizardPage() {
   // Back / Next button labels per wireframe
   const backLabels = [
     '',
-    m.projects_wizard_back_default(),
+    m.setup_wizard_back(),
     m.projects_wizard_back_to_sources(),
     m.projects_wizard_back_calibration(),
     m.projects_wizard_back_source_views(),
-    m.projects_wizard_back_default(),
+    m.setup_wizard_back(),
   ];
   const nextLabels = [
     m.projects_wizard_next_sources(),
@@ -467,22 +467,22 @@ export function WizardPage() {
 
   // Summary panel (right rail)
   const summary = (
-    <div className="alm-wizard-page__summary">
-      <div className="alm-wizard-page__summary-heading">
+    <div className="pv-wizard-page__summary">
+      <div className="pv-wizard-page__summary-heading">
         {m.projects_wizard_summary_title()}
       </div>
       <div>
-        <div className="alm-wizard-page__summary-project-name">
+        <div className="pv-wizard-page__summary-project-name">
           {projectLabel}
         </div>
-        <div className="alm-wizard-page__summary-profile">{profileLabel}</div>
+        <div className="pv-wizard-page__summary-profile">{profileLabel}</div>
       </div>
 
       <div>
-        <div className="alm-wizard-page__summary-section-heading">
+        <div className="pv-wizard-page__summary-section-heading">
           {m.projects_wizard_summary_selected()}
         </div>
-        <div className="alm-wizard-page__summary-list">
+        <div className="pv-wizard-page__summary-list">
           <SummaryRow
             label={m.projects_wizard_summary_lights_label()}
             value={`${wizardData.sources.selectedSessionIds.length} sess`}
@@ -500,7 +500,7 @@ export function WizardPage() {
             })}
           />
           <SummaryRow
-            label={m.projects_wizard_bias_label()}
+            label={m.common_bias()}
             value={m.projects_wizard_summary_master_count({
               count: biasSelected,
             })}
@@ -510,17 +510,17 @@ export function WizardPage() {
 
       {currentStep < 5 && (
         <div>
-          <div className="alm-wizard-page__summary-section-heading">
+          <div className="pv-wizard-page__summary-section-heading">
             {m.projects_wizard_summary_coming_up()}
           </div>
-          <div className="alm-wizard-page__summary-list">
+          <div className="pv-wizard-page__summary-list">
             {labels.slice(currentStep + 1).map((label, i) => (
               <div
                 key={label}
                 className={
-                  'alm-wizard-page__coming-up-item' +
+                  'pv-wizard-page__coming-up-item' +
                   (i < labels.length - currentStep - 2
-                    ? ' alm-wizard-page__coming-up-item--sep'
+                    ? ' pv-wizard-page__coming-up-item--sep'
                     : '')
                 }
               >
@@ -531,20 +531,20 @@ export function WizardPage() {
         </div>
       )}
 
-      <div className="alm-wizard-page__footprint">
-        <div className="alm-wizard-page__footprint-label">
+      <div className="pv-wizard-page__footprint">
+        <div className="pv-wizard-page__footprint-label">
           {m.projects_wizard_footprint_label()}
         </div>
-        <div className="alm-mono alm-wizard-page__footprint-value">
+        <div className="pv-mono pv-wizard-page__footprint-value">
           {m.projects_wizard_footprint_value()}
         </div>
-        <div className="alm-wizard-page__footprint-note">
+        <div className="pv-wizard-page__footprint-note">
           {m.projects_wizard_footprint_note()}
         </div>
       </div>
 
       {/* Navigation buttons in the summary rail */}
-      <div className="alm-wizard-page__summary-nav">
+      <div className="pv-wizard-page__summary-nav">
         {currentStep > 0 && (
           <Btn size="sm" onClick={handleBack}>
             {backLabels[currentStep]}
@@ -556,7 +556,7 @@ export function WizardPage() {
             size="sm"
             onClick={handleNext}
             disabled={!canAdvance()}
-            className="alm-wizard-page__flex-fill"
+            className="pv-wizard-page__flex-fill"
           >
             {nextLabels[currentStep]}
           </Btn>
@@ -570,7 +570,7 @@ export function WizardPage() {
             {createError &&
               (createError.field === 'path' ||
                 createError.field === 'general') && (
-                <span role="alert" className="alm-field-error">
+                <span role="alert" className="pv-field-error">
                   {createError.message}
                 </span>
               )}
@@ -579,7 +579,7 @@ export function WizardPage() {
               size="sm"
               onClick={() => void handleCreate()}
               disabled={creating || !wizardData.name.name.trim()}
-              className="alm-wizard-page__flex-fill"
+              className="pv-wizard-page__flex-fill"
               data-testid="wizard-create-btn"
             >
               {creating
@@ -595,13 +595,13 @@ export function WizardPage() {
   // T078c layout fix: min-height: 0 prevents flex overflow that caused the
   // wizard to render at the bottom of the window instead of filling the main area.
   return (
-    <div className="alm-page alm-wizard-page">
+    <div className="pv-page pv-wizard-page">
       {/* Wizard toolbar — styled consistently with other page toolbars */}
-      <div className="alm-page__bar alm-wizard-page__toolbar">
-        <span className="alm-wizard-page__toolbar-title">
+      <div className="pv-page__bar pv-wizard-page__toolbar">
+        <span className="pv-wizard-page__toolbar-title">
           {m.projects_wizard_toolbar_title()} {projectLabel}
         </span>
-        <span className="alm-wizard-page__spacer" />
+        <span className="pv-wizard-page__spacer" />
         {devSkip && (
           <Btn
             size="sm"
@@ -620,7 +620,7 @@ export function WizardPage() {
       </div>
 
       {/* Sub-toolbar: workflow profile breadcrumb */}
-      <div className="alm-page__bar alm-wizard-page__subbbar">
+      <div className="pv-page__bar pv-wizard-page__subbbar">
         <span>
           {m.projects_wizard_workflow_profile_label()} {profileLabel}
         </span>
@@ -635,7 +635,7 @@ export function WizardPage() {
               wizardData.name.target.primaryDesignation}
           </span>
         )}
-        <span className="alm-wizard-page__subbar-note">
+        <span className="pv-wizard-page__subbar-note">
           {m.projects_wizard_subbar_note()}
         </span>
       </div>
@@ -645,12 +645,12 @@ export function WizardPage() {
         steps={steps}
         currentStep={currentStep}
         summary={summary}
-        className="alm-wizard-page__flex-fill--noscroll"
+        className="pv-wizard-page__flex-fill--noscroll"
       >
         {/* Step title + description */}
         {currentStep < 5 && (
-          <div className="alm-wizard-page__step-header">
-            <h2 className="alm-wizard-page__step-title">
+          <div className="pv-wizard-page__step-header">
+            <h2 className="pv-wizard-page__step-title">
               {m.projects_wizard_step_label()} {currentStep + 1} &middot;{' '}
               {labels[currentStep]}
             </h2>
@@ -732,9 +732,9 @@ export function WizardPage() {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="alm-wizard-page__summary-row">
-      <span className="alm-wizard-page__summary-row-label">{label}</span>
-      <span className="alm-mono">{value}</span>
+    <div className="pv-wizard-page__summary-row">
+      <span className="pv-wizard-page__summary-row-label">{label}</span>
+      <span className="pv-mono">{value}</span>
     </div>
   );
 }

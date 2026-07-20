@@ -236,7 +236,7 @@ everything neither automated layer reaches.
 | Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
 |---|:--:|:--:|:--:|---|
 | 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Full 6-step happy path and Data-Sources management (rescan/remap/disable/delete/reveal) still uncovered | `windows-journeys/journey-01-first-run-setup.md` |
-| 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path. Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448, 2026-07-05): mixed-folder split, needs-review gate + bulk reclassify, single-type confirm→plan toast, plan-approval overlay review→apply/cancel | `windows-journeys/journey-02-inbox-ingest-move.md` |
+| 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path, unsplit-folder Type-badge reads "unclassified" not "classified" (`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`, #711 Instance A, NEW 2026-07-19 — **written, not yet executed**). Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448, 2026-07-05): mixed-folder split, needs-review gate + bulk reclassify, single-type confirm→plan toast, plan-approval overlay review→apply/cancel | `windows-journeys/journey-02-inbox-ingest-move.md` |
 | 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448): catalogue-in-place plan distinguishable from a move plan in the review overlay | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 real-UI (`sessions_journeys.rs`): nothing before apply, real session row appears automatically, no review-lifecycle controls anywhere, no-op rescan never duplicates. Notes-edit invariant (Test 4) found untestable — see finding below | 🟡 rows/detail render only (`lifecycle_detail.spec.ts`, pre-existing) | `windows-journeys/journey-04-sessions-review.md` |
 | 5 Project lifecycle | ✅ | 🟡 real-UI (`lifecycle_ui_journeys.rs`): create-wizard makes real `lights/`/`darks/` folders under the registered project library root (PR #414 regression guard) + blocks a duplicate name with a real inline field error. Attach/remove-source UX, manifests/notes, tool launch, artifact watcher still IPC-only | ✅ `project_lifecycle_create.spec.ts` (batch 3, PR #453, 2026-07-05): creation-wizard happy path, duplicate-name inline block, empty-name Create-disabled gate; `project_lifecycle_surfaces.spec.ts` + `project_lifecycle_transitions_full.spec.ts` (landed same window): notes autosave, manifests/outputs/tool-launch affordance, attach/remove-source guards, full state-machine transitions. `lifecycle_transitions.spec.ts` (pre-existing): transition button + pill-refresh (`test.skip`, real-backend only) | `windows-journeys/journey-05-project-lifecycle.md` |
@@ -381,11 +381,20 @@ just test the mock, not the product:
    missing-path-attribute (FR-032) gate as a distinct real mechanism, Confirm
    never moving a file before Apply, Apply moving to exactly the
    overlay-displayed destination path, and the catalogue-in-place (0-move,
-   byte-identical) variant. Remaining gap (follow-up, not done): the
-   multi-root destination picker prompt (`inbox-root-picker`, needs 2+
-   registered light-frame roots) and the stale-plan-refusal UI (external
-   file mutation between confirm and apply) are still unautomated at this
-   layer.
+   byte-identical) variant. Extended 2026-07-19 (#711 Instance A): the
+   Type-column badge of an UNSPLIT folder that resolved to no frame type
+   must read "unclassified", never "classified"
+   (`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`). The four
+   pre-existing journeys above all passed identically with and without the
+   fix — they assert on `inbox-unclassified-alert`, Confirm enablement and
+   move counts, and never read the Type column, so badge correctness was a
+   genuine coverage gap rather than a dead harness (a testid-rename positive
+   control produced a real 20s timeout failure). That journey is WRITTEN BUT
+   NOT YET EXECUTED — validate it on its first Layer-2 run. Remaining gap
+   (follow-up, not done): the multi-root destination picker prompt
+   (`inbox-root-picker`, needs 2+ registered light-frame roots) and the
+   stale-plan-refusal UI (external file mutation between confirm and apply)
+   are still unautomated at this layer.
 7. **Targets catalog + SIMBAD resolve-on-demand + stub-disclosure guard**
    (Journey 9) — DONE (2026-07-05, `crates/e2e-tests/tests/targets_journeys.rs`):
    add-target via the real dialog resolves to the same real id on re-add (no

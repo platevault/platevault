@@ -8,14 +8,19 @@
  *   [props A] [props B] [sessions column: "Used by" + "Compatible" stacked]
  *
  * Actions (Use in project / Replace master / Reveal) are inline-left
- * in the title via titleExtra, wrapped in alm-session-detail2__actions — same
+ * in the title via titleExtra, wrapped in pv-session-detail2__actions — same
  * pattern as SessionDetail's actionButtons. No `actions` prop passed to
  * DetailPanel. No subtitle (kind is already in the title, size is redundant).
  *
- * #642: all three header actions are disabled with an explanatory `title`,
- * not wired to fake IPC — none has a backing flow yet (no project-picker, no
- * replace-master use case, no master file path on the contract for Reveal).
- * Same "disabled, no fake handler" precedent as ArchivePage's Reveal button.
+ * #642: "Use in project" and "Replace master" stay disabled with an
+ * explanatory `title` — no project-picker or replace-master use case exists
+ * yet. Reveal is now wired: the contract carries `rootId`/`relativePath`
+ * (masters_list/masters_get, `crates/app/calibration/src/matching.rs`),
+ * resolved to an absolute path the same way SessionsPage does (root path
+ * from `useInventorySources()` + `resolveRevealPath`), reused rather than
+ * duplicated. Falls back to disabled+explanatory-title when the master's
+ * frame was never resolved to a `file_record` (legacy masters) or its
+ * owning root isn't currently actionable.
  *
  * Data wiring:
  *   - master.usedBySessionIds from the list endpoint is always empty.
@@ -36,7 +41,7 @@
  *   master gets its first assignment instead of faked from stub data.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
@@ -47,6 +52,8 @@ import {
   DetailPanel,
   type PropertyDef,
   PropertyTable,
+  Modal,
+  TwoColDetailLayout,
 } from '@/components';
 import { Btn, EmptyState, Pill } from '@/ui';
 import type { CalibrationMatchMissingFlag } from '@/bindings/index';
@@ -58,9 +65,23 @@ import {
   formatGain,
   formatBinning,
 } from '@/lib/format';
+import { errMessage } from '@/lib/errors';
+import { addToast } from '@/shared/toast';
+import { useInventorySources } from '@/features/sessions/store';
+import { isSourceActionable } from '@/features/sessions/connectivity';
+import {
+  resolveRevealPath,
+  revealInventoryPath,
+} from '@/features/sessions/revealInventory';
+import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
-import { useCalibrationAssign, useCalibrationSuggest } from './useCalibration';
+import {
+  useCalibrationAssign,
+  useCalibrationSuggest,
+  useGenerateMasterArchivePlan,
+  useInvalidateCalibrationMaster,
+} from './useCalibration';
 import { masterFieldApplicability } from './master-applicability';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -162,6 +183,17 @@ export function MasterDetail({
     queryKey: queryKeys.sessions.all(),
     queryFn: async () => unwrap(await commands.sessionsList()),
   });
+  // #642: shares the same inventory-sources query SessionsPage's Reveal
+  // action reads (`queryKeys.inventory.all`) — no private fetch.
+  const sourcesQuery = useInventorySources();
+
+  // #886: single-master archive plan generation + review/apply.
+  const generateArchivePlan = useGenerateMasterArchivePlan();
+  const invalidateMaster = useInvalidateCalibrationMaster();
+  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
+    null,
+  );
+  const [inUseConfirmOpen, setInUseConfirmOpen] = useState(false);
 
   const detail: DetailState = useMemo(() => {
     const empty: DetailState = {
@@ -230,6 +262,88 @@ export function MasterDetail({
   const isAgingWarn = master.ageDays > agingThresholdDays && !isAging1Year;
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
   const fp = master.fingerprint;
+
+  // #642: resolve the master's absolute file location the same way
+  // SessionsPage resolves a session's reveal target — join the owning
+  // source's current root path with the master's root-relative path.
+  // `undefined` (disabled) when the master's frame was never resolved to a
+  // `file_record` or its root isn't currently listed.
+  const revealSource = sourcesQuery.data?.sources.find(
+    (s) => s.id === master.rootId,
+  );
+  const revealTarget =
+    master.rootId != null && master.relativePath != null && revealSource != null
+      ? resolveRevealPath(revealSource.path, master.relativePath)
+      : undefined;
+  const revealActionable =
+    revealTarget != null &&
+    revealSource != null &&
+    isSourceActionable(revealSource.state);
+  const handleReveal = async () => {
+    if (!revealTarget) return;
+    try {
+      await revealInventoryPath({ path: revealTarget, sessionId: master.id });
+    } catch {
+      addToast({
+        message: m.common_reveal_error(),
+        variant: 'error',
+      });
+    }
+  };
+
+  // #886: generate a reviewable single-master archive plan. A master
+  // assigned to one or more sessions comes back `calibration.master_in_use`
+  // on the first call (decisions.md: warn + require confirm) — that opens
+  // the confirm modal rather than a bare error toast; confirming re-invokes
+  // with `confirmInUse: true`.
+  const handleArchiveSuccess = (res: { planId: string; itemCount: number }) => {
+    addToast({
+      message: m.calibration_archive_plan_created_toast({
+        count: res.itemCount,
+      }),
+      variant: 'info',
+    });
+    setArchiveReviewPlanId(res.planId);
+  };
+  const handleArchive = () => {
+    generateArchivePlan.mutate(
+      { masterId: master.id },
+      {
+        onSuccess: handleArchiveSuccess,
+        onError: (err) => {
+          if (err.code === 'calibration.master_in_use') {
+            setInUseConfirmOpen(true);
+            return;
+          }
+          addToast({
+            message: errMessage(err),
+            variant: 'error',
+          });
+        },
+      },
+    );
+  };
+  const handleConfirmArchiveInUse = () => {
+    setInUseConfirmOpen(false);
+    generateArchivePlan.mutate(
+      { masterId: master.id, confirmInUse: true },
+      {
+        onSuccess: handleArchiveSuccess,
+        onError: (err) => {
+          addToast({
+            message: errMessage(err),
+            variant: 'error',
+          });
+        },
+      },
+    );
+  };
+  /** After the archive plan applies, the master drops out of masters.list
+   * (backend finalize_calibration_master_archive) — refresh so the stale
+   * selection cleans up (`CalibrationPage`'s `useStaleSelectionCleanup`). */
+  const handleArchivePlanApplied = () => {
+    invalidateMaster(master.id);
+  };
 
   const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
   const masterDisc =
@@ -315,7 +429,7 @@ export function MasterDetail({
 
   // Actions inline-left in the title, same pattern as SessionDetail's actionButtons.
   const actionButtons = (
-    <span className="alm-session-detail2__actions">
+    <span className="pv-session-detail2__actions">
       {/* spec 048 US5 (FR-024/025): distinct wording per trigger path; the
 			    match itself is never auto-invalidated or removed, so this is a
 			    warning badge, not a blocking state. */}
@@ -348,62 +462,127 @@ export function MasterDetail({
           {m.calibration_action_replace_master()}
         </Btn>
       )}
-      {/* Platform-native label via the shared revealLabel() helper.
-          #642: no master file path is exposed by the backend (no `path`
-          field on CalibrationMaster/MasterDetail) — disabled, no fake IPC,
-          matching the ArchivePage Reveal precedent. */}
+      {/* #886: builds a reviewable single-master archive plan and opens the
+          shared PlanReviewOverlay (same review→approve→apply kit the
+          Archive page's Restore action uses). Disabled once the master has
+          no tracked file to archive (same untracked case that disables
+          Reveal) — a plan with zero resolvable items has nothing to
+          review. */}
       <Btn
         size="sm"
-        disabled
-        title={m.calibration_reveal_unavailable_title()}
-        data-testid="calibration-reveal-btn"
+        variant="danger"
+        disabled={!revealTarget || generateArchivePlan.isPending}
+        title={
+          revealTarget ? undefined : m.calibration_reveal_unavailable_title()
+        }
+        onClick={handleArchive}
+        data-testid="calibration-archive-btn"
       >
-        {revealLabel()}
+        {m.calibration_action_archive()}
       </Btn>
+      {/* Platform-native label via the shared revealLabel() helper.
+          #642: wired once the master's frame path resolves to an
+          actionable source; falls back to disabled+explanatory title
+          (legacy master with no tracked file, or its root unavailable). */}
+      {revealActionable ? (
+        <Btn
+          size="sm"
+          onClick={() => void handleReveal()}
+          title={m.calibration_reveal_title()}
+          data-testid="calibration-reveal-btn"
+        >
+          {revealLabel()}
+        </Btn>
+      ) : (
+        <Btn
+          size="sm"
+          disabled
+          title={m.calibration_reveal_unavailable_title()}
+          data-testid="calibration-reveal-btn"
+        >
+          {revealLabel()}
+        </Btn>
+      )}
     </span>
   );
 
   return (
-    <DetailPanel
-      variant="calibration"
-      title={<strong>{masterTitle}</strong>}
-      titleExtra={actionButtons}
-    >
-      {/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible stacked]. */}
-      <div className="alm-session-detail2">
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" properties={colA} />
-        </div>
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" properties={colB} />
-        </div>
-
-        {/* Single column with both session popovers stacked vertically. */}
-        <div className="alm-session-detail2__linked alm-session-detail2__linked--stack">
-          <SessionListPopover
-            label={m.calibration_used_by_label()}
-            names={detail.loading ? [] : detail.confirmedNames}
-          />
-          <SessionListPopover
-            label={m.calibration_compatible_label()}
-            names={detail.loading ? [] : detail.compatibleNames}
-          />
-        </div>
-      </div>
-
-      {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
-			    the master's matching-context session, with assign/cancel. */}
-      <div className="alm-session-detail2__match">
-        <MatchCandidatesPanel
-          sessionId={matchSessionId ?? ''}
-          response={suggestResponse}
-          loading={suggestLoading}
-          error={suggestError}
-          onAssign={handleAssign}
-          assigning={assigning}
-          prefillSuggestion={prefillSuggestion}
+    <>
+      <DetailPanel
+        variant="calibration"
+        title={<strong>{masterTitle}</strong>}
+        titleExtra={actionButtons}
+      >
+        {/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible
+            stacked] (#813: shared TwoColDetailLayout instead of hand-copied divs). */}
+        <TwoColDetailLayout
+          colA={<PropertyTable mode="view" properties={colA} />}
+          colB={<PropertyTable mode="view" properties={colB} />}
+          linkedClassName="pv-session-detail2__linked--stack"
+          linked={
+            <>
+              <SessionListPopover
+                label={m.calibration_used_by_label()}
+                names={detail.loading ? [] : detail.confirmedNames}
+              />
+              <SessionListPopover
+                label={m.calibration_compatible_label()}
+                names={detail.loading ? [] : detail.compatibleNames}
+              />
+            </>
+          }
         />
-      </div>
-    </DetailPanel>
+
+        {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
+			    the master's matching-context session, with assign/cancel. */}
+        <div className="pv-session-detail2__match">
+          <MatchCandidatesPanel
+            sessionId={matchSessionId ?? ''}
+            response={suggestResponse}
+            loading={suggestLoading}
+            error={suggestError}
+            onAssign={handleAssign}
+            assigning={assigning}
+            prefillSuggestion={prefillSuggestion}
+          />
+        </div>
+      </DetailPanel>
+
+      {/* #886: in-use warn + confirm gate before archiving (decisions.md). */}
+      <Modal
+        open={inUseConfirmOpen}
+        onClose={() => setInUseConfirmOpen(false)}
+        title={m.calibration_archive_in_use_confirm_title()}
+        size="sm"
+        ariaLabel={m.calibration_archive_in_use_confirm_title()}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setInUseConfirmOpen(false)}>
+              {m.common_cancel()}
+            </Btn>
+            <Btn
+              variant="danger"
+              disabled={generateArchivePlan.isPending}
+              onClick={handleConfirmArchiveInUse}
+            >
+              {m.calibration_action_archive()}
+            </Btn>
+          </>
+        }
+      >
+        <p>{m.calibration_archive_in_use_confirm_desc()}</p>
+      </Modal>
+
+      {/* Archive plan review overlay (#886): shares the same review → approve
+          → apply kit every other plan-gated flow uses. */}
+      <PlanReviewOverlay
+        planId={archiveReviewPlanId}
+        open={archiveReviewPlanId !== null}
+        onClose={() => setArchiveReviewPlanId(null)}
+        title={m.archive_generate_review_title()}
+        onApplied={handleArchivePlanApplied}
+        onRetryCreated={setArchiveReviewPlanId}
+      />
+    </>
   );
 }

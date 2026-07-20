@@ -259,6 +259,10 @@ describe('InboxDetail', () => {
           { filePath: 'mystery.fits', properties: { frameType: 'dark' } },
         ],
         bulk: [],
+        // Required so reclassify hashes the real files instead of writing
+        // folder_signature([]) — the empty-set constant that made the confirm
+        // staleness guard compare equal unconditionally.
+        rootAbsolutePath: '/astro/inbox',
       });
     });
   });
@@ -402,8 +406,8 @@ describe('InboxList', () => {
     // count — the single search lives in the top bar and the folder/master
     // counts live in the top-bar summary + status bar (computed by
     // deriveInboxStats, covered by inboxStatsFromItems.test.ts), not here.
-    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
-    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__search')).toBeNull();
     expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
   });
 });

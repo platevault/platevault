@@ -8,9 +8,9 @@
  * over the dim overlay with OS-default buttons — and every gate stayed green.
  * The adapter deliberately does not spread joyride's `tooltipProps` (VC-002
  * forbids the `role="alertdialog"` it carries), which also forfeits joyride's
- * default tooltip CSS, and no stylesheet defined `.alm-onboarding-tooltip`.
+ * default tooltip CSS, and no stylesheet defined `.pv-onboarding-tooltip`.
  * The Layer-2 journey only ever asserted the element EXISTS
- * (`querySelector('.alm-onboarding-tooltip')`), which is true of an unstyled
+ * (`querySelector('.pv-onboarding-tooltip')`), which is true of an unstyled
  * node, so nothing failed. Verified on real Windows/WebView2: 0 of 1868 loaded
  * CSS rules matched the tooltip family.
  *
@@ -30,11 +30,11 @@ const adapter = readFileSync(join(DIR, 'joyrideAdapter.tsx'), 'utf8');
 
 describe('orientation walk tooltip styling contract', () => {
   it('defines a card rule for the tooltip root', () => {
-    expect(css).toMatch(/\.alm-onboarding-tooltip\s*\{/);
+    expect(css).toMatch(/\.pv-onboarding-tooltip\s*\{/);
   });
 
   it('gives the card a real surface — background, padding and border', () => {
-    const card = /\.alm-onboarding-tooltip\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const card = /\.pv-onboarding-tooltip\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(card).toMatch(/background:/);
     expect(card).toMatch(/padding:/);
     expect(card).toMatch(/border:/);
@@ -53,14 +53,14 @@ describe('orientation walk tooltip styling contract', () => {
   it('reuses the shared Btn primitive instead of restyling buttons', () => {
     // The one-component/one-class rule: no per-feature button CSS clone.
     expect(css).not.toMatch(
-      /\.alm-onboarding-tooltip__(skip|back|primary|close)\s*\{/,
+      /\.pv-onboarding-tooltip__(skip|back|primary|close)\s*\{/,
     );
     expect(adapter).toMatch(/<Btn/);
   });
 
   it('keeps the class names the Layer-2 journey selects on', () => {
     for (const cls of ['__skip', '__primary']) {
-      expect(adapter).toContain(`alm-onboarding-tooltip${cls}`);
+      expect(adapter).toContain(`pv-onboarding-tooltip${cls}`);
     }
   });
 

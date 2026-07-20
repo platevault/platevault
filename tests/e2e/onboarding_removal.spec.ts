@@ -11,8 +11,8 @@
  * the per-row dismiss "X" was deliberately deleted (the round checkbox is the
  * single per-item affordance). This file covers the surviving header ··· menu.
  *
- * The checklist now lives only inside the `.alm-onb-ring` flyout (portalled to
- * `document.body`), so `.alm-onb-checklist` — and with it the header menu — is
+ * The checklist now lives only inside the `.pv-onb-ring` flyout (portalled to
+ * `document.body`), so `.pv-onb-checklist` — and with it the header menu — is
  * absent until the ring is clicked; see `openChecklist`.
  */
 
@@ -39,16 +39,16 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 		await remove.click();
 		// One-line confirm copy comes straight from `onboarding_section_remove_confirm`.
 		await expect(
-			page.locator(".alm-onb-checklist__menu-confirm-text"),
+			page.locator(".pv-onb-checklist__menu-confirm-text"),
 		).toContainText("Remove the getting-started checklist?");
 		await expect(
-			page.locator(".alm-onb-checklist__menu-confirm-yes"),
+			page.locator(".pv-onb-checklist__menu-confirm-yes"),
 		).toBeVisible();
 
 		// Cancel closes the confirm and leaves the section in place.
-		await page.locator(".alm-onb-checklist__menu-confirm-no").click();
+		await page.locator(".pv-onb-checklist__menu-confirm-no").click();
 		await expect(
-			page.locator(".alm-onb-checklist__menu-confirm-text"),
+			page.locator(".pv-onb-checklist__menu-confirm-text"),
 		).toHaveCount(0);
 		await expect(page.locator(SECTION)).toBeVisible();
 	});
@@ -75,7 +75,7 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 			.getByRole("button", { name: "Getting started options" })
 			.click();
 		await page.getByRole("menuitem", { name: "Remove getting started" }).click();
-		await page.locator(".alm-onb-checklist__menu-confirm-yes").click();
+		await page.locator(".pv-onb-checklist__menu-confirm-yes").click();
 
 		// Removal unmounts the flyout AND its sidebar ring trigger, and the mock
 		// persists `sectionHidden`, so a reload must not bring either back.
@@ -97,7 +97,7 @@ test.describe("onboarding removal + restore controls (spec 056 US5)", () => {
 			.getByRole("button", { name: "Getting started options" })
 			.click();
 		await page.getByRole("menuitem", { name: "Remove getting started" }).click();
-		await page.locator(".alm-onb-checklist__menu-confirm-yes").click();
+		await page.locator(".pv-onb-checklist__menu-confirm-yes").click();
 		await expect(page.locator(SECTION)).toHaveCount(0);
 
 		// … then restore from Settings → Advanced.

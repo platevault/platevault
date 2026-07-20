@@ -89,6 +89,13 @@ export function resolveActiveSite(state: ObservingState): ObserverSite | null {
 let current: ObservingState = EMPTY_STATE;
 const listeners = new Set<() => void>();
 
+// Mirrors the `writeGen` guard in ../guidance-settings.ts (#836). `Shell.tsx`
+// kicks off `loadObservingState()` at boot; on a slow backend that read can
+// still be in flight once the user reaches Targets and saves a site, and a read
+// that started before the write is stale by the time it resolves. A load only
+// applies if no save has committed since the load started.
+let writeGen = 0;
+
 function emit(): void {
   for (const fn of listeners) fn();
 }
@@ -108,11 +115,16 @@ function snapshot(): ObservingState {
  * unavailable.
  */
 export async function loadObservingState(): Promise<ObservingState> {
+  const genAtStart = writeGen;
   try {
     const data = unwrap(await commands.settingsGet(OBSERVING_SCOPE));
-    current = coerceObservingState(data.values as Record<string, unknown>);
+    if (writeGen === genAtStart) {
+      current = coerceObservingState(data.values as Record<string, unknown>);
+    }
   } catch {
-    current = EMPTY_STATE;
+    if (writeGen === genAtStart) {
+      current = EMPTY_STATE;
+    }
   }
   emit();
   return current;
@@ -139,6 +151,7 @@ export async function saveSites(
         : null,
     usableAltitudeDeg: current.usableAltitudeDeg,
   };
+  writeGen += 1;
   unwrap(
     await commands.settingsUpdate(OBSERVING_SCOPE, {
       [SITES_KEY]: next.sites,
@@ -167,6 +180,7 @@ export async function saveActiveSiteId(
  */
 export async function saveUsableAltitude(degrees: number): Promise<void> {
   const clamped = clampThreshold(degrees);
+  writeGen += 1;
   current = { ...current, usableAltitudeDeg: clamped };
   emit();
   unwrap(

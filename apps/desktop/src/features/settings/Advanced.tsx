@@ -199,7 +199,7 @@ export function Advanced({ save }: AdvancedProps) {
           info={m.settings_advanced_loglevel_info()}
         >
           <select
-            className="alm-select alm-adv-settings__log-select"
+            className="pv-select pv-adv-settings__log-select"
             value={logLevel}
             onChange={(e) => {
               const v = e.target.value as LogLevel;
@@ -223,13 +223,13 @@ export function Advanced({ save }: AdvancedProps) {
           label={m.settings_advanced_firstrun_restart_label()}
           info={m.settings_advanced_firstrun_restart_desc()}
         >
-          <div className="alm-adv-settings__control-col">
+          <div className="pv-adv-settings__control-col">
             {firstRunConfirming ? (
-              <div className="alm-adv-settings__danger-box">
-                <p className="alm-adv-settings__danger-desc">
+              <div className="pv-adv-settings__danger-box">
+                <p className="pv-adv-settings__danger-desc">
                   {m.settings_advanced_firstrun_restart_confirm_desc()}
                 </p>
-                <div className="alm-adv-settings__control-row">
+                <div className="pv-adv-settings__control-row">
                   <Btn
                     size="sm"
                     variant="danger"
@@ -247,7 +247,7 @@ export function Advanced({ save }: AdvancedProps) {
                     onClick={() => setFirstRunConfirming(false)}
                     disabled={firstRunRestarting}
                   >
-                    {m.settings_advanced_firstrun_restart_cancel()}
+                    {m.common_cancel()}
                   </Btn>
                 </div>
               </div>
@@ -261,7 +261,7 @@ export function Advanced({ save }: AdvancedProps) {
               </Btn>
             )}
             {firstRunError && (
-              <div className="alm-settings__error" role="alert">
+              <div className="pv-settings__error" role="alert">
                 {m.settings_advanced_firstrun_restart_error({
                   message: firstRunError,
                 })}
@@ -274,10 +274,10 @@ export function Advanced({ save }: AdvancedProps) {
       {/* Signed auto-update — staged flow (spec 051 US10, #888/#869/#873) */}
       <SettingsSection title={m.settings_advanced_updates_title()}>
         <SettingsRow label={m.settings_advanced_updates_title()}>
-          <div className="alm-adv-settings__control-col">
+          <div className="pv-adv-settings__control-col">
             {runningVersion && (
               <p
-                className="alm-adv-settings__control-desc"
+                className="pv-adv-settings__control-desc"
                 data-testid="update-running-version"
               >
                 {m.settings_advanced_updates_running_version({
@@ -286,7 +286,7 @@ export function Advanced({ save }: AdvancedProps) {
               </p>
             )}
             <p
-              className="alm-adv-settings__control-desc"
+              className="pv-adv-settings__control-desc"
               data-testid="update-status"
             >
               {updateState.phase === 'checking' &&
@@ -322,7 +322,7 @@ export function Advanced({ save }: AdvancedProps) {
                 data-testid="update-restart-btn"
               >
                 {updateBusy
-                  ? m.settings_advanced_updates_installing()
+                  ? m.common_restarting()
                   : m.settings_advanced_updates_restart()}
               </Btn>
             )}
@@ -375,19 +375,19 @@ export function Advanced({ save }: AdvancedProps) {
           it's wired for real, gated behind a confirm step like this pane's
           other resets. */}
       <SettingsSection title={m.settings_advanced_danger_title()}>
-        <div className="alm-adv-settings__danger-box">
-          <div className="alm-adv-settings__danger-heading">
+        <div className="pv-adv-settings__danger-box">
+          <div className="pv-adv-settings__danger-heading">
             <strong>{m.settings_advanced_danger_reset()}</strong>
           </div>
-          <p className="alm-adv-settings__danger-desc">
+          <p className="pv-adv-settings__danger-desc">
             {m.settings_advanced_danger_desc()}
           </p>
           {resetConfirming ? (
             <>
-              <p className="alm-adv-settings__danger-desc">
+              <p className="pv-adv-settings__danger-desc">
                 {m.settings_advanced_danger_confirm_desc()}
               </p>
-              <div className="alm-adv-settings__control-row">
+              <div className="pv-adv-settings__control-row">
                 <Btn
                   size="sm"
                   variant="danger"
@@ -401,7 +401,7 @@ export function Advanced({ save }: AdvancedProps) {
                   variant="ghost"
                   onClick={() => setResetConfirming(false)}
                 >
-                  {m.settings_advanced_danger_reset_cancel()}
+                  {m.common_cancel()}
                 </Btn>
               </div>
             </>
@@ -417,7 +417,7 @@ export function Advanced({ save }: AdvancedProps) {
           )}
           {resetDone && (
             <p
-              className="alm-adv-settings__control-desc"
+              className="pv-adv-settings__control-desc"
               role="status"
               data-testid="reset-preferences-done"
             >

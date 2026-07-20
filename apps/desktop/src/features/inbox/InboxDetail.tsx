@@ -7,10 +7,10 @@
  * Follows the SessionDetail shape (spec 043 §4 redesign):
  *
  *   HEADER — item path (title, bold) + titleExtra: classification pill +
- *             inline action buttons (left-packed, alm-session-detail2__actions).
+ *             inline action buttons (left-packed, pv-session-detail2__actions).
  *             Confirm lives HERE; disabled for "mixed" rows (spec 041 FR-050 —
  *             the backend "split" action is removed, T071/T072).
- *   BODY   — scrollable (#553) left-packed .alm-session-detail2 flex row:
+ *   BODY   — scrollable (#553) left-packed .pv-session-detail2 flex row:
  *     col A (PropertyTable) — classification + file-count + FITS metadata
  *     mixed-summary line   — compact "N light · M dark" muted text (mixed only)
  *     "Files (N) ▾" popover trigger — opens a portaled popup containing:
@@ -98,6 +98,7 @@ interface ReclassifyV2Args {
  */
 function useInboxReclassifyV2(
   inboxItemId: string,
+  rootAbsolutePath: string,
   sourceGroupId?: string | null,
 ) {
   const queryClient = useQueryClient();
@@ -115,6 +116,10 @@ function useInboxReclassifyV2(
               ...(sourceGroupId ? { sourceGroupId } : { inboxItemId }),
               overrides: args.overrides ?? [],
               bulk: args.bulk ?? [],
+              // Lets the re-split hash the group's real files, so each
+              // re-materialized sub-item gets a per-group content signature
+              // the confirm staleness guard can actually compare.
+              rootAbsolutePath,
             }),
           ),
         );
@@ -134,7 +139,7 @@ function useInboxReclassifyV2(
         setLoading(false);
       }
     },
-    [inboxItemId, sourceGroupId, queryClient],
+    [inboxItemId, rootAbsolutePath, sourceGroupId, queryClient],
   );
 
   return { reclassifyV2, loading };
@@ -259,7 +264,7 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
   if (!file) {
     return (
       <div
-        className="alm-inbox-inspector alm-inbox-inspector--empty"
+        className="pv-inbox-inspector pv-inbox-inspector--empty"
         data-testid="file-inspector"
       />
     );
@@ -311,19 +316,19 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
     ];
 
   return (
-    <div className="alm-inbox-inspector" data-testid="file-inspector">
-      <div className="alm-inbox-inspector__name" title={file.relativeFilePath}>
+    <div className="pv-inbox-inspector" data-testid="file-inspector">
+      <div className="pv-inbox-inspector__name" title={file.relativeFilePath}>
         {basename(file.relativeFilePath)}
       </div>
-      <dl className="alm-inbox-inspector__dl">
+      <dl className="pv-inbox-inspector__dl">
         {rows.map((r) => (
           <div
             key={r.label}
-            className="alm-inbox-inspector__row"
+            className="pv-inbox-inspector__row"
             data-testid={r.testid}
           >
-            <dt className="alm-inbox-inspector__label">{r.label}</dt>
-            <dd className="alm-inbox-inspector__value">{r.value}</dd>
+            <dt className="pv-inbox-inspector__label">{r.label}</dt>
+            <dd className="pv-inbox-inspector__value">{r.value}</dd>
           </div>
         ))}
       </dl>
@@ -406,6 +411,7 @@ export function InboxDetail({
 }: InboxDetailProps) {
   const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
     item.inboxItemId,
+    rootAbsolutePath,
     sourceGroupId,
   );
 
@@ -728,7 +734,7 @@ export function InboxDetail({
       />
     ),
     file: (
-      <span title={filePath} className="alm-inbox-detail__file-cell">
+      <span title={filePath} className="pv-inbox-detail__file-cell">
         {filePath}
       </span>
     ),
@@ -738,7 +744,7 @@ export function InboxDetail({
         onChange={(e) => handleOverrideChange(filePath, e.target.value)}
         aria-label={m.inbox_override_frame_type_aria({ file: filePath })}
         data-testid={`override-select-${filePath}`}
-        className="alm-select alm-select--sm"
+        className="pv-select pv-select--sm"
       >
         <option value="">{m.inbox_pick_type_placeholder()}</option>
         {FRAME_TYPE_OPTIONS.map((t) => (
@@ -776,10 +782,7 @@ export function InboxDetail({
     const isInspected = inspectedIdx === rowIdx;
     return {
       file: (
-        <span
-          title={f.relativeFilePath}
-          className="alm-inbox-detail__file-cell"
-        >
+        <span title={f.relativeFilePath} className="pv-inbox-detail__file-cell">
           {f.relativeFilePath}
           {missingAttrs.length > 0 && (
             <span
@@ -787,7 +790,7 @@ export function InboxDetail({
               title={m.inbox_missing_attrs_title({
                 attrs: missingAttrs.join(', '),
               })}
-              className="alm-inbox-detail__missing-attr-badge"
+              className="pv-inbox-detail__missing-attr-badge"
             >
               {m.inbox_needs_attrs({ attrs: missingAttrs.join(', ') })}
             </span>
@@ -827,9 +830,9 @@ export function InboxDetail({
       }),
       date: renderValue(f.dateObs ?? null, { applicability: 'applicable' }),
       _rowClassName: [
-        needsAttention ? 'alm-inbox-meta-row--warn' : '',
-        isInspected ? 'alm-inbox-meta-row--inspected' : '',
-        'alm-inbox-meta-row',
+        needsAttention ? 'pv-inbox-meta-row--warn' : '',
+        isInspected ? 'pv-inbox-meta-row--inspected' : '',
+        'pv-inbox-meta-row',
       ]
         .filter(Boolean)
         .join(' '),
@@ -958,7 +961,7 @@ export function InboxDetail({
   // ── Inline header actions ─────────────────────────────────────────────────
 
   const titleActions = (
-    <span className="alm-session-detail2__actions">
+    <span className="pv-session-detail2__actions">
       <Pill variant={classificationVariant(classType)}>
         {classType === 'single_type'
           ? (classification?.frameType ?? m.inbox_detail_single_fallback())
@@ -982,12 +985,12 @@ export function InboxDetail({
       {/* Destination library picker — to the RIGHT of Confirm. Lets the user
 			    choose which library the files are placed in (Auto = backend pick). */}
       {onConfirm && applicableRoots.length > 1 && (
-        <label className="alm-inbox-detail__dest-root">
-          <span className="alm-inbox-detail__dest-root-label">
+        <label className="pv-inbox-detail__dest-root">
+          <span className="pv-inbox-detail__dest-root-label">
             {m.inbox_dest_root_label()}
           </span>
           <select
-            className="alm-select alm-select--sm"
+            className="pv-select pv-select--sm"
             value={selectedRootId ?? ''}
             onChange={(e) => onSelectRoot?.(e.target.value)}
             aria-label={m.inbox_dest_root_aria()}
@@ -1029,21 +1032,21 @@ export function InboxDetail({
           DetailPanel's "content-only" mode (no facts/aux slots) renders
           children with no scroll wrapper of its own, so a tall FILES/Needs-
           review body previously overflowed the docked panel's max-height and
-          was clipped by `.alm-listpage__detail-body`'s `overflow: hidden`
+          was clipped by `.pv-listpage__detail-body`'s `overflow: hidden`
           (unreachable, not just unscrolled). */}
-      <div className="alm-inbox-detail__scroll">
+      <div className="pv-inbox-detail__scroll">
         {/* Mixed: advisory banner */}
         {classType === 'mixed' && (
           <Banner
             variant="warn"
-            className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+            className="pv-inbox-detail__banner-mt3 pv-inbox-alert"
             data-testid="inbox-mixed-alert"
           >
-            <div className="alm-inbox-alert__msg">
-              <span className="alm-inbox-alert__title">
+            <div className="pv-inbox-alert__msg">
+              <span className="pv-inbox-alert__title">
                 {m.inbox_mixed_folder_title()}
               </span>
-              <span className="alm-inbox-alert__body">
+              <span className="pv-inbox-alert__body">
                 {m.inbox_mixed_folder_body()}
               </span>
             </div>
@@ -1054,14 +1057,14 @@ export function InboxDetail({
         {classType === 'unclassified' && (
           <Banner
             variant="danger"
-            className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+            className="pv-inbox-detail__banner-mt3 pv-inbox-alert"
             data-testid="inbox-unclassified-alert"
           >
-            <div className="alm-inbox-alert__msg">
-              <span className="alm-inbox-alert__title">
+            <div className="pv-inbox-alert__msg">
+              <span className="pv-inbox-alert__title">
                 {m.inbox_frame_types_required_title()}
               </span>
-              <span className="alm-inbox-alert__body">
+              <span className="pv-inbox-alert__body">
                 {m.inbox_frame_types_required_body()}
               </span>
             </div>
@@ -1069,28 +1072,28 @@ export function InboxDetail({
         )}
 
         {!classification && (
-          <div className="alm-inbox-detail__empty">
+          <div className="pv-inbox-detail__empty">
             {m.inbox_select_item_prompt()}
           </div>
         )}
 
-        {/* Left-packed .alm-session-detail2 row */}
-        <div className="alm-session-detail2">
+        {/* Left-packed .pv-session-detail2 row */}
+        <div className="pv-session-detail2">
           {/* Col A: detection facts (first half) */}
-          <div className="alm-session-detail2__col">
+          <div className="pv-session-detail2__col">
             <PropertyTable mode="view" showSource properties={detColA} />
           </div>
 
           {/* Col B: detection facts (second half) — only when there are enough */}
           {detColB.length > 0 && (
-            <div className="alm-session-detail2__col">
+            <div className="pv-session-detail2__col">
               <PropertyTable mode="view" showSource properties={detColB} />
             </div>
           )}
 
           {/* Col C: Files — mixed-composition summary + the metadata popover */}
-          <div className="alm-session-detail2__col">
-            <div className="alm-session-detail2__head">
+          <div className="pv-session-detail2__col">
+            <div className="pv-session-detail2__head">
               {m.inbox_col_files()}
             </div>
 
@@ -1098,7 +1101,7 @@ export function InboxDetail({
             {mixedSummary && (
               <section
                 aria-label={m.inbox_mixed_composition_summary_aria()}
-                className="alm-inbox-detail__mixed-summary"
+                className="pv-inbox-detail__mixed-summary"
               >
                 {mixedSummary}
               </section>
@@ -1113,7 +1116,7 @@ export function InboxDetail({
                 }}
               >
                 <Popover.Trigger
-                  className="alm-inbox-detail__files-trigger"
+                  className="pv-inbox-detail__files-trigger"
                   aria-label={m.inbox_file_metadata_count({
                     count: metadataRows.length,
                   })}
@@ -1129,17 +1132,17 @@ export function InboxDetail({
                     sideOffset={4}
                   >
                     <Popover.Popup
-                      className="alm-inbox-detail__files-popup"
+                      className="pv-inbox-detail__files-popup"
                       data-testid="inbox-files-popup"
                       aria-label={m.inbox_file_metadata_aria()}
                     >
                       {/* Scrollable metadata table */}
-                      <div className="alm-inbox-detail__files-popup-table">
+                      <div className="pv-inbox-detail__files-popup-table">
                         <Table columns={metadataColumns} rows={metadataRows} />
                       </div>
                       {/* Inspector — updates on row click */}
                       {inspectedIdx != null && (
-                        <div className="alm-inbox-detail__files-popup-inspector">
+                        <div className="pv-inbox-detail__files-popup-inspector">
                           <FileInspector
                             file={fileMetadata?.[inspectedIdx] ?? null}
                           />
@@ -1151,7 +1154,7 @@ export function InboxDetail({
               </Popover.Root>
             ) : (
               !mixedSummary && (
-                <span className="alm-session-detail2__muted">
+                <span className="pv-session-detail2__muted">
                   {m.inbox_no_file_metadata()}
                   {/* #551: no per-file metadata means the required-destination-
                     attribute gate has no data to evaluate here — say so
@@ -1171,14 +1174,14 @@ export function InboxDetail({
             {filesMissingAttrs.length > 0 && (
               <Banner
                 variant="danger"
-                className="alm-inbox-detail__banner-mt2 alm-inbox-alert"
+                className="pv-inbox-detail__banner-mt2 pv-inbox-alert"
                 data-testid="inbox-missing-attr-banner"
               >
-                <div className="alm-inbox-alert__msg">
-                  <span className="alm-inbox-alert__title">
+                <div className="pv-inbox-alert__msg">
+                  <span className="pv-inbox-alert__title">
                     {m.inbox_required_metadata_missing_title()}
                   </span>
-                  <span className="alm-inbox-alert__body">
+                  <span className="pv-inbox-alert__body">
                     {m.inbox_required_metadata_body({
                       count: filesMissingAttrs.length,
                     })}
@@ -1190,13 +1193,13 @@ export function InboxDetail({
 
           {/* Needs review — rendered when unclassified files exist */}
           {unclassifiedRows.length > 0 && (
-            <div className="alm-session-detail2__col">
+            <div className="pv-session-detail2__col">
               <Section
                 title={m.inbox_needs_review_title({
                   count: unclassifiedRows.length,
                 })}
               >
-                <div className="alm-inbox-detail__select-all-row">
+                <div className="pv-inbox-detail__select-all-row">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -1207,7 +1210,7 @@ export function InboxDetail({
                     aria-label={m.inbox_select_all_unclassified_aria()}
                     data-testid="reclassify-select-all"
                   />
-                  <span className="alm-inbox-detail__select-all-label">
+                  <span className="pv-inbox-detail__select-all-label">
                     {selectedFiles.size === 0
                       ? m.common_select_all()
                       : m.inbox_n_selected({ count: selectedFiles.size })}
@@ -1216,15 +1219,15 @@ export function InboxDetail({
                 <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
 
                 {selectedFiles.size > 0 && (
-                  <fieldset className="alm-inbox-detail__bulk-controls">
-                    <legend className="alm-visually-hidden">
+                  <fieldset className="pv-inbox-detail__bulk-controls">
+                    <legend className="pv-visually-hidden">
                       {m.inbox_bulk_override_controls_aria()}
                     </legend>
-                    <div className="alm-inbox-detail__bulk-field">
+                    <div className="pv-inbox-detail__bulk-field">
                       {}
                       <label
                         htmlFor="bulk-frame-type"
-                        className="alm-inbox-detail__bulk-label"
+                        className="pv-inbox-detail__bulk-label"
                       >
                         {m.inbox_frame_type_label()}
                       </label>
@@ -1234,7 +1237,7 @@ export function InboxDetail({
                         onChange={(e) => setBulkFrameType(e.target.value)}
                         aria-label={m.inbox_bulk_frame_type_aria()}
                         data-testid="bulk-frame-type"
-                        className="alm-select alm-select--sm"
+                        className="pv-select pv-select--sm"
                       >
                         <option value="">
                           {m.inbox_unchanged_placeholder()}
@@ -1267,13 +1270,13 @@ export function InboxDetail({
                           : 'text';
                       return (
                         <div
-                          className="alm-inbox-detail__bulk-field"
+                          className="pv-inbox-detail__bulk-field"
                           key={field.key}
                         >
                           {}
                           <label
                             htmlFor={testid}
-                            className="alm-inbox-detail__bulk-label"
+                            className="pv-inbox-detail__bulk-label"
                             title={field.validation ?? undefined}
                           >
                             {label}
@@ -1291,7 +1294,7 @@ export function InboxDetail({
                             }
                             aria-label={label}
                             data-testid={testid}
-                            className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
+                            className="pv-input pv-input--sm pv-inbox-detail__bulk-input-w80"
                           />
                         </div>
                       );
@@ -1306,20 +1309,20 @@ export function InboxDetail({
                     {isHeterogeneousFrameTypeBulk && (
                       <Banner
                         variant="warn"
-                        className="alm-inbox-detail__banner-mt2"
+                        className="pv-inbox-detail__banner-mt2"
                         data-testid="bulk-heterogeneous-warning"
                       >
-                        <div className="alm-inbox-alert__msg">
-                          <span className="alm-inbox-alert__title">
+                        <div className="pv-inbox-alert__msg">
+                          <span className="pv-inbox-alert__title">
                             {m.inbox_bulk_heterogeneous_title()}
                           </span>
-                          <span className="alm-inbox-alert__body">
+                          <span className="pv-inbox-alert__body">
                             {m.inbox_bulk_heterogeneous_body({
                               type: bulkFrameType,
                             })}
                           </span>
                         </div>
-                        <label className="alm-inbox-detail__select-all-row">
+                        <label className="pv-inbox-detail__select-all-row">
                           <input
                             type="checkbox"
                             checked={heterogeneousAcked}
@@ -1344,7 +1347,7 @@ export function InboxDetail({
 
                     <button
                       type="button"
-                      className="alm-btn alm-btn--sm alm-btn--primary"
+                      className="pv-btn pv-btn--sm pv-btn--primary"
                       onClick={handleBulkApply}
                       disabled={reclassifyLoading || !heterogeneousAcked}
                       aria-label={m.inbox_bulk_override_apply_aria({
@@ -1368,7 +1371,7 @@ export function InboxDetail({
                 {bulkError && (
                   <Banner
                     variant="danger"
-                    className="alm-inbox-detail__banner-mt2"
+                    className="pv-inbox-detail__banner-mt2"
                   >
                     {bulkError}
                   </Banner>
@@ -1380,11 +1383,11 @@ export function InboxDetail({
                 {lastFrameTypeUndo && (
                   <Banner
                     variant="info"
-                    className="alm-inbox-detail__banner-mt2"
+                    className="pv-inbox-detail__banner-mt2"
                     data-testid="bulk-undo-banner"
                   >
-                    <div className="alm-inbox-alert__msg">
-                      <span className="alm-inbox-alert__body">
+                    <div className="pv-inbox-alert__msg">
+                      <span className="pv-inbox-alert__body">
                         {m.inbox_bulk_undo_message({
                           count: lastFrameTypeUndo.count,
                         })}
@@ -1392,7 +1395,7 @@ export function InboxDetail({
                     </div>
                     <button
                       type="button"
-                      className="alm-btn alm-btn--sm"
+                      className="pv-btn pv-btn--sm"
                       onClick={() => void handleUndoBulkFrameType()}
                       disabled={undoLoading}
                       aria-label={m.inbox_bulk_undo_aria()}
@@ -1408,17 +1411,17 @@ export function InboxDetail({
                 {undoError && (
                   <Banner
                     variant="danger"
-                    className="alm-inbox-detail__banner-mt2"
+                    className="pv-inbox-detail__banner-mt2"
                   >
                     {undoError}
                   </Banner>
                 )}
 
                 {Object.keys(pendingOverrides).length > 0 && (
-                  <div className="alm-inbox-detail__apply-row">
+                  <div className="pv-inbox-detail__apply-row">
                     <button
                       type="button"
-                      className="alm-btn alm-btn--sm alm-btn--primary"
+                      className="pv-btn pv-btn--sm pv-btn--primary"
                       onClick={handleApplyOverrides}
                       disabled={
                         Object.keys(pendingOverrides).length === 0 ||
@@ -1438,7 +1441,7 @@ export function InboxDetail({
                 {applyError && (
                   <Banner
                     variant="danger"
-                    className="alm-inbox-detail__banner-mt2"
+                    className="pv-inbox-detail__banner-mt2"
                   >
                     {applyError}
                   </Banner>

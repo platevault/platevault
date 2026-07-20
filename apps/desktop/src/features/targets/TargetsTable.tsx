@@ -410,7 +410,7 @@ function groupTargets(
 //
 // The virtualizer windows a single flat list, so groups + targets are flattened
 // into a discriminated union. Group-header rows and target rows estimate to the
-// same row height (keyed off --alm-row-height in CSS).
+// same row height (keyed off --pv-row-height in CSS).
 
 type FlatRow =
   | {
@@ -504,7 +504,7 @@ const COLUMNS: Array<{
   {
     key: 'star',
     label: () => '★',
-    className: 'alm-targets-cell--center',
+    className: 'pv-targets-cell--center',
     title: () => m.targets_col_favourite(),
   },
   {
@@ -517,14 +517,14 @@ const COLUMNS: Array<{
     key: 'maxAlt',
     label: () => m.targets_col_max_alt(),
     sort: 'maxAlt',
-    className: 'alm-targets-cell--num',
+    className: 'pv-targets-cell--num',
     title: () => m.targets_table_max_alt_title(),
   },
   {
     key: 'opposition',
     label: () => m.targets_col_opposition(),
     sort: 'opposition',
-    className: 'alm-targets-cell--opposition',
+    className: 'pv-targets-cell--opposition',
     title: () => m.targets_table_next_opposition(),
   },
   // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
@@ -532,13 +532,13 @@ const COLUMNS: Array<{
     key: 'lunarDist',
     label: () => m.targets_col_lunar(),
     sort: 'lunarDist',
-    className: 'alm-targets-cell--num',
+    className: 'pv-targets-cell--num',
     title: () => m.targets_col_lunar_title(),
   },
   {
     key: 'filters',
     label: () => m.common_filters(),
-    className: 'alm-targets-cell--filters',
+    className: 'pv-targets-cell--filters',
     title: () => m.targets_col_filters_title(),
   },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
@@ -546,14 +546,14 @@ const COLUMNS: Array<{
     key: 'imagingTime',
     label: () => m.targets_col_img_time(),
     sort: 'imagingTime',
-    className: 'alm-targets-cell--num',
+    className: 'pv-targets-cell--num',
     title: () => m.targets_col_img_time_title(),
   },
   {
     key: 'sessions',
     label: () => m.common_sessions(),
     sort: 'sessions',
-    className: 'alm-targets-cell--num',
+    className: 'pv-targets-cell--num',
     title: () => m.targets_col_sessions_title(),
   },
 ];
@@ -599,7 +599,7 @@ function ImagingTimeCell({
   if (alt.needsCoordinates || alt.needsSite) {
     return (
       <span
-        className="alm-targets-cell--muted"
+        className="pv-targets-cell--muted"
         title={m.targets_col_img_time_title()}
       >
         —
@@ -626,7 +626,7 @@ function ImagingTimeCell({
         <span
           role="img"
           aria-label={title}
-          className="alm-imgtime-glyph alm-imgtime-glyph--warn"
+          className="pv-imgtime-glyph pv-imgtime-glyph--warn"
         >
           {ZERO_REASON_GLYPH[reason]}
         </span>
@@ -647,7 +647,7 @@ function ImagingTimeCell({
         <span
           role="img"
           aria-label={title}
-          className="alm-imgtime-glyph alm-imgtime-glyph--warn"
+          className="pv-imgtime-glyph pv-imgtime-glyph--warn"
         >
           ☾
         </span>
@@ -660,7 +660,7 @@ function ImagingTimeCell({
     // but never render a bare 0.
     return (
       <span
-        className="alm-targets-cell--muted"
+        className="pv-targets-cell--muted"
         title={m.targets_col_img_time_title()}
       >
         —
@@ -689,7 +689,7 @@ function ImagingTimeCell({
             role="img"
             aria-label={limitedTitle}
             title={limitedTitle}
-            className="alm-imgtime-glyph alm-imgtime-glyph--muted"
+            className="pv-imgtime-glyph pv-imgtime-glyph--muted"
           >
             ☾
           </span>
@@ -790,7 +790,7 @@ export function TargetsTable({
   const resolvedFavouriteIds = favouriteIds ?? internalFavourites.favouriteIds;
   const resolvedToggle = onToggleFavourite ?? internalFavourites.toggle;
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Row height follows the GLOBAL density setting (task #82, `--alm-row-height`
+  // Row height follows the GLOBAL density setting (task #82, `--pv-row-height`
   // in tokens.css); the virtualizer has no measureElement (see file docstring
   // — rows are uniform so estimateSize must be exact), so this must track the
   // active density rather than a fixed guess.
@@ -1085,7 +1085,7 @@ export function TargetsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as TargetSortCol)}
-        ariaLabel={m.targets_table_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
         title={c.title?.()}
       />
     ) : (
@@ -1104,11 +1104,11 @@ export function TargetsTable({
   const moonHeader = night ? (
     <MoonSummary night={night} />
   ) : (
-    <div className="alm-planner-site-prompt" data-testid="planner-site-prompt">
-      <span className="alm-planner-site-prompt__title">
+    <div className="pv-planner-site-prompt" data-testid="planner-site-prompt">
+      <span className="pv-planner-site-prompt__title">
         {m.targets_planner_site_prompt_title()}
       </span>
-      <span className="alm-planner-site-prompt__desc">
+      <span className="pv-planner-site-prompt__desc">
         {m.targets_planner_site_prompt_desc()}
       </span>
     </div>
@@ -1116,9 +1116,9 @@ export function TargetsTable({
 
   if (count === 0 && loading) {
     return (
-      <div className="alm-targets-table__wrap">
+      <div className="pv-targets-table__wrap">
         {moonHeader}
-        <div className="alm-targets-table__empty">
+        <div className="pv-targets-table__empty">
           <Skeleton variant="block" count={8} label={m.common_loading()} />
         </div>
       </div>
@@ -1127,30 +1127,30 @@ export function TargetsTable({
 
   if (count === 0 && !loading) {
     return (
-      <div className="alm-targets-table__wrap">
+      <div className="pv-targets-table__wrap">
         {moonHeader}
-        <div className="alm-targets-table__empty">{emptyMessage}</div>
+        <div className="pv-targets-table__empty">{emptyMessage}</div>
       </div>
     );
   }
 
   return (
-    <div className="alm-targets-table__wrap">
+    <div className="pv-targets-table__wrap">
       {moonHeader}
       {!site && (
-        <Banner variant="info" className="alm-targets-table__no-site-banner">
+        <Banner variant="info" className="pv-targets-table__no-site-banner">
           {m.targets_planner_no_site_banner()}{' '}
           <Link
             to="/settings/$pane"
             params={{ pane: 'planner' }}
-            className="alm-banner__action-link"
+            className="pv-banner__action-link"
           >
             {m.targets_planner_no_site_banner_action()}
           </Link>
         </Banner>
       )}
-      <div ref={scrollRef} className="alm-targets-table__scroll">
-        <table className="alm-table alm-targets-table">
+      <div ref={scrollRef} className="pv-targets-table__scroll">
+        <table className="pv-table pv-targets-table">
           {/* Fixed-layout colgroup: column widths are pinned so the table
               does NOT recompute widths per windowed page as pill text varies
               (e.g. "galaxy" vs "open cluster" would shift all columns).
@@ -1158,17 +1158,17 @@ export function TargetsTable({
               the right prevent the per-page column-shift bug.
               task #18: star col added first (28 px, wave2 CSS block). */}
           <colgroup>
-            <col className="alm-targets-col--star" />
-            <col className="alm-targets-col--designation" />
-            <col className="alm-targets-col--type" />
-            <col className="alm-targets-col--maxalt" />
-            <col className="alm-targets-col--opposition" />
+            <col className="pv-targets-col--star" />
+            <col className="pv-targets-col--designation" />
+            <col className="pv-targets-col--type" />
+            <col className="pv-targets-col--maxalt" />
+            <col className="pv-targets-col--opposition" />
             {/* task #5: lunardist widened to 80px (wave2 CSS block). */}
-            <col className="alm-targets-col--lunardist" />
-            <col className="alm-targets-col--filters" />
+            <col className="pv-targets-col--lunardist" />
+            <col className="pv-targets-col--filters" />
             {/* task #5: imagingtime widened to 100px (wave2 CSS block). */}
-            <col className="alm-targets-col--imagingtime" />
-            <col className="alm-targets-col--sessions" />
+            <col className="pv-targets-col--imagingtime" />
+            <col className="pv-targets-col--sessions" />
           </colgroup>
           <thead>
             <tr>
@@ -1184,11 +1184,11 @@ export function TargetsTable({
               ))}
             </tr>
           </thead>
-          <tbody className="alm-targets-table__body">
+          <tbody className="pv-targets-table__body">
             {/* Before-spacer: reserve height for virtual rows above the window.
                 Height is dynamic (virtualizer offset), allowed by convention. */}
             {paddingBefore > 0 && (
-              <tr aria-hidden="true" className="alm-targets-table__spacer">
+              <tr aria-hidden="true" className="pv-targets-table__spacer">
                 {/* eslint-disable no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
                 <td
                   colSpan={COL_COUNT}
@@ -1208,12 +1208,12 @@ export function TargetsTable({
                     <tr
                       key={row.key}
                       data-index={index}
-                      className="alm-listgroup"
+                      className="pv-listgroup"
                     >
                       <td colSpan={COL_COUNT}>
                         <button
                           type="button"
-                          className="alm-listgroup__cell"
+                          className="pv-listgroup__cell"
                           data-testid={`targets-group-${row.key}`}
                           aria-expanded={!row.collapsed}
                           aria-label={row.label}
@@ -1222,15 +1222,15 @@ export function TargetsTable({
                           style={{ paddingLeft: tableIndent(row.depth ?? 0) }}
                         >
                           <span
-                            className="alm-listgroup__caret"
+                            className="pv-listgroup__caret"
                             aria-hidden="true"
                           >
                             {row.collapsed ? '▸' : '▾'}
                           </span>
-                          <span className="alm-listgroup__label">
+                          <span className="pv-listgroup__label">
                             {row.label}
                           </span>
-                          <span className="alm-listgroup__count">
+                          <span className="pv-listgroup__count">
                             {m.targets_table_target_count({ count: row.count })}
                           </span>
                         </button>
@@ -1240,14 +1240,10 @@ export function TargetsTable({
                 }
                 // Legacy non-collapsible group header.
                 return (
-                  <tr
-                    key={row.key}
-                    data-index={index}
-                    className="alm-listgroup"
-                  >
+                  <tr key={row.key} data-index={index} className="pv-listgroup">
                     <td colSpan={COL_COUNT}>
                       {row.label}
-                      <span className="alm-listgroup__count">
+                      <span className="pv-listgroup__count">
                         {m.targets_table_target_count({ count: row.count })}
                       </span>
                     </td>
@@ -1282,8 +1278,8 @@ export function TargetsTable({
                   key={row.key}
                   data-index={index}
                   className={
-                    'alm-targets-table__row alm-table__row--clickable' +
-                    (isSelected ? ' alm-targets-table__row--selected' : '')
+                    'pv-targets-table__row pv-table__row--clickable' +
+                    (isSelected ? ' pv-targets-table__row--selected' : '')
                   }
                   onClick={() => onSelect(t.id)}
                   onKeyDown={(e) => {
@@ -1299,12 +1295,12 @@ export function TargetsTable({
                   {/* task #18: favourite star toggle.
                       STUB: stored in localStorage only until task #54 (backend linkage) lands.
                       stopPropagation prevents the row-select click from firing. */}
-                  <td className="alm-targets-cell--center">
+                  <td className="pv-targets-cell--center">
                     <button
                       type="button"
                       className={
-                        'alm-targets-star' +
-                        (isFav ? ' alm-targets-star--active' : '')
+                        'pv-targets-star' +
+                        (isFav ? ' pv-targets-star--active' : '')
                       }
                       aria-label={
                         isFav
@@ -1332,12 +1328,12 @@ export function TargetsTable({
                     </button>
                   </td>
                   <td>
-                    <span className="alm-targets-cell__desig">
-                      <span className="alm-targets-cell__label">
+                    <span className="pv-targets-cell__desig">
+                      <span className="pv-targets-cell__label">
                         {t.effectiveLabel}
                       </span>
                       {showAltDesig && (
-                        <span className="alm-targets-cell__alt">
+                        <span className="pv-targets-cell__alt">
                           {t.primaryDesignation}
                         </span>
                       )}
@@ -1349,7 +1345,7 @@ export function TargetsTable({
                   {/* Real peak altitude tonight (spec 044 Track B ephemeris).
                       #757: no catalogued coordinates → the shared unresolved
                       chip, never a fabricated 0°. */}
-                  <td className="alm-targets-cell--num">
+                  <td className="pv-targets-cell--num">
                     {alt.needsCoordinates ? (
                       <span title={m.targets_table_needs_coordinates_title()}>
                         <UnresolvedChip />
@@ -1362,11 +1358,11 @@ export function TargetsTable({
                   </td>
                   {/* Real next-opposition date (spec 047 US4). Unknown
                       coordinates / no site → explicit "—", never a date. */}
-                  <td className="alm-targets-cell--opposition">
+                  <td className="pv-targets-cell--opposition">
                     {moon.nextOppositionDate === null ||
                     moon.daysToOpposition === null ? (
                       <span
-                        className="alm-targets-cell--muted"
+                        className="pv-targets-cell--muted"
                         title={m.targets_opposition_unknown_title()}
                       >
                         —
@@ -1394,17 +1390,17 @@ export function TargetsTable({
                   </td>
                   {/* Real lunar angular separation (spec 047 US2). Unknown
                       coordinates / no site → explicit "—", never a number. */}
-                  <td className="alm-targets-cell--num">
+                  <td className="pv-targets-cell--num">
                     {moon.lunarSeparationDeg === null ? (
                       <span
-                        className="alm-targets-cell--muted"
+                        className="pv-targets-cell--muted"
                         title={m.targets_lunar_unknown_title()}
                       >
                         —
                       </span>
                     ) : (
                       <span
-                        className="alm-targets-cell--lunardist"
+                        className="pv-targets-cell--lunardist"
                         title={m.targets_table_lunar_dist_title({
                           deg: Math.round(moon.lunarSeparationDeg),
                         })}
@@ -1415,7 +1411,7 @@ export function TargetsTable({
                   </td>
                   {/* Real per-band filter guidance from the Moon-avoidance rule
                       (spec 047 US3): pills + explanation popover. */}
-                  <td className="alm-targets-cell--filters">
+                  <td className="pv-targets-cell--filters">
                     <GuidanceCell
                       night={night}
                       moon={moon}
@@ -1436,12 +1432,12 @@ export function TargetsTable({
                       `altMoon` — the per-rendered-row pass that includes Moon
                       geometry — so 'moon' is never inferred from the cheap
                       geometry-free catalogue pass. */}
-                  <td className="alm-targets-cell--num">
+                  <td className="pv-targets-cell--num">
                     <ImagingTimeCell alt={altMoon} threshold={usableAltDeg} />
                   </td>
                   {/* MOCK (#57): linked-session count not on TargetListItem yet. */}
-                  <td className="alm-targets-cell--num">
-                    <span className="alm-targets-cell--muted">—</span>
+                  <td className="pv-targets-cell--num">
+                    <span className="pv-targets-cell--muted">—</span>
                   </td>
                 </tr>
               );
@@ -1450,7 +1446,7 @@ export function TargetsTable({
             {/* After-spacer: reserve height for virtual rows below the window.
                 Height is dynamic (virtualizer remainder), allowed by convention. */}
             {paddingAfter > 0 && (
-              <tr aria-hidden="true" className="alm-targets-table__spacer">
+              <tr aria-hidden="true" className="pv-targets-table__spacer">
                 {/* eslint-disable no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
                 <td
                   colSpan={COL_COUNT}
@@ -1462,7 +1458,7 @@ export function TargetsTable({
           </tbody>
         </table>
       </div>
-      <div className="alm-targets-table__footer">
+      <div className="pv-targets-table__footer">
         {loading ? m.common_loading() : m.targets_table_target_count({ count })}
       </div>
     </div>

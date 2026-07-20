@@ -10,17 +10,21 @@
  * useCalibrationSettings  : reads prefill_suggestion from persisted settings.
  */
 
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type {
   CalibrationMatchSuggestResponse,
   CalibrationMatchAssignResponse,
+  CalibrationMatchUnassignResponse,
   CalibrationType,
+  ContractError,
+  GenerateArchivePlanResult,
 } from '@/bindings/index';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
+import { useInvalidateInventory } from '@/features/sessions/store';
 
 // ── Masters list ─────────────────────────────────────────────────────────────
 
@@ -123,6 +127,116 @@ export function useCalibrationAssign(): UseAssignState {
     assigning: mutation.isPending,
     result: mutation.data,
     assign,
+  };
+}
+
+// ── Unassign (#875) ──────────────────────────────────────────────────────────
+
+export interface UseUnassignState {
+  unassigning: boolean;
+  /**
+   * Remove a session's assignment for one calibration type, returning it to
+   * "no master assigned" (#875). `masterId` is not sent over the wire — it's
+   * only used to target the affected master's own cache entries once the
+   * call succeeds, since the request itself is keyed on (session, type).
+   */
+  unassign: (
+    sessionId: string,
+    calibrationType: CalibrationType,
+    masterId: string,
+  ) => Promise<CalibrationMatchUnassignResponse>;
+}
+
+export function useCalibrationUnassign(): UseUnassignState {
+  const queryClient = useQueryClient();
+  const invalidateInventory = useInvalidateInventory();
+
+  const mutation = useMutation({
+    mutationFn: async ({
+      sessionId,
+      calibrationType,
+    }: {
+      sessionId: string;
+      calibrationType: CalibrationType;
+      masterId: string;
+    }) =>
+      unwrap(
+        await commands.calibrationMatchUnassign({
+          contractVersion: '1.0.0',
+          requestId: `unassign-${sessionId}-${Date.now()}`,
+          sessionId,
+          calibrationType,
+        }),
+      ),
+    onSuccess: (res, vars) => {
+      // The outer IPC call can resolve "ok" while the inner domain result is
+      // still `status: "error"` (e.g. `assignment.not_found`) — only bust the
+      // caches once the assignment actually changed.
+      if (res.status !== 'success') return;
+      // Session's own `calibrationMatches` list lives on `inventory.list`
+      // (contracts_core::inventory::InventorySession), read by SessionDetail
+      // via SessionsPage — same invalidation target session-note saves use.
+      invalidateInventory();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.calibration.masters(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.calibration.master(vars.masterId),
+      });
+    },
+  });
+
+  const unassign = async (
+    sessionId: string,
+    calibrationType: CalibrationType,
+    masterId: string,
+  ) => mutation.mutateAsync({ sessionId, calibrationType, masterId });
+
+  return {
+    unassigning: mutation.isPending,
+    unassign,
+  };
+}
+
+// ── Archive (#886) ───────────────────────────────────────────────────────────
+
+/**
+ * Materialise a reviewable single-master archive plan (#886). Mirrors
+ * `features/archive/store.ts`'s `useGenerateArchivePlan` shape so
+ * `MasterDetail` can open the same shared `PlanReviewOverlay`.
+ *
+ * `confirmInUse` must be `true` to proceed once a first call without it
+ * returns `calibration.master_in_use` (decisions.md: warn + require confirm
+ * before archiving an in-use master) — the caller re-invokes the mutation
+ * with it set after the user confirms.
+ */
+export function useGenerateMasterArchivePlan() {
+  return useMutation<
+    GenerateArchivePlanResult,
+    ContractError,
+    { masterId: string; confirmInUse?: boolean }
+  >({
+    mutationFn: async ({ masterId, confirmInUse }) =>
+      unwrap(
+        await commands.calibrationMastersArchivePlanGenerate(
+          masterId,
+          null,
+          confirmInUse ?? null,
+        ),
+      ),
+  });
+}
+
+/** Invalidate the masters list + this master's detail after its archive plan applies. */
+export function useInvalidateCalibrationMaster() {
+  const queryClient = useQueryClient();
+  return (masterId: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.calibration.masters(),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.calibration.master(masterId),
+    });
   };
 }
 

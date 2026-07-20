@@ -81,10 +81,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   Espresso) or "System" (follows OS) applies live with no reload; the choice
   survives a full app restart (confirmed by a live Windows kill+relaunch
   test, docs/development/journey-run-2026-07-14.md). Density
-  (compact/comfortable/spacious) rescales the `--alm-sp-*` spacing tokens
-  (plus `--alm-row-height`); font size is a three-stop dial — Small/Default/
+  (compact/comfortable/spacious) rescales the `--pv-sp-*` spacing tokens
+  (plus `--pv-row-height`); font size is a three-stop dial — Small/Default/
   Large writes a single integer `<html>` font-size of 12/14/16px (bumped
-  from a 13px default) that the `--alm-text-*` type-scale tokens (rem,
+  from a 13px default) that the `--pv-text-*` type-scale tokens (rem,
   re-derived from the 14px default) resolve against app-wide, so every
   consuming surface (Sessions, Inbox, Calibration, sidebar/settings group
   labels, wizard fine print, the Planner SVG axis labels, the toast dismiss
@@ -98,7 +98,7 @@ Note: Release builds lack the /dev/contracts palette entry by design
   same persisted choice; Ctrl+0 always resets to 100%. Zoom persists the
   same way as font size (settings DB + localStorage boot cache) and is
   re-applied once at startup.
-- **Expect (negative):** The `--alm-row-height` token itself — the actual
+- **Expect (negative):** The `--pv-row-height` token itself — the actual
   row *height* — is still consumed only by the Targets table, the
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
   Inbox, and Calibration list rows do not get taller or shorter with
@@ -131,10 +131,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   apps/desktop/src/features/settings/General.tsx,
   apps/desktop/src-tauri/capabilities/default.json
   (`core:webview:allow-set-webview-zoom`),
-  apps/desktop/src/styles/tokens.css (`--alm-text-*` rem scale),
+  apps/desktop/src/styles/tokens.css (`--pv-text-*` rem scale),
   apps/desktop/src/styles/reset.css (`html { font-size: 14px }`),
   apps/desktop/src/styles/components/merges-1.css:556. PR #882 fixes #587:
-  density previously only ever touched `--alm-row-height`; font size was
+  density previously only ever touched `--pv-row-height`; font size was
   fully inert local state with no layout effect at all. Spec 055 Phase 2
   (T010–T012) replaced the 0.9/1.0/1.15 fractional-px multiplier with the
   integer dial described above; Phase 4 (T030) adds Zoom.
@@ -212,7 +212,7 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Expect:** Sidebar collapse state persists across reload and keeps
   per-item tooltips. Every page keeps its header/action bar pinned while
   only its content scrolls, down to 1100×720. The command palette now
-  renders fully styled (a `.alm-palette*` floating overlay, not bare
+  renders fully styled (a `.pv-palette*` floating overlay, not bare
   document flow); search matching is alias-aware and reuses the Targets
   page's own tested matcher (a compact query like "M31" now matches a
   spaced designation like "M 31"); arrow-key navigation and clicking a
@@ -300,32 +300,43 @@ Note: Release builds lack the /dev/contracts palette entry by design
   docs/development/windows-journeys/journey-11-framing-clustering-attribution.md.
 
 ### S11 — Choose the detail panel's placement per page {#S11}
-- **Do:** In Appearance, open the new "Detail panel placement" control and
-  set it to Auto / Bottom / Right for each of Sessions, Calibration,
-  Archive, Projects, and Targets; restart the app; open Inbox.
-- **Expect:** Each of the five adopting pages exposes its own Auto/Bottom/
-  Right choice; choosing Bottom or Right pins that page's detail-panel
-  placement regardless of window width, overriding the automatic
-  width-based placement (spec-054's default: side on a wide window, bottom
-  when narrow); Auto restores the automatic width-based behavior. The
-  choice persists per page across an app restart. Inbox is not offered
-  this control at all — its detail region is shown as fixed (not
-  user-adjustable) since it is a permanent split, not an adaptive dock
-  (see J02/S2, J03/S1).
-- **Expect (negative):** No placement control appears for Inbox; setting a
-  pinned placement (Bottom or Right) for one page never changes another
-  page's placement or its own automatic-vs-pinned state after restart.
-- **Trace:** apps/desktop/src/features/settings/General.tsx (placement
-  control); `ListPageLayout` per-page pin consumption (Sessions/
-  Calibration/Archive/Projects/Targets); spec-054/FR-003.
+- **Do:** On each of Sessions, Calibration, Archive, Projects, Targets, and
+  Inbox, select a row/item so its detail panel is showing, then use the
+  Auto/Bottom/Right control inline in the detail panel's own header bar;
+  set it to Bottom, then Right, then back to Auto; restart the app; reopen
+  each page.
+- **Expect:** All six pages share the same control (there is no separate
+  copy per page, and no control in Settings → Appearance) — Inbox included,
+  since it never got a page-specific placement design and instead inherits
+  the same default `'adaptive'` `ListPageLayout` placement as the other
+  five. Choosing Bottom or Right pins that page's detail-panel placement
+  regardless of window width, overriding the automatic width-based
+  placement (side on a window ≥1400px wide, bottom when narrower); Auto
+  restores the automatic width-based behavior. Below a ~640px-wide window
+  even a Bottom/Right pin falls back to bottom placement — the side dock is
+  never usable under that width regardless of the pin. The choice persists
+  per page across an app restart.
+- **Expect (negative):** No "Detail panel placement" control exists on the
+  Appearance pane or anywhere else in Settings; setting a pinned placement
+  (Bottom or Right) for one page never changes another page's placement or
+  its own automatic-vs-pinned state after restart.
+- **Trace:** apps/desktop/src/components/DetailDockPlacementControl.tsx
+  (the control), apps/desktop/src/components/ListPageLayout.tsx
+  (`isAdaptive && <DetailDockPlacementControl>`, rendered identically for
+  every consumer including `apps/desktop/src/features/inbox/InboxPage.tsx`,
+  which passes no `detailPlacement` override), apps/desktop/src/ui/
+  useAdaptiveDock.ts (`setOverride`, `sideAvailable` fallback); spec-054/
+  FR-003. PR #1070 (fixes #1066 — before this, the placement pin was a
+  two-state Bottom/Right toggle with no way back to Auto once touched).
 
 ## Success criteria
 - SC1: Every control across all 14 panes does something observable,
   persists, and round-trips a pane switch (S1–S5, S9, S10).
-- SC6: Each of the 5 adopting pages' Detail panel placement choice
-  (Auto/Bottom/Right) persists across an app restart and overrides
-  width-based automatic placement when set to Bottom or Right; Inbox is
-  never offered the control (S11).
+- SC6: Each of the 6 pages sharing the adaptive dock (Sessions,
+  Calibration, Archive, Projects, Targets, Inbox)'s inline Auto/Bottom/
+  Right placement choice persists across an app restart, independently per
+  page, and overrides width-based automatic placement when set to Bottom
+  or Right (S11).
 - SC2: Durable-data settings/protection/equipment/source mutations each
   produce exactly one audit row per committed change, with none for
   UI-state-only keys (S3).
@@ -385,7 +396,7 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Δ6** 2026-07-17 · S2 · behavior-change
   Font size is now a three-integer-stop dial (12/14/16px root, default
   bumped from 13px) instead of a 0.9/1.0/1.15 fractional-px multiplier; the
-  `--alm-text-*` scale is rem-derived so every stop's computed size is
+  `--pv-text-*` scale is rem-derived so every stop's computed size is
   integer, never fractional, with an 11px floor guaranteed at Default. The
   11 previously-hardcoded px sizes (sidebar/settings group labels, wizard
   titles/fine print, Planner SVG axis text, toast glyph) now scale with the
@@ -418,14 +429,18 @@ Note: Release builds lack the /dev/contracts palette entry by design
   merged at authoring time) · by: journey-scribe (intent-gated)
 
 - **Δ8** 2026-07-17 · +S11, +SC6 · behavior-change
-  Appearance gains a per-page "Detail panel placement" control
-  (Auto/Bottom/Right) for each of the 5 pages adopting the adaptive detail
-  dock (Sessions, Calibration, Archive, Projects, Targets); the choice
-  persists across restarts and takes precedence over automatic width-based
-  placement. Inbox is fixed to its permanent split and is not offered the
-  control. Also corrected S2's stale note that spec 054 (adaptive detail
+  Each of the 6 pages sharing the adaptive detail dock (Sessions,
+  Calibration, Archive, Projects, Targets, and Inbox — which never got its
+  own placement design and simply inherits the shared default) now exposes
+  an inline Auto/Bottom/Right placement control
+  (`DetailDockPlacementControl`) in its own detail-panel header bar — not a
+  Settings pane. Before this, the placement pin was a two-state Bottom/
+  Right toggle with no way back to Auto once touched (#1066); the control
+  makes Auto a reachable third state again. The choice persists per page
+  across an app restart and takes precedence over automatic width-based
+  placement. Also corrected S2's stale note that spec 054 (adaptive detail
   dock) "remains orphaned" — it has since shipped (see S11), though it does
   not by itself resolve the S2 zoom-envelope viewport degradation, which is
   a shell/zoom concern rather than a detail-dock concern.
-  Evidence: spec-054-adaptive-detail-dock (FR-003) · by: journey-scribe
-  (intent-gated)
+  Evidence: PR #1070 (fixes #1066), spec-054-adaptive-detail-dock (FR-003)
+  · by: journey-scribe (intent-gated)

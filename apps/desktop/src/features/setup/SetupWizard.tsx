@@ -10,6 +10,7 @@ import { m } from '@/lib/i18n';
 import { setPreference } from '@/data/preferences';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import {
   StepSourceFolders,
   StepTools,
@@ -88,7 +89,7 @@ const STEPS = [
     description: () => m.setup_step_site_desc(),
   },
   {
-    label: () => m.setup_step_confirm_label(),
+    label: () => m.common_confirm(),
     heading: () => m.setup_step_confirm_heading(),
     description: () => m.setup_step_confirm_desc(),
   },
@@ -337,12 +338,10 @@ export function SetupWizard() {
       setFlushResult(result);
       goTo(SCAN_STEP);
     } catch (err) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ?? String(err));
       setSubmitError(
-        m.setup_sources_error_batch_registration_failed({ message: msg }),
+        m.setup_sources_error_batch_registration_failed({
+          message: errMessage(err),
+        }),
       );
     } finally {
       setIsSubmitting(false);
@@ -419,11 +418,9 @@ export function SetupWizard() {
       clearWizardState();
       void navigate({ to: '/inbox' });
     } catch (err) {
-      const msg =
-        typeof err === 'string'
-          ? err
-          : ((err as Error)?.message ?? String(err));
-      setSubmitError(m.setup_wizard_finish_failed({ message: msg }));
+      setSubmitError(
+        m.setup_wizard_finish_failed({ message: errMessage(err) }),
+      );
       setIsFinishing(false);
     }
     // `state.tools` was already read here without being a dependency (stale
@@ -509,10 +506,10 @@ export function SetupWizard() {
       ) : (
         <span />
       )}
-      <div className="alm-setup-wizard__footer-spacer" />
+      <div className="pv-setup-wizard__footer-spacer" />
       {/* Folder count summary on source step */}
       {step === 0 && totalFolders > 0 && (
-        <span className="alm-setup-wizard__folder-count">
+        <span className="pv-setup-wizard__folder-count">
           {m.setup_wizard_folder_count({ count: totalFolders })}
         </span>
       )}
@@ -560,7 +557,7 @@ export function SetupWizard() {
   return (
     // Layout fix (mirrors the project wizard): flex column + minHeight:0 so the
     // WizardShell fills the main content area instead of overflowing/mis-placing.
-    <div className="alm-page alm-setup-wizard">
+    <div className="pv-page pv-setup-wizard">
       <WizardShell
         steps={wizardSteps}
         currentStep={step}
@@ -568,15 +565,15 @@ export function SetupWizard() {
         // Scan runs registration side-effects on entry, so disable step-tab
         // navigation while on it (Back button still works) — issue #512.
         onStepSelect={isOnScanStep ? undefined : handleStepSelect}
-        className="alm-setup-wizard__shell"
+        className="pv-setup-wizard__shell"
       >
         {/* Step label + heading */}
-        <div className="alm-setup-wizard__step-label">
+        <div className="pv-setup-wizard__step-label">
           {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
         </div>
-        <h1 className="alm-setup-wizard__heading">{stepMeta.heading()}</h1>
+        <h1 className="pv-setup-wizard__heading">{stepMeta.heading()}</h1>
         {stepMeta.description && (
-          <p className="alm-setup-wizard__description">
+          <p className="pv-setup-wizard__description">
             {stepMeta.description()}
           </p>
         )}

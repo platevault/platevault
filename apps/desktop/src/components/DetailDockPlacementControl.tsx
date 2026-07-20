@@ -12,12 +12,19 @@
  * This exists because the placement model is three-state but the UI that
  * preceded it was a two-state toggle: `useAdaptiveDock` treats `override ===
  * null` as "follow the automatic width rule", yet the old
- * `.alm-listpage__detail-pin` button only ever called `setOverride('side')` or
+ * `.pv-listpage__detail-pin` button only ever called `setOverride('side')` or
  * `setOverride('bottom')`. Once a user touched it, Auto was unreachable
  * without clearing localStorage (#1066). Mapping the third state onto a real
  * control is the fix.
+ *
+ * Icon-only (#1068): three text buttons ran ~175px wide, dominating a
+ * ~390px narrow-dock detail bar. `SegControl`'s `icon` option renders each
+ * option as an icon with `label` moved to `aria-label`/`title`, so the
+ * accessible name (asserted by tests/e2e as "Auto"/"Bottom"/"Right") and a
+ * hover tooltip are unchanged — only the visible glyph differs.
  */
 
+import { Wand2, PanelBottom, PanelRight } from 'lucide-react';
 import { SegControl } from '@/ui';
 import type { DockPlacement } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -44,13 +51,27 @@ export function DetailDockPlacementControl({
 }: DetailDockPlacementControlProps) {
   return (
     <SegControl
-      className={className}
+      className={['pv-dock-placement-control', className]
+        .filter(Boolean)
+        .join(' ')}
       data-testid="dock-placement-control"
       aria-label={m.detail_dock_placement_aria()}
       options={[
-        { value: 'adaptive', label: m.detail_dock_placement_auto() },
-        { value: 'bottom', label: m.detail_dock_placement_bottom() },
-        { value: 'side', label: m.detail_dock_placement_right() },
+        {
+          value: 'adaptive',
+          label: m.detail_dock_placement_auto(),
+          icon: <Wand2 size={14} aria-hidden="true" />,
+        },
+        {
+          value: 'bottom',
+          label: m.detail_dock_placement_bottom(),
+          icon: <PanelBottom size={14} aria-hidden="true" />,
+        },
+        {
+          value: 'side',
+          label: m.detail_dock_placement_right(),
+          icon: <PanelRight size={14} aria-hidden="true" />,
+        },
       ]}
       value={override ?? 'adaptive'}
       onChange={(value) =>

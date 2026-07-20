@@ -36,12 +36,17 @@ import {
   useSessionNames,
 } from '@/features/projects/store';
 import { SessionSourcePicker } from '@/features/projects/SessionSourcePicker';
-import type { ProjectDetailDto, ProjectChannelDto } from '@/bindings/index';
+import type {
+  ProjectDetailDto,
+  ProjectChannelDto,
+  ErrorCode,
+} from '@/bindings/index';
 import {
   editProjectFormSchema,
   type EditProjectFormValues,
 } from '@/features/projects/schemas';
 import { errMessage, isContractError } from '@/lib/errors';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
 
 // ── Tool-lock and read-only helpers ──────────────────────────────────────────
 
@@ -168,10 +173,14 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         });
         onClose();
       } catch (err: unknown) {
-        const code =
-          typeof err === 'string'
+        // isContractError first: a ContractError's `.message` is the raw
+        // backend diagnostic (never shown to the user, FR-009), not the
+        // `.code` that mapUpdateError switches on.
+        const code = isContractError(err)
+          ? err.code
+          : typeof err === 'string'
             ? err
-            : ((err as Error)?.message ?? 'unknown');
+            : 'unknown';
         setServerError(mapUpdateError(code));
       }
     },
@@ -282,14 +291,14 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
   return (
     <div
-      className="alm-edit-project-pane"
+      className="pv-edit-project-pane"
       aria-label={m.projects_edit_pane_aria()}
     >
       {/* Channel drift banner (US1c / US4) */}
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
           <span>{m.projects_edit_drift_banner()}</span>
-          <div className="alm-edit-project__drift-actions">
+          <div className="pv-edit-project__drift-actions">
             <Btn
               size="sm"
               variant="primary"
@@ -326,28 +335,26 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
        * inputs/checkboxes (native <button>/<input> default behaviour inside
        * a <form>).
        */}
-      <div className="alm-edit-project__sources-panel">
-        <span className="alm-field-label">{m.common_sources()}</span>
-        <div className="alm-edit-project__sources">
+      <div className="pv-edit-project__sources-panel">
+        <span className="pv-field-label">{m.common_sources()}</span>
+        <div className="pv-edit-project__sources">
           {project.sources.length === 0 ? (
-            <span className="alm-field-hint">
-              {m.projects_edit_sources_empty()}
-            </span>
+            <span className="pv-field-hint">{m.projects_sources_empty()}</span>
           ) : (
-            <ul className="alm-edit-project__sources-list">
+            <ul className="pv-edit-project__sources-list">
               {project.sources.map((src) => (
                 <li
                   key={src.inventoryId}
-                  className="alm-edit-project__source-row"
+                  className="pv-edit-project__source-row"
                 >
-                  <span className="alm-edit-project__source-name">
+                  <span className="pv-edit-project__source-name">
                     {src.name ||
                       sessionNames.get(src.inventoryId) ||
                       src.inventoryId}
                   </span>
                   {confirmRemoveId === src.inventoryId ? (
-                    <span className="alm-edit-project__source-confirm">
-                      <span className="alm-field-hint">
+                    <span className="pv-edit-project__source-confirm">
+                      <span className="pv-field-hint">
                         {m.err_lifecycle_last_confirmed_source()}
                       </span>
                       <Btn
@@ -394,14 +401,14 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           )}
 
           {sourceError && (
-            <span role="alert" className="alm-field-error">
+            <span role="alert" className="pv-field-error">
               {sourceError}
             </span>
           )}
 
           {!readOnly &&
             (showAddSources ? (
-              <div className="alm-edit-project__add-sources">
+              <div className="pv-edit-project__add-sources">
                 <SessionSourcePicker
                   selectedSessionIds={addSelection}
                   onChange={setAddSelection}
@@ -409,11 +416,11 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                   emptyMessage={m.projects_edit_sources_add_empty()}
                 />
                 {addError && (
-                  <span role="alert" className="alm-field-error">
+                  <span role="alert" className="pv-field-error">
                     {addError}
                   </span>
                 )}
-                <div className="alm-edit-project__add-sources-actions">
+                <div className="pv-edit-project__add-sources-actions">
                   <Btn
                     type="button"
                     size="sm"
@@ -459,17 +466,17 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
       <form
         onSubmit={rhfHandleSubmit(onValid)}
         noValidate
-        className="alm-edit-project__form"
+        className="pv-edit-project__form"
       >
         {/* Name */}
         <div>
           {}
-          <label className="alm-field-label" htmlFor="ep-name">
+          <label className="pv-field-label" htmlFor="ep-name">
             {m.projects_name_label()}
           </label>
           <input
             id="ep-name"
-            className="alm-input"
+            className="pv-input"
             type="text"
             maxLength={130}
             disabled={readOnly}
@@ -478,7 +485,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
             {...register('name')}
           />
           {errors.name && (
-            <span id="ep-name-error" role="alert" className="alm-field-error">
+            <span id="ep-name-error" role="alert" className="pv-field-error">
               {errors.name.message}
             </span>
           )}
@@ -487,12 +494,12 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         {/* Tool */}
         <div>
           {}
-          <label className="alm-field-label" htmlFor="ep-tool">
+          <label className="pv-field-label" htmlFor="ep-tool">
             {m.projects_tool_label()}
           </label>
           <select
             id="ep-tool"
-            className="alm-input"
+            className="pv-input"
             disabled={readOnly || toolLocked}
             aria-describedby={toolLocked ? 'ep-tool-lock' : undefined}
             {...register('tool')}
@@ -503,7 +510,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
             <option value="Siril">Siril</option>
           </select>
           {toolLocked && (
-            <span id="ep-tool-lock" className="alm-field-hint">
+            <span id="ep-tool-lock" className="pv-field-hint">
               {m.projects_edit_tool_locked_hint({
                 lifecycle: project.lifecycle,
               })}
@@ -518,19 +525,19 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Channels preview (US4) */}
         <div>
-          <span className="alm-field-label">
+          <span className="pv-field-label">
             {m.projects_edit_channels_label()}
           </span>
-          <div className="alm-edit-project__channels">
+          <div className="pv-edit-project__channels">
             {channels.length === 0 ? (
-              <span className="alm-field-hint">
+              <span className="pv-field-hint">
                 {m.projects_edit_channels_empty()}
               </span>
             ) : (
               channels.map((ch) => (
                 <span
                   key={ch.label}
-                  className={`alm-channel-chip alm-channel-chip--${ch.source}`}
+                  className={`pv-channel-chip pv-channel-chip--${ch.source}`}
                   title={
                     ch.source === 'inferred'
                       ? m.projects_edit_inferred_title()
@@ -540,7 +547,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                 >
                   {ch.label}
                   {ch.source === 'inferred' && (
-                    <span className="alm-channel-chip__tag">
+                    <span className="pv-channel-chip__tag">
                       {m.projects_edit_channels_auto_tag()}
                     </span>
                   )}
@@ -552,13 +559,13 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Server error */}
         {serverError && (
-          <span role="alert" className="alm-field-error">
+          <span role="alert" className="pv-field-error">
             {serverError}
           </span>
         )}
 
         {/* Actions */}
-        <div className="alm-edit-project__actions">
+        <div className="pv-edit-project__actions">
           <Btn
             type="button"
             variant="ghost"
@@ -579,6 +586,11 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 }
 
 // ── Error mapping ─────────────────────────────────────────────────────────────
+// `projects.update` codes intentionally keep edit-specific wording where it is
+// clearer than the shared catalog (e.g. "This project is archived and cannot
+// be edited." vs. the generic "This item is read-only"); any other known code
+// falls through to the shared errors.ts catalog before the generic fallback,
+// so consolidation doesn't regress coverage for codes this switch never named.
 
 function mapUpdateError(code: string): string {
   switch (code) {
@@ -598,7 +610,11 @@ function mapUpdateError(code: string): string {
       return m.projects_edit_err_read_only();
     case 'no_op':
       return m.projects_edit_err_no_op();
-    default:
-      return m.projects_edit_err_generic({ code });
+    default: {
+      const resolve = ERROR_MESSAGES[code as ErrorCode] as
+        | (() => string)
+        | undefined;
+      return resolve ? resolve() : m.projects_edit_err_generic();
+    }
   }
 }

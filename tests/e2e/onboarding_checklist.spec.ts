@@ -11,11 +11,11 @@
  *
  * ── The flyout is the ONLY presentation ─────────────────────────────────────
  * The checklist is no longer rendered inline in the expanded sidebar. In BOTH
- * sidebar widths it lives behind the `.alm-onb-ring` trigger and is portalled
- * to `document.body` when open, so `.alm-onb-checklist` does not exist until
+ * sidebar widths it lives behind the `.pv-onb-ring` trigger and is portalled
+ * to `document.body` when open, so `.pv-onb-checklist` does not exist until
  * the ring is clicked. `openChecklist()` below is the precondition for every
  * assertion here. The expanded sidebar only adds the trigger's text + count
- * (`.alm-onb-ring--labelled`); the panel itself is identical.
+ * (`.pv-onb-ring--labelled`); the panel itself is identical.
  *
  * ── Mock-mode coverage limit (VC-002), by design of the shared T007 mock ──
  *  Prerequisite presentation (FR-010, T019): the mock always sends
@@ -28,7 +28,7 @@
 import { test, expect, seedSetupComplete, seedOnboarding, openChecklist, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
 import type { Page } from "@playwright/test";
 
-const GROUP_HEADER = ".alm-onb-checklist__group-header";
+const GROUP_HEADER = ".pv-onb-checklist__group-header";
 
 function groupHeader(page: Page, label: string) {
 	return page.locator(GROUP_HEADER).filter({ hasText: label });
@@ -84,19 +84,19 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		await openChecklist(page);
 
 		// The bespoke `#onb-tt-<id>` reveal is gone; the row wraps its label in the
-		// shared base-ui `Tooltip`, which portals its popup as `.alm-tooltip`.
+		// shared base-ui `Tooltip`, which portals its popup as `.pv-tooltip`.
 		//
 		// #1103: that trigger span is not focusable, so the reveal is owned by the
 		// row's CHECKBOX (already in the tab order). BOTH paths are asserted here —
 		// asserting only hover is exactly how the keyboard path regressed unnoticed.
-		const tooltip = page.locator(".alm-tooltip");
+		const tooltip = page.locator(".pv-tooltip");
 		const row = page.locator('[data-item-id="sessions.review_first"]');
 		const checkbox = row.locator('[role="checkbox"]');
 
 		await expect(tooltip).toHaveCount(0);
 
 		// 1. Pointer hover on the label.
-		await row.locator(".alm-onb-checklist__item-label").hover();
+		await row.locator(".pv-onb-checklist__item-label").hover();
 		await expect(tooltip).toBeVisible();
 		await expect(tooltip).toHaveText(/session/i);
 
@@ -145,7 +145,7 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		await openChecklist(page);
 
 		const sessionsGroup = page
-			.locator(".alm-onb-checklist__group")
+			.locator(".pv-onb-checklist__group")
 			.filter({ hasText: "Sessions" });
 		// Both Sessions items are manual (non-auto) → checkable in mock mode.
 		await page.getByRole("checkbox", { name: "Review a session" }).click();
@@ -161,7 +161,7 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		});
 		await expect(header).toContainText("2/2");
 		await expect(
-			sessionsGroup.locator(".alm-onb-checklist__group-done"),
+			sessionsGroup.locator(".pv-onb-checklist__group-done"),
 		).toBeVisible();
 		await expect(
 			page.getByRole("checkbox", { name: "Review a session" }),
@@ -188,25 +188,25 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 
 		const ring = page.locator(RING);
 		await expect(ring).toBeVisible({ timeout: 8_000 });
-		await expect(ring).not.toHaveClass(/alm-onb-ring--labelled/);
+		await expect(ring).not.toHaveClass(/pv-onb-ring--labelled/);
 		await expect(ring.getByRole("progressbar")).toBeVisible();
 		// Closed: the checklist body is not mounted.
 		await expect(page.locator(SECTION)).toHaveCount(0);
 
 		// Open the non-modal popover.
 		await ring.click();
-		await expect(page.locator(".alm-onb-popover")).toBeVisible();
-		await expect(page.locator(".alm-onb-popover").locator(SECTION)).toBeVisible();
+		await expect(page.locator(".pv-onb-popover")).toBeVisible();
+		await expect(page.locator(".pv-onb-popover").locator(SECTION)).toBeVisible();
 
 		// The ring is a toggle: a second click closes the flyout again.
 		await ring.click();
 		await expect(ring).toHaveAttribute("aria-expanded", "false");
-		await expect(page.locator(".alm-onb-popover")).toHaveCount(0);
+		await expect(page.locator(".pv-onb-popover")).toHaveCount(0);
 
 		// Non-modality: with the flyout open there is no blocking backdrop — a
 		// sidebar nav item is still directly clickable and navigates.
 		await ring.click();
-		await expect(page.locator(".alm-onb-popover")).toBeVisible();
+		await expect(page.locator(".pv-onb-popover")).toBeVisible();
 		await page.getByRole("link", { name: "Sessions" }).click();
 		await expect(page).toHaveURL(/#\/sessions/);
 	});
@@ -219,10 +219,10 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		await openChecklist(page);
 
 		// Collapse the whole Getting-started section (FR-012).
-		const toggle = page.locator(".alm-onb-checklist__section-toggle");
+		const toggle = page.locator(".pv-onb-checklist__section-toggle");
 		await toggle.click();
 		await expect(toggle).toHaveAttribute("aria-expanded", "false");
-		await expect(page.locator(".alm-onb-checklist__groups")).toHaveCount(0);
+		await expect(page.locator(".pv-onb-checklist__groups")).toHaveCount(0);
 
 		// SPA navigation keeps the persisted collapse (mock flag round-trips).
 		// Clicking outside the portalled panel also dismisses the flyout, so it
@@ -231,7 +231,7 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 		await expect(page).toHaveURL(/#\/inbox/);
 		await openChecklist(page);
 		await expect(
-			page.locator(".alm-onb-checklist__section-toggle"),
+			page.locator(".pv-onb-checklist__section-toggle"),
 		).toHaveAttribute("aria-expanded", "false");
 	});
 
@@ -244,14 +244,14 @@ test.describe("onboarding getting-started checklist (spec 056 US2)", () => {
 
 		// Collapse the whole section; the mock persists `sidebarCollapsed` to
 		// localStorage, so it must survive a full page reload (app restart).
-		const toggle = page.locator(".alm-onb-checklist__section-toggle");
+		const toggle = page.locator(".pv-onb-checklist__section-toggle");
 		await toggle.click();
 		await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
 		await page.reload();
 		await openChecklist(page);
 		await expect(
-			page.locator(".alm-onb-checklist__section-toggle"),
+			page.locator(".pv-onb-checklist__section-toggle"),
 		).toHaveAttribute("aria-expanded", "false");
 	});
 

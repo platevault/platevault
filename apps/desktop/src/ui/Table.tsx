@@ -40,6 +40,21 @@ function focusAdjacentRow(current: HTMLTableRowElement, dir: 1 | -1) {
   clickable[idx + dir]?.focus();
 }
 
+/**
+ * Move keyboard focus to the first or last focusable (selectable) row in the
+ * same scope as `current`. Wired to Home/End on clickable rows.
+ */
+function focusEdgeRow(current: HTMLTableRowElement, edge: 'first' | 'last') {
+  const scope = current.closest('tbody') ?? current.parentElement;
+  if (!scope) return;
+  const clickable = scope.querySelectorAll<HTMLTableRowElement>(
+    'tr[data-row-clickable="true"]',
+  );
+  const target =
+    edge === 'first' ? clickable[0] : clickable[clickable.length - 1];
+  target?.focus();
+}
+
 export interface TableColumn {
   key: string;
   /** Header content. Accepts a plain string or rich nodes (e.g. sortable header buttons). */
@@ -124,7 +139,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
   },
   ref,
 ) {
-  const cls = ['alm-table', className].filter(Boolean).join(' ');
+  const cls = ['pv-table', className].filter(Boolean).join(' ');
 
   // The scroll viewport the virtualizer measures against (virtualized mode).
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -146,17 +161,17 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
     const style: CSSProperties | undefined =
       row._indent != null
         ? // The custom property carries the per-row indent; consumed by the
-          // `.alm-table__row--indented` rule (primitives.css).
+          // `.pv-table__row--indented` rule (primitives.css).
           {
             ...row._rowStyle,
-            ['--alm-row-indent' as string]: `${row._indent}px`,
+            ['--pv-row-indent' as string]: `${row._indent}px`,
           }
         : row._rowStyle;
     const className =
       [
         row._rowClassName,
-        clickable ? 'alm-table__row--clickable' : null,
-        row._indent != null ? 'alm-table__row--indented' : null,
+        clickable ? 'pv-table__row--clickable' : null,
+        row._indent != null ? 'pv-table__row--indented' : null,
       ]
         .filter(Boolean)
         .join(' ') || undefined;
@@ -179,6 +194,12 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
                 } else if (e.key === 'ArrowUp') {
                   e.preventDefault();
                   focusAdjacentRow(e.currentTarget, -1);
+                } else if (e.key === 'Home') {
+                  e.preventDefault();
+                  focusEdgeRow(e.currentTarget, 'first');
+                } else if (e.key === 'End') {
+                  e.preventDefault();
+                  focusEdgeRow(e.currentTarget, 'last');
                 }
               }
             : undefined
@@ -239,7 +260,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
   return (
     <div
       ref={scrollRef}
-      className={['alm-table__scroll', scrollClassName]
+      className={['pv-table__scroll', scrollClassName]
         .filter(Boolean)
         .join(' ')}
       data-testid={scrollTestId}
@@ -251,7 +272,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
           {windowed ? (
             <>
               {paddingBefore > 0 && (
-                <tr aria-hidden="true" className="alm-table__spacer">
+                <tr aria-hidden="true" className="pv-table__spacer">
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- decorative spacer in aria-hidden row, no label needed */}
                   <td
                     colSpan={colCount}
@@ -262,7 +283,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
               )}
               {virtualItems.map((vi) => renderRow(rows[vi.index], vi.index))}
               {paddingAfter > 0 && (
-                <tr aria-hidden="true" className="alm-table__spacer">
+                <tr aria-hidden="true" className="pv-table__spacer">
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- decorative spacer in aria-hidden row, no label needed */}
                   <td
                     colSpan={colCount}

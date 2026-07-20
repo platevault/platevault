@@ -131,6 +131,18 @@ pub struct CalibrationMaster {
     pub size_bytes: Option<u64>,
     pub used_by_session_ids: Vec<String>,
     pub used_by_project_ids: Vec<String>,
+    /// #642: the master's owning library root id. `None` alongside
+    /// `relative_path` when the master frame was never resolved to a
+    /// `file_record` (legacy/unresolved masters) — never guessed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_id: Option<String>,
+    /// #642: root-relative path of the master's own file, for Reveal /
+    /// archive-plan generation. Resolve to an absolute path by joining with
+    /// the `root_id`'s current library root path (roots stay modeled
+    /// separately per Constitution I, so a moved/remapped root still
+    /// resolves correctly).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
 }
 
 /// A compatible session entry within a master detail view.
@@ -187,6 +199,10 @@ pub struct MasterDetail {
     pub size_bytes: Option<u64>,
     pub used_by_session_ids: Vec<String>,
     pub used_by_project_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
     // Detail-only fields.
     pub compatible_sessions: Vec<CompatibleSessionEntry>,
     pub usage_stats: MasterUsageStats,

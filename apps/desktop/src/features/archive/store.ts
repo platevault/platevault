@@ -55,12 +55,25 @@ async function generateArchivePlan(
   return unwrap(await commands.archivePlanGenerate(projectId, null));
 }
 
-/** Materialise a reviewable restore (un-archive) plan (#885, decision D15). */
-async function generateRestorePlan(
-  archivedViaPlanId: string,
-): Promise<GenerateRestorePlanResult> {
+/**
+ * Materialise a reviewable restore (un-archive) plan (#885 project, #886
+ * master). `entityType` picks the backend command: a master-archive plan
+ * (`origin = calibration_master_archive`) is only valid input to the
+ * calibration-scoped restore generator, not the project one (and vice
+ * versa) — `archive_generator::generate_restore_generic`'s origin check
+ * would otherwise reject a cross-called request with `plan.invalid_state`.
+ */
+async function generateRestorePlan(args: {
+  archivedViaPlanId: string;
+  entityType: string;
+}): Promise<GenerateRestorePlanResult> {
   return unwrap(
-    await commands.archivePlanGenerateRestore(archivedViaPlanId, null),
+    args.entityType === 'master'
+      ? await commands.calibrationMastersArchivePlanGenerateRestore(
+          args.archivedViaPlanId,
+          null,
+        )
+      : await commands.archivePlanGenerateRestore(args.archivedViaPlanId, null),
   );
 }
 
@@ -72,7 +85,7 @@ export interface QueryState<T> {
   error: Error | undefined;
 }
 
-/** Subscribe to the archived-projects list (C5: projects only). */
+/** Subscribe to the archived-entries list (projects, C5; masters, #886). */
 export function useArchiveList(): QueryState<ArchiveEntry[]> {
   const { data, isFetching, error } = useQuery({
     queryKey: queryKeys.archive.list(),
@@ -146,7 +159,11 @@ export function useGenerateArchivePlan() {
  * open the same {@link PlanReviewOverlay} on the result.
  */
 export function useGenerateRestorePlan() {
-  return useMutation<GenerateRestorePlanResult, Error, string>({
+  return useMutation<
+    GenerateRestorePlanResult,
+    Error,
+    { archivedViaPlanId: string; entityType: string }
+  >({
     mutationFn: generateRestorePlan,
   });
 }

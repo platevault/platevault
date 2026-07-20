@@ -83,7 +83,7 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
     app.complete_first_run_gate().await
 }
 
-/// DIAGNOSTIC ONLY (not a fix): capture what the `.alm-target-search` widget
+/// DIAGNOSTIC ONLY (not a fix): capture what the `.pv-target-search` widget
 /// actually rendered when the suggestion-poll loop in [`add_target_via_ui`]
 /// times out, so the NEXT CI run tells us whether Phase 1 (`target.search`)
 /// threw, is still "resolving" (stuck on Phase 2 / SIMBAD), or genuinely
@@ -107,16 +107,16 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
 async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     let mut report = format!("=== target-search diagnostics for query {query:?} ===\n");
 
-    // (a) DOM dump: outerHTML of the whole `.alm-target-search` root (input +
+    // (a) DOM dump: outerHTML of the whole `.pv-target-search` root (input +
     // filters + status + any rendered options), not the full page — small and
     // directly relevant.
     let outer_html_script = r"
-        var el = document.querySelector('.alm-target-search');
-        return el ? el.outerHTML : '<.alm-target-search not found in DOM>';
+        var el = document.querySelector('.pv-target-search');
+        return el ? el.outerHTML : '<.pv-target-search not found in DOM>';
     ";
     match app.driver.execute(outer_html_script, vec![]).await {
         Ok(ret) => match ret.convert::<String>() {
-            Ok(html) => report.push_str(&format!("--- .alm-target-search outerHTML ---\n{html}\n")),
+            Ok(html) => report.push_str(&format!("--- .pv-target-search outerHTML ---\n{html}\n")),
             Err(e) => report.push_str(&format!("(failed to deserialise outerHTML: {e})\n")),
         },
         Err(e) => report.push_str(&format!("(outerHTML script execution failed: {e})\n")),
@@ -125,28 +125,25 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // (b) Explicit state check: is a real `role="alert"` field error visible
     // (Phase 1 threw, `TargetSearch.tsx`'s catch branch), or is the
     // `--resolving` status still showing (stuck on Phase 2 / SIMBAD)?
-    match app.driver.find(By::Css(".alm-field-error")).await {
-        Ok(el) => {
-            let text = el.text().await.unwrap_or_default();
-            report.push_str(&format!("--- error state: PRESENT, text={text:?} ---\n"));
+    // Diagnostic-only, but a failed `.text()` read is reported AS a failed
+    // read rather than defaulted to "" (#1111) — otherwise a stale handle
+    // renders as `text=""`, which is indistinguishable from a real element
+    // whose text is genuinely empty and would misdirect the next investigation.
+    for (label, css) in [
+        ("error state", ".pv-field-error"),
+        ("resolving (SIMBAD phase-2) state", ".pv-target-search__status--resolving"),
+        ("generic status line", ".pv-target-search__status"),
+    ] {
+        match app.driver.find(By::Css(css)).await {
+            Ok(el) => {
+                let text = el
+                    .text()
+                    .await
+                    .map_or_else(|e| format!("<text read failed: {e}>"), |t| format!("{t:?}"));
+                report.push_str(&format!("--- {label}: PRESENT, text={text} ---\n"));
+            }
+            Err(_) => report.push_str(&format!("--- {label}: absent ---\n")),
         }
-        Err(_) => report.push_str("--- error state: absent ---\n"),
-    }
-    match app.driver.find(By::Css(".alm-target-search__status--resolving")).await {
-        Ok(el) => {
-            let text = el.text().await.unwrap_or_default();
-            report.push_str(&format!(
-                "--- resolving (SIMBAD phase-2) state: PRESENT, text={text:?} ---\n"
-            ));
-        }
-        Err(_) => report.push_str("--- resolving (SIMBAD phase-2) state: absent ---\n"),
-    }
-    match app.driver.find(By::Css(".alm-target-search__status")).await {
-        Ok(el) => {
-            let text = el.text().await.unwrap_or_default();
-            report.push_str(&format!("--- generic status line: PRESENT, text={text:?} ---\n"));
-        }
-        Err(_) => report.push_str("--- generic status line: absent ---\n"),
     }
 
     // (c) Best-effort screenshot — written to a fixed, predictable path per
@@ -216,7 +213,7 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     let console_log = app.dump_console_log().await;
     report.push_str(&format!("--- dump_console_log ---\n{console_log:#}\n"));
 
-    // (g) Round 3 correction: (a) above only dumps `.alm-target-search`'s
+    // (g) Round 3 correction: (a) above only dumps `.pv-target-search`'s
     // OWN outerHTML, and `Combobox.Portal` renders the suggestion listbox at
     // `document.body` — a SIBLING of that subtree, never a descendant — so
     // "absent from (a)'s dump" was never real evidence the listbox didn't
@@ -235,10 +232,10 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
             return s.length > n ? s.slice(0, n) + '...[truncated]' : s;
         }
         try {
-            var input = document.querySelector('.alm-target-search__input');
+            var input = document.querySelector('.pv-target-search__input');
             var controlsId = input ? input.getAttribute('aria-controls') : null;
             var listboxEl = controlsId ? document.getElementById(controlsId) : null;
-            var optionEls = document.querySelectorAll('.alm-target-search__option');
+            var optionEls = document.querySelectorAll('.pv-target-search__option');
             var roleListboxEls = document.querySelectorAll('[role="listbox"]');
             var roleOptionEls = document.querySelectorAll('[role="option"]');
             callback({
@@ -312,13 +309,13 @@ async fn dump_astronomy_diagnostics(app: &E2eApp) -> String {
     let mut report = String::from("=== astronomy-columns diagnostics ===\n");
 
     let row_html_script = r"
-        var el = document.querySelector('.alm-targets-table__row');
-        return el ? el.outerHTML : '<.alm-targets-table__row not found in DOM>';
+        var el = document.querySelector('.pv-targets-table__row');
+        return el ? el.outerHTML : '<.pv-targets-table__row not found in DOM>';
     ";
     match app.driver.execute(row_html_script, vec![]).await {
         Ok(ret) => match ret.convert::<String>() {
             Ok(html) => report
-                .push_str(&format!("--- first .alm-targets-table__row outerHTML ---\n{html}\n")),
+                .push_str(&format!("--- first .pv-targets-table__row outerHTML ---\n{html}\n")),
             Err(e) => report.push_str(&format!("(failed to deserialise row outerHTML: {e})\n")),
         },
         Err(e) => report.push_str(&format!("(row outerHTML script execution failed: {e})\n")),
@@ -353,8 +350,8 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     // Poll for the dialog to actually mount: it opens asynchronously after the
     // trigger click, same route/render race `E2eApp::find_waiting` documents.
     let popup =
-        app.find_waiting(By::Css(".alm-add-target__popup"), "the Add-target dialog popup").await?;
-    let input = popup.find(By::Css(".alm-target-search__input")).await?;
+        app.find_waiting(By::Css(".pv-add-target__popup"), "the Add-target dialog popup").await?;
+    let input = popup.find(By::Css(".pv-target-search__input")).await?;
 
     // #841 (dialog focus race, product fix filed + out of this branch's
     // scope): a keystroke can land on the modal's own close (X) button
@@ -370,10 +367,10 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     // Poll for a real suggestion option to render (offline seed search).
     //
     // Round 3 root cause (#463): this MUST be `app.driver.find` (page-scoped),
-    // NOT `popup.find` (scoped to `.alm-add-target__popup`'s subtree).
+    // NOT `popup.find` (scoped to `.pv-add-target__popup`'s subtree).
     // `TargetSearch.tsx`'s `Combobox.Portal` renders the suggestion listbox at
     // `document.body` — a SIBLING of the dialog popup, never a descendant of
-    // it — so `popup.find(By::Css(".alm-target-search__option"))` was
+    // it — so `popup.find(By::Css(".pv-target-search__option"))` was
     // structurally unable to ever match, regardless of whether the backend
     // responded or the popup actually rendered. This explained every prior
     // round's "no suggestion rendered" symptom even though round-3
@@ -384,7 +381,7 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     // `page.locator(...)` is page-scoped by default.
     let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
     let option = loop {
-        if let Ok(opt) = app.driver.find(By::Css(".alm-target-search__option")).await {
+        if let Ok(opt) = app.driver.find(By::Css(".pv-target-search__option")).await {
             break opt;
         }
         if tokio::time::Instant::now() >= deadline {
@@ -649,13 +646,19 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
     // reliably, and the aria-label mirror is the accessible contract.
     add_target_via_ui(&app, "M 1").await?;
     let row =
-        app.find_waiting(By::Css(".alm-targets-table__row"), "a targets-table row to open").await?;
+        app.find_waiting(By::Css(".pv-targets-table__row"), "a targets-table row to open").await?;
     row.click().await?;
     let best_date =
         app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
             anyhow::anyhow!("expected the detail Best-date stat with its Moon explanation: {e}")
         })?;
-    let label = best_date.attr("aria-label").await?.unwrap_or_default();
+    // A MISSING aria-label and an EMPTY one are different regressions; don't
+    // let `unwrap_or_default()` collapse them into the same `got ""` message.
+    let label = best_date
+        .attr("aria-label")
+        .await
+        .context("reading the Best-date stat's aria-label failed")?
+        .context("the Best-date stat has no aria-label attribute at all")?;
     anyhow::ensure!(
         label.contains("Matches opposition")
             || label.contains("falls near full Moon")

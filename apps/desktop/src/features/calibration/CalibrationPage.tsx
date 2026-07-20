@@ -161,6 +161,7 @@ export function CalibrationPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockId="calibration"
       detail={
         master != null ? (
           <MasterDetail

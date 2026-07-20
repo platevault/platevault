@@ -172,27 +172,27 @@ export function ProjectNotesSection({
 
   if (!editing) {
     return (
-      <div className="alm-project-notes__root">
+      <div className="pv-project-notes__root">
         {draft ? (
-          <div data-testid="notes-body" className="alm-project-notes__body">
+          <div data-testid="notes-body" className="pv-project-notes__body">
             {draft}
           </div>
         ) : (
-          <span data-testid="notes-empty" className="alm-project-notes__empty">
+          <span data-testid="notes-empty" className="pv-project-notes__empty">
             {m.projects_notes_empty()}
           </span>
         )}
         {!readOnly && (
           <div>
             <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              {m.projects_detail_edit_btn()}
+              {m.common_edit()}
             </Btn>
           </div>
         )}
         {lastSaved && (
           <span
             data-testid="notes-saved-indicator"
-            className="alm-project-notes__saved"
+            className="pv-project-notes__saved"
           >
             {m.projects_notes_saved()}
           </span>
@@ -202,10 +202,10 @@ export function ProjectNotesSection({
   }
 
   return (
-    <div className="alm-project-notes__root">
+    <div className="pv-project-notes__root">
       <textarea
         data-testid="notes-textarea"
-        className="alm-input alm-project-notes__textarea"
+        className="pv-input pv-project-notes__textarea"
         aria-label={m.projects_notes_label()}
         value={draft}
         onChange={handleChange}
@@ -214,21 +214,21 @@ export function ProjectNotesSection({
         aria-invalid={Boolean(fieldError || overLimit)}
         aria-describedby={fieldError ? 'notes-field-error' : undefined}
       />
-      <div className="alm-project-notes__toolbar">
+      <div className="pv-project-notes__toolbar">
         <span
           data-testid="notes-byte-counter"
           className={
             overLimit
-              ? 'alm-project-notes__byte-counter--over'
+              ? 'pv-project-notes__byte-counter--over'
               : nearLimit
-                ? 'alm-project-notes__byte-counter--near'
-                : 'alm-project-notes__byte-counter'
+                ? 'pv-project-notes__byte-counter--near'
+                : 'pv-project-notes__byte-counter'
           }
         >
           {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()}{' '}
           {m.projects_notes_bytes_unit()}
         </span>
-        <div className="alm-project-notes__actions">
+        <div className="pv-project-notes__actions">
           <Btn
             size="sm"
             variant="ghost"
@@ -252,7 +252,7 @@ export function ProjectNotesSection({
           id="notes-field-error"
           role="alert"
           data-testid="notes-field-error"
-          className="alm-field-error"
+          className="pv-field-error"
         >
           {fieldError}
         </span>

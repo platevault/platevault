@@ -64,20 +64,20 @@ export class AppErrorBoundary extends Component<Props, State> {
         <div
           role="alert"
           data-testid="app-error-boundary-fallback"
-          className="alm-error-boundary__overlay"
+          className="pv-error-boundary__overlay"
         >
-          <h1 className="alm-error-boundary__heading">
+          <h1 className="pv-error-boundary__heading">
             {m.shell_error_heading()}
           </h1>
-          <p className="alm-error-boundary__body">{m.shell_error_body()}</p>
+          <p className="pv-error-boundary__body">{m.shell_error_body()}</p>
           {error.message && (
-            <pre className="alm-error-boundary__detail">{error.message}</pre>
+            <pre className="pv-error-boundary__detail">{error.message}</pre>
           )}
           <button
             type="button"
             onClick={this.handleReset}
             data-testid="app-error-boundary-reset"
-            className="alm-error-boundary__reset-btn"
+            className="pv-error-boundary__reset-btn"
           >
             {m.common_try_again()}
           </button>

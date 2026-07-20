@@ -807,6 +807,8 @@ async fn masters_list_from_db(
                 size_bytes: r.size_bytes.and_then(|b| u64::try_from(b).ok()),
                 used_by_session_ids: vec![],
                 used_by_project_ids: vec![],
+                root_id: r.root_id,
+                relative_path: r.frame_relative_path,
             }
         })
         .collect();
@@ -866,6 +868,8 @@ pub async fn masters_get(
         size_bytes: r.size_bytes.and_then(|b| u64::try_from(b).ok()),
         used_by_session_ids,
         used_by_project_ids,
+        root_id: r.root_id,
+        relative_path: r.frame_relative_path,
         compatible_sessions,
         usage_stats: contracts_core::calibration::MasterUsageStats { session_count, project_count },
         missing_flag,
@@ -1102,6 +1106,74 @@ mod masters_tests {
         assert_eq!(detail.id, "cal-t2");
         assert_eq!(detail.kind, contracts_core::calibration::CalibrationKind::Flat);
         assert_eq!(detail.fingerprint.filter, Some("Ha".to_owned()));
+    }
+
+    /// #642: masters_list/masters_get expose `root_id`/`relative_path`
+    /// resolved from `calibration_session.frame_ids[0]` → `file_record`, the
+    /// master's own applied frame file written at master-confirm time
+    /// (`crates/app/inbox/src/plan_listener.rs`).
+    #[tokio::test]
+    async fn masters_list_and_get_resolve_frame_path_from_file_record() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
+        let db = test_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES ('root-1', 'Library', '/data/lib', 'local', 'active', '2026-06-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+             (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('fr-1', 'root-1', 'masters/masterDark_300s.xisf', 1000, \
+                     '2026-06-01T00:00:00Z', 'observed', '2026-06-01T00:00:00Z', \
+                     '2026-06-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, frame_ids, root_id, created_at) \
+             VALUES ('cal-path', 'dark-300s', 'dark', '[\"fr-1\"]', 'root-1', '2026-06-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let masters = masters_list(db.pool()).await.unwrap();
+        assert_eq!(masters.len(), 1);
+        assert_eq!(masters[0].root_id.as_deref(), Some("root-1"));
+        assert_eq!(masters[0].relative_path.as_deref(), Some("masters/masterDark_300s.xisf"));
+
+        let detail = masters_get(db.pool(), "cal-path").await.unwrap();
+        assert_eq!(detail.root_id.as_deref(), Some("root-1"));
+        assert_eq!(detail.relative_path.as_deref(), Some("masters/masterDark_300s.xisf"));
+    }
+
+    /// #642: an unresolved master frame (`frame_ids = '[]'`, the common case
+    /// before spec 048 US1 wired real file-record writes) must leave both
+    /// fields `None` — never a guessed/empty-string path.
+    #[tokio::test]
+    async fn masters_list_leaves_path_none_when_frame_unresolved() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
+        let db = test_db().await;
+
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-unresolved', 'bias-none', 'bias', '2026-06-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let masters = masters_list(db.pool()).await.unwrap();
+        assert_eq!(masters.len(), 1);
+        assert_eq!(masters[0].root_id, None);
+        assert_eq!(masters[0].relative_path, None);
     }
 
     /// T032 / T037: masters_get returns error for unknown id.

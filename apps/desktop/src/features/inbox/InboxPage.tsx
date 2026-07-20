@@ -2,37 +2,33 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * InboxPage — classify / confirm workflow on the Inbox's OWN 3-zone layout.
+ * InboxPage — classify / confirm workflow on the shared list-page layout.
  *
- * spec 043 (#83 inbox redesign): the Inbox is a special page that does NOT use
- * the shared `ListPageLayout` bottom-split. It shares only the pinned
- * `PageTopBar` convention (search + group/sort/frame-type filter + Confirm /
- * Rescan actions, no page title) and then composes its OWN body with three
- * zones:
+ * The Inbox once composed its own bespoke 3-zone body (list + fixed side panel
+ * + docked bottom plan panel) and deliberately avoided `ListPageLayout`. It no
+ * longer does. It renders through the shared `ListPageLayout` like every other
+ * list page, passing no `detailPlacement`, so it takes the `'adaptive'` default
+ * (spec 054 / #936): the detail docks to the SIDE on a wide window and to the
+ * BOTTOM on a narrow one, and the user can pin that per page via the
+ * Auto/Bottom/Right control. There is no Inbox-specific placement — the
+ * permanent narrow split once designed for it (spec 054 FR-014/FR-015) was
+ * never built and was withdrawn in #1068.
  *
- *   ┌──────────────── PageTopBar (pinned) ─────────────────┐
- *   ├───────────────────────────────┬──────────────────────┤
- *   │ detection LIST (primary,       │ file-details SIDE    │
- *   │ full height of the top region) │ panel (selected      │
- *   │                                │ detection: class +   │
- *   │                                │ breakdown + metadata)│
- *   ├═════════ planned-actions BOTTOM panel (docked) ═══════┤
- *   │ full width · own scroll · shown only when a plan/root │
- *   │ pick exists · never steals the list or side panel     │
- *   └───────────────────────────────────────────────────────┘
- *
+ *   - `detail` is the selected detection's `InboxDetail`: classification +
+ *     breakdown + per-file metadata. Its body is its own scroll region, so a
+ *     long FILES list is reachable rather than clipped (PR #939, fixes #553).
+ *   - `children` is the `InboxList` detection table.
+ *   - The aggregate `PlanPanel` is NOT a docked zone any more. It lives in the
+ *     plan-approval overlay below, opened from a top-bar trigger. #75:
+ *     per-group summaries collapse per-file rows and aggregate by ACTUAL frame
+ *     type from the item's breakdown.
  *   - #83: ONE search only (top-bar FilterToolbar). The list no longer wraps in
  *     ListSidebar (which carried a 2nd search box + a 3rd folder/master count).
  *     The triplicate counts collapse to a single compact per-frame-type
  *     breakdown in the top-bar summary; global totals live in the status bar.
- *   - The SIDE panel holds the selected detection's detail (`InboxDetail`):
- *     classification + breakdown + per-file metadata, at a sensible fixed width.
- *   - The BOTTOM panel holds the aggregate `PlanPanel` (every open plan), docked
- *     full-width with its own scroll. #75: per-group summaries collapse per-file
- *     rows and aggregate by ACTUAL frame type from the item's breakdown.
  *
- * spec 039: the left list is a cross-root aggregate of all unacknowledged
- * items (inbox.list), grouped/labelled by their registered root.
+ * spec 039: the list is a cross-root aggregate of all unacknowledged items
+ * (inbox.list), grouped/labelled by their registered root.
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
@@ -999,8 +995,8 @@ export function InboxPage() {
   // ("Maximum update depth exceeded") for as long as the Inbox was open.
   const pageStatusNode = useMemo(
     () => (
-      <span className="alm-inbox-summary" data-testid="statusbar-inbox-summary">
-        <span className="alm-inbox-summary__count">{summary}</span>
+      <span className="pv-inbox-summary" data-testid="statusbar-inbox-summary">
+        <span className="pv-inbox-summary__count">{summary}</span>
         {!listLoading && <InboxStatsSummary stats={derivedStats} />}
       </span>
     ),
@@ -1132,6 +1128,7 @@ export function InboxPage() {
     <>
       <ListPageLayout
         topBar={topBar}
+        dockId="inbox"
         detailLabel={m.inbox_detection_details()}
         detail={
           selectedItem != null ? (

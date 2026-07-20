@@ -27,10 +27,10 @@
 import { test, expect, seedSetupComplete } from "./support/harness";
 import type { Page } from "@playwright/test";
 
-const TOOLTIP = ".alm-onboarding-tooltip";
-const PRIMARY = ".alm-onboarding-tooltip__primary";
-const BACK = ".alm-onboarding-tooltip__back";
-const SKIP = ".alm-onboarding-tooltip__skip";
+const TOOLTIP = ".pv-onboarding-tooltip";
+const PRIMARY = ".pv-onboarding-tooltip__primary";
+const BACK = ".pv-onboarding-tooltip__back";
+const SKIP = ".pv-onboarding-tooltip__skip";
 
 const STOP_TITLES = [
   "Start in the Inbox",
@@ -76,7 +76,7 @@ async function injectSectionAnchor(page: Page): Promise<void> {
 async function expectStop(page: Page, index: number): Promise<void> {
   await expect(page.locator(TOOLTIP)).toBeVisible();
   await expect(
-    page.locator(`${TOOLTIP} .alm-onboarding-tooltip__title`),
+    page.locator(`${TOOLTIP} .pv-onboarding-tooltip__title`),
   ).toHaveText(STOP_TITLES[index]);
 }
 

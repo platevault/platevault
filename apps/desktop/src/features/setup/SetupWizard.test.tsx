@@ -771,7 +771,12 @@ describe('SetupWizard 5-step flow', () => {
     });
 
     // firstrunComplete must be called exactly once, after the tool updates.
-    expect(mockFirstrunComplete).toHaveBeenCalledTimes(1);
+    // waitFor, not a sync assertion: handleFinish AWAITS each toolsUpdate
+    // before reaching firstrunComplete (SetupWizard.tsx:384-415), so the
+    // waitFor above — which only proves both toolsUpdate calls were dispatched
+    // — still leaves firstrunComplete pending. Asserting it synchronously
+    // fails with "expected 1 times, but got 0 times" (#1083).
+    await waitFor(() => expect(mockFirstrunComplete).toHaveBeenCalledTimes(1));
   });
 });
 

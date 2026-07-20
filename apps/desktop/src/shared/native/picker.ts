@@ -14,7 +14,7 @@
 import { dirname } from 'pathe';
 import { commands } from '@/bindings';
 import { unwrap } from '@/api/ipc';
-import { errMessage, isContractError } from '@/lib/errors';
+import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 import { useAsyncAction } from './useAsyncAction';
 import type {
@@ -204,7 +204,9 @@ export async function pickDirectory(
       }),
     );
   } catch (err: unknown) {
-    const message = isContractError(err) ? err.message : errMessage(err);
+    // errMessage() routes a ContractError through the catalog (FR-009) rather
+    // than leaking its raw `.message` diagnostic to the user.
+    const message = errMessage(err);
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, cancelled: true };
     }
@@ -253,7 +255,9 @@ export async function pickFile(
       }),
     );
   } catch (err: unknown) {
-    const message = isContractError(err) ? err.message : errMessage(err);
+    // errMessage() routes a ContractError through the catalog (FR-009) rather
+    // than leaking its raw `.message` diagnostic to the user.
+    const message = errMessage(err);
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, selectedFilter: null, cancelled: true };
     }

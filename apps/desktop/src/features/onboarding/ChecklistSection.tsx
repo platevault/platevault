@@ -11,7 +11,7 @@
  * popover reserved for the collapsed width. That was dropped: rendered inline,
  * the list blended into the sidebar's own surface and read as navigation rather
  * than as a checklist. Both widths now use the flyout, which is portalled to
- * `<body>` because `.alm-sidebar` is `overflow: hidden` and was scissoring the
+ * `<body>` because `.pv-sidebar` is `overflow: hidden` and was scissoring the
  * panel away. There is consequently NO inline host — anything asserting on this
  * component (tests included) must open the flyout first.
  *
@@ -221,15 +221,15 @@ export function ChecklistSection({
   return (
     <section
       className={clsx(
-        'alm-onb-checklist',
-        spotlightActive && 'alm-onb-checklist--spotlighting',
+        'pv-onb-checklist',
+        spotlightActive && 'pv-onb-checklist--spotlighting',
       )}
       aria-label={m.onboarding_section_title()}
     >
-      <div className="alm-onb-checklist__head">
+      <div className="pv-onb-checklist__head">
         <button
           type="button"
-          className="alm-onb-checklist__section-toggle"
+          className="pv-onb-checklist__section-toggle"
           aria-expanded={sectionExpanded}
           onClick={toggleSection}
         >
@@ -238,14 +238,14 @@ export function ChecklistSection({
           ) : (
             <ChevronRight size={14} aria-hidden />
           )}
-          <span className="alm-onb-checklist__title">
+          <span className="pv-onb-checklist__title">
             {m.onboarding_section_title()}
           </span>
         </button>
         <div
           className={clsx(
-            'alm-onb-checklist__progress',
-            choreo.pulseActive && 'alm-onb-checklist__progress--pulse',
+            'pv-onb-checklist__progress',
+            choreo.pulseActive && 'pv-onb-checklist__progress--pulse',
           )}
           role="progressbar"
           aria-valuemin={0}
@@ -253,12 +253,12 @@ export function ChecklistSection({
           aria-valuenow={done}
           aria-label={progressText}
         >
-          <span className="alm-onb-checklist__progress-text">
+          <span className="pv-onb-checklist__progress-text">
             {progressText}
           </span>
-          <span className="alm-onb-checklist__progress-track" aria-hidden>
+          <span className="pv-onb-checklist__progress-track" aria-hidden>
             <span
-              className="alm-onb-checklist__progress-fill"
+              className="pv-onb-checklist__progress-fill"
               // eslint-disable-next-line no-restricted-syntax -- dynamic: progress width tracks live done/total
               style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
             />
@@ -267,10 +267,10 @@ export function ChecklistSection({
 
         {/* Header overflow menu (T029): the single "Remove getting started"
             action behind a one-line confirm (FR-013). */}
-        <div className="alm-onb-checklist__menu-wrap">
+        <div className="pv-onb-checklist__menu-wrap">
           <button
             type="button"
-            className="alm-onb-checklist__menu-btn"
+            className="pv-onb-checklist__menu-btn"
             aria-label={m.onboarding_section_menu_aria()}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
@@ -282,23 +282,23 @@ export function ChecklistSection({
             <MoreHorizontal size={14} aria-hidden />
           </button>
           {menuOpen && (
-            <div className="alm-onb-checklist__menu" role="menu">
+            <div className="pv-onb-checklist__menu" role="menu">
               {removeConfirming ? (
-                <div className="alm-onb-checklist__menu-confirm">
-                  <p className="alm-onb-checklist__menu-confirm-text">
+                <div className="pv-onb-checklist__menu-confirm">
+                  <p className="pv-onb-checklist__menu-confirm-text">
                     {m.onboarding_section_remove_confirm()}
                   </p>
-                  <div className="alm-onb-checklist__menu-confirm-actions">
+                  <div className="pv-onb-checklist__menu-confirm-actions">
                     <button
                       type="button"
-                      className="alm-onb-checklist__menu-confirm-yes"
+                      className="pv-onb-checklist__menu-confirm-yes"
                       onClick={handleRemove}
                     >
                       {m.common_remove()}
                     </button>
                     <button
                       type="button"
-                      className="alm-onb-checklist__menu-confirm-no"
+                      className="pv-onb-checklist__menu-confirm-no"
                       onClick={() => {
                         setRemoveConfirming(false);
                         setMenuOpen(false);
@@ -312,7 +312,7 @@ export function ChecklistSection({
                 <button
                   type="button"
                   role="menuitem"
-                  className="alm-onb-checklist__menu-item"
+                  className="pv-onb-checklist__menu-item"
                   onClick={() => setRemoveConfirming(true)}
                 >
                   {m.onboarding_section_menu_remove()}
@@ -326,7 +326,7 @@ export function ChecklistSection({
       {/* Polite per-tick announcement (T024, WCAG). Always rendered so AT reads
           each completion; text changes when the choreography detector reports a
           fresh unchecked→settled transition. */}
-      <div className="alm-visually-hidden" role="status" aria-live="polite">
+      <div className="pv-visually-hidden" role="status" aria-live="polite">
         {choreo.announceItemId
           ? m.onboarding_announcer_tick({
               item: itemLabel(choreo.announceItemId),
@@ -335,7 +335,7 @@ export function ChecklistSection({
       </div>
 
       {sectionExpanded && (
-        <div className="alm-onb-checklist__groups">
+        <div className="pv-onb-checklist__groups">
           {PAGE_ORDER.filter((page) => itemsByPage.has(page)).map((page) => {
             const items = itemsByPage.get(page) ?? [];
             const completingHere = items.some((i) =>
@@ -360,13 +360,13 @@ export function ChecklistSection({
               <div
                 key={page}
                 className={clsx(
-                  'alm-onb-checklist__group',
-                  complete && 'alm-onb-checklist__group--complete',
+                  'pv-onb-checklist__group',
+                  complete && 'pv-onb-checklist__group--complete',
                 )}
               >
                 <button
                   type="button"
-                  className="alm-onb-checklist__group-header"
+                  className="pv-onb-checklist__group-header"
                   aria-expanded={expanded}
                   onClick={() => toggleGroup(page)}
                 >
@@ -375,23 +375,23 @@ export function ChecklistSection({
                   ) : (
                     <ChevronRight size={13} aria-hidden />
                   )}
-                  <span className="alm-onb-checklist__group-label">
+                  <span className="pv-onb-checklist__group-label">
                     {PAGE_META[page].label()}
                   </span>
                   {complete && (
                     <Check
                       size={13}
                       aria-hidden
-                      className="alm-onb-checklist__group-done"
+                      className="pv-onb-checklist__group-done"
                     />
                   )}
-                  <span className="alm-onb-checklist__group-count">
+                  <span className="pv-onb-checklist__group-count">
                     {g.done}/{g.total}
                   </span>
                 </button>
 
                 {expanded && (
-                  <ul className="alm-onb-checklist__items">
+                  <ul className="pv-onb-checklist__items">
                     {open.map((item) => (
                       <ChecklistItemRow
                         key={item.itemId}
@@ -404,14 +404,14 @@ export function ChecklistSection({
                       />
                     ))}
                     {completed.length > 0 && (
-                      <li className="alm-onb-checklist__completed">
-                        <ul className="alm-onb-checklist__items">
+                      <li className="pv-onb-checklist__completed">
+                        <ul className="pv-onb-checklist__items">
                           {completed.map((item) => {
                             const doneLabelId = `${idPrefix}-done-${item.itemId.replaceAll('.', '_')}`;
                             return (
                               <li
                                 key={item.itemId}
-                                className="alm-onb-checklist__item alm-onb-checklist__item--done"
+                                className="pv-onb-checklist__item pv-onb-checklist__item--done"
                                 data-item-id={item.itemId}
                                 data-state={item.state}
                               >
@@ -435,7 +435,7 @@ export function ChecklistSection({
                                   role="checkbox"
                                   aria-checked
                                   aria-labelledby={doneLabelId}
-                                  className="alm-onb-checklist__check alm-onb-checklist__check--done"
+                                  className="pv-onb-checklist__check pv-onb-checklist__check--done"
                                   onClick={() =>
                                     void setOnboardingItemState(
                                       item.itemId,
@@ -446,12 +446,12 @@ export function ChecklistSection({
                                   <Check
                                     size={14}
                                     aria-hidden
-                                    className="alm-onb-checklist__check-icon"
+                                    className="pv-onb-checklist__check-icon"
                                   />
                                 </button>
                                 <span
                                   id={doneLabelId}
-                                  className="alm-onb-checklist__item-label"
+                                  className="pv-onb-checklist__item-label"
                                 >
                                   {itemLabel(item.itemId)}
                                 </span>
@@ -544,17 +544,17 @@ function ChecklistItemRow({
   if (completing) {
     return (
       <li
-        className="alm-onb-checklist__item alm-onb-checklist__item--completing"
+        className="pv-onb-checklist__item pv-onb-checklist__item--completing"
         data-item-id={item.itemId}
         data-completing="true"
       >
         <Check
           size={14}
           aria-hidden
-          className="alm-onb-checklist__check-icon"
+          className="pv-onb-checklist__check-icon"
         />
-        <span className="alm-onb-checklist__item-main">
-          <span className="alm-onb-checklist__item-label">{label}</span>
+        <span className="pv-onb-checklist__item-main">
+          <span className="pv-onb-checklist__item-label">{label}</span>
         </span>
       </li>
     );
@@ -563,8 +563,8 @@ function ChecklistItemRow({
   return (
     <li
       className={clsx(
-        'alm-onb-checklist__item',
-        blocked && 'alm-onb-checklist__item--blocked',
+        'pv-onb-checklist__item',
+        blocked && 'pv-onb-checklist__item--blocked',
       )}
       data-item-id={item.itemId}
       data-blocked={blocked ? 'true' : undefined}
@@ -585,7 +585,7 @@ function ChecklistItemRow({
         aria-checked={false}
         aria-labelledby={labelId}
         aria-describedby={tooltipId}
-        className="alm-onb-checklist__check"
+        className="pv-onb-checklist__check"
         onClick={check}
         disabled={blocked}
         // #1103: this control owns the tooltip reveal for keyboard users.
@@ -614,9 +614,9 @@ function ChecklistItemRow({
           }
         }}
       >
-        <span className="alm-onb-checklist__checkbox" aria-hidden />
+        <span className="pv-onb-checklist__checkbox" aria-hidden />
       </button>
-      <span className="alm-onb-checklist__item-main">
+      <span className="pv-onb-checklist__item-main">
         {/*
           Shared Tooltip (base-ui): portalled, positioned, with the app's
           standard open/close delays and dismissal. Replaces a bespoke
@@ -630,23 +630,23 @@ function ChecklistItemRow({
           open={tipOpen}
           onOpenChange={setTipOpen}
         >
-          <span id={labelId} className="alm-onb-checklist__item-label">
+          <span id={labelId} className="pv-onb-checklist__item-label">
             {label}
           </span>
         </Tooltip>
         {blocked && item.prerequisite && (
-          <span className="alm-onb-checklist__prereq">
+          <span className="pv-onb-checklist__prereq">
             <Lock
               size={10}
               aria-hidden
-              className="alm-onb-checklist__prereq-icon"
+              className="pv-onb-checklist__prereq-icon"
             />
-            <span className="alm-onb-checklist__prereq-reason">
+            <span className="pv-onb-checklist__prereq-reason">
               {prerequisiteReason(item.prerequisite.reasonKey)}
             </span>
             <button
               type="button"
-              className="alm-onb-checklist__prereq-jump"
+              className="pv-onb-checklist__prereq-jump"
               onClick={() =>
                 item.prerequisite && onJump(item.prerequisite.jumpPage)
               }
@@ -665,11 +665,11 @@ function ChecklistItemRow({
         rows, so a per-item dismiss can return (e.g. behind a row menu) without
         a migration.
       */}
-      <span className="alm-onb-checklist__actions">
+      <span className="pv-onb-checklist__actions">
         {findable && (
           <button
             type="button"
-            className="alm-onb-checklist__find"
+            className="pv-onb-checklist__find"
             aria-label={m.onboarding_find_label({ item: label })}
             aria-pressed={findActive}
             onClick={() => toggleFind(item)}

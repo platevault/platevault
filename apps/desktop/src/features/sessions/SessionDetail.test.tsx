@@ -10,8 +10,24 @@
  * 2. A session with matches renders one row per assigned master.
  */
 
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import {
+  render as rtlRender,
+  screen,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    calibrationMatchUnassign: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { status: 'success', contractVersion: '1.0.0', requestId: 'r1' },
+    }),
+  },
+}));
 
 // The frame-inventory / cleanup / notes children hit IPC or the query cache —
 // stub them so this test isolates the calibration-linkage rendering.
@@ -25,6 +41,20 @@ vi.mock('./SessionNotesSection', () => ({ SessionNotesSection: () => null }));
 
 import { SessionDetail } from './SessionDetail';
 import type { InventorySession } from '@/bindings/index';
+
+// #875: CalibrationLinkage's un-assign action reads useQueryClient() (via
+// useCalibrationUnassign), so every render needs a QueryClientProvider
+// ancestor now — mirrors MasterDetail.actions.test.tsx's render() wrapper.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 function makeSession(
   overrides: Partial<InventorySession> = {},
@@ -109,5 +139,72 @@ describe('SessionDetail calibration linkage', () => {
     expect(list).toHaveTextContent('master-dark-1');
     expect(list).toHaveTextContent('90%');
     expect(list).toHaveTextContent('gain');
+  });
+});
+
+describe('SessionDetail calibration linkage — un-assign (#875)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('opens a confirm dialog and does NOT call unassign until confirmed', async () => {
+    const { commands } = await import('@/bindings/index');
+    render(
+      <SessionDetail
+        session={makeSession({
+          id: 'sess-unassign-1',
+          calibrationMatches: [
+            {
+              masterId: 'master-dark-1',
+              kind: 'dark',
+              score: 0.9,
+              softMismatches: [],
+              wasOverride: false,
+            },
+          ],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('session-calib-unassign-dark'));
+    await screen.findByText('Remove this assignment?');
+    expect(commands.calibrationMatchUnassign).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('session-calib-unassign-confirm-btn'));
+
+    await waitFor(() =>
+      expect(commands.calibrationMatchUnassign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'sess-unassign-1',
+          calibrationType: 'dark',
+        }),
+      ),
+    );
+  });
+
+  it('cancel closes the dialog without calling unassign', async () => {
+    const { commands } = await import('@/bindings/index');
+    render(
+      <SessionDetail
+        session={makeSession({
+          calibrationMatches: [
+            {
+              masterId: 'master-flat-1',
+              kind: 'flat',
+              score: 0.8,
+              softMismatches: [],
+              wasOverride: false,
+            },
+          ],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('session-calib-unassign-flat'));
+    await screen.findByText('Remove this assignment?');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Remove this assignment?')).toBeNull();
+    expect(commands.calibrationMatchUnassign).not.toHaveBeenCalled();
   });
 });

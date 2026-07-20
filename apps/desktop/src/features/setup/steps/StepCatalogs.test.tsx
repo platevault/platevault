@@ -11,7 +11,13 @@
  * (#504 — wired to the same `data/theme.ts` runtime as Settings > General).
  */
 
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGet, mockUpdate, mockSettingsGet, mockSettingsUpdate } = vi.hoisted(
@@ -85,8 +91,11 @@ describe('StepCatalogs (Configuration)', () => {
   it('renders the SIMBAD online-resolution toggle', async () => {
     renderStep();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // findBy: the toggle comes from ResolverSettingsControl (compact), which
+    // renders a label-less <Skeleton> until `loaded` flips in a .finally()
+    // after mockGet resolves — the waitFor above only proves the call (#1083).
     expect(
-      screen.getByLabelText('Enable online SIMBAD resolution'),
+      await screen.findByLabelText('Enable online SIMBAD resolution'),
     ).toBeInTheDocument();
   });
 
@@ -104,12 +113,18 @@ describe('StepCatalogs (Configuration)', () => {
     const theme = screen.getByLabelText('Theme') as HTMLSelectElement;
     expect(theme).not.toBeDisabled();
     const optionValues = Array.from(theme.options).map((o) => o.value);
+    // The wizard's ThemeControl deliberately maps over the full THEMES
+    // registry (unfiltered by `enabled`) — handoff 03's canonical/variant
+    // split only hides Warm Clay/Espresso from the Settings > Appearance
+    // picker, not this first-run control (#504's "all app themes" intent).
     expect(optionValues).toEqual([
       'system',
       'warm-clay',
       'warm-slate',
       'observatory-dark',
       'espresso-dark',
+      'observatory-cool-light',
+      'observatory-cool',
     ]);
   });
 
@@ -130,5 +145,46 @@ describe('StepCatalogs (Configuration)', () => {
   it('shows no catalog-download affordance', () => {
     renderStep();
     expect(screen.queryByRole('button', { name: /download/i })).toBeNull();
+  });
+});
+
+describe('DefaultProtectionControl mount-read vs user-edit race', () => {
+  it('does not let the in-flight mount read clobber a choice made while it was pending', async () => {
+    // Hold the mount `settingsGet` open so the user can act while it is still
+    // in flight — the same defect fixed in LogPanelContext and Settings >
+    // Cleanup. The stale read must not overwrite the newer pick.
+    let resolveGet!: (v: unknown) => void;
+    mockSettingsGet.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+
+    renderStep();
+
+    const select = screen.getByLabelText(
+      'Default source protection',
+    ) as HTMLSelectElement;
+    expect(select.value).toBe('protected');
+
+    // User picks 'unprotected' before the read resolves. This also persists,
+    // so a clobber would leave the UI disagreeing with the settings DB.
+    fireEvent.change(select, { target: { value: 'unprotected' } });
+    expect(select.value).toBe('unprotected');
+    expect(mockSettingsUpdate).toHaveBeenCalledWith('cleanup', {
+      defaultProtection: 'unprotected',
+    });
+
+    // The stale read now lands, carrying the pre-edit value.
+    await act(async () => {
+      resolveGet({
+        status: 'ok',
+        data: { values: { defaultProtection: 'protected' } },
+      });
+    });
+
+    // Assert directly, NOT via waitFor: waitFor would succeed on its first
+    // check before a clobber landed and would pass with the fix removed.
+    expect(select.value).toBe('unprotected');
   });
 });

@@ -23,6 +23,8 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 const { mockList, mockExport, mockNavigate } = vi.hoisted(() => ({
   mockList: vi.fn(),
@@ -30,12 +32,28 @@ const { mockList, mockExport, mockNavigate } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
 }));
 
+// The shared useEntityNames hook (#809) reads session names via
+// useInventorySources, a TanStack Query hook — AuditLog now needs a
+// QueryClientProvider ancestor, same pattern as CalibrationMatchPanel.test.tsx.
+function wrapper({ children }: { children: ReactNode }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
+
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
 
 // #803 entity-name resolution calls these per-row; default to a "not found"
 // error so unrelated tests keep seeing the raw `entityType · entityId` text.
+// #809: the shared useEntityNames hook (apps/desktop/src/hooks/useEntityNames.ts)
+// also reads session names off `inventoryList` (no per-id session lookup
+// exists) — an empty source list keeps existing raw-fallback assertions for
+// `entityType: 'session'` entries unchanged.
 vi.mock('@/bindings/index', () => ({
   commands: {
     auditList: mockList,
@@ -65,6 +83,16 @@ vi.mock('@/bindings/index', () => ({
         message: 'not found',
         severity: 'warning',
         retryable: false,
+      },
+    }),
+    inventoryList: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        status: 'ok',
+        contractVersion: '1.0',
+        requestId: 'req-inventory',
+        generatedAt: '2026-01-01T00:00:00Z',
+        sources: [],
       },
     }),
   },
@@ -115,17 +143,21 @@ beforeEach(() => {
 
 describe('AuditLog', () => {
   it('loads audit entries via auditList and renders them', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    expect(screen.getByText('session.confirmed')).toBeInTheDocument();
+    // findBy, not getBy: rows render behind `{!loading && …}` (AuditLog.tsx)
+    // and `loading` only clears once auditList's promise RESOLVES — the
+    // waitFor above only proves the call was made. A sync getBy therefore
+    // races the "Loading…" row on a contended runner (#1083).
+    expect(await screen.findByText('session.confirmed')).toBeInTheDocument();
     expect(screen.getByText('plan.approved')).toBeInTheDocument();
     // First call has no filters (nothing typed yet).
     expect(mockList).toHaveBeenCalledWith(null, { limit: 8, offset: 0 });
   });
 
   it('debounces the search box, then maps it to filters.search', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
     const callsBeforeTyping = mockList.mock.calls.length;
 
@@ -146,7 +178,7 @@ describe('AuditLog', () => {
   });
 
   it('maps the date-range inputs to filters.from / filters.to', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     fireEvent.change(screen.getByLabelText('From'), {
@@ -180,7 +212,7 @@ describe('AuditLog', () => {
       status: 'ok',
       data: { entries: ENTRIES, total: 20 },
     });
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     // Wait for the initial load to RESOLVE, not merely for auditList to have been
     // called: the Next button is disabled until `total` is set (totalPages > 1),
     // so clicking while the load promise is still pending is a no-op that leaves
@@ -208,7 +240,7 @@ describe('AuditLog', () => {
         retryable: true,
       },
     });
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
 
     await waitFor(() =>
       expect(
@@ -291,7 +323,7 @@ describe('AuditLog', () => {
       },
     });
 
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
 
     // waitFor on rendered content (not just "mockList was called") — the
     // list call resolves asynchronously, so asserting immediately after only
@@ -330,7 +362,7 @@ describe('AuditLog', () => {
       return el;
     });
 
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // The Export button is `disabled={exporting || loading}` (AuditLog.tsx),
@@ -355,15 +387,19 @@ describe('AuditLog', () => {
   });
 
   it('renders the state-change column (#749)', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    expect(screen.getByText('needs_review → confirmed')).toBeInTheDocument();
+    // findBy: rows are gated on `loading` clearing, which the waitFor above
+    // does not prove (#1083).
+    expect(
+      await screen.findByText('needs_review → confirmed'),
+    ).toBeInTheDocument();
     expect(screen.getByText('ready_for_review → approved')).toBeInTheDocument();
   });
 
   it('maps the outcome and entity-type selects to structured filters (#749)', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     fireEvent.change(screen.getByLabelText('Outcome'), {
@@ -388,21 +424,26 @@ describe('AuditLog', () => {
   });
 
   it('navigates to the entity page when a linked row is clicked (#831)', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // ENTRIES[0] is entityType 'session', which has a real /sessions/:id route.
-    fireEvent.click(screen.getByText('session.confirmed'));
+    // findBy: the row only exists once `loading` clears (#1083); clicking a
+    // row that hasn't rendered would throw rather than navigate.
+    fireEvent.click(await screen.findByText('session.confirmed'));
 
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/sessions/ses-001' });
   });
 
   it('does not link entity types without a destination page (#626 reasoning, #831)', async () => {
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     // ENTRIES[1] is entityType 'plan' — no /plans/:id route exists yet.
-    fireEvent.click(screen.getByText('plan.approved'));
+    // findBy: without it a still-loading table makes this pass vacuously —
+    // the click never lands, so "navigate was not called" proves nothing
+    // about the no-route behaviour (#1083).
+    fireEvent.click(await screen.findByText('plan.approved'));
 
     expect(mockNavigate).not.toHaveBeenCalled();
   });
@@ -434,7 +475,7 @@ describe('AuditLog', () => {
       },
     });
 
-    render(<AuditLog />);
+    render(<AuditLog />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText('J5 Lifecycle Test')).toBeInTheDocument();

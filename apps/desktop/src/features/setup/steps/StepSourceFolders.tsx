@@ -97,22 +97,24 @@ function findAddTimeConflict(
 }
 
 /**
- * Best-effort existence check for a manually typed/pasted path (#662) — the
- * native OS picker already guarantees a real, existing directory, so this
- * only matters for the manual-entry affordance, but runs for both so there is
- * one add-time validation path. Reuses `tools.validate_path` (an existing,
- * side-effect-free `exists() && is_absolute()` check meant for tool
- * executables) instead of inventing a new backend command; it does not
- * discriminate file vs. directory — that stricter check still runs, and
- * blocks registration, at Confirm-step flush via the real
- * `roots.register.batch` path validation (`crates/app/core/src/first_run.rs`).
- * An IPC failure here is treated as inconclusive (not blocking) for the same
- * reason: the authoritative check runs at flush regardless.
+ * Best-effort existence + file-vs-directory check for a manually typed/pasted
+ * path (#662, #1056) — the native OS picker already guarantees a real,
+ * existing directory, so this only matters for the manual-entry affordance,
+ * but runs for both so there is one add-time validation path. Reuses
+ * `tools.validate_path` (an existing, side-effect-free `exists() &&
+ * is_absolute()` check meant for tool executables, extended with an `isDir`
+ * signal) instead of inventing a new backend command. The stricter
+ * `roots.register.batch` path validation (`crates/app/core/src/first_run.rs`)
+ * still runs, and blocks registration, at Confirm-step flush regardless — this
+ * is only meant to surface the error earlier. An IPC failure here is treated
+ * as inconclusive (not blocking) for the same reason.
  */
 async function checkPathExists(path: string): Promise<string | null> {
   try {
     const result = unwrap(await commands.toolsValidatePath(path));
-    return result.valid ? null : m.err_path_not_exists();
+    if (!result.valid) return m.err_path_not_exists();
+    if (result.isDir === false) return m.err_path_not_directory();
+    return null;
   } catch {
     return null;
   }
@@ -143,10 +145,10 @@ export function StepSourceFolders({
   const indexed = entries.map((entry, index) => ({ entry, index }));
 
   return (
-    <div className="alm-step-sources">
-      <p className="alm-step-sources__intro">{m.setup_sources_intro()}</p>
+    <div className="pv-step-sources">
+      <p className="pv-step-sources__intro">{m.setup_sources_intro()}</p>
 
-      <div className="alm-step-sources__groups">
+      <div className="pv-step-sources__groups">
         {ORDERED_SOURCE_KINDS.map((kind, i) => {
           const rows = indexed.filter(({ entry }) => entry.kind === kind);
           const isRequired = REQUIRED_KINDS.includes(kind);
@@ -156,7 +158,7 @@ export function StepSourceFolders({
           return (
             <Fragment key={kind}>
               {isSectionStart && (
-                <div className="alm-step-sources__section-heading">
+                <div className="pv-step-sources__section-heading">
                   {isRequired
                     ? m.setup_sources_section_required()
                     : m.setup_sources_section_optional()}
@@ -232,20 +234,20 @@ function SourceGroup({
   // (data-required, data-requirement-met) — no inline style needed.
   return (
     <div
-      className="alm-step-sources__group"
+      className="pv-step-sources__group"
       data-testid={`source-group-${kind}`}
       data-required={isRequired ? 'true' : 'false'}
       data-requirement-met={isRequired ? (isMet ? 'true' : 'false') : undefined}
     >
       {/* Single compact header row: label + count + status + add button.
           When empty this is the entire card height. */}
-      <div className="alm-step-sources__group-header">
-        <span className="alm-step-sources__group-header-label">
+      <div className="pv-step-sources__group-header">
+        <span className="pv-step-sources__group-header-label">
           {SOURCE_KIND_LABELS[kind]()}
         </span>
         <InfoTip tip={SOURCE_KIND_HELP[kind]()} />
         {hasRows && (
-          <span className="alm-step-sources__group-header-count">
+          <span className="pv-step-sources__group-header-count">
             {rows.length}
           </span>
         )}
@@ -259,11 +261,11 @@ function SourceGroup({
               : m.setup_sources_required()}
           </Pill>
         ) : (
-          <span className="alm-step-sources__group-header-optional">
+          <span className="pv-step-sources__group-header-optional">
             {m.setup_sources_optional()}
           </span>
         )}
-        <span className="alm-step-sources__group-header-spacer" />
+        <span className="pv-step-sources__group-header-spacer" />
         <AddFolderButton
           kind={kind}
           onAdd={handleAdd}
@@ -308,18 +310,15 @@ function SourceRow({
 }) {
   const isInbox = entry.kind === 'inbox';
   return (
-    <div className="alm-step-sources__row">
-      <div className="alm-step-sources__row-main">
-        <span
-          className="alm-step-sources__row-path alm-mono"
-          title={entry.path}
-        >
+    <div className="pv-step-sources__row">
+      <div className="pv-step-sources__row-main">
+        <span className="pv-step-sources__row-path pv-mono" title={entry.path}>
           {entry.path}
         </span>
         {!isInbox && (
           <>
             <select
-              className="alm-step-sources__org-select"
+              className="pv-step-sources__org-select"
               value={entry.organizationState}
               onChange={(e) =>
                 onOrganizationStateChange(e.target.value as OrganizationState)
@@ -341,7 +340,7 @@ function SourceRow({
         </Btn>
       </div>
 
-      {error && <div className="alm-step-sources__row-error">{error}</div>}
+      {error && <div className="pv-step-sources__row-error">{error}</div>}
     </div>
   );
 }
@@ -402,11 +401,11 @@ function AddFolderButton({
         get identical validation.
       */}
       <span
-        className="alm-step-sources__manual-add"
+        className="pv-step-sources__manual-add"
         data-testid={`manual-add-by-path-${kind}`}
       >
         <input
-          className="alm-step-sources__manual-input alm-mono"
+          className="pv-step-sources__manual-input pv-mono"
           data-testid={`manual-path-input-${kind}`}
           aria-label={m.setup_sources_manual_path_aria({
             kind: SOURCE_KIND_LABELS[kind](),
@@ -431,11 +430,11 @@ function AddFolderButton({
         </Btn>
       </span>
       {error && (
-        <span className="alm-step-sources__picker-error">{error.message}</span>
+        <span className="pv-step-sources__picker-error">{error.message}</span>
       )}
       {/* role="alert" announces without requiring focus (#502 a11y ask). */}
       {validationError && (
-        <span role="alert" className="alm-step-sources__picker-error">
+        <span role="alert" className="pv-step-sources__picker-error">
           {validationError}
         </span>
       )}

@@ -13,19 +13,24 @@
  *
  * Verification layer: PE — Playwright mocks-UI (run in WSL).
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from "./support/harness";
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
 
-test.describe("Regression · Add target dialog focus (#856)", () => {
-  test("opening Add target focuses the search input, not the close button", async ({
+test.describe('Regression · Add target dialog focus (#856)', () => {
+  test('opening Add target focuses the search input, not the close button', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/targets");
+    await page.goto('/#/targets');
     await disableOnboarding(page);
 
-    await page.getByRole("button", { name: "Add target" }).click();
+    await page.getByRole('button', { name: 'Add target' }).click();
 
-    const search = page.getByLabel("Search for a target");
+    const search = page.getByLabel('Search for a target');
     await expect(search).toBeVisible();
     await expect(search).toBeFocused();
   });

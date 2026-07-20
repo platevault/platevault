@@ -17,12 +17,12 @@ export function TopActionBar({
   children,
 }: TopActionBarProps) {
   return (
-    <div className="alm-action-bar">
-      <span className="alm-action-bar__title">{title}</span>
-      {subtitle && <span className="alm-action-bar__subtitle">{subtitle}</span>}
+    <div className="pv-action-bar">
+      <span className="pv-action-bar__title">{title}</span>
+      {subtitle && <span className="pv-action-bar__subtitle">{subtitle}</span>}
       {children}
-      <span className="alm-action-bar__spacer" />
-      {right && <div className="alm-action-bar__actions">{right}</div>}
+      <span className="pv-action-bar__spacer" />
+      {right && <div className="pv-action-bar__actions">{right}</div>}
     </div>
   );
 }

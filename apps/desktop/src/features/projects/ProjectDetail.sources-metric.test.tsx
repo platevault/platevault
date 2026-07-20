@@ -17,6 +17,19 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    // ProjectLifecycleStepper's History section (#833) falls back to this
+    // route search param when its (optional) projectId prop isn't wired;
+    // unrelated to this file's assertions, so a static empty selection is
+    // enough.
+    useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+  };
+});
+
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {
@@ -26,6 +39,13 @@ vi.mock('./store', async (importOriginal) => {
     useTransitionLifecycle: vi.fn(),
     useReinferChannels: vi.fn(),
     useDismissChannelDrift: vi.fn(),
+    // Avoids requiring a QueryClientProvider for this file's real-useQuery
+    // History query (#833) — same reasoning as useProjectDetail above.
+    useProjectHistory: vi.fn(() => ({
+      data: [],
+      loading: false,
+      error: undefined,
+    })),
   };
 });
 
@@ -113,7 +133,7 @@ describe('ProjectDetail — sources Integ cell (#622)', () => {
     // The className is shared by the column's <th> and its <td> (Table
     // component); the body cell is the last match.
     const integCells = document.querySelectorAll(
-      'td.alm-project-detail__integ-cell',
+      'td.pv-project-detail__integ-cell',
     );
     expect(integCells).toHaveLength(1);
     expect(integCells[0]).toHaveTextContent('—');
@@ -171,7 +191,7 @@ describe('ProjectDetail — MetricLine pluralization (#793)', () => {
     });
     render(<ProjectDetailContent projectId="proj-m31" />);
     // MetricLine order (ProjectDetail.tsx): integration, sources, channels, tool.
-    const metrics = document.querySelectorAll('.alm-metricline__m');
+    const metrics = document.querySelectorAll('.pv-metricline__m');
     const sourcesMetric = metrics[1];
     expect(sourcesMetric.querySelector('b')).toHaveTextContent('1');
     expect(sourcesMetric.querySelector('span:not(b)')).toHaveTextContent(
@@ -185,7 +205,7 @@ describe('ProjectDetail — MetricLine pluralization (#793)', () => {
   it('shows plural "channels" for a project with zero channels', () => {
     setupStore({ sources: [], channels: [] });
     render(<ProjectDetailContent projectId="proj-m31" />);
-    const metrics = document.querySelectorAll('.alm-metricline__m');
+    const metrics = document.querySelectorAll('.pv-metricline__m');
     const channelsMetric = metrics[2];
     expect(channelsMetric.querySelector('b')).toHaveTextContent('0');
     expect(channelsMetric.querySelector('span:not(b)')).toHaveTextContent(

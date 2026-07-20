@@ -295,13 +295,13 @@ function SpotlightFor({
 
   if (!selector || status === 'missing') {
     return (
-      <div className="alm-onb-spotlight-unavailable" role="status">
+      <div className="pv-onb-spotlight-unavailable" role="status">
         <span>
           {m.onboarding_find_unavailable({ item: itemLabel(item.itemId) })}
         </span>
         <button
           type="button"
-          className="alm-onb-spotlight-unavailable__close"
+          className="pv-onb-spotlight-unavailable__close"
           onClick={() => clearFind()}
         >
           {m.common_close()}

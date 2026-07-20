@@ -791,10 +791,21 @@ impl E2eApp {
     /// (`apps/desktop/src/features/settings/DataSources.tsx::handleReconcile`)
     /// — but this journey triggers `inventory.reconcile.run` directly over
     /// the invoke bridge (documented KNOWN GAP, no UI trigger for that path),
-    /// which #517's handler never runs. This call is now belt-and-braces
-    /// rather than the only fix for a known-missing product hook; keep it
-    /// until the bridge-triggered path has a few weeks of green CI, then
-    /// re-evaluate whether `driver.refresh()` alone is sufficient.
+    /// which #517's handler never runs. This is the freshness guarantee for
+    /// that read, not belt-and-braces.
+    ///
+    /// The question this doc comment used to leave open — "re-evaluate
+    /// whether `driver.refresh()` alone is sufficient" — is settled: it is
+    /// not (#1113). A reload remounts the app through the setup gate and
+    /// route restore, so the document a journey is asserting against can be
+    /// torn down under it; the observed failure was an Inbox page with no
+    /// `inbox-list` element at all for a full 20s budget while WebDriver went
+    /// on serving detached row handles from the pre-reload document. Prefer
+    /// this method for any settle-then-assert step, so the settle signal and
+    /// the assertion read one live document. Reserve `driver.refresh()` for
+    /// steps that are genuinely exercising reload or route-restore behaviour
+    /// (see `complete_first_run_gate`, which needs a reload because the
+    /// preferences module caches its localStorage read in module state).
     pub async fn invalidate_query(&self, key_json: &str) -> Result<()> {
         let script = format!(
             r#"
@@ -871,6 +882,46 @@ impl E2eApp {
             .find_all(By::Css(format!("[data-testid^='{prefix}']")))
             .await
             .with_context(|| format!("query for data-testid prefix {prefix:?} failed"))
+    }
+
+    /// Lowercased, trimmed `textContent` of every element whose `data-testid`
+    /// starts with `prefix`, read as ONE snapshot of the live document.
+    ///
+    /// Prefer this over [`Self::find_all_testid_prefix`] + per-element
+    /// `.text()` whenever the texts are asserted on. The two-step form is not
+    /// equivalent on a list that re-renders (the Inbox list swaps row nodes
+    /// constantly): a handle can be detached before `.text()` reads it, and
+    /// `.text()` on a detached handle raises `stale element reference`. A
+    /// caller that defaults that error to `""` turns a WebDriver failure into
+    /// something shaped like product data — the #1111 failure mode, which
+    /// reported two blank Type badges the product can never render. A single
+    /// snapshot cannot interleave with a re-render, and a driver failure
+    /// propagates as an error rather than as text.
+    pub async fn testid_prefix_texts(&self, prefix: &str) -> Result<Vec<String>> {
+        let script = format!(
+            r#"
+            return JSON.stringify(
+                Array.prototype.map.call(
+                    document.querySelectorAll('[data-testid^="{prefix}"]'),
+                    function (el) {{ return el.textContent || ''; }}
+                )
+            );
+            "#
+        );
+        let raw = self
+            .driver
+            .execute(&script, vec![])
+            .await
+            .with_context(|| format!("snapshotting text for data-testid prefix {prefix:?} failed"))?
+            .json()
+            .as_str()
+            .with_context(|| {
+                format!("the {prefix:?} text snapshot script did not return a string")
+            })?
+            .to_owned();
+        let texts: Vec<String> = serde_json::from_str(&raw)
+            .with_context(|| format!("the {prefix:?} text snapshot was not a JSON array"))?;
+        Ok(texts.into_iter().map(|t| t.trim().to_lowercase()).collect())
     }
 
     /// The dynamic suffix of the first `data-testid` starting with `prefix`
@@ -1264,6 +1315,10 @@ impl E2eApp {
             .await
             .context("failed to write the onboarding suppression flag")?;
 
+        // KEEP the reload (#1113 reviewed): this is not a settle step. The
+        // preferences module caches its localStorage read in module state, so
+        // the write above is invisible without a fresh page load —
+        // `invalidate_query` cannot substitute for it.
         self.driver.refresh().await.context("page refresh after first-run completion failed")?;
         self.wait_document_ready(Duration::from_secs(10)).await?;
         self.wait_bridge_ready(Duration::from_secs(15)).await?;

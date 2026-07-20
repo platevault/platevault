@@ -165,9 +165,9 @@ function frameTypeLabel(cls: FrameTypeClass): string {
     case 'flat':
       return m.inbox_kind_flat();
     case 'dark':
-      return m.inbox_kind_dark();
+      return m.common_dark();
     case 'bias':
-      return m.inbox_kind_bias();
+      return m.common_bias();
     case 'master_flat':
       return m.settings_naming_frametype_master_flat();
     case 'master_dark':
@@ -303,7 +303,7 @@ function PatternChipsEditor({
   return (
     <div>
       {/* Chip row */}
-      <div className="alm-naming__chip-row">
+      <div className="pv-naming__chip-row">
         {pattern.map((part) => {
           const isSep = part.kind === 'separator';
           const label = isSep
@@ -314,11 +314,11 @@ function PatternChipsEditor({
           return (
             <span
               key={part.id}
-              className={isSep ? 'alm-sep-chip' : 'alm-token-chip'}
+              className={isSep ? 'pv-sep-chip' : 'pv-token-chip'}
             >
               {label}
               <span
-                className="alm-token-chip__x"
+                className="pv-token-chip__x"
                 role="button"
                 tabIndex={0}
                 aria-label={m.settings_naming_remove_token({ label })}
@@ -337,7 +337,7 @@ function PatternChipsEditor({
         })}
 
         {/* Add Token menu */}
-        <div className="alm-naming__menu-anchor">
+        <div className="pv-naming__menu-anchor">
           <Btn
             size="sm"
             onClick={() => {
@@ -348,12 +348,12 @@ function PatternChipsEditor({
             {m.settings_naming_add_token()}
           </Btn>
           {showTokenMenu && (
-            <div className="alm-naming__dropdown alm-naming__dropdown--token">
+            <div className="pv-naming__dropdown pv-naming__dropdown--token">
               {AVAILABLE_TOKENS.map((t) => (
                 <button
                   key={t}
                   type="button"
-                  className="alm-naming__menu-item"
+                  className="pv-naming__menu-item"
                   onClick={() => handleAddToken(t)}
                 >
                   {`{${t}}`}
@@ -364,7 +364,7 @@ function PatternChipsEditor({
         </div>
 
         {/* Add Separator menu */}
-        <div className="alm-naming__menu-anchor">
+        <div className="pv-naming__menu-anchor">
           <Btn
             size="sm"
             onClick={() => {
@@ -375,12 +375,12 @@ function PatternChipsEditor({
             {m.settings_naming_add_sep()}
           </Btn>
           {showSepMenu && (
-            <div className="alm-naming__dropdown alm-naming__dropdown--sep">
+            <div className="pv-naming__dropdown pv-naming__dropdown--sep">
               {SEPARATORS.map((s) => (
                 <button
                   key={s}
                   type="button"
-                  className="alm-naming__menu-item"
+                  className="pv-naming__menu-item"
                   onClick={() => handleAddSep(s)}
                 >
                   {s === '/'
@@ -397,7 +397,7 @@ function PatternChipsEditor({
 
       {/* Validation feedback */}
       {errorCode && (
-        <div className="alm-naming__error" role="alert">
+        <div className="pv-naming__error" role="alert">
           {}
           {errorCode === 'pattern.empty' && m.settings_naming_invalid_pattern()}
           {}
@@ -408,7 +408,7 @@ function PatternChipsEditor({
         </div>
       )}
       {warnings.length > 0 && (
-        <div className="alm-naming__warning">
+        <div className="pv-naming__warning">
           {warnings.includes('no_path_separator') && (
             <span>{m.settings_naming_warn_no_path_sep()} </span>
           )}
@@ -496,9 +496,9 @@ function PerTypePatternChipsEditor({
   return (
     <div>
       {/* Chip row */}
-      <div className="alm-naming__chip-row">
+      <div className="pv-naming__chip-row">
         {isEmpty && (
-          <span className="alm-naming__chip-placeholder">
+          <span className="pv-naming__chip-placeholder">
             {defaultPlaceholder}
           </span>
         )}
@@ -512,15 +512,15 @@ function PerTypePatternChipsEditor({
                 : chip.value;
           const chipClass =
             chip.kind === 'token'
-              ? 'alm-token-chip'
+              ? 'pv-token-chip'
               : chip.kind === 'sep'
-                ? 'alm-sep-chip'
-                : 'alm-literal-chip';
+                ? 'pv-sep-chip'
+                : 'pv-literal-chip';
           return (
             <span key={chip.id} className={chipClass}>
               {label}
               <span
-                className="alm-token-chip__x"
+                className="pv-token-chip__x"
                 role="button"
                 tabIndex={0}
                 aria-label={m.settings_naming_remove_token({ label })}
@@ -539,7 +539,7 @@ function PerTypePatternChipsEditor({
         })}
 
         {/* Add Token menu */}
-        <div className="alm-naming__menu-anchor">
+        <div className="pv-naming__menu-anchor">
           <Btn
             size="sm"
             onClick={() => {
@@ -550,12 +550,12 @@ function PerTypePatternChipsEditor({
             {m.settings_naming_add_token()}
           </Btn>
           {showTokenMenu && (
-            <div className="alm-naming__dropdown alm-naming__dropdown--token">
+            <div className="pv-naming__dropdown pv-naming__dropdown--token">
               {AVAILABLE_TOKENS.map((t) => (
                 <button
                   key={t}
                   type="button"
-                  className="alm-naming__menu-item"
+                  className="pv-naming__menu-item"
                   onClick={() => handleAddToken(t)}
                 >
                   {`{${t}}`}
@@ -571,7 +571,7 @@ function PerTypePatternChipsEditor({
         </Btn>
 
         {/* Add Literal segment */}
-        <div className="alm-naming__menu-anchor">
+        <div className="pv-naming__menu-anchor">
           <Btn
             size="sm"
             onClick={() => {
@@ -586,11 +586,11 @@ function PerTypePatternChipsEditor({
             {m.settings_naming_add_literal()}
           </Btn>
           {showLiteralInput && (
-            <div className="alm-naming__dropdown alm-naming__dropdown--literal">
+            <div className="pv-naming__dropdown pv-naming__dropdown--literal">
               <input
                 ref={literalInputRef}
                 type="text"
-                className="alm-naming__literal-input"
+                className="pv-naming__literal-input"
                 value={literalInput}
                 placeholder={m.settings_naming_literal_placeholder()}
                 spellCheck={false}
@@ -602,7 +602,7 @@ function PerTypePatternChipsEditor({
               />
               <button
                 type="button"
-                className="alm-naming__literal-add-btn"
+                className="pv-naming__literal-add-btn"
                 onClick={handleAddLiteral}
               >
                 {m.common_add()}
@@ -614,7 +614,7 @@ function PerTypePatternChipsEditor({
 
       {/* Validation / error feedback */}
       {error && (
-        <div id={`${rowId}-error`} role="alert" className="alm-naming__error">
+        <div id={`${rowId}-error`} role="alert" className="pv-naming__error">
           {error}
         </div>
       )}
@@ -836,9 +836,9 @@ function PerTypeDestinationPatterns() {
             info={m.settings_naming_dest_info()}
           >
             {/* Editor and its buttons live on separate lines (spec 043 §4). */}
-            <div className="alm-naming__pertype-stack">
+            <div className="pv-naming__pertype-stack">
               <div
-                className="alm-naming__pertype-editor-wrap"
+                className="pv-naming__pertype-editor-wrap"
                 role="group"
                 aria-labelledby={`${rowId}-label`}
                 data-testid={rowId}
@@ -856,25 +856,25 @@ function PerTypeDestinationPatterns() {
 							    politely so screen-reader users hear updates while editing. */}
               {preview && preview.path !== '' && (
                 <div
-                  className="alm-naming__pertype-preview"
+                  className="pv-naming__pertype-preview"
                   aria-live="polite"
                   data-testid={`${rowId}-preview`}
                 >
-                  <span className="alm-naming__pertype-preview-label">
+                  <span className="pv-naming__pertype-preview-label">
                     {m.settings_naming_preview_label()}
                   </span>{' '}
-                  <code className="alm-mono alm-naming__pertype-preview-code">
+                  <code className="pv-mono pv-naming__pertype-preview-code">
                     {preview.path}
                   </code>
                   {preview.missingTokens.length > 0 && (
-                    <span className="alm-naming__preview-fallback">
+                    <span className="pv-naming__preview-fallback">
                       {m.settings_naming_fallback_used({
                         tokens: preview.missingTokens.join(', '),
                       })}
                     </span>
                   )}
                   {!isOverridden && (
-                    <span className="alm-naming__pertype-preview-default">
+                    <span className="pv-naming__pertype-preview-default">
                       {m.settings_naming_preview_default()}
                     </span>
                   )}
@@ -882,7 +882,7 @@ function PerTypeDestinationPatterns() {
               )}
               {previewUnavailable && (
                 <div
-                  className="alm-naming__preview-error"
+                  className="pv-naming__preview-error"
                   role="alert"
                   data-testid={`${rowId}-preview-error`}
                 >
@@ -891,7 +891,7 @@ function PerTypeDestinationPatterns() {
               )}
 
               {/* Buttons on their own line. */}
-              <div className="alm-naming__pertype-actions">
+              <div className="pv-naming__pertype-actions">
                 <Btn
                   size="sm"
                   disabled={!isOverridden}
@@ -1017,8 +1017,8 @@ export function NamingStructure({ save }: NamingStructureProps) {
           />
         }
       >
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-content">
+        <div className="pv-settings__row">
+          <div className="pv-settings__row-content">
             <PatternChipsEditor
               pattern={pattern}
               onChange={handlePatternChange}
@@ -1035,17 +1035,14 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
       <PerTypeDestinationPatterns />
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__row">
-          <label
-            className="alm-settings__row-label"
-            htmlFor="naming-auto-apply"
-          >
+      <div className="pv-settings__group">
+        <div className="pv-settings__row">
+          <label className="pv-settings__row-label" htmlFor="naming-auto-apply">
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
             <input
               id="naming-auto-apply"
               type="checkbox"
-              className="alm-naming__checkbox"
+              className="pv-naming__checkbox"
               checked={autoApplyPattern}
               onChange={(e) => handleAutoApplyChange(e.target.checked)}
             />
@@ -1055,27 +1052,27 @@ export function NamingStructure({ save }: NamingStructureProps) {
       </div>
 
       <SettingsSection title={m.settings_naming_live_preview_title()}>
-        <div className="alm-naming__preview-sample">
+        <div className="pv-naming__preview-sample">
           {m.settings_naming_live_preview_sample()}
         </div>
         {!canSave && (
-          <div className="alm-naming__preview-empty">
+          <div className="pv-naming__preview-empty">
             {m.settings_naming_invalid_pattern()}
           </div>
         )}
         {previewError && (
-          <div className="alm-naming__preview-error">{previewError}</div>
+          <div className="pv-naming__preview-error">{previewError}</div>
         )}
         {preview && canSave && (
-          <div className="alm-naming__preview-path-row">
-            <code className="alm-mono alm-naming__preview-code">
+          <div className="pv-naming__preview-path-row">
+            <code className="pv-mono pv-naming__preview-code">
               {preview.missingTokens.length > 0
                 ? // Render path with fallback segments dimmed.
                   preview.resolvedPath
                 : preview.resolvedPath}
             </code>
             {preview.missingTokens.length > 0 && (
-              <span className="alm-naming__preview-fallback">
+              <span className="pv-naming__preview-fallback">
                 {m.settings_naming_fallback_used({
                   tokens: preview.missingTokens.join(', '),
                 })}
