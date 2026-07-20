@@ -3,6 +3,7 @@
 
 /** All stateful logic for the Equipment pane (cameras/telescopes/trains/filters). */
 import { useCallback, useEffect, useState } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
 import {
@@ -101,59 +102,81 @@ export function useEquipment() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const mountedRef = useMountedRef();
+
   // ── Loaders ──────────────────────────────────────────────────────────────────
 
   const loadCameras = useCallback(() => {
     setCamerasLoading(true);
     setCamerasError(null);
     equipmentCamerasList()
-      .then(setCameras)
-      .catch((err: unknown) =>
-        setCamerasError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setCamerasLoading(false));
-  }, []);
+      .then((data) => {
+        if (mountedRef.current) setCameras(data);
+      })
+      .catch((err: unknown) => {
+        if (mountedRef.current)
+          setCamerasError(
+            m.settings_equipment_load_error({ error: errMessage(err) }),
+          );
+      })
+      .finally(() => {
+        if (mountedRef.current) setCamerasLoading(false);
+      });
+  }, [mountedRef]);
 
   const loadTelescopes = useCallback(() => {
     setTelescopesLoading(true);
     setTelescopesError(null);
     equipmentTelescopesList()
-      .then(setTelescopes)
-      .catch((err: unknown) =>
-        setTelescopesError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setTelescopesLoading(false));
-  }, []);
+      .then((data) => {
+        if (mountedRef.current) setTelescopes(data);
+      })
+      .catch((err: unknown) => {
+        if (mountedRef.current)
+          setTelescopesError(
+            m.settings_equipment_load_error({ error: errMessage(err) }),
+          );
+      })
+      .finally(() => {
+        if (mountedRef.current) setTelescopesLoading(false);
+      });
+  }, [mountedRef]);
 
   const loadTrains = useCallback(() => {
     setTrainsLoading(true);
     setTrainsError(null);
     equipmentTrainsList()
-      .then(setTrains)
-      .catch((err: unknown) =>
-        setTrainsError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setTrainsLoading(false));
-  }, []);
+      .then((data) => {
+        if (mountedRef.current) setTrains(data);
+      })
+      .catch((err: unknown) => {
+        if (mountedRef.current)
+          setTrainsError(
+            m.settings_equipment_load_error({ error: errMessage(err) }),
+          );
+      })
+      .finally(() => {
+        if (mountedRef.current) setTrainsLoading(false);
+      });
+  }, [mountedRef]);
 
   const loadFilters = useCallback(() => {
     setFiltersLoading(true);
     setFiltersError(null);
     equipmentFiltersList()
-      .then(setFilters)
-      .catch((err: unknown) =>
-        setFiltersError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setFiltersLoading(false));
-  }, []);
+      .then((data) => {
+        if (mountedRef.current) setFilters(data);
+      })
+      .catch((err: unknown) => {
+        if (mountedRef.current)
+          setFiltersError(
+            m.settings_equipment_load_error({ error: errMessage(err) }),
+          );
+      })
+      .finally(() => {
+        if (mountedRef.current) setFiltersLoading(false);
+      });
+  }, [mountedRef]);
 
   useEffect(() => {
     loadCameras();

@@ -44,6 +44,17 @@ concurrency:
   # which is exactly when verification matters most.
   #
   # e2e.yml took the same fix in #1268; this is the other half.
+  #
+  # `cancelled` still appears on main, and that is expected — not a regression
+  # of #1203. With `false`, GitHub keeps the in-flight run plus ONE queued run
+  # per group and evicts intermediate pending runs. Measured on main minutes
+  # after this landed: `f3668b86` survived while `89025366`, `b37b072e` and
+  # `30e29bd1` were each evicted while queued.
+  #
+  # So the guarantee is "main always has a recent run that completes", NOT
+  # "every main commit is verified". Individual intermediate commits can still
+  # go unverified when merges land seconds apart. That is the bounded cost that
+  # keeps this from serialising the queue indefinitely.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
@@ -365,11 +376,32 @@ jobs:
         if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
         run: just db-boundary
 
+      # Dead-caller ratchet: fails if a module-level `pub fn` in crates/ has no
+      # production caller. rustc's dead_code lint does not fire on `pub` items
+      # in a lib crate, which is how #712, #879 and #943 shipped fully tested
+      # but never invoked. Pure grep, no compile — same Linux-only gating as the
+      # DB boundary ratchet above. The script self-tests its own detector before
+      # reporting success, so a green result cannot be vacuous.
+      - name: Dead-caller ratchet
+        if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
+        run: just dead-callers
+
       # Compilation warnings/lints are OS-agnostic; running clippy on all 3 legs
       # is pure redundancy — the nextest step below builds the workspace anyway.
       - name: Clippy (workspace, all targets, deny warnings)
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The default workspace clippy above never enables `dev-tools`, so the
+      # developer-mode surface (apps/desktop/src-tauri/src/commands/dev.rs)
+      # was linted by nobody and four lints rotted unseen (#1165). Release
+      # binaries still omit `dev-tools` (see .claude/rules/21-astro-monorepo.md)
+      # — this step only adds lint coverage for the daily developer build, it
+      # does not touch the release build path. Same OS-agnostic reasoning as
+      # the step above, so Linux-only here too.
+      - name: Clippy (desktop_shell, dev-tools feature, deny warnings)
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
+        run: cargo clippy -p desktop_shell --features dev-tools --all-targets -- -D warnings
 
       # --- L1 (isolated units) + L2 (real-backend integration) ---
       # No standalone `cargo build --workspace` step: clippy --all-targets

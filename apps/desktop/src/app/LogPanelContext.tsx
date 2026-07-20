@@ -86,10 +86,12 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
 
   // Load persisted settings on mount (T012, T032).
   useEffect(() => {
+    let cancelled = false;
     commands
       .settingsGet('advanced')
       .then(unwrap)
       .then((data) => {
+        if (cancelled) return;
         const vals = data.values as Record<string, unknown>;
         if (vals?.logLevel && typeof vals.logLevel === 'string') {
           setLogLevel(vals.logLevel as LogLevel);
@@ -101,6 +103,9 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         // Non-fatal; fall back to defaults.
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggle = useCallback(() => {
