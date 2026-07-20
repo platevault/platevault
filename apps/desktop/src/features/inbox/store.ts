@@ -36,6 +36,7 @@ import type {
   InboxStatsTotals,
   InboxFileMetadata_Serialize as InboxFileMetadata,
   ConeSearchReason,
+  ChosenAttributionDto_Deserialize as ChosenAttributionRequest,
 } from '@/bindings/index';
 import type {
   InboxClassifyResponse,
@@ -318,6 +319,8 @@ export function useInboxConfirm() {
       destructiveDestination?: string;
       /** Caller-selected destination root (spec 041 US8/FR-029). */
       rootId?: string | null;
+      /** The user's attribution pick (spec 008 FR-022) — omitted when unpicked. */
+      chosenAttribution?: ChosenAttributionRequest;
     }) => {
       setState({
         loading: true,
@@ -334,6 +337,7 @@ export function useInboxConfirm() {
             rootAbsolutePath: args.rootAbsolutePath,
             destructiveDestination: args.destructiveDestination ?? null,
             rootId: args.rootId ?? null,
+            chosenAttribution: args.chosenAttribution ?? null,
           }),
         );
         setState({
