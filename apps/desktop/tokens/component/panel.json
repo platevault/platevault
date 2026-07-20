@@ -6,5 +6,15 @@
   "rail-width": {
     "$value": "300px",
     "$type": "dimension"
+  },
+  "inbox-inspector-width": {
+    "$value": "320px",
+    "$type": "dimension",
+    "$description": "Inbox inspector pane. Was referenced as var(--pv-inbox-inspector-width, 320px) against a token that never existed, so the fallback was the only value it ever had."
+  },
+  "inbox-breakdown-width": {
+    "$value": "340px",
+    "$type": "dimension",
+    "$description": "Inbox breakdown pane; same phantom-reference history as the inspector width."
   }
 }

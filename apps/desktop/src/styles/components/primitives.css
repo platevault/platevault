@@ -322,7 +322,7 @@
    on the <tr> pads the first cell's content (group-header button or leaf label),
    replacing the per-table inline paddingLeft clones. */
 .pv-table__row--indented > td:first-child > :first-child {
-  padding-left: var(--pv-row-indent, 0);
+  padding-left: var(--pv-row-indent);
 }
 
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky

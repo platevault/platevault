@@ -113,6 +113,8 @@
   --pv-control-h-sm: 24px;
   --pv-list-width: 280px;
   --pv-rail-width: 300px;
+  --pv-inbox-inspector-width: 320px; /** Inbox inspector pane. Was referenced as var(--pv-inbox-inspector-width, 320px) against a token that never existed, so the fallback was the only value it ever had. */
+  --pv-inbox-breakdown-width: 340px; /** Inbox breakdown pane; same phantom-reference history as the inspector width. */
   --pv-sidebar-width: 220px; /** #962: was 200px with ZERO slack against the header's own content sum (mark + brand-name + version chip + collapse button + gaps/padding measured at exactly 199px) — any platform font-metric variance (Windows subpixel rendering, non-1.0 DPR) tips "PlateVault" into its ellipsis safety net. +20px gives real headroom. */
   --pv-sidebar-collapsed: 48px;
   --pv-action-sidebar-width: 220px;
@@ -401,4 +403,45 @@
 
 .density-spacious {
   --pv-row-height: 40px;
+}
+
+@property --pv-skel-w {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --pv-skel-h {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 12px;
+}
+@property --pv-skel-r {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 3px;
+}
+@property --pv-row-indent {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --pv-toast-accent {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: rgba(0, 0, 0, 0);
+}
+@property --pv-side-detail-w {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 420px;
+}
+@property --pv-modal-w {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 640px;
+}
+@property --pv-targets-star-w {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 50px;
 }

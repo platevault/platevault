@@ -14,7 +14,7 @@
   align-items: center;
   gap: var(--pv-sp-3);
   padding: 0 var(--pv-sp-4);
-  height: var(--pv-toolbar-height, 44px);
+  height: var(--pv-toolbar-height);
   border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 
@@ -1785,9 +1785,9 @@ button.pv-wizard__steps-card:disabled {
 .pv-wizard-sources__zero-hint {
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
-  background: var(--pv-surface-muted, var(--pv-surface));
+  background: var(--pv-surface);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: var(--pv-radius-sm, 4px);
+  border-radius: var(--pv-radius-sm);
   padding: var(--pv-sp-3);
   margin-bottom: var(--pv-sp-3);
 }

@@ -58,7 +58,7 @@
   white-space: nowrap;
   padding: 1px var(--pv-sp-2);
   border: var(--pv-border-w) solid var(--pv-border-subtle);
-  border-radius: var(--pv-radius-pill, var(--pv-radius-sm));
+  border-radius: var(--pv-radius-sm);
   background: var(--pv-surface-raised);
 }
 .pv-inbox-stats__type {
@@ -114,7 +114,7 @@
   cursor: pointer;
 }
 .pv-inbox-table__row:hover {
-  background: var(--pv-hover-bg, var(--pv-surface));
+  background: var(--pv-hover-bg);
 }
 .pv-inbox-table__row--selected,
 .pv-inbox-table__row--selected:hover {
@@ -132,7 +132,7 @@
   border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 .pv-inbox-table__group:hover td {
-  background: var(--pv-hover-bg, var(--pv-surface));
+  background: var(--pv-hover-bg);
 }
 /* The group cell is a real <button> — reset native chrome. */
 .pv-inbox-table__group-cell {
@@ -624,8 +624,8 @@
  * panel's horizontal room so it is visible without scrolling under the table.
  * Sticks to the top of the column as the left content scrolls. */
 .pv-inbox-detail__cols--split .pv-inbox-detail__aside {
-  flex: 0 0 var(--pv-inbox-inspector-width, 320px);
-  width: var(--pv-inbox-inspector-width, 320px);
+  flex: 0 0 var(--pv-inbox-inspector-width);
+  width: var(--pv-inbox-inspector-width);
   min-width: 0;
   position: sticky;
   top: 0;

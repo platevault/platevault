@@ -104,8 +104,8 @@
 /* Side detail panel inside the dual layout — same width token as the existing
  * side-only variant to stay visually consistent. */
 .pv-listpage__side {
-  flex: 0 0 var(--pv-side-detail-w, 420px);
-  width: var(--pv-side-detail-w, 420px);
+  flex: 0 0 var(--pv-side-detail-w);
+  width: var(--pv-side-detail-w);
   height: auto;
   max-height: none;
   align-self: stretch;
@@ -433,8 +433,8 @@
 
 /* Narrowband (Ha/OIII/SII): subtle cool tint. */
 .pv-filter-badge--narrowband {
-  background: color-mix(in srgb, var(--pv-accent-alt, var(--pv-text-muted)) 12%, transparent);
-  color: var(--pv-text-secondary, var(--pv-text-muted));
+  background: color-mix(in srgb, var(--pv-text-muted) 12%, transparent);
+  color: var(--pv-text-secondary);
   border-color: color-mix(in srgb, var(--pv-text-muted) 30%, transparent);
 }
 
@@ -589,7 +589,7 @@
 .pv-moon-summary__phase {
   font-size: var(--pv-text-sm);
   font-weight: var(--pv-weight-medium);
-  color: var(--pv-text-primary, var(--pv-text));
+  color: var(--pv-text);
 }
 
 .pv-moon-summary__meta {
@@ -609,7 +609,7 @@
 .pv-planner-site-prompt__title {
   font-size: var(--pv-text-sm);
   font-weight: var(--pv-weight-medium);
-  color: var(--pv-text-primary, var(--pv-text));
+  color: var(--pv-text);
 }
 
 .pv-planner-site-prompt__desc {
@@ -653,7 +653,7 @@
 
 /* The breakdown LEFT column is now the compact fixed-width side. */
 .pv-inbox-detail__cols--split .pv-inbox-detail__main {
-  flex: 0 0 var(--pv-inbox-breakdown-width, 340px);
+  flex: 0 0 var(--pv-inbox-breakdown-width);
   min-width: 0;
 }
 
@@ -713,7 +713,7 @@
    master rows (e.g. Type "DARK" next to Format "dark master") — quieted to a
    plain-weight, muted-ink label (#555). */
 .pv-inbox-row__classification {
-  font-size: var(--pv-text-xs, 0.75rem);
+  font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-medium);
   color: var(--pv-text-secondary);
   white-space: nowrap;
@@ -1122,7 +1122,7 @@
   z-index: var(--pv-z-modal);
   display: flex;
   flex-direction: column;
-  width: min(94vw, var(--pv-modal-w, 640px));
+  width: min(94vw, var(--pv-modal-w));
   max-height: 88vh;
   background: var(--pv-surface-raised);
   border: var(--pv-border-w) solid var(--pv-border);

@@ -13,9 +13,9 @@
 .pv-plan-panel__root-picker {
   margin-bottom: var(--pv-sp-3);
   padding: var(--pv-sp-3);
-  border: var(--pv-border-w) solid var(--pv-warn, var(--pv-border));
+  border: var(--pv-border-w) solid var(--pv-warn);
   border-radius: var(--pv-radius-md);
-  background: var(--pv-surface-raised, var(--pv-bg3));
+  background: var(--pv-surface-raised);
 }
 
 .pv-plan-panel__root-picker-title {
@@ -151,7 +151,7 @@
   font-size: var(--pv-text-xs);
   text-transform: uppercase;
   letter-spacing: var(--pv-tracking-tight);
-  color: var(--pv-danger, var(--pv-warn));
+  color: var(--pv-danger);
   border: var(--pv-border-w) solid currentColor;
   border-radius: var(--pv-radius-sm);
   padding: 0 var(--pv-sp-1);
@@ -276,7 +276,7 @@
 .pv-plan-panel__stale-badge {
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
-  color: var(--pv-danger, var(--pv-warn));
+  color: var(--pv-danger);
   border: var(--pv-border-w) solid currentColor;
   border-radius: var(--pv-radius-md);
   padding: 0 var(--pv-sp-1);
@@ -325,7 +325,7 @@
 .pv-plan-panel__destructive {
   margin-top: var(--pv-sp-3);
   padding: var(--pv-sp-3);
-  background: var(--pv-surface-raised, var(--pv-bg3));
+  background: var(--pv-surface-raised);
   border-radius: var(--pv-radius-md);
 }
 

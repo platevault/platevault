@@ -210,7 +210,7 @@ font-weight: var(--pv-weight-medium);
   display: inline-flex; align-items: center; gap: var(--pv-sp-1);
   padding: var(--pv-sp-0) var(--pv-sp-2); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
-  background: var(--pv-success-bg, var(--pv-surface-raised)); color: var(--pv-text);
+  background: var(--pv-surface-raised); color: var(--pv-text);
   border: var(--pv-border-w) solid var(--pv-border);
 }
 
