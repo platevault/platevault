@@ -246,13 +246,19 @@ below.**
 - **FR-005** (**DELIVERED**, #1003): The side panel MUST be drag-resizable,
   bounded 320px min to 50% window max, width persisted and restored.
   `useAdaptiveDock.ts` `clampWidth`/`setWidth`, `ResizeHandle.tsx`.
-- **FR-006** (**NOT DELIVERED** — superseded, no tracked issue): Targets
-  table MUST keep the favorite-star + designation columns pinned left with a
-  permanent importance column order. No evidence found in
-  `TargetsTable.tsx`/`TargetsPage.tsx`.
-- **FR-007** (**NOT DELIVERED** — superseded, no tracked issue): non-pinned
-  Targets columns MUST scroll horizontally only when space is insufficient.
-  Not built (depends on FR-006, which is not built).
+- **FR-006** (**DELIVERED in part**, #1158): Targets table MUST keep the
+  favorite-star + designation columns pinned left with a permanent importance
+  column order. The **pinning** is built — sticky-left columns in
+  `merges-2.css`. The **column reordering** is not, and is treated as a
+  deliberate outcome rather than a gap: the shipped order already leads with
+  identity, and reordering the rest is a separate design question with no
+  reported complaint behind it.
+- **FR-007** (**DELIVERED**, pre-existing): non-pinned Targets columns MUST
+  scroll horizontally only when space is insufficient.
+  `.pv-targets-table__scroll` carries `overflow-x: auto` against the table's
+  1000px `min-width` floor, so scrolling engages only when space genuinely
+  falls short. FR-006's pinning is what makes that scrolling non-lossy: before
+  it, the 20%-wide designation column was itself what scrolled out of view.
 - **FR-008** (**NOT DELIVERED** — superseded, moot): no automatic column
   hiding. Trivially true only because no column-priority work was built at
   all, not because this constraint was actively honored.
