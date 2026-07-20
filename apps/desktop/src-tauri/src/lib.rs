@@ -66,9 +66,12 @@ pub fn build_app() -> tauri::App {
     // silently redirected/exited without ever opening a window, timing out the
     // WebDriver session (observed on the Windows shard). No journey exercises
     // single-instance behaviour, so when the var is set we skip the plugin
-    // entirely on every platform. Unset (real users, non-e2e builds), the
-    // guard is registered unchanged.
-    if std::env::var_os("ALM_E2E_INSTANCE_ID").is_none() {
+    // entirely on every platform. The bypass additionally requires the `e2e`
+    // feature at compile time, so release binaries ignore the variable — see
+    // `bootstrap::single_instance_guard_enabled`.
+    if crate::bootstrap::single_instance_guard_enabled(
+        std::env::var_os("ALM_E2E_INSTANCE_ID").is_some(),
+    ) {
         tb = tb.plugin(
             tauri_plugin_single_instance::Builder::new()
                 .callback(|app, argv, cwd| {
