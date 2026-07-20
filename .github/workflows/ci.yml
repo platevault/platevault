@@ -29,7 +29,22 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on branches, but never on `main` (#1203).
+  #
+  # Every main push shares one concurrency group, because `github.ref` is
+  # `refs/heads/main` for all of them. A blanket `true` therefore made each
+  # merge cancel the previous merge's run, and during a merge campaign no main
+  # run survived to report: `6e624adc` and `67f48ee9` landed five minutes apart
+  # and both concluded `cancelled,cancelled`.
+  #
+  # That silently emptied main's gate for unit, integration and mock-mode UI —
+  # the suites this workflow owns. It is worse than a plain outage because it is
+  # merge-rate dependent: when merges space out a run completes and main looks
+  # green, so the gap only opens during periods of highest change velocity,
+  # which is exactly when verification matters most.
+  #
+  # e2e.yml took the same fix in #1268; this is the other half.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
 env:
@@ -146,7 +161,42 @@ jobs:
           if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_rust }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
             rust=true
           fi
-          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+          # `frontend_full` activates the frontend lane as well as widening it.
+          # The two were independent, which was incoherent: an i18n catalogue
+          # change (`apps/desktop/messages/**`, JSON — matched by frontend_full
+          # but by no other frontend pattern) set frontend_full=true while
+          # leaving the lane off, so the flag asked for every frontend spec while
+          # no frontend step ran at all. It also activated no lane, which made
+          # such a PR unmergeable for the same reason described below.
+          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend_full }}" = "true" ]; then
+            frontend=true
+          fi
+          # Fail closed on paths no filter recognises. The filter list is an
+          # allowlist of things we know how to classify; a path matching none of
+          # them is not evidence that nothing can break, it is evidence that we
+          # do not know. `apps/desktop/scripts/*.mjs` (the token generator) and
+          # `.design-sync/**` both land here today.
+          #
+          # Without this, such a change activates no lane, so `integration` is
+          # skipped and its required contexts are never published — the PR is
+          # unmergeable. Treating the unknown as "run everything" makes it both
+          # mergeable and actually tested, instead of green because nothing ran.
+          # Every meaningful filter counts as "recognised", including the
+          # force_full_* ones. Omitting them would drag a Cargo.lock bump — which
+          # matches force_full_rust but not `rust` — into the catch-all and run
+          # the frontend suite too, exactly the lane separation the filter
+          # comments above argue for.
+          if [ "${{ steps.filter.outputs.all }}" = "true" ] \
+            && [ "${{ steps.filter.outputs.rust }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.frontend }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.frontend_full }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.force_full_shared }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.force_full_rust }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.force_full_frontend }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.scripts }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.docs }}" != "true" ]; then
+            echo "::notice::No path filter matched this change; running both lanes rather than assuming it is inert."
+            rust=true
             frontend=true
           fi
           # frontend_full: run every vitest spec rather than the `related`
@@ -472,6 +522,59 @@ jobs:
       - name: Generated contract/binding drift
         if: needs.changes.outputs.rust == 'true'
         run: just check-generated
+
+  # Required-check shim for the case where BOTH lanes are idle.
+  #
+  # `integration` above is a MATRIX job. When a matrix job is skipped by its
+  # job-level `if`, GitHub never expands the matrix, so it publishes ONE check
+  # named with the literal, uninterpolated string
+  # `Unit + integration (L1+L2) — ${{ matrix.os }}`. The two contexts branch
+  # protection actually requires — `… — ubuntu-latest` and `… — windows-latest`
+  # — are therefore never created at all, and GitHub blocks the PR waiting for
+  # checks that can never arrive. Not a red check: an absent one.
+  #
+  # This is invisible for almost every PR, because any Rust or frontend change
+  # activates a lane. It bites exactly the changes that touch neither: a
+  # docs-only PR, or repo tooling such as `.design-sync/**` (which matches no
+  # filter at all, so it is not even `docs_only`). #1313 sat permanently
+  # unmergeable this way, and earlier tooling-only PRs were merged by admin
+  # override rather than by satisfying the gate.
+  #
+  # Single-lane jobs need no shim: `ui-e2e` below is not a matrix, so when it
+  # skips it still publishes `UI mock-mode (Playwright)` under its real name,
+  # and GitHub accepts a skipped check as satisfying a required context. Only
+  # the matrix name fails to materialise.
+  #
+  # This job runs for docs-only changes, so the matrix DOES expand and the
+  # required contexts are reported — green, and explicit that nothing was tested
+  # rather than implying a suite passed. It runs every leg on ubuntu because it
+  # executes no platform-specific work; the leg names exist to satisfy the
+  # contexts, not to claim Windows coverage.
+  #
+  # Gated on `docs_only` specifically, NOT on "both lanes idle". Those are no
+  # longer the same thing: `decide` now forces both lanes for any path no filter
+  # recognises, so an unclassified change is tested rather than waved through.
+  # Reporting green for "no filter matched" would be a check that degrades into
+  # "everything's fine" — the failure mode this whole gate exists to prevent.
+  # `docs_only` is the one case the repo positively asserts is inert.
+  integration-idle:
+    name: Unit + integration (L1+L2) — ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: No Rust or frontend changes to test
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          LEG: ${{ matrix.os }}
+        run: |
+          echo "Neither the Rust nor the frontend lane was triggered by this change."
+          echo "docs_only=$DOCS_ONLY"
+          echo "Reporting the required context for $LEG so the PR is mergeable."
+          echo "No tests ran, and none were applicable."
 
   # Mock-mode UI regression: fast Playwright run (Vite + chromium, mocks on, no
   # backend/Tauri build). The real UI->IPC->backend journeys run in the dedicated

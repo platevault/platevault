@@ -222,6 +222,19 @@ pub async fn classify(
                 (None, EvidenceSource::None, None, true, false, None)
             };
 
+        // #549: a detected calibration master is extracted into its own
+        // `inbox_items` row at scan time (`persist_master_item`), but the
+        // file is never moved off disk, so a folder-PLACEHOLDER classify run
+        // still walks it here. Without this guard the master was tallied a
+        // second time into the placeholder's evidence/breakdown/file_count —
+        // the placeholder must represent only the un-extracted remainder.
+        // Only skip when classifying the placeholder itself: a master's own
+        // classify call (`item.is_master_item != 0`) has exactly this one
+        // file and must still record it.
+        if is_master && item.is_master_item == 0 {
+            continue;
+        }
+
         // Persist evidence
         let ev_id = Uuid::new_v4().to_string();
         let ev = InsertEvidence {
@@ -454,12 +467,16 @@ pub async fn classify(
     };
     repo::upsert_classification(pool, &classification).await.ok();
 
-    // 9. Update item state and signature
+    // 9. Update item state and signature.
+    // #549: `file_records.len()` (not `file_paths.len()`) — extracted-master
+    // files were filtered out of `file_records` above, so this is the
+    // un-extracted remainder the placeholder is meant to represent, matching
+    // the count `persist_folder_placeholder` (inbox.rs) writes at scan time.
     repo::update_inbox_item_scan(
         pool,
         &req.inbox_item_id,
         &content_signature,
-        i64::try_from(file_paths.len()).unwrap_or(i64::MAX),
+        i64::try_from(file_records.len()).unwrap_or(i64::MAX),
     )
     .await
     .ok();
@@ -1403,6 +1420,64 @@ mod tests {
         assert_eq!(resp.classification_type, "mixed");
         assert!(resp.frame_type.is_none());
         assert_eq!(resp.breakdown.len(), 2);
+    }
+
+    /// Regression (#549): a detected calibration master is extracted into its
+    /// own `inbox_items` row at scan time, but the file itself is never moved
+    /// off disk. Classifying the folder PLACEHOLDER (this item, is_master_item
+    /// = 0) must not re-tally that master into the breakdown or file_count —
+    /// the placeholder represents only the un-extracted remainder. Before the
+    /// fix `classify` walked every FITS/XISF file still in the folder, so a
+    /// folder of 2 un-extracted lights + 1 already-extracted master dark
+    /// reported "mixed"/3 files instead of "single_type light"/2 files.
+    #[tokio::test]
+    async fn classify_excludes_already_extracted_master_from_placeholder_tally() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "light_002.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "master_dark.fits", "Master Dark");
+
+        let db = test_db().await;
+        let item_id = "item-classify-placeholder-with-master";
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let req = ClassifyRequest {
+            inbox_item_id: item_id.to_owned(),
+            root_absolute_path: tmp.path().to_owned(),
+            force_rescan: false,
+        };
+
+        let resp = classify(db.pool(), req).await.unwrap();
+
+        assert_eq!(
+            resp.classification_type, "single_type",
+            "the master must not turn this into a mixed folder: {:?}",
+            resp.breakdown
+        );
+        assert_eq!(resp.breakdown.len(), 1);
+        assert_eq!(resp.breakdown[0].kind, "light");
+        assert_eq!(
+            resp.breakdown[0].count, 2,
+            "breakdown must not double-count the already-extracted master (#549)"
+        );
+
+        let item = repo::get_inbox_item(db.pool(), item_id).await.unwrap();
+        assert_eq!(
+            item.file_count, 2,
+            "placeholder file_count must be the un-extracted remainder (#549), not the full folder"
+        );
     }
 
     #[tokio::test]

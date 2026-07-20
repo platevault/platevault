@@ -85,10 +85,17 @@ pub async fn get_inbox_item_metadata(
         // is_master: a single-file master item OR a per-file detected master.
         let is_master = item_is_master || ev.is_some_and(|e| e.is_master != 0);
 
-        // Non-type overrides: override_filter/exposure/binning take
+        // Non-type overrides: override_filter/exposure/binning/target take
         // precedence over the extracted header values when set.
         let filter = ev.and_then(|e| e.override_filter.clone()).or_else(|| m.filter.clone());
         let exposure_s = ev.and_then(|e| e.override_exposure_s).or(m.exposure_s);
+        // #1294: the `target` override written by `cone_search::confirm`
+        // (a coordinate-resolved match) becomes the effective OBJECT here,
+        // same precedence as the other non-type overrides above — otherwise
+        // confirm's write is never read back and the mandatory-attribute
+        // gate (compute_missing_mandatory's "target" check, below) keeps
+        // reporting the file as missing its target forever.
+        let object = ev.and_then(|e| e.override_target.clone()).or_else(|| m.object.clone());
         // Parse "NxN" binning string (e.g. "2x2") → (binning_x, binning_y).
         let (binning_x, binning_y) =
             ev.and_then(|e| e.override_binning.as_deref()).and_then(parse_binning).map_or_else(
@@ -114,7 +121,7 @@ pub async fn get_inbox_item_metadata(
             binning_x,
             binning_y,
             temperature_c: m.temperature_c,
-            object: m.object.clone(),
+            object,
             date_obs: m.date_obs.clone(),
             instrume: m.instrume.clone(),
             telescop: m.telescop.clone(),
@@ -541,6 +548,114 @@ mod tests {
         assert_eq!(f.binning_y, Some(2), "parsed binning y from '2x2'");
         // A freshly-set override is not stale.
         assert!(!f.override_stale, "freshly-set override must not be stale");
+    }
+
+    /// #1294: the `target` override written by `cone_search::confirm` must
+    /// win over the extracted (missing) `object` header value in the
+    /// assembled metadata DTO, and clear the `target` mandatory-gate entry —
+    /// same override precedence as filter/exposure/binning above. Without the
+    /// `override_target` join in `list_evidence`, this override is a write
+    /// nobody reads and the file reports `target` missing forever.
+    #[tokio::test]
+    async fn target_override_surfaces_as_effective_object_and_clears_missing_mandatory() {
+        let db = test_db().await;
+        let item_id = "item-meta-target-1";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "lights",
+                file_count: 1,
+                content_signature: Some("sig-target-1"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Wire the item to a source group (as classify normally does) so a
+        // target override has somewhere to attach — inbox_file_overrides is
+        // FK-constrained to inbox_source_groups.
+        repo::upsert_inbox_source_group(
+            db.pool(),
+            &repo::UpsertSourceGroup {
+                id: "sg-meta-target-1",
+                root_id: "root-1",
+                relative_path: "lights",
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = ?")
+            .bind("sg-meta-target-1")
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        repo::insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-meta-target-1",
+                inbox_item_id: item_id,
+                relative_file_path: "lights/light_001.fits",
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // No OBJECT header, filter/exposure present so `target` is isolated
+        // as the only variable in the mandatory gate.
+        repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &UpsertFileMetadata {
+                inbox_item_id: item_id,
+                relative_file_path: "lights/light_001.fits",
+                filter: Some("Ha"),
+                exposure_s: Some(300.0),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let before = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert_eq!(before[0].object, None, "no OBJECT header extracted yet");
+        assert!(
+            before[0].missing_mandatory.iter().any(|k| k == "target"),
+            "sanity: target starts out missing"
+        );
+
+        repo::set_file_override(
+            db.pool(),
+            "sg-meta-target-1",
+            "lights/light_001.fits",
+            "target",
+            "M 31",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let after = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert_eq!(after[0].object.as_deref(), Some("M 31"), "target override must win");
+        assert!(
+            !after[0].missing_mandatory.iter().any(|k| k == "target"),
+            "target override must clear the mandatory gate"
+        );
     }
 
     /// When mark_override_stale has been called (simulating R-4 detection),
