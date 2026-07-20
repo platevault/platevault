@@ -79,7 +79,6 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationBiasOverridePenalty",
             "calibrationAgingThresholdDays",
         ],
-        "plans" => &["plansListDefaultAgeCutoffDays"],
         "sourceViews" => &["sourceViewLinkKindIntraDrive", "sourceViewLinkKindCrossDrive"],
         "observing" => &[
             "observingSites",
@@ -121,7 +120,6 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationFlatOverridePenalty",
             "calibrationBiasOverridePenalty",
             "calibrationAgingThresholdDays",
-            "plansListDefaultAgeCutoffDays",
             "currentLibraryId",
             "sourceViewLinkKindIntraDrive",
             "sourceViewLinkKindCrossDrive",

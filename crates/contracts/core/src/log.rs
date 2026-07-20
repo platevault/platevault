@@ -294,33 +294,15 @@ fn extract_entity(topic: &str, payload: &serde_json::Value) -> (Option<String>, 
     (entity_type, None)
 }
 
+/// ISO-8601 UTC timestamp, whole-second precision: `YYYY-MM-DDTHH:MM:SSZ`.
 fn chrono_now_utc() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    // Simple ISO-8601 UTC: YYYY-MM-DDTHH:MM:SSZ
-    let s = secs;
-    let sec = s % 60;
-    let min = (s / 60) % 60;
-    let hour = (s / 3600) % 24;
-    let days = s / 86400;
-    // Days since epoch to calendar date (Gregorian proleptic).
-    let (year, month, day) = days_to_ymd(days);
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
-}
-
-fn days_to_ymd(days: u64) -> (u64, u64, u64) {
-    // Algorithm from https://www.tondering.dk/claus/cal/julperiod.php
-    let z = days + 719_468;
-    let era = z / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
+    let now = time::OffsetDateTime::now_utc()
+        // Match the previous whole-seconds-only output (no subsecond noise
+        // in log entries); 0 is always a valid nanosecond value.
+        .replace_nanosecond(0)
+        .expect("0 is always a valid nanosecond");
+    now.format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 // ── Stream request / event types ──────────────────────────────────────────────
@@ -600,5 +582,17 @@ mod tests {
         let event: LogStreamEvent = serde_json::from_str(json_str).unwrap();
         assert!(event.truncated);
         assert_eq!(event.truncated_count, Some(42));
+    }
+
+    #[test]
+    fn chrono_now_utc_is_whole_second_iso8601() {
+        // #922: replaced the hand-rolled Gregorian conversion with the `time`
+        // crate; assert the output shape is unchanged (no fractional
+        // seconds — a bare Rfc3339 format of `now_utc()` would include them).
+        let ts = chrono_now_utc();
+        assert_eq!(ts.len(), "2026-01-01T00:00:00Z".len(), "unexpected length: {ts}");
+        assert!(ts.ends_with('Z'), "must end in Z: {ts}");
+        let format = time::format_description::well_known::Rfc3339;
+        assert!(time::OffsetDateTime::parse(&ts, &format).is_ok(), "not valid Rfc3339: {ts}");
     }
 }

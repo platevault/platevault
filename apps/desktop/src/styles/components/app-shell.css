@@ -142,7 +142,10 @@
   color: var(--pv-on-accent); font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.pv-sidebar__brand-name { flex: 1; }
+/* #962: flex-shrink:0 — the product wordmark must never be the element that
+   concedes space under flex pressure; the version chip (below) is the
+   lower-priority sibling that can shrink first if the row is ever tight. */
+.pv-sidebar__brand-name { flex: 1; flex-shrink: 0; }
 .pv-sidebar__version { font-size: var(--pv-text-xs); color: var(--pv-text-faint); }
 .pv-sidebar__collapse { margin-left: auto; }
 .pv-sidebar__group { padding-bottom: var(--pv-sp-1); }
