@@ -16,7 +16,7 @@ use app_core::inbox::property_registry::property_registry as get_property_regist
 use app_core::inbox::reclassify::{
     reclassify, reclassify_v2, ReclassifyOverride, ReclassifyRequest,
 };
-use app_core::inbox::scan::{scan_root, ScanOptions, ScannedInboxItem, ScannedMasterFile};
+use app_core::inbox::scan::{scan_root, ScannedInboxItem, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use app_core::inbox::target_recommendations::{
     target_recommendations as target_recommendations_uc, RecommendationTarget,
@@ -26,6 +26,7 @@ use app_core::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
     get_inbox_plan, list_open_inbox_plans,
 };
+use app_core::inbox_scan::resolve_scan_options;
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
@@ -297,7 +298,7 @@ pub async fn inbox_scan_folder(
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<InboxScanFolderResponse, ContractError> {
     let root_path = PathBuf::from(&req.root_absolute_path);
-    let opts = ScanOptions { follow_symlinks: req.follow_symlinks };
+    let opts = resolve_scan_options(&pool).await?;
     let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
 
     // Derive the move-vs-catalogue lane for source groups from the root's
