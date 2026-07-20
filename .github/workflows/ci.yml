@@ -63,7 +63,7 @@ jobs:
   #   all_files — CSV of every changed path, consumed by the changed-crate
   #               scoping step for `cargo test -p`.
   changes:
-    name: Detect changes
+    name: Detect changes (CI)
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.decide.outputs.rust }}
