@@ -469,50 +469,45 @@ impl E2eApp {
             return Err(e).context("failed to set explicit WebDriver timeouts");
         }
 
-        // Attach to the MAIN webview, not to whichever window the session
-        // happened to open on (#1248/#1299).
-        //
-        // `tauri.conf.json` declares two windows: `main`, created with
-        // `visible: false` and shown once the app is ready, and `splash`
-        // (`splash.html`). A fresh session's current handle is therefore the
-        // SPLASH — and when the app finishes booting the splash closes, taking
-        // that handle with it. Every probe afterwards fails
-        // `no such window`, which reads like an app crash and is not one: the
-        // app's own log shows a healthy start.
-        //
-        // Poll rather than switch once: the window set changes during boot, and
-        // the main window may not exist yet at connect time. The last handle is
-        // preferred because Tauri creates `main` after `splash` in config
-        // order, and a single remaining handle is unambiguous once the splash
-        // has gone. A failure here is non-fatal — if the topology changes again
-        // the bridge wait below reports the real symptom rather than this
-        // heuristic masking it.
-        let window_deadline = Instant::now() + Duration::from_secs(20);
-        loop {
-            match driver.windows().await {
-                Ok(handles) if !handles.is_empty() => {
-                    // Once the splash is gone a single handle remains; while it
-                    // is still up, the later handle is the main window.
-                    let target = handles.last().expect("non-empty");
-                    if driver.switch_to_window(target.clone()).await.is_ok()
-                        && driver.current_url().await.is_ok_and(|u| {
-                            !u.as_str().contains("splash") && u.as_str() != "about:blank"
-                        })
-                    {
-                        break;
-                    }
-                }
-                _ => {}
-            }
-            if Instant::now() >= window_deadline {
-                // Leave the session on whatever handle it has and let the
-                // bridge wait produce the authoritative diagnostic.
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(250)).await;
+        // The plugin binds a new session to `webview_windows().keys().first()`
+        // (`tauri-plugin-webdriver-0.2.1/src/server/handlers/session.rs:24`) —
+        // a `HashMap` key order, and the splash window now exists BEFORE
+        // `main` does (the app builds `main` only after migrations). Without
+        // an explicit switch the session can hold the splash, whose document
+        // has no `__ALM_E2E__` bridge, and every journey would fail in
+        // `wait_bridge_ready` with no indication why.
+        if let Err(e) = Self::switch_to_main_window(&driver, deadline).await {
+            blocking_session_delete(env.proxy_port);
+            kill_driver_proc(&mut driver_proc);
+            return Err(e).context(proc_log.dump());
         }
 
         Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
+    }
+
+    /// Bind the session to the `main` window, waiting for the app to create it.
+    ///
+    /// The plugin's window handles ARE the Tauri window labels
+    /// (`webview_windows().keys()`), so `main` is matched by name, not by
+    /// position.
+    async fn switch_to_main_window(driver: &WebDriver, deadline: Instant) -> Result<()> {
+        let deadline = deadline.max(Instant::now() + Duration::from_secs(60));
+        let main = WindowHandle::from("main");
+        loop {
+            let handles = driver.windows().await.unwrap_or_default();
+            if handles.contains(&main) {
+                return driver
+                    .switch_to_window(main)
+                    .await
+                    .context("failed to switch the session to the `main` window");
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "the app never created its `main` window; handles seen: {handles:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
     }
 
     /// Resize the real OS window and return the viewport actually ACHIEVED,
