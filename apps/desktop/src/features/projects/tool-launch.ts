@@ -128,13 +128,28 @@ export function useToolProfiles() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // `cancelled` guard: this fetch outlives the component whenever a consumer
+    // unmounts while it is still in flight. Without it the late `setState`
+    // reaches a torn-down React root — harmless in the app, but under vitest it
+    // lands after jsdom has removed `window`, and React's own scheduler then
+    // throws `ReferenceError: window is not defined` into a promise nobody
+    // awaits. That surfaces as an unhandled rejection, which fails the entire
+    // unit-test job while every test still reports as passing (#1215).
+    let cancelled = false;
     setLoading(true);
     toolProfileList()
-      .then((resp) => setProfiles(resp.tools))
+      .then((resp) => {
+        if (!cancelled) setProfiles(resp.tools);
+      })
       .catch(() => {
         /* silently degrade — CTA will disable */
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return { profiles, loading };

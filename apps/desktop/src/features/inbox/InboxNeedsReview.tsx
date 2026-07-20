@@ -33,7 +33,7 @@ export function InboxNeedsReview({
 }: InboxNeedsReviewProps) {
   const {
     reclassifyLoading,
-    unclassifiedFiles,
+    filesNeedingReview,
     propertyRegistry,
     pendingOverrides,
     applyError,
@@ -57,8 +57,8 @@ export function InboxNeedsReview({
   } = reclassify;
 
   const allSelected =
-    unclassifiedFiles.length > 0 &&
-    selectedFiles.size === unclassifiedFiles.length;
+    filesNeedingReview.length > 0 &&
+    selectedFiles.size === filesNeedingReview.length;
   const someSelected = selectedFiles.size > 0 && !allSelected;
 
   // Generic bulk-editable properties (FR-044/US11, issue #755): every

@@ -11,7 +11,7 @@
  * so the component keeps only rendering concerns.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import type {
@@ -117,7 +117,25 @@ export function useInboxReclassifyState({
   };
 
   // T027 selection helpers.
-  const unclassifiedFiles = classification?.unclassifiedFiles ?? [];
+  //
+  // #1114: the needs-review set is every file that still blocks promotion, NOT
+  // just the ones with no frame type. `classification.unclassifiedFiles` drops
+  // a file the instant a frame-type override is written (classify.rs: the
+  // `unclassified != 0 && manual_override.is_none()` filter), which used to
+  // unmount this whole section — including the generic property editor — while
+  // the file was still blocked on a mandatory attribute like exposureS. The
+  // per-file `missingMandatory` set (metadata.rs `compute_missing_mandatory`,
+  // override-applied and re-fetched after every reclassify) is the truthful
+  // gate. Unioned rather than swapped because per-file metadata can be absent
+  // or still loading, and losing the frame-type affordance then would be the
+  // same class of bug in the other direction.
+  const filesNeedingReview = useMemo(() => {
+    const paths = new Set(classification?.unclassifiedFiles ?? []);
+    for (const f of fileMetadata ?? []) {
+      if ((f.missingMandatory?.length ?? 0) > 0) paths.add(f.relativeFilePath);
+    }
+    return Array.from(paths);
+  }, [classification?.unclassifiedFiles, fileMetadata]);
 
   const handleToggleFile = (filePath: string) => {
     setSelectedFiles((prev) => {
@@ -129,9 +147,9 @@ export function useInboxReclassifyState({
   };
 
   const handleSelectAll = () => {
-    if (selectedFiles.size === unclassifiedFiles.length)
+    if (selectedFiles.size === filesNeedingReview.length)
       setSelectedFiles(new Set());
-    else setSelectedFiles(new Set(unclassifiedFiles));
+    else setSelectedFiles(new Set(filesNeedingReview));
   };
 
   const handleBulkPropChange = (key: string, value: string) => {
@@ -242,7 +260,7 @@ export function useInboxReclassifyState({
 
   return {
     reclassifyLoading,
-    unclassifiedFiles,
+    filesNeedingReview,
     propertyRegistry,
     // per-file override flow
     pendingOverrides,

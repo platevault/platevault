@@ -267,10 +267,11 @@ fn parse_session_key(key: &str, fp: Option<&Fingerprint>) -> SessionKey {
 type SessionKeyFields =
     (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
 
-/// Split the real pipe-delimited `target|filter|binning|gain|night` form.
+/// Split the real pipe-delimited `target|filter|binning|gain|night` form,
+/// via the format's owner (`crates/sessions`).
 fn parse_session_key_delimited_fields(key: &str) -> SessionKeyFields {
-    let mut parts = key.splitn(5, '|').map(ToOwned::to_owned);
-    (parts.next(), parts.next(), parts.next(), parts.next(), parts.next())
+    let p = sessions::parse_session_key(key);
+    (p.target, p.filter, p.binning, p.gain, p.night)
 }
 
 /// Parse the legacy JSON-object form (`{"target":...}`), pre-035/test-only.
