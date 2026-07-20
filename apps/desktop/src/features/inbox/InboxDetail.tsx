@@ -48,7 +48,6 @@ import { useInboxReclassifyState } from './useInboxReclassifyState';
 import {
   applicableRootCategory,
   basename,
-  buildMixedSummary,
   buildRootLabels,
   classificationVariant,
   FRAME_TYPE_OPTIONS,
@@ -266,12 +265,6 @@ export function InboxDetail({
     ),
   }));
 
-  // ── Mixed composition summary (FR-011) ────────────────────────────────────
-
-  const mixedSummary =
-    classType === 'mixed' && classification?.breakdown
-      ? buildMixedSummary(classification.breakdown)
-      : null;
 
   // ── Detection property table (col A) ─────────────────────────────────────
   const repFile = fileMetadata?.[0] ?? null;
@@ -361,23 +354,6 @@ export function InboxDetail({
           was clipped by `.pv-listpage__detail-body`'s `overflow: hidden`
           (unreachable, not just unscrolled). */}
       <div className="pv-inbox-detail__scroll">
-        {/* Mixed: advisory banner */}
-        {classType === 'mixed' && (
-          <Banner
-            variant="warn"
-            className="pv-inbox-detail__banner-mt3 pv-inbox-alert"
-            data-testid="inbox-mixed-alert"
-          >
-            <div className="pv-inbox-alert__msg">
-              <span className="pv-inbox-alert__title">
-                {m.inbox_mixed_folder_title()}
-              </span>
-              <span className="pv-inbox-alert__body">
-                {m.inbox_mixed_folder_body()}
-              </span>
-            </div>
-          </Banner>
-        )}
 
         {/* Unclassified: blocking banner. #1114 — when the frame type is
             already supplied and only OTHER mandatory attributes are absent,
@@ -432,7 +408,6 @@ export function InboxDetail({
             <InboxFilesColumn
               key="files"
               fileMetadata={fileMetadata}
-              mixedSummary={mixedSummary}
             />,
             /* Needs review — rendered when unclassified files exist */
             /* Needs review — null (not an empty component) when there is

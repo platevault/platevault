@@ -116,16 +116,6 @@ export function buildRootLabels(
   return labels;
 }
 
-/**
- * Build a plain-language composition summary for a mixed classification.
- * Example: "12 light · 4 dark · 1 bias"
- */
-export function buildMixedSummary(
-  breakdown: InboxClassifyResponse['breakdown'],
-): string {
-  if (!breakdown || breakdown.length === 0) return '';
-  return breakdown.map((e) => `${e.count} ${e.kind}`).join(' · ');
-}
 
 /**
  * Format an exposure length in seconds for display (issue #789): raw FITS

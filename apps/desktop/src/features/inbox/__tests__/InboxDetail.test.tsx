@@ -192,60 +192,6 @@ const fileMetadataFixture: InboxFileMetadata[] = [
 
 // ── FR-011: Mixed composition summary ────────────────────────────────────────
 
-describe('InboxDetail — FR-011: mixed composition summary', () => {
-  it('renders an explicit per-type count string for mixed folders', () => {
-    render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
-      />,
-    );
-    const summary = screen.getByLabelText('Mixed composition summary');
-    expect(summary).toBeInTheDocument();
-    expect(summary.textContent).toContain('12');
-    expect(summary.textContent).toContain('light');
-    expect(summary.textContent).toContain('4');
-    expect(summary.textContent).toContain('dark');
-    expect(summary.textContent).toContain('1');
-    expect(summary.textContent).toContain('flat');
-  });
-
-  it('does NOT render a composition summary for single-type folders', () => {
-    render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification}
-      />,
-    );
-    expect(
-      screen.queryByLabelText('Mixed composition summary'),
-    ).not.toBeInTheDocument();
-  });
-
-  it('does NOT render a composition summary when classification is null', () => {
-    render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={null}
-      />,
-    );
-    expect(
-      screen.queryByLabelText('Mixed composition summary'),
-    ).not.toBeInTheDocument();
-  });
-});
-
-// ── FR-010: Per-file metadata popover trigger ─────────────────────────────────
-//
-// The metadata table now lives inside a portaled Popover. The trigger button
-// ("File metadata (N) ▾") is always visible when fileMetadata is provided.
-// The table columns are inside the popup (not in the DOM until the popup is
-// opened — base-ui portals), so tests assert the trigger and the table content
-// that IS rendered in the document (the trigger renders unconditionally).
-
 describe('InboxDetail — FR-010: file metadata popover trigger', () => {
   it('renders the popover trigger button when fileMetadata is provided', () => {
     render(
@@ -289,23 +235,6 @@ describe('InboxDetail — FR-010: file metadata popover trigger', () => {
     expect(
       screen.queryByTestId('inbox-files-popover-trigger'),
     ).not.toBeInTheDocument();
-  });
-
-  it('renders both the FR-011 composition summary and the FR-010 popover trigger simultaneously', () => {
-    render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
-        fileMetadata={fileMetadataFixture}
-      />,
-    );
-    expect(
-      screen.getByLabelText('Mixed composition summary'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTestId('inbox-files-popover-trigger'),
-    ).toBeInTheDocument();
   });
 
   it('opens the popup with the metadata table when the trigger is clicked', () => {
@@ -450,28 +379,31 @@ describe('InboxDetail — #551: honest "unknown" state when no per-file metadata
 
 // ── task #34: mixed-folder — banner in body, action in header ────────────────
 
-describe('InboxDetail — task #34: mixed-folder banner + header confirm action', () => {
-  it('renders the mixed banner AND the confirm button (labelled "Generate split plan") in the header', () => {
+/**
+ * The header confirm action (task #34).
+ *
+ * Spec 058 T035 retired the mixed-folder banner these tests were paired with,
+ * but the header confirm behaviour they also covered is very much live, so it
+ * is kept here rather than deleted along with the banner. The fixtures move to
+ * a single-type classification because that is now the only shape a confirmable
+ * detection has.
+ */
+describe('InboxDetail — task #34: header confirm action', () => {
+  it('renders the confirm button in the header and reports clicks', () => {
     const onConfirm = vi.fn();
     render(
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
+        classification={singleTypeClassification}
         onConfirm={onConfirm}
-        confirmLabel="Generate split plan"
+        confirmLabel="Confirm to inventory"
       />,
     );
-    expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
     const btn = screen.getByTestId('inbox-confirm-btn');
-    expect(btn).toHaveTextContent('Generate split plan');
+    expect(btn).toHaveTextContent('Confirm to inventory');
     fireEvent.click(btn);
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    // Button is NOT inside the banner.
-    const banner = screen.getByTestId('inbox-mixed-alert');
-    expect(
-      banner.querySelector('[data-testid="inbox-confirm-btn"]'),
-    ).toBeNull();
   });
 
   it('disables the header confirm button while busy', () => {
@@ -479,9 +411,9 @@ describe('InboxDetail — task #34: mixed-folder banner + header confirm action'
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
+        classification={singleTypeClassification}
         onConfirm={vi.fn()}
-        confirmLabel="Generate split plan"
+        confirmLabel="Confirm to inventory"
         confirmBusy
       />,
     );
@@ -493,38 +425,19 @@ describe('InboxDetail — task #34: mixed-folder banner + header confirm action'
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
+        classification={singleTypeClassification}
       />,
     );
-    expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
     expect(screen.queryByTestId('inbox-confirm-btn')).not.toBeInTheDocument();
   });
 
-  it('does NOT render the mixed banner for single-type folders, but DOES render the confirm button', () => {
-    render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification}
-        onConfirm={vi.fn()}
-      />,
-    );
-    expect(screen.queryByTestId('inbox-mixed-alert')).not.toBeInTheDocument();
-    // The unified confirm action (default label "Confirm to inventory") is the
-    // per-detection primary action for single-type folders.
-    expect(screen.getByTestId('inbox-confirm-btn')).toHaveTextContent(
-      'Confirm to inventory',
-    );
-  });
-
-  // #552/#569: the banner used to say "Confirm to produce a reviewable split
-  // plan" — but Confirm is disabled entirely for mixed rows (spec 041
-  // FR-050/T071/T072: the backend "split" action was removed), so that
-  // promised a click that could never do anything. The folder is actually
-  // ALREADY auto-split into separate single-type sub-items by the time this
-  // banner renders (classify() materializes them — T066); the copy must
-  // point there instead of a nonexistent "Confirm"-triggered split.
-  it('#552/#569: does not promise a Confirm-triggered split; explains the automatic split instead', () => {
+  /**
+   * Spec 058 T035: the retired banner must not come back by accident. A
+   * multi-type folder now reports `unclassified` and renders no advisory of its
+   * own — the folder is represented by the single-type items materialization
+   * produced, each confirmable on its own.
+   */
+  it('renders no mixed banner for a multi-type classification', () => {
     render(
       <InboxDetail
         item={sampleItem}
@@ -532,9 +445,7 @@ describe('InboxDetail — task #34: mixed-folder banner + header confirm action'
         classification={mixedClassification}
       />,
     );
-    const banner = screen.getByTestId('inbox-mixed-alert');
-    expect(banner.textContent).toContain(m.inbox_mixed_folder_body());
-    expect(banner.textContent).not.toMatch(/Confirm to produce/i);
+    expect(screen.queryByTestId('inbox-mixed-alert')).not.toBeInTheDocument();
   });
 });
 
@@ -604,25 +515,6 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
     expect(heads.some((h) => h.textContent === 'Files')).toBe(true);
     // 'light' from frameType appears in the PropertyTable value.
     expect(screen.getAllByText(/light/).length).toBeGreaterThan(0);
-  });
-
-  it('mixed composition summary renders inside a detail column', () => {
-    const { container } = render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
-      />,
-    );
-    const cols = [...container.querySelectorAll('.pv-session-detail2__col')];
-    expect(cols.length).toBeGreaterThan(0);
-    // Summary lives within one of the left-packed columns (the Files column).
-    expect(
-      cols.some(
-        (c) =>
-          c.querySelector('[aria-label="Mixed composition summary"]') != null,
-      ),
-    ).toBe(true);
   });
 
   it('files popover trigger renders inside a detail column', () => {

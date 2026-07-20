@@ -712,16 +712,17 @@ export function InboxPage() {
   );
 
   const handleConfirm = async () => {
-    // spec 041 T071/T072 (FR-050): the backend "split" action is removed —
-    // classification.type === "mixed" is only reachable when the SELECTED
-    // item is still the pre-materialization leaf-folder row spanning more
-    // than one frame type (T066 already split it into single-type
-    // sub-items, which appear as separate list rows). Such a row can never
-    // itself be confirmed (its classification.result is never
-    // "classified"), so confirm is gated off entirely for it via
-    // `canConfirm` below — guard here too as defense in depth.
-    if (!selectedItem || !classification || classification.type === 'mixed')
-      return;
+    // Spec 058 T035/T036: the `classification.type === "mixed"` guard is gone
+    // with the vocabulary it tested.
+    //
+    // It was accurate when written: `mixed` was reachable only on the
+    // pre-materialization leaf-folder row spanning more than one frame type,
+    // and that row could never be confirmed. T012 stopped creating that row and
+    // T035 retired the label, so the condition can no longer be true — keeping
+    // it would read as a live safeguard while testing a value the backend never
+    // returns. A multi-type folder now reports `unclassified`, which
+    // `canConfirm` already refuses.
+    if (!selectedItem || !classification) return;
     await runConfirm(
       {
         inboxItemId: selectedItem.inboxItemId,
@@ -801,10 +802,10 @@ export function InboxPage() {
   const handlePickDestinationRoot = async (rootId: string) => {
     if (!rootPickItemId || !selectedItem || !classification) return;
     if (selectedItem.inboxItemId !== rootPickItemId) return;
-    // A "mixed" classification can never reach the destination-root picker
-    // (confirm rejects it with classification.ambiguous before root
-    // resolution runs) — guarded as defense in depth, matching handleConfirm.
-    if (classification.type === 'mixed') return;
+    // Spec 058 T035: the companion `mixed` guard is gone here too. It can no
+    // longer be true, and a guard that cannot fire reads as protection while
+    // providing none. A multi-type folder reports `unclassified`, which confirm
+    // already rejects before root resolution runs.
     await runConfirm(
       {
         inboxItemId: selectedItem.inboxItemId,
@@ -935,12 +936,11 @@ export function InboxPage() {
     [fileMetadata],
   );
 
-  // spec 041 T071/T072 (FR-050): the backend "split" action for MIXED items
-  // is removed — a folder that still classifies as "mixed" (multiple frame
-  // types on this row) can never itself be confirmed; only "single_type"
-  // rows (including the sub-items T066 already materialized alongside it)
-  // are confirmable, so confirm is disabled for both "unclassified" and
-  // "mixed" here.
+  // spec 041 T071/T072 (FR-050): only "single_type" rows are confirmable. A
+  // folder spanning several frame types is not one thing to confirm, so it
+  // reports "unclassified" and confirm stays disabled. Spec 058 T035 retired
+  // the separate "mixed" label; the rows it described are the sub-items
+  // materialization produces, each single-type and confirmable on its own.
   // Issue #643: while per-file metadata is loading or failed to load, we
   // cannot know whether mandatory attributes are missing — fail safe by
   // keeping Confirm disabled instead of judging over an empty array.
@@ -1293,8 +1293,7 @@ export function InboxPage() {
               classification={classification ?? null}
               fileMetadata={fileMetadata}
               // Confirm runs the same flow the old top-bar button did.
-              // Disabled entirely for "mixed" rows (FR-050) — see
-              // canConfirm above.
+              // Disabled for any row that is not single-type — see canConfirm.
               onConfirm={() => void handleConfirm()}
               confirmLabel={confirmLabel}
               confirmDisabled={!canConfirm}

@@ -192,21 +192,6 @@ function queryClientWrapper({ children }: { children: ReactNode }) {
 // ── Tests: InboxDetail ────────────────────────────────────────────────────
 
 describe('InboxDetail', () => {
-  it('renders mixed-summary line with frame-type counts for mixed classify response', () => {
-    render(
-      <InboxDetail
-        item={sampleItem}
-        rootAbsolutePath="/astro/inbox"
-        classification={mixedClassification}
-      />,
-    );
-    // Mixed summary compact text line (replaces the old breakdown table)
-    const summary = screen.getByLabelText('Mixed composition summary');
-    expect(summary).toBeInTheDocument();
-    expect(summary.textContent).toMatch(/16\s+light/i);
-    expect(summary.textContent).toMatch(/2\s+dark/i);
-  });
-
   it('renders "Needs review" section for unclassified files', () => {
     render(
       <InboxDetail

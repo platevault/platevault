@@ -24,12 +24,10 @@ import { basename, formatExposureSeconds } from './inboxDetailHelpers';
 export interface InboxFilesColumnProps {
   fileMetadata: InboxFileMetadata[] | null | undefined;
   /** FR-011 summary node, or null when the item is not a mixed folder. */
-  mixedSummary: React.ReactNode;
 }
 
 export function InboxFilesColumn({
   fileMetadata,
-  mixedSummary,
 }: InboxFilesColumnProps) {
   // Files popover: which row is "inspected" inside the popover.
   const [inspectedIdx, setInspectedIdx] = useState<number | null>(null);
@@ -122,15 +120,6 @@ export function InboxFilesColumn({
     <Fragment>
       <div className="pv-session-detail2__head">{m.inbox_col_files()}</div>
 
-      {/* FR-011: compact mixed-composition summary */}
-      {mixedSummary && (
-        <section
-          aria-label={m.inbox_mixed_composition_summary_aria()}
-          className="pv-inbox-detail__mixed-summary"
-        >
-          {mixedSummary}
-        </section>
-      )}
 
       {/* Files popover — trigger + portaled popup with metadata table + inspector */}
       {hasMetadata ? (
@@ -176,7 +165,7 @@ export function InboxFilesColumn({
           </Popover.Portal>
         </Popover.Root>
       ) : (
-        !mixedSummary && (
+        (
           <span className="pv-session-detail2__muted">
             {m.inbox_no_file_metadata()}
             {/* #551: no per-file metadata means the required-destination-

@@ -52,7 +52,7 @@ pub struct BreakdownEntry {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ClassifyResponse {
     pub inbox_item_id: String,
-    /// API vocabulary (stable for frontend): "single_type" | "mixed" | "unclassified".
+    /// API vocabulary (stable for frontend): "single_type" | "unclassified".
     /// Note: the DB stores "classified" / "unclassified" (migration 0049 CHECK);
     /// the API vocabulary is mapped from the DB value so the frontend contract
     /// stays unchanged until T071/T072 update the contracts.
@@ -346,15 +346,22 @@ pub async fn classify(
     //                  a single frame type → 'classified'; a folder with
     //                  multiple frame types → 'unclassified' (the mixed case
     //                  will be re-split into single-type sub-items in T066).
-    //   api_result   — returned in ClassifyResponse.classification_type; kept
-    //                  on the stable pre-0049 vocabulary ('single_type' /
-    //                  'mixed' / 'unclassified') so the frontend contract and
-    //                  confirm routing remain unchanged until T071/T072 land.
+    //   api_result   — returned in ClassifyResponse.classification_type, on the
+    //                  pre-0049 vocabulary ('single_type' / 'unclassified').
+    //
+    // Spec 058 T035 retires 'mixed'. FR-031 required it "for as long as
+    // placeholder rows exist" and named this feature as the change that ends
+    // that condition: 'mixed' was reachable ONLY on a pre-materialization
+    // placeholder whose files spanned two or more frame types, and T012 stopped
+    // creating those rows. The multi-type arm stays for exhaustiveness and
+    // reports 'unclassified' — the value its DB result already carried — rather
+    // than becoming `unreachable!()`, because a panic is a poor way to discover
+    // that an assumption was wrong in a release build.
     let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
     let (db_result, api_result, single_frame_type) = match distinct_types.len() {
         0 => ("unclassified", "unclassified", None),
         1 => ("classified", "single_type", Some(distinct_types[0].to_owned())),
-        _ => ("unclassified", "mixed", None),
+        _ => ("unclassified", "unclassified", None),
     };
 
     let unclassified_count = i64::try_from(unclassified_files.len()).unwrap_or(i64::MAX);
@@ -1421,22 +1428,17 @@ async fn build_response_from_cache(
     // refetch after `inbox.reclassify`), where `canConfirm` requires exactly
     // 'single_type' — permanently disabling Confirm for already-classified
     // items (caught by the spec 037 Layer-2 Inbox journeys, PR #457). Map DB
-    // → API here, mirroring `reclassify`'s aggregation: 'classified' is
-    // single-type by the 0049 CHECK's definition; a DB 'unclassified' with
-    // two or more distinct effective frame types is the mixed case.
+    // → API here: 'classified' is single-type by the 0049 CHECK's definition,
+    // and everything else is 'unclassified'.
+    //
+    // Spec 058 T035: this used to distinguish a 'mixed' case by counting
+    // distinct effective frame types across the evidence rows. That count could
+    // only reach two on a pre-materialization placeholder, which T012 no longer
+    // creates, so the branch reported a state the app can no longer be in. The
+    // cached path now mirrors the compute path above.
     let classification_type = match cached.result.as_str() {
         "classified" => "single_type".to_owned(),
-        "unclassified" => {
-            let distinct: std::collections::HashSet<&str> = evidence_rows
-                .iter()
-                .filter_map(|ev| ev.manual_override.as_deref().or(ev.frame_type.as_deref()))
-                .collect();
-            if distinct.len() >= 2 {
-                "mixed".to_owned()
-            } else {
-                "unclassified".to_owned()
-            }
-        }
+        "unclassified" => "unclassified".to_owned(),
         // Pre-0049 rows can still carry the API vocabulary — pass through.
         other => other.to_owned(),
     };
@@ -1566,8 +1568,17 @@ mod tests {
         assert_eq!(second.content_signature, first.content_signature);
     }
 
+    /// Spec 058 T035: a folder spanning two frame types reports `unclassified`,
+    /// not `mixed`.
+    ///
+    /// The vocabulary is retired, not the behaviour. The breakdown still
+    /// carries both types — that is what the UI needs to explain why the folder
+    /// cannot be confirmed as one thing — and the DB result is unchanged, since
+    /// it stored `unclassified` for this case all along. Only the API label
+    /// collapses, because `mixed` could only ever be observed on a
+    /// pre-materialization placeholder and T012 stopped creating those.
     #[tokio::test]
-    async fn classify_mixed_folder() {
+    async fn classify_multi_type_folder_reports_unclassified() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits_with_imagetyp(tmp.path(), "light.fits", "Light Frame");
         write_fits_with_imagetyp(tmp.path(), "dark.fits", "Dark Frame");
@@ -1595,7 +1606,7 @@ mod tests {
         };
 
         let resp = classify(db.pool(), req).await.unwrap();
-        assert_eq!(resp.classification_type, "mixed");
+        assert_eq!(resp.classification_type, "unclassified");
         assert!(resp.frame_type.is_none());
         assert_eq!(resp.breakdown.len(), 2);
     }
