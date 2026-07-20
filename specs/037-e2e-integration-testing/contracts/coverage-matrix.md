@@ -156,8 +156,10 @@ prose"):
 - **RESOLVED 2026-07-05: `cleanup_plan_review`'s apply gap.** The blocker was
   a missing channel-free apply command for archive/cleanup plans (unlike
   `inbox.plan.apply` for inbox plans) — `plans.apply_real` takes a
-  `tauri::ipc::Channel` progress argument this WebDriver harness cannot
-  construct. `plans.apply.direct` (a.k.a. `plans_apply_direct`,
+  `tauri::ipc::Channel` progress argument this WebDriver harness declines to
+  construct (buildable from a test script, but only by reaching into
+  Tauri internals — see #1234).
+  `plans.apply.direct` (a.k.a. `plans_apply_direct`,
   `app_core::plan_apply::apply_plan_channel_free`) now exists: same executor
   (`apply_plan`) and durable audit trail as `plans.apply_real`, no `Channel`
   required. `cleanup_plan_review` now drives a real apply past `plans.approve`
