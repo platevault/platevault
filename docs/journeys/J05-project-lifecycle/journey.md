@@ -1,7 +1,7 @@
 ---
 id: J05
 title: Run a project from creation through tool launch and output tracking
-version: 2
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -62,7 +62,10 @@ safe-by-construction or was explicitly reviewed.
 ### S2 — Attach sources {#S2}
 - **Do:** From the project's edit view, add sources from a picker and, when
   needed, remove a previously attached source.
-- **Expect:** The picker offers only unlinked, already-confirmed sessions;
+- **Expect:** The edit view opens as a real dialog (`role=dialog`, an
+  accessible name, backdrop, Escape-to-close, and a focus trap) centred over
+  the page — not a full-window overlay covering the sidebar, list, and
+  action bars. The picker offers only unlinked, already-confirmed sessions;
   removing any source except the last one takes effect immediately.
 - **Expect (negative):** Not-yet-confirmed inbox data never appears as an
   attachable source. Removing the *last* remaining source is blocked behind
@@ -71,7 +74,9 @@ safe-by-construction or was explicitly reviewed.
 - **Expect (negative):** A project in a locked lifecycle state (e.g.
   archived) refuses source edits with an explicit message rather than
   silently no-op-ing.
-- **Trace:** e2e-agentic-test/008-.../edit-project-sources/scenario.md
+- **Trace:** e2e-agentic-test/008-.../edit-project-sources/scenario.md;
+  `apps/desktop/src/features/projects/edit/EditProjectPane.tsx` (rendered
+  through the shared `Modal`, PR #1290, closes #660).
 
 ### S3 — Review real per-channel numbers {#S3}
 - **Do:** Open the project detail view at the 1100×720 minimum window size,
@@ -83,7 +88,8 @@ safe-by-construction or was explicitly reviewed.
   (previously a bespoke side-and-bottom dual layout with no narrow
   fallback). The per-channel (per-filter) breakdown shows actual sub-frame
   counts and total integration time, computed from the currently attached
-  sessions and formatted as hours/minutes.
+  sessions and formatted as hours/minutes (e.g. "1h 30m" — the same grammar
+  Sessions and the setup wizard use for the identical quantity).
 - **Expect (negative):** No channel row shows a placeholder dash or a bare
   `0` where the real value is simply unknown — a missing value is
   distinguishable from a real zero. At the 1100×720 minimum, no part of the
@@ -162,3 +168,16 @@ safe-by-construction or was explicitly reviewed.
   1100×720 minimum window in bottom mode.
   Evidence: spec-054-adaptive-detail-dock (FR-004, FR-011) · by:
   journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-20 · S2 · behavior-change
+  The project edit view now opens as a real dialog (role=dialog, Escape,
+  focus trap, backdrop) — previously a bare positioned div with no
+  containing block covered the entire 1280x800 window, including the
+  sidebar and action bars, with none of those affordances.
+  Evidence: PR #1290 (closes #660) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-20 · S3 · behavior-change
+  Total integration time now renders as "1h 30m" (h/m grammar), matching
+  Sessions and the setup wizard — previously Projects showed a decimal-hours
+  variant ("1.5h") for the same quantity.
+  Evidence: PR #1288 (refs #631) · by: journey-scribe (intent-gated)
