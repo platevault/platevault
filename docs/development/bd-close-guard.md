@@ -29,10 +29,11 @@ Read-only: it never calls `bd close`, `bd update`, or any mutating
 `origin/main` remote-tracking ref.
 
 ```
-$ scripts/bd-close-guard.sh astro-plan-hew astro-plan-tlw astro-plan-pjg
+$ scripts/bd-close-guard.sh astro-plan-hew astro-plan-tlw astro-plan-pjg astro-plan-r8n
 PASS     astro-plan-hew   PR #1364 merged into main, commit d4876d81528951e40901bb83f6799c3c54c0a94b is on origin/main (platevault/platevault)
 FAIL     astro-plan-tlw   PR #1048 is OPEN, not merged (platevault/platevault) — do not close
 FAIL     astro-plan-pjg   PR #1310 merged into 061-selectable-app-language, not on origin/main — do not close (platevault/platevault)
+UNKNOWN  astro-plan-r8n   FIX-PR: UNDETERMINED — checked=bead's own notes (cites PR #1310 and #1321), gh pr list --search r8n, git log origin/main --grep=r8n | Two distinct stacked PRs cited, neither merged into origin/main (#1310 base=061-selectable-app-language, #1321 base=061-p1-locale-runtime); root-cause bead astro-plan-vi1w names this exact bead as the flagship ambiguous case (8 loosely-related numbers). Cannot pick one without guessing.
 ```
 
 Exit status is 0 only if every given bead's fix commit is on `origin/main`.
@@ -47,18 +48,46 @@ Exit status is 0 only if every given bead's fix commit is on `origin/main`.
 
 PR resolution order:
 
-1. `metadata.pr` on the bead, set via `bd update --metadata pr=<n>`.
-2. Exactly one distinct `PR #<n>` mention across `notes` + `description`.
+1. A `FIX-PR:` line in `notes` (format below). If present it wins outright —
+   `metadata.pr` and prose mentions are not consulted.
+2. `metadata.pr` on the bead, set via `bd update --metadata pr=<n>`.
+3. Exactly one distinct `PR #<n>` mention across `notes` + `description`.
 
-A bare `#<n>` is never treated as a PR reference. Beads routinely
+A bare `#<n>` is never treated as a PR reference: beads routinely
 cross-reference other issues and PRs by number in prose, and most of those
-numbers are not the bead's own PR. When more than one distinct `PR #<n>`
-mention exists and `metadata.pr` is not set, the check reports `UNKNOWN`
-rather than guessing. One real bead's description narrated two PRs ("PR
-#1268 already covers X ... PR #1309 implements Y"); taking the first mention
-resolved to the wrong, already-merged PR instead of the actual fix. Setting
-`metadata.pr` on beads that narrate more than one PR removes the ambiguity;
-guessing does not.
+numbers are not the bead's own PR.
+
+Multiple distinct `PR #<n>` mentions with no `FIX-PR:` line and no
+`metadata.pr` resolve to `UNKNOWN`, not a guess. Astro-plan-yxw's description
+narrates two PRs ("PR #1268 already covers X ... PR #1309 implements Y");
+taking the first mention resolved to the wrong, already-merged #1268 instead
+of the actual fix, #1309.
+
+### The `FIX-PR:` line
+
+Write this format into a bead's notes when prose `PR #<n>` mentions are
+ambiguous (multiple candidate PRs, a stacked-PR chain, or an already-reopened
+bead). One line, anchored at the start of a line in `notes`:
+
+```
+FIX-PR: #<n> | base=<branch> | on-main=<yes|no> | verified=<date>
+FIX-PR: UNDETERMINED | checked=<what was searched> | <why ambiguous>
+```
+
+`UNDETERMINED` resolves straight to `UNKNOWN` with the recorded reason. It
+never falls back to prose scraping — that would silently overturn a
+deliberate judgement that no single PR can be picked.
+
+The `on-main=` field is a claim recorded at `verified=<date>`, not a fact:
+`origin/main` moves after the note is written. The check always re-verifies
+by ancestry and never trusts the field. When the recorded claim and the live
+ancestry check disagree, the check reports both explicitly (for example, the
+note claims `on-main=yes` but ancestry now says no) — a stale claim is worse
+than no claim.
+
+A `#<n>` with no `FIX-PR:` prefix, anywhere else in the line or in prose, is
+not a `FIX-PR:` line and does not match this rule; it falls through to the
+`PR #<n>` prose matching above.
 
 ## Where this runs
 

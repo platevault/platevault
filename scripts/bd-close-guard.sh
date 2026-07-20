@@ -18,8 +18,11 @@
 # the only authoritative test, so that is what this script checks.
 #
 # PR resolution order:
-#   1. `metadata.pr` on the bead (set by `bd update --metadata pr=<n>`).
-#   2. A `PR #<n>` mention (case-insensitive) anywhere in `notes` +
+#   1. A `FIX-PR:` line (start-of-line, see below) in `notes`. If present it
+#      WINS OUTRIGHT — metadata and prose mentions are not consulted at all,
+#      never merged with it.
+#   2. `metadata.pr` on the bead (set by `bd update --metadata pr=<n>`).
+#   3. A `PR #<n>` mention (case-insensitive) anywhere in `notes` +
 #      `description`, but ONLY if exactly one distinct PR number is
 #      mentioned. Bare `#<n>` is never matched: descriptions routinely
 #      cross-reference other issues/PRs by number without those being THIS
@@ -31,6 +34,19 @@
 #      ambiguity is reported as UNKNOWN, never silently resolved.
 # A bead with no resolvable PR is reported UNKNOWN, not skipped — an unjudged
 # bead must never look the same as a passing one.
+#
+# The `FIX-PR:` line is a canonical, human/agent-authored backfill format
+# (see docs/development/bd-close-guard.md) for beads where prose mentions are
+# genuinely ambiguous:
+#   FIX-PR: #<n> | base=<branch> | on-main=<yes|no> | verified=<date>
+#   FIX-PR: UNDETERMINED | checked=<what was searched> | <why ambiguous>
+# `UNDETERMINED` is a deliberate judgement that no single PR can be picked; it
+# resolves to UNKNOWN immediately and never falls through to prose scraping,
+# which would silently overturn that judgement. For a numbered line, the
+# `on-main=` field is a CLAIM recorded at `verified=<date>`, not a fact — main
+# moves after the note is written. This script always re-verifies by ancestry
+# and reports a mismatch (e.g. the note claims `on-main=yes` but ancestry now
+# says no) explicitly: a stale claim is worse than no claim at all.
 #
 # Usage:
 #   scripts/bd-close-guard.sh <bead-id> [<bead-id> ...]
@@ -74,6 +90,57 @@ resolve_pr_number() {
   fi
 }
 
+# Extract the canonical `FIX-PR: ...` line body (everything after the
+# "FIX-PR:" prefix) from arbitrary text. Anchored to start-of-line so prose
+# that happens to mention the literal string "FIX-PR:" mid-sentence is not
+# picked up. `grep` matches `^` per input line regardless of surrounding
+# newlines, so this works whether the line opens, closes, or sits inside the
+# text. Prints nothing if no such line exists.
+extract_fixpr_line() {
+  grep -m1 -E '^FIX-PR:[[:space:]]*' <<<"$1" | sed -E 's/^FIX-PR:[[:space:]]*//'
+}
+
+# Parse a FIX-PR line body into two output lines: the PR number (or the
+# literal `UNDETERMINED`), then either the recorded `on-main=` claim
+# (yes|no|empty) for a numbered line, or the full reason text for an
+# UNDETERMINED line.
+parse_fixpr_line() {
+  local body="$1" first
+  first=$(cut -d'|' -f1 <<<"$body" | xargs)
+  if [ "$first" = "UNDETERMINED" ]; then
+    printf 'UNDETERMINED\n%s\n' "$(cut -d'|' -f2- <<<"$body" | sed -E 's/^[[:space:]]*//')"
+    return
+  fi
+  printf '%s\n%s\n' \
+    "$(grep -oE '[0-9]+' <<<"$first" | head -1)" \
+    "$(grep -oE 'on-main=[a-z]+' <<<"$body" | head -1 | cut -d= -f2)"
+}
+
+# Resolve what PR (if any) governs closing this bead. Prints one line:
+#   NUM:<pr>:<on-main-claim>   from a FIX-PR line (claim may be empty)
+#   NUM:<pr>:                 from metadata.pr / prose fallback (no claim)
+#   UNDETERMINED:<reason>      from a `FIX-PR: UNDETERMINED` line
+#   (nothing)                  unresolvable — caller reports generic UNKNOWN
+resolve_pr_reference() {
+  local bead_json="$1" fixpr_line parsed kind rest pr
+  fixpr_line=$(extract_fixpr_line "$(jq -r '.notes // empty' <<<"$bead_json")")
+  if [ -n "$fixpr_line" ]; then
+    parsed=$(parse_fixpr_line "$fixpr_line")
+    kind=$(head -1 <<<"$parsed")
+    rest=$(tail -n +2 <<<"$parsed")
+    if [ "$kind" = "UNDETERMINED" ]; then
+      printf 'UNDETERMINED:%s\n' "$rest"
+    else
+      printf 'NUM:%s:%s\n' "$kind" "$rest"
+    fi
+    return
+  fi
+  pr=$(resolve_pr_number "$bead_json")
+  if [ -n "$pr" ]; then
+    printf 'NUM:%s:\n' "$pr"
+  fi
+}
+
 # Pure decision table: given a PR's `state`, its merge commit oid (empty if
 # none), and whether that oid is an ancestor of origin/main
 # (yes|no|not-applicable), decide the verdict. Kept side-effect-free so
@@ -105,17 +172,23 @@ classify_pr() {
 }
 
 check_one() {
-  local id="$1" bead_json repo pr pr_json state base merge_oid is_ancestor verdict code detail
+  local id="$1" bead_json ref pr claim repo pr_json state base merge_oid is_ancestor verdict code detail staleness
   if ! bead_json=$(bd show "$id" --json 2>/dev/null | jq -e '.[0]' 2>/dev/null); then
     echo "ERROR    $id   bd show failed (bad id, or bd unavailable)"
     return 1
   fi
 
-  pr=$(resolve_pr_number "$bead_json")
-  if [ -z "$pr" ]; then
-    echo "UNKNOWN  $id   no PR reference in metadata/notes/description — cannot verify, do not close"
+  ref=$(resolve_pr_reference "$bead_json")
+  if [ -z "$ref" ]; then
+    echo "UNKNOWN  $id   no PR reference in FIX-PR line/metadata/notes/description — cannot verify, do not close"
     return 1
   fi
+  if [ "${ref%%:*}" = "UNDETERMINED" ]; then
+    echo "UNKNOWN  $id   FIX-PR: UNDETERMINED — ${ref#UNDETERMINED:}"
+    return 1
+  fi
+  pr=$(cut -d: -f2 <<<"$ref")
+  claim=$(cut -d: -f3- <<<"$ref")
 
   repo=$(jq -r '.metadata.repo // empty' <<<"$bead_json")
   repo="${repo:-$REPO_DEFAULT}"
@@ -137,16 +210,24 @@ check_one() {
     fi
   fi
 
+  # The FIX-PR note's on-main= claim is a snapshot as of its `verified=`
+  # date, not truth — main moves after the note is written. A mismatch is
+  # reported, never silently trusted or silently overridden.
+  staleness=""
+  if [ -n "$claim" ] && [ "$claim" != "$is_ancestor" ]; then
+    staleness=" — FIX-PR note claims on-main=$claim, ancestry now says $is_ancestor (note is stale)"
+  fi
+
   verdict=$(classify_pr "$state" "$merge_oid" "$is_ancestor")
   code="${verdict%%:*}"
   detail="${verdict#*:}"
 
   case "$code" in
     PASS)
-      echo "PASS     $id   PR #$pr merged into main, commit $merge_oid is on origin/main ($repo)"
+      echo "PASS     $id   PR #$pr merged into main, commit $merge_oid is on origin/main ($repo)$staleness"
       ;;
     STACKED)
-      echo "FAIL     $id   PR #$pr merged into $base, not on origin/main — do not close ($repo)"
+      echo "FAIL     $id   PR #$pr merged into $base, not on origin/main — do not close ($repo)$staleness"
       return 1
       ;;
     FAIL)
@@ -224,6 +305,29 @@ self_test() {
   got=$(classify_pr "MERGED" "" "n/a")
   [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_pr returns ERROR rather than silently passing a MERGED PR with no merge commit" \
     || { echo "FAIL: classify_pr got '$got', want ERROR:*"; fail=1; }
+
+  # resolve_pr_reference: a bead whose ONLY reference is a FIX-PR line, with
+  # no prose "PR #<n>" mention anywhere, must still resolve. This is the
+  # exact case that was broken: `PR #<n>` prose-matching does not match
+  # `FIX-PR: #<n>` because of the colon, so before this fix such a bead fell
+  # through resolve_pr_number to UNKNOWN even with a canonical answer present.
+  got=$(resolve_pr_reference '{"metadata":{},"notes":"FIX-PR: #1310 | base=061-selectable-app-language | on-main=no | verified=2026-07-21","description":"No prose PR mention here at all."}')
+  [ "$got" = "NUM:1310:no" ] && echo "ok: resolve_pr_reference resolves a FIX-PR-only bead (no prose mention exists)" \
+    || { echo "FAIL: resolve_pr_reference got '$got', want 'NUM:1310:no'"; fail=1; }
+
+  # resolve_pr_reference: FIX-PR: UNDETERMINED resolves to UNDETERMINED with
+  # its reason, and never falls through to prose scraping even when prose
+  # mentions exist.
+  got=$(resolve_pr_reference '{"metadata":{},"notes":"FIX-PR: UNDETERMINED | checked=notes+search | two stacked PRs cited, neither on main","description":"See PR #1310 and PR #1321."}')
+  [ "$got" = "UNDETERMINED:checked=notes+search | two stacked PRs cited, neither on main" ] \
+    && echo "ok: resolve_pr_reference honours FIX-PR: UNDETERMINED and ignores competing prose" \
+    || { echo "FAIL: resolve_pr_reference got '$got'"; fail=1; }
+
+  # resolve_pr_reference: a FIX-PR line wins outright over a DIFFERENT
+  # metadata.pr / prose mention — it is not merged or reconciled with them.
+  got=$(resolve_pr_reference '{"metadata":{"pr":9999},"notes":"FIX-PR: #1364 | base=main | on-main=yes | verified=2026-07-21 -- see also PR #4242 for context.","description":""}')
+  [ "$got" = "NUM:1364:yes" ] && echo "ok: resolve_pr_reference lets FIX-PR win outright over metadata.pr and other prose numbers" \
+    || { echo "FAIL: resolve_pr_reference got '$got', want 'NUM:1364:yes'"; fail=1; }
 
   if [ "$fail" -eq 0 ]; then
     echo "bd-close-guard self-test: PASS"
