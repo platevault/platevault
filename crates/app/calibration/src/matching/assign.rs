@@ -6,6 +6,7 @@
 
 use audit::bus::EventBus;
 use audit::event_bus::Source;
+use audit::{AuditLogEntry, Outcome, Severity};
 use calibration_core::assign::{dimension_names, evaluate_assign, AssignError};
 use contracts_core::calibration_match::{
     contract_to_kind, kind_to_contract, AssignedDto, CalibrationMatchAssignRequest,
@@ -13,13 +14,50 @@ use contracts_core::calibration_match::{
     CalibrationMatchUnassignResponse, UnassignErrorDto, ASSIGN_CONTRACT_VERSION,
     UNASSIGN_CONTRACT_VERSION,
 };
-use domain_core::ids::Timestamp;
+use domain_core::ids::{EntityId, Timestamp};
+use domain_core::lifecycle::data_asset::EntityType;
 use persistence_db::repositories::calibration_assignment::{self as assign_repo, UpsertParams};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use super::loaders::{load_config, load_master_by_id, load_session};
 use super::responses::error_assign_response;
+use crate::audit_ids::audit_entity_id;
+
+/// Record an assignment mutation in the authoritative audit log, then emit it
+/// on the live bus.
+///
+/// #1120: `assign`/`unassign` previously recorded only a `bus.publish`, whose
+/// `events` row `crates/audit/src/bus.rs` documents as non-authoritative
+/// transient diagnostics — so assignment history was absent from the
+/// FR-131/T121 durable record. `topic` and `payload` stay byte-identical to
+/// that pre-#1120 publish, leaving live subscribers unaffected; `topic`
+/// doubles as the audit `trigger` (the `protection.source.set` precedent).
+///
+/// # Errors
+/// Returns `Err` if the durable `audit_log_entry` insert fails — constitution
+/// §II makes that row load-bearing, so the caller's command must fail with it.
+/// A bus-emit failure is swallowed inside `write_audit`.
+async fn write_assignment_audit(
+    bus: &EventBus,
+    topic: &str,
+    assignment_id: &str,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let entry = AuditLogEntry::new(
+        EntityType::Calibration,
+        audit_entity_id("calibration.assignment", assignment_id),
+        topic,
+        "user",
+        Outcome::Applied,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_payload(payload.clone());
+
+    bus.write_audit(entry, topic, Source::User, payload).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 /// `calibration.match.assign` — persist a calibration master assignment.
 ///
@@ -104,22 +142,22 @@ pub async fn assign(
             .await
             .map_err(|e| e.to_string())?;
 
-            // Emit audit event (T030).
-            let _ = bus
-                .publish(
-                    "calibration.assignment.created",
-                    Source::User,
-                    serde_json::json!({
-                        "assignmentId": assignment_id,
-                        "sessionId": req.session_id,
-                        "masterId": req.master_id,
-                        "calibrationType": master.kind.as_str(),
-                        "confidence": decision.confidence,
-                        "wasOverride": decision.was_override,
-                        "mismatchedDimensions": mismatch_names,
-                    }),
-                )
-                .await;
+            // Durable audit row + live event (T030, #1120).
+            write_assignment_audit(
+                bus,
+                "calibration.assignment.created",
+                &assignment_id,
+                serde_json::json!({
+                    "assignmentId": assignment_id,
+                    "sessionId": req.session_id,
+                    "masterId": req.master_id,
+                    "calibrationType": master.kind.as_str(),
+                    "confidence": decision.confidence,
+                    "wasOverride": decision.was_override,
+                    "mismatchedDimensions": mismatch_names,
+                }),
+            )
+            .await?;
 
             Ok(CalibrationMatchAssignResponse {
                 status: "success".to_owned(),
@@ -174,19 +212,19 @@ pub async fn unassign(
 
     assign_repo::delete(pool, &req.session_id, type_str).await.map_err(|e| e.to_string())?;
 
-    // Audit event mirrors "calibration.assignment.created" (T030).
-    let _ = bus
-        .publish(
-            "calibration.assignment.removed",
-            Source::User,
-            serde_json::json!({
-                "assignmentId": existing.id,
-                "sessionId": req.session_id,
-                "masterId": existing.master_id,
-                "calibrationType": type_str,
-            }),
-        )
-        .await;
+    // Mirrors "calibration.assignment.created" (T030, #1120).
+    write_assignment_audit(
+        bus,
+        "calibration.assignment.removed",
+        &existing.id,
+        serde_json::json!({
+            "assignmentId": existing.id,
+            "sessionId": req.session_id,
+            "masterId": existing.master_id,
+            "calibrationType": type_str,
+        }),
+    )
+    .await?;
 
     Ok(CalibrationMatchUnassignResponse {
         status: "success".to_owned(),

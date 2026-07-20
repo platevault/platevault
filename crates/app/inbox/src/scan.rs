@@ -564,4 +564,57 @@ mod tests {
         let items = scan_root(&scan_root_dir, &options).unwrap();
         assert_eq!(items.len(), 1, "symlinked subdir is traversed when explicitly enabled");
     }
+
+    /// Create a directory junction, the reparse-point kind `is_symlink()` does
+    /// **not** report. Uses the `mklink /J` shell builtin (junctions need no
+    /// admin privilege, unlike symlinks) rather than adding a dependency for
+    /// two tests — the same approach as `fs_pathsafe`'s junction test.
+    #[cfg(windows)]
+    fn make_junction(link: &std::path::Path, target: &std::path::Path) {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J", link.to_str().unwrap(), target.to_str().unwrap()])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+    }
+
+    /// Windows-only counterpart to the two `cfg(unix)` symlink tests above.
+    ///
+    /// The Unix tests give no evidence about Windows: a followed junction can
+    /// walk the scan into a loop or onto an unrelated drive and produce inbox
+    /// items the user never pointed at (constitution product constraints).
+    #[cfg(windows)]
+    #[test]
+    fn junction_subdir_not_traversed_by_default() {
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "hidden.fits", b"hidden");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
+
+        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap();
+        assert!(items.is_empty(), "must not see files behind an un-enabled junction");
+    }
+
+    /// The opt-in direction, mirroring
+    /// `symlinked_subdir_traversed_when_follow_symlinks_enabled`.
+    #[cfg(windows)]
+    #[test]
+    fn junction_subdir_traversed_when_follow_symlinks_enabled() {
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "visible.fits", b"visible");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
+
+        let options = ScanOptions { follow_symlinks: true };
+        let items = scan_root(&scan_root_dir, &options).unwrap();
+        assert_eq!(items.len(), 1, "junction is traversed when explicitly enabled");
+    }
 }

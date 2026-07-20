@@ -156,8 +156,10 @@ prose"):
 - **RESOLVED 2026-07-05: `cleanup_plan_review`'s apply gap.** The blocker was
   a missing channel-free apply command for archive/cleanup plans (unlike
   `inbox.plan.apply` for inbox plans) — `plans.apply_real` takes a
-  `tauri::ipc::Channel` progress argument this WebDriver harness cannot
-  construct. `plans.apply.direct` (a.k.a. `plans_apply_direct`,
+  `tauri::ipc::Channel` progress argument this WebDriver harness declines to
+  construct (buildable from a test script, but only by reaching into
+  Tauri internals — see #1234).
+  `plans.apply.direct` (a.k.a. `plans_apply_direct`,
   `app_core::plan_apply::apply_plan_channel_free`) now exists: same executor
   (`apply_plan`) and durable audit trail as `plans.apply_real`, no `Channel`
   required. `cleanup_plan_review` now drives a real apply past `plans.approve`
@@ -242,7 +244,7 @@ everything neither automated layer reaches.
 
 | Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
 |---|:--:|:--:|:--:|---|
-| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Full 6-step happy path and Data-Sources management (rescan/remap/disable/delete/reveal) still uncovered | `windows-journeys/journey-01-first-run-setup.md` |
+| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Data Sources Rescan/Disable/Enable/Delete have vitest coverage (`DataSources.rescan.test.tsx`, `DataSources.disable-delete.test.tsx` — see correction below); full 6-step happy path and Remap/Reveal remain uncovered at every layer | `windows-journeys/journey-01-first-run-setup.md` |
 | 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path, unsplit-folder Type-badge reads "unclassified" not "classified" (`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`, #711 Instance A, NEW 2026-07-19 — **written, not yet executed**). Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448, 2026-07-05): mixed-folder split, needs-review gate + bulk reclassify, single-type confirm→plan toast, plan-approval overlay review→apply/cancel | `windows-journeys/journey-02-inbox-ingest-move.md` |
 | 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448): catalogue-in-place plan distinguishable from a move plan in the review overlay | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 real-UI (`sessions_journeys.rs`): nothing before apply, real session row appears automatically, no review-lifecycle controls anywhere, no-op rescan never duplicates. Notes-edit invariant (Test 4) found untestable — see finding below | 🟡 rows/detail render only (`lifecycle_detail.spec.ts`, pre-existing) | `windows-journeys/journey-04-sessions-review.md` |
@@ -506,11 +508,64 @@ the existing batch work, not newly gapped: 046 i18n cross-cutting
 disclosure are both exercised by `settings_appearance_i18n.spec.ts` and
 `targets_planner.spec.ts` respectively (see the per-journey table).
 
-**Still open (not closed this pass, out of this task's named scope)**: the
-full 6-step wizard happy path (Sources→Tools→Config→Site→Confirm→Scan) end
-to end, and Data Sources management (rescan/remap/disable/delete/reveal) —
-both remain "UNCOVERED" per the original audit and are follow-up candidates,
-not regressions.
+**Correction (2026-07-20, issue #1235): the Data Sources line above was
+stale.** Rescan and Disable/Enable/Delete already had vitest component
+coverage *before* this note was originally written:
+`apps/desktop/src/features/settings/DataSources.rescan.test.tsx` (rescan,
+`7e19d7bb`, 2026-07-04) and `DataSources.disable-delete.test.tsx`
+(disable/enable/delete, `7219fb57`, 2026-07-04) — both predate this section's
+2026-07-09 date. Per this file's own convention (the `ObservingSites.test.tsx`
+precedent a few lines above), a vitest `.test.tsx` counts as real coverage,
+so "UNCOVERED" was never accurate for those two actions. **Remap and Reveal
+remain genuinely uncovered at every layer** — no test references `remap` or
+`reveal`/`RemapRootDialog`/`handleReveal` in any of the three DataSources
+`.test.tsx` files, and no Mock-Playwright spec exists for Data Sources at all
+(only `setup_wizard_site_step.spec.ts`, `settings_framing.spec.ts`,
+`settings_appearance_i18n.spec.ts`, and `source_view_*.spec.ts` exist under
+`tests/e2e/`). **Still open (not closed this pass, out of this task's named
+scope)**: the full 6-step wizard happy path (Sources→Tools→Config→Site→
+Confirm→Scan) end to end, and any Mock-Playwright or Layer-2 real-UI coverage
+of Data Sources management (rescan/remap/disable/delete/reveal) — these
+remain follow-up candidates, not regressions.
+
+## Spec 051 (tauri-shell-integration) — shipped-and-untested surface — 2026-07-20
+
+Per `specs/SPEC_STATUS.md:92` (🟡 Partial, 34/64 tasks ticked — undercounts,
+several merged tasks aren't checked off), US1/US2/US3/US4/US5/US6/US7/US10 are
+merged to `main` and this matrix has **zero reference to any of them** at any
+layer:
+
+- US1 single-instance guard (`64a94881`/#471)
+- US2 favourites-in-DB (`54378086`/#472)
+- US3 cleanup-overrides-in-DB (`c990f967`/#474)
+- US4 window-state persistence (`e9b1622b`/#476)
+- US5 native menu bar (`e9b1622b`/#476)
+- US6 native theme sync (`29617775`/#475)
+- US7 diagnostics log file (`e9b1622b`/#476)
+- US10 signed-update groundwork (`c1f3ede9`/#473, `a33dc427`, `60732f2f`/#469)
+
+None of these have a Layer-1 integration test, a Layer-2 real-UI journey, or a
+Mock-Playwright spec in this repo as of this writing — they are desktop-shell
+integrations (native OS behavior, window chrome, update signing) that are
+plausibly hard to assert in the existing harnesses, but that has not been
+verified either way; this row exists so the gap is tracked rather than
+silently absent. US8 (OS notifications) and US9 (release-build native
+behavior/reload-guard) are real open *product* scope per `SPEC_STATUS.md`, not
+a testing gap, and are excluded from this row.
+
+## Specs not yet implemented — no coverage expected — 2026-07-20
+
+Per `specs/SPEC_STATUS.md:92-95`, these specs in the 050-058 range have no
+shipped product code, so their absence from this matrix is not a test gap:
+
+- **050** publishable-crate-extractions — docs-only plan-of-record (#429)
+- **056** onboarding-redesign — 📄 Specified (2026-07-18), no implementation
+- **058** inbox-drop-parent-items — 📄 Specified (2026-07-19), no implementation
+
+Check `specs/SPEC_STATUS.md` before re-deriving shipped-vs-specified for any
+spec above 049; specs 052-055/057 (including 053, which has a `specs/`
+directory but no row in `SPEC_STATUS.md`'s table) aren't tracked there and
+are out of scope here too.
 
 ## Spec 008 Q27 iteration — framing clustering + Inbox-confirm attribution (F-Framing-8/9/11) — 2026-07-17
 
@@ -568,10 +623,13 @@ even earlier: no consuming component exists at all yet.
 ## Spec 058 — Inbox drops the parent item — 2026-07-20
 
 Re-shapes area #3 (and every Layer-2 journey that touches the Inbox queue).
-**Status at the time of writing: SPECIFIED, phases 2–4 in flight** — verified
-against real code at `38227ca3`, not against spec prose. The rows below say
-what the coverage must become; the "State at `38227ca3`" column says what is
-actually true today, so a later reader can tell a plan from a fact.
+**Status refreshed 2026-07-20 at `94db2e7a`** — verified against real code,
+not against spec prose. The rows below say what the coverage must become; the
+State column says what is actually true, so a later reader can tell a plan
+from a fact. The L2 rows are marked ⚠️ rather than ✅ deliberately: the
+journeys were rewritten for the new row shape and every referenced testid was
+checked against real app source, but **the SC-005 journeys have never been
+run** (T030), so nothing here is evidence they pass.
 
 The behaviour change: a scanned folder no longer produces a placeholder inbox
 row. Before classification a folder appears as a **source-group row** that is
@@ -581,15 +639,15 @@ row states only facts about its own files. This deletes the read-side
 suppression predicate that has been hiding the placeholder (SC-007) rather
 than adding a new one.
 
-| Coverage obligation | Layer | Target test | State at `38227ca3` |
+| Coverage obligation | Layer | Target test | State at `94db2e7a` |
 |---|---|---|---|
-| A scanned-but-unclassified folder is visible as exactly one row, and that row is NOT an inbox item (SC-002b) | L2 | `crates/e2e-tests/tests/inbox_ui_journeys.rs`, source-group-row variant of `rescan_and_wait_for_item` (T014) | ❌ helper waits for an item row; no source-group row type exists in `InboxPage.tsx` |
-| Selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present | L2 | split of `select_only_item` (T015) | ❌ the single current helper waits for `inbox-confirm-btn` to mount — exactly what a source-group row must never provide |
-| Classification replaces the source-group row with N item rows without dropping the user's selection (FR-017/FR-023, CHK011 rule: N=1 → select that item; N>1 → select the folder group header, never a sibling; N=0 → the source-group row stays selected, [#1178](https://github.com/platevault/platevault/issues/1178)) | L2 | T016/T017 update to the five journeys in `inbox_ui_journeys.rs` | ❌ not written |
-| 1 row for a uniform folder, N rows for N frame-type groups, zero aggregate rows (SC-002) | L1 + L2 | `crates/app/inbox` classify tests; `inbox_ui_journeys.rs::inbox_ui_mixed_folder_splits_into_single_type_items` | 🟡 split ships, but the placeholder still exists and is hidden by `exclude_split_placeholder!` (`crates/persistence/db/src/repositories/inbox.rs:1503`) |
-| List badge, detail badge and the item's own classification agree — the #711 exit condition (SC-001) | L1 + L2 | as above | 🟡 achieved today via suppression, which SC-007 removes |
-| Confirming one sibling leaves the other N−1 unchanged in state, classification and plan binding (SC-006) | L2 | `inbox_ui_journeys.rs` | ❌ not asserted |
-| Group the Inbox by folder and see one folder's siblings under one header (SC-010, D-007) | L2 | `inbox_ui_journeys.rs` | ❌ not asserted |
+| A scanned-but-unclassified folder is visible as exactly one row, and that row is NOT an inbox item (SC-002b) | L2 | `crates/e2e-tests/tests/inbox_ui_journeys.rs`, source-group-row variant of `rescan_and_wait_for_item` (T014) | ⚠️ helper split done (T014) — `rescan_and_wait_for_source_group`; source-group rows render. Not yet run. |
+| Selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present | L2 | split of `select_only_item` (T015) | ⚠️ `assert_source_group_not_confirmable` (T015) asserts Confirm is ABSENT; `select_only_item` still asserts it present. Not yet run. |
+| Classification replaces the source-group row with N item rows without dropping the user's selection (FR-017/FR-023, CHK011 rule: N=1 → select that item; N>1 → select the folder group header, never a sibling; N=0 → the source-group row stays selected, [#1178](https://github.com/platevault/platevault/issues/1178)) | L2 | T016/T017 update to the five journeys in `inbox_ui_journeys.rs` | ⚠️ written (T016/T017). CHK011 N>1 selects NOTHING — the folder group header now exists (T034) but header selection is a follow-up; selecting a sibling would designate a primary (D-002). |
+| 1 row for a uniform folder, N rows for N frame-type groups, zero aggregate rows (SC-002) | L1 + L2 | `crates/app/inbox` classify tests; `inbox_ui_journeys.rs::inbox_ui_mixed_folder_splits_into_single_type_items` | ✅ L1: placeholder deleted at source (T012) and the suppression removed (T024); `t031_two_frame_types_yield_two_items_and_no_aggregate` pins N items + zero aggregate. ⚠️ L2 not run. |
+| List badge, detail badge and the item's own classification agree — the #711 exit condition (SC-001) | L1 + L2 | as above | ✅ achieved by construction — there is no longer a row that can disagree, rather than one hidden at read time. |
+| Confirming one sibling leaves the other N−1 unchanged in state, classification and plan binding (SC-006) | L1 + L2 | `confirm.rs::confirm_alters_exactly_one_item_and_leaves_its_sibling_untouched_sc006`; `inbox_ui_journeys.rs` | ✅ L1 asserted in both directions (T037). ⚠️ L2 not run. |
+| Group the Inbox by folder and see one folder's siblings under one header (SC-010, D-007) | L1 + L2 | `InboxList.folderGrouping.test.tsx`; `inbox_ui_journeys.rs` | ✅ L1 (T034 folder dimension). ⚠️ L2 not asserted. |
 | Reclassify does not report `classified` while mandatory attributes are missing — #711 Instance B stays fixed (SC-011) | L1 | the `22f94a9e` regression test (PR #1086) | ✅ merged, must be preserved |
 
 ### The three SC-005 journeys are the gate
@@ -638,3 +696,28 @@ the not-yet-implemented boundary and the SC-009 exclusion. J03
 row-shape change; it has not been re-versioned in this pass because its steps
 describe confirm-and-catalogue rather than the scan/classify row shape — worth
 a re-read once phases 2–4 land, not a silent assumption that it is unaffected.
+
+## Recorded for whoever sequences the next journey-suite batch — 2026-07-20
+
+Net wall-clock impact of the proposed next batch of real-UI journey work, so
+sequencing doesn't have to re-derive it (issue #1228):
+
+- Four new real-UI journeys: cleanup/apply (~45s), archive/trash (~50s), root
+  remap (~35s), first-run wizard (~40s) — **+170s**.
+- Delete `plan_review_apply_with_audit`
+  (`crates/e2e-tests/tests/journeys.rs:155`, confirmed still present as of
+  this writing) as subsumed by the new cleanup/apply journey — **−30s**.
+- Move six IPC-only tests to `apps/desktop/src-tauri/tests/` — **−180s**.
+- **Net: ≈ −40s.**
+
+Caveats: `.config/nextest.toml`'s `e2e` profile runs with `test-threads > 1`,
+so real wall-clock is better than this raw sum suggests. The actual
+constraint is per-boot memory on a 4-vCPU CI runner, not seconds — sequence
+this batch to bound concurrent app boots, not to shave time. **This estimate
+assumes the Real-UI E2E suite actually runs to completion on `main`, which is
+not true today**: `main`'s `e2e.yml` concurrency group cancels in-flight runs
+on every subsequent merge, so the suite has been silently non-reporting
+(#1202, #1208; fix in #1268). Re-baseline these numbers once #1268 lands and
+a full run is observed to finish.
+
+Documentation only; no code change follows from this note in this task.
