@@ -53,19 +53,22 @@ real OS-level condition (device unavailable / disk full) that isn't producible
 in an in-memory/tempdir harness, so they remain exercised only at the
 executor's classifier-unit-test layer (`crates/fs/executor/src/failure.rs`).
 
-## 4. `plan.resume` — re-validate and continue (KNOWN GAP)
+## 4. `plan.resume` — re-validate and continue
 
-Per `contracts/plan.resume.json`, resuming a paused run should re-validate
-the pause condition and, on success, continue applying the plan's remaining
-`pending` items. As of this writing `resume_plan`
-(`crates/app/core/src/plan_apply.rs`) only flips the plan's DB state
-`paused -> applying` and emits the audit/event pair — it does **not**
-re-validate the condition, and it does **not** re-spawn the executor to
-process remaining items. See
-[issue #575](https://github.com/nightwatch-astro/alm/issues/575) for the full
-writeup and a suggested fix (extract the `tokio::spawn` executor block from
-`apply_plan` into a shared helper callable from both `apply_plan` and
-`resume_plan`).
+> **Reconciliation note (2026-07-19, issue #764)**: this section previously
+> read "KNOWN GAP" — stale. Issue #575 is fixed: `resume_plan`
+> (`crates/app/core/src/plan_apply.rs`) re-validates the pause condition via
+> `revalidate_pause_condition` and, on success, re-spawns the executor
+> (`spawn_executor_run`, shared with `apply_plan`) over the plan's remaining
+> `pending` items — backed by real-backend integration coverage in
+> `crates/app/core/tests/plan_resume_integration.rs`. `tasks.md` T012 still
+> cites #575 as an open blocker for its integration test; that citation is
+> also stale (see T048–T052 in the same file, which document the fix) and
+> should be re-scoped rather than trusted as a current blocker.
+
+Per `contracts/plan.resume.json`, resuming a paused run re-validates the
+pause condition and, on success, continues applying the plan's remaining
+`pending` items.
 
 The contract's success/`run.not_paused` response shapes are validated at the
 schema level:

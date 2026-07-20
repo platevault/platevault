@@ -177,11 +177,18 @@ launch profile defined in `crates/workflow/profiles/`.
 - **FR-002**: Project actions (row overflow, footer, detail header) MUST
   include `Open in {tool}` whenever the project's workflow profile resolves
   to a configured tool, and MUST be disabled with a clear reason otherwise.
+  *(Reconciliation note, 2026-07-19, issue #764: only the detail-pane action
+  bar carries this CTA — `ProjectsPage.tsx`'s own doc comment confirms
+  per-project actions live solely in the detail pane, which mounts on
+  selection; no row-overflow or footer surface exists.)*
 - **FR-003**: Tool launch MUST be unavailable or clearly blocked when no
   valid executable path is configured for the project's workflow.
 - **FR-004**: Every launch attempt (success or failure) MUST be recorded via
   the audit envelope with project id, tool id, executable path hash, and
-  resolved argument vector hash.
+  resolved argument vector hash. *(Reconciliation note, 2026-07-19, issue
+  #764: `tool_launch.rs::compute_args_hash` produces a single SHA-256 hash
+  over the executable path + argv together (`args_hash`), not two separate
+  hashes.)*
 - **FR-005**: Tool launch MUST NOT mutate project lifecycle state. The
   `ready → processing` transition remains a separate, explicit user action.
 - **FR-006**: Workflow profiles MUST remain tool-agnostic and extensible

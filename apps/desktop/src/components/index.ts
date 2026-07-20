@@ -52,8 +52,6 @@ export type {
 // (primary column + unified rail panel), plus the centralized lifecycle.
 export { MetricLine } from './MetricLine';
 export type { Metric, MetricLineProps } from './MetricLine';
-export { DetailGrid, Rail, RailCard } from './DetailGrid';
-export type { DetailGridProps, RailProps, RailCardProps } from './DetailGrid';
 
 // #813: the shared two-col-properties + linked-entity detail recipe
 // (`.pv-session-detail2`), wrapped once instead of hand-copied per feature.
