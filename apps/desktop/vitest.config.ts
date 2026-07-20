@@ -23,6 +23,13 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    // Compiles the generated Paraglide catalogue before any suite loads.
+    // package.json's `pretest` hook only runs for `pnpm test`; invoking
+    // vitest directly (single file, watch mode, IDE runner) skipped it, and
+    // every suite then failed at import on `@/paraglide/messages`. A
+    // globalSetup runs once per vitest process whatever the entrypoint.
+    // See vitest.globalSetup.ts.
+    globalSetup: ["./vitest.globalSetup.ts"],
     css: false,
     // Vitest's 5s default is too tight for jsdom + React render + waitFor
     // chains once the runner is CPU-contended — and CI runners are contended
