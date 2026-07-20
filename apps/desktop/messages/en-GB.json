@@ -825,6 +825,8 @@
   "settings_ingestion_hashing_title": "File hashing",
   "settings_ingestion_scan_startup": "Scan on startup",
   "settings_ingestion_scan_title": "Scan defaults",
+  "settings_language_label": "Language",
+  "settings_language_title": "Language",
   "settings_naming_add_literal": "+ Literal",
   "settings_naming_add_path_sep": "+ /",
   "settings_naming_add_sep": "+ Sep",
