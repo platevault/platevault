@@ -65,6 +65,7 @@ import {
   formatGain,
   formatBinning,
 } from '@/lib/format';
+import { errMessage } from '@/lib/errors';
 import { addToast } from '@/shared/toast';
 import { useInventorySources } from '@/features/sessions/store';
 import { isSourceActionable } from '@/features/sessions/connectivity';
@@ -315,7 +316,7 @@ export function MasterDetail({
             return;
           }
           addToast({
-            message: err.message || m.archive_generate_failed(),
+            message: errMessage(err),
             variant: 'error',
           });
         },
@@ -330,7 +331,7 @@ export function MasterDetail({
         onSuccess: handleArchiveSuccess,
         onError: (err) => {
           addToast({
-            message: err.message || m.archive_generate_failed(),
+            message: errMessage(err),
             variant: 'error',
           });
         },
