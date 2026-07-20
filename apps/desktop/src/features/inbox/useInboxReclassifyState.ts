@@ -270,3 +270,7 @@ export function useInboxReclassifyState({
     handleUndoBulkFrameType,
   };
 }
+
+export type UseInboxReclassifyState = ReturnType<
+  typeof useInboxReclassifyState
+>;
