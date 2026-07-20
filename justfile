@@ -10,9 +10,11 @@ test:
     pnpm -r --if-present test
     node scripts/check-eslint-baseline.test.mjs
 
-# Lint and format
+# Lint and format. The extra `rustfmt` call covers bootstrap/specta.rs, which
+# `cargo fmt` cannot reach because it is `include!`d, not `mod`-declared.
 lint:
     cargo fmt --all --check
+    rustfmt --edition 2021 --check apps/desktop/src-tauri/src/bootstrap/specta.rs
     cargo clippy --workspace --all-targets -- -D warnings
     pnpm -r --if-present lint
     pre-commit run --all-files
