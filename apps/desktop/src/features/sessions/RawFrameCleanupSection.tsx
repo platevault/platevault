@@ -27,6 +27,7 @@ import {
 import type { TableColumn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { formatBytes } from '@/lib/format';
+import { isProtectedLevel, protectionLabel } from '@/lib/protection-label';
 import { errMessage } from '@/lib/errors';
 import { addToast } from '@/shared/toast';
 import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
@@ -118,7 +119,7 @@ export function RawFrameCleanupSection({
   };
 
   const rows = candidates.map((c: RawFrameCleanupCandidate) => {
-    const isProtected = c.protection === 'protected';
+    const isProtected = isProtectedLevel(c.protection);
     return {
       _testid: `raw-cleanup-candidate-${c.frameId}`,
       select: isProtected ? null : (
@@ -139,10 +140,10 @@ export function RawFrameCleanupSection({
       ),
       type: c.frameType,
       size: formatBytes(c.sizeBytes),
-      protection: isProtected ? (
-        <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
-      ) : (
-        <Pill variant="ghost">{c.protection}</Pill>
+      protection: (
+        <Pill variant={isProtected ? 'warn' : 'ghost'}>
+          {protectionLabel(c.protection)}
+        </Pill>
       ),
     };
   });

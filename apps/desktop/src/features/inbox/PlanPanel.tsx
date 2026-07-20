@@ -1047,7 +1047,22 @@ export function PlanPanel({
                             </span>
                           )}
                         </span>
+                        {/* #606 (Constitution II — a filesystem mutation must be
+                            reviewable): show BOTH sides of the move, not just the
+                            destination. The source was previously only reachable by
+                            hovering the file-name cell's tooltip, so a reviewer could
+                            not see what a move was actually moving. Mirrors
+                            PlanReviewOverlay's From/To columns. In-place catalogue
+                            actions have no second side — the single path is the
+                            item's current (and final) location. */}
                         <span className="pv-plan-panel__file-dest">
+                          <code
+                            className="pv-plan-panel__path"
+                            data-testid={`inbox-source-absolute-${rowIdx}`}
+                            title={`${m.plans_review_col_from()}: ${a.fromPath}`}
+                          >
+                            {a.fromPath}
+                          </code>
                           {inPlace ? (
                             <span className="pv-plan-panel__inplace">
                               {m.inbox_inplace_label()}
@@ -1058,20 +1073,19 @@ export function PlanPanel({
                                 className="pv-plan-panel__summary-arrow"
                                 aria-hidden="true"
                               >
+                                {' '}
                                 →{' '}
                               </span>
                               <code
-                                className="pv-plan-panel__dest"
+                                className="pv-plan-panel__path"
                                 data-testid={`inbox-dest-absolute-${rowIdx}`}
-                                title={destText}
+                                title={`${m.plans_review_col_to()}: ${destText}`}
                               >
                                 {destText}
                               </code>
                             </>
                           )}
                         </span>
-                        <span />
-                        <span />
                       </div>
                     );
                   })}

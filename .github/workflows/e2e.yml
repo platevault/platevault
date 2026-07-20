@@ -732,12 +732,21 @@ jobs:
       # its default DMA-BUF/compositing render paths were suspected of adding
       # ~25-30s of per-test overhead vs Windows. Linux-only; harmless no-op if
       # the hypothesis is wrong.
+      #
+      # `-s "-screen 0 1600x1200x24"` overrides xvfb-run's built-in default of
+      # 1280x1024x24 (`XVFBARGS` in /usr/bin/xvfb-run). 1280 is NARROWER than
+      # the 1400px viewport the docked-layout journeys request via
+      # `E2eApp::set_viewport`, and a resize past the screen edge is clamped —
+      # which would silently yield a too-small viewport and a journey that
+      # passes while asserting nothing. The larger framebuffer is plain memory
+      # (1600*1200*4 = ~7.7MB), not GPU, so it costs nothing on a runner that
+      # already has none.
       - name: Run E2E (xvfb)
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
           ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: xvfb-run -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/4
+        run: xvfb-run -s "-screen 0 1600x1200x24" -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/4
 
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
   real-ui-e2e-windows:
