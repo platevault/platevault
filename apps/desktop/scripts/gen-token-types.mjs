@@ -1,4 +1,12 @@
-#!/usr/bin/env node
+// NO SHEBANG — deliberately, unlike the sibling scripts in this folder.
+// This is the only script here that is also IMPORTED as a module (by
+// src/styles/tokens.types-drift.test.ts). Under vitest on Windows a leading
+// `#!` reaches the transform unstripped and the suite dies with
+// `SyntaxError: Invalid or unexpected token` before a single test runs; the
+// same import is fine on Linux and macOS, so CI only reddens on one platform.
+// Nothing needs the shebang: the file is mode 644 and is invoked as
+// `node scripts/gen-token-types.mjs` via the `tokens:types` package script.
+//
 // Parses src/styles/tokens.css and packages/tokens/foundation.css (handoff
 // 04 — shared spacing/type-scale/radius/motion/font tokens) for `--pv-*`
 // custom-property declarations and emits src/styles/tokens.d.ts exporting a
@@ -17,7 +25,7 @@
 // without duplicating the parsing rules as a second source of truth.
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +84,12 @@ function main() {
 
 // Only run generation when executed directly (`node scripts/gen-token-types.mjs`
 // or `pnpm tokens:types`) — not when imported by the drift-guard test.
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// Compared via pathToFileURL rather than a `file://` template: on Windows
+// process.argv[1] is a backslashed drive path (`C:\...\gen-token-types.mjs`),
+// so interpolating it yields `file://C:\...` which never equals import.meta.url
+// (`file:///C:/.../gen-token-types.mjs`) — `pnpm tokens:types` would silently
+// generate nothing there.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
