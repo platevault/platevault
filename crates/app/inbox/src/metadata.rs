@@ -158,7 +158,13 @@ pub async fn get_inbox_item_metadata(
         // T070 / FR-047: surface the mandatory-attribute gate per file so the UI
         // can prompt the user before the needs-review bucket blocks confirm.
         // Uses the same DTO values (override-applied) as missing_path_attributes.
-        entry.missing_mandatory = compute_missing_mandatory(&entry);
+        //
+        // `target_resolved` is pinned to `false` for the same reason as
+        // `classify::missing_mandatory_for_file`: nothing threads a resolved-target
+        // signal into this read path yet (#1132) — the parameter exists so the
+        // formula agrees with `check_mandatory_missing` by construction, not so a
+        // real value flows in today.
+        entry.missing_mandatory = compute_missing_mandatory(&entry, false);
 
         files.push(entry);
     }
@@ -176,7 +182,11 @@ pub async fn get_inbox_item_metadata(
 /// The mandatory set itself comes from [`crate::classify::mandatory_set_for`]
 /// (R-14) — the single definition this and the classify-time gate both read, so
 /// the list shown to the user cannot drift from the list promotion is gated on.
-fn compute_missing_mandatory(m: &InboxFileMetadata) -> Vec<String> {
+/// Likewise the `target` key's absence formula comes from
+/// [`crate::classify::target_missing`] (#1132) rather than a hand-copied
+/// duplicate, so this gate and [`crate::classify::check_mandatory_missing`]
+/// cannot silently diverge on what "target missing" means.
+fn compute_missing_mandatory(m: &InboxFileMetadata, target_resolved: bool) -> Vec<String> {
     let Some(ft_str) = m.frame_type_effective.as_deref() else {
         // Unclassified files are implicitly needs-review; frameType is the gate.
         return vec!["frameType".to_owned()];
@@ -188,10 +198,7 @@ fn compute_missing_mandatory(m: &InboxFileMetadata) -> Vec<String> {
     let mut missing = Vec::new();
     for key in crate::classify::mandatory_set_for(ft) {
         let absent = match key {
-            "target" => {
-                // light: satisfied by OBJECT header (proxy for coord resolution).
-                m.object.as_deref().map_or("", str::trim).is_empty()
-            }
+            "target" => crate::classify::target_missing(m.object.as_deref(), target_resolved),
             "filter" => m.filter.as_deref().map_or("", str::trim).is_empty(),
             "exposureS" => !m.exposure_s.is_some_and(|v| v > 0.0),
             "gain" => m.gain.as_deref().map_or("", str::trim).is_empty(),
@@ -315,15 +322,61 @@ mod tests {
             let gate = crate::classify::check_mandatory_missing(ft, None, false);
             assert_eq!(gate, expected, "classify gate for {ft} diverged from mandatory_set_for");
 
-            let shown = compute_missing_mandatory(&InboxFileMetadata {
-                frame_type_effective: Some(ft.as_str().to_owned()),
-                ..Default::default()
-            });
+            let shown = compute_missing_mandatory(
+                &InboxFileMetadata {
+                    frame_type_effective: Some(ft.as_str().to_owned()),
+                    ..Default::default()
+                },
+                false,
+            );
             assert_eq!(
                 shown, expected,
                 "metadata missing_mandatory for {ft} diverged from mandatory_set_for"
             );
         }
+    }
+
+    /// Issue #1132: the `target` arm specifically must agree between the two
+    /// gates for the coordinate-resolved-but-no-`OBJECT` case, not just the
+    /// all-attributes-absent case above (which both branches satisfy trivially
+    /// since `target_resolved` is fixed at `false` on both sides). This is
+    /// constructible today only because both gates now delegate to the shared
+    /// [`crate::classify::target_missing`] predicate and expose the same
+    /// `target_resolved` knob — no production caller supplies `true` yet
+    /// (that wiring is the open R-17 product decision), but the formula
+    /// itself is proven identical.
+    #[test]
+    fn target_missing_agrees_between_classify_and_metadata_for_resolved_no_object() {
+        use metadata_core::{FrameType, RawFileMetadata};
+
+        // Coordinate-resolved (or user-picked), but no OBJECT header at all.
+        let raw = RawFileMetadata { object: None, ..Default::default() };
+        let gate = crate::classify::check_mandatory_missing(FrameType::Light, Some(&raw), true);
+        assert!(!gate.contains(&"target".to_owned()), "classify gate: {gate:?}");
+
+        let shown = compute_missing_mandatory(
+            &InboxFileMetadata {
+                frame_type_effective: Some(FrameType::Light.as_str().to_owned()),
+                object: None,
+                ..Default::default()
+            },
+            true,
+        );
+        assert!(!shown.contains(&"target".to_owned()), "metadata gate: {shown:?}");
+
+        // Unresolved + no OBJECT: both still flag target missing.
+        let gate_unresolved =
+            crate::classify::check_mandatory_missing(FrameType::Light, Some(&raw), false);
+        assert!(gate_unresolved.contains(&"target".to_owned()));
+        let shown_unresolved = compute_missing_mandatory(
+            &InboxFileMetadata {
+                frame_type_effective: Some(FrameType::Light.as_str().to_owned()),
+                object: None,
+                ..Default::default()
+            },
+            false,
+        );
+        assert!(shown_unresolved.contains(&"target".to_owned()));
     }
 
     #[tokio::test]

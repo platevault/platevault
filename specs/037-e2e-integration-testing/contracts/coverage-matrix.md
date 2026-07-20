@@ -156,8 +156,10 @@ prose"):
 - **RESOLVED 2026-07-05: `cleanup_plan_review`'s apply gap.** The blocker was
   a missing channel-free apply command for archive/cleanup plans (unlike
   `inbox.plan.apply` for inbox plans) — `plans.apply_real` takes a
-  `tauri::ipc::Channel` progress argument this WebDriver harness cannot
-  construct. `plans.apply.direct` (a.k.a. `plans_apply_direct`,
+  `tauri::ipc::Channel` progress argument this WebDriver harness declines to
+  construct (buildable from a test script, but only by reaching into
+  Tauri internals — see #1234).
+  `plans.apply.direct` (a.k.a. `plans_apply_direct`,
   `app_core::plan_apply::apply_plan_channel_free`) now exists: same executor
   (`apply_plan`) and durable audit trail as `plans.apply_real`, no `Channel`
   required. `cleanup_plan_review` now drives a real apply past `plans.approve`
@@ -242,7 +244,7 @@ everything neither automated layer reaches.
 
 | Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
 |---|:--:|:--:|:--:|---|
-| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Full 6-step happy path and Data-Sources management (rescan/remap/disable/delete/reveal) still uncovered | `windows-journeys/journey-01-first-run-setup.md` |
+| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Data Sources Rescan/Disable/Enable/Delete have vitest coverage (`DataSources.rescan.test.tsx`, `DataSources.disable-delete.test.tsx` — see correction below); full 6-step happy path and Remap/Reveal remain uncovered at every layer | `windows-journeys/journey-01-first-run-setup.md` |
 | 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path, unsplit-folder Type-badge reads "unclassified" not "classified" (`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`, #711 Instance A, NEW 2026-07-19 — **written, not yet executed**). Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448, 2026-07-05): mixed-folder split, needs-review gate + bulk reclassify, single-type confirm→plan toast, plan-approval overlay review→apply/cancel | `windows-journeys/journey-02-inbox-ingest-move.md` |
 | 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448): catalogue-in-place plan distinguishable from a move plan in the review overlay | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 real-UI (`sessions_journeys.rs`): nothing before apply, real session row appears automatically, no review-lifecycle controls anywhere, no-op rescan never duplicates. Notes-edit invariant (Test 4) found untestable — see finding below | 🟡 rows/detail render only (`lifecycle_detail.spec.ts`, pre-existing) | `windows-journeys/journey-04-sessions-review.md` |
@@ -506,11 +508,64 @@ the existing batch work, not newly gapped: 046 i18n cross-cutting
 disclosure are both exercised by `settings_appearance_i18n.spec.ts` and
 `targets_planner.spec.ts` respectively (see the per-journey table).
 
-**Still open (not closed this pass, out of this task's named scope)**: the
-full 6-step wizard happy path (Sources→Tools→Config→Site→Confirm→Scan) end
-to end, and Data Sources management (rescan/remap/disable/delete/reveal) —
-both remain "UNCOVERED" per the original audit and are follow-up candidates,
-not regressions.
+**Correction (2026-07-20, issue #1235): the Data Sources line above was
+stale.** Rescan and Disable/Enable/Delete already had vitest component
+coverage *before* this note was originally written:
+`apps/desktop/src/features/settings/DataSources.rescan.test.tsx` (rescan,
+`7e19d7bb`, 2026-07-04) and `DataSources.disable-delete.test.tsx`
+(disable/enable/delete, `7219fb57`, 2026-07-04) — both predate this section's
+2026-07-09 date. Per this file's own convention (the `ObservingSites.test.tsx`
+precedent a few lines above), a vitest `.test.tsx` counts as real coverage,
+so "UNCOVERED" was never accurate for those two actions. **Remap and Reveal
+remain genuinely uncovered at every layer** — no test references `remap` or
+`reveal`/`RemapRootDialog`/`handleReveal` in any of the three DataSources
+`.test.tsx` files, and no Mock-Playwright spec exists for Data Sources at all
+(only `setup_wizard_site_step.spec.ts`, `settings_framing.spec.ts`,
+`settings_appearance_i18n.spec.ts`, and `source_view_*.spec.ts` exist under
+`tests/e2e/`). **Still open (not closed this pass, out of this task's named
+scope)**: the full 6-step wizard happy path (Sources→Tools→Config→Site→
+Confirm→Scan) end to end, and any Mock-Playwright or Layer-2 real-UI coverage
+of Data Sources management (rescan/remap/disable/delete/reveal) — these
+remain follow-up candidates, not regressions.
+
+## Spec 051 (tauri-shell-integration) — shipped-and-untested surface — 2026-07-20
+
+Per `specs/SPEC_STATUS.md:92` (🟡 Partial, 34/64 tasks ticked — undercounts,
+several merged tasks aren't checked off), US1/US2/US3/US4/US5/US6/US7/US10 are
+merged to `main` and this matrix has **zero reference to any of them** at any
+layer:
+
+- US1 single-instance guard (`64a94881`/#471)
+- US2 favourites-in-DB (`54378086`/#472)
+- US3 cleanup-overrides-in-DB (`c990f967`/#474)
+- US4 window-state persistence (`e9b1622b`/#476)
+- US5 native menu bar (`e9b1622b`/#476)
+- US6 native theme sync (`29617775`/#475)
+- US7 diagnostics log file (`e9b1622b`/#476)
+- US10 signed-update groundwork (`c1f3ede9`/#473, `a33dc427`, `60732f2f`/#469)
+
+None of these have a Layer-1 integration test, a Layer-2 real-UI journey, or a
+Mock-Playwright spec in this repo as of this writing — they are desktop-shell
+integrations (native OS behavior, window chrome, update signing) that are
+plausibly hard to assert in the existing harnesses, but that has not been
+verified either way; this row exists so the gap is tracked rather than
+silently absent. US8 (OS notifications) and US9 (release-build native
+behavior/reload-guard) are real open *product* scope per `SPEC_STATUS.md`, not
+a testing gap, and are excluded from this row.
+
+## Specs not yet implemented — no coverage expected — 2026-07-20
+
+Per `specs/SPEC_STATUS.md:92-95`, these specs in the 050-058 range have no
+shipped product code, so their absence from this matrix is not a test gap:
+
+- **050** publishable-crate-extractions — docs-only plan-of-record (#429)
+- **056** onboarding-redesign — 📄 Specified (2026-07-18), no implementation
+- **058** inbox-drop-parent-items — 📄 Specified (2026-07-19), no implementation
+
+Check `specs/SPEC_STATUS.md` before re-deriving shipped-vs-specified for any
+spec above 049; specs 052-055/057 (including 053, which has a `specs/`
+directory but no row in `SPEC_STATUS.md`'s table) aren't tracked there and
+are out of scope here too.
 
 ## Spec 008 Q27 iteration — framing clustering + Inbox-confirm attribution (F-Framing-8/9/11) — 2026-07-17
 
@@ -564,3 +619,28 @@ surface and an attribution-candidate picker at Inbox confirm), not on
 test-harness capability — the same class of gap as row 8's
 `MatchCandidatesPanel.tsx` "implemented but unreachable" finding, but here
 even earlier: no consuming component exists at all yet.
+
+## Recorded for whoever sequences the next journey-suite batch — 2026-07-20
+
+Net wall-clock impact of the proposed next batch of real-UI journey work, so
+sequencing doesn't have to re-derive it (issue #1228):
+
+- Four new real-UI journeys: cleanup/apply (~45s), archive/trash (~50s), root
+  remap (~35s), first-run wizard (~40s) — **+170s**.
+- Delete `plan_review_apply_with_audit`
+  (`crates/e2e-tests/tests/journeys.rs:155`, confirmed still present as of
+  this writing) as subsumed by the new cleanup/apply journey — **−30s**.
+- Move six IPC-only tests to `apps/desktop/src-tauri/tests/` — **−180s**.
+- **Net: ≈ −40s.**
+
+Caveats: `.config/nextest.toml`'s `e2e` profile runs with `test-threads > 1`,
+so real wall-clock is better than this raw sum suggests. The actual
+constraint is per-boot memory on a 4-vCPU CI runner, not seconds — sequence
+this batch to bound concurrent app boots, not to shave time. **This estimate
+assumes the Real-UI E2E suite actually runs to completion on `main`, which is
+not true today**: `main`'s `e2e.yml` concurrency group cancels in-flight runs
+on every subsequent merge, so the suite has been silently non-reporting
+(#1202, #1208; fix in #1268). Re-baseline these numbers once #1268 lands and
+a full run is observed to finish.
+
+Documentation only; no code change follows from this note in this task.

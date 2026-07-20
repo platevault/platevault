@@ -329,12 +329,49 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'target' }));
 
+    // #669: the miss must NAME the filter that excluded the rows, not just
+    // say "a filter is on" — an unnamed message still leaves the user unable
+    // to tell which control to undo.
     await waitFor(() => {
-      expect(
-        screen.getByText('No entries match the current filter.'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('No entries match target')).toBeInTheDocument();
     });
     expect(screen.queryByText('No log entries')).not.toBeInTheDocument();
+  });
+
+  it('names an active severity filter in the empty state (#669)', async () => {
+    // The Sweep-C repro: entries exist, the Error severity chip is active,
+    // and nothing matches.
+    appendLog([
+      {
+        id: 'aud:10',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'info',
+        source: 'audit',
+        message: 'All good',
+      },
+    ]);
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('All good')).toBeInTheDocument();
+    });
+
+    const levelGroup = screen.getByRole('group', { name: 'Level filter' });
+    fireEvent.click(within(levelGroup).getByRole('button', { name: 'Error' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No entries match Error')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('No log entries')).not.toBeInTheDocument();
+  });
+
+  it('still shows the plain empty message when nothing was recorded', () => {
+    renderPanel();
+    fireEvent.click(getTrigger());
+
+    expect(screen.getByText('No log entries')).toBeInTheDocument();
   });
 
   it('gives the level-filter and category-filter "All" chips distinct accessible names', async () => {
