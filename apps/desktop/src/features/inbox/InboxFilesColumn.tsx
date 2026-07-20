@@ -26,9 +26,7 @@ export interface InboxFilesColumnProps {
   /** FR-011 summary node, or null when the item is not a mixed folder. */
 }
 
-export function InboxFilesColumn({
-  fileMetadata,
-}: InboxFilesColumnProps) {
+export function InboxFilesColumn({ fileMetadata }: InboxFilesColumnProps) {
   // Files popover: which row is "inspected" inside the popover.
   const [inspectedIdx, setInspectedIdx] = useState<number | null>(null);
 
@@ -120,7 +118,6 @@ export function InboxFilesColumn({
     <Fragment>
       <div className="pv-session-detail2__head">{m.inbox_col_files()}</div>
 
-
       {/* Files popover — trigger + portaled popup with metadata table + inspector */}
       {hasMetadata ? (
         <Popover.Root
@@ -165,18 +162,16 @@ export function InboxFilesColumn({
           </Popover.Portal>
         </Popover.Root>
       ) : (
-        (
-          <span className="pv-session-detail2__muted">
-            {m.inbox_no_file_metadata()}
-            {/* #551: no per-file metadata means the required-destination-
+        <span className="pv-session-detail2__muted">
+          {m.inbox_no_file_metadata()}
+          {/* #551: no per-file metadata means the required-destination-
             attribute gate has no data to evaluate here — say so
             explicitly instead of silently reading as "nothing to
             worry about" (confirm can still be rejected server-side
             for these files; see inbox.missing_path_attributes). */}
-            {' — '}
-            {m.inbox_no_file_metadata_caveat()}
-          </span>
-        )
+          {' — '}
+          {m.inbox_no_file_metadata_caveat()}
+        </span>
       )}
 
       {/* FR-032 (US9) / #554: missing-required-attribute warning lives

@@ -93,9 +93,7 @@ describe('InboxList — grouping by folder (spec 058 T034)', () => {
     // ...but the shared folder contributes exactly ONE group header, not one
     // per sibling. Asserted on the header testid rather than on the path text,
     // which also appears in each row's own path cell.
-    expect(
-      screen.getAllByTestId(/^inbox-group-folder-/),
-    ).toHaveLength(2); // this folder + the unrelated one
+    expect(screen.getAllByTestId(/^inbox-group-folder-/)).toHaveLength(2); // this folder + the unrelated one
     expect(
       screen.getByTestId('inbox-group-folder-2025-11-01/session'),
     ).toBeInTheDocument();

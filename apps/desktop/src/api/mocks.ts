@@ -15,6 +15,7 @@ import type {
 import type {
   CalibrationTolerances,
   InboxListResponse_Serialize,
+  InboxClassifySourceGroupResponse,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
   InboxConfirmResponse_Serialize,
@@ -1884,6 +1885,24 @@ export const mockHandlers = {
         },
       ],
     } satisfies InboxScanFolderResponse_Serialize;
+  },
+  /**
+   * Spec 058 FR-017. Group-scoped classification, the action a source-group
+   * row offers.
+   *
+   * The real operation materialises item rows and returns only a count, so the
+   * mock returns a plausible count and nothing else — there is no
+   * classification payload to invent. Mock mode's `inbox_list` returns
+   * `sourceGroups: []` (every mock root is already classified), so no row
+   * actually invokes this today; it exists so the command is exercisable and
+   * so `tsc` checks this payload against the generated binding.
+   */
+  inbox_classify_source_group: async (_args) => {
+    const args = _args as { req: { sourceGroupId: string } } | undefined;
+    return {
+      sourceGroupId: args?.req?.sourceGroupId ?? 'sg-001',
+      materializedSubItemCount: 2,
+    } satisfies InboxClassifySourceGroupResponse;
   },
   inbox_classify: async (_args) => {
     const args = _args as { req: { inboxItemId: string } } | undefined;

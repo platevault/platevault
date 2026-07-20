@@ -101,7 +101,9 @@ describe('InboxList — classifying a source group (spec 058 FR-017)', () => {
       />,
     );
 
-    expect(screen.getByTestId('inbox-source-group-classify-sg-busy')).toBeDisabled();
+    expect(
+      screen.getByTestId('inbox-source-group-classify-sg-busy'),
+    ).toBeDisabled();
     expect(
       screen.getByTestId('inbox-source-group-classify-sg-idle'),
     ).not.toBeDisabled();

@@ -116,7 +116,6 @@ export function buildRootLabels(
   return labels;
 }
 
-
 /**
  * Format an exposure length in seconds for display (issue #789): raw FITS
  * EXPTIME floats carry IEEE-754 noise (e.g. `6.92447668013071`) that reads as

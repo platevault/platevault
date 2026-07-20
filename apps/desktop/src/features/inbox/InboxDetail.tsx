@@ -265,7 +265,6 @@ export function InboxDetail({
     ),
   }));
 
-
   // ── Detection property table (col A) ─────────────────────────────────────
   const repFile = fileMetadata?.[0] ?? null;
   const { colA: detColA, colB: detColB } = splitDetectionColumns(
@@ -357,7 +356,6 @@ export function InboxDetail({
           was clipped by `.pv-listpage__detail-body`'s `overflow: hidden`
           (unreachable, not just unscrolled). */}
       <div className="pv-inbox-detail__scroll">
-
         {/* Unclassified: blocking banner. #1114 — when the frame type is
             already supplied and only OTHER mandatory attributes are absent,
             name those instead of asking again for the frame type. */}
@@ -408,10 +406,7 @@ export function InboxDetail({
           }
           extraCols={[
             /* Files — mixed-composition summary + the metadata popover */
-            <InboxFilesColumn
-              key="files"
-              fileMetadata={fileMetadata}
-            />,
+            <InboxFilesColumn key="files" fileMetadata={fileMetadata} />,
             /* Needs review — rendered when unclassified files exist */
             /* Needs review — null (not an empty component) when there is
                nothing to review: TwoColDetailLayout allocates a `__col` per
