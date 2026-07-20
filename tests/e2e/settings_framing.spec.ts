@@ -23,7 +23,12 @@
  * (`apps/desktop/src/api/mocks.ts`), seeded at the R11a shipped defaults —
  * mirrors the Ingestion/Cleanup panes' proven round-trip pattern.
  */
-import { expect, seedSetupComplete, test, disableOnboarding } from './support/harness';
+import {
+  expect,
+  seedSetupComplete,
+  test,
+  disableOnboarding,
+} from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);

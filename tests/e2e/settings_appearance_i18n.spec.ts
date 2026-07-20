@@ -37,7 +37,12 @@
  *   - Locale switching is not user-reachable (046 FR-004); no product switcher
  *     exists to drive.
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
 import type { Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {

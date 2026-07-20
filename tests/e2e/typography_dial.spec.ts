@@ -23,7 +23,12 @@
  * hardcoded px before spec 055 T012 (e.g. the sidebar group label, formerly
  * a bare `9.5px`) — proof the dial reaches previously-inert surfaces.
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
 import type { Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {

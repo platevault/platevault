@@ -43,7 +43,12 @@
  * The Tauri `Channel` polyfill the approve-and-apply path needs is installed
  * globally by the shared harness `test` (tests/e2e/support/harness.ts).
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);
