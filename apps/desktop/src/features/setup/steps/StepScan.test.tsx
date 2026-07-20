@@ -452,8 +452,9 @@ describe('StepScan', () => {
       const row = screen.getByTestId('scan-item-master-001');
       // "Master" pill in the Folder/File cell
       expect(within(row).getByText('Master')).toBeInTheDocument();
-      // Frame type + exposure in the Detected types cell (filter null → omitted)
-      expect(within(row).getByText('Master Dark · 300s')).toBeInTheDocument();
+      // Frame type + exposure in the Detected types cell (filter null → omitted).
+      // Exposure now goes through the shared formatExposureSeconds (#811).
+      expect(within(row).getByText('Master Dark · 300 s')).toBeInTheDocument();
     });
 
     it('reconciles the file count by surfacing unclassified files (issue #513)', async () => {

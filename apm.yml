@@ -5,6 +5,7 @@ author: Sjors Robroek
 dependencies:
   apm:
   - srobroek/agentic-packages/packages/core#main
+  - srobroek/agentic-packages/packages/beads#main
   - srobroek/agentic-packages/packages/steering-pragmatic#main
   - srobroek/agentic-packages/packages/orchestrate#main
   - srobroek/agentic-packages/packages/release-please#main
