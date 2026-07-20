@@ -867,7 +867,15 @@ export function InboxPage() {
   // spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
   // the header/footer count from (distinct-folder counting) so the stats strip,
   // header, and footer always reconcile — a mixed folder counts once overall.
-  const derivedStats = useMemo(() => deriveInboxStats(items), [items]);
+  //
+  // spec 058 T022 / SC-004 (owner decision, 2026-07-20): derived from
+  // `filteredItems`, NOT `items`. `InboxList` renders `filteredItems`, so
+  // deriving the summary from the unfiltered array made the strip report more
+  // rows than the list showed whenever a lane or kind filter was active. A
+  // summary sitting above a filtered list and disagreeing with it is the same
+  // class of lie this feature exists to remove, so the counts now describe what
+  // the user is actually looking at.
+  const derivedStats = useMemo(() => deriveInboxStats(filteredItems), [filteredItems]);
 
   // #75: frame-type hint per ingestion, derived from the inbox item's
   // classification/breakdown (here: the dominant `groupFrameType`, or the
