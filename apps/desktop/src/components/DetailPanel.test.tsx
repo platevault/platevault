@@ -150,7 +150,9 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     const content = container.querySelector('.pv-detailpanel__content');
     expect(content).not.toBeNull();
     expect(
-      content?.contains(container.querySelector('[data-testid="content-body"]')),
+      content?.contains(
+        container.querySelector('[data-testid="content-body"]'),
+      ),
     ).toBe(true);
   });
 
