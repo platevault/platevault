@@ -21,6 +21,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   return {
     ...actual,
     useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+    Link: (await import('@/test/router-link-stub')).LinkStub,
   };
 });
 
