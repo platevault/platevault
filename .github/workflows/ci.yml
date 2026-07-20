@@ -44,6 +44,17 @@ concurrency:
   # which is exactly when verification matters most.
   #
   # e2e.yml took the same fix in #1268; this is the other half.
+  #
+  # `cancelled` still appears on main, and that is expected — not a regression
+  # of #1203. With `false`, GitHub keeps the in-flight run plus ONE queued run
+  # per group and evicts intermediate pending runs. Measured on main minutes
+  # after this landed: `f3668b86` survived while `89025366`, `b37b072e` and
+  # `30e29bd1` were each evicted while queued.
+  #
+  # So the guarantee is "main always has a recent run that completes", NOT
+  # "every main commit is verified". Individual intermediate commits can still
+  # go unverified when merges land seconds apart. That is the bounded cost that
+  # keeps this from serialising the queue indefinitely.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
