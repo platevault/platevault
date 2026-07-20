@@ -497,11 +497,14 @@ export function SetupWizard() {
   // enabled by scanComplete — canProceed is not consulted for that step.
   const canProceed = isStepValid(step);
 
-  // True while the user is sitting on an empty Observing Site step and has not
-  // yet acknowledged skipping it. Drives both the warning banner and the
-  // Continue button's label/behaviour.
-  const siteSkipNeedsAck =
-    step === SITE_STEP && !siteStepHasSite(state.site) && !siteSkipAcked;
+  // Sitting on the Observing Site step with nothing filled in. The primary
+  // action is named for what it actually does for as long as this holds — it
+  // must NOT revert to "Continue to <next>" once the skip is acknowledged, or
+  // the button silently changes wording between the two clicks.
+  const siteStepEmpty = step === SITE_STEP && !siteStepHasSite(state.site);
+  // Only the first click on that empty step is an acknowledgement; the second
+  // proceeds.
+  const siteSkipNeedsAck = siteStepEmpty && !siteSkipAcked;
 
   const stepMeta = STEPS[step];
 
@@ -561,9 +564,9 @@ export function SetupWizard() {
             goTo(step + 1);
           }}
           disabled={!canProceed}
-          data-testid={siteSkipNeedsAck ? 'setup-site-skip-ack' : undefined}
+          data-testid={siteStepEmpty ? 'setup-site-skip-ack' : undefined}
         >
-          {siteSkipNeedsAck
+          {siteStepEmpty
             ? m.setup_wizard_continue_without_site()
             : m.setup_wizard_continue_to({
                 label: STEPS[step + 1].label().toLowerCase(),

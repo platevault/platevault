@@ -77,8 +77,23 @@ test.describe('setup wizard · Observing Site step (spec 044 US3/T016)', () => {
     await expect(page.locator('#setup-site-lat')).toHaveValue('');
     await expect(page.locator('#setup-site-lon')).toHaveValue('');
 
-    // FR-025: the step is entirely optional — leaving it blank must still advance.
-    await page.getByRole('button', { name: 'Continue to confirm →' }).click();
+    // FR-025: the step is entirely optional — leaving it blank must still
+    // advance. Skipping is acknowledged rather than blocked (#1050): on an
+    // empty step the primary action names the consequence, the first click
+    // reveals it, and the second proceeds.
+    const skipBtn = page.getByRole('button', {
+      name: 'Continue without a site →',
+    });
+    await expect(skipBtn).toBeEnabled();
+    await skipBtn.click();
+
+    // Still on the site step, now with the cost of skipping spelled out.
+    await expect(page.getByTestId('setup-site-skip-warning')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Where do you observe from?' }),
+    ).toBeVisible();
+
+    await skipBtn.click();
     await expect(
       page.getByRole('heading', { name: 'Ready to go' }),
     ).toBeVisible({ timeout: 5_000 });
