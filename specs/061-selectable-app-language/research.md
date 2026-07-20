@@ -66,11 +66,24 @@ contradicts the default behaviour:
 > Reloading can be disabled by passing `reload: false` as an option, but you'll
 > need to ensure the UI updates to reflect the new locale."
 
-A reload violates FR-004 outright. Worse, it violates it *invisibly in the
-worst place*: the language chooser is the first step of the first-run wizard
-(FR-005), so a reload there would discard wizard progress — the exact failure
-the spec's edge-case list calls out. Taking the default would look correct in
-a trivial test and destroy real user state.
+A reload violates FR-004 outright.
+
+**Correction (2026-07-20):** an earlier draft justified this by claiming a
+reload would discard first-run wizard progress. That reasoning was wrong.
+Language selection is the *first* step (FR-005), so at that moment there is no
+progress to lose — a reload there would be harmless.
+
+The requirement rests entirely on US2 instead: changing language from Settings
+mid-session. A reload there drops scroll position, expanded panels, in-flight
+view state, and any unsaved edit — and FR-004 requires the change to apply
+without a reload *and* without losing unsaved context. That case is sufficient
+on its own.
+
+This also settles a tempting simplification: allow the reload at first-run
+(where it costs nothing) and use `reload: false` only in Settings. Rejected —
+Settings needs the no-reload path regardless, so the provider gets built
+either way, and the split would leave two locale-change behaviours to keep
+correct instead of one.
 
 The cost of `reload: false` is that Paraglide no longer refreshes the UI for
 us. Because messages compile to plain function calls (`m.common_save()`),

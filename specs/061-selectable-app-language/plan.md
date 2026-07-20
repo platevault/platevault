@@ -132,7 +132,7 @@ multi-locale.
 | Risk | Mitigation |
 |---|---|
 | **Unregistered settings key silently discards the choice** (D8) | Phase 0 ordering + Layer-1 round-trip test before any UI |
-| `setLocale` default reload destroys wizard progress (D2) | `{ reload: false }` mandatory; Layer-2 asserts progress survives |
+| `setLocale` default reload discards session state on a Settings-initiated change (D2) | `{ reload: false }` mandatory; Layer-2 asserts scroll/panel/unsaved state survives a language change made from Settings |
 | Machine translations read as native-reviewed | FR-013 labelling; drift-report in CI |
 | Translated strings overflow layouts | pt-BR is frequently longer than English; check the 1100×720 layout convention |
 | Windows E2E shards share one localStorage | Tests must not assume mirror isolation |
