@@ -258,7 +258,11 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
 });
 
 test.describe('onboarding find-it spotlight — reduced motion (VC-002)', () => {
-  test.use({ reducedMotion: 'reduce' });
+  // `reducedMotion` moved out of the top-level `PlaywrightTestOptions` type
+  // in @playwright/test 1.61.1 (still a real BrowserContextOptions field,
+  // still applied at runtime) — set it via the `contextOptions` escape hatch
+  // instead of the removed direct property.
+  test.use({ contextOptions: { reducedMotion: 'reduce' } });
 
   test('reduced motion suppresses the spotlight pulse (static outline only)', async ({
     page,

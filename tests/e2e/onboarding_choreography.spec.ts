@@ -97,7 +97,11 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
   });
 
   test.describe('reduced motion parity', () => {
-    test.use({ reducedMotion: 'reduce' });
+    // `reducedMotion` moved out of the top-level `PlaywrightTestOptions` type
+    // in @playwright/test 1.61.1 (still a real BrowserContextOptions field,
+    // still applied at runtime) — set it via the `contextOptions` escape
+    // hatch instead of the removed direct property.
+    test.use({ contextOptions: { reducedMotion: 'reduce' } });
 
     test('completion applies the final state instantly with no animation (FR-020)', async ({
       page,
