@@ -56,6 +56,11 @@ impl CallBuffer {
     }
 
     /// Append a new call record. Evicts the oldest entry when over capacity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal mutex is poisoned (a prior panic while holding
+    /// the lock).
     pub fn push(&self, call: ContractCall) {
         let mut guard = self.inner.lock().unwrap();
         guard.calls.push(call);
@@ -66,6 +71,11 @@ impl CallBuffer {
     }
 
     /// Return up to `limit` entries in newest-first order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal mutex is poisoned (a prior panic while holding
+    /// the lock).
     pub fn snapshot(&self, limit: usize) -> Vec<ContractCall> {
         let guard = self.inner.lock().unwrap();
         // Entries are oldest-first internally; reverse for newest-first output.
@@ -73,8 +83,19 @@ impl CallBuffer {
     }
 
     /// Total entries dropped due to capacity overflow since session start.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal mutex is poisoned (a prior panic while holding
+    /// the lock).
     pub fn dropped(&self) -> u64 {
         self.inner.lock().unwrap().dropped
+    }
+}
+
+impl Default for CallBuffer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
