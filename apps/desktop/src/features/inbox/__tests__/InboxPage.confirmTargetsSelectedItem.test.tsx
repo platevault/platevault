@@ -14,9 +14,13 @@
  * folder-scoped id stops being merely wrong and starts being unrepresentable.
  *
  * The fixture is built so all three plausible regressions fail it: the two
- * siblings share one `groupId` (the folder), the SECOND one is selected (so
- * "pick the first sibling" fails), and their ids differ from the group id (so
- * "pass the group id" fails).
+ * siblings share one `sourceGroupId` (the folder they were materialized from),
+ * the SECOND one is selected (so "pick the first sibling" fails), and both item
+ * ids differ from that source-group id (so "pass the folder id" fails).
+ *
+ * Note `groupId` is NOT the folder id despite the name — per the contract it
+ * "Equals `inbox_item_id`". `sourceGroupId` is the folder-scoped one, and it is
+ * what `InboxDetail`'s remount key already reads (InboxPage.tsx:1156).
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -75,11 +79,13 @@ vi.mock('@tanstack/react-router', () => ({
 
 const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
-/** Both siblings live in one folder and therefore share `groupId`. */
+/** Both siblings live in one folder and therefore share `sourceGroupId`. */
 function sibling(inboxItemId: string, groupKey: string, sig: string) {
   return {
     inboxItemId,
-    groupId: 'sg-folder-1',
+    // Per the contract this restates the item's own identity, not the folder's.
+    groupId: inboxItemId,
+    sourceGroupId: 'sg-folder-1',
     groupKey,
     needsReview: false,
     rootId: 'root-001',
