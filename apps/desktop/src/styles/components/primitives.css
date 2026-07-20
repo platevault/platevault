@@ -126,6 +126,17 @@
   -webkit-mask-size: contain;
 }
 .pv-btn--sm { height: var(--pv-control-h-sm); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
+/* --xs / --ghost were used in markup (log panel chips, dev call list,
+   ProcessingTools) but had no rule anywhere, so those controls silently fell
+   back to full-size bordered buttons (#734). Defined once here rather than
+   per-feature. */
+.pv-btn--xs { height: var(--pv-control-h-xs); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
+.pv-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pv-text-muted);
+}
+.pv-btn--ghost:hover { background: var(--pv-hover-bg); border-color: transparent; color: var(--pv-text); }
 
 /* === SECTION === */
 .pv-section { margin-bottom: var(--pv-sp-4); }
@@ -320,6 +331,20 @@
    replacing the per-table inline paddingLeft clones. */
 .pv-table__row--indented > td:first-child > :first-child {
   padding-left: var(--pv-row-indent, 0);
+}
+
+/* Cell content that is a Pill (or several) sitting next to its label: without a
+   flex gap the pill butts straight against the text, since adjacent JSX nodes
+   emit no whitespace. Wrap the cell's children in this to space them. Replaces
+   the per-feature clones of the same three declarations (calibration masters,
+   setup scan). `flex-wrap` matters where a row carries two pills plus a label.
+   Note `.pv-table td` clips with an ellipsis; an inline-flex box is atomic and
+   clips rather than ellipsizing, which is the long-standing behaviour here. */
+.pv-table__cell-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  flex-wrap: wrap;
 }
 
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky

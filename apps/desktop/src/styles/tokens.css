@@ -64,6 +64,7 @@
   --pv-statusbar-height: 26px;
   --pv-control-h: 26px; /** Control height (#616) — single source of truth for toolbar-adjacent controls (buttons, text inputs, selects, SegControl) so they line up in the same row instead of drifting per-component (measured: input 27px, select 25px, button 24px, Settings select 28px, all in one chrome). */
   --pv-control-h-sm: 24px;
+  --pv-control-h-xs: 20px; /** Dense filter chips (log panel, dev lists) — below this the 4px text padding stops clearing the --pv-text-xs cap height. */
   --pv-list-width: 280px;
   --pv-rail-width: 300px;
   --pv-sidebar-width: 220px; /** #962: was 200px with ZERO slack against the header's own content sum (mark + brand-name + version chip + collapse button + gaps/padding measured at exactly 199px) — any platform font-metric variance (Windows subpixel rendering, non-1.0 DPR) tips "PlateVault" into its ellipsis safety net. +20px gives real headroom. */

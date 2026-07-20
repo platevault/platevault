@@ -7,5 +7,10 @@
   "control-h-sm": {
     "$value": "24px",
     "$type": "dimension"
+  },
+  "control-h-xs": {
+    "$value": "20px",
+    "$type": "dimension",
+    "$description": "Dense filter chips (log panel, dev lists) — below this the 4px text padding stops clearing the --pv-text-xs cap height."
   }
 }
