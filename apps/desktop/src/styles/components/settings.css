@@ -134,9 +134,9 @@ font-weight: var(--pv-weight-medium);
   color: var(--pv-danger);
   margin-top: var(--pv-sp-2);
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  background: var(--pv-danger-bg, rgba(220,38,38,0.08));
+  background: var(--pv-danger-bg);
   border-radius: var(--pv-radius-sm);
-  border: 1px solid var(--pv-danger-border, rgba(220,38,38,0.2));
+  border: 1px solid var(--pv-danger-border);
 }
 
 /* Radio group */

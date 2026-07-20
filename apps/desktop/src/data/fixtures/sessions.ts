@@ -5,94 +5,16 @@
 // Types mirror @/bindings/types — inline definitions used until that module is created
 // Updated to match design V3 mock data
 
-type SessionState =
-  | 'discovered'
-  | 'candidate'
-  | 'needs_review'
-  | 'confirmed'
-  | 'rejected'
-  | 'ignored';
-type ConfidenceLevel =
-  | 'unknown'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'confirmed'
-  | 'rejected';
-type ProvenanceOrigin =
-  | 'reviewed'
-  | 'inferred'
-  | 'observed'
-  | 'generated'
-  | 'planned'
-  | 'applied';
+import type {
+  AcquisitionSession_Serialize,
+  SessionDetail_Serialize,
+} from '@/bindings/index';
 
-interface MetaValue {
-  value: unknown;
-  raw?: string;
-  origin: ProvenanceOrigin;
-  confidence: ConfidenceLevel;
-  evidence_ref?: string;
-}
-
-interface SessionKey {
-  target: string;
-  filter: string;
-  binning: number;
-  gain: number;
-  night: string; // ISO date of the observing night (local sunset date)
-}
-
-interface AcquisitionSession {
-  id: string;
-  session_key: SessionKey;
-  state: SessionState;
-  confidence: ConfidenceLevel;
-  optical_train_id: string;
-  frame_count: number;
-  total_integration_seconds: number;
-  total_size_bytes: number;
-  metadata: Record<string, MetaValue>;
-  target_ids: string[];
-  project_ids: string[];
-  warnings: string[];
-}
-
-interface Frameset {
-  id: string;
-  filter: string;
-  exposure_s: number;
-  frame_count: number;
-  accepted_count: number;
-  total_integration_seconds: number;
-  binning: number;
-  gain: number;
-  temp_c: number;
-}
-
-interface CalibrationMatch {
-  master_id: string;
-  kind: 'dark' | 'flat' | 'bias';
-  score: number;
-  is_soft_mismatch: boolean;
-  mismatch_reasons: string[];
-}
-
-interface HistoryEntry {
-  timestamp: string;
-  event_type: string;
-  from_state?: string;
-  to_state?: string;
-  actor: 'user' | 'system';
-  detail: string;
-}
-
-interface SessionDetail extends AcquisitionSession {
-  framesets: Frameset[];
-  calibration_matches: CalibrationMatch[];
-  history: HistoryEntry[];
-}
-
+/**
+ * Display-only metadata used by the Sessions design fixtures (SESSIONS_DATA).
+ * Not part of any IPC contract — the wire shapes below come from the generated
+ * bindings so mock payloads cannot drift from the backend (#1221).
+ */
 // ─── Design V3 flat fixture shape ───────────────────────────────────────────
 
 export interface SessionFixture {
@@ -244,23 +166,22 @@ const TARGET_NGC2244 = '550e8400-e29b-41d4-a716-446655440205';
 const PROJECT_NGC7000_NB = '550e8400-e29b-41d4-a716-446655440301';
 const PROJECT_M31_LRGB = '550e8400-e29b-41d4-a716-446655440302';
 
-export const sessions: AcquisitionSession[] = [
+export const sessions: AcquisitionSession_Serialize[] = [
   // --- confirmed (5) ---
   {
     id: '550e8400-e29b-41d4-a716-446655440001',
-    session_key: {
+    sessionKey: {
       target: 'NGC 7000',
       filter: 'SII',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-04-18',
     },
-    state: 'confirmed',
     confidence: 'high',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 14,
-    total_integration_seconds: 8400,
-    total_size_bytes: 981_467_136,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 14,
+    totalIntegrationSeconds: 8400,
+    totalSizeBytes: 981_467_136,
     metadata: {
       target: {
         value: 'NGC 7000',
@@ -281,25 +202,24 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_NGC7000],
-    project_ids: [PROJECT_NGC7000_NB],
+    targetIds: [TARGET_NGC7000],
+    projectIds: [PROJECT_NGC7000_NB],
     warnings: [],
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440002',
-    session_key: {
+    sessionKey: {
       target: 'NGC 7000',
       filter: 'OIII',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-04-15',
     },
-    state: 'confirmed',
     confidence: 'confirmed',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 22,
-    total_integration_seconds: 9000,
-    total_size_bytes: 1_503_238_554,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 22,
+    totalIntegrationSeconds: 9000,
+    totalSizeBytes: 1_503_238_554,
     metadata: {
       target: {
         value: 'NGC 7000',
@@ -320,32 +240,31 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_NGC7000],
-    project_ids: [PROJECT_NGC7000_NB],
+    targetIds: [TARGET_NGC7000],
+    projectIds: [PROJECT_NGC7000_NB],
     warnings: [],
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440003',
-    session_key: {
+    sessionKey: {
       target: 'IC 1396',
       filter: 'SII',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-04-14',
     },
-    state: 'discovered',
     confidence: 'low',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 18,
-    total_integration_seconds: 6480,
-    total_size_bytes: 1_181_116_006,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 18,
+    totalIntegrationSeconds: 6480,
+    totalSizeBytes: 1_181_116_006,
     metadata: {
       target: {
         value: 'IC 1396',
         raw: 'IC1396',
         origin: 'inferred',
         confidence: 'low',
-        evidence_ref: 'fits.object',
+        evidenceRef: 'fits.object',
       },
       filter: {
         value: 'SII',
@@ -360,25 +279,24 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_IC1396],
-    project_ids: [],
+    targetIds: [TARGET_IC1396],
+    projectIds: [],
     warnings: ['target confidence low', 'no calibration match found'],
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440004',
-    session_key: {
+    sessionKey: {
       target: 'NGC 7000',
       filter: 'Ha',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-04-12',
     },
-    state: 'confirmed',
     confidence: 'confirmed',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 54,
-    total_integration_seconds: 16200,
-    total_size_bytes: 3_435_973_837,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 54,
+    totalIntegrationSeconds: 16200,
+    totalSizeBytes: 3_435_973_837,
     metadata: {
       target: {
         value: 'NGC 7000',
@@ -399,25 +317,24 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_NGC7000],
-    project_ids: [PROJECT_NGC7000_NB, '550e8400-e29b-41d4-a716-446655440303'],
+    targetIds: [TARGET_NGC7000],
+    projectIds: [PROJECT_NGC7000_NB, '550e8400-e29b-41d4-a716-446655440303'],
     warnings: [],
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440005',
-    session_key: {
+    sessionKey: {
       target: 'M31',
       filter: 'R',
-      binning: 1,
-      gain: 0,
+      binning: '1',
+      gain: '0',
       night: '2026-03-30',
     },
-    state: 'confirmed',
     confidence: 'high',
-    optical_train_id: TRAIN_GT81_ASI533,
-    frame_count: 40,
-    total_integration_seconds: 4050,
-    total_size_bytes: 2_576_980_378,
+    opticalTrainId: TRAIN_GT81_ASI533,
+    frameCount: 40,
+    totalIntegrationSeconds: 4050,
+    totalSizeBytes: 2_576_980_378,
     metadata: {
       target: {
         value: 'M31',
@@ -438,27 +355,26 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_M31],
-    project_ids: [PROJECT_M31_LRGB],
+    targetIds: [TARGET_M31],
+    projectIds: [PROJECT_M31_LRGB],
     warnings: [],
   },
 
   // --- needs_review (2) ---
   {
     id: '550e8400-e29b-41d4-a716-446655440006',
-    session_key: {
+    sessionKey: {
       target: 'M31',
       filter: 'L',
-      binning: 1,
-      gain: 0,
+      binning: '1',
+      gain: '0',
       night: '2026-03-28',
     },
-    state: 'needs_review',
     confidence: 'medium',
-    optical_train_id: TRAIN_GT81_ASI533,
-    frame_count: 120,
-    total_integration_seconds: 23400,
-    total_size_bytes: 7_730_941_133,
+    opticalTrainId: TRAIN_GT81_ASI533,
+    frameCount: 120,
+    totalIntegrationSeconds: 23400,
+    totalSizeBytes: 7_730_941_133,
     metadata: {
       target: {
         value: 'M31',
@@ -471,7 +387,7 @@ export const sessions: AcquisitionSession[] = [
         raw: 'Luminance',
         origin: 'inferred',
         confidence: 'medium',
-        evidence_ref: 'fits.filter',
+        evidenceRef: 'fits.filter',
       },
       exposure_s: {
         value: 195,
@@ -480,32 +396,31 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_M31],
-    project_ids: [],
+    targetIds: [TARGET_M31],
+    projectIds: [],
     warnings: ['filter origin is inferred — please verify'],
   },
   {
     id: '550e8400-e29b-41d4-a716-446655440009',
-    session_key: {
+    sessionKey: {
       target: 'M42',
       filter: 'Ha',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-02-10',
     },
-    state: 'needs_review',
     confidence: 'medium',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 45,
-    total_integration_seconds: 13500,
-    total_size_bytes: 3_006_477_107,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 45,
+    totalIntegrationSeconds: 13500,
+    totalSizeBytes: 3_006_477_107,
     metadata: {
       target: {
         value: 'M42',
         raw: 'Orion Nebula',
         origin: 'inferred',
         confidence: 'medium',
-        evidence_ref: 'fits.object',
+        evidenceRef: 'fits.object',
       },
       filter: {
         value: 'Ha',
@@ -520,27 +435,26 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_M42],
-    project_ids: [],
+    targetIds: [TARGET_M42],
+    projectIds: [],
     warnings: ['object name "Orion Nebula" needs alias confirmation'],
   },
 
   // --- ignored (1) ---
   {
     id: '550e8400-e29b-41d4-a716-446655440007',
-    session_key: {
+    sessionKey: {
       target: 'M31',
       filter: 'B',
-      binning: 1,
-      gain: 0,
+      binning: '1',
+      gain: '0',
       night: '2026-03-10',
     },
-    state: 'ignored',
     confidence: 'low',
-    optical_train_id: TRAIN_GT81_ASI533,
-    frame_count: 35,
-    total_integration_seconds: 3510,
-    total_size_bytes: 2_254_857_830,
+    opticalTrainId: TRAIN_GT81_ASI533,
+    frameCount: 35,
+    totalIntegrationSeconds: 3510,
+    totalSizeBytes: 2_254_857_830,
     metadata: {
       target: {
         value: 'M31',
@@ -561,27 +475,26 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_M31],
-    project_ids: [],
+    targetIds: [TARGET_M31],
+    projectIds: [],
     warnings: ['aborted session — too few frames', 'moon interference'],
   },
 
   // --- rejected (1) ---
   {
     id: '550e8400-e29b-41d4-a716-446655440008',
-    session_key: {
+    sessionKey: {
       target: 'M42',
       filter: 'OIII',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-02-11',
     },
-    state: 'rejected',
     confidence: 'rejected',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 28,
-    total_integration_seconds: 4800,
-    total_size_bytes: 1_825_361_101,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 28,
+    totalIntegrationSeconds: 4800,
+    totalSizeBytes: 1_825_361_101,
     metadata: {
       target: {
         value: 'M42',
@@ -602,27 +515,26 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_M42],
-    project_ids: [],
+    targetIds: [TARGET_M42],
+    projectIds: [],
     warnings: ['high cloud cover during capture', 'star FWHM > 6 arcsec'],
   },
 
   // --- confirmed (1 more) ---
   {
     id: '550e8400-e29b-41d4-a716-446655440010',
-    session_key: {
+    sessionKey: {
       target: 'NGC 2244',
       filter: 'Ha',
-      binning: 1,
-      gain: 100,
+      binning: '1',
+      gain: '100',
       night: '2026-01-20',
     },
-    state: 'confirmed',
     confidence: 'confirmed',
-    optical_train_id: TRAIN_FSQ106_ASI2600,
-    frame_count: 62,
-    total_integration_seconds: 18600,
-    total_size_bytes: 3_865_470_566,
+    opticalTrainId: TRAIN_FSQ106_ASI2600,
+    frameCount: 62,
+    totalIntegrationSeconds: 18600,
+    totalSizeBytes: 3_865_470_566,
     metadata: {
       target: {
         value: 'NGC 2244',
@@ -643,74 +555,63 @@ export const sessions: AcquisitionSession[] = [
         confidence: 'high',
       },
     },
-    target_ids: [TARGET_NGC2244],
-    project_ids: [],
+    targetIds: [TARGET_NGC2244],
+    projectIds: [],
     warnings: [],
   },
 ];
 
 // Full session detail for the first confirmed NGC 7000 OIII session
-export const sessionDetail: SessionDetail = {
+export const sessionDetail: SessionDetail_Serialize = {
   ...sessions[1], // 550e8400-e29b-41d4-a716-446655440002 (confirmed, NGC 7000 OIII)
+  // Frameset/SessionCalibrationMatch/SessionHistoryEntry are far narrower on the
+  // wire than the old hand-written fixture assumed; exposure, binning, gain,
+  // temperature and per-state history transitions are simply not sent (#1221).
   framesets: [
     {
-      id: '550e8400-e29b-41d4-a716-446655440501',
       filter: 'OIII',
-      exposure_s: 600,
-      frame_count: 22,
-      accepted_count: 21,
-      total_integration_seconds: 9000,
-      binning: 1,
-      gain: 100,
-      temp_c: -10,
+      count: 22,
+      integrationS: 9000,
     },
   ],
-  calibration_matches: [
+  calibrationMatches: [
     {
-      master_id: '550e8400-e29b-41d4-a716-446655440401',
+      masterId: '550e8400-e29b-41d4-a716-446655440401',
       kind: 'dark',
       score: 0.97,
-      is_soft_mismatch: false,
-      mismatch_reasons: [],
+      softMismatches: [],
+      wasOverride: false,
     },
     {
-      master_id: '550e8400-e29b-41d4-a716-446655440403',
+      masterId: '550e8400-e29b-41d4-a716-446655440403',
       kind: 'flat',
       score: 0.91,
-      is_soft_mismatch: true,
-      mismatch_reasons: ['flat age 34 days (threshold: 30)'],
+      softMismatches: ['flat age 34 days (threshold: 30)'],
+      wasOverride: false,
     },
     {
-      master_id: '550e8400-e29b-41d4-a716-446655440407',
+      masterId: '550e8400-e29b-41d4-a716-446655440407',
       kind: 'bias',
       score: 0.99,
-      is_soft_mismatch: false,
-      mismatch_reasons: [],
+      softMismatches: [],
+      wasOverride: false,
     },
   ],
   history: [
     {
       timestamp: '2026-04-15T21:05:00Z',
-      event_type: 'session.discovered',
-      to_state: 'discovered',
+      event: 'session.discovered',
       actor: 'system',
-      detail: 'Inbox scan detected 22 new FITS files matching session pattern',
     },
     {
       timestamp: '2026-04-15T21:06:00Z',
-      event_type: 'session.candidate',
-      from_state: 'discovered',
-      to_state: 'candidate',
+      event: 'session.candidate',
       actor: 'system',
-      detail: 'Metadata extraction completed; target and filter resolved',
     },
     {
       timestamp: '2026-04-16T09:12:00Z',
-      event_type: 'session.confirmed',
-      from_state: 'needs_review',
-      to_state: 'confirmed',
+      event: 'session.confirmed',
       actor: 'user',
-      detail: 'Reviewed and confirmed via Review queue',
     },
   ],
 };
