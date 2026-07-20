@@ -3,7 +3,9 @@
 
 /// <reference types="@testing-library/jest-dom" />
 /**
- * ProjectStatusTag tests — spec 043 task #105.
+ * StatusTag tests — spec 043 task #105, relocated from the retired
+ * `ProjectStatusTag` alias (handoff 06 consolidation: the alias added no
+ * behavior of its own, so its tests now cover the shared component directly).
  *
  * Verifies the dot+text replacement for the status Pill badge:
  *   1. Renders the label text.
@@ -14,17 +16,17 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { ProjectStatusTag } from './ProjectStatusTag';
+import { StatusTag } from './StatusTag';
 
-describe('ProjectStatusTag', () => {
+describe('StatusTag', () => {
   it('renders the label text', () => {
-    render(<ProjectStatusTag variant="ok">Completed</ProjectStatusTag>);
+    render(<StatusTag variant="ok">Completed</StatusTag>);
     expect(screen.getByText('Completed')).toBeInTheDocument();
   });
 
   it('applies the correct variant modifier class', () => {
     const { container } = render(
-      <ProjectStatusTag variant="danger">Blocked</ProjectStatusTag>,
+      <StatusTag variant="danger">Blocked</StatusTag>,
     );
     const tag = container.querySelector('.pv-status-tag');
     expect(tag).toHaveClass('pv-status-tag--danger');
@@ -32,7 +34,7 @@ describe('ProjectStatusTag', () => {
 
   it('renders a dot span that is aria-hidden', () => {
     const { container } = render(
-      <ProjectStatusTag variant="info">Processing</ProjectStatusTag>,
+      <StatusTag variant="info">Processing</StatusTag>,
     );
     const dot = container.querySelector('.pv-status-tag__dot');
     expect(dot).toBeInTheDocument();
@@ -41,7 +43,7 @@ describe('ProjectStatusTag', () => {
 
   it('does not use the pv-pill class', () => {
     const { container } = render(
-      <ProjectStatusTag variant="neutral">Ready</ProjectStatusTag>,
+      <StatusTag variant="neutral">Ready</StatusTag>,
     );
     expect(container.querySelector('.pv-pill')).toBeNull();
   });
@@ -58,7 +60,7 @@ describe('ProjectStatusTag', () => {
     ] as const;
     for (const variant of variants) {
       const { unmount } = render(
-        <ProjectStatusTag variant={variant}>{variant}</ProjectStatusTag>,
+        <StatusTag variant={variant}>{variant}</StatusTag>,
       );
       expect(screen.getByText(variant)).toBeInTheDocument();
       unmount();

@@ -393,7 +393,7 @@ export function SourceViewsSection({
               {canRemoveView(view.state) && (
                 <Btn
                   size="sm"
-                  variant="danger"
+                  variant="destructive"
                   disabled={busyViewId !== null}
                   onClick={() => handleRemove(view.id)}
                   data-testid={`remove-view-${view.id}`}

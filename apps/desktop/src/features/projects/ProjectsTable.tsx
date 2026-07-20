@@ -24,10 +24,9 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { m } from '@/lib/i18n';
 import { Table, tableIndent, Skeleton } from '@/ui';
-import { SortHeader, ariaSortFor } from '@/components';
+import { SortHeader, ariaSortFor, StatusTag } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
-import { ProjectStatusTag } from './ProjectStatusTag';
 import { blockedReasonMessage, deriveBlockedReason } from './BlockedBanner';
 import { compareDateDesc, formatDateTime } from '@/lib/datetime';
 import type { ProjectSummaryDto } from '@/bindings/index';
@@ -263,9 +262,9 @@ export function ProjectsTable({
       // STUB: target — omitted until FITS OBJECT → target_id linkage lands (#54).
       target: <span className="pv-projects-table__dash">—</span>,
       state: (
-        <ProjectStatusTag variant={projectStateVariant(project.lifecycle)}>
+        <StatusTag variant={projectStateVariant(project.lifecycle)}>
           {projectStateLabel(project.lifecycle)}
-        </ProjectStatusTag>
+        </StatusTag>
       ),
       sources: (
         <span className="pv-projects-table__cell--num">

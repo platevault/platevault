@@ -564,6 +564,45 @@ pub async fn active_frame_exposure_seconds(pool: &SqlitePool, ids: &[String]) ->
     Ok(total)
 }
 
+/// The DISTINCT per-sub `exposure_s` values across a session's active
+/// (non-`missing`) frames (#1218), ascending. Frames with no reachable
+/// metadata row contribute nothing rather than a `NULL` entry.
+///
+/// Exposure is NOT part of `session_key` (`crates/sessions/src/key.rs`), so a
+/// session can legitimately hold more than one per-sub exposure; callers need
+/// the distinct set, not the [`active_frame_exposure_seconds`] sum, to decide
+/// whether a single per-sub value exists.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn active_frame_exposures(pool: &SqlitePool, ids: &[String]) -> DbResult<Vec<f64>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut builder = sqlx::QueryBuilder::new(
+        // Same per-frame join as `active_frame_exposure_seconds` (one row per
+        // frame via MAX+GROUP BY, so a root with several inbox groups cannot
+        // fan a frame out), then collapsed to the distinct values.
+        "SELECT DISTINCT per_frame.exposure_s FROM ( \
+             SELECT fr.id, MAX(ifm.exposure_s) AS exposure_s \
+             FROM file_record fr \
+             LEFT JOIN inbox_items ii ON ii.root_id = fr.root_id \
+             LEFT JOIN inbox_file_metadata ifm \
+                 ON ifm.inbox_item_id = ii.id AND ifm.relative_file_path = fr.relative_path \
+             WHERE fr.state != 'missing' AND fr.id IN (",
+    );
+    let mut separated = builder.separated(", ");
+    for id in ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(
+        ") GROUP BY fr.id) AS per_frame \
+         WHERE per_frame.exposure_s IS NOT NULL ORDER BY per_frame.exposure_s",
+    );
+    let rows: Vec<(f64,)> = builder.build_query_as().fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|(v,)| v).collect())
+}
+
 /// `project_id`s linked to a session via `project_sources`.
 ///
 /// # Errors

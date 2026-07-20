@@ -30,6 +30,7 @@ pub async fn preferences_get() -> Result<AppPreferences, ContractError> {
         sessions_view: SessionsView::List,
         tour_completed: TourCompleted { step1: false, step2: false, step3: false },
         setup_completed: false,
+        detail_dock: HashMap::new(),
     })
 }
 

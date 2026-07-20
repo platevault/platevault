@@ -16,7 +16,7 @@
  *   6. Rich columns: Tool, State (now a dot+text tag, not a pill), Sources, Updated.
  *   7. Selected row carries the selected CSS class.
  *   8. Clicking a sortable header calls onSort with the column.
- *   9. (#105) State column renders a ProjectStatusTag (dot + label, no pill).
+ *   9. (#105) State column renders a StatusTag (dot + label, no pill).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -117,7 +117,7 @@ describe('ProjectsTable', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('(#105) state column uses ProjectStatusTag: dot+text, not a filled pill', () => {
+  it('(#105) state column uses StatusTag: dot+text, not a filled pill', () => {
     const { container } = renderTable();
     // pv-status-tag class present in the state column — no pv-pill class.
     const tags = container.querySelectorAll('.pv-status-tag');

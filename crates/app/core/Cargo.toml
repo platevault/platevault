@@ -38,6 +38,8 @@ camino = { workspace = true }
 dashmap = { workspace = true }
 hex.workspace = true
 serde_json.workspace = true
+# #1218: session_key parsing goes through the crate that owns the format.
+sessions = { path = "../../sessions" }
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true

@@ -127,7 +127,7 @@ export const THEMES: ThemeMeta[] = [
 
 const THEME_KEY = 'alm.theme';
 const LIGHT_DEFAULT: ThemeId = 'warm-slate';
-const DARK_DEFAULT: ThemeId = 'observatory-dark';
+const DARK_DEFAULT: ThemeId = 'observatory-cool';
 
 /** Settings-DB scope/key for the durable theme choice (spec 018 `general` scope). */
 const SETTINGS_SCOPE = 'general';

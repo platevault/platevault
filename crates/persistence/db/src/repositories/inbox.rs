@@ -1957,7 +1957,13 @@ struct MetadataAggRow {
 
 /// Format an exposure in seconds like `"300s"` — trailing zeros trimmed
 /// (`300.0` -> `"300s"`, `1.5` -> `"1.5s"`).
-fn format_exposure_label(secs: f64) -> String {
+///
+/// Public because this is the app-wide exposure-label vocabulary: project
+/// source snapshots (`app_core_projects::project_setup`) must produce labels
+/// that `parse_exposure_seconds` and the `{exposure}` path token read back
+/// identically to the ones written here.
+#[must_use]
+pub fn format_exposure_label(secs: f64) -> String {
     // {} on f64 already drops a trailing `.0` for whole numbers and avoids
     // fixed-precision padding, so 300.0 -> "300" and 1.5 -> "1.5".
     format!("{secs}s")
