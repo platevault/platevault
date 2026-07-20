@@ -3887,38 +3887,69 @@ mod tests {
         );
     }
 
-    /// Spec 058 FR-015 master carve-out: a folder whose files are all detected
-    /// calibration masters is already fully represented by its per-master item
-    /// rows. Those rows carry a NULL `source_group_id`
-    /// (`q_desktop::insert_inbox_master_item`), so the "has no items" clause
-    /// alone would list the folder a second time as unclassified. Scan records
-    /// `file_count = 0` for such a folder, which is what excludes it.
+    /// Spec 058 FR-015 master carve-out — pinned at the layer that actually
+    /// implements it.
+    ///
+    /// This query has no master-awareness and structurally cannot have any:
+    /// `q_desktop::insert_inbox_master_item` omits `source_group_id` from its
+    /// INSERT, so master rows always carry NULL there and can never satisfy the
+    /// `NOT EXISTS` clause. The ONLY thing that excludes a masters-only folder
+    /// is `file_count = 0`, written by scan's `sub_frame_count()`, which
+    /// subtracts the detected masters. The asserted pair below states exactly
+    /// that, so this cannot be misread as coverage of the carve-out arithmetic
+    /// itself — that lives in
+    /// `crates/app/core/tests/scan_masters_integration.rs`.
     #[tokio::test]
-    async fn masters_only_folder_is_not_listed_as_an_unclassified_group_058() {
+    async fn only_file_count_excludes_a_masters_only_folder_058() {
         let db = test_db().await;
         let pool = db.pool();
         let source_id = seed_inbox_source(pool, "/astro/inbox").await;
 
-        upsert_inbox_source_group(
-            pool,
-            &UpsertSourceGroup {
-                id: "sg-masters",
-                root_id: &source_id,
-                relative_path: "masters",
-                content_signature: Some("sig-masters"),
-                format: Some("fits"),
-                lane: Some("move"),
-                file_count: 0,
-            },
-        )
-        .await
-        .unwrap();
+        let group = |file_count: i64| UpsertSourceGroup {
+            id: "sg-masters",
+            root_id: &source_id,
+            relative_path: "masters",
+            content_signature: Some("sig-masters"),
+            format: Some("fits"),
+            lane: Some("move"),
+            file_count,
+        };
 
+        // Two real master rows, exactly as scan writes them.
+        for (id, name) in [("m-1", "masterDark.fits"), ("m-2", "masterBias.fits")] {
+            crate::repositories::q_desktop::insert_inbox_master_item(
+                pool,
+                id,
+                &source_id,
+                &format!("masters/{name}"),
+                "move",
+                "fits",
+                "dark",
+                None,
+                Some(30.0),
+            )
+            .await
+            .unwrap();
+        }
+
+        upsert_inbox_source_group(pool, &group(0)).await.unwrap();
         let rows = list_unclassified_source_groups(pool, 100).await.unwrap();
         assert!(
             rows.is_empty(),
             "a folder with no sub-frames left to classify must not appear as a \
              scanned-but-unclassified row (FR-015 master carve-out)"
+        );
+
+        // Converse: the same master rows are still present, yet a non-zero
+        // `file_count` lists the folder anyway. `file_count` is load-bearing on
+        // its own; nothing in this query reads `is_master_item`.
+        upsert_inbox_source_group(pool, &group(2)).await.unwrap();
+        let rows = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "the query is master-blind: only `file_count` excludes the folder, so \
+             scan's `sub_frame_count()` is the whole carve-out"
         );
     }
 }

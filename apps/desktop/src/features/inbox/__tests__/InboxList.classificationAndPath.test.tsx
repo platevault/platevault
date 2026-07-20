@@ -96,12 +96,19 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     expect(screen.getByText('needs review')).toBeInTheDocument();
   });
 
-  it('(058) an item with a resolved identity and `needsReview: false` is not labelled needs review', () => {
+  // `frameType` and `groupFrameType` are deliberately null: both are checked
+  // BEFORE the needs-review branch in `classificationLabel`, so a fixture
+  // carrying either returns early and the negative assertion holds regardless
+  // of what `isNeedsReview` reports — the classic vacuous negative. With them
+  // null the branch is genuinely exercised.
+  it('(058) `needsReview: false` on a frame-typeless item is not labelled needs review', () => {
     const items = [
       makeItem({
         inboxItemId: 'ok',
         groupKey: 'type=light·filter=Ha',
-        frameType: 'light',
+        frameType: null,
+        groupFrameType: null,
+        state: 'pending_classification',
         needsReview: false,
       }),
     ];
@@ -113,7 +120,6 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
         filterType="all"
       />,
     );
-    expect(screen.getByText('light')).toBeInTheDocument();
     expect(screen.queryByText('needs review')).not.toBeInTheDocument();
   });
 

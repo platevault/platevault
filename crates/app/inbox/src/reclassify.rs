@@ -2763,6 +2763,16 @@ mod tests {
     /// the folder aggregate is flipped by `classify()`'s step 9, while a
     /// needs-review sub-item is written by `upsert_inbox_sub_item`. A test
     /// scoped to either one alone passes while the other still lies.
+    ///
+    /// **Scope**: the SELECT is table-wide, but the fixture is classify-only —
+    /// it never confirms an item, opens a plan or cancels one, so the plan
+    /// lifecycle writers are out of its reach no matter what the sweep selects.
+    /// They are guarded separately by `app_core`'s
+    /// `cancel_does_not_report_classified_without_a_frame_type_sc003` and by
+    /// `plan_listener`'s
+    /// `discarded_plan_does_not_report_classified_without_a_frame_type_sc003`.
+    /// Neither can be driven from here: `app_core` depends on this crate, so
+    /// SC-003 needs three tests rather than one.
     #[tokio::test]
     async fn no_item_reports_classified_without_a_frame_type_sc003() {
         let db = test_db().await;
@@ -2807,6 +2817,22 @@ mod tests {
             .await
             .unwrap();
         assert!(total >= 3, "fixture is vacuous — classify produced no item rows at all");
+
+        // Positive direction. Without this, a regression that leaves EVERY row
+        // at `pending_classification` — classification silently never
+        // completing — satisfies the sweep below trivially and stays green.
+        let classified: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM inbox_items
+             WHERE state = 'classified' AND frame_type IS NOT NULL",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert!(
+            classified >= 1,
+            "fixture is vacuous — no row reached `classified` at all, so the sweep below \
+             proves nothing"
+        );
 
         let offenders: Vec<(String, String, String)> = sqlx::query_as(
             "SELECT id, state, COALESCE(group_key, '<null>') FROM inbox_items
