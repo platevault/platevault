@@ -88,9 +88,20 @@ font-weight: var(--pv-weight-medium);
   font-size: var(--pv-text-sm);
   color: var(--pv-text-secondary);
 }
+/* Dresses both the data-source <a> and the <button> that opens a bundled
+   licence, so the button's UA chrome is reset here rather than in a near-copy
+   of this class. Every reset below is a no-op on an anchor. The button pairs
+   this with `.pv-link` for the colour affordance, since the global reset
+   renders anchors in inherited colour with no underline. */
 .pv-attribution__link {
   font-size: var(--pv-text-xs);
   word-break: break-all;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 /* Grid so help text (__row-desc) always sits BELOW the control in column 2,
    never beside/overlapping it (was a 3rd flex column → collision on
@@ -187,6 +198,7 @@ font-weight: var(--pv-weight-medium);
 }
 .pv-toggle input:checked ~ .pv-toggle__track { background: var(--pv-accent); }
 .pv-toggle input:checked ~ .pv-toggle__thumb { transform: translateX(16px); }
+.pv-toggle--disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* Token chip (naming builder) */
 .pv-token-chip {
