@@ -219,4 +219,40 @@ describe('PlanApprovalOverlay', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('inbox-root-picker')).toBeInTheDocument();
   });
+
+  // #606 (Constitution II — every filesystem mutation must be reviewable):
+  // the Inbox overlay used to render the destination only; the source was
+  // reachable solely by hovering the file-name cell's `title` tooltip, so a
+  // reviewer could not see what a move was actually moving. Both sides must
+  // render as visible text on the SAME row, so neither can regress
+  // independently. Mirrors the equivalent assertion for the Projects/Archive
+  // consumer in PlanReviewOverlay.test.tsx.
+  it('#606: renders both the source and the destination path for a move item', () => {
+    renderOverlay({
+      plans: [
+        makePlan({
+          inboxItemId: 'item-1',
+          actions: [
+            makeAction({
+              action: 'move',
+              fromPath: '/root/lights/img001.fits',
+              toPath: '/dest/lights/img001.fits',
+              destinationPreview: '/dest/lights/img001.fits',
+            }),
+          ],
+        }),
+      ],
+    });
+    // Per-file rows are collapsed until the group is expanded.
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
+
+    const source = screen.getByTestId('inbox-source-absolute-0');
+    const dest = screen.getByTestId('inbox-dest-absolute-0');
+    expect(source).toHaveTextContent('/root/lights/img001.fits');
+    expect(dest).toHaveTextContent('/dest/lights/img001.fits');
+    // Both sides belong to one action's row, not merely somewhere in the panel.
+    const row = source.closest('.pv-plan-panel__file-row');
+    expect(row).not.toBeNull();
+    expect(row).toContainElement(dest);
+  });
 });
