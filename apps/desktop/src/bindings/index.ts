@@ -2082,6 +2082,8 @@ export type AppPreferences = {
 	sessionsView: SessionsView,
 	tourCompleted: TourCompleted,
 	setupCompleted: boolean,
+	/**  Keyed by `dockId` (the adopting list page, e.g. `"sessions"`). */
+	detailDock: { [key in string]: DetailDockPref },
 };
 
 /**
@@ -3517,6 +3519,17 @@ export type Density = "compact" | "comfortable" | "spacious";
 /**  Per-plan destination for destructive items (R-Trash-1). */
 export type DestructiveDestination = "archive" | "os_trash";
 
+/**
+ *  Per-page detail-dock state.
+ * 
+ *  `placement` is three-state: `Some(Side)` / `Some(Bottom)` pin the dock,
+ *  `None` means "auto" — follow the window-width rule (#1066).
+ */
+export type DetailDockPref = {
+	placement: DockPlacement | null,
+	width: number | null,
+};
+
 /**  Per-root detection trigger configuration (spec 048 FR-014/FR-015/FR-017). */
 export type DetectionConfig = {
 	live: boolean,
@@ -3694,6 +3707,9 @@ export type DirectoryPickResponse = {
 	/**  True when the user dismissed the dialog without selecting. */
 	cancelled: boolean,
 };
+
+/**  Detail-panel dock placement for a list page. */
+export type DockPlacement = "side" | "bottom";
 
 /**  Entity kind for audit-log correlation on reveal operations. */
 export type EntityKind = "inbox_item" | "inventory_row" | "project_manifest" | "master_calibration" | "registered_source" | "other";
