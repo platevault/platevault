@@ -76,7 +76,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
   // OR a non-empty `missingMandatory`) is gone, so both directions must hold:
   // the field alone drives the label, and a classification-identity groupKey
   // does not suppress it.
-  it("(058) the needs-review label comes from `needsReview`, not from `groupKey`", () => {
+  it('(058) the needs-review label comes from `needsReview`, not from `groupKey`', () => {
     const items = [
       makeItem({
         inboxItemId: 'nr',
@@ -96,7 +96,7 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     expect(screen.getByText('needs review')).toBeInTheDocument();
   });
 
-  it("(058) an item with a resolved identity and `needsReview: false` is not labelled needs review", () => {
+  it('(058) an item with a resolved identity and `needsReview: false` is not labelled needs review', () => {
     const items = [
       makeItem({
         inboxItemId: 'ok',
