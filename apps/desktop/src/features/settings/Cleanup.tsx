@@ -38,19 +38,31 @@ type DefaultProtection = 'protected' | 'unprotected';
 
 /**
  * The data types the backend policy model knows (`DataType::as_str` in
- * crates/app/core/src/cleanup_generator.rs). `protected` marks the types the
+ * crates/app/core/src/cleanup_generator.rs). `isProtected` marks the types the
  * backend maps to protected categories (`masters`/`finals`), so opting them
  * into a destructive action warrants the impact warning.
  */
-const POLICY_DATA_TYPES = [
-  { id: 'intermediate', label: () => m.settings_cleanup_type_intermediate() },
+const POLICY_DATA_TYPES: ReadonlyArray<{
+  id: string;
+  label: () => string;
+  isProtected: boolean;
+}> = [
+  {
+    id: 'intermediate',
+    label: () => m.settings_cleanup_type_intermediate(),
+    isProtected: false,
+  },
   {
     id: 'master',
     label: () => m.settings_cleanup_type_master(),
-    protected: true,
+    isProtected: true,
   },
-  { id: 'final', label: () => m.settings_cleanup_type_final(), protected: true },
-] as const;
+  {
+    id: 'final',
+    label: () => m.settings_cleanup_type_final(),
+    isProtected: true,
+  },
+];
 
 /** All-Keep, no auto-run — mirrors `default_cleanup_policy()` on the backend. */
 const DEFAULT_ACTIONS: Record<string, CleanupAction> = {
@@ -178,8 +190,7 @@ export function Cleanup({ save }: CleanupProps) {
   // Protected (high-value) categories currently set to a destructive action —
   // surfaced as an impact warning so the change is deliberate.
   const warnedTypes = POLICY_DATA_TYPES.filter(
-    (type) =>
-      'protected' in type && type.protected && actions[type.id] !== 'keep',
+    (type) => type.isProtected && actions[type.id] !== 'keep',
   ).map((type) => type.label());
 
   return (
@@ -254,7 +265,7 @@ export function Cleanup({ save }: CleanupProps) {
             label={
               <span className="pv-cleanup__type-cell">
                 {type.label()}
-                {'protected' in type && type.protected && (
+                {type.isProtected && (
                   <Pill variant="neutral">
                     {m.settings_cleanup_protection_protected()}
                   </Pill>
@@ -266,7 +277,10 @@ export function Cleanup({ save }: CleanupProps) {
             <SegControl
               options={[
                 { value: 'keep', label: m.settings_cleanup_action_keep() },
-                { value: 'archive', label: m.settings_cleanup_action_archive() },
+                {
+                  value: 'archive',
+                  label: m.settings_cleanup_action_archive(),
+                },
                 { value: 'delete', label: m.settings_cleanup_action_delete() },
               ]}
               value={actions[type.id] ?? 'keep'}
@@ -286,6 +300,7 @@ export function Cleanup({ save }: CleanupProps) {
         >
           <Toggle
             checked={autoOnCompletion}
+            aria-label={m.settings_cleanup_policy_auto_label()}
             onChange={(v) => {
               setAutoOnCompletion(v);
               persistPolicy(actions, v);

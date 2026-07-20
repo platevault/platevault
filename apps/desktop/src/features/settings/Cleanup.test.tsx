@@ -74,7 +74,9 @@ describe('Cleanup — cleanup policy control (issue #804)', () => {
         policyRow('Intermediate files').querySelector('.pv-seg__btn--active'),
       ).toHaveTextContent('Delete');
     });
-    expect(screen.getByRole('switch')).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: 'Scan on project completion' }),
+    ).toBeChecked();
   });
 
   it('defaults every data type to Keep when the backend has no stored policy', async () => {
@@ -119,7 +121,9 @@ describe('Cleanup — cleanup policy control (issue #804)', () => {
     render(<Cleanup save={vi.fn()} />);
     await waitFor(() => expect(mockPolicyGet).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Scan on project completion' }),
+    );
 
     await waitFor(() => {
       expect(mockPolicyUpdate).toHaveBeenCalledWith(
@@ -177,7 +181,9 @@ describe('Cleanup — cleanup policy control (issue #804)', () => {
         policyRow('Intermediate files').querySelector('.pv-seg__btn--active'),
       ).toHaveTextContent('Keep');
     });
-    expect(screen.getByRole('switch')).not.toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: 'Scan on project completion' }),
+    ).not.toBeChecked();
   });
 
   it('a policy edit before the mount fetch resolves is not clobbered by the stale response', async () => {
