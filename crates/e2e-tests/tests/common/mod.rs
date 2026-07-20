@@ -472,6 +472,131 @@ impl E2eApp {
         Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
     }
 
+    /// Resize the real OS window and return the viewport actually ACHIEVED,
+    /// which may be smaller than requested.
+    ///
+    /// Needed because layout-dependent behaviour cannot be asserted at the
+    /// default window size: `tauri.conf.json` opens at 1280x820, while the
+    /// side dock only engages at `window.innerWidth >= 1400`
+    /// (`useAdaptiveDock.ts`'s `threshold`). A journey that wants the docked
+    /// layout has to ask for it.
+    ///
+    /// **Not a one-line `set_window_rect`.** That call sizes the OUTER
+    /// window (frame included), but every threshold in the app keys off
+    /// `window.innerWidth`. The two differ by the window chrome, which is
+    /// not a constant we can hardcode: ~0 under `xvfb-run` (no window
+    /// manager, so no decorations) but real on Windows. Passing 1400 blind
+    /// would yield innerWidth 1400 on Linux and something smaller on
+    /// Windows. So: set, MEASURE, correct by the observed delta.
+    ///
+    /// **Best-effort, deliberately not an assertion.** GitHub-hosted
+    /// **Windows runners are fixed at 1024x768 and cannot be resized** — the
+    /// runner service runs in non-interactive Session 0 with no real display
+    /// attached, so `ChangeDisplaySettings` has nothing to act on
+    /// (actions/runner-images#2935, #8606). Hard-failing on a short request
+    /// would make every docked-layout journey Linux-only by construction.
+    /// Callers needing a minimum must assert on the return value — better
+    /// still, avoid depending on one, as
+    /// `targets_ui_identity_columns_stay_pinned_while_table_scrolls` does by
+    /// pinning the dock rather than relying on the width threshold.
+    ///
+    /// Convergence is capped rather than looped-until-stable: a request
+    /// exceeding the screen is clamped by the OS and would otherwise spin.
+    pub async fn set_viewport(&self, target_w: u32, target_h: u32) -> Result<(i64, i64)> {
+        const ATTEMPTS: usize = 4;
+        let (screen_w, screen_h) = self.screen_size().await.unwrap_or((-1, -1));
+        // Ask for no more than the screen can hold: anything larger is
+        // clamped anyway, and requesting it only wastes attempts.
+        let tw = if screen_w > 0 { i64::from(target_w).min(screen_w) } else { i64::from(target_w) };
+        let th = if screen_h > 0 { i64::from(target_h).min(screen_h) } else { i64::from(target_h) };
+        let (mut outer_w, mut outer_h) = (tw, th);
+        let mut last = (0, 0);
+
+        for _ in 0..ATTEMPTS {
+            self.driver
+                .set_window_rect(0, 0, outer_w.max(1) as u32, outer_h.max(1) as u32)
+                .await
+                .with_context(|| format!("set_window_rect to {outer_w}x{outer_h} failed"))?;
+
+            let (inner_w, inner_h) = self.inner_size().await?;
+            last = (inner_w, inner_h);
+            if inner_w == tw && inner_h == th {
+                return Ok(last);
+            }
+
+            // A non-positive reading means the webview reported no viewport at
+            // all (not laid out yet, or `innerWidth` came back 0/-1) — not that
+            // the window is too small. Correcting by `target - 0` would then ADD
+            // the full target every pass (1400 -> 2800 -> 4200 -> 5600), blowing
+            // the window far past the screen and leaving content so wide that
+            // overflow-dependent journeys can never trip. Observed on Ubuntu CI:
+            // a 5380px client width and a reported 0x0 viewport. Stop and report
+            // what we last saw rather than diverging.
+            if inner_w <= 0 || inner_h <= 0 {
+                return Ok(last);
+            }
+
+            // Never ask for more than the screen can show, for the same reason.
+            outer_w = (outer_w + tw - inner_w).min(if screen_w > 0 { screen_w } else { i64::MAX });
+            outer_h = (outer_h + th - inner_h).min(if screen_h > 0 { screen_h } else { i64::MAX });
+        }
+        Ok(last)
+    }
+
+    /// Seed a persisted app preference BEFORE the frontend reads it, then
+    /// reload so the read is genuinely cold.
+    ///
+    /// The reload is not optional. `data/preferences.ts` memoises into a
+    /// module-level `cachedPreferences` on first read, so writing
+    /// localStorage into an already-booted page changes nothing the app will
+    /// ever look at. Only a real reload drops that cache — which also makes
+    /// this the one path that exercises the cold read.
+    pub async fn seed_preference(&self, key: &str, value_json: &str) -> Result<()> {
+        let script = format!(
+            "var k = 'alm-preferences';\
+             var cur = {{}};\
+             try {{ cur = JSON.parse(localStorage.getItem(k)) || {{}}; }} catch (e) {{ cur = {{}}; }}\
+             cur[{}] = {};\
+             localStorage.setItem(k, JSON.stringify(cur));\
+             return localStorage.getItem(k);",
+            escape_string(key),
+            value_json
+        );
+        self.driver
+            .execute(&script, vec![])
+            .await
+            .with_context(|| format!("failed to seed the {key:?} preference"))?;
+        self.driver.refresh().await.context("failed to reload after seeding a preference")?;
+        Ok(())
+    }
+
+    /// `window.innerWidth`/`innerHeight` — the viewport the app's own
+    /// breakpoints see, as opposed to the OS window `set_window_rect` sets.
+    async fn inner_size(&self) -> Result<(i64, i64)> {
+        let v: Value = self
+            .driver
+            .execute("return [window.innerWidth, window.innerHeight];", vec![])
+            .await
+            .context("failed to read window.innerWidth/innerHeight")?
+            .convert()
+            .context("innerWidth/innerHeight were not a JSON array")?;
+        let get = |i: usize| v.get(i).and_then(Value::as_i64).unwrap_or(-1);
+        Ok((get(0), get(1)))
+    }
+
+    /// Physical screen size, used only to explain a failed resize.
+    async fn screen_size(&self) -> Result<(i64, i64)> {
+        let v: Value = self
+            .driver
+            .execute("return [screen.width, screen.height];", vec![])
+            .await
+            .context("failed to read screen.width/height")?
+            .convert()
+            .context("screen.width/height were not a JSON array")?;
+        let get = |i: usize| v.get(i).and_then(Value::as_i64).unwrap_or(-1);
+        Ok((get(0), get(1)))
+    }
+
     /// Issue a Tauri command through the `window.__ALM_E2E__` bridge.
     ///
     /// The bridge is exposed by the desktop app when it is built with
