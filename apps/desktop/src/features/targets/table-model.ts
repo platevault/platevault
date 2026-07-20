@@ -37,7 +37,7 @@ import type { ObserverSite } from './observing-sites/observer-site';
  *   - lunarDist: sorts by real target↔Moon separation; unknowns sort last
  *     regardless of direction (spec 047 US2)
  *   - imagingTime: sorts by hoursAboveUsable (Track B placeholder)
- *   - sessions: stub — all values 0; sort is a no-op
+ *   - sessions: sorts by real linked-session count (#622), ties by designation
  */
 export type TargetSortCol =
   | 'designation'
@@ -140,8 +140,12 @@ export function compareTargetRows(
       cmp = altA.hoursAboveUsable - altB.hoursAboveUsable;
       break;
     case 'sessions':
-      // All values are 0 until backend #57 lands; preserve input order.
-      cmp = 0;
+      // #622: real `sessionCount` (#877). Absent on older clients → 0, which
+      // sorts alongside genuinely-unshot targets; designation breaks ties so
+      // the order stays deterministic across the many zero-count rows.
+      cmp =
+        (a.sessionCount ?? 0) - (b.sessionCount ?? 0) ||
+        compareStr(a.effectiveLabel, b.effectiveLabel);
       break;
   }
   return sort.dir === 'asc' ? cmp : -cmp;

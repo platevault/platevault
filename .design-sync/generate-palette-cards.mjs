@@ -44,12 +44,35 @@ function parseDecls(body) {
   return out;
 }
 
+/** Strip `/* … *\/` comments so a selector mentioned in prose cannot be mistaken
+ *  for a rule. tokens.css documents the default palette with a comment that
+ *  contains the literal text `:root, [data-theme="warm-slate"]`; a plain
+ *  `indexOf` matched that comment, took the next `{…}` — a different theme's
+ *  block — and rendered a dark palette under the Warm Slate label. */
+function stripComments(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/** Body of the rule whose selector list contains `selector`. Anchored: the
+ *  selector must be followed by `{`, optionally after other selectors in the
+ *  same comma-separated list, so only a real rule can match. */
 function blockBody(css, selector) {
-  const i = css.indexOf(selector);
-  if (i === -1) return null;
-  const start = css.indexOf('{', i);
-  const end = css.indexOf('}', start);
-  return start === -1 || end === -1 ? null : css.slice(start + 1, end);
+  const re = new RegExp(
+    `(?:^|[},])[^{}]*?${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^{}]*?\\{([^{}]*)\\}`,
+  );
+  const m = re.exec(css);
+  return m ? m[1] : null;
+}
+
+/** sRGB relative luminance, for asserting a theme renders in its declared mode. */
+function luminance(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex?.trim() ?? '');
+  if (!m) return null;
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(m[1].slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /** Resolve one level of `var(--pv-x)` against the theme, then :root. */
@@ -59,7 +82,7 @@ function resolve(value, theme, root) {
   return theme[m[1]] ?? root[m[1]] ?? value;
 }
 
-const css = readFileSync(TOKENS, 'utf8');
+const css = stripComments(readFileSync(TOKENS, 'utf8'));
 const root = parseDecls(blockBody(css, ':root') ?? '');
 
 // Pull the registry entries without importing TypeScript: id/label/mode only.
@@ -95,6 +118,24 @@ for (const { id, label, mode } of themes) {
 
   // Card chrome uses the theme's own colours, so each card previews itself.
   const bg = val('bg');
+
+  // A card is only trustworthy if the block we parsed is actually this theme's.
+  // Card count matching theme count proved nothing — six cards were emitted with
+  // one rendering the wrong palette entirely. Background luminance against the
+  // registry's declared mode catches a mis-parse for what it is.
+  const lum = luminance(bg);
+  if (lum === null) {
+    problems.push(`${id}: --pv-bg did not resolve to a hex colour (got ${bg ?? 'nothing'})`);
+    continue;
+  }
+  const rendered = lum < 0.5 ? 'dark' : 'light';
+  if (rendered !== mode) {
+    problems.push(
+      `${id}: registry declares mode '${mode}' but the parsed block renders ${rendered} ` +
+        `(--pv-bg ${bg}). The wrong block was almost certainly parsed.`,
+    );
+    continue;
+  }
   const surface = val('surface');
   const ink = val('ink');
   const ink3 = val('ink3');
