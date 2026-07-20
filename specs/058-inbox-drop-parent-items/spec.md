@@ -31,18 +31,23 @@ The scope claim is deliberately narrow, because ground is already held:
   landed after this specification was written, making the list badge read the
   item's own classification result rather than falling back to `state`.
 
-  ⚠️ **Corrected 2026-07-20 — do not read this as "the journey passes on
-  `main`".** An earlier revision of this section said
-  `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` passes on
-  `main` having been fixed by #1099. The #1208 bisect refutes that: the test
-  failed on the very commit credited with fixing it (`ef90b074`, before #1131)
-  **and** after it (`6fa1bf55`), on both the ubuntu 2/4 and windows 2/2 shards.
-  `main` merely looked green because its E2E runs were being cancelled by a
-  concurrency-group bug before they could report (#1268 fixes that) — silence
-  was mistaken for a pass. What #1099 actually fixed is the badge *expression*;
-  the journey has a separate failure whose symptom is an **empty list**, not a
-  wrong badge (#1202). The scope claim below is therefore stated against
-  SC-003, which is measurable independently of that journey.
+  📎 **#1099 alone was not sufficient — #1206 finished it.** Two accounts of
+  this looked contradictory and are in fact both correct, about different
+  commits. The #1208 bisect found
+  `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` failing on
+  `ef90b074` — the very commit credited with the fix — **and** on `6fa1bf55`,
+  across the ubuntu 2/4 and windows 2/2 shards. Both refs **predate #1206**,
+  which repaired the journey's stale selector (following the gap #1202
+  identified). #1099 fixed the badge *expression*; the journey went on failing
+  on a selector until #1206.
+
+  Confirmed green on this branch 2026-07-20: the full Real-UI E2E suite passed
+  on head `33f78450`, **all six shards, including the ubuntu 2/4 and windows
+  2/2 that the bisect saw fail**. Note that pre-#1268 `main` could not have
+  settled this either way — its E2E runs were cancelled by a concurrency-group
+  bug before reporting, so green-on-`main` in that window meant silence, not a
+  pass. The scope claim below is stated against SC-003 regardless, which is
+  measurable independently of this journey.
 
 What remains — and what this feature is actually for — is the folder that
 produces exactly one item, and specifically **the false row underneath it**.
@@ -58,8 +63,16 @@ a row with `state = 'classified'` and no frame type, which confirm can still
 bind a filesystem plan to. That is what SC-003 measures and what this feature
 exists to remove.
 
-**Supersedes the read-side workarounds in**: PR #1038 and PR #1081. Those
-workarounds are removed (FR-026, SC-007) rather than corrected — with no
+**The visible unsplit-case symptom was subsequently patched a third time by
+PR #1099** (merged 2026-07-20, after this scope claim was written): the list now
+reads `classification_result` instead of `state` for the badge, so #711
+Instance A no longer reproduces on `main`. This does not narrow this feature's
+scope — see [Product Intent](#product-intent) for why a third read-side patch
+is evidence for the model-level fix, not a reason to drop it. `upsert_inbox_sub_item`
+still writes the hardcoded `state = 'classified'` literal #1099 read around.
+
+**Supersedes the read-side workarounds in**: PR #1038, PR #1081, and PR #1099.
+Those workarounds are removed (FR-026, SC-007) rather than corrected — with no
 aggregate row there is nothing to suppress.
 
 ## Product Intent
@@ -77,37 +90,36 @@ confirms for ordinary folders. For a folder that splits, the placeholder is
 superseded by the real single-type rows but is not removed, so it lingers in the
 list advertising a classification it does not have.
 
-This produced a visible, reproducible lie. In #711 Instance A a list row read
-**CLASSIFIED** while opening it showed `unclassified`, a blocking "Frame types
-required" banner, and a disabled Confirm button. The list and the detail panel
-disagreed about the same item id.
+This produced a visible, reproducible lie: in #711 Instance A a list row read
+**CLASSIFIED** while opening it showed `unclassified`, a blocking
+"Frame types required" banner, and a disabled Confirm button — the list and the
+detail panel disagreeing about the same item id.
 
-**That visible symptom was closed on `main` by PR #1099 (`ef90b074`), after this
-specification was written.** The list badge now reads the item's own
-classification result instead of falling back to `state`, and the Layer-2
-journey asserting it —
-`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` — passes.
+**That visible symptom is now closed.** PR #1099 (merged 2026-07-20T03:22:26Z)
+changed the list to read the item's own cached `classification_result` instead
+of falling back to `state` for the Type-column badge, so the two surfaces agree
+on screen again. `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`
+(`crates/e2e-tests/tests/inbox_ui_journeys.rs:562`) is the acceptance test for
+exactly this defect; once its stale selector was repaired (#1206, following the
+gap #1202 identified), it passes on `main`.
 
-**The cause did not go away.** The badge was never rendering the wrong thing: it
-was rendering the database faithfully, and **the database contains a false
-statement**. Classification sets the placeholder's state to `classified` while
-leaving it with no frame type and no group key, so a row that has never been
-classified truthfully claims it has. That row is still written today. The
-measure of this feature is therefore **SC-003** — zero inbox items carrying a
-`classified` state without a frame type — not the badge. SC-003 is violated on
-`main` and on this branch, pinned executably by
-`no_item_reports_classified_without_a_frame_type_sc003`
-(`crates/app/inbox/src/reclassify.rs`).
+The badge no longer lies, but **the database still does**. `upsert_inbox_sub_item`
+(`crates/persistence/db/src/repositories/inbox.rs:525` INSERT `VALUES`, `:532`
+`ON CONFLICT ... DO UPDATE SET`) hardcodes `state` to the SQL literal
+`'classified'` regardless of `frame_type`, so a placeholder that has never been
+classified is persisted as `classified` with a null frame type for as long as it
+stays unresolved. That is SC-003's failure condition — observable database
+state, not a transient rendering window. #1099 changed how the list reads
+around that row; it did not change what the row says.
 
-**Three attempts have now patched the read side rather than the cause**, and the
-second existed only to repair the first. #1099 is the third, landing while this
-feature was being planned. Each was correct in isolation and none could reach
-the model underneath — which is exactly what
-[Not considered a real option](#not-considered-a-real-option--patch-the-read-side-again)
-predicted. That the read side keeps needing patches is the strongest available
-evidence that the model, not the query, is wrong. This feature removes the
-parent concept so that every row in the Inbox is a real, actionable item that
-states only true things about itself.
+This is the **third** time the read side has needed patching for the same
+underlying lie: #1038 and #1081 patched it before, and #1099 is a third — one
+that landed while this feature was already being planned. That is not evidence
+against this feature; it is the strongest evidence for it. The read side keeps
+needing patches because the model, not the query, is wrong. This feature removes
+the parent concept so that every row in the Inbox is a real, actionable item
+that states only true things about itself, closing the defect at its source
+rather than at its latest presentation. (Refs #711, #1099, #1202, #1206.)
 
 ## Recorded Decisions
 

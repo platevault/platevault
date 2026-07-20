@@ -71,12 +71,41 @@ pub fn invalidate_calibration_masters() {
     calibration_masters().invalidate();
 }
 
+/// Test-only serialization for the two process-global `SnapshotCache` statics
+/// above.
+///
+/// Shared between this module's own round-trip tests and
+/// `matching::tests`'s cache-behavior tests (`load_config`/`masters_list`
+/// read through the same `CALIBRATION_CONFIG`/`CALIBRATION_MASTERS` slots).
+/// Before this lock was shared, each test module held its own private mutex,
+/// so a `caches::tests` round-trip test could run concurrently with a
+/// `matching::tests` cache-hit test and race on the same slot — the
+/// known-flaky `load_config_reads_require_same_offset_from_tolerances_table`
+/// (#988).
+#[cfg(test)]
+pub(crate) mod cache_test_lock {
+    static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    /// Acquire the shared lock for an async (`#[tokio::test]`) caller.
+    pub(crate) async fn lock() -> tokio::sync::MutexGuard<'static, ()> {
+        LOCK.lock().await
+    }
+
+    /// Acquire the shared lock for a sync (`#[test]`) caller. Blocks the
+    /// current thread rather than `.await`ing — safe here because these call
+    /// sites have no Tokio runtime, unlike [`lock`]'s async callers.
+    pub(crate) fn lock_sync() -> tokio::sync::MutexGuard<'static, ()> {
+        LOCK.blocking_lock()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn calibration_config_cache_store_load_invalidate_round_trips() {
+        let _guard = cache_test_lock::lock_sync();
         invalidate_calibration_config();
         assert!(calibration_config().load().is_none());
 
@@ -89,6 +118,7 @@ mod tests {
 
     #[test]
     fn calibration_masters_cache_store_load_invalidate_round_trips() {
+        let _guard = cache_test_lock::lock_sync();
         invalidate_calibration_masters();
         assert!(calibration_masters().load().is_none());
 

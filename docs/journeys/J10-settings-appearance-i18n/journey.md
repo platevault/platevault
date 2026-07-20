@@ -1,7 +1,7 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 8
+version: 10
 status: draft
 last_reviewed: 2026-07-17
 actors: [astrophotographer]
@@ -33,6 +33,9 @@ trace:
   - spec 055 (typography rework) Phase 2, T010–T015
   - spec-054-adaptive-detail-dock (FR-003 — per-page Detail panel placement
     control)
+  - PR #1176 (design-refresh handoff 03 — canonical themes, family-grouped
+    picker, clay/espresso hidden)
+  - PR #1185 (design-refresh handoff 08 — default dark theme)
 ---
 
 ## Goal
@@ -77,10 +80,16 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Do:** In Appearance, pick a different theme, change density, change font
   size, and change the whole-app Zoom setting (or use Ctrl+= / Ctrl+- / Ctrl+0
   anywhere in the app, outside a text field).
-- **Expect:** One of four named themes (Warm Clay, Warm Slate, Observatory,
-  Espresso) or "System" (follows OS) applies live with no reload; the choice
-  survives a full app restart (confirmed by a live Windows kill+relaunch
-  test, docs/development/journey-run-2026-07-14.md). Density
+- **Expect:** The picker offers a System card, then two family groups
+  labeled Warm and Cool; within each family, the light theme is listed
+  before the dark one. Four canonical themes are offered: Warm (Warm
+  Slate — light, Observatory — dark) and Cool (Observatory Cool · Light,
+  Observatory Cool — dark). Picking any card, or System, applies live with
+  no reload; the choice survives a full app restart (confirmed by a live
+  Windows kill+relaunch test, docs/development/journey-run-2026-07-14.md).
+  Choosing System now resolves to Observatory Cool on a dark OS preference
+  (Warm Slate on a light one) — previously System resolved dark to
+  Observatory. Density
   (compact/comfortable/spacious) rescales the `--pv-sp-*` spacing tokens
   (plus `--pv-row-height`); font size is a three-stop dial — Small/Default/
   Large writes a single integer `<html>` font-size of 12/14/16px (bumped
@@ -98,6 +107,11 @@ Note: Release builds lack the /dev/contracts palette entry by design
   same persisted choice; Ctrl+0 always resets to 100%. Zoom persists the
   same way as font size (settings DB + localStorage boot cache) and is
   re-applied once at startup.
+- **Expect (negative):** Warm Clay and Espresso (dark) no longer appear as
+  cards in the picker — they are hidden, not removed: a user who already
+  had one of them selected keeps seeing it applied and keeps resolving/
+  persisting correctly, but cannot re-select it from Appearance once they
+  switch away, and it is not offered to a user who never had it selected.
 - **Expect (negative):** The `--pv-row-height` token itself — the actual
   row *height* — is still consumed only by the Targets table, the
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
@@ -123,12 +137,14 @@ Note: Release builds lack the /dev/contracts palette entry by design
   detail dock, has since shipped — see S11 — but it addresses list-page
   detail-panel placement specifically, not this shell/zoom viewport
   degradation, which remains accepted as-is).
-- **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
-  `applyDensity`, `applyFontSize`/`FontSizeChoice`/`FONT_SIZE_ROOT_PX`/
-  `roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/`setZoomChoice`/
-  `applyZoom`/`stepZoomIn`/`stepZoomOut`/`resetZoom`),
+- **Trace:** apps/desktop/src/data/theme.ts (`THEMES` registry — `enabled`/
+  `family` fields, `LIGHT_DEFAULT`/`DARK_DEFAULT`, `resolveTheme`,
+  `applyTokenScale`, `applyDensity`, `applyFontSize`/`FontSizeChoice`/
+  `FONT_SIZE_ROOT_PX`/`roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/
+  `setZoomChoice`/`applyZoom`/`stepZoomIn`/`stepZoomOut`/`resetZoom`),
+  apps/desktop/src/features/settings/General.tsx (`WARM_CHOICES`/
+  `COOL_CHOICES` — filter to `enabled` themes, grouped by family/mode),
   apps/desktop/src/app/Shell.tsx (Ctrl+=/-/0 `useHotkeys` bindings),
-  apps/desktop/src/features/settings/General.tsx,
   apps/desktop/src-tauri/capabilities/default.json
   (`core:webview:allow-set-webview-zoom`),
   apps/desktop/src/styles/tokens.css (`--pv-text-*` rem scale),
@@ -444,3 +460,21 @@ Note: Release builds lack the /dev/contracts palette entry by design
   a shell/zoom concern rather than a detail-dock concern.
   Evidence: PR #1070 (fixes #1066), spec-054-adaptive-detail-dock (FR-003)
   · by: journey-scribe (intent-gated)
+
+- **Δ9** 2026-07-20 · S2 · behavior-change
+  The Appearance theme picker now offers exactly 4 canonical themes
+  (Warm Slate, Observatory, Observatory Cool · Light, Observatory Cool),
+  grouped under System / Warm / Cool headings with light listed before
+  dark in each family — previously a flat list of Warm Clay, Warm Slate,
+  Observatory, Espresso, System. Warm Clay and Espresso (dark) are hidden
+  from the picker but remain valid, still-resolving choices for anyone who
+  already had one selected.
+  Evidence: PR #1176 (closes #1139) · by: journey-scribe (intent-gated)
+
+- **Δ10** 2026-07-20 · S2 · behavior-change
+  Choosing System (or Restore Defaults, S9) now resolves a dark OS
+  preference to Observatory Cool instead of Observatory; the light
+  resolution (Warm Slate) is unchanged. Confirmed live in
+  `apps/desktop/src/data/theme.ts` (`DARK_DEFAULT`) on `origin/main` as of
+  commit 8164b48a, ahead of this journey's prior `last_reviewed` snapshot.
+  Evidence: PR #1185 (merged) · by: journey-scribe (intent-gated)

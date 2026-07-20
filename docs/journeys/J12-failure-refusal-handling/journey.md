@@ -1,9 +1,9 @@
 ---
 id: J12
 title: See why an action failed or was refused, and what to do next
-version: 1
+version: 2
 status: draft
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-20
 actors: [astrophotographer]
 surfaces: [plans, projects, audit]
 interfaces: [desktop-ui]
@@ -14,6 +14,11 @@ trace:
   - deltas/2026-07-14-q16-t130.md (folded into S3)
   - docs/development/journey-run-2026-07-14.md (Journey 12 section — live
     Windows validation; source for step-level Trace notes below)
+  - issue #1236 (re-verify S3/S4 against current main, closed by this pass)
+  - PR #1041 (approve_plan FS snapshot, closes #829), PR #1054 (per-item
+    failure reason threaded to PlanReviewOverlay, closes #607), PR #855
+    (mid-run item retry re-execution, closes #742) — re-verification
+    evidence for the 2026-07-20 Trace updates to S3/S4 below
 ---
 
 ## Goal
@@ -102,26 +107,44 @@ control, or a raw error code.
 - **Expect (negative):** A partial failure never hides or rolls back the
   items that already succeeded, and never presents a single undifferentiated
   "plan failed" message in place of per-item detail.
-- **Trace:** Confirmed unmet in the running app (2026-07-14 live run):
-  deleting a plan item's source file before apply produced
-  `itemsFailed=0`/`itemsApplied=2` — silent success, not a listed failure.
-  Root cause: `approve_plan` never snapshots per-item FS metadata, so the
-  CAS staleness check permissively skips universally (issue #829, open,
-  SAFETY; DB-wide, 0/26 `plan_items` have `approved_mtime` populated). Even
-  when an item does fail, the per-item id/reason payload is discarded
-  before reaching the UI, leaving only an aggregate count (issue #607,
-  open, P1, `usePlanApplyProgress.ts:74-76`). Retry mechanism verified in
-  code: `apps/desktop/src/features/plans/PlanReviewOverlay.tsx`
-  (`handleGenerateRetryPlan`) creates a new plan from the failed subset —
-  it does not re-apply the original plan in place; the separate in-run
-  per-item `retry_plan_item` path (`crates/app/core/src/plan_apply.rs:1978`)
-  is for retrying within a still-active apply and never re-executes queued
-  retries (issue #742, open). Unresolved-chip claim verified via
-  `apps/desktop/src/components/RenderValue.tsx:76-87` and
-  `RenderValue.test.tsx`/`PropertyTable.test.tsx`; no dedicated per-item
-  failure indicator exists yet to compare it against (#607), so the
-  "never confusable with a failure indicator" half of this claim is
-  unverified until #607 ships. See report for candidate Known gap.
+- **Trace:** RE-VERIFIED 2026-07-20 against current `main`: this step now
+  matches the running app; the 2026-07-14 finding was accurate at the time
+  but has since been fixed. `approve_plan` (`crates/app/core/src/plans.rs:
+  366-396`) now snapshots per-item FS metadata (`approved_mtime`/
+  `approved_size_bytes`) at approval, and `check_cas`
+  (`crates/fs/executor/src/ops/cas_check.rs:43-98`) compares it at apply
+  time, returning `ItemStale`/`SourceMissing` instead of skipping
+  permissively — landed in PR #1041 (closes #829). The per-item id/reason
+  payload is no longer discarded: `PlanReviewOverlay.tsx` (~line 414-436)
+  renders a Result column with a state `Pill` plus `item.failureReason`
+  text sourced from the durable `plan_items.failure_reason` column —
+  landed in PR #1054 (closes #607). Integration coverage now exists for
+  the exact 2026-07-14 reproduction: `crates/app/core/tests/
+  plan_apply_lifecycle_integration.rs` asserts 2 succeeded + 1 failed item
+  reaches plan state `partially_applied` with `items_applied=2`/
+  `items_failed=1` (not the old silent `itemsFailed=0`). Retry mechanism
+  re-verified: `handleGenerateRetryPlan`
+  (`apps/desktop/src/features/plans/PlanReviewOverlay.tsx`, `retryable`
+  gate ~line 205) is reachable once `effectiveState` is `failed`/
+  `partially_applied`/`cancelled`, and calls `plansRetry(planId, 'failed')`
+  which still creates a new plan scoped to the failed subset — covered by
+  `PlanReviewOverlay.test.tsx` ("offers \"Generate retry plan\" after a
+  partially_applied outcome and drives plans.retry", ~line 379). The
+  separate in-run `retry_plan_item` path (`crates/app/core/src/
+  plan_apply/lifecycle.rs:476`, module split from the old
+  `plan_apply.rs:1978`) is also now fixed — issue #742 (mid-run retry never
+  re-executed) landed in PR #855, covered by
+  `crates/fs/executor/src/run.rs::mid_run_retry_reexecutes_already_passed_item`
+  — but this remains a distinct mechanism from `plansRetry`, per the
+  doc's original framing. Unresolved-chip claim re-verified via
+  `apps/desktop/src/components/RenderValue.tsx:76-87`; the "never
+  confusable with a failure indicator" half is now also verified — the
+  Result column's failed-state `Pill` (PR #1054) is visually and
+  semantically distinct from `UnresolvedChip`. A real-UI journey covering
+  partial-apply recovery is now proposable: this step (and the
+  `PlanReviewOverlay` surface generally) still has zero real-backend/
+  real-UI coverage per this doc's own gap language, but the underlying
+  mechanism is no longer a known-broken target to validate against.
 
 ### S4 — A stale plan refuses to apply and offers regeneration {#S4}
 - **Do:** Attempt to apply a plan whose referenced source data changed on
@@ -132,15 +155,43 @@ control, or a raw error code.
 - **Expect (negative):** Apply never proceeds silently against stale plan
   data, and the stale state is never indistinguishable from a normal
   pending-apply plan.
-- **Trace:** Confirmed unmet in the running app (2026-07-14 live run): a
-  plan whose source file was deleted after confirm applied silently
-  (`itemsFailed=0`), with no stale marking and no regenerate action offered
-  — same root cause as S3 (issue #829, open, SAFETY). The stale-plan-refusal
-  mechanism this step describes is currently unwired for every plan type
-  (catalogue/mkdir/link actions cannot detect it at all; move/archive/
-  trash/delete actions may still surface a real IO error for a *deleted*
-  source, untested, but a *modified* source is never caught). See report
-  for candidate Known gap.
+- **Trace:** RE-VERIFIED 2026-07-20 against current `main`: the shared root
+  cause (#829) is fixed — see S3 — so the original "applies silently,
+  `itemsFailed=0`" reproduction no longer occurs. But this step's specific
+  expectations (a visibly *stale*-marked plan, apply refused up front, a
+  distinct regenerate action) still do not match the running app, so the
+  "unmet" framing stands, for a different and more precise reason than the
+  2026-07-14 note gave. What actually happens now: a CAS mismatch detected
+  mid-apply pauses the run (R-Pause-1) rather than either applying silently
+  or cleanly refusing up front — `crates/app/core/tests/
+  plan_apply_lifecycle_integration.rs::apply_pauses_on_stale_item_cas_mismatch`
+  asserts plan state `paused` with `pause_reason="item.stale"`, source file
+  left untouched. The UI surfaces this as a generic paused badge with the
+  **raw, untranslated** reason string — `PlanReviewOverlay.tsx:649-650`
+  renders `m.plans_review_paused_badge({ reason: progress.pauseReason })`,
+  confirmed by `PlanReviewOverlay.test.tsx` asserting the literal text
+  "Paused — item.stale" — and offers only a "Resume" button (re-attempts
+  the same operation), never a distinct "stale"/"regenerate" affordance.
+  Separately, there is dead code aimed at exactly this step's UX: `inbox_
+  plan.rs:130-135` computes `InboxPlanView.stale` as `plan_row.state ==
+  "stale"`, which the frontend (`apps/desktop/src/features/inbox/
+  PlanPanel.tsx:1002-1009`) uses to disable Apply and show a
+  "discard and re-confirm" banner (`inbox_stale_plan_warning`) — but no
+  code path in the repo ever writes the literal string `"stale"` to
+  `plans.state`: `PlanState` (`crates/contracts/core/src/lifecycle.rs:
+  60-72`) has no `Stale` variant, `TerminalCounts::terminal_state`
+  (`crates/fs/executor/src/run.rs:59-69`) never returns it, and every raw
+  `UPDATE plans SET state = ...` call site was audited (`crates/
+  persistence/db/src/repositories/plan_apply.rs`, `plans.rs`,
+  `projects.rs`) with none writing `'stale'`. So `InboxPlanView.stale` is
+  always `false` in practice — the one code path that would satisfy this
+  step's exact expectation ("visibly marked stale ... regenerate action
+  offered in place of apply") is unreachable. Net: staleness detection
+  itself is real and no longer silent (genuine improvement over
+  2026-07-14), but it surfaces as an untranslated pause reason with a
+  retry-style Resume button, not the distinct stale-marking +
+  regenerate flow this step describes — still unwired for every plan
+  type, now for a dead-code reason rather than a missing-snapshot reason.
 
 ### S5 — Every refusal and failure is later findable in the Audit Log {#S5}
 - **Do:** After triggering a refusal/failure from S1-S4, open the Audit Log
@@ -176,3 +227,33 @@ control, or a raw error code.
 - G1: (dissolved 2026-07-15) — tracked as issues #647 and #766; plan-apply outcomes lack durable audit rows.
 
 ## Delta log
+
+- **Δ2** 2026-07-20 · S3 · behavior-change
+  Partial-apply failure handling shipped: `approve_plan` now snapshots
+  per-item FS metadata and the CAS check consults it at apply time instead
+  of skipping permissively, so a missing/changed source is caught rather
+  than silently counted as success; the per-item failure reason now reaches
+  the plan-review table (Result column) instead of being discarded to an
+  aggregate count. Mid-run per-item retry re-execution also shipped.
+  Evidence: PR #1041 (closes #829), PR #1054 (closes #607), PR #855
+  (closes #742); re-verified against
+  `crates/app/core/tests/plan_apply_lifecycle_integration.rs` and
+  `apps/desktop/src/features/plans/PlanReviewOverlay.test.tsx` · by:
+  re-verification pass for issue #1236 (intent-gated)
+
+- **Δ3** 2026-07-20 · S4 · behavior-change
+  The shared root cause (#829) is fixed, so a stale plan no longer applies
+  with `itemsFailed=0` — a CAS mismatch now pauses the run instead. The
+  step's specific expectation (a plan visibly marked stale, with a
+  regenerate action offered in place of apply) still does not hold: the
+  pause surfaces as an untranslated `pause_reason` string with a
+  retry-style Resume action, and the one code path that would compute a
+  dedicated `stale` flag (`inbox_plan.rs`'s `plan_row.state == "stale"`)
+  is unreachable dead code — no plan-state write in the codebase ever sets
+  the literal value `"stale"`. The "unmet" verdict stands; the mechanism
+  and evidence behind it changed.
+  Evidence: PR #1041 (closes #829); `crates/contracts/core/src/
+  lifecycle.rs:60-72` (`PlanState` has no `Stale` variant);
+  `crates/app/core/src/inbox_plan.rs:130-135`; `apps/desktop/src/features/
+  plans/PlanReviewOverlay.test.tsx` ("Paused — item.stale") · by:
+  re-verification pass for issue #1236 (intent-gated)

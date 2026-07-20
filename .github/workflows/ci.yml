@@ -164,7 +164,7 @@ jobs:
   # therefore fires only when BOTH lanes are idle, which is exactly the case
   # where the job had nothing to do and must not report `success`.
   integration:
-    name: Integration (Layer 1) — ${{ matrix.os }}
+    name: Unit + integration (L1+L2) — ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
     strategy:
@@ -227,6 +227,29 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
+      # Vite's dependency-optimizer output. Restored AFTER `pnpm install`
+      # because it lives inside `node_modules/`, which the install recreates.
+      #
+      # Without it every run pays a cold optimize+transform for all ~200 test
+      # files at once. That storm is not merely slow: vitest's `testTimeout`
+      # clock starts when a test is scheduled, not when it gets a worker, so
+      # a cold run charges queue time against unrelated tests and fails them
+      # on timeout (observed locally: 21s transform vs the 15s timeout, two
+      # suites red; both pass in isolation and pass warm).
+      #
+      # Vite validates this cache against its own hash of the lockfile and
+      # config and re-optimizes on mismatch, so a stale restore degrades to
+      # today's cold behaviour rather than serving wrong modules. The key
+      # mirrors those same inputs so the common case is a clean hit.
+      - name: Cache Vite transform/deps output
+        if: needs.changes.outputs.frontend == 'true'
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/vite.config.ts', 'apps/desktop/vitest.config.ts') }}
+          restore-keys: |
+            vite-${{ runner.os }}-
+
       # --- Fast checks first (FR-012) ---
       # Frontend lint gate: Biome (format check + syntactic rules) first, then
       # the slimmed ESLint layer Biome cannot replicate — the spec-046
@@ -283,7 +306,7 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # --- Layer 1: real-backend integration + unit tests ---
+      # --- L1 (isolated units) + L2 (real-backend integration) ---
       # No standalone `cargo build --workspace` step: clippy --all-targets
       # (above, Linux) and nextest (below, every OS) each already build every
       # target they need, so a dedicated build step only duplicated work.
@@ -302,7 +325,7 @@ jobs:
       # force_full trigger (Cargo.lock, workflows, …) or a rust-relevant file
       # outside every member yields the full-workspace fallback. Build/clippy
       # stay workspace-wide — conservative: when in doubt, run more.
-      - name: Rust tests (Layer 1 — real SQLite, real migrations)
+      - name: Rust tests (L1+L2 — real SQLite, real migrations)
         if: needs.changes.outputs.rust == 'true'
         shell: bash
         # CHANGED_FILES is passed via env (never interpolated into the script
@@ -435,7 +458,7 @@ jobs:
   # the frontend lane and a change that cannot affect the frontend skips it
   # outright rather than reporting a green check for an empty run.
   ui-e2e:
-    name: UI E2E (mock-mode Playwright)
+    name: UI mock-mode (Playwright)
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest

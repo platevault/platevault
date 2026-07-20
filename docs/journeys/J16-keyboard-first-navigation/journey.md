@@ -1,7 +1,7 @@
 ---
 id: J16
 title: Drive PlateVault end to end without a pointer
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -30,6 +30,8 @@ trace:
   - PR #884 (merged, fixes #581)
   - spec-054-adaptive-detail-dock (FR-012, FR-013 — placement-neutral
     keyboard contract)
+  - PR #1175 (design-refresh handoff 02 — Home/End on table rows, closes
+    #1138)
 ---
 
 ## Goal
@@ -90,13 +92,16 @@ operable, and observable using only the keyboard, from any page.
 
 ### S3 — Traverse a list page by keyboard {#S3}
 - **Do:** Tab to a list page's table, move the focused row with ArrowUp and
-  ArrowDown, then press Enter or Space on a focused row; separately, Tab to
-  a sortable column header and activate it.
-- **Expect:** Arrow keys move focus row-to-row without a pointer; Enter or
-  Space on the focused row performs exactly what a click on that row would
-  (typically opening its detail panel); the focused row and every
-  Tab-reachable control show a visible focus ring; sortable headers are
-  keyboard-reachable and expose `aria-sort` when active.
+  ArrowDown, then press Home and End; press Enter or Space on a focused
+  row; separately, Tab to a sortable column header and activate it.
+- **Expect:** Arrow keys move focus row-to-row without a pointer; Home
+  jumps focus directly to the first row and End to the last row of the
+  same scope as the currently focused row, without needing to arrow
+  through every row in between; Enter or Space on the focused row performs
+  exactly what a click on that row would (typically opening its detail
+  panel); the focused row and every Tab-reachable control show a visible
+  focus ring; sortable headers are keyboard-reachable and expose
+  `aria-sort` when active.
 - **Expect (negative):** Moving focus with the arrow keys alone does not
   perform the row's action — only Enter/Space activates it, so keyboard
   users can browse without triggering navigation by accident.
@@ -174,8 +179,9 @@ operable, and observable using only the keyboard, from any page.
   listed in its Pages group resolve to an existing route today — the
   remaining 3 (`/review`, `/plans`, `/audit`) are dead links tracked as
   Known gap G6 (S1).
-- SC2: 100% of rows on a list page are reachable via ArrowUp/ArrowDown and
-  activatable via Enter/Space without a pointer (S3).
+- SC2: 100% of rows on a list page are reachable via ArrowUp/ArrowDown (or
+  directly via Home/End for the first/last row) and activatable via
+  Enter/Space without a pointer (S3).
 - SC3: Sidebar collapse/expand state matches its pre-restart value 100% of
   the time after an app restart (S5).
 - SC4: "Open in new window" produces a window that survives independently
@@ -223,3 +229,9 @@ operable, and observable using only the keyboard, from any page.
   never updated to match.
   Evidence: spec-054-adaptive-detail-dock (FR-012, FR-013) · by:
   journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-20 · S3, +SC2 · behavior-change
+  Table row traversal gains Home/End in the existing roving-keyboard idiom:
+  Home moves focus to the first row and End to the last row of the current
+  scope, without arrowing through the rows in between.
+  Evidence: PR #1175 (closes #1138) · by: journey-scribe (intent-gated)
