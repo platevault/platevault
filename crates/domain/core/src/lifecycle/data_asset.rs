@@ -61,6 +61,11 @@ pub enum EntityType {
     /// Settings/Protection/Equipment (no lifecycle table/transitions of its
     /// own; only used at the `insert_audit_entry` write path).
     Framing,
+    /// A calibration master assignment (#1120) — audit-only entity type, same
+    /// precedent as Framing. `calibration_assignment` rows are created and
+    /// deleted outright rather than transitioned, so an assignment's history
+    /// survives only in `audit_log_entry`.
+    Calibration,
 }
 
 impl EntityType {
@@ -80,6 +85,7 @@ impl EntityType {
             Self::Protection => "protection",
             Self::Equipment => "equipment",
             Self::Framing => "framing",
+            Self::Calibration => "calibration",
         }
     }
 }

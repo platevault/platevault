@@ -471,6 +471,86 @@ async fn unassign_removes_persisted_assignment() {
     assert_eq!(again.error.expect("expected error details").code, "assignment.not_found");
 }
 
+/// #1120: assign/unassign history must land in `audit_log_entry`, the
+/// authoritative durable record — not only in the non-authoritative `events`
+/// table that `bus.publish` writes. Asserted on the durable table directly,
+/// because an `events` row satisfies the old (weak) check either way.
+#[tokio::test]
+async fn assign_and_unassign_write_durable_audit_log_entries() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    insert_acq_fingerprint(pool, &session_id, 200.0, 20.0, -15.0, "2x2").await;
+    insert_cal_session(pool, &master_id, "dark").await;
+    insert_cal_fingerprint(pool, &master_id, "dark", 200.0, 20.0, -15.0, "2x2").await;
+
+    let assign_resp = assign(
+        pool,
+        &bus,
+        CalibrationMatchAssignRequest {
+            contract_version: ASSIGN_CONTRACT_VERSION.to_owned(),
+            request_id: Uuid::new_v4().to_string(),
+            session_id: session_id.clone(),
+            master_id: master_id.clone(),
+            r#override: false,
+        },
+    )
+    .await
+    .expect("assign should not return Err");
+    assert_eq!(assign_resp.status, "success", "expected success, got: {:?}", assign_resp.error);
+    let assignment_id = assign_resp.assigned.expect("expected Some(assigned)").assignment_id;
+
+    let (created_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM audit_log_entry \
+         WHERE trigger = 'calibration.assignment.created' AND entity_type = 'calibration' \
+           AND outcome = 'applied' AND payload LIKE ?",
+    )
+    .bind(format!("%{assignment_id}%"))
+    .fetch_one(pool)
+    .await
+    .expect("audit_log_entry query failed");
+    assert_eq!(created_count, 1, "assign must write exactly 1 durable audit row");
+
+    let unassign_resp = unassign(
+        pool,
+        &bus,
+        CalibrationMatchUnassignRequest {
+            contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+            request_id: Uuid::new_v4().to_string(),
+            session_id: session_id.clone(),
+            calibration_type: CalibrationType::Dark,
+        },
+    )
+    .await
+    .expect("unassign should not return Err");
+    assert_eq!(unassign_resp.status, "success", "expected success, got: {:?}", unassign_resp.error);
+
+    let (removed_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM audit_log_entry \
+         WHERE trigger = 'calibration.assignment.removed' AND entity_type = 'calibration' \
+           AND outcome = 'applied' AND payload LIKE ?",
+    )
+    .bind(format!("%{assignment_id}%"))
+    .fetch_one(pool)
+    .await
+    .expect("audit_log_entry query failed");
+    assert_eq!(removed_count, 1, "unassign must write exactly 1 durable audit row");
+
+    // Both mutations must resolve to the same audit entity, so an assignment's
+    // full history is reachable from one entity_id.
+    let (entity_ids,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT entity_id) FROM audit_log_entry WHERE entity_type = 'calibration'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("audit_log_entry query failed");
+    assert_eq!(entity_ids, 1, "create+remove must share one entity_id");
+}
+
 /// `batch_suggest` across two sessions: one with a matching master, one unknown.
 #[tokio::test]
 async fn batch_suggest_returns_results_and_errors_per_session() {
