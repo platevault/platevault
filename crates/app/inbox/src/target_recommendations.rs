@@ -49,6 +49,7 @@ use app_core_errors::db_err;
 use persistence_db::repositories::inbox::{self as repo, InboxPointingRow};
 use sqlx::SqlitePool;
 
+use contracts_core::cone_search::{ConeSearchConfidence, PointingSource};
 use contracts_core::error_code::ErrorCode;
 use contracts_core::inbox::{
     InboxPointing, InboxTargetCandidate, InboxTargetRecommendationsResponse,
@@ -99,6 +100,38 @@ pub async fn target_recommendations(
     target: &RecommendationTarget,
     fixed_radius_deg: f64,
 ) -> Result<InboxTargetRecommendationsResponse, ContractError> {
+    let ranked = rank_sub_group(pool, target, fixed_radius_deg).await?;
+    Ok(InboxTargetRecommendationsResponse {
+        candidates: ranked.candidates,
+        pointing: ranked.pointing,
+        object_hint: ranked.object_hint,
+    })
+}
+
+/// One sub-group's coordinate ranking plus the two signals a gate decision
+/// needs beyond the candidate list: which pointing tier produced it, and
+/// whether the frame footprint was derivable from optics.
+struct RankedSubGroup {
+    candidates: Vec<InboxTargetCandidate>,
+    pointing: Option<InboxPointing>,
+    object_hint: Option<String>,
+    source: PointingSource,
+    /// `false` when the fixed-radius fallback was used (R-17 C5) — the match
+    /// is then a circular proximity test, not a frame-containment test.
+    optics_known: bool,
+}
+
+/// Rank the catalog against one light sub-group's pointing (R-17 steps 1–5).
+///
+/// Shared by [`target_recommendations`] (which shows the ranking) and
+/// [`auto_resolve_target`] (which decides whether it may clear a gate), so
+/// the recommendation the user sees and the inference the gate trusts can
+/// never diverge.
+async fn rank_sub_group(
+    pool: &SqlitePool,
+    target: &RecommendationTarget,
+    fixed_radius_deg: f64,
+) -> Result<RankedSubGroup, ContractError> {
     // 1. Resolve to a concrete inbox item id.
     let item_id = resolve_item_id(pool, target).await?;
 
@@ -111,20 +144,20 @@ pub async fn target_recommendations(
         .find_map(|r| r.object.as_deref().map(str::trim).filter(|s| !s.is_empty()))
         .map(str::to_owned);
 
-    // 3. Derive the sub-group pointing (first file carrying a finite RA/Dec). All
-    //    files in a single-type light group share a pointing within tolerance, so
-    //    any representative file is fine.
-    let Some(pointing_row) = rows.iter().find(|r| has_pointing(r)) else {
+    // 3. Derive the sub-group pointing: plate-solved WCS (high confidence)
+    //    before mount RA/Dec (medium), matching `cone_search::derive_pointing`'s
+    //    tiering (spec 052 FR-012). All files in a single-type light group share
+    //    a pointing within tolerance, so any representative file is fine.
+    let Some((pointing_row, ra, dec, source)) = derive_pointing(&rows) else {
         // No pointing → no coordinate match possible (R-17: needs-review path).
-        return Ok(InboxTargetRecommendationsResponse {
+        return Ok(RankedSubGroup {
             candidates: Vec::new(),
             pointing: None,
             object_hint,
+            source: PointingSource::None,
+            optics_known: false,
         });
     };
-    // Safe: has_pointing guarantees both are Some + finite.
-    let ra = pointing_row.ra_deg.unwrap_or_default();
-    let dec = pointing_row.dec_deg.unwrap_or_default();
     let pointing = coords::to_equatorial(Pointing::new(ra, dec));
 
     // 4. Frame membership: a rectangle sized from the sub-group's optics,
@@ -136,13 +169,14 @@ pub async fn target_recommendations(
         .sky_rotation_deg
         .filter(|v| v.is_finite())
         .or_else(|| pointing_row.rotator_angle_deg.filter(|v| v.is_finite()));
-    let constraint = coords::field_from_optics(
+    let field = coords::field_from_optics(
         pointing_row.focal_length_mm,
         pointing_row.pixel_size_um,
         pointing_row.naxis1,
         pointing_row.naxis2,
-    )
-    .map_or_else(
+    );
+    let optics_known = field.is_some();
+    let constraint = field.map_or_else(
         || Constraint::circular(Angle::from_degrees(fixed_radius_deg)),
         |field| {
             sky_pa_deg.map_or_else(
@@ -176,11 +210,117 @@ pub async fn target_recommendations(
         })
         .collect();
 
-    Ok(InboxTargetRecommendationsResponse {
+    Ok(RankedSubGroup {
         candidates,
         pointing: Some(InboxPointing { ra_deg: ra, dec_deg: dec }),
         object_hint,
+        source,
+        optics_known,
     })
+}
+
+/// Pick the sub-group's pointing tier: plate-solved WCS before mount RA/Dec
+/// (spec 052 FR-012 — `wcs_ra_deg`/`wcs_dec_deg` is the astrometric solution,
+/// `ra_deg`/`dec_deg` is only where the mount believed it was pointing).
+///
+/// Returns the representative row (optics/rotation are read from it) with its
+/// coordinates and the tier that supplied them.
+fn derive_pointing(
+    rows: &[InboxPointingRow],
+) -> Option<(&InboxPointingRow, f64, f64, PointingSource)> {
+    let finite = |ra: Option<f64>, dec: Option<f64>| {
+        ra.zip(dec).filter(|(ra, dec)| ra.is_finite() && dec.is_finite())
+    };
+    rows.iter()
+        .find_map(|r| {
+            finite(r.wcs_ra_deg, r.wcs_dec_deg).map(|(ra, dec)| (r, ra, dec, PointingSource::Wcs))
+        })
+        .or_else(|| {
+            rows.iter().find_map(|r| {
+                finite(r.ra_deg, r.dec_deg).map(|(ra, dec)| (r, ra, dec, PointingSource::Mount))
+            })
+        })
+}
+
+/// A coordinate-derived target identification, with the confidence that
+/// identification carries (Constitution §II — inference must be qualified).
+#[derive(Clone, Debug)]
+pub struct AutoResolvedTarget {
+    pub target_id: String,
+    pub name: String,
+    pub separation_deg: f64,
+    pub confidence: ConeSearchConfidence,
+}
+
+impl AutoResolvedTarget {
+    /// Whether this identification may satisfy the mandatory `target`
+    /// attribute on its own (FR-047 "satisfiable by coordinate
+    /// auto-resolution"). Only [`ConeSearchConfidence::High`] qualifies —
+    /// see [`resolution_confidence`] for why.
+    #[must_use]
+    pub fn satisfies_mandatory_target(&self) -> bool {
+        self.confidence == ConeSearchConfidence::High
+    }
+}
+
+/// Confidence in a coordinate-derived identification, from the two things that
+/// determine whether the match is a *deduction* or a *guess*: the astrometric
+/// quality of the pointing, and whether the answer is unique.
+///
+/// `High` requires all three of: a plate-solved WCS pointing, a frame footprint
+/// derived from real optics (so membership is "inside the image", not "within
+/// an arbitrary circle"), and exactly one catalog object in that footprint.
+/// Under those conditions the identification is not a nearest-neighbour pick at
+/// all — it is the only catalogued object the exposure can contain.
+///
+/// Everything softer stays `Medium`/`Low`: it is still shown as a
+/// recommendation, but it does not clear the mandatory gate by itself
+/// (Constitution §II — inference may inform the user, not silently stand in
+/// for their decision).
+#[must_use]
+pub fn resolution_confidence(
+    source: PointingSource,
+    optics_known: bool,
+    in_field_count: usize,
+) -> ConeSearchConfidence {
+    match (source, optics_known, in_field_count) {
+        (_, _, 0) | (PointingSource::None, _, _) => ConeSearchConfidence::Low,
+        (PointingSource::Wcs, true, 1) => ConeSearchConfidence::High,
+        (PointingSource::Wcs, _, _) | (PointingSource::Mount, true, 1) => {
+            ConeSearchConfidence::Medium
+        }
+        (PointingSource::Mount, _, _) => ConeSearchConfidence::Low,
+    }
+}
+
+/// Resolve a light sub-group's target from its coordinates (R-17 / FR-052).
+///
+/// Returns the nearest in-field catalog object with the confidence that
+/// identification carries, or `None` when the sub-group has no usable pointing
+/// or nothing falls in its field. Reads only local state — the
+/// `canonical_target` catalog via the resolver cache — so it costs one bounded
+/// catalog scan per sub-group and never a network round-trip (R-17: "the target
+/// DB is small; a bounded scan or simple spatial index suffices").
+///
+/// # Errors
+///
+/// - [`ErrorCode::InboxItemNotFound`] — the item / source group has no
+///   resolvable inbox item.
+/// - [`ErrorCode::InternalDatabase`] — a query failed.
+pub async fn auto_resolve_target(
+    pool: &SqlitePool,
+    target: &RecommendationTarget,
+    fixed_radius_deg: f64,
+) -> Result<Option<AutoResolvedTarget>, ContractError> {
+    let ranked = rank_sub_group(pool, target, fixed_radius_deg).await?;
+    let confidence =
+        resolution_confidence(ranked.source, ranked.optics_known, ranked.candidates.len());
+    Ok(ranked.candidates.into_iter().next().map(|best| AutoResolvedTarget {
+        target_id: best.target_id,
+        name: best.name,
+        separation_deg: best.separation_deg,
+        confidence,
+    }))
 }
 
 /// A catalog entry adapted to `target_match::SkyObject` for frame ranking.
@@ -196,11 +336,6 @@ impl SkyObject for CatalogObject {
     fn position(&self) -> Equatorial {
         self.position
     }
-}
-
-/// A pointing row is usable when both RA and Dec are present and finite.
-fn has_pointing(r: &InboxPointingRow) -> bool {
-    matches!((r.ra_deg, r.dec_deg), (Some(ra), Some(dec)) if ra.is_finite() && dec.is_finite())
 }
 
 /// Map a resolver-cache error onto a contract error.
@@ -352,6 +487,202 @@ mod tests {
         .execute(db.pool())
         .await
         .unwrap();
+    }
+
+    /// Promote an item's mount pointing to a plate-solved WCS solve, the
+    /// high-confidence tier (migration 0062).
+    async fn set_wcs(db: &Database, item_id: &str, ra: f64, dec: f64) {
+        sqlx::query(
+            "UPDATE inbox_file_metadata SET wcs_ra_deg = ?, wcs_dec_deg = ?
+             WHERE inbox_item_id = ?",
+        )
+        .bind(ra)
+        .bind(dec)
+        .bind(item_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+
+    /// The mandatory `target` gate for a light with no OBJECT header — the
+    /// exact call `reclassify::mandatory_attrs_present` makes, reduced to the
+    /// one key under test.
+    fn target_gate_cleared(target_resolved: bool) -> bool {
+        !crate::classify::check_mandatory_missing(
+            metadata_core::FrameType::Light,
+            Some(&metadata_core::RawFileMetadata {
+                filter: Some("Ha".to_owned()),
+                exposure: Some("300".to_owned()),
+                gain: Some("100".to_owned()),
+                object: None,
+                ..Default::default()
+            }),
+            target_resolved,
+        )
+        .contains(&"target".to_owned())
+    }
+
+    /// Confidence is a function of pointing quality × footprint quality ×
+    /// uniqueness; only the all-three-strong cell is `High` (Constitution §II).
+    #[test]
+    fn only_plate_solved_unique_in_field_match_is_high_confidence() {
+        use ConeSearchConfidence::{High, Low, Medium};
+        let cases = [
+            // (source, optics_known, in_field_count, expected)
+            (PointingSource::Wcs, true, 1, High),
+            // Ambiguous: more than one catalogued object fits the frame.
+            (PointingSource::Wcs, true, 2, Medium),
+            // Circular fixed-radius fallback, not a frame-containment test.
+            (PointingSource::Wcs, false, 1, Medium),
+            // Mount pointing is where the mount believed it was aimed.
+            (PointingSource::Mount, true, 1, Medium),
+            (PointingSource::Mount, true, 3, Low),
+            (PointingSource::Mount, false, 1, Low),
+            // Nothing in field, whatever the pointing quality.
+            (PointingSource::Wcs, true, 0, Low),
+            (PointingSource::None, false, 0, Low),
+        ];
+        for (source, optics, count, expected) in cases {
+            assert_eq!(
+                resolution_confidence(source, optics, count),
+                expected,
+                "confidence for {source:?}/optics={optics}/count={count}"
+            );
+        }
+    }
+
+    /// A light with a plate-solved pointing and exactly one object in frame
+    /// clears the mandatory `target` gate with no OBJECT header at all — the
+    /// R-17/FR-052 behaviour the OBJECT proxy could not express.
+    #[tokio::test]
+    async fn plate_solved_unique_match_clears_the_target_gate_without_object() {
+        let db = test_db().await;
+        seed_target(&db, "M 31", 1, 10.684_708, 41.268_75).await;
+        // Narrow field (~0.5°) so M31 is the only catalogued object in frame.
+        seed_light_item(
+            &db,
+            "item-1",
+            Some(10.684_708),
+            Some(41.268_75),
+            Some(800.0),
+            Some(3.76),
+            Some(6248),
+            None,
+        )
+        .await;
+        set_wcs(&db, "item-1", 10.684_708, 41.268_75).await;
+
+        let resolved = auto_resolve_target(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-1".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap()
+        .expect("a plate-solved pointing over a seeded catalog resolves");
+
+        assert_eq!(resolved.name, "M 31");
+        assert_eq!(resolved.confidence, ConeSearchConfidence::High);
+        assert!(resolved.satisfies_mandatory_target());
+        assert!(target_gate_cleared(resolved.satisfies_mandatory_target()));
+    }
+
+    /// Mount-reported pointing resolves a recommendation but stays below the
+    /// auto-clear threshold: the user still confirms it (Constitution §II).
+    #[tokio::test]
+    async fn mount_pointing_resolves_but_does_not_clear_the_target_gate() {
+        let db = test_db().await;
+        seed_target(&db, "M 31", 1, 10.684_708, 41.268_75).await;
+        seed_light_item(
+            &db,
+            "item-1",
+            Some(10.684_708),
+            Some(41.268_75),
+            Some(800.0),
+            Some(3.76),
+            Some(6248),
+            None,
+        )
+        .await;
+        // No set_wcs: mount RA/Dec only.
+
+        let resolved = auto_resolve_target(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-1".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap()
+        .expect("mount pointing still yields a recommendation");
+
+        assert_eq!(resolved.confidence, ConeSearchConfidence::Medium);
+        assert!(!resolved.satisfies_mandatory_target());
+        assert!(!target_gate_cleared(resolved.satisfies_mandatory_target()));
+    }
+
+    /// Pixel size absent ⇒ no FOV-aware footprint ⇒ the configurable fixed
+    /// radius (R-17 C5). The fallback still resolves a recommendation — it is
+    /// not blanked out — but a circular proximity hit is not a containment
+    /// proof, so it does not clear the gate.
+    #[tokio::test]
+    async fn fixed_radius_fallback_recommends_without_clearing_the_gate() {
+        let db = test_db().await;
+        seed_target(&db, "M 31", 1, 10.684_708, 41.268_75).await;
+        seed_light_item(
+            &db,
+            "item-1",
+            Some(10.684_708),
+            Some(41.268_75),
+            Some(800.0),
+            None, // no XPIXSZ/PIXSIZE → field_from_optics yields None
+            Some(6248),
+            None,
+        )
+        .await;
+        set_wcs(&db, "item-1", 10.684_708, 41.268_75).await;
+
+        let resolved = auto_resolve_target(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-1".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap()
+        .expect("the fixed-radius fallback still recommends");
+
+        assert_eq!(resolved.name, "M 31");
+        assert_eq!(resolved.confidence, ConeSearchConfidence::Medium);
+        assert!(!target_gate_cleared(resolved.satisfies_mandatory_target()));
+    }
+
+    /// No pointing ⇒ nothing to resolve, and the gate keeps its pre-R-17
+    /// behaviour: a light with no OBJECT stays in needs-review.
+    #[tokio::test]
+    async fn no_pointing_resolves_nothing_and_gate_is_unchanged() {
+        let db = test_db().await;
+        seed_target(&db, "M 31", 1, 10.684_708, 41.268_75).await;
+        seed_light_item(&db, "item-1", None, None, Some(800.0), Some(3.76), Some(6248), None).await;
+
+        let resolved = auto_resolve_target(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-1".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap();
+
+        assert!(resolved.is_none());
+        assert!(!target_gate_cleared(false));
+        // An OBJECT header still satisfies the gate on its own, as before.
+        assert!(!crate::classify::check_mandatory_missing(
+            metadata_core::FrameType::Light,
+            Some(&metadata_core::RawFileMetadata {
+                object: Some("M 31".to_owned()),
+                ..Default::default()
+            }),
+            false,
+        )
+        .contains(&"target".to_owned()));
     }
 
     #[tokio::test]

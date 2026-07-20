@@ -855,9 +855,13 @@ pub fn check_mandatory_missing(
 /// the first mandatory attribute, and until it is known no per-type set can be
 /// derived. Empty means the file can leave the needs-review bucket.
 ///
-/// `target_resolved` is pinned to `false` for the same reason as
-/// [`materialize_sub_items`]: coordinate resolution (FR-052) is not integrated
-/// at classify time, so the OBJECT header is the proxy.
+/// `target_resolved` is pinned to `false` here because coordinate resolution
+/// (FR-052) needs the sub-group's persisted pointing rows, which this pass is
+/// still producing — so at classify time the OBJECT header remains the proxy.
+/// A light with pointing but no OBJECT therefore starts in needs-review and
+/// leaves it on the next reclassify, where
+/// [`crate::target_recommendations::auto_resolve_target`] can run against the
+/// stored pointing.
 #[must_use]
 pub(crate) fn missing_mandatory_for_file(
     frame_type: Option<FrameType>,
