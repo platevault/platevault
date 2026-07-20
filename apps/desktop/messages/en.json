@@ -1023,6 +1023,8 @@
   "setup_step_site_label": "Observing Site",
   "setup_step_site_heading": "Where do you observe from?",
   "setup_step_site_desc": "Add your observing location so the Targets Planner can show real tonight altitude, visibility, and imaging time.",
+  "setup_step_site_skip_warning": "Without an observing site the Targets planner can't work out what's visible from your location, so every target will read as not visible. You can add one now, or later in Settings → Target Planner.",
+  "setup_wizard_continue_without_site": "Continue without a site →",
   "setup_site_intro": "Optional — add one observing site now, or skip and add it later from Settings → Target Planner.",
   "setup_site_map_label": "Pick on map",
   "setup_site_map_unavailable": "Map unavailable right now — enter your coordinates in the fields below.",
