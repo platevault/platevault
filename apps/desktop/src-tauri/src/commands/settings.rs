@@ -266,7 +266,10 @@ mod tests {
             .into_iter()
             .filter(|k| !reachable.contains(k))
             .collect();
-        assert!(missing.is_empty(), "keys writable but unreadable via settings_get(''): {missing:?}");
+        assert!(
+            missing.is_empty(),
+            "keys writable but unreadable via settings_get(''): {missing:?}"
+        );
     }
 
     #[test]
