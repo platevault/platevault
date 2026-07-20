@@ -68,9 +68,45 @@ failure-output = "immediate-final"
 # green CI runs there show 1-3 retried flakes recovering by luck). One extra
 # retry buys more margin without masking a real regression, since a genuinely
 # broken journey still fails all 3 attempts.
+#
+# `threads-required = 2` makes each Windows journey occupy the whole
+# `test-threads = 2` budget, i.e. Windows runs one journey at a time while
+# ubuntu/macOS keep running two.
+#
+# Why (#1204): the note above claims concurrent journeys have "isolated
+# app-data/config dirs". That is true on Linux (`XDG_*`) and macOS (`HOME`),
+# and **false on Windows**. `InstanceEnv::new` sets `APPDATA`/`LOCALAPPDATA`,
+# but Tauri resolves those directories through `dirs`, which on Windows calls
+# `SHGetKnownFolderPath(FOLDERID_RoamingAppData)` (`dirs-sys-0.5.0/src/lib.rs`)
+# — the Known Folder API ignores both environment variables outright. So every
+# concurrent instance shares the real `C:\Users\runneradmin\AppData\…`.
+#
+# Observed end-to-end in main run 29734205501, `windows-latest 1/2`, in the
+# driver log that #1262 started surfacing:
+#
+#   WARN resolve_cache: Database already open. Cannot acquire lock.
+#         path=…\AppData\Roaming\…\simbad-cache.redb          <- 2nd instance
+#   ERROR tauri_runtime_wry: failed to create webview:
+#         WebView2 error: WindowsError(HRESULT(0x80070057))   <- shared UDF
+#   Error serving connection: … target machine actively refused it (10061)
+#   Error: window.__ALM_E2E__ bridge never became ready within 30s
+#
+# No webview means no window, so the plugin's WebDriver port never serves and
+# every proxy request is refused — which is the bare "bridge never became
+# ready" this file's readers have been chasing since #1019.
+#
+# This is the *same class* of bug as the single-instance collision documented
+# above, which was also Windows/macOS-only for the same reason: per-instance
+# isolation that exists on Linux and silently does not on Windows.
+#
+# Serialising is the honest fix available here, not the ideal one. Real
+# isolation needs the app to accept an explicit data-directory override (and
+# to pass it to the webview's `data_directory`), since no environment variable
+# can redirect a Known Folder. Tracked on #1204; revert this when that lands.
 [[profile.e2e.overrides]]
 platform = 'cfg(windows)'
 retries = 2
+threads-required = 2
 
 # ---------------------------------------------------------------------------
 # CI profile for the Layer-1 workspace test run (spec: build/adopt-nextest).

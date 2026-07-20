@@ -34,6 +34,21 @@ concurrency:
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
 env:
   CARGO_INCREMENTAL: 0
+  # Debuginfo is 53% of every compiled artifact and the runners have been
+  # exhausting disk on it: `target/debug` reaches 1.1 GB, the 11 e2e journey
+  # binaries total 356 MB (~32 MB each, 15.3 MB after `strip --strip-debug`),
+  # and that archive is then downloaded by six shard jobs. PR #1216's ubuntu
+  # leg died with `rustc-LLVM ERROR: IO failure on output stream: No space left
+  # on device`, which reads as a code failure and costs real triage time.
+  #
+  # `line-tables-only` keeps file/line information in panic backtraces -- the
+  # part that actually matters when a test or journey fails -- while dropping
+  # the type and variable debuginfo that dominates the size. A full strip would
+  # be smaller still but loses backtrace line numbers, a bad trade for a test
+  # suite. Set here rather than as a `[profile.*]` in Cargo.toml so local
+  # developer builds keep full debuginfo. See issue #1250.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
   # Cheap change-detection gate (dorny/paths-filter). Downstream jobs read its
@@ -48,7 +63,7 @@ jobs:
   #   all_files — CSV of every changed path, consumed by the changed-crate
   #               scoping step for `cargo test -p`.
   changes:
-    name: Detect changes
+    name: Detect changes (CI)
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.decide.outputs.rust }}
@@ -402,15 +417,23 @@ jobs:
           # Changed files under this package, rebased to package-relative paths
           # and filtered to ones that exist (a deleted file has no dependents to
           # resolve and makes `vitest related` error).
-          mapfile -t files < <(
+          #
+          # Read with `while read`, NOT `mapfile`: the macOS runner's /bin/bash
+          # is 3.2 (Apple ships no GPLv3 bash), where `mapfile` does not exist.
+          # It exits 127 and takes the whole step with it, so the frontend suite
+          # never runs on macOS at all. The existence filter is folded into the
+          # same loop rather than kept as a second pass over an intermediate
+          # array — one loop cannot disagree with itself about which files it
+          # collected.
+          existing=()
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ -f "$f" ] && existing+=("$f")
+          done < <(
             printf '%s' "$CHANGED_FILES" | tr ',' '\n' \
               | sed -n 's#^apps/desktop/##p' \
               | grep -E '^src/.*\.(ts|tsx)$' || true
           )
-          existing=()
-          for f in "${files[@]}"; do
-            [ -f "$f" ] && existing+=("$f")
-          done
 
           if [ ${#existing[@]} -eq 0 ]; then
             echo "No existing apps/desktop/src TS files changed -> full suite (conservative)."
