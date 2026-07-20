@@ -81,7 +81,7 @@ the needs-review field and the scan/classify boundary land first.
 - [ ] T014 Split `rescan_and_wait_for_item` in `crates/e2e-tests/tests/inbox_ui_journeys.rs:135-138` into a source-group-row variant and an item-row variant
 - [ ] T015 Split `select_only_item` (`crates/e2e-tests/tests/inbox_ui_journeys.rs:148-170`) likewise: selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present. The current helper waits for `inbox-confirm-btn` to mount, which is exactly what a source-group row must never provide
 - [ ] T016 Update the five journeys in `crates/e2e-tests/tests/inbox_ui_journeys.rs` that call those helpers — including all three SC-005 journeys — to use the correct variant per step
-- [ ] T017 Replace the source-group row with the folder's item rows when classification completes (FR-017), preserving selection (FR-023)
+- [ ] T017 Replace the source-group row with the folder's item rows when classification completes (FR-017), preserving selection (FR-023) per the **CHK011 rule**: N=1 -> select that item; N>1 -> select the folder group header, never a sibling; N=0 -> the source-group row stays selected ([#1178](https://github.com/platevault/platevault/issues/1178))
 
 **Checkpoint** — foundational work complete. Layer-1 green, and the five
 journeys pass against the new boundary before any story phase begins.
@@ -101,7 +101,7 @@ agree, and no row reports `classified` without a frame type.
 - [ ] T019 [US1] Remove the unconditional materialisation gate at `crates/app/inbox/src/classify.rs:433` so a homogeneous folder yields exactly one item rather than a parent plus one child (FR-002, FR-004). **Do not remove the `state != 'plan_open'` filter itself** — that is one of the two interlocks PG-3 retains
 - [ ] T020 [US1] Stop creating the placeholder row entirely (FR-001, FR-004, FR-006). **T024 depends on this being complete**
 - [ ] T021 [P] [US1] Make the list badge read the item's own classification result rather than falling back to `state` in `apps/desktop/src/features/inbox/InboxList.tsx` (FR-008). If #1099 has merged, this is already done — verify rather than duplicate
-- [ ] T022 [P] [US1] Align the Inbox summary counts with the visible rows for uniform, split and needs-review folders (FR-009, SC-004)
+- [ ] T022 [P] [US1] Align the Inbox summary counts with the visible rows for uniform, split and needs-review folders (FR-009, SC-004). **CHK010: source-group rows ARE counted.** This fixes TWO defects -- `list_unacknowledged_across_roots` selects `state IN ('pending_classification','classified','plan_open')` but `count_unacknowledged_inbox_items` counts only the first two, so a `plan_open` item is visible-but-uncounted **on main today**, independently of 058 ([#1178](https://github.com/platevault/platevault/issues/1178))
 - [ ] T023 [US1] Layer-1 tests asserting SC-001 (zero badge disagreements across all three folder shapes) and SC-003 (zero items with `classified` state and no frame type)
 - [ ] T024 [US1] Delete **all four** read-side suppression call sites and the `exclude_split_placeholder!` macro: `crates/persistence/db/src/repositories/inbox.rs:1494` (definition), `:1565`, `:1603`, `:1788`, and `crates/persistence/db/src/repositories/q_desktop.rs:184` (plus its import at `:13`). Introduce no replacement suppression (FR-026, SC-007). **Blocked by T020 — see sequencing constraint 1**
 - [ ] T025 [US1] Correct the stale comment at `crates/e2e-tests/tests/inbox_ui_journeys.rs:~392-394` claiming classify "purges the superseded parent row". It was hidden, not deleted — and after T020 there is no parent at all
@@ -121,7 +121,7 @@ bulk-reclassify-unblocks-confirm.
 - [ ] T026 [P] [US2] Verify `inbox.confirm` still operates on exactly one `inbox_item_id` and alters no sibling (FR-010, SC-006). Per `contracts/operations.md` this needs **no change** — confirm and `inbox_plan_links` are already sibling-safe. Add the regression test rather than refactoring
 - [ ] T027 [US2] Point the UI's confirm call at the item id rather than the folder's placeholder id in `apps/desktop/src/features/inbox/InboxPage.tsx`. This is the narrow change the spec identified: the machinery was always correct, only the id it was handed was wrong
 - [ ] T028 [P] [US2] Ensure the resulting plan is reachable on the plan surface after confirming (FR-024)
-- [ ] T029 [US2] Ensure selection is not silently dropped when classification swaps a source-group row for item rows (FR-023). Note the detail pane is keyed `sourceGroupId ?? inboxItemId` (`InboxPage.tsx:~1160`), which already survives a split — verify before adding handoff logic
+- [ ] T029 [US2] Ensure selection is not silently dropped when classification swaps a source-group row for item rows (FR-023), implementing the **CHK011 rule** (see T017). The detail pane is keyed `sourceGroupId ?? inboxItemId` (`InboxPage.tsx:1156`) -- source group FIRST, and siblings share one -- so it already survives the swap. The task is *which item the pane shows*, not preventing a remount. Verify before adding handoff logic
 - [ ] T030 [US2] Run the three SC-005 journeys and record verbatim output. These are the gate; a green run here is the primary evidence the feature has not regressed the confirm flow
 
 **Checkpoint** — US1 + US2 together are a shippable increment.
@@ -140,7 +140,7 @@ are unchanged in state, classification and plan binding.
 - [ ] T031 [US3] Ensure a folder with N distinct groups yields exactly N items and no aggregate (FR-003, SC-002)
 - [ ] T032 [P] [US3] Ensure no sibling is designated primary or authoritative (FR-006) — audit any remaining "first id wins" resolution beyond `resolve_item_id`
 - [ ] T033 [US3] Apply the #1102 decision from T003 to `resolve_item_id` in `crates/app/inbox/src/target_recommendations.rs:~227-231`, replacing `ids.into_iter().next()`
-- [ ] T034 [P] [US3] Implement grouping the Inbox list by folder so siblings appear together under one header (FR-025, D-007, SC-010)
+- [ ] T034 [P] [US3] Implement grouping the Inbox list by folder so siblings appear together under one header (FR-025, D-007, SC-010). **CHK016: add `i.group_key` as the ORDER BY tiebreak** -- `list_unacknowledged_across_roots` orders by `r.path, i.relative_path`, which both TIE for siblings of one folder, so sibling order is currently whatever SQLite returns. Matches the existing sub-item query at `inbox.rs:649` ([#1178](https://github.com/platevault/platevault/issues/1178))
 - [ ] T035 [US3] **Retire `mixed` (PG-1)** — remove the `_ => ("unclassified", "mixed", None)` arm at `crates/app/inbox/src/classify.rs:404`, the `inbox-mixed-alert` affordance, `mixedSummary` and the two guards in `InboxPage.tsx`, and the three `inbox_mixed_*` i18n keys. **In the same task**, replace the sync signal in `inbox_ui_mixed_folder_splits_into_single_type_items` with the appearance of the split item rows — see sequencing constraint 4
 - [ ] T036 [P] [US3] Correct the reachability comment at `apps/desktop/src/features/inbox/InboxPage.tsx:~599-606`. It is **accurate today** — the spec's earlier claim that it was stale was withdrawn after Layer-2 verification. It becomes wrong only once T035 lands, so update it then, not before
 - [ ] T037 [US3] Layer-1 test for SC-006: confirming one sibling leaves the others untouched
@@ -158,6 +158,26 @@ the headers already determined.
 - [ ] T039 [P] [US4] Ensure re-scanning an unchanged folder produces no item identity churn (FR-018, SC-008)
 - [ ] T040 [US4] Anchor folder-level re-scan comparison to the source group rather than any single item (FR-019)
 - [ ] T041 [US4] Layer-1 test for SC-008 asserting stable item identity across an unchanged re-scan
+
+---
+
+## Phase 6b: The needs-review split (CHK003 decision, scope addition)
+
+**Added 2026-07-20 by the CHK003 decision on [#1178](https://github.com/platevault/platevault/issues/1178).**
+`spec.md` recorded this as "a gap to size, not a decision taken"; it is now
+taken. A needs-review item whose files receive two or more *different*
+user-supplied frame types MUST split into that many sibling items rather than
+come to rest in `mixed` with Confirm disabled -- a dead end the user can only
+escape by re-editing answers that were correct.
+
+**This is a scope addition, not a task-breakdown refinement.** It is recorded
+here rather than routed through `/speckit.iterate` because the decision closes a
+gap the specification already names; if it grows beyond these three tasks,
+stop and iterate properly.
+
+- [ ] T050 Make resolving a needs-review item into N distinct frame types materialise N sibling items rather than a single `mixed` item, reusing the existing materialisation path rather than a bespoke split
+- [ ] T051 Handle the item-identity hazard: splitting moves resolved files onto a different item id **mid-interaction**. See the documented remount hazard at `crates/e2e-tests/tests/inbox_ui_journeys.rs:390-399`. Selection after the split follows the **CHK011 N>1 rule** -- the folder group header, never a sibling
+- [ ] T052 Layer-1 test: a needs-review item resolved into two frame types yields exactly two siblings, each carrying its own frame type, with no `mixed` item and no orphaned original row
 
 ---
 
