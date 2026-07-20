@@ -5,7 +5,6 @@ import { describe, it, expect } from 'vitest';
 import {
   formatBytes,
   formatIntegration,
-  formatIntegrationHours,
   formatExposureSeconds,
   formatTempC,
   formatGain,
@@ -19,17 +18,35 @@ describe('formatBytes', () => {
   });
 });
 
+// #631 — one formatter for integration time. Sessions rendered "1h 30m" while
+// Projects rendered "1.5h" for the same quantity; these lock the single
+// grammar both now share.
 describe('formatIntegration', () => {
-  it('formats seconds into h/m/s', () => {
-    expect(formatIntegration(3661)).toBe('1h 1m 1s');
-    expect(formatIntegration(0)).toBe('0s');
+  it('renders hours and minutes together', () => {
+    expect(formatIntegration(5400)).toBe('1h 30m');
+    expect(formatIntegration(3661)).toBe('1h 1m');
   });
-});
 
-describe('formatIntegrationHours', () => {
-  it('formats hours to one decimal', () => {
-    expect(formatIntegrationHours(2.5)).toBe('2.5h');
-    expect(formatIntegrationHours(0)).toBe('0h');
+  it('drops the empty unit rather than padding with a zero', () => {
+    expect(formatIntegration(7200)).toBe('2h');
+    expect(formatIntegration(3000)).toBe('50m');
+  });
+
+  it('keeps whole minutes exact where the old "1.5h" rounded them away', () => {
+    // 1.8h to one decimal — the divergent Projects formatter's output.
+    expect(formatIntegration(6480)).toBe('1h 48m');
+  });
+
+  it('floors a nonzero sub-minute total to "<1m", never a misleading "0m"', () => {
+    expect(formatIntegration(20)).toBe('<1m');
+    expect(formatIntegration(59)).toBe('<1m');
+  });
+
+  it('uses the dash convention for absent and zero totals', () => {
+    expect(formatIntegration(null)).toBe('—');
+    expect(formatIntegration(undefined)).toBe('—');
+    expect(formatIntegration(0)).toBe('—');
+    expect(formatIntegration(-1)).toBe('—');
   });
 });
 
