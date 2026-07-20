@@ -2331,6 +2331,156 @@ mod tests {
         );
     }
 
+    /// T012 / T042, SC-002b (spec 058): a scanned-but-unclassified folder is
+    /// exactly ONE row, and that row is not an inbox item.
+    ///
+    /// This is the property the whole feature turns on. Scan writes the source
+    /// group and no item (FR-015); `list_unclassified_source_groups` surfaces
+    /// it precisely because no item references it. While scan still wrote a
+    /// folder placeholder, that `NOT EXISTS` clause was false for every scanned
+    /// folder, so this query returned nothing and the source-group row was
+    /// unreachable in practice.
+    ///
+    /// The second half is the two-direction control and is the real point:
+    /// linking a single item to the group makes the group row VANISH. That
+    /// proves the placeholder is what was hiding it, rather than asserting the
+    /// happy path and inferring the cause.
+    ///
+    /// Worth recording why this test exists at Layer 1 at all: when the
+    /// scan-time placeholder was deleted, the entire workspace suite stayed
+    /// green (2528/2528). `inbox_scan_folder`'s placeholder behaviour had no
+    /// Layer-1 coverage whatsoever — only the `#[ignore]`d L3 journeys touched
+    /// it. A silent green is exactly how this change could have shipped broken.
+    #[tokio::test]
+    async fn scanned_folder_is_one_source_group_row_and_no_item() {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        // Exactly what scan now writes for a folder: the group, and nothing else.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-scanned",
+                root_id: &source_id,
+                relative_path: "2025-11-01/lights",
+                content_signature: Some("sig-scanned"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 4,
+            },
+        )
+        .await
+        .unwrap();
+
+        let groups = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert_eq!(groups.len(), 1, "a scanned folder must be exactly one row");
+        assert_eq!(groups[0].id, "sg-scanned");
+
+        // ...and that row is NOT an inbox item. Nothing is confirmable yet.
+        let items = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+        assert!(
+            items.is_empty(),
+            "a scanned-but-unclassified folder must produce no inbox item; got {:?}",
+            items.iter().map(|i| &i.id).collect::<Vec<_>>()
+        );
+
+        // Two-direction control: give the group an item — as the deleted
+        // scan-time placeholder did — and the group row disappears.
+        upsert_inbox_sub_item(
+            pool,
+            &UpsertInboxSubItem {
+                id: "item-materialized",
+                root_id: &source_id,
+                relative_path: "2025-11-01/lights",
+                source_group_id: "sg-scanned",
+                group_key: "type=light",
+                group_label: "(root) · lights",
+                frame_type: Some("light"),
+                content_signature: "sig-sub",
+                file_count: 4,
+                lane: "fits",
+                needs_review: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let groups_after = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert!(
+            groups_after.is_empty(),
+            "once the folder has an item row the source-group row must not \
+             also be listed — that double-count is the contradiction FR-001 removes"
+        );
+    }
+
+    /// FR-015 master carve-out: a folder whose files are ALL detected masters
+    /// has no sub-frames left to classify, so it must NOT surface a
+    /// source-group row. Scan records `file_count = 0` for exactly this case,
+    /// and the `file_count > 0` predicate is what keeps the queue honest.
+    #[tokio::test]
+    async fn masters_only_folder_surfaces_no_source_group_row() {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-masters-only",
+                root_id: &source_id,
+                relative_path: "calibration/masters",
+                content_signature: Some("sig-masters"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        let groups = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert!(
+            groups.is_empty(),
+            "a masters-only folder has nothing left to classify and must not \
+             appear as an unclassified source group"
+        );
+    }
+
     /// T034 / CHK016 (spec 058): siblings of one folder come back in a stable,
     /// deterministic order.
     ///
