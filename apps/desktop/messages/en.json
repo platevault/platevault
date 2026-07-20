@@ -2328,6 +2328,7 @@
   "projects_toollaunch_not_available": "Tool executable missing",
   "projects_toast_transition_refused": "Transition refused.",
   "projects_detail_label": "Project details",
+  "targets_detail_label": "Target details",
   "projects_wizard_step_name_profile": "Name & profile",
   "projects_wizard_step_sources_lights": "Sources (lights)",
   "projects_wizard_step_calibration": "Calibration",
