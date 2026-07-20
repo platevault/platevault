@@ -14,7 +14,7 @@ Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 |---|---|:--:|:--:|---|
 | 1 | First-run source setup | ✅ | ✅ | setup wizard → root persisted |
 | 2 | Native filesystem controls | ✅ | — | path validation/side effects via L1 |
-| 3 | Inbox mixed-folder split | ✅ | ✅ | classify + split |
+| 3 | Inbox mixed-folder split | ✅ | ✅ | classify + split; **re-shaped by spec 058** (source-group row before classification, N item rows after, no aggregate row) — see the dated section below |
 | 4 | Inventory / data lifecycle state | ✅ | ✅ | ledger + transitions |
 | 5 | Calibration matching & masters | ✅ | ✅ | suggest + assign |
 | 6 | Sessions | ✅ | ✅ | list/merge/split/transition |
@@ -547,3 +547,77 @@ surface and an attribution-candidate picker at Inbox confirm), not on
 test-harness capability — the same class of gap as row 8's
 `MatchCandidatesPanel.tsx` "implemented but unreachable" finding, but here
 even earlier: no consuming component exists at all yet.
+
+## Spec 058 — Inbox drops the parent item — 2026-07-20
+
+Re-shapes area #3 (and every Layer-2 journey that touches the Inbox queue).
+**Status at the time of writing: SPECIFIED, phases 2–4 in flight** — verified
+against real code at `38227ca3`, not against spec prose. The rows below say
+what the coverage must become; the "State at `38227ca3`" column says what is
+actually true today, so a later reader can tell a plan from a fact.
+
+The behaviour change: a scanned folder no longer produces a placeholder inbox
+row. Before classification a folder appears as a **source-group row** that is
+structurally non-confirmable; after classification it becomes exactly N **item
+rows**, one per frame-type group, with no aggregate row alongside them. Every
+row states only facts about its own files. This deletes the read-side
+suppression predicate that has been hiding the placeholder (SC-007) rather
+than adding a new one.
+
+| Coverage obligation | Layer | Target test | State at `38227ca3` |
+|---|---|---|---|
+| A scanned-but-unclassified folder is visible as exactly one row, and that row is NOT an inbox item (SC-002b) | L2 | `crates/e2e-tests/tests/inbox_ui_journeys.rs`, source-group-row variant of `rescan_and_wait_for_item` (T014) | ❌ helper waits for an item row; no source-group row type exists in `InboxPage.tsx` |
+| Selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present | L2 | split of `select_only_item` (T015) | ❌ the single current helper waits for `inbox-confirm-btn` to mount — exactly what a source-group row must never provide |
+| Classification replaces the source-group row with N item rows without dropping the user's selection (FR-017/FR-023, CHK011 rule: N=1 → select that item; N>1 → select the folder group header, never a sibling; N=0 → the source-group row stays selected, [#1178](https://github.com/platevault/platevault/issues/1178)) | L2 | T016/T017 update to the five journeys in `inbox_ui_journeys.rs` | ❌ not written |
+| 1 row for a uniform folder, N rows for N frame-type groups, zero aggregate rows (SC-002) | L1 + L2 | `crates/app/inbox` classify tests; `inbox_ui_journeys.rs::inbox_ui_mixed_folder_splits_into_single_type_items` | 🟡 split ships, but the placeholder still exists and is hidden by `exclude_split_placeholder!` (`crates/persistence/db/src/repositories/inbox.rs:1503`) |
+| List badge, detail badge and the item's own classification agree — the #711 exit condition (SC-001) | L1 + L2 | as above | 🟡 achieved today via suppression, which SC-007 removes |
+| Confirming one sibling leaves the other N−1 unchanged in state, classification and plan binding (SC-006) | L2 | `inbox_ui_journeys.rs` | ❌ not asserted |
+| Group the Inbox by folder and see one folder's siblings under one header (SC-010, D-007) | L2 | `inbox_ui_journeys.rs` | ❌ not asserted |
+| Reclassify does not report `classified` while mandatory attributes are missing — #711 Instance B stays fixed (SC-011) | L1 | the `22f94a9e` regression test (PR #1086) | ✅ merged, must be preserved |
+
+### The three SC-005 journeys are the gate
+
+Spec 058's own exit bar names three Real-UI journeys that regressed under
+#1038 and must pass again after the re-shape. All three live in
+`crates/e2e-tests/tests/inbox_ui_journeys.rs` and all three call the helpers
+T014/T015 split, so all three change mechanically even where their assertions
+do not:
+
+| SC-005 journey | Test |
+|---|---|
+| catalogue-in-place zero-moves | `inbox_ui_catalogue_in_place_zero_moves_byte_identical` |
+| confirm-then-apply-to-shown-destination | `inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination` |
+| bulk-reclassify-unblocks-confirm | `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm` |
+
+The two remaining journeys in that file
+(`inbox_ui_mixed_folder_splits_into_single_type_items`,
+`inbox_ui_missing_path_attribute_banner_blocks_confirm`) call the same helpers
+and are in scope for T016 for that reason.
+
+### Explicitly NOT covered by spec 058 — do not add a row for it
+
+**SC-009** (a re-derivation that removes an item with an open plan marks it
+superseded, blocks its plan pending the user's decision, and surfaces an
+explicit superseded signal) is **knowingly not delivered by spec 058**. D-005
+stands as a recorded decision; only its mechanism is descoped, to
+`specs/tiny/reclassify-split-per-item-and-rederivation.md` (PR #1097),
+together with the retired FR-020/021/022. The real exit bar for 058 is the
+other **eleven** criteria. Full record:
+`specs/058-inbox-drop-parent-items/sc-009-boundary.md`.
+
+Consequently the folder-wide reclassify refusal survives this feature: both
+PG-3 interlocks (`crates/app/inbox/src/reclassify.rs` group-open-plan block,
+`crates/app/inbox/src/classify.rs` `plan_open` re-derivation guard) stay in
+place. A Layer-2 journey asserting a *successful* reclassify across a folder
+with an open sibling plan would fail correctly, and must not be written until
+the follow-on lands.
+
+### Journey docs
+
+`docs/journeys/J02-ingest-review-reclassify-confirm-move/journey.md` is at v4
+with the Δ4 behaviour delta (S1, S2, SC1, +SC6, +SC7) and carries G2/G3 marking
+the not-yet-implemented boundary and the SC-009 exclusion. J03
+(catalogue-in-place) shares the Inbox queue surface and inherits the same
+row-shape change; it has not been re-versioned in this pass because its steps
+describe confirm-and-catalogue rather than the scan/classify row shape — worth
+a re-read once phases 2–4 land, not a silent assumption that it is unaffected.
