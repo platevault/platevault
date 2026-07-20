@@ -32,13 +32,13 @@ pub fn is_global_protection_default_key(key: &str) -> bool {
 // ── Durable-data noisy keys (spec 030 FR-130, Q15/#647, T122) ───────────────
 //
 // `descriptors::DESCRIPTORS[].noisy` conflates two different concerns:
-// UI-state keys (`rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) that
-// FR-134 exempts from durable audit entirely, and durable-data keys whose
+// UI-state keys (`rememberFollowLogs`) that FR-134 exempts from durable
+// audit entirely, and durable-data keys whose
 // writes are debounced/frequent (`pattern`) but still get a single durable
 // row at the committed value, before→after (FR-130). This is the same
 // named-exception-list shape as `GLOBAL_PROTECTION_DEFAULT_KEYS` above, kept
-// separate from the descriptor table rather than adding a 36th field to every
-// one of its 35 literals for a single-member set.
+// separate from the descriptor table rather than adding a new field to every
+// one of its literals for a single-member set.
 pub(super) const NOISY_AUDITED_KEYS: [&str; 1] = ["pattern"];
 
 /// Whether a `noisy` key still gets a durable audit row at its committed

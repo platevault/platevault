@@ -158,7 +158,8 @@ describe('AuditLog', () => {
 
   it('debounces the search box, then maps it to filters.search', async () => {
     render(<AuditLog />, { wrapper });
-    await waitFor(() => expect(mockList).toHaveBeenCalled());
+    // Start from settled load state before interacting.
+    await screen.findByText('session.confirmed');
     const callsBeforeTyping = mockList.mock.calls.length;
 
     fireEvent.change(screen.getByLabelText('Search audit events'), {
@@ -179,7 +180,7 @@ describe('AuditLog', () => {
 
   it('maps the date-range inputs to filters.from / filters.to', async () => {
     render(<AuditLog />, { wrapper });
-    await waitFor(() => expect(mockList).toHaveBeenCalled());
+    await screen.findByText('session.confirmed');
 
     fireEvent.change(screen.getByLabelText('From'), {
       target: { value: '2026-05-01' },
@@ -400,7 +401,7 @@ describe('AuditLog', () => {
 
   it('maps the outcome and entity-type selects to structured filters (#749)', async () => {
     render(<AuditLog />, { wrapper });
-    await waitFor(() => expect(mockList).toHaveBeenCalled());
+    await screen.findByText('session.confirmed');
 
     fireEvent.change(screen.getByLabelText('Outcome'), {
       target: { value: 'refused' },

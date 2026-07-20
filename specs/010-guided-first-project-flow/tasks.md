@@ -70,7 +70,9 @@ by an overlay hint.
 - [x] **T014** Anchor the Inbox confirm control with the `inbox.confirm-row`
   attribute (UI only; no logic change).
   **Evidence**: `ActionSidebar.tsx` `data-guide-anchor="inbox.confirm-row"` on
-  the primary confirm Btn.
+  the primary confirm Btn. *(Reconciliation note, 2026-07-19, issue #764:
+  `ActionSidebar.tsx` no longer exists; the anchor now lives in
+  `InboxPage.tsx`/`InboxDetail.tsx`.)*
 
 - [x] **T015** [P] Add integration test in `tests/` that exercises spec 003
   setup completion followed by an `InventoryConfirmed` event and asserts the
@@ -81,7 +83,10 @@ by an overlay hint.
 - [x] **T016** Add acceptance scenario coverage for FR-007 (anchor absent) by
   navigating away mid-step in a UI test.
   **Evidence**: `GuidedOverlay.test.tsx` — "defers hint (renders nothing) when
-  anchor element is absent (FR-007)" test.
+  anchor element is absent (FR-007)" test. *(Reconciliation note, 2026-07-19,
+  issue #764: this coverage moved to the dedicated
+  `features/guided/__tests__/GuidedOverlay.anchor-absence.test.tsx` (real
+  react-joyride, #723/#585), not the string quoted above.)*
 
 ## Phase 2 - US2: First Project Create (P2)
 
@@ -179,7 +184,11 @@ Goal: the coach can be dismissed and restarted without losing progress.
 - [x] **T044** Add a11y test asserting Escape on a focused hint dismisses the
   coach and that overlay hints announce via `aria-live=polite`.
   **Evidence**: `GuidedOverlay.test.tsx` — "calls onDismiss when Escape is pressed"
-  and "hint card has aria-live='polite' (a11y, T044)".
+  and "hint card has aria-live='polite' (a11y, T044)". *(Reconciliation
+  note, 2026-07-19, issue #764: neither test string exists anywhere under
+  `features/guided/` today — the tour moved to real `react-joyride` (spec
+  010 tour-library decision), which owns Escape/aria-live behavior itself;
+  the app-level tests this task cites were superseded, not just renamed.)*
 
 ## Phase 2 (addendum) — Anchor-Orphan CI Gate (A2)
 

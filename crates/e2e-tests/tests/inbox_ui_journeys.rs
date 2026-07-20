@@ -475,7 +475,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
 
 /// Trimmed, lowercased text of every Type-column cell currently rendered in
 /// the Inbox list. That cell carries no `data-testid` of its own — it is the
-/// `span.alm-inbox-row__classification` inside each row (the `type:` cell in
+/// `span.pv-inbox-row__classification` inside each row (the `type:` cell in
 /// `apps/desktop/src/features/inbox/InboxList.tsx`), so it is located by class.
 ///
 /// Callers MUST compare with exact equality, never `contains`: "unclassified"
@@ -499,7 +499,7 @@ async fn classification_cell_labels(app: &E2eApp) -> anyhow::Result<Vec<String>>
             r#"
             return JSON.stringify(
                 Array.prototype.map.call(
-                    document.querySelectorAll('.alm-inbox-row__classification'),
+                    document.querySelectorAll('.pv-inbox-row__classification'),
                     function (el) { return el.textContent || ''; }
                 )
             );

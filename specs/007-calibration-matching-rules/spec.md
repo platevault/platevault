@@ -209,9 +209,11 @@ partial success: if one session lacks observer_location, that session returns
   calibration type (dark, bias, flat).
 - **FR-003**: Dark matching MUST default to gain (exact), offset (exact),
   exposure (±configurable tolerance), and temperature (±configurable tolerance).
-- **FR-004**: Flat matching MUST default to filter (exact), rotation (±0.5°
-  default), binning (exact), optic_train (exact), and date proximity scored
-  against the light session's observing night.
+- **FR-004**: Flat matching MUST default to filter (exact), gain (exact —
+  hard-gate, ratified 2026-05-23; no soft tolerance, mixed-gain flats require
+  manual override), rotation (±0.5° default), binning (exact), optic_train
+  (exact), and date proximity scored against the light session's observing
+  night.
 - **FR-005**: Bias matching MUST default to gain (exact) and offset (exact),
   with exposure and temperature explicitly excluded unless configured.
 - **FR-006**: System MUST return ranked recommendations with per-candidate

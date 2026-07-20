@@ -109,8 +109,7 @@ pub async fn update_setting(
     // plan.md E-016-3: "MUST emit `protection.default.changed` whenever it is
     // updated"). Non-protection noisy keys audit only when in
     // `NOISY_AUDITED_KEYS` (durable-data, e.g. `pattern`); the rest
-    // (`rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) are UI state and
-    // stay fully exempt (FR-134).
+    // (`rememberFollowLogs`) are UI state and stay fully exempt (FR-134).
     let is_noisy = descriptors::is_noisy(key.as_str());
     let audit_id = if !is_protection_default && is_noisy && !is_noisy_audited_key(key.as_str()) {
         None

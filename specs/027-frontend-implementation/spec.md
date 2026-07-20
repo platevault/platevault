@@ -348,6 +348,12 @@ As a user tracking what happened in my library, I open the Audit log to see an i
 - **SC-007**: All provenance glyphs, confidence indicators, lifecycle pills, and status badges render correctly and are distinguishable without relying on color alone (text labels always present).
 - **SC-008**: Command palette returns relevant results for session names, target names, project names, page names, and action names within 200ms of keystroke.
 - **SC-009**: All DirPicker components invoke the native OS directory dialog — no text input for paths anywhere in the application.
+  *(Reconciliation note, 2026-07-19, issue #764: conflicts with spec 018
+  FR-011 — `features/settings/ProcessingTools.tsx` has a real raw
+  `<input type="text">` for each tool's executable path, saved on
+  blur/Enter. Route through speckit-sync to adjudicate which requirement
+  wins; not corrected here since it's a genuine cross-spec conflict, not a
+  one-sided drift.)*
 - **SC-010**: The guided tour completes all 3 hint steps without blocking user interaction with the underlying UI.
 
 ## Assumptions

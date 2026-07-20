@@ -8,7 +8,15 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
+// Dedicated e2e port, distinct from the interactive dev-server port (5173,
+// hardcoded+strictPort in vite.config.ts). Concurrent worktrees on this host
+// routinely leave a `pnpm dev`/`just dev` server bound to 5173; sharing that
+// port let Playwright's reuseExistingServer probe treat a FOREIGN worktree's
+// unrelated server as "the" server, producing silent phantom failures
+// (deterministic 0-row assertions) instead of a clear connection error.
+const E2E_PORT = process.env.PLAYWRIGHT_E2E_PORT ?? "5183";
+const BASE_URL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${E2E_PORT}`;
 
 /**
  * Spec 002 T025 — Playwright e2e config for the desktop browser mockup.
@@ -45,14 +53,29 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm --filter @astro-plan/desktop dev",
-    cwd: repoRoot,
+    // Invoke vite directly (not the `dev` package script via `pnpm --filter
+    // … dev -- …`): pnpm's `--` arg-forwarding re-inserts a literal `--`
+    // ahead of the forwarded flags, which vite's CLI then treats as "end of
+    // options" and silently ignores — `--port`/`--strictPort` never applied,
+    // defeating the whole dedicated-port fix. `pnpm exec vite` passes flags
+    // straight through. --port/--strictPort override vite.config.ts's
+    // hardcoded 5173: this spawns on the dedicated e2e port and fails loudly
+    // (EADDRINUSE) rather than silently falling back to a different port a
+    // stray process left occupied — the same fail-loud contract
+    // vite.config.ts already applies to the interactive dev port.
+    command: `pnpm exec vite --host 127.0.0.1 --port ${E2E_PORT} --strictPort`,
+    cwd: __dirname,
     // e2e runs in a headless browser with no Tauri host, so it must use the
     // mock layer. The app default is now real-backend (VITE_USE_MOCKS=false),
     // so pin mocks on explicitly here.
     env: { VITE_USE_MOCKS: "true" },
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Always spawn a fresh server for this dedicated port — never reuse.
+    // CI already ran with reuseExistingServer:false (via !process.env.CI);
+    // this keeps CI behavior identical while closing the local foreign-
+    // worktree-server hazard the dedicated port alone doesn't fully prevent
+    // (e.g. a second concurrent local e2e run on the same override port).
+    reuseExistingServer: false,
     timeout: 60_000,
     stdout: "ignore",
     stderr: "pipe",

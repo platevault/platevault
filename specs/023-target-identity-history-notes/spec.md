@@ -210,6 +210,12 @@ alias. Then remove alias `NGC 224` (success).
   destructive "rename" path: `target.primary.rename` was dropped in favour of an additive `display_alias`.)*
 - **FR-007**: Missing observing-plan references MUST warn without deleting historical records.
 - **FR-008**: Users MUST be able to remove an alias from a target (`target.alias.remove`), with `alias.is_primary` error when the alias is also the primary designation.
+  *(Reconciliation note, 2026-07-19, issue #764: like FR-009, this scenario
+  is structurally foreclosed by the gen-3 model — `crates/app/targets/src/
+  target_management.rs`'s alias-remove path carries no `is_primary` guard;
+  there is no protected "primary alias" concept to violate. The 2026-06-23
+  closing banner reconciled FR-009's drop but missed this one — both share
+  the same root cause.)*
 - **FR-009**: Users MUST be able to rename the primary designation by promoting an existing alias (`target.primary.rename`), which demotes the prior primary to alias status.
 
 ### Key Entities

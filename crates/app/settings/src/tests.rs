@@ -589,7 +589,6 @@ fn is_valid_key_cases(#[case] key: &str, #[case] expected: bool) {
 #[case("calibrationPrefillSuggestion", serde_json::json!(false))]
 #[case("currentLibraryId", serde_json::json!(null))]
 #[case("currentLibraryId", serde_json::json!("lib-1"))]
-#[case("plansListDefaultAgeCutoffDays", serde_json::json!(30))]
 #[case("pattern", serde_json::json!([]))]
 #[case("protectedCategories", serde_json::json!(["lights"]))]
 #[case("tools.pixinsight.bundle_id", serde_json::json!("com.x"))]
@@ -647,7 +646,6 @@ fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
 #[case("calibrationFlatOverridePenalty", serde_json::json!(1.1))] // above [0,1]
 #[case("autoApplyPattern", serde_json::json!("true"))] // string, not boolean
 #[case("currentLibraryId", serde_json::json!(5))] // not string/null
-#[case("plansListDefaultAgeCutoffDays", serde_json::json!("x"))] // not a number
 #[case("pattern", serde_json::json!("notarray"))]
 #[case("protectedCategories", serde_json::json!({}))] // object, not array
 #[case("tools.siril.enabled", serde_json::json!("yes"))] // not a boolean
