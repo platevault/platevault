@@ -269,13 +269,16 @@ pub struct InboxReclassifyResponse {
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────
 
 /// Request to scan a root directory and discover inbox items.
+///
+/// Traversal behaviour is deliberately not a request field: `inbox.scan.folder`
+/// resolves `followSymlinks` from persisted ingestion settings so every caller
+/// gets the behaviour the user configured (issue #878). Every previous caller
+/// hardcoded `false`, which silently overrode that setting.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxScanFolderRequest {
     pub root_id: String,
     pub root_absolute_path: String,
-    #[serde(default)]
-    pub follow_symlinks: bool,
 }
 
 /// A discovered inbox item returned from the scan.

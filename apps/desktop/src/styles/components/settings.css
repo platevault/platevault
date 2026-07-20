@@ -187,6 +187,7 @@ font-weight: var(--pv-weight-medium);
 }
 .pv-toggle input:checked ~ .pv-toggle__track { background: var(--pv-accent); }
 .pv-toggle input:checked ~ .pv-toggle__thumb { transform: translateX(16px); }
+.pv-toggle--disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* Token chip (naming builder) */
 .pv-token-chip {

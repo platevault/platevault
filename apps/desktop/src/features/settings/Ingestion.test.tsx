@@ -105,31 +105,23 @@ describe('Ingestion', () => {
     );
   });
 
-  it('persists "off" for the hashing mode selector', async () => {
+  // Issue #878: only followSymlinks has a pipeline consumer. The other three
+  // controls must not present themselves as working settings.
+  it.each([
+    ['Scan on startup'],
+    ['Follow NTFS junctions'],
+    ['Hashing mode'],
+  ])('%s is disabled because no pipeline reads it', async (label) => {
     render(<Ingestion save={vi.fn()} />);
 
-    // Same hydration gate as above — the persisted payload is built from
-    // loaded state, so editing pre-hydration would send DEFAULTS' companions.
     await screen.findByRole('checkbox', {
       name: 'Follow symbolic links',
       checked: true,
     });
-    const select = screen.getByLabelText('Hashing mode');
-    expect(select).toHaveValue('eager');
-    await act(async () => {
-      fireEvent.change(select, { target: { value: 'off' } });
-      await Promise.resolve();
-    });
 
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hashingMode: 'off',
-        // Proves the persisted document was built from the loaded settings,
-        // not from DEFAULTS.
-        defaultFilter: SETTINGS.defaultFilter,
-      }),
-    );
+    expect(screen.getByLabelText(label)).toBeDisabled();
   });
+
 
   it('a slow initial fetch does not clobber an edit made before it resolves', async () => {
     // Reproduces a real race, not just CI flakiness: the mount-time
