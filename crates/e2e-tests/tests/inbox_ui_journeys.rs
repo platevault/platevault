@@ -755,10 +755,17 @@ async fn inbox_ui_unsplit_unclassified_folder_badge_is_not_classified() -> anyho
          still renders a 'classified' Type badge, contradicting the detail panel's \
          unclassified state. Type cells: {labels:?}"
     );
+    // Spec 058 T012: there IS no unsplit placeholder row any more. An
+    // unreadable folder materialises as a needs-review item, and "needs review"
+    // is a STRICTLER label than "unclassified" — it names why the row cannot be
+    // confirmed rather than merely that its type is unknown. Both satisfy this
+    // journey's actual claim, asserted above: the badge must never read
+    // "classified" when the row carries no frame type (#711 Instance A).
     anyhow::ensure!(
-        labels.iter().any(|l| l == "unclassified"),
-        "expected the unsplit placeholder row to render the 'unclassified' Type badge \
-         that agrees with inbox.classify and the detail panel. Type cells: {labels:?}"
+        labels.iter().any(|l| l == "unclassified" || l == "needs review"),
+        "expected the row for a folder with no resolvable frame type to read \
+         'unclassified' or 'needs review', agreeing with inbox.classify and the \
+         detail panel. Type cells: {labels:?}"
     );
 
     app.shutdown().await
