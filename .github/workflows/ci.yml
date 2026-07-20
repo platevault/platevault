@@ -357,6 +357,14 @@ jobs:
           pnpm --filter='!./apps/desktop' --filter='!.' -r --if-present test
 
           cd apps/desktop
+
+          # `apps/desktop` declares `"pretest": "pnpm i18n:compile"`, and
+          # `src/paraglide/` is gitignored, so the message catalogue only exists
+          # once that runs. Invoking vitest through `pnpm exec` skips npm
+          # lifecycle hooks, so pretest never fires and 145 of 199 spec files
+          # fail on a missing `@/paraglide/messages`. Compile explicitly.
+          pnpm i18n:compile
+
           if [ "$FRONTEND_FULL" = "true" ]; then
             echo "frontend_full=true -> running the complete vitest suite."
             pnpm exec vitest run
