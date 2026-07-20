@@ -421,15 +421,6 @@
   justify-content: flex-end;
 }
 
-/* Edit-project pane full-pane overlay */
-.pv-project-detail__edit-overlay {
-  position: absolute;
-  inset: 0;
-  background: var(--pv-surface);
-  z-index: 10;
-  overflow: auto;
-}
-
 /* === INBOX DETAIL === */
 
 /* Muted dash spans produced by fmtOrDash / fmtBinning / fmtExposure / fmtTemp */

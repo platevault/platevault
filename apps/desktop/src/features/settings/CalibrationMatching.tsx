@@ -82,9 +82,13 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
 
   // ── Load persisted values from backend on mount ────────────────────────────
   useEffect(() => {
+    // `cancelled` is a separate concern from `editedRef`: that guard protects a
+    // user edit from being clobbered by a late fetch, this one stops the fetch
+    // touching React state at all once the pane has unmounted.
+    let cancelled = false;
     calibrationTolerancesGet()
       .then((tol) => {
-        if (editedRef.current) return;
+        if (cancelled || editedRef.current) return;
         setRequireCamera(tol.requireSameCamera);
         setRequireBinning(tol.requireSameBinning);
         setRequireGain(tol.requireSameGain);
@@ -100,6 +104,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       .catch(() => {
         // Backend unavailable in mock / dev mode — stay with in-code defaults.
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Persist a partial update; callers pass only the changed field ──────────

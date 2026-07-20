@@ -38,6 +38,15 @@ build:
 db-boundary:
     bash scripts/check-db-boundary.sh
 
+# Dead-caller ratchet — fail if a module-level `pub fn` in crates/ has no
+# production caller, i.e. only its own tests reach it. rustc cannot catch this:
+# `dead_code` does not fire on `pub` items in a lib crate, and `unreachable_pub`
+# flags the opposite condition. Shrink-only baseline; refresh after wiring up or
+# deleting debt:
+#   bash scripts/check-dead-callers.sh --generate
+dead-callers:
+    bash scripts/check-dead-callers.sh
+
 # Regenerate the sqlx offline query cache (.sqlx/) for compile-time verification.
 # Requires a DATABASE_URL pointing at a migrated SQLite db, or run after the
 # crate's migrations have been applied. Commit the resulting .sqlx/ dir so CI can
