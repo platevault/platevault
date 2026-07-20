@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
-import { ConfirmOverlay } from '@/components';
+import { Modal } from '@/components';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
 import {
@@ -576,6 +576,12 @@ export function Equipment({ save: _save }: EquipmentProps) {
     } finally {
       setDeleteBusy(false);
     }
+  };
+
+  const closeDeleteConfirm = () => {
+    if (deleteBusy) return;
+    setDeleteTarget(null);
+    setDeleteError(null);
   };
 
   // ── Row lookups for the optical trains table ─────────────────────────────────
@@ -1248,23 +1254,33 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
       </SettingsSection>
 
-      <ConfirmOverlay
+      <Modal
         open={deleteTarget != null}
-        onClose={() => {
-          if (deleteBusy) return;
-          setDeleteTarget(null);
-          setDeleteError(null);
-        }}
-        onConfirm={() => void handleConfirmDelete()}
+        onClose={closeDeleteConfirm}
         title={m.settings_equipment_delete_confirm_title({
           name: deleteTarget?.name ?? '',
         })}
-        description={m.settings_equipment_delete_confirm_desc()}
-        confirmLabel={deleteBusy ? m.common_removing() : m.common_remove()}
-        confirmVariant="danger"
+        size="sm"
+        hideClose
+        footer={
+          <>
+            <Btn variant="ghost" onClick={closeDeleteConfirm}>
+              {m.common_cancel()}
+            </Btn>
+            <Btn
+              variant="destructive"
+              onClick={() => void handleConfirmDelete()}
+            >
+              {deleteBusy ? m.common_removing() : m.common_remove()}
+            </Btn>
+          </>
+        }
       >
+        <p className="pv-modal__message">
+          {m.settings_equipment_delete_confirm_desc()}
+        </p>
         {deleteError && <span className="pv-field-error">{deleteError}</span>}
-      </ConfirmOverlay>
+      </Modal>
     </>
   );
 }

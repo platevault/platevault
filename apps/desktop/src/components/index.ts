@@ -66,10 +66,7 @@ export type { LifecycleProps } from './Lifecycle';
 export { Modal } from './Modal';
 export type { ModalProps, ModalSize } from './Modal';
 
-export { ConfirmOverlay } from './ConfirmOverlay';
-export type { ConfirmOverlayProps } from './ConfirmOverlay';
-
-// Shared status indicator (dot + label). ProjectStatusTag is a thin alias.
+// Shared status indicator (dot + label).
 export { StatusTag } from './StatusTag';
 export type { StatusTagProps } from './StatusTag';
 

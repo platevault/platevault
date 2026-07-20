@@ -4,7 +4,7 @@
 import { forwardRef } from 'react';
 import type { ReactNode, ButtonHTMLAttributes } from 'react';
 
-export type BtnVariant = 'primary' | 'danger' | 'ghost';
+export type BtnVariant = 'primary' | 'danger' | 'destructive' | 'ghost';
 export type BtnSize = 'sm' | 'md';
 export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: BtnVariant;
