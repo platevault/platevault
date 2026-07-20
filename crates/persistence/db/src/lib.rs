@@ -28,6 +28,12 @@ pub mod repositories;
 
 pub const CRATE_NAME: &str = "persistence_db";
 
+/// How long a writer waits for the SQLite write lock before `SQLITE_BUSY`.
+///
+/// Matches sqlx's current default; stated here so the value is ours, not a
+/// transitively-inherited one (#1231).
+pub const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub type DbResult<T> = Result<T, DbError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -85,12 +91,22 @@ impl Database {
     /// already fsynced at that setting, so durability of the audit record
     /// (constitution II/V) is unchanged; only the locking model differs.
     ///
+    /// `busy_timeout` is stated explicitly rather than inherited (#1231). WAL
+    /// removes reader/writer contention but NOT writer/writer contention: two
+    /// writers still serialise on the single write lock, and the loser gets
+    /// `SQLITE_BUSY` the moment the timeout expires. sqlx currently defaults
+    /// this to the same 5s (`SqliteConnectOptions::default`), so pinning it
+    /// changes no behaviour today — it stops the app's write-contention
+    /// tolerance from being an upstream default that a dependency bump can
+    /// silently move. `tests/two_writer_contention.rs` holds it to that.
+    ///
     /// # Errors
     ///
     /// Returns [`DbError::Database`] if the pool cannot connect to the given URL.
     pub async fn connect(connection_string: &str) -> DbResult<Self> {
-        let options =
-            SqliteConnectOptions::from_str(connection_string)?.journal_mode(SqliteJournalMode::Wal);
+        let options = SqliteConnectOptions::from_str(connection_string)?
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(BUSY_TIMEOUT);
         let pool = SqlitePoolOptions::new().max_connections(8).connect_with(options).await?;
         Ok(Self { pool })
     }
