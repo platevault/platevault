@@ -27,14 +27,15 @@ describe('T072: release build dev surface gate', () => {
   let originalEnv: string;
 
   beforeEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env = (import.meta as any).env as Record<string, string> | undefined;
+    const env = import.meta.env as unknown as
+      | Record<string, string>
+      | undefined;
     originalEnv = env?.VITE_DEV_TOOLS ?? 'false';
   });
 
   afterEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (import.meta as any).env.VITE_DEV_TOOLS = originalEnv;
+    (import.meta.env as unknown as Record<string, string>).VITE_DEV_TOOLS =
+      originalEnv;
   });
 
   it('DEV_TOOLS_ENABLED is false when VITE_DEV_TOOLS is not "true"', () => {

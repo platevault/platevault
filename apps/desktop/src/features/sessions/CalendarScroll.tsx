@@ -100,7 +100,10 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
             );
           }
 
-          const night = row.night!;
+          const night = row.night;
+          if (!night) {
+            return null;
+          }
           return (
             <div
               key={virtualRow.key}
