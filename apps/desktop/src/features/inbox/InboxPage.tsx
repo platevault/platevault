@@ -1004,8 +1004,25 @@ export function InboxPage() {
   ]);
 
   // Summary count (no page title — top-bar convention): folders / masters.
-  const folderCount = items.filter((it) => !it.isMaster).length;
-  const masterCount = items.filter((it) => it.isMaster).length;
+  //
+  // spec 058 SC-004: counted off the SAME filtered arrays as `derivedStats`
+  // above, and off the same ones `InboxList` renders. These two surfaces sit
+  // beside each other and had drifted apart in two independent ways:
+  //
+  //   - the stats strip moved onto `filteredItems` for SC-004 while the header
+  //     stayed on the unfiltered `items`, so with any lane/kind/search filter
+  //     active the two adjacent numbers disagreed;
+  //   - `deriveInboxStats` then began counting source-group rows (CHK010) while
+  //     the header still ignored them, so a scanned-but-unclassified folder was
+  //     counted by one surface and not the other.
+  //
+  // Both are the same defect SC-004 names — a summary that disagrees with the
+  // list under it — so both are fixed at the one site rather than the header
+  // being taught the source-group rule separately.
+  const folderCount =
+    filteredItems.filter((it) => !it.isMaster).length +
+    filteredSourceGroups.length;
+  const masterCount = filteredItems.filter((it) => it.isMaster).length;
   const summary = useMemo(() => {
     if (listLoading) return m.common_loading();
     const parts: string[] = [];

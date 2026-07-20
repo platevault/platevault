@@ -173,4 +173,71 @@ describe('Inbox summary counts follow the filtered list (T022, SC-004)', () => {
       expect(num?.textContent).toBe('1');
     });
   });
+
+  // The stats strip and the top-bar summary sit beside each other and are two
+  // separate derivations of "how many rows". Fixing only the strip (above) left
+  // the header still counting the UNFILTERED array, so the two adjacent numbers
+  // disagreed under any active filter — the same SC-004 defect, one surface
+  // over.
+  it('the top-bar folder count follows the filter too, agreeing with the strip', async () => {
+    const { InboxPage } = await import('../InboxPage');
+    render(<InboxPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('2 folders')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'M31' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('1 folder')).toBeInTheDocument();
+    });
+  });
+});
+
+// CHK010 gave `deriveInboxStats` a source-group argument, so the strip counts
+// scanned-but-unclassified folders. The header did not, leaving a folder that
+// one surface counted and the other ignored — visible without any filter at
+// all, unlike the drift above.
+describe('Inbox summary counts include source-group rows (T013, CHK010)', () => {
+  beforeEach(() => {
+    mockInboxList.mockResolvedValue(
+      ok({
+        items: [folder('item-m31', 'lights/M31', 'sig-b')],
+        sourceGroups: [
+          {
+            sourceGroupId: 'sg-unscanned',
+            rootId: 'root-001',
+            rootAbsolutePath: '/astro/inbox',
+            relativePath: 'lights/NGC6888',
+            fileCount: 9,
+            format: 'fits',
+            lane: 'move',
+            contentSignature: 'sig-sg',
+            discoveredAt: '2026-07-20T10:00:00Z',
+          },
+        ],
+        capped: false,
+        limit: 500,
+      }),
+    );
+  });
+
+  it('counts a source-group row as a folder in the top-bar summary', async () => {
+    const { InboxPage } = await import('../InboxPage');
+    render(<InboxPage />);
+
+    // One classified item + one scanned-but-unclassified folder = two rows on
+    // screen, so two folders in the summary above them.
+    await waitFor(() => {
+      expect(screen.getByText('lights/M31')).toBeInTheDocument();
+      expect(screen.getByText('lights/NGC6888')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('2 folders')).toBeInTheDocument();
+    });
+  });
 });
