@@ -41,3 +41,21 @@ repos:
     hooks:
       - id: cocogitto-verify
         stages: [commit-msg]
+
+  # Catches a `var(--pv-*)` that resolves to nothing before it is committed.
+  # That failure is invisible at review time — the browser silently drops the
+  # declaration, so the rule is simply absent rather than visibly wrong — and it
+  # reached production once already (spec 028, R-4).
+  #
+  # Runs the same glob as CI rather than the staged filenames: stylelint resolves
+  # its config and referenceFiles relative to apps/desktop, so the repo-root
+  # relative paths pre-commit would hand in do not resolve. Linting all CSS costs
+  # about a second and keeps the local result identical to CI's.
+  - repo: local
+    hooks:
+      - id: stylelint-token-references
+        name: stylelint (design-token references)
+        language: system
+        pass_filenames: false
+        files: ^(apps/desktop/src/styles/.*\.css|apps/desktop/tokens/.*|packages/tokens/.*)$
+        entry: pnpm --dir apps/desktop exec stylelint "src/styles/**/*.css"

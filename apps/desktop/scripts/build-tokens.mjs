@@ -29,9 +29,6 @@ import StyleDictionary from 'style-dictionary';
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join, basename, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-// Reused from the standalone type generator rather than reimplemented, so the
-// emitted tokens.d.ts stays byte-identical and its drift test keeps passing.
-import { extractTokenNames, renderTokenTypesDts } from './gen-token-types.mjs';
 
 // Paths resolve from this file, not the cwd: CI invokes it via
 // `pnpm --filter @astro-plan/desktop run lint`, which runs from apps/desktop,
@@ -41,7 +38,6 @@ const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOKENS_DIR = join(APP_DIR, 'tokens');
 const OUT = join(APP_DIR, 'src/styles/tokens.css');
 const PRELUDE = join(TOKENS_DIR, 'prelude.css');
-const TYPES_OUT = join(APP_DIR, 'src/styles/tokens.d.ts');
 
 // The docs site shares this app's non-color foundation but keeps its own
 // palette (#1153), so it gets a purpose-built output rather than a slice of
@@ -204,31 +200,9 @@ const docsOutput = `${docsBanner}${await buildBlock({
   include: fromFile('foundation.json'),
 })}`;
 
-// tokens.d.ts is derived from the CSS this same run produced, so the type and
-// the stylesheet cannot disagree — they are written from one in-memory build
-// rather than by two scripts that might run at different times.
-const typesOutput = renderTokenTypesDts(extractTokenNames([output, docsOutput]));
-
-// Every token that ships in the CSS must exist in the type. Today this holds by
-// construction, because the names are extracted FROM the emitted CSS — which
-// also means a `--pv-*` hand-added to a non-generated import (prelude.css)
-// is picked up rather than missed. The assertion is here so that stays true if
-// anyone later switches to enumerating the token tree instead, where the union
-// across every tier and theme becomes an assumption rather than a consequence.
-{
-  const inCss = new Set(extractTokenNames([output, docsOutput]));
-  const inTypes = new Set([...typesOutput.matchAll(/'(pv-[A-Za-z0-9_-]+)'/g)].map((m) => m[1]));
-  const missing = [...inCss].filter((n) => !inTypes.has(n));
-  if (missing.length > 0) {
-    console.error(`ERROR: tokens in the CSS but absent from tokens.d.ts: ${missing.join(', ')}`);
-    process.exit(1);
-  }
-}
-
 const artifacts = [
   [OUT, output],
   [DOCS_OUT, docsOutput],
-  [TYPES_OUT, typesOutput],
 ];
 
 // Compare content, not line endings. `.gitattributes` pins these files to LF,

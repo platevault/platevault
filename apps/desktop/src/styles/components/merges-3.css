@@ -797,6 +797,12 @@
  * designation column's sticky `left` offset must equal this width EXACTLY (see
  * --pv-targets-star-w in merges-2.css). A percentage would drift from that
  * offset at any table width above the 1000px min-width floor. */
+/* stylelint-disable-next-line no-unknown-custom-properties --
+   Deliberate cross-file inheritance, not a missing token: the property is
+   declared on the table in merges-2.css and inherits down to this <col>. It is
+   component-local geometry, so it is intentionally NOT a design token. This is
+   the only such crossing in the codebase — every other var() resolves to a
+   generated token. */
 .pv-targets-col--star { width: var(--pv-targets-star-w); }
 
 /* Star toggle button: tiny, borderless, centred in its cell. */
