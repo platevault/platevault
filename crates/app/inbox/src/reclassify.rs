@@ -1090,14 +1090,23 @@ mod tests {
     /// the item forever.
     ///
     /// The resolve records the frame type, the classification identity, the
-    /// `classified` state and `needs_review = 0` in one statement — there is no
-    /// observable intermediate where the row reports `classified` with a NULL
-    /// `frame_type`.
+    /// `classified` state and `needs_review = 0` in one statement.
+    ///
+    /// This does NOT establish SC-003 generally: `upsert_inbox_sub_item`
+    /// hardcodes `state = 'classified'` (inbox.rs:536,543), so an UNRESOLVED
+    /// needs-review row sits at `classified` with a NULL `frame_type` for as
+    /// long as it stays unresolved. That is a live SC-003 violation, pinned by
+    /// `needs_review_resolves_atomically_onto_its_natural_key_058` and fixed
+    /// by T018 — not by this test.
     #[tokio::test]
     async fn reclassify_fully_resolved_clears_needs_review() {
         let db = test_db().await;
         setup_unclassified_item(&db, "item-recl-724").await;
-        flag_needs_review(&db, "item-recl-724", "type=flat").await;
+        // A key classify actually produces for a flat missing FILTER: the
+        // absent grouping dimension renders as SENTINEL_MISSING. Injecting a
+        // bare "type=flat" would only assert that a hand-written constant
+        // survives a round trip.
+        flag_needs_review(&db, "item-recl-724", "type=flat·filter=∅·exposure=∅").await;
 
         let resp = reclassify(
             db.pool(),
@@ -1143,21 +1152,28 @@ mod tests {
             "resolving must record the frame type in the same statement"
         );
         assert_eq!(state, "classified", "resolving must record the classified state");
+        // No synthetic `resolved=<id>` token is appended. KNOWN GAP: the
+        // resolve rewrites the row through `upsert_inbox_sub_item` with
+        // `group_key` passed through unchanged, so the identity still records
+        // the now-supplied FILTER as absent and will never converge with a
+        // sibling carrying the real value — defeating T006's ON CONFLICT
+        // rationale. Re-keying from override-merged metadata is a re-split
+        // decision owned by T012-T016; asserted as-is so it stays visible.
         assert_eq!(
-            group_key, "type=flat",
-            "group_key carries classification identity only — no synthetic resolved= token"
+            group_key, "type=flat·filter=∅·exposure=∅",
+            "resolve passes group_key through unchanged (stale ∅ identity — T012-T016)"
         );
 
-        // SC-003 restated as an invariant over the whole table: no row may
-        // report `classified` without a frame type.
+        // SC-003 as written: unqualified. A `needs_review = 0` qualifier here
+        // would exclude exactly the rows that violate it.
         let violations: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM inbox_items
-              WHERE state = 'classified' AND frame_type IS NULL AND needs_review = 0",
+              WHERE state = 'classified' AND frame_type IS NULL",
         )
         .fetch_one(db.pool())
         .await
         .unwrap();
-        assert_eq!(violations, 0, "SC-003: no resolved item may be classified with no frame type");
+        assert_eq!(violations, 0, "SC-003: no item may be classified with no frame type");
     }
 
     /// Issue #711 Instance B: overriding every file's frame_type to a single

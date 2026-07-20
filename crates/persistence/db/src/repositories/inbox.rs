@@ -2239,8 +2239,14 @@ mod tests {
 
     /// Spec 058 FR-028/FR-029 (T005, T011): `needs_review` is its own column,
     /// and resolving an item out of needs-review moves the flag, the frame
-    /// type and the state in ONE statement — there is no observable moment at
-    /// which the row reports `classified` without a frame type (SC-003).
+    /// type and the state in ONE statement (FR-029).
+    ///
+    /// SC-003 is NOT yet met, and this test pins the violation rather than
+    /// claiming it away: the INSERT hardcodes `state = 'classified'`, so the
+    /// UNRESOLVED needs-review row reports `classified` with a NULL
+    /// `frame_type` for as long as it stays unresolved — an observable state,
+    /// not a transient window. T018 owns the fix; when it lands the
+    /// `state == "classified"` assertion below must flip, which is the point.
     ///
     /// The last assertion is the one that matters for T006: the resolve
     /// converges onto the item's NATURAL classification key via `ON CONFLICT`,
@@ -2306,14 +2312,20 @@ mod tests {
         };
         let first_id = upsert_inbox_sub_item(pool, &unresolved).await.unwrap();
 
-        let (nr, ft): (i64, Option<String>) =
-            sqlx::query_as("SELECT needs_review, frame_type FROM inbox_items WHERE id = ?")
+        let (nr, ft, state): (i64, Option<String>, String) =
+            sqlx::query_as("SELECT needs_review, frame_type, state FROM inbox_items WHERE id = ?")
                 .bind(&first_id)
                 .fetch_one(pool)
                 .await
                 .unwrap();
         assert_eq!(nr, 1, "needs_review must persist as its own field, not as a group_key value");
         assert_eq!(ft, None, "an unresolved needs-review item carries no frame type");
+        // The pinned SC-003 violation — see this test's doc comment. T018.
+        assert_eq!(
+            state, "classified",
+            "SC-003 gap: the INSERT hardcodes state='classified', so an unresolved \
+             needs-review row is classified with no frame type. T018 must change this."
+        );
 
         // The user supplies the missing attributes; re-materialization writes
         // the resolved item with a DIFFERENT freshly-generated id but the SAME
