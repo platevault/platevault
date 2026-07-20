@@ -140,6 +140,81 @@
     "$type": "dimension",
     "$description": "Circle/pill. Not a length: it tracks the box at any size, so it states the intent (round this completely) that a px radius cannot. Used for avatars, status dots and icon buttons."
   },
+  "z-raised": {
+    "$value": "1",
+    "$type": "number",
+    "$description": "Sticky table headers, resize handles, lifecycle dots — lifted just off the base within their own scroller."
+  },
+  "z-pinned": {
+    "$value": "2",
+    "$type": "number",
+    "$description": "Pinned table column cells, above sticky headers of the same table."
+  },
+  "z-pinned-header": {
+    "$value": "3",
+    "$type": "number",
+    "$description": "The pinned-column header corner, which must sit above both."
+  },
+  "z-dropdown": {
+    "$value": "10",
+    "$type": "number",
+    "$description": "Attached menus and inline edit overlays."
+  },
+  "z-overlay": {
+    "$value": "20",
+    "$type": "number",
+    "$description": "Local (in-pane) overlays. NOTE: below z-menu and z-tooltip — the project-detail modal overlay lives here while the app modal is at z-modal, which is a pre-existing inconsistency this naming makes visible rather than fixes."
+  },
+  "z-menu": {
+    "$value": "50",
+    "$type": "number",
+    "$description": "Filter-bar and other detached menu panels."
+  },
+  "z-tooltip": {
+    "$value": "60",
+    "$type": "number",
+    "$description": "Tooltips."
+  },
+  "z-popover": {
+    "$value": "200",
+    "$type": "number",
+    "$description": "Guidance popups, session popovers, file popups."
+  },
+  "z-modal-backdrop": {
+    "$value": "500",
+    "$type": "number",
+    "$description": "Modal scrim."
+  },
+  "z-modal": {
+    "$value": "501",
+    "$type": "number",
+    "$description": "Modal surface — one above its own backdrop."
+  },
+  "z-search-overlay": {
+    "$value": "510",
+    "$type": "number",
+    "$description": "Target-search positioner, above the modal it can be opened from."
+  },
+  "z-palette-backdrop": {
+    "$value": "600",
+    "$type": "number",
+    "$description": "Command-palette scrim."
+  },
+  "z-palette": {
+    "$value": "601",
+    "$type": "number",
+    "$description": "Command palette — one above its own backdrop."
+  },
+  "z-dev": {
+    "$value": "1000",
+    "$type": "number",
+    "$description": "Developer-mode overlays (dev-tools builds only)."
+  },
+  "z-toast": {
+    "$value": "9999",
+    "$type": "number",
+    "$description": "Toasts: always last, above everything including dev overlays."
+  },
   "border-w": {
     "$value": "1px",
     "$type": "dimension",

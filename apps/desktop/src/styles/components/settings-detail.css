@@ -352,7 +352,7 @@
   position: absolute;
   top: 100%;
   right: 0;
-  z-index: 10;
+  z-index: var(--pv-z-dropdown);
   margin-top: var(--pv-sp-1);
   min-width: 180px;
   display: flex;

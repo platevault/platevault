@@ -42,6 +42,21 @@
   --pv-radius-md: 5px;
   --pv-radius-lg: 8px;
   --pv-radius-full: 50%; /** Circle/pill. Not a length: it tracks the box at any size, so it states the intent (round this completely) that a px radius cannot. Used for avatars, status dots and icon buttons. */
+  --pv-z-raised: 1; /** Sticky table headers, resize handles, lifecycle dots — lifted just off the base within their own scroller. */
+  --pv-z-pinned: 2; /** Pinned table column cells, above sticky headers of the same table. */
+  --pv-z-pinned-header: 3; /** The pinned-column header corner, which must sit above both. */
+  --pv-z-dropdown: 10; /** Attached menus and inline edit overlays. */
+  --pv-z-overlay: 20; /** Local (in-pane) overlays. NOTE: below z-menu and z-tooltip — the project-detail modal overlay lives here while the app modal is at z-modal, which is a pre-existing inconsistency this naming makes visible rather than fixes. */
+  --pv-z-menu: 50; /** Filter-bar and other detached menu panels. */
+  --pv-z-tooltip: 60; /** Tooltips. */
+  --pv-z-popover: 200; /** Guidance popups, session popovers, file popups. */
+  --pv-z-modal-backdrop: 500; /** Modal scrim. */
+  --pv-z-modal: 501; /** Modal surface — one above its own backdrop. */
+  --pv-z-search-overlay: 510; /** Target-search positioner, above the modal it can be opened from. */
+  --pv-z-palette-backdrop: 600; /** Command-palette scrim. */
+  --pv-z-palette: 601; /** Command palette — one above its own backdrop. */
+  --pv-z-dev: 1000; /** Developer-mode overlays (dev-tools builds only). */
+  --pv-z-toast: 9999; /** Toasts: always last, above everything including dev overlays. */
   --pv-border-w: 1px; /** Hairline border. Used 202 times across the app, so it is a system decision, not per-component geometry: one value to change if the UI ever moves off a 1px rule. */
   --pv-border-w-thick: 2px; /** Emphasis border (selected/active edges). The lone 1.5px in the tree was drift and is folded into this. */
 }

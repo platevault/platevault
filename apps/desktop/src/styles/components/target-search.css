@@ -55,7 +55,7 @@
    paints over the dropdown/no-match message: present and functional in the
    DOM, but never visible or hit-testable to a real (mouse-driven) user. */
 .pv-target-search__positioner {
-  z-index: 510;
+  z-index: var(--pv-z-search-overlay);
   width: var(--anchor-width, auto);
 }
 .pv-target-search__popup {
@@ -160,7 +160,7 @@
 .pv-palette-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 600;
+  z-index: var(--pv-z-palette-backdrop);
   background: color-mix(in srgb, var(--pv-ink) 45%, transparent);
   backdrop-filter: blur(2px);
 }
@@ -175,7 +175,7 @@
   top: 14vh;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 601;
+  z-index: var(--pv-z-palette);
   display: flex;
   flex-direction: column;
   width: min(94vw, 560px);

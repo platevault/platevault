@@ -190,7 +190,7 @@
 }
 .pv-filterbar__multi-menu {
   position: absolute;
-  z-index: var(--pv-z-popover, 50);
+  z-index: var(--pv-z-menu);
   top: calc(100% + var(--pv-sp-1));
   left: 0;
   min-width: 11rem;
@@ -301,7 +301,7 @@
   width: 6px;
   height: 100%;
   cursor: col-resize;
-  z-index: 1;
+  z-index: var(--pv-z-raised);
   touch-action: none;
 }
 .pv-resize-handle:hover,

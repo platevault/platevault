@@ -297,7 +297,7 @@
 .pv-targets-table__scroll .pv-targets-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--pv-z-raised);
 }
 
 /* === Pinned identity columns (spec 054 FR-006/FR-007, #1158) ==============
@@ -360,14 +360,14 @@
 /* Layering: pinned header corner > pinned body cells > sticky header > rest.
    Without this the pinned body cells slide over the header while scrolling. */
 .pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(-n + 2) {
-  z-index: 2;
+  z-index: var(--pv-z-pinned);
   /* Cells are transparent by default and would let scrolled columns show
      through. `th` already carries --pv-surface (primitives.css), which is why
      the sticky header reads as opaque. */
   background: var(--pv-bg);
 }
 .pv-targets-table__scroll .pv-targets-table thead th:nth-child(-n + 2) {
-  z-index: 3;
+  z-index: var(--pv-z-pinned-header);
 }
 
 /* Re-assert row state on the pinned cells. The hover/selected rules set
