@@ -724,11 +724,23 @@ fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
 /// the rest of the Targets table scrolls sideways, so a row's identity is
 /// never lost (FR-006/FR-007, shipped in #1253).
 ///
-/// Sized to 1400x900 on purpose: that is the DEFAULT docked configuration,
-/// not an edge case. At 1400 the sidebar takes 220px and the side dock 420px,
-/// leaving the table ~760px against its own 1000px min-width floor — so it
-/// overflows by ~240px and, under `table-layout: fixed`, the designation
-/// column is exactly what would scroll away unpinned.
+/// **Pins the dock rather than relying on the 1400px width threshold**, so
+/// this runs on both supported platforms. GitHub-hosted Windows runners are
+/// fixed at 1024x768 and cannot be resized — the runner service runs in
+/// non-interactive Session 0 with no real display (actions/runner-images
+/// #2935, #8606) — so a journey demanding a 1400px viewport would be
+/// Linux-only by construction. A user pin is a first-class supported
+/// configuration, not a test-only shortcut: `useAdaptiveDock` honours an
+/// override at any width wide enough for a side dock at all.
+///
+/// Pinning also sidesteps a counter-intuitive trap. A LARGER screen produces
+/// LESS horizontal overflow, because the table's 1000px min-width floor is
+/// fixed while the space left for it grows: at a 1400px viewport the table
+/// gets ~760px and overflows by ~240px, but at 1600px it gets ~960px and
+/// overflows by only ~40px. Asserting against a fixed viewport would be
+/// fragile in the direction people intuitively assume is safer. So the
+/// assertion is on MEASURED overflow — ~616px at the Windows runners'
+/// 1024px, ~240px at 1400px.
 ///
 /// Asserts a non-pinned CONTROL column moves by the scroll distance. Without
 /// it this journey would pass in the one case it most needs to catch: if the
@@ -743,24 +755,37 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     complete_first_run(&app).await?;
 
-    // Size the viewport BEFORE navigating: `useAdaptiveDock` reads
-    // `window.innerWidth` on mount, so engaging the dock after the page is
-    // already laid out would depend on its resize listener rather than on
-    // the configuration this journey means to assert.
-    app.set_viewport(1400, 900).await?;
+    // Best-effort: widens the window where the display allows (Ubuntu, whose
+    // xvfb screen e2e.yml sizes to 1600x1200) and is a no-op on a Windows
+    // runner that cannot resize. Nothing below depends on the result — the
+    // dock is pinned explicitly, and the real gate is measured overflow.
+    let (viewport_w, viewport_h) = app.set_viewport(1400, 900).await?;
 
     app.goto_route("/targets").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     add_target_via_ui(&app, "M 1").await?;
+
+    // Pin the side dock through the app's REAL persisted preference, then
+    // let the reload apply it. The reload is what makes this work at all:
+    // `data/preferences.ts` memoises into a module-level cache on first
+    // read, so seeding localStorage into a booted page would be inert.
+    app.seed_preference("detailDock", r#"{"targets":{"placement":"side","width":420}}"#).await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
 
     let before = measure_pinned_columns(&app).await?;
     let overflow = px(&before, "scrollWidth")? - px(&before, "clientWidth")?;
     anyhow::ensure!(
         overflow >= MIN_SCROLL,
         "the table must really overflow horizontally for this journey to mean \
-         anything, but scrollWidth-clientWidth is only {overflow}px \
-         (need >= {MIN_SCROLL}). Either the side dock did not engage at 1400px \
-         or the table's min-width floor changed: {before}"
+         anything, but scrollWidth-clientWidth is only {overflow}px (need \
+         >= {MIN_SCROLL}) at a {viewport_w}x{viewport_h} viewport. Either the \
+         pinned side dock did not apply (the seeded `detailDock` preference \
+         needs a reload to beat the module-level preference cache), or the \
+         table's 1000px min-width floor changed. Note a WIDER viewport yields \
+         LESS overflow, so a large screen is not the safe direction here: \
+         {before}"
     );
 
     // Scroll to the far right — the worst case for identity loss.

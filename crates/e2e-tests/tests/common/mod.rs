@@ -456,8 +456,8 @@ impl E2eApp {
         Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
     }
 
-    /// Resize the real OS window until the WEBVIEW reports exactly
-    /// `target_w` x `target_h`, and fail loudly if it cannot.
+    /// Resize the real OS window and return the viewport actually ACHIEVED,
+    /// which may be smaller than requested.
     ///
     /// Needed because layout-dependent behaviour cannot be asserted at the
     /// default window size: `tauri.conf.json` opens at 1280x820, while the
@@ -465,25 +465,36 @@ impl E2eApp {
     /// (`useAdaptiveDock.ts`'s `threshold`). A journey that wants the docked
     /// layout has to ask for it.
     ///
-    /// **This is deliberately not a one-line `set_window_rect`.** That call
-    /// sizes the OUTER window (frame included), but every threshold in the
-    /// app keys off `window.innerWidth`. The two differ by the window
-    /// chrome, which is not a constant we can hardcode: it is ~0 under
-    /// `xvfb-run` (no window manager, so no decorations) but real on a
-    /// Windows runner. Passing 1400 blind therefore yields an innerWidth of
-    /// 1400 on Linux and something smaller on Windows — the dock silently
-    /// does not engage, the table never overflows, and the journey passes
-    /// while asserting nothing. So: set, MEASURE, correct by the observed
-    /// delta, and verify.
+    /// **Not a one-line `set_window_rect`.** That call sizes the OUTER
+    /// window (frame included), but every threshold in the app keys off
+    /// `window.innerWidth`. The two differ by the window chrome, which is
+    /// not a constant we can hardcode: ~0 under `xvfb-run` (no window
+    /// manager, so no decorations) but real on Windows. Passing 1400 blind
+    /// would yield innerWidth 1400 on Linux and something smaller on
+    /// Windows. So: set, MEASURE, correct by the observed delta.
     ///
-    /// Convergence is capped rather than looped-until-stable because a
-    /// too-small X screen clamps the resize and would otherwise spin
-    /// forever; the error names the screen size, since that is the fix.
-    pub async fn set_viewport(&self, target_w: u32, target_h: u32) -> Result<()> {
+    /// **Best-effort, deliberately not an assertion.** GitHub-hosted
+    /// **Windows runners are fixed at 1024x768 and cannot be resized** — the
+    /// runner service runs in non-interactive Session 0 with no real display
+    /// attached, so `ChangeDisplaySettings` has nothing to act on
+    /// (actions/runner-images#2935, #8606). Hard-failing on a short request
+    /// would make every docked-layout journey Linux-only by construction.
+    /// Callers needing a minimum must assert on the return value — better
+    /// still, avoid depending on one, as
+    /// `targets_ui_identity_columns_stay_pinned_while_table_scrolls` does by
+    /// pinning the dock rather than relying on the width threshold.
+    ///
+    /// Convergence is capped rather than looped-until-stable: a request
+    /// exceeding the screen is clamped by the OS and would otherwise spin.
+    pub async fn set_viewport(&self, target_w: u32, target_h: u32) -> Result<(i64, i64)> {
         const ATTEMPTS: usize = 4;
-        let (mut outer_w, mut outer_h) = (i64::from(target_w), i64::from(target_h));
-        let (tw, th) = (i64::from(target_w), i64::from(target_h));
-        let mut seen = Vec::new();
+        let (screen_w, screen_h) = self.screen_size().await.unwrap_or((-1, -1));
+        // Ask for no more than the screen can hold: anything larger is
+        // clamped anyway, and requesting it only wastes attempts.
+        let tw = if screen_w > 0 { i64::from(target_w).min(screen_w) } else { i64::from(target_w) };
+        let th = if screen_h > 0 { i64::from(target_h).min(screen_h) } else { i64::from(target_h) };
+        let (mut outer_w, mut outer_h) = (tw, th);
+        let mut last = (0, 0);
 
         for _ in 0..ATTEMPTS {
             self.driver
@@ -492,24 +503,41 @@ impl E2eApp {
                 .with_context(|| format!("set_window_rect to {outer_w}x{outer_h} failed"))?;
 
             let (inner_w, inner_h) = self.inner_size().await?;
-            seen.push(format!("{outer_w}x{outer_h} outer -> {inner_w}x{inner_h} inner"));
+            last = (inner_w, inner_h);
             if inner_w == tw && inner_h == th {
-                return Ok(());
+                return Ok(last);
             }
-            // Correct by the observed chrome delta rather than guessing it.
             outer_w += tw - inner_w;
             outer_h += th - inner_h;
         }
+        Ok(last)
+    }
 
-        let (screen_w, screen_h) = self.screen_size().await.unwrap_or((-1, -1));
-        Err(anyhow!(
-            "could not reach a {target_w}x{target_h} viewport in {ATTEMPTS} attempts \
-             (screen is {screen_w}x{screen_h}). If the requested size exceeds the \
-             screen, the display is too small and the resize is being clamped — on \
-             the Ubuntu shards widen it via `xvfb-run -s \"-screen 0 WxHx24\"` in \
-             e2e.yml. Attempts: {}",
-            seen.join("; ")
-        ))
+    /// Seed a persisted app preference BEFORE the frontend reads it, then
+    /// reload so the read is genuinely cold.
+    ///
+    /// The reload is not optional. `data/preferences.ts` memoises into a
+    /// module-level `cachedPreferences` on first read, so writing
+    /// localStorage into an already-booted page changes nothing the app will
+    /// ever look at. Only a real reload drops that cache — which also makes
+    /// this the one path that exercises the cold read.
+    pub async fn seed_preference(&self, key: &str, value_json: &str) -> Result<()> {
+        let script = format!(
+            "var k = 'alm-preferences';\
+             var cur = {{}};\
+             try {{ cur = JSON.parse(localStorage.getItem(k)) || {{}}; }} catch (e) {{ cur = {{}}; }}\
+             cur[{}] = {};\
+             localStorage.setItem(k, JSON.stringify(cur));\
+             return localStorage.getItem(k);",
+            escape_string(key),
+            value_json
+        );
+        self.driver
+            .execute(&script, vec![])
+            .await
+            .with_context(|| format!("failed to seed the {key:?} preference"))?;
+        self.driver.refresh().await.context("failed to reload after seeding a preference")?;
+        Ok(())
     }
 
     /// `window.innerWidth`/`innerHeight` — the viewport the app's own
