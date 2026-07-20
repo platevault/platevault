@@ -1433,6 +1433,7 @@
   "inbox_col_gain": "Gain",
   "inbox_col_temp": "Temp",
   "inbox_col_object": "Object",
+  "inbox_dim_folder": "Folder",
   "inbox_dim_target": "Target",
   "inbox_dim_exposure": "Exposure",
   "inbox_dim_instrument": "Instrument",
