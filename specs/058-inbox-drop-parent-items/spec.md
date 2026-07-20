@@ -32,8 +32,16 @@ produces exactly one item. #1081's narrowing knowingly returned Instance A for
 that case, because there is no sibling whose existence could suppress the
 placeholder. This feature removes the placeholder itself.
 
-**Supersedes the read-side workarounds in**: PR #1038 and PR #1081. Those
-workarounds are removed (FR-026, SC-007) rather than corrected — with no
+**The visible unsplit-case symptom was subsequently patched a third time by
+PR #1099** (merged 2026-07-20, after this scope claim was written): the list now
+reads `classification_result` instead of `state` for the badge, so #711
+Instance A no longer reproduces on `main`. This does not narrow this feature's
+scope — see [Product Intent](#product-intent) for why a third read-side patch
+is evidence for the model-level fix, not a reason to drop it. `upsert_inbox_sub_item`
+still writes the hardcoded `state = 'classified'` literal #1099 read around.
+
+**Supersedes the read-side workarounds in**: PR #1038, PR #1081, and PR #1099.
+Those workarounds are removed (FR-026, SC-007) rather than corrected — with no
 aggregate row there is nothing to suppress.
 
 ## Product Intent
@@ -51,21 +59,36 @@ confirms for ordinary folders. For a folder that splits, the placeholder is
 superseded by the real single-type rows but is not removed, so it lingers in the
 list advertising a classification it does not have.
 
-This has produced a visible, reproducible lie. In #711 Instance A a list row
-reads **CLASSIFIED** while opening it shows `unclassified`, a blocking
-"Frame types required" banner, and a disabled Confirm button. The list and the
-detail panel disagree about the same item id.
+This produced a visible, reproducible lie: in #711 Instance A a list row read
+**CLASSIFIED** while opening it showed `unclassified`, a blocking
+"Frame types required" banner, and a disabled Confirm button — the list and the
+detail panel disagreeing about the same item id.
 
-The badge is not rendering the wrong thing. The badge is rendering the database
-faithfully, and **the database contains a false statement**. Classification sets
-the placeholder's state to `classified` while leaving it with no frame type and
-no group key, so a row that has never been classified truthfully claims it has.
+**That visible symptom is now closed.** PR #1099 (merged 2026-07-20T03:22:26Z)
+changed the list to read the item's own cached `classification_result` instead
+of falling back to `state` for the Type-column badge, so the two surfaces agree
+on screen again. `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`
+(`crates/e2e-tests/tests/inbox_ui_journeys.rs:562`) is the acceptance test for
+exactly this defect; once its stale selector was repaired (#1206, following the
+gap #1202 identified), it passes on `main`.
 
-Two attempts have already patched the read side rather than the cause, and the
-second exists only to repair the first. That is the signal that the model, not
-the query, is wrong. This feature removes the parent concept so that every row
-in the Inbox is a real, actionable item that states only true things about
-itself.
+The badge no longer lies, but **the database still does**. `upsert_inbox_sub_item`
+(`crates/persistence/db/src/repositories/inbox.rs:525` INSERT `VALUES`, `:532`
+`ON CONFLICT ... DO UPDATE SET`) hardcodes `state` to the SQL literal
+`'classified'` regardless of `frame_type`, so a placeholder that has never been
+classified is persisted as `classified` with a null frame type for as long as it
+stays unresolved. That is SC-003's failure condition — observable database
+state, not a transient rendering window. #1099 changed how the list reads
+around that row; it did not change what the row says.
+
+This is the **third** time the read side has needed patching for the same
+underlying lie: #1038 and #1081 patched it before, and #1099 is a third — one
+that landed while this feature was already being planned. That is not evidence
+against this feature; it is the strongest evidence for it. The read side keeps
+needing patches because the model, not the query, is wrong. This feature removes
+the parent concept so that every row in the Inbox is a real, actionable item
+that states only true things about itself, closing the defect at its source
+rather than at its latest presentation. (Refs #711, #1099, #1202, #1206.)
 
 ## Recorded Decisions
 
