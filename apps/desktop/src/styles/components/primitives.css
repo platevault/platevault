@@ -13,11 +13,11 @@
      a full surface of its own, all token-driven so the four themes track it. */
   background: var(--pv-surface-raised);
   color: var(--pv-text);
-  border: 1px solid var(--pv-rule);
+  border: var(--pv-border-w) solid var(--pv-rule);
   border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-2) var(--pv-sp-3);
   font-size: var(--pv-text-xs);
-  line-height: 1.5;
+  line-height: var(--pv-leading-normal);
   box-shadow: var(--pv-shadow-sm);
   z-index: 60;
 }
@@ -27,8 +27,8 @@
   display: inline-flex; align-items: center;
   padding: 1px var(--pv-sp-2); border-radius: 99px;
   font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium);
-  line-height: 1.6; white-space: nowrap;
-  border: 1px solid transparent;
+  line-height: var(--pv-leading-relaxed); white-space: nowrap;
+  border: var(--pv-border-w) solid transparent;
   /* Pills are labels/placeholders, never data values: stay sans even when
      rendered inside a mono value cell (e.g. UnresolvedChip in PropertyTable
      or calibration list columns). */
@@ -49,7 +49,7 @@
   padding: 0 var(--pv-sp-3);
   font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium);
 
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   background: var(--pv-bg); color: var(--pv-text-secondary);
   cursor: pointer; white-space: nowrap;
@@ -135,7 +135,7 @@
 .pv-section__header {
   display: flex; align-items: center; gap: var(--pv-sp-2);
   padding-bottom: var(--pv-sp-2);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   margin-bottom: var(--pv-sp-3);
   cursor: pointer; user-select: none;
 }
@@ -160,7 +160,7 @@
   gap: var(--pv-sp-1) var(--pv-sp-4);
   align-items: baseline;
   padding: var(--pv-sp-3) 0;
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   font-size: var(--pv-text-sm);
 }
 .pv-metricline__m { font-size: var(--pv-text-sm); color: var(--pv-text-muted); }
@@ -183,7 +183,7 @@
   display: flex;
   flex-direction: column;
   background: var(--pv-surface);
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-md);
   overflow: hidden;
 }
@@ -215,7 +215,7 @@
   overflow-y: auto;
 }
 .pv-rail__card { padding: var(--pv-sp-3) var(--pv-sp-4); }
-.pv-rail__card + .pv-rail__card { border-top: 1px solid var(--pv-border-subtle); }
+.pv-rail__card + .pv-rail__card { border-top: var(--pv-border-w) solid var(--pv-border-subtle); }
 .pv-rail__card-h {
   font-size: var(--pv-text-xs);
   text-transform: uppercase;
@@ -227,7 +227,7 @@
 
 /* === BOX / CARD === */
 .pv-box {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-bg);
   overflow: hidden;
@@ -235,7 +235,7 @@
 .pv-box__header {
   padding: var(--pv-sp-2) var(--pv-sp-3);
   background: var(--pv-surface);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold);
   text-transform: uppercase; letter-spacing: var(--pv-tracking-normal);
   color: var(--pv-text-muted);
@@ -250,7 +250,7 @@
   color: var(--pv-text-muted); text-transform: uppercase;
   letter-spacing: var(--pv-tracking-normal);
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
   white-space: nowrap;
   /* Fixed-layout columns: truncate the header instead of clipping it mid-glyph
@@ -260,7 +260,7 @@
 }
 .pv-table td {
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   font-size: var(--pv-text-sm);
   vertical-align: middle;
   /* Keep cell content within its column box: with table-layout:fixed an
@@ -295,7 +295,7 @@
   gap: var(--pv-sp-2);
   background: none;
   border: none;
-  padding: 0;
+  padding: var(--pv-sp-none);
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -337,7 +337,7 @@
   z-index: 1;
 }
 .pv-table__spacer td {
-  padding: 0;
+  padding: var(--pv-sp-none);
   border: 0;
 }
 
@@ -363,10 +363,10 @@
 }
 .pv-coverage__bar {
   flex: 1; height: 6px; background: var(--pv-rule2);
-  border-radius: 3px; overflow: hidden;
+  border-radius: var(--pv-radius-sm); overflow: hidden;
 }
 .pv-coverage__fill {
-  height: 100%; border-radius: 3px;
+  height: 100%; border-radius: var(--pv-radius-sm);
   background: var(--pv-accent);
   transition: width var(--pv-transition-slow);
 }
@@ -384,16 +384,16 @@
   font-size: var(--pv-text-xs);
   display: flex; align-items: center; gap: var(--pv-sp-2);
 }
-.pv-banner--warn { background: var(--pv-warn-bg); color: var(--pv-warn); border: 1px solid var(--pv-warn-border); }
-.pv-banner--danger { background: var(--pv-danger-bg); color: var(--pv-danger); border: 1px solid var(--pv-danger-border); }
-.pv-banner--info { background: var(--pv-info-bg); color: var(--pv-info); border: 1px solid var(--pv-info-border); }
+.pv-banner--warn { background: var(--pv-warn-bg); color: var(--pv-warn); border: var(--pv-border-w) solid var(--pv-warn-border); }
+.pv-banner--danger { background: var(--pv-danger-bg); color: var(--pv-danger); border: var(--pv-border-w) solid var(--pv-danger-border); }
+.pv-banner--info { background: var(--pv-info-bg); color: var(--pv-info); border: var(--pv-border-w) solid var(--pv-info-border); }
 /* Optional inline call-to-action link inside a banner (e.g. "no site" -> Settings). */
 .pv-banner__action-link { color: inherit; font-weight: var(--pv-weight-medium); text-decoration: underline; white-space: nowrap; }
 
 /* === PROPERTY TABLE === */
 .pv-prop-table { width: 100%; }
 .pv-prop-table__row {
-  display: flex; border-bottom: 1px solid var(--pv-border-subtle);
+  display: flex; border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   padding: var(--pv-sp-2) 0;
 }
 .pv-prop-table__label {

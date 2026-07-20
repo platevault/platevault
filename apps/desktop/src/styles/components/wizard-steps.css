@@ -15,7 +15,7 @@
   gap: var(--pv-sp-3);
   padding: 0 var(--pv-sp-4);
   height: var(--pv-toolbar-height, 44px);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 
 /* Toolbar title text */
@@ -37,7 +37,7 @@
   padding: var(--pv-sp-1) var(--pv-sp-4);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 
 /* Trailing note in sub-toolbar pushed to the right */
@@ -55,7 +55,7 @@
 .pv-wizard-page__step-title {
   font-size: var(--pv-text-lg);
   font-weight: var(--pv-weight-semibold);
-  margin: 0;
+  margin: var(--pv-sp-none);
 }
 
 /* ── Summary panel ── */
@@ -106,7 +106,7 @@
 
 /* "Coming up" step item — separator shown between items (not last) */
 .pv-wizard-page__coming-up-item--sep {
-  border-bottom: 1px dotted var(--pv-border);
+  border-bottom: var(--pv-border-w) dotted var(--pv-border);
 }
 
 /* Flex-fill utility used in WizardPage summary nav buttons */
@@ -124,7 +124,7 @@
 .pv-wizard-page__footprint {
   padding: var(--pv-sp-3);
   background: var(--pv-bg);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
 }
 
 /* Label inside footprint box */
@@ -157,7 +157,7 @@
 /* Each label/value row in the counts table */
 .pv-wizard-page__summary-row {
   padding: 3px 0;
-  border-bottom: 1px dotted var(--pv-border);
+  border-bottom: var(--pv-border-w) dotted var(--pv-border);
   display: flex;
 }
 
@@ -180,13 +180,13 @@
   width: 60px;
   height: 6px;
   background: var(--pv-bg3);
-  border-radius: 3px;
+  border-radius: var(--pv-radius-sm);
   overflow: hidden;
 }
 
 .pv-match-candidates__conf-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--pv-radius-sm);
   /* width and background are set via inline style (dynamic per confidence value) */
 }
 
@@ -316,7 +316,7 @@
 /* Project name input */
 .pv-wizard-name__input {
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 4px;
   font-size: var(--pv-text-sm);
   background: var(--pv-surface);
@@ -353,7 +353,7 @@
   align-items: flex-start;
   gap: var(--pv-sp-3);
   padding: var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 6px;
   cursor: pointer;
   background: transparent;
@@ -403,7 +403,7 @@
 /* Filter inputs */
 .pv-source-picker__filter-input {
   padding: var(--pv-sp-1) var(--pv-sp-2);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 4px;
   font-size: var(--pv-text-xs);
   background: var(--pv-surface);
@@ -432,8 +432,8 @@
 .pv-source-picker__list {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  border: 1px solid var(--pv-border);
+  gap: var(--pv-sp-none);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -444,9 +444,9 @@
   grid-template-columns: 32px 1fr 80px 80px 100px;
   padding: var(--pv-sp-2) var(--pv-sp-3);
   background: var(--pv-surface);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs);
-  font-weight: 600;
+  font-weight: var(--pv-weight-semibold);
   color: var(--pv-text-muted);
 }
 
@@ -455,7 +455,7 @@
   display: grid;
   grid-template-columns: 32px 1fr 80px 80px 100px;
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs);
   cursor: pointer;
   background: transparent;
@@ -522,7 +522,7 @@
 .pv-wizard-calib__select {
   width: 100%;
   padding: var(--pv-sp-1) 6px;
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
 
@@ -591,7 +591,7 @@
 
 /* Why-recommended list */
 .pv-wizard-calib__why-list {
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding-left: var(--pv-sp-4);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-secondary);
@@ -615,7 +615,7 @@
 
 /* Shared link style used in multiple boxes */
 .pv-wizard-views__link {
-  padding: 0;
+  padding: var(--pv-sp-none);
   border: none;
   background: none;
   font: inherit;
@@ -636,7 +636,7 @@
 }
 
 .pv-wizard-views__box-link {
-  padding: 0;
+  padding: var(--pv-sp-none);
   border: none;
   background: none;
   cursor: pointer;
@@ -686,7 +686,7 @@
 
   font-size: var(--pv-text-xs);
   padding: 3px 6px;
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   /* Recessed field bg: --pv-bg on light themes, --pv-surface on dark
      (where raw --pv-bg is near-black). The token carries the per-theme
@@ -724,7 +724,7 @@
 .pv-wizard-views__radio-group {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--pv-sp-none);
 }
 
 /* Individual radio label */
@@ -760,7 +760,7 @@
 /* Naming pattern input */
 .pv-wizard-layout__input {
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 4px;
   font-size: var(--pv-text-sm);
 
@@ -791,7 +791,7 @@
 .pv-wizard-layout__token-chip {
   padding: var(--pv-sp-0) 6px;
   background: var(--pv-surface);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 4px;
   font-size: var(--pv-text-xs);
 
@@ -803,7 +803,7 @@
 .pv-wizard-layout__preview {
   padding: var(--pv-sp-3) var(--pv-sp-4);
   background: var(--pv-surface);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 6px;
 
   font-size: var(--pv-text-xs);
@@ -834,7 +834,7 @@
 .pv-wizard-review__banner {
   padding: var(--pv-sp-3);
   background: var(--pv-ok-bg);
-  border: 1px solid var(--pv-ok-border);
+  border: var(--pv-border-w) solid var(--pv-ok-border);
 }
 
 /* Banner inner row */
@@ -901,7 +901,7 @@
 /* Disk tree pre */
 .pv-wizard-review__disk-tree {
   font-size: var(--pv-text-xs);
-  margin: 0;
+  margin: var(--pv-sp-none);
   line-height: var(--pv-leading-normal);
   color: var(--pv-text-secondary);
   white-space: pre-wrap;
@@ -910,7 +910,7 @@
 
 /* After-creating ordered list */
 .pv-wizard-review__after-list {
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding-left: 18px;
   font-size: var(--pv-text-xs);
 }
@@ -947,7 +947,7 @@
 /* ── SourceSummary card ──────────────────────────────────────────────────── */
 
 .pv-setup-scan__card {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   margin-bottom: var(--pv-sp-3);
   background: var(--pv-surface);
@@ -974,7 +974,7 @@
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
   flex-shrink: 0;
-  line-height: 1;
+  line-height: var(--pv-leading-none);
 }
 
 .pv-setup-scan__path {
@@ -1001,7 +1001,7 @@
 
 .pv-setup-scan__msg {
   font-size: var(--pv-text-sm);
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding: 0 var(--pv-sp-4) var(--pv-sp-4);
 }
 
@@ -1034,7 +1034,7 @@
 .pv-setup-scan__chip {
   font-size: var(--pv-text-xs);
   background: var(--pv-bg3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   padding: var(--pv-sp-0) var(--pv-sp-2);
   color: var(--pv-text-secondary);
@@ -1044,7 +1044,7 @@
 .pv-setup-scan__table-wrap {
   max-height: 280px;
   overflow-y: auto;
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-sm);
 }
 
@@ -1075,7 +1075,7 @@
 }
 
 .pv-setup-scan__tbody-row {
-  border-top: 1px solid var(--pv-border-subtle);
+  border-top: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 .pv-setup-scan__path-cell-inner {
@@ -1193,7 +1193,7 @@
 
 /* What-happens-next bullet list */
 .pv-setup-confirm__next-list {
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding-left: var(--pv-sp-5);
   display: flex;
   flex-direction: column;
@@ -1227,7 +1227,7 @@
 
 /* ── Intro paragraph ── */
 .pv-step-sources__intro {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-sm);
   line-height: var(--pv-leading-normal);
   color: var(--pv-text-secondary);
@@ -1242,7 +1242,7 @@
 
 /* ── Group card — neutral (optional or default) ── */
 .pv-step-sources__group {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   background: var(--pv-bg);
   overflow: hidden;
@@ -1273,7 +1273,7 @@
 
 /* Header separator: shown only when folder rows exist below it */
 .pv-step-sources__group:has(.pv-step-sources__row) .pv-step-sources__group-header {
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* Header separator colour matches the card accent when required */
@@ -1321,7 +1321,7 @@
 }
 
 .pv-step-sources__section-heading:first-child {
-  margin-top: 0;
+  margin-top: var(--pv-sp-none);
 }
 
 /* ── Source row ── */
@@ -1332,7 +1332,7 @@
 
 /* Row separator: all rows except the last get a bottom border */
 .pv-step-sources__row:not(:last-child) {
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* ── Row main line (path + controls) ── */
@@ -1358,7 +1358,7 @@
   font-size: var(--pv-text-xs);
   background: var(--pv-surface);
   color: var(--pv-text);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   padding: 1px var(--pv-sp-1);
   transition: border-color var(--pv-transition-fast);
@@ -1393,7 +1393,7 @@
   font-size: var(--pv-text-xs);
   background: var(--pv-surface);
   color: var(--pv-text);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   padding: 1px var(--pv-sp-1);
   width: 12rem;
@@ -1415,7 +1415,7 @@
 
 /* Intro paragraph -- shares the tools-step intro/note type scale below. */
 .pv-step-site__intro {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-sm);
   line-height: var(--pv-leading-normal);
   color: var(--pv-text-secondary);
@@ -1442,22 +1442,22 @@
 .pv-step-site__map {
   width: 100%;
   height: 240px;
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   overflow: hidden;
 }
 
 .pv-step-site__map-unavailable {
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding: var(--pv-sp-3);
-  border: 1px dashed var(--pv-border);
+  border: var(--pv-border-w) dashed var(--pv-border);
   border-radius: var(--pv-radius-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text-secondary);
 }
 
 .pv-step-site__note {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-faint);
 }
@@ -1473,7 +1473,7 @@
 
 /* Intro paragraph */
 .pv-step-tools__intro {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-sm);
   line-height: var(--pv-leading-normal);
   color: var(--pv-text-secondary);
@@ -1488,14 +1488,14 @@
 
 /* Footer note */
 .pv-step-tools__note {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-faint);
 }
 
 /* Individual tool card */
 .pv-step-tools__card {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   background: var(--pv-bg);
   overflow: hidden;
@@ -1579,7 +1579,7 @@
   flex-direction: column;
   gap: var(--pv-sp-1);
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-top: 1px solid var(--pv-border-subtle);
+  border-top: var(--pv-border-w) solid var(--pv-border-subtle);
   background: var(--pv-surface-raised);
 }
 
@@ -1631,7 +1631,7 @@
   align-items: center;
   gap: var(--pv-sp-3);
   padding: var(--pv-sp-4) var(--pv-sp-5);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   flex-shrink: 0;
 }
 
@@ -1649,7 +1649,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--pv-radius-full);
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
 }
@@ -1690,7 +1690,7 @@
 
 .pv-wizard__summary {
   width: var(--pv-rail-width);
-  border-left: 1px solid var(--pv-border);
+  border-left: var(--pv-border-w) solid var(--pv-border);
   padding: var(--pv-sp-5);
   overflow: auto;
   background: var(--pv-surface);
@@ -1720,7 +1720,7 @@
 .pv-wizard__steps-card {
   flex: 1;
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   text-align: center;
@@ -1767,7 +1767,7 @@ button.pv-wizard__steps-card:disabled {
 
 /* Pinned navigation footer */
 .pv-wizard__footer {
-  border-top: 1px solid var(--pv-border);
+  border-top: var(--pv-border-w) solid var(--pv-border);
   padding: var(--pv-sp-4) var(--pv-sp-5);
   flex-shrink: 0;
   background: var(--pv-surface);
@@ -1786,7 +1786,7 @@ button.pv-wizard__steps-card:disabled {
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
   background: var(--pv-surface-muted, var(--pv-surface));
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm, 4px);
   padding: var(--pv-sp-3);
   margin-bottom: var(--pv-sp-3);

@@ -561,7 +561,7 @@
 .pv-toast__item {
   padding: var(--pv-sp-3) var(--pv-sp-4);
   border-radius: var(--pv-radius-sm);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
   color: var(--pv-text);
   font-size: var(--pv-text-sm);
@@ -611,7 +611,7 @@
 /* Optional action button */
 .pv-toast__action-btn {
   background: transparent;
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   color: var(--pv-text);
   font-size: var(--pv-text-xs);
@@ -628,8 +628,8 @@
   color: var(--pv-text-muted);
   font-size: var(--pv-text-base);
   cursor: pointer;
-  line-height: 1;
-  padding: 0;
+  line-height: var(--pv-leading-none);
+  padding: var(--pv-sp-none);
   display: inline-flex;
   transition: color var(--pv-transition-fast);
 }
@@ -681,13 +681,13 @@
   font-size: var(--pv-text-xl);
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-danger);
-  margin: 0;
+  margin: var(--pv-sp-none);
 }
 
 .pv-error-boundary__body {
   font-size: var(--pv-text-base);
   color: var(--pv-text-secondary);
-  margin: 0;
+  margin: var(--pv-sp-none);
   max-width: 480px;
   text-align: center;
 }
@@ -696,19 +696,19 @@
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
   background: var(--pv-surface);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   padding: var(--pv-sp-3);
   max-width: 480px;
   overflow: auto;
-  margin: 0;
+  margin: var(--pv-sp-none);
 }
 
 .pv-error-boundary__reset-btn {
   padding: var(--pv-sp-2) var(--pv-sp-4);
   background: var(--pv-accent);
   color: var(--pv-on-accent);
-  border: 1px solid transparent;
+  border: var(--pv-border-w) solid transparent;
   border-radius: var(--pv-radius-sm);
   cursor: pointer;
   font-size: var(--pv-text-base);
@@ -760,8 +760,8 @@
   flex-direction: column;
   gap: var(--pv-sp-3);
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: var(--pv-sp-none);
+  padding: var(--pv-sp-none);
 }
 
 /* One source-view row: main info left, actions right. `flex-wrap` (spec 055
@@ -780,7 +780,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--pv-sp-4);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-3);
 }
@@ -875,7 +875,7 @@
   padding-top: var(--pv-sp-3);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-xs);
-  font-weight: 600;
+  font-weight: var(--pv-weight-semibold);
   text-transform: uppercase;
   letter-spacing: var(--pv-tracking-normal);
 }
@@ -992,8 +992,8 @@
   flex-direction: column;
   gap: var(--pv-sp-1);
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: var(--pv-sp-none);
+  padding: var(--pv-sp-none);
 }
 
 .pv-edit-project__source-row {
@@ -1002,7 +1002,7 @@
   justify-content: space-between;
   gap: var(--pv-sp-2);
   padding: var(--pv-sp-1) var(--pv-sp-2);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 4px;
 }
 
@@ -1023,7 +1023,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--pv-sp-2);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: 6px;
   padding: var(--pv-sp-3);
 }
@@ -1121,7 +1121,7 @@
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-text-muted);
   background: var(--pv-surface);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* Night row — absolute inside the virtualizer canvas */
@@ -1135,7 +1135,7 @@
   gap: var(--pv-sp-2);
   padding: 0 var(--pv-sp-3);
   cursor: pointer;
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   transition: background var(--pv-transition-fast);
 }
 
@@ -1218,7 +1218,7 @@
   flex: 1;
   min-width: 0;
   padding: var(--pv-sp-1) var(--pv-sp-2);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   background: var(--pv-bg-input, transparent);
   color: inherit;

@@ -8,7 +8,7 @@
   color: var(--pv-text-secondary);
   margin-bottom: var(--pv-sp-1);
 }
-.pv-field-hint { color: var(--pv-text-faint); font-weight: 400; }
+.pv-field-hint { color: var(--pv-text-faint); font-weight: var(--pv-weight-normal); }
 .pv-field-error {
   display: block;
   font-size: var(--pv-text-xs);
@@ -19,7 +19,7 @@
   width: 100%;
   height: var(--pv-control-h);
   padding: 0 var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
 
@@ -37,7 +37,7 @@
 .pv-target-search__label--sr {
   position: absolute;
   width: 1px; height: 1px;
-  padding: 0; margin: -1px;
+  padding: var(--pv-sp-none); margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
@@ -60,7 +60,7 @@
 }
 .pv-target-search__popup {
   background: var(--pv-surface-raised);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   box-shadow: var(--pv-shadow-sm);
   outline: none;
@@ -68,7 +68,7 @@
 /* The scroll container (Combobox.List) is the virtualizer's scroll element. */
 .pv-target-search__list {
   list-style: none;
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding: var(--pv-sp-1);
   max-height: 320px;
   overflow-y: auto;
@@ -83,7 +83,7 @@
   align-items: center;
   gap: var(--pv-sp-2);
   color: var(--pv-text-faint);
-  border-top: 1px solid var(--pv-border-subtle);
+  border-top: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 /* Inline "no matches — search more catalogues" framing (spec 052 P2UX). */
 .pv-target-search__no-match {
@@ -134,7 +134,7 @@
   min-width: 160px;
 }
 .pv-target-search__override {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
   color: var(--pv-text-secondary);
   font-size: var(--pv-text-xs);
@@ -181,7 +181,7 @@
   width: min(94vw, 560px);
   max-height: 70vh;
   background: var(--pv-surface-raised);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-lg);
   box-shadow: var(--pv-shadow-sm);
   overflow: hidden;
@@ -193,7 +193,7 @@
   width: 100%;
   padding: var(--pv-sp-3) var(--pv-sp-4);
   border: none;
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: 0;
   background: transparent;
   color: var(--pv-text);
@@ -218,7 +218,7 @@
 
 .pv-palette__group { padding-block: var(--pv-sp-1); }
 .pv-palette__group:not(:last-child) {
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   margin-bottom: var(--pv-sp-1);
 }
 /* cmdk wraps the `heading` prop in an element carrying `cmdk-group-heading` —
@@ -271,14 +271,14 @@
 /* === SCROLLBAR === */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--pv-rule); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--pv-rule); border-radius: var(--pv-radius-sm); }
 ::-webkit-scrollbar-thumb:hover { background: var(--pv-ink4); }
 
 /* === SESSIONS list: source group header + helpers (was inline styles) === */
 .pv-source-group-header {
   padding: var(--pv-sp-1) var(--pv-sp-3);
   font-size: var(--pv-text-xs); color: var(--pv-text-muted);
-  border-bottom: 1px solid var(--pv-border); background: var(--pv-surface);
+  border-bottom: var(--pv-border-w) solid var(--pv-border); background: var(--pv-surface);
 }
 .pv-source-group-header__path { font-weight: var(--pv-weight-semibold); color: var(--pv-text-secondary); }
 .pv-source-group-header .pv-pill { margin-left: var(--pv-sp-2); }
@@ -289,11 +289,11 @@
 .pv-inbox-stats {
   display: flex; flex-wrap: wrap; gap: var(--pv-sp-3); align-items: center;
   padding: var(--pv-sp-1) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs); color: var(--pv-text-secondary);
   background: var(--pv-surface-raised);
 }
-.pv-inbox-stats__sep { border-left: 1px solid var(--pv-border); align-self: stretch; }
+.pv-inbox-stats__sep { border-left: var(--pv-border-w) solid var(--pv-border); align-self: stretch; }
 .pv-inbox-stats__chip { margin-right: var(--pv-sp-2); white-space: nowrap; }
 .pv-inbox-stats__per-type { white-space: nowrap; }
 .pv-inbox-stats__num { font-weight: var(--pv-weight-semibold); color: var(--pv-text); }
@@ -308,7 +308,7 @@
    theme's own palette with no element-level color injection. */
 .pv-theme-swatches { display: flex; flex-wrap: wrap; gap: var(--pv-sp-2); }
 .pv-theme-swatch {
-  border: 1px solid var(--pv-border); border-radius: var(--pv-radius-lg);
+  border: var(--pv-border-w) solid var(--pv-border); border-radius: var(--pv-radius-lg);
   background: var(--pv-surface-raised); padding: var(--pv-sp-2);
   cursor: pointer; width: 150px; text-align: left;
   display: flex; flex-direction: column; gap: 6px;
@@ -318,7 +318,7 @@
 .pv-theme-swatch--active { border-color: var(--pv-accent); box-shadow: 0 0 0 1px var(--pv-accent); }
 .pv-theme-swatch__prev {
   display: flex; height: 44px; border-radius: var(--pv-radius-md); overflow: hidden;
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 .pv-theme-swatch__prev i { flex: 1; display: block; }
 .pv-theme-swatch__bg { background: var(--pv-bg); }
@@ -338,10 +338,10 @@
   gap: var(--pv-sp-3);
   align-items: baseline;
   padding: 5px 0;
-  border-bottom: 1px solid var(--pv-rule2);
+  border-bottom: var(--pv-border-w) solid var(--pv-rule2);
 }
 .pv-property-table__header {
-  border-bottom: 1px solid var(--pv-rule);
+  border-bottom: var(--pv-border-w) solid var(--pv-rule);
   padding-bottom: 6px; margin-bottom: var(--pv-sp-0);
 }
 .pv-property-table__header .pv-property-table__cell {
@@ -360,9 +360,9 @@
 .pv-property-table__cell--confirm { justify-self: start; }
 .pv-property-table__source-badge {
   font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold); letter-spacing: var(--pv-tracking-tight);
-  text-transform: uppercase; padding: 1px 7px; border-radius: 8px;
+  text-transform: uppercase; padding: 1px 7px; border-radius: var(--pv-radius-lg);
   background: var(--pv-bg3); color: var(--pv-text-muted);
-  border: 1px solid transparent;
+  border: var(--pv-border-w) solid transparent;
 }
 .pv-property-table__source-badge--fits { background: var(--pv-info-bg); color: var(--pv-info); border-color: var(--pv-info-border); }
 .pv-property-table__source-badge--user { background: var(--pv-ok-bg); color: var(--pv-ok); border-color: var(--pv-ok-border); }

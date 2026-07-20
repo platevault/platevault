@@ -28,7 +28,7 @@
   width: 140px;
   background: var(--pv-surface);
   color: var(--pv-text);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
 }
 
@@ -145,7 +145,7 @@
   height: var(--pv-control-h);
   background: var(--pv-surface);
   color: var(--pv-text);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
   transition: border-color var(--pv-transition-fast);
@@ -213,7 +213,7 @@
 
 /* Individual root card */
 .pv-data-sources__root-card {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-3);
 }
@@ -278,7 +278,7 @@
   grid-template-columns: 1fr auto;
   gap: var(--pv-sp-2);
   align-items: start;
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-3) var(--pv-sp-4);
   background: var(--pv-surface-raised);
@@ -344,7 +344,7 @@
 
 .pv-data-sources__kebab-btn {
   font-size: var(--pv-text-md);
-  line-height: 1;
+  line-height: var(--pv-leading-none);
   padding-inline: var(--pv-sp-2);
 }
 
@@ -358,7 +358,7 @@
   display: flex;
   flex-direction: column;
   padding: var(--pv-sp-1);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface-raised);
   box-shadow: var(--pv-shadow-sm);
@@ -416,7 +416,7 @@
 .pv-remap-dialog__samples {
   list-style: none;
   margin: var(--pv-sp-2) 0 0 0;
-  padding: 0;
+  padding: var(--pv-sp-none);
   display: flex;
   flex-direction: column;
   gap: var(--pv-sp-1);
@@ -428,7 +428,7 @@
   justify-content: space-between;
   gap: var(--pv-sp-2);
   padding: var(--pv-sp-1) var(--pv-sp-2);
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-sm);
 }
 
@@ -483,7 +483,7 @@
 
   background: var(--pv-surface-raised);
   color: var(--pv-text);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
 }
 
@@ -536,7 +536,7 @@
   gap: var(--pv-sp-3);
   padding: var(--pv-sp-3);
   margin-top: var(--pv-sp-2);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface);
 }
@@ -579,12 +579,12 @@
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
   margin-bottom: var(--pv-sp-3);
-  margin-top: 0;
+  margin-top: var(--pv-sp-none);
 }
 
 /* Danger-zone bordered box */
 .pv-adv-settings__danger-box {
-  border: 1px solid var(--pv-danger);
+  border: var(--pv-border-w) solid var(--pv-danger);
   border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-4);
 }
@@ -627,7 +627,7 @@
   align-items: center;
   gap: var(--pv-sp-2);
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-bg3);
 }
@@ -645,7 +645,7 @@
 
 /* Individual protected-item card */
 .pv-plan-gate__item {
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-3);
 }
@@ -820,7 +820,7 @@
 
 /* Individual manifest item row wrapper */
 .pv-manifests__item {
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   padding-bottom: var(--pv-sp-2);
   margin-bottom: var(--pv-sp-2);
 }

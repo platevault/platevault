@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--pv-border);
+  border-right: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-bg);
 }
 
@@ -29,7 +29,7 @@
   flex-shrink: 0;
   display: flex;
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
 }
 
@@ -254,7 +254,7 @@
 	color: var(--pv-text-muted);
 	padding: var(--pv-sp-1) var(--pv-sp-2);
 	background: var(--pv-surface-raised);
-	border: 1px solid var(--pv-border-subtle);
+	border: var(--pv-border-w) solid var(--pv-border-subtle);
 	border-radius: var(--pv-radius-sm);
 }
 
@@ -436,7 +436,7 @@
   padding: var(--pv-sp-2) var(--pv-sp-3);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  border-top: 1px solid var(--pv-border-subtle);
+  border-top: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* --- Compact horizontal lifecycle stepper (#74) --------------------------- */
@@ -449,15 +449,15 @@
   flex-direction: column;
   gap: var(--pv-sp-2);
   padding: var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 .pv-stepper__track {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--pv-sp-1);
-  margin: 0;
-  padding: 0;
+  margin: var(--pv-sp-none);
+  padding: var(--pv-sp-none);
   list-style: none;
 }
 .pv-stepper__chip {
@@ -468,7 +468,7 @@
   text-transform: capitalize;
   color: var(--pv-text-muted);
   background: var(--pv-surface);
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-lg);
   white-space: nowrap;
 }
@@ -489,7 +489,7 @@
   font-weight: var(--pv-weight-semibold);
 }
 .pv-stepper__next {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
@@ -602,7 +602,7 @@
   padding: var(--pv-sp-2) var(--pv-sp-3);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  border-top: 1px solid var(--pv-border-subtle);
+  border-top: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* === merged from .cssblocks/sessions-detail.css (refine wave, spec-043) === */
@@ -715,7 +715,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--pv-sp-2);
-  padding: 0;
+  padding: var(--pv-sp-none);
 }
 
 /* The detail-pane content stack: per-detection detail, then (when present) the
@@ -731,7 +731,7 @@
  * detail pane's scroll region (#76). A top rule separates it from the detail
  * above it. */
 .pv-inbox-detail-plans {
-  border-top: 1px solid var(--pv-border);
+  border-top: var(--pv-border-w) solid var(--pv-border);
   margin-top: var(--pv-sp-3);
   padding-top: var(--pv-sp-2);
 }
@@ -741,8 +741,8 @@
  * detached fragment. */
 .pv-inbox-detail-plans--solo {
   border-top: none;
-  margin-top: 0;
-  padding-top: 0;
+  margin-top: var(--pv-sp-none);
+  padding-top: var(--pv-sp-none);
 }
 
 /* Within the (narrower) detail pane the plan-panel group rows wrap rather than
@@ -788,5 +788,5 @@
   overflow: hidden;
   min-width: 0;
   padding-right: var(--pv-sp-3);
-  border-right: 1px solid var(--pv-border-subtle);
+  border-right: var(--pv-border-w) solid var(--pv-border-subtle);
 }

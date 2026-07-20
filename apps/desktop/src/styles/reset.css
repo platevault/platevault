@@ -1,4 +1,4 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: var(--pv-sp-none); padding: var(--pv-sp-none); }
 html, body, #root { height: 100%; overflow: hidden; }
 /* #root is a bounded flex column so top-level pages (the setup wizard uses
    flex:1) fill the viewport and scroll INTERNALLY — without this, a flex:1 page

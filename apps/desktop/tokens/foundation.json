@@ -69,6 +69,16 @@
   "leading-relaxed": {
     "$value": "1.6"
   },
+  "leading-none": {
+    "$value": "1",
+    "$type": "number",
+    "$description": "Line-height 1 — deliberate for icon and single-glyph alignment, where any leading misaligns the box. Named so it is visibly a choice rather than a magic literal."
+  },
+  "sp-none": {
+    "$value": "0",
+    "$type": "dimension",
+    "$description": "Explicit zero spacing. Not a lever — nobody re-points this at a non-zero value. It exists so the spacing properties can be linted absolutely: every padding/margin/gap states a token, so a bare literal is always a violation with no carve-out to slip through. NOTE: sp-0 below is 2px, not zero."
+  },
   "sp-0": {
     "$value": "2px",
     "$type": "dimension",
@@ -124,5 +134,20 @@
   "radius-lg": {
     "$value": "8px",
     "$type": "dimension"
+  },
+  "radius-full": {
+    "$value": "50%",
+    "$type": "dimension",
+    "$description": "Circle/pill. Not a length: it tracks the box at any size, so it states the intent (round this completely) that a px radius cannot. Used for avatars, status dots and icon buttons."
+  },
+  "border-w": {
+    "$value": "1px",
+    "$type": "dimension",
+    "$description": "Hairline border. Used 202 times across the app, so it is a system decision, not per-component geometry: one value to change if the UI ever moves off a 1px rule."
+  },
+  "border-w-thick": {
+    "$value": "2px",
+    "$type": "dimension",
+    "$description": "Emphasis border (selected/active edges). The lone 1.5px in the tree was drift and is folded into this."
   }
 }

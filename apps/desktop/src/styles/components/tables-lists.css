@@ -66,7 +66,7 @@
   gap: var(--pv-sp-3);
   flex-wrap: wrap;
   padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
   /* Reserve scrollbar space so a page-level scrollbar appearing or disappearing
    * (e.g. when a native <select> opens its OS dropdown on Windows) does not
@@ -81,7 +81,7 @@
 }
 .pv-topbar__title { display: flex; align-items: baseline; }
 .pv-topbar__heading {
-  margin: 0;
+  margin: var(--pv-sp-none);
   font-size: var(--pv-text-lg);
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-text);
@@ -116,7 +116,7 @@
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   background: var(--pv-surface-raised);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
 }
 .pv-filterbar__search:focus {
@@ -137,7 +137,7 @@
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   background: var(--pv-surface-raised);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
 }
 /* Multi-level grouping configurator (Group / then / then). */
@@ -151,7 +151,7 @@
   align-items: center;
   gap: var(--pv-sp-1);
 }
-.pv-filterbar__sort-dir { line-height: 1; }
+.pv-filterbar__sort-dir { line-height: var(--pv-leading-none); }
 .pv-filterbar__actions {
   display: flex;
   gap: var(--pv-sp-2);
@@ -172,7 +172,7 @@
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   background: var(--pv-surface-raised);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   cursor: pointer;
   list-style: none;
@@ -199,7 +199,7 @@
   gap: var(--pv-sp-1);
   padding: var(--pv-sp-2);
   background: var(--pv-surface-raised);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   box-shadow: var(--pv-shadow-sm);
 }
@@ -248,7 +248,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--pv-border);
+  border-top: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface-raised);
 }
 .pv-listpage__detail-bar {
@@ -258,7 +258,7 @@
   gap: var(--pv-sp-1);
   justify-content: flex-end;
   padding: var(--pv-sp-1) var(--pv-sp-2);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 /* Icon-only Auto/Bottom/Right control (#1068): 3 text buttons ran ~175px,
  * dominating a ~390px narrow-dock bar. 28px is the touch-target floor this
@@ -266,7 +266,7 @@
 .pv-dock-placement-control .pv-seg__btn {
   width: 28px;
   height: 28px;
-  padding: 0;
+  padding: var(--pv-sp-none);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -280,7 +280,7 @@
   cursor: pointer;
   color: var(--pv-text-muted);
   font-size: var(--pv-text-sm);
-  line-height: 1;
+  line-height: var(--pv-leading-none);
   padding: var(--pv-sp-1);
   border-radius: var(--pv-radius-sm);
 }
@@ -391,8 +391,8 @@
   gap: var(--pv-sp-1);
   background: none;
   border: none;
-  padding: 0;
-  margin: 0;
+  padding: var(--pv-sp-none);
+  margin: var(--pv-sp-none);
   font: inherit;
   color: inherit;
   text-transform: inherit;
@@ -418,7 +418,7 @@
   text-transform: uppercase;
   letter-spacing: var(--pv-tracking-normal);
   color: var(--pv-text-muted);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   padding: var(--pv-sp-2) var(--pv-sp-3);
 }
 .pv-listgroup__cell {
@@ -428,7 +428,7 @@
   width: 100%;
   background: none;
   border: none;
-  padding: 0;
+  padding: var(--pv-sp-none);
   text-align: left;
   font: inherit;
   color: inherit;
@@ -515,7 +515,7 @@
 .pv-listtable__foot {
   flex-shrink: 0;
   padding: var(--pv-sp-1) var(--pv-sp-3);
-  border-top: 1px solid var(--pv-border);
+  border-top: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }

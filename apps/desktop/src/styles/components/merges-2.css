@@ -45,7 +45,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--pv-sp-2);
-  padding: 0;
+  padding: var(--pv-sp-none);
   border: none;
   background: none;
   font-size: var(--pv-text-xs);
@@ -57,7 +57,7 @@
   gap: var(--pv-sp-1);
   white-space: nowrap;
   padding: 1px var(--pv-sp-2);
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-pill, var(--pv-radius-sm));
   background: var(--pv-surface-raised);
 }
@@ -92,7 +92,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 500;
+  font-weight: var(--pv-weight-medium);
   color: var(--pv-text);
 }
 /* Issue #605: path + the "Plan pending review" chip on one line — the path
@@ -129,7 +129,7 @@
 }
 .pv-inbox-table__group td {
   background: var(--pv-surface);
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 .pv-inbox-table__group:hover td {
   background: var(--pv-hover-bg, var(--pv-surface));
@@ -210,7 +210,7 @@
   overflow-y: auto;
 }
 .pv-calib-detail__matches > .pv-section {
-  margin-bottom: 0;
+  margin-bottom: var(--pv-sp-none);
 }
 
 /* Single-column fallback for very narrow panels (defensive — the 1280px min
@@ -234,7 +234,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: var(--pv-sp-5);
-  row-gap: 0;
+  row-gap: var(--pv-sp-none);
   align-items: start;
 }
 .pv-calib-kvgrid .pv-kv {
@@ -404,7 +404,7 @@
 
 /* Spacer row reserving the height of rows scrolled above the visible window. */
 .pv-targets-table__spacer td {
-  padding: 0;
+  padding: var(--pv-sp-none);
   border: none;
 }
 
@@ -485,7 +485,7 @@
   max-height: none;
   align-self: stretch;
   border-top: none;
-  border-left: 1px solid var(--pv-border);
+  border-left: var(--pv-border-w) solid var(--pv-border);
 }
 
 /* Fixed side-panel width token (kept local to this block). */
@@ -553,7 +553,7 @@
 
 /* Sections read as tidy bordered cards with clear headers and no dead space. */
 .pv-project-detail-side__section {
-  border: 1px solid var(--pv-border-subtle);
+  border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface);
   padding: var(--pv-sp-2);
@@ -636,7 +636,7 @@
  * (left border + raised surface) instead of a full-width bottom strip. */
 .pv-inbox-detail__cols--split .pv-inbox-detail__aside .pv-inbox-inspector {
   border-top: none;
-  border-left: 1px solid var(--pv-border-subtle);
+  border-left: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface-raised);
   overflow: hidden;
@@ -693,7 +693,7 @@
   align-items: flex-start;
   gap: var(--pv-sp-3);
   padding: var(--pv-sp-3) var(--pv-sp-4);
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   flex-wrap: wrap;
 }
 
@@ -812,7 +812,7 @@
   color: var(--pv-text);
   min-width: 0;
   overflow-wrap: anywhere;
-  margin: 0;
+  margin: var(--pv-sp-none);
 }
 
 /* Single-column fallback for very narrow panels — collapse all zones. */
@@ -872,7 +872,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: var(--pv-sp-4);
-  row-gap: 0;
+  row-gap: var(--pv-sp-none);
   align-items: start;
 }
 .pv-session-detail__kvgrid .pv-kv {
@@ -932,7 +932,7 @@
   padding: var(--pv-sp-1) var(--pv-sp-2);
   color: var(--pv-text-muted);
   text-align: left;
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   white-space: nowrap;
 }
 .pv-session-frames__table td {
@@ -968,7 +968,7 @@
 .pv-session-frames__expanded-row td {
   padding: var(--pv-sp-2) var(--pv-sp-3);
   background: var(--pv-surface);
-  border-top: 1px solid var(--pv-border-subtle);
+  border-top: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 .pv-session-frames__expanded-body {
@@ -1005,5 +1005,5 @@
 
 .pv-session-frames__expanded-kv dd {
   color: var(--pv-text);
-  margin: 0;
+  margin: var(--pv-sp-none);
 }

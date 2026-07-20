@@ -15,7 +15,7 @@
 
 /* Header row */
 .pv-dev-calls__thead-row {
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   text-align: left;
 }
 
@@ -26,7 +26,7 @@
 
 /* Body rows */
 .pv-dev-calls__row {
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* Cell — shared padding (version, duration, outcome) */
@@ -92,7 +92,7 @@
 }
 
 .pv-dev-contracts-list__thead-row {
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   text-align: left;
 }
 
@@ -101,7 +101,7 @@
 }
 
 .pv-dev-contracts-list__row {
-  border-bottom: 1px solid var(--pv-border-subtle);
+  border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 
 /* Generic cell — padding only */
@@ -182,7 +182,7 @@
 /* Modal panel */
 .pv-dev-schema__panel {
   background: var(--pv-surface);
-  border: 1px solid var(--pv-border);
+  border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   width: 80vw;
   max-width: 900px;
@@ -252,7 +252,7 @@
 
 /* Schema content pre block */
 .pv-dev-schema__pre {
-  margin: 0;
+  margin: var(--pv-sp-none);
   padding: var(--pv-sp-2);
 
   font-size: var(--pv-text-xs);
@@ -302,7 +302,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--pv-border);
+  border-bottom: var(--pv-border-w) solid var(--pv-border);
   padding-bottom: var(--pv-sp-3);
 }
 
@@ -343,13 +343,13 @@
   justify-content: center;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  border: 1px solid var(--pv-text-faint);
+  border-radius: var(--pv-radius-full);
+  border: var(--pv-border-w) solid var(--pv-text-faint);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
   font-style: normal;
-  line-height: 1;
+  line-height: var(--pv-leading-none);
   cursor: help;
   position: relative;
   flex: none;
