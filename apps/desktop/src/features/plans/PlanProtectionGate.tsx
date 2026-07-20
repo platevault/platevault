@@ -161,9 +161,9 @@ export function PlanProtectionGate({
         return (
           <div
             key={item.itemId}
-            className={
-              'pv-plan-gate__item' + (isDone ? ' pv-plan-gate__item--done' : '')
-            }
+            className={`pv-plan-gate__item${
+              isDone ? ' pv-plan-gate__item--done' : ''
+            }`}
           >
             <div className="pv-plan-gate__item-header">
               <Pill variant="ok">{item.level}</Pill>

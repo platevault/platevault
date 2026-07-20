@@ -245,13 +245,20 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
       expect(screen.getByText('Second entry')).toBeInTheDocument();
     });
 
-    // Wait for the PERSISTED follow-tail setting to land before toggling.
-    // `followLogs` starts false and only turns true once the async
-    // `settingsGet` read resolves, so clicking before that flips follow ON
-    // instead of off and every later assertion inverts. This is what failed
-    // on Windows CI ("expected '↓ Follow' to be '— Follow'"): the loaded
-    // runner resolved the promise after the click. The test was racing app
-    // startup rather than asserting a precondition it had established.
+    // Gate on the HYDRATED follow state before toggling it (#1249).
+    //
+    // `followLogs` initialises to `false` (LogPanelContext.tsx:83) and is then
+    // hydrated asynchronously from `settings.get('advanced')` on mount
+    // (`:88`). Waiting for 'Second entry' above says nothing about that: it is
+    // an independent async path. On a loaded runner the click below could land
+    // while `followLogs` was still the pre-hydration `false`, toggling it to
+    // `true`, after which the late hydration confirmed `true` — leaving
+    // '↓ Follow' where this test expects '— Follow'. That is this file's
+    // long-standing flake, which #1118 reduced but did not remove.
+    //
+    // This is `waitFor` used correctly — "the state has not arrived yet" —
+    // rather than the vacuous "this must never happen" shape the
+    // alm/no-vacuous-waitfor rule rejects.
     await waitFor(() => {
       expect(getFollowButton().textContent).toBe('↓ Follow');
     });

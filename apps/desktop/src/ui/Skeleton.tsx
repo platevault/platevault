@@ -3,6 +3,7 @@
 
 import { forwardRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
+import { m } from '@/lib/i18n';
 
 export type SkeletonVariant = 'line' | 'block' | 'circle';
 
@@ -21,7 +22,9 @@ export interface SkeletonProps
   radius?: string;
   /** Repeated placeholder blocks — e.g. list rows or text lines. Default 1. */
   count?: number;
-  /** Accessible loading label announced by assistive tech. Default "Loading". */
+  /** Accessible loading label announced by assistive tech. Defaults to the
+   * shared `common_loading` catalog message, evaluated per render so it follows
+   * the active locale. */
   label?: string;
 }
 
@@ -43,7 +46,7 @@ export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
       height,
       radius,
       count = 1,
-      label = 'Loading',
+      label = m.common_loading(),
       className,
       style,
       ...rest

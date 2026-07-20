@@ -230,12 +230,20 @@ describe('CalibrationMatching — exposureToleranceS never sent as null (#639)',
     // making all updates in this pane silently no-op.
     mockGet.mockResolvedValue({
       status: 'ok',
-      data: makeTolerances({ exposureToleranceS: 3.5 }),
+      data: makeTolerances({
+        exposureToleranceS: 3.5,
+        // Hydration marker — see `cameraToggleInput`.
+        requireSameCamera: false,
+      }),
     });
     mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances() });
 
     render(<CalibrationMatching save={vi.fn()} />);
-    await waitFor(() => expect(offsetToggleInput()).toBeChecked());
+    // Gate on the Camera toggle, not the Offset one: `requireSameOffset` is
+    // `true` in both the in-code default and the mocked payload, so waiting on
+    // it cannot prove the fetch landed. The click would then race hydration and
+    // send the default `2` instead of the fetched `3.5` (#1213).
+    await waitFor(() => expect(cameraToggleInput()).not.toBeChecked());
 
     fireEvent.click(offsetToggleInput());
 

@@ -10,6 +10,14 @@ mapping required by FR-019 / SC-001. Final per-test names are filled in by
 Legend: **L1** = real-backend integration test required; **L2** = appears in a
 Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 
+> **Naming note.** This table's `L1`/`L2` columns predate the CI tier names and
+> do NOT line up with them. Here `L1` means "real-backend integration" and `L2`
+> means "smoke journey". The CI tiers are: **L1** = isolated unit (no real I/O),
+> **L2** = integration against real SQLite/filesystem, **L3** = real-UI journey.
+> So this table's `L1` column corresponds to the CI tiers' **L2**, and its `L2`
+> column to the CI tiers' **L3**. The column headers are left unchanged because
+> every row references them; use this note when reading across.
+
 | # | Feature area | L1 | L2 | Notes |
 |---|---|:--:|:--:|---|
 | 1 | First-run source setup | ✅ | ✅ | setup wizard → root persisted |

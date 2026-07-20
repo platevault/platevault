@@ -548,28 +548,16 @@
 /* Metadata table horizontal scroll wrapper */
 .pv-inbox-detail__metadata-scroll { overflow-x: auto; }
 
-/* #553: InboxDetail renders in DetailPanel's "content-only" mode (no facts/
- * aux slots), which intentionally skips the `.pv-detailpanel__content`
- * scroll wrapper — that mode assumes children establish their own scroll
- * (e.g. a virtualized Table), which InboxDetail's multi-column body does not.
- * Without a scroll region the FILES/Needs-review content simply overflowed
- * the docked panel's max-height and was clipped by the ancestor
- * `.pv-listpage__detail-body`'s `overflow: hidden` (unreachable, not just
- * unscrolled — see tables-lists.css). Scoped to inbox only via `:has()` (the
- * same pattern already used in wizard-steps.css) so Sessions/Calibration/
- * Projects detail panes are unaffected. */
-.pv-listpage__detail-body:has(.pv-inbox-detail__scroll) .pv-detail {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-.pv-listpage__detail-body:has(.pv-inbox-detail__scroll) .pv-detail__header {
-  flex-shrink: 0;
-}
+/* #553 → #1107: InboxDetail used to need a scroll region of its own, because
+ * DetailPanel's content-only mode skipped `.pv-detailpanel__content` and left
+ * the pane with no scroll region at all — FILES/Needs-review content was
+ * clipped by the ancestor `.pv-listpage__detail-body`'s `overflow: hidden`
+ * (unreachable, not merely unscrolled). DetailPanel now ALWAYS renders
+ * `.pv-detailpanel__content` as the single scroll region, and the docked flex
+ * chain lives in tables-lists.css for EVERY page instead of being scoped to
+ * inbox via `:has()`. This local override is retired: keeping its
+ * `overflow-y: auto` would nest a second scroller inside the shared one.
+ * The class stays as a plain layout hook (its e2e selectors still resolve). */
 .pv-inbox-detail__scroll {
-  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }

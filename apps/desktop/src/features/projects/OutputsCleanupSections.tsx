@@ -176,7 +176,10 @@ function candidateRow(candidate: CleanupCandidate, index: number) {
       : candidate.reason,
     protection: isProtected ? (
       <span className="pv-cleanup-scan__protected-cell">
-        <Lock reason={m.projects_cleanup_row_protected_hint()} />
+        {/* Decorative: the hint is one static sentence, identical on every
+            protected row, and is stated once above the table. Giving each row
+            its own tab stop would repeat that same announcement N times. */}
+        <Lock decorative />
         <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
       </span>
     ) : parsed ? (
@@ -205,6 +208,12 @@ export function CleanupSection({
   const result = scan.data;
   const groups = result ? groupCandidates(result.candidates) : [];
   const hasCandidates = (result?.candidates.length ?? 0) > 0;
+  // Whether any candidate is protected. The acknowledgement rule is stated once
+  // here rather than N times behind identical per-row padlock tooltips, so it
+  // is visible without hovering and costs one tab stop instead of one per row.
+  const hasProtected = (result?.candidates ?? []).some(
+    (c) => parseCandidateReason(c.reason)?.protection === 'protected',
+  );
 
   const handleGenerate = () => {
     generate.mutate(
@@ -276,6 +285,13 @@ export function CleanupSection({
           title={m.projects_cleanup_no_candidates_title()}
           desc={m.projects_cleanup_no_candidates_desc()}
         />
+      )}
+
+      {/* The protection rule, stated once for every protected row below. */}
+      {hasProtected && (
+        <p className="pv-text-muted" data-testid="cleanup-protected-note">
+          {m.projects_cleanup_row_protected_hint()}
+        </p>
       )}
 
       {/* Candidates grouped by classification (intermediate → master → final). */}

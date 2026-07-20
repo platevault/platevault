@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:real": "bash scripts/run-e2e-real.sh",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.e2e.json --noEmit",
     "lint": "biome check . && node ../../scripts/check-eslint-baseline.mjs && bash ../../scripts/check-tokens.sh && node ../../scripts/check-i18n-catalog.mjs",
     "lint:biome": "biome check .",
     "lint:eslint": "node ../../scripts/check-eslint-baseline.mjs",
@@ -27,7 +27,9 @@
     "knip": "knip",
     "madge:circular": "madge --circular --extensions ts,tsx src",
     "css:dup-sniff": "node scripts/css-dup-sniff.mjs",
-    "size": "size-limit"
+    "size": "size-limit",
+    "icons:generate": "node scripts/generate-app-icons.mjs",
+    "wordmark:generate": "node scripts/generate-splash-wordmark.mjs"
   },
   "dependencies": {
     "@astro-plan/contracts": "workspace:*",
@@ -67,6 +69,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
+    "@fontsource/space-grotesk": "^5.3.0",
     "@playwright/test": "^1.61.1",
     "@size-limit/file": "^12.1.0",
     "@tauri-apps/cli": "^2.11.4",
@@ -79,9 +82,12 @@
     "eslint": "^10.7.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fontkit": "^2.0.4",
     "jsdom": "^29.1.1",
     "knip": "^6.26.0",
     "madge": "^8.0.0",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.3",
     "size-limit": "^12.1.0",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.63.0",

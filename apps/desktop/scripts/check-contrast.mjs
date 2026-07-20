@@ -17,6 +17,10 @@ import path from 'node:path';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(__dirname, '../src/styles/tokens.css');
 const AA_BODY = 4.5;
+// UI-component/large-text floor (WCAG AA 3:1) — for pairs that are borders,
+// icons, or button labels rather than body copy (spec footnote: "AA = 4.5:1
+// body / 3:1 large & UI").
+const AA_UI = 3.0;
 
 // WCAG 2.x relative-luminance contrast ratio (sRGB linearization).
 function hexToRgb(hex) {
@@ -67,6 +71,12 @@ const PAIRS = [
   ['info', 'info-bg', 'info pill/banner/badge'],
   ['accent-text', 'accent-bg', 'accent pill/badge (primitives.css .pv-pill--accent)'],
   ['accent-text', 'selected-bg', 'selected nav item text (app-shell.css)'],
+  // Destructive button (handoff 06, primitives.css .pv-btn--destructive):
+  // border/text/icon on its own fill — UI-component text, not body copy, so
+  // it's held to the 3:1 floor rather than 4.5:1 (warm-slate default/hover
+  // land at 4.44/3.75, below 4.5 but clear of 3.0).
+  ['destructive', 'destructive-bg', 'destructive button text/border/icon on its default fill', AA_UI],
+  ['destructive', 'destructive-bg-hover', 'destructive button text/border/icon on its hover fill', AA_UI],
 ];
 
 const css = readFileSync(SRC, 'utf8');
@@ -95,7 +105,7 @@ if (themeTokens.size === 0) {
 
 let ok = true;
 for (const [theme, tokens] of themeTokens) {
-  for (const [textName, surfaceName, note] of PAIRS) {
+  for (const [textName, surfaceName, note, threshold = AA_BODY] of PAIRS) {
     const fg = tokens.get(`--pv-${textName}`);
     const bg = tokens.get(`--pv-${surfaceName}`);
     if (!fg || !bg) {
@@ -106,11 +116,11 @@ for (const [theme, tokens] of themeTokens) {
       continue;
     }
     const ratio = contrastRatio(fg, bg);
-    if (ratio < AA_BODY) {
+    if (ratio < threshold) {
       ok = false;
       console.error(
         `FAIL: [data-theme="${theme}"] --pv-${textName} (${fg}) on --pv-${surfaceName} (${bg}) = ` +
-          `${ratio.toFixed(2)}:1, below AA ${AA_BODY}:1 (${note})`,
+          `${ratio.toFixed(2)}:1, below AA ${threshold}:1 (${note})`,
       );
     }
   }
@@ -118,7 +128,7 @@ for (const [theme, tokens] of themeTokens) {
 
 if (ok) {
   console.log(
-    `OK: all ${PAIRS.length} text/surface pairs meet AA ${AA_BODY}:1 across ${themeTokens.size} theme(s).`,
+    `OK: all ${PAIRS.length} text/surface pairs meet their AA floor (${AA_BODY}:1 body / ${AA_UI}:1 UI) across ${themeTokens.size} theme(s).`,
   );
   process.exit(0);
 }

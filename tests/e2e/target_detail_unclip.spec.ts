@@ -11,9 +11,18 @@
  * everything below the altitude graph — including the back button — sat
  * beyond the pane's clipped bottom edge with NO way for a mouse-wheel user to
  * ever scroll it into view (an `overflow:hidden` box is not wheel-scrollable,
- * unlike `overflow:auto`/`scroll`). Fixed by wrapping that content in
- * `.pv-planner__scroll` (`flex:1; min-height:0; overflow-y:auto`,
+ * unlike `overflow:auto`/`scroll`). Originally fixed by wrapping that content
+ * in `.pv-planner__scroll` (`flex:1; min-height:0; overflow-y:auto`,
  * redesign-detail.css).
+ *
+ * #1107 moved that scroll region out one level. The root cause was that
+ * `DetailPanel` only rendered its content wrapper when a facts/aux rail slot
+ * was passed, and no page ever passed one — so no scroll region existed and
+ * every feature had to grow its own. The wrapper is now unconditional and owns
+ * the scrolling for all six detail pages; `.pv-planner__scroll` is a plain
+ * layout div. This test therefore asserts on `.pv-detailpanel__content`, and
+ * aims the wheel at the visible pane rather than at a scroll region whose
+ * centroid can fall outside the viewport.
  *
  * IMPORTANT: this deliberately drives a real mouse-wheel event
  * (`page.mouse.wheel`) rather than `locator.scrollIntoViewIfNeeded()` /
@@ -62,7 +71,10 @@ test.describe('Regression · Target detail pane content unclipped (#816)', () =>
     await m31.click();
 
     const pane = page.locator('.pv-detail--fill');
-    const scrollRegion = page.locator('.pv-planner__scroll');
+    // The pane's content lives in DetailPanel's shared scroll region (#1107).
+    // Before that, each feature supplied its own — here `.pv-planner__scroll`,
+    // which is now a plain layout div inside the shared one.
+    const scrollRegion = page.locator('.pv-detailpanel__content');
     await expect(scrollRegion).toBeVisible();
 
     const backBtn = page.getByRole('button', { name: '← All targets' });
@@ -73,11 +85,19 @@ test.describe('Regression · Target detail pane content unclipped (#816)', () =>
     // post-fix, since it's the natural (unscrolled) layout position.
     expect(beforeBox.y).toBeGreaterThan(paneBox.y + paneBox.height);
 
-    // Real wheel scroll over the scroll region, as an actual user would do.
-    const scrollBox = await requireBox(scrollRegion);
+    // Real wheel scroll over the PANE, which is what a user actually points at.
+    //
+    // Deliberately not the scroll region's own centroid: whichever element owns
+    // the scrolling is unbounded in height (it is the full content), so at this
+    // short 620px viewport its midpoint lands *below the window* and the wheel
+    // hits nothing. That is what broke this test under #1107 — not the
+    // behaviour, which was re-verified by hand: the button travels from y=1204
+    // to y=536, above the pane bottom at 594, visible and enabled. Aiming at
+    // the visible pane keeps the assertion about user-facing behaviour rather
+    // than about which div happens to carry `overflow-y`.
     await page.mouse.move(
-      scrollBox.x + scrollBox.width / 2,
-      scrollBox.y + scrollBox.height / 2,
+      paneBox.x + paneBox.width / 2,
+      paneBox.y + paneBox.height / 2,
     );
     await page.mouse.wheel(0, 3000);
 

@@ -19,6 +19,7 @@ const defaults: AppPreferences = {
   sessionsGroupBy: 'none',
   sessionsView: 'list',
   setupCompleted: false,
+  detailDock: {},
 };
 
 function notify(): void {

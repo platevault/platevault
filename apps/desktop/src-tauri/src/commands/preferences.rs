@@ -29,6 +29,7 @@ pub async fn preferences_get() -> Result<AppPreferences, ContractError> {
         sessions_group_by: SessionsGroupBy::None,
         sessions_view: SessionsView::List,
         setup_completed: false,
+        detail_dock: HashMap::new(),
     })
 }
 

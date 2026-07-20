@@ -152,9 +152,9 @@ function stepLabels(): string[] {
 function profileLabelFor(profile: string): string | undefined {
   switch (profile) {
     case 'pixinsight':
-      return 'PixInsight/WBPP';
+      return m.projects_wizard_profile_pixinsight();
     case 'siril':
-      return 'Siril';
+      return m.projects_wizard_profile_siril();
     case 'planetary':
       return m.projects_wizard_profile_planetary_lunar();
     default:

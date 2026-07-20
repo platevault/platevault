@@ -390,7 +390,7 @@ export function Advanced({ save }: AdvancedProps) {
               <div className="pv-adv-settings__control-row">
                 <Btn
                   size="sm"
-                  variant="danger"
+                  variant="destructive"
                   onClick={handleReset}
                   data-testid="reset-preferences-confirm-btn"
                 >
@@ -408,7 +408,7 @@ export function Advanced({ save }: AdvancedProps) {
           ) : (
             <Btn
               size="sm"
-              variant="danger"
+              variant="destructive"
               onClick={() => setResetConfirming(true)}
               data-testid="reset-preferences-btn"
             >

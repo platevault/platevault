@@ -686,6 +686,7 @@ const mockPreferences: AppPreferences = {
   sessionsGroupBy: 'none',
   sessionsView: 'list',
   setupCompleted: false,
+  detailDock: {},
 };
 
 // Review items are loaded from the wireframe-aligned fixture file (review.queue case below).

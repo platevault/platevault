@@ -130,8 +130,31 @@ impl Database {
     // produces), so the scan's only remaining effect was auto-corrupting
     // real cross-drive projects into the dead-end `kind_diverged` state on
     // every reopen. Removed along with `reconcile_kind_diverged_views`.
+    //
+    // #1307: 15 migrations rebuild a table that has children under `ON DELETE
+    // CASCADE` (e.g. `plans` -> `plan_items`) and open with `PRAGMA
+    // foreign_keys = OFF` to make their `DROP TABLE` safe. sqlx runs every
+    // migration inside its own transaction, and SQLite treats that pragma as
+    // a no-op once a transaction is open (sqlite.org/pragma.html#pragma_foreign_keys),
+    // so the in-file pragma never took effect and `DROP TABLE plans` cascaded
+    // through `plan_items.plan_id ON DELETE CASCADE`, silently deleting every
+    // plan item on each of those 15 migrations. The already-applied migration
+    // files can't be edited (their checksums are recorded in every deployed
+    // database and validated by sqlx), so the fix runs the whole chain over a
+    // single connection with FK enforcement disabled *before* any transaction
+    // opens on it — that setting isn't scoped to a transaction, so it survives
+    // every migration's own `BEGIN`/`COMMIT`, regardless of what that
+    // migration's own pragma lines attempt. This protects every rebuild in
+    // the chain, past and future, without touching the migration files.
     pub async fn migrate(&self) -> DbResult<()> {
-        sqlx::migrate!("./migrations").run(&self.pool).await?;
+        let mut conn = self.pool.acquire().await?;
+        sqlx::query("PRAGMA foreign_keys = OFF;").execute(&mut *conn).await?;
+        let migrate_result = sqlx::migrate!("./migrations").run(&mut *conn).await;
+        // Always restore enforcement before the connection returns to the pool:
+        // ordinary repository queries and legitimate runtime deletes rely on
+        // FK cascade behaviour being active outside of migrations.
+        sqlx::query("PRAGMA foreign_keys = ON;").execute(&mut *conn).await?;
+        migrate_result?;
         Ok(())
     }
 

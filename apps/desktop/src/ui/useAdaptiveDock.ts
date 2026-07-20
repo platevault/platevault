@@ -7,6 +7,8 @@ import {
   useEffect,
   useState,
 } from 'react';
+import type { DetailDockPref, DockPlacement } from '@/bindings';
+import { getPreferences, setPreference } from '@/data/preferences';
 
 /**
  * useAdaptiveDock — spec 054 (#936): decides whether a list page's detail
@@ -18,11 +20,12 @@ import {
  * of an override — bottom is the universal narrow-window fallback (decision
  * #8: the shell's enforced 1100x720 minimum must stay fully workable).
  *
- * `dockId` scopes localStorage persistence per adopting page (e.g.
- * "sessions", "targets") so each page remembers its own pin + width.
+ * `dockId` scopes persistence per adopting page (e.g. "sessions", "targets")
+ * so each page remembers its own pin + width, stored under the typed
+ * `detailDock` preference (#1158).
  */
 
-export type DockPlacement = 'side' | 'bottom';
+export type { DockPlacement };
 
 export interface UseAdaptiveDockOptions {
   /** Persistence key scope, e.g. "sessions", "calibration", "targets". */
@@ -55,19 +58,15 @@ export interface UseAdaptiveDockResult {
   resizing: boolean;
 }
 
-const STORAGE_PREFIX = 'pv-dock';
-
-function readStoredPlacement(dockId: string): DockPlacement | null {
-  const raw = window.localStorage.getItem(
-    `${STORAGE_PREFIX}-placement-${dockId}`,
-  );
-  return raw === 'side' || raw === 'bottom' ? raw : null;
+function readStored(dockId: string): DetailDockPref | undefined {
+  return getPreferences().detailDock?.[dockId];
 }
 
-function readStoredWidth(dockId: string): number | null {
-  const raw = window.localStorage.getItem(`${STORAGE_PREFIX}-width-${dockId}`);
-  const parsed = raw != null ? Number(raw) : NaN;
-  return Number.isFinite(parsed) ? parsed : null;
+/** Merges a partial dock update for one `dockId` into the typed preference. */
+function writeStored(dockId: string, patch: Partial<DetailDockPref>): void {
+  const all = getPreferences().detailDock ?? {};
+  const current = all[dockId] ?? { placement: null, width: null };
+  setPreference('detailDock', { ...all, [dockId]: { ...current, ...patch } });
 }
 
 export function useAdaptiveDock({
@@ -78,11 +77,11 @@ export function useAdaptiveDock({
   defaultWidth = 420,
 }: UseAdaptiveDockOptions): UseAdaptiveDockResult {
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-  const [override, setOverrideState] = useState<DockPlacement | null>(() =>
-    readStoredPlacement(dockId),
+  const [override, setOverrideState] = useState<DockPlacement | null>(
+    () => readStored(dockId)?.placement ?? null,
   );
   const [width, setWidthState] = useState<number>(
-    () => readStoredWidth(dockId) ?? defaultWidth,
+    () => readStored(dockId)?.width ?? defaultWidth,
   );
   const [resizing, setResizing] = useState(false);
 
@@ -105,10 +104,7 @@ export function useAdaptiveDock({
     (value: number) => {
       const clamped = clampWidth(value);
       setWidthState(clamped);
-      window.localStorage.setItem(
-        `${STORAGE_PREFIX}-width-${dockId}`,
-        String(clamped),
-      );
+      writeStored(dockId, { width: clamped });
     },
     [clampWidth, dockId],
   );
@@ -116,9 +112,7 @@ export function useAdaptiveDock({
   const setOverride = useCallback(
     (value: DockPlacement | null) => {
       setOverrideState(value);
-      const key = `${STORAGE_PREFIX}-placement-${dockId}`;
-      if (value == null) window.localStorage.removeItem(key);
-      else window.localStorage.setItem(key, value);
+      writeStored(dockId, { placement: value });
     },
     [dockId],
   );

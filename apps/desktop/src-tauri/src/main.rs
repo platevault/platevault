@@ -51,10 +51,18 @@ async fn main() {
     // `tauri_plugin_log::Builder::new().skip_logger()` comment in
     // `build_app()` for why the plugin does not also try to install one.
     {
-        let log_dir = app
-            .path()
-            .app_log_dir()
-            .unwrap_or_else(|_| std::env::temp_dir().join("plate-vault-logs"));
+        // `ALM_DATA_DIR` (issue #1204) relocates the whole app-data root, logs
+        // included — otherwise concurrent E2E instances on Windows interleave
+        // their lines into one shared daily log file, which is exactly the
+        // evidence trail those runs exist to produce.
+        let log_dir = desktop_shell::data_dir::resolve().map_or_else(
+            || {
+                app.path()
+                    .app_log_dir()
+                    .unwrap_or_else(|_| std::env::temp_dir().join("plate-vault-logs"))
+            },
+            |root| root.join("logs"),
+        );
         let _ = std::fs::create_dir_all(&log_dir);
 
         // Prune before creating today's writer so a just-rotated file from a
@@ -92,7 +100,16 @@ async fn main() {
     // redb resolve-cache file (`simbad-cache.redb`, D2 — one global file,
     // independent of the `ALM_DB_URL` override so dev/test SQLite swaps don't
     // also relocate the resolve cache).
-    let data_dir = app.path().app_data_dir().expect("failed to resolve platform data directory");
+    //
+    // `ALM_DATA_DIR` overrides it outright (issue #1204). The platform
+    // resolver goes through `dirs`, which on Windows reads a Known Folder and
+    // therefore ignores the `APPDATA`/`LOCALAPPDATA` overrides the E2E harness
+    // sets — so concurrent instances there all landed on ONE real root and
+    // fought over `simbad-cache.redb` ("Database already open. Cannot acquire
+    // lock"). See `desktop_shell::data_dir`.
+    let data_dir = desktop_shell::data_dir::resolve().unwrap_or_else(|| {
+        app.path().app_data_dir().expect("failed to resolve platform data directory")
+    });
     std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
 
     // `ALM_DB_URL` lets dev/test runs target an alternate SQLite store.

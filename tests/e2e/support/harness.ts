@@ -58,6 +58,18 @@ export async function installTauriChannelPolyfill(page: Page): Promise<void> {
 /**
  * Seed first-run as complete so the app lands on real content, not the wizard.
  *
+ * MERGES into any existing `alm-preferences` rather than replacing it. This
+ * runs via `addInitScript`, so it re-executes on EVERY navigation *including
+ * reloads* — a wholesale `setItem` therefore silently wiped every other
+ * preference each time a spec reloaded the page.
+ *
+ * That went unnoticed while all cross-reload UI state lived in its own
+ * top-level localStorage keys. Once dock placement moved into the typed
+ * preferences blob (#1158), it made "persists across a reload" specs fail
+ * against a perfectly working app: the seed erased the pin mid-test. Any
+ * future preference would have hit the same trap, so merge here rather than
+ * special-casing one key.
+ *
  * By default this ALSO marks the spec-056 US1 orientation walk done, because
  * seeding setup alone would otherwise auto-launch the modal walk (it navigates
  * to /inbox and dims the page) over every unrelated spec, intercepting its flow.
@@ -73,9 +85,16 @@ export function seedSetupComplete(
   opts?: { suppressWalk?: boolean },
 ): void {
   page.addInitScript(() => {
+    let existing: Record<string, unknown> = {};
+    try {
+      const raw = window.localStorage.getItem('alm-preferences');
+      if (raw) existing = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      // Corrupt or unreadable value — fall back to seeding a fresh object.
+    }
     window.localStorage.setItem(
       'alm-preferences',
-      JSON.stringify({ setupCompleted: true }),
+      JSON.stringify({ ...existing, setupCompleted: true }),
     );
   });
   if (opts?.suppressWalk !== false) {

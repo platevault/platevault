@@ -6,14 +6,16 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import alm from './eslint-rules/no-user-string.js';
+import noVacuousWaitFor from './eslint-rules/no-vacuous-waitfor.js';
 
 // ESLint is the SECOND lint layer, after Biome (`pnpm lint` runs
 // `biome check` first). Biome owns the syntactic layer (core JS recommended +
 // non-type-aware TS rules — see biome.json); ESLint keeps ONLY the gates Biome
 // cannot replicate:
 //
-//   1. `alm/*` custom rules (the spec-046 i18n catalog gate) — Biome has no
-//      custom JS plugin rules.
+//   1. `alm/*` custom rules (the spec-046 i18n catalog gate and the
+//      no-vacuous-waitfor test-hygiene gate) — Biome has no custom JS plugin
+//      rules.
 //   2. Type-aware @typescript-eslint rules (recommendedTypeCheckedOnly) —
 //      Biome has no type-aware linting.
 //   3. eslint-plugin-react-hooks v7 — its React-compiler-derived rules
@@ -49,7 +51,9 @@ export default tseslint.config(
   // ENFORCED on migrated areas (I18N_MIGRATED), so it can be rolled out wave by
   // wave without turning the whole tree red at once.
   {
-    plugins: { alm },
+    plugins: {
+      alm: { rules: { ...alm.rules, ...noVacuousWaitFor.rules } },
+    },
   },
   {
     files: I18N_MIGRATED,
@@ -159,7 +163,14 @@ export default tseslint.config(
   // Off for tests; it stays on for app source.
   {
     files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
-    rules: { '@typescript-eslint/no-unnecessary-type-assertion': 'off' },
+    rules: {
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      // A negated mock-call assertion inside `waitFor` passes on the first
+      // attempt and asserts nothing — the silent no-op a naive "wrap the flake
+      // in waitFor" fix introduces. See the rule's header and
+      // docs/development/testing.md (issue #1136).
+      'alm/no-vacuous-waitfor': 'error',
+    },
   },
 
   // Scope: only lint app source (not generated bindings, not archived src)
