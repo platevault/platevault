@@ -1,6 +1,6 @@
 # Feature Specification: Inbox — Drop Parent Items
 
-**Feature Branch**: `spec/057-inbox-drop-parent-items`
+**Feature Branch**: `spec/058-inbox-drop-parent-items`
 
 **Created**: 2026-07-19
 
@@ -450,7 +450,14 @@ resulting sibling carries a frame type without any user input.
 **Model**
 
 - **FR-001**: The system MUST NOT create any inbox item that lacks a
-  classification identity, at any point in the folder's lifecycle.
+  classification identity, at any point in the folder's lifecycle. *Read with
+  the FR-015 scoping note: a detected calibration master carries its own frame
+  type, filter and exposure read from the file, so it has a classification
+  identity and is not an exception to this requirement. Its empty stored
+  `group_key` is a storage artifact, not an absence of identity — see
+  [#1157](https://github.com/platevault/platevault/issues/1157), which requires
+  placeholder-scoped predicates to stop treating that empty value as a
+  discriminator.*
 - **FR-002**: A classified folder whose files all belong to one group MUST
   produce exactly one inbox item.
 - **FR-003**: A classified folder whose files belong to N distinct groups MUST
@@ -492,9 +499,12 @@ resulting sibling carries a frame type without any user input.
   conflicting user-supplied frame types — that route was recorded originally
   and refuted at Layer 2, because the re-materialization rebuild clears
   `manual_override` from the evidence rows. Since this feature removes
-  placeholder rows, **this feature is itself what makes `mixed` unreachable**;
-  the plan gate MUST decide whether the affordance is then retired or
-  re-scoped.
+  placeholder rows, **this feature is itself what makes `mixed` unreachable**.
+  *The plan gate has decided: PG-1 retires `mixed` rather than re-scoping it,
+  because the affordance attaches to the placeholder this feature deletes, so
+  retiring it is dead-code removal. Implemented by T035, which MUST also replace
+  the `inbox-mixed-alert` sync signal in the same change — see `tasks.md`
+  sequencing constraint 4.*
 
 **Lifecycle**
 
@@ -606,10 +616,15 @@ another there.
 - **SC-007**: Every read-side predicate that exists solely to suppress an
   aggregate row is deleted, and no replacement suppression logic is introduced.
 - **SC-008**: Re-scanning an unchanged folder produces no item identity churn.
-- **SC-009**: When re-derivation removes an item that had an open plan, that
-  item is marked superseded, its plan is blocked from application pending the
-  user's decision, and the user receives an explicit superseded signal — zero
-  cases of a silently discarded or silently retained plan (D-005).
+- **SC-009** *(**NOT met by this feature — do not tick.** D-005 remains a
+  recorded decision, but its mechanism is descoped to
+  `specs/tiny/reclassify-split-per-item-and-rederivation.md` together with the
+  retired FR-020/021/022. T043 records this. **The real exit bar for 058 is the
+  other eleven criteria.**)*: When re-derivation removes an item that had an
+  open plan, that item is marked superseded, its plan is blocked from
+  application pending the user's decision, and the user receives an explicit
+  superseded signal — zero cases of a silently discarded or silently retained
+  plan (D-005).
 - **SC-010**: A user can group the Inbox by folder and see each folder's
   siblings together under one header (D-007).
 - **SC-011**: #711 Instance B stays fixed — reclassify does not report

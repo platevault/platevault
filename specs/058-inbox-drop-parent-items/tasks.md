@@ -46,9 +46,13 @@ a wasted CI cycle.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the feature branch from current `main` and confirm `specs/058-inbox-drop-parent-items/` carries spec, research, plan, data-model, contracts and quickstart
-- [ ] T002 Re-check the next free migration number in `crates/persistence/db/migrations/`. Highest on main is `0073`; open PR #1048 adds colliding `0072`/`0073` which must renumber upward. Do not assume `0074` is still free
-- [ ] T003 Resolve #1102 (`phase:design`) — decide what "the item for this folder" means for target recommendations once no parent exists. **Blocks Phase 5.** Record the decision on the issue before writing code
+- [X] T001 Create the feature branch from current `main` and confirm `specs/058-inbox-drop-parent-items/` carries spec, research, plan, data-model, contracts and quickstart — branch `spec/058-inbox-drop-parent-items` off `20bf710c`; all seven artifacts present
+- [X] T002 Re-check the next free migration number in `crates/persistence/db/migrations/`. Highest on main is `0073`; open PR #1048 adds colliding `0072`/`0073` which must renumber upward. Do not assume `0074` is still free — **re-checked 2026-07-20 against `20bf710c`: main still tops out at `0073`, so `0074` is free. PR #1048 still claims `0072`/`0073` and must renumber to `0075`/`0076` regardless of merge order.**
+- [X] T003 Resolve #1102 (`phase:design`) — decide what "the item for this folder" means for target recommendations once no parent exists. **Blocks Phase 5.** Record the decision on the issue before writing code — **DECIDED: per-sibling recommendations.** `SourceGroup` stops resolving to a representative item; a recommendation belongs to one `inbox_item_id`. `ids.next()` is deleted, not replaced with a better pick. Rationale on [#1102](https://github.com/platevault/platevault/issues/1102#issuecomment-5018415456). Phase 5 unblocked
+
+### Requirements-quality gate (`/speckit.checklist`)
+
+- [X] T003a Run the skipped requirements-quality gate → `checklists/requirements.md` (32 items). Editorial corrections applied to `spec.md`: feature-branch field `057`→`058`, FR-001 scoped to match FR-015's master carve-out, FR-031 updated to record PG-1's decision, SC-009 marked NOT-met in its own text so a completion sweep cannot tick it. Substantive gaps filed as [#1177](https://github.com/platevault/platevault/issues/1177) (D-004 precondition drift) and [#1178](https://github.com/platevault/platevault/issues/1178) (counts, selection, needs-review split, ordering). **#1178's CHK010 and CHK011 must be answered before T022 and T029 close**
 
 ---
 
