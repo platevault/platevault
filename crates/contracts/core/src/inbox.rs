@@ -420,6 +420,18 @@ pub struct InboxListItem {
     /// its own field rather than a `group_key` value. `true` means the item
     /// cannot be confirmed until the missing attributes are supplied.
     pub needs_review: bool,
+    /// Cached classification result, DB vocabulary (`"classified"` /
+    /// `"unclassified"`) — the SAME value `inbox.classify` reads for this
+    /// item. `None` when the item has never been classified.
+    ///
+    /// Issue #711 Instance A (unsplit-folder variant): `state` is
+    /// unconditionally `"classified"` once a folder has been scanned even
+    /// when it has no dominant frame type (empty/mixed/needs-review), so the
+    /// list's classification badge must not fall back to `state` alone —
+    /// this field lets it agree with `inbox.classify`/the detail panel by
+    /// construction instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification_result: Option<String>,
 }
 
 /// A scanned-but-unclassified folder in `inbox.list` (spec 058 FR-016).
@@ -471,7 +483,7 @@ pub struct InboxListResponse {
 /// `frame_type_effective` reflects override-if-present-else-extracted.
 /// `override_stale` is true when the file was changed (size/mtime) since the
 /// override was recorded (R-4); the override is surfaced but flagged.
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxFileMetadata {
     pub relative_file_path: String,

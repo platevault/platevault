@@ -618,6 +618,16 @@ export const commands = {
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_get", { id })),
 	/**
+	 *  `plans.free_space_estimate` — advisory destination free-space estimate for
+	 *  a plan under review, before approval (issue #876). Never blocks approval;
+	 *  see `app_core::plans::estimate_free_space`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+	 */
+	plansFreeSpaceEstimate: (id: string) => typedError<PlanFreeSpaceEstimate_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_free_space_estimate", { id })),
+	/**
 	 *  `plans.approve` — move a plan to `approved`; snapshot item FS metadata (US3, T025).
 	 * 
 	 *  # Errors
@@ -1520,8 +1530,10 @@ export const commands = {
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
 	 * 
-	 *  Results are capped at 500 items (FR-006). Each item carries its root's
-	 *  absolute path so the UI can group/label by root without a second call.
+	 *  Each of the two result arrays is capped at 500 rows (FR-006); `capped` is
+	 *  true when either hit its limit, so the UI never silently drops folders.
+	 *  Each item carries its root's absolute path so the UI can group/label by
+	 *  root without a second call.
 	 * 
 	 *  # Errors
 	 *  Returns a string error on database failure.
@@ -5003,6 +5015,19 @@ export type InboxListItem_Deserialize = {
 	 *  cannot be confirmed until the missing attributes are supplied.
 	 */
 	needsReview: boolean,
+	/**
+	 *  Cached classification result, DB vocabulary (`"classified"` /
+	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
+	 *  item. `None` when the item has never been classified.
+	 * 
+	 *  Issue #711 Instance A (unsplit-folder variant): `state` is
+	 *  unconditionally `"classified"` once a folder has been scanned even
+	 *  when it has no dominant frame type (empty/mixed/needs-review), so the
+	 *  list's classification badge must not fall back to `state` alone —
+	 *  this field lets it agree with `inbox.classify`/the detail panel by
+	 *  construction instead.
+	 */
+	classificationResult: string | null,
 };
 
 /**
@@ -5098,6 +5123,19 @@ export type InboxListItem_Serialize = {
 	 *  cannot be confirmed until the missing attributes are supplied.
 	 */
 	needsReview: boolean,
+	/**
+	 *  Cached classification result, DB vocabulary (`"classified"` /
+	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
+	 *  item. `None` when the item has never been classified.
+	 * 
+	 *  Issue #711 Instance A (unsplit-folder variant): `state` is
+	 *  unconditionally `"classified"` once a folder has been scanned even
+	 *  when it has no dominant frame type (empty/mixed/needs-review), so the
+	 *  list's classification badge must not fall back to `state` alone —
+	 *  this field lets it agree with `inbox.classify`/the detail panel by
+	 *  construction instead.
+	 */
+	classificationResult?: string | null,
 };
 
 /**  Response from `inbox.list`. */
@@ -7047,6 +7085,64 @@ export type PlanDetail_Serialize = {
 export type PlanDiscardResponse = {
 	planId: string,
 	discardedAt: string,
+};
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate = PlanFreeSpaceEstimate_Serialize | PlanFreeSpaceEstimate_Deserialize;
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate_Deserialize = {
+	/**
+	 *  Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+	 *  all-trash/all-delete plan, which needs no destination space).
+	 */
+	requiredBytes: number,
+	/**
+	 *  Free bytes on the destination volume, probed via
+	 *  `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+	 *  items to probe a destination from, or the probe itself fails (e.g. the
+	 *  volume is momentarily unreachable) — the UI shows no comparison rather
+	 *  than a false warning in that case.
+	 */
+	availableBytes: number | null,
+};
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate_Serialize = {
+	/**
+	 *  Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+	 *  all-trash/all-delete plan, which needs no destination space).
+	 */
+	requiredBytes: number,
+	/**
+	 *  Free bytes on the destination volume, probed via
+	 *  `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+	 *  items to probe a destination from, or the probe itself fails (e.g. the
+	 *  volume is momentarily unreachable) — the UI shows no comparison rather
+	 *  than a false warning in that case.
+	 */
+	availableBytes?: number | null,
 };
 
 /**  Action to perform on a single filesystem item. */

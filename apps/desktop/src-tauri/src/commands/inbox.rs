@@ -569,6 +569,7 @@ pub async fn inbox_list(
                 group_key: r.group_key,
                 group_label: r.group_label,
                 frame_type: r.frame_type,
+                classification_result: g.classification_result,
             }
         })
         .collect();

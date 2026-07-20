@@ -168,10 +168,6 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
         "devMode" => {
             state.dev_mode = serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "plansListDefaultAgeCutoffDays" => {
-            state.plans_list_default_age_cutoff_days =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
         "calibrationDarkTempTolerance" => {
             state.calibration_dark_temp_tolerance =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;

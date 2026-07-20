@@ -142,6 +142,21 @@ export function PlanReviewOverlay({
     enabled: open && planId !== null,
   });
 
+  // Advisory destination free-space estimate (issue #876) — surfaced at
+  // review time, before approval; never gates "Approve & apply" (that
+  // decision belongs to `recheck_disk_space`'s real R-Pause-1 apply-time
+  // check, not this estimate). Only fetched once the plan itself has items to
+  // probe a destination from.
+  const { data: freeSpace } = useQuery({
+    queryKey: queryKeys.plans.freeSpaceEstimate(planId ?? ''),
+    queryFn: async () =>
+      unwrap(await commands.plansFreeSpaceEstimate(planId as string)),
+    enabled: open && planId !== null && (plan?.itemsTotal ?? 0) > 0,
+  });
+  const freeSpaceInsufficient =
+    freeSpace?.availableBytes != null &&
+    freeSpace.availableBytes < freeSpace.requiredBytes;
+
   // Protection gate readiness (spec 016 US3): the gate signals true when every
   // protected item is acknowledged — or immediately when none are protected.
   const [gateReady, setGateReady] = useState(false);
@@ -504,6 +519,26 @@ export function PlanReviewOverlay({
             {plan.totalBytesRequired > 0 &&
               ` ${m.plans_review_bytes_required({ size: formatBytes(plan.totalBytesRequired) })}`}
           </Banner>
+
+          {/* #876: destination free-space estimate, before approval. Advisory
+              only — a warning here never disables "Approve & apply"; the real
+              gate is the apply-time `recheck_disk_space` pre-flight. */}
+          {freeSpace?.availableBytes != null && (
+            <Banner
+              variant={freeSpaceInsufficient ? 'warn' : 'info'}
+              role="status"
+              data-testid="plan-review-free-space"
+            >
+              {freeSpaceInsufficient
+                ? m.plans_review_free_space_insufficient({
+                    required: formatBytes(freeSpace.requiredBytes),
+                    available: formatBytes(freeSpace.availableBytes),
+                  })
+                : m.plans_review_free_space_available({
+                    size: formatBytes(freeSpace.availableBytes),
+                  })}
+            </Banner>
+          )}
 
           {/* #603: a 0-item plan otherwise dead-ends on a disabled
               "Approve & apply" with no explanation — render the generator's

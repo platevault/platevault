@@ -208,6 +208,79 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
   });
 });
 
+describe('InboxList — unsplit-folder badge agrees with inbox_classify (#711 Instance A)', () => {
+  // classify() unconditionally sets `state = "classified"` once a folder is
+  // scanned, even when the actual result is unclassified/mixed/needs-review
+  // and the folder never split into materialized sub-items (no frameType/
+  // groupFrameType, groupKey stays the placeholder's `""`). Without reading
+  // `classificationResult` the row previously fell through to `state` and
+  // rendered "classified" — disagreeing with the detail panel/inbox_classify.
+  it('shows "unclassified", not "classified", when classificationResult says unclassified', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'placeholder-unsplit',
+        groupKey: '',
+        groupFrameType: null,
+        state: 'classified',
+        classificationResult: 'unclassified',
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.getByText('unclassified')).toBeInTheDocument();
+    expect(screen.queryByText('classified')).not.toBeInTheDocument();
+  });
+
+  it('still shows "classified" when classificationResult agrees (no regression for a genuinely resolved unsplit folder)', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'placeholder-resolved',
+        groupKey: '',
+        groupFrameType: null,
+        state: 'classified',
+        classificationResult: 'classified',
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.getByText('classified')).toBeInTheDocument();
+  });
+
+  it('a plan_open item is never relabeled "unclassified", even with a stale classificationResult', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'plan-open-stale',
+        groupKey: '',
+        groupFrameType: null,
+        state: 'plan_open',
+        classificationResult: 'unclassified',
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.getByText('plan open')).toBeInTheDocument();
+    expect(screen.queryByText('unclassified')).not.toBeInTheDocument();
+  });
+});
+
 describe('InboxList — Format column sort matches the displayed value (#649)', () => {
   it('sorts master rows by their displayed "{type} master" label, not the internal format tag', () => {
     // Displayed labels, ascending (locale compare): "bias master" <
