@@ -47,19 +47,24 @@ Spec context goes at the bottom under "## Spec Context" (not in the title).
 The release-please draft PR will be manually curated before publish -- raw material matters.
 GUIDANCE
 
-# Detect the branch the PR is actually being opened from.
+# Detect current branch.
 #
-# `git branch --show-current` alone is wrong: this hook runs with the session's
-# cwd, but `gh pr create` is routinely run from a linked worktree on a different
-# branch, and the main checkout may meanwhile be on something else entirely.
-# That mismatch stamped PRs with a completely unrelated branch and spec.
-#
-# Order of trust: the explicit `--head` on the command, then the branch of the
-# checkout the command actually runs in, then the session cwd as a last resort.
-HOOK_CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-BRANCH=$(echo "$COMMAND" | grep -oE -- '--head[ =]+[^ ]+' | head -1 | sed -E 's/--head[ =]+//')
+# Read the branch from the directory the COMMAND runs in, not the hook's own
+# $PWD. With git worktrees those differ: `gh pr create` runs in the worktree
+# while the hook inherits the main checkout, so using $PWD reports whatever the
+# shared checkout happens to be on. In practice that injected another lane's
+# spec context into five unrelated PRs. Both Claude and Codex put the directory
+# in `.cwd`; fall back to $PWD when absent or not a directory, matching
+# packages/hooks-git-safety/scripts/git-guard.sh.
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+[ -n "$CWD" ] && [ "$CWD" != "null" ] && [ -d "$CWD" ] || CWD="$PWD"
+
+# Order of trust: an explicit `--head` on the command names the branch outright,
+# so prefer it over any checkout state. `--head` may be `owner:branch` for a
+# fork; keep only the branch part.
+BRANCH=$(echo "$COMMAND" | grep -oE -- '--head[= ]+[^ ]+' | head -1 | sed -E 's/--head[= ]+//; s/^[^:]*://')
 if [ -z "$BRANCH" ]; then
-  BRANCH=$(git -C "${HOOK_CWD:-.}" branch --show-current 2>/dev/null)
+  BRANCH=$(git -C "$CWD" branch --show-current 2>/dev/null)
 fi
 if [ -z "$BRANCH" ]; then
   jq -n --arg ctx "$CONTEXT" '{
@@ -71,23 +76,29 @@ if [ -z "$BRANCH" ]; then
   exit 0
 fi
 
-# Extract spec number from branch name (e.g., 023-lifecycle-testing -> 023).
+# Extract the spec number from the branch name.
 #
-# The number must be a whole 3-digit path segment followed by `-`, so a branch
-# named after a 4-digit ISSUE (`fix/1050-wizard-site-skip-nag`) is not read as
-# spec `105` — an unanchored `[0-9]{3}` matched the first three digits of the
-# issue number and stamped every such PR with a spec it has nothing to do with.
+# Spec branches put the id at the start of a path segment, followed by a dash:
+# `023-lifecycle-testing`, `spec/058-inbox-drop-parent-items`.
+#
+# Anchoring matters. The previous `grep -oE '[0-9]{3}'` took the first three
+# digits ANYWHERE, so an ordinary issue branch was misread as a spec:
+# `fix/1050-wizard-site-skip-nag` -> "105" and `fix/1249-logpanel-follow-race`
+# -> "124". Neither repo has those specs; the ids came from issue numbers.
+# Requiring a segment boundary before and a dash after means a four-digit issue
+# number cannot match: in `/1050-`, `105` is not followed by `-` and `050` is
+# not preceded by a boundary.
 SPEC_ID=$(echo "$BRANCH" | grep -oE '(^|/)[0-9]{3}-' | head -1 | tr -dc '0-9')
 
-# Final guard: only treat this as a spec branch if that spec actually exists.
-# Cheap, and it fails closed on any pattern the regex above did not anticipate.
-if [ -n "$SPEC_ID" ]; then
-  # compgen, not `[ -d glob ]`: the latter passes every match as a separate
-  # argument to `[`, so two matching spec dirs would make it error out and
-  # silently discard a perfectly valid spec id.
-  if ! compgen -G "${HOOK_CWD:-.}/specs/${SPEC_ID}-*" >/dev/null 2>&1; then
-    SPEC_ID=""
-  fi
+# Final guard: only treat this as a spec branch if that spec directory actually
+# exists. Cheap, and it fails closed on any naming pattern the regex above did
+# not anticipate.
+#
+# compgen, not `[ -d glob ]`: the latter passes every match as a separate
+# argument to `[`, so two matching spec dirs would make it error out and
+# silently discard a valid spec id.
+if [ -n "$SPEC_ID" ] && ! compgen -G "$CWD/specs/${SPEC_ID}-*" >/dev/null 2>&1; then
+  SPEC_ID=""
 fi
 
 if [ -z "$SPEC_ID" ]; then
@@ -103,7 +114,10 @@ fi
 # Detect repo from git remote.
 # Handles both SSH (git@host:owner/repo.git) and HTTPS (https://host/owner/repo.git)
 # forms. BSD sed has no '+?'; use a portable greedy slug regex with a [/:] anchor.
-REPO=$(git remote get-url origin 2>/dev/null | sed -E 's#.*[/:]([^/]+/[^/]+)$#\1#; s#\.git$##')
+# `git -C "$CWD"` for the same reason as the branch lookup: when the command
+# runs in a worktree of a DIFFERENT repo than the hook's own checkout, reading
+# the remote from $PWD queries the wrong repository's issues entirely.
+REPO=$(git -C "$CWD" remote get-url origin 2>/dev/null | sed -E 's#.*[/:]([^/]+/[^/]+)$#\1#; s#\.git$##')
 if [ -z "$REPO" ]; then
   jq -n --arg ctx "$CONTEXT" '{
     hookSpecificOutput: {

@@ -1,22 +1,22 @@
 lockfile_version: '1'
-generated_at: '2026-07-17T17:54:20.184523+00:00'
+generated_at: '2026-07-20T09:20:22.444386+00:00'
 apm_version: 0.25.0
 dependencies:
 - repo_url: srobroek/agentic-packages
   name: core
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 7.1.0
+  version: 7.2.0
   virtual_path: packages/core
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:ac49bd532701c0fdc1e7df849524b56c1a8457ebdc274fa433f08370c654a5f9
+  content_hash: sha256:3a6a50c07b2e78b70b395ce97b0513e7feed7f8e1d7e6fcb8dd723c060c8d43b
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: docs-architecture
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 2.1.0
   virtual_path: packages/docs-architecture
@@ -27,18 +27,18 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: frontend
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 3.1.0
+  version: 3.2.0
   virtual_path: packages/frontend
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:1e6c9aa666fc7169b3732df3907e7e0243ef164f92ce08bf64f922f453a42b97
+  content_hash: sha256:70c74156c6c7ece0d0717b99e5571c54a16b5eaf8cfba7975ab5b796a59548eb
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: hooks-quality
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.3.0
   virtual_path: packages/hooks-quality
@@ -59,40 +59,40 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-rust
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 3.1.0
+  version: 3.2.0
   virtual_path: packages/language-rust
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:af95927a073ec440520103d57956380dac05352598a8372abd43dcca1d4432b2
+  content_hash: sha256:b925322292296252b496ca35cb5bda3818379935db51e18080659c3af8a3d3f7
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-shell
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 2.1.0
+  version: 2.2.0
   virtual_path: packages/language-shell
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:8d64fd2ff76bc7c7536bf331765fe6c3c7693b8931de6160cfc158264e896f36
+  content_hash: sha256:1ca9108f968dc9783ec5a53b947f23818e1324f0027fca371b04801e28895b87
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-typescript
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 3.1.0
+  version: 3.2.0
   virtual_path: packages/language-typescript
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:23db3e467bfb48d449e09d76954877a20c11cd8ee5ae3f71db460f161a2dc176
+  content_hash: sha256:ec748955ed7725c4f824d8536e9d8cd0bca1d0ad7676688538f0f4dc56bbe041
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: mcp-codebase-memory
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-codebase-memory
@@ -103,7 +103,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-context7
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-context7
@@ -114,7 +114,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-package-version
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-package-version
@@ -125,7 +125,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-playwright
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-playwright
@@ -136,7 +136,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-repomix
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-repomix
@@ -153,7 +153,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-serena
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-serena
@@ -164,7 +164,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-tauri
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.2.0
   virtual_path: packages/mcp-tauri
@@ -179,7 +179,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: orchestrate
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/orchestrate
@@ -266,7 +266,7 @@ dependencies:
     .claude/agents/ledger-scribe.md: sha256:ee4217889600ca3ec60179b3ea285f6e2c4b5e7ea072dc5e92170bcf4746b5c1
     .claude/agents/workflow-advisor.md: sha256:45406aa5b65b0f39a64d8362c889916f348088a2711d16dc6a446107b670e682
     .claude/agents/workflow-coder.md: sha256:71425e36352bc4294a61a96bd98c04c4455654dc53935428c2e53dd6ff7d860a
-    .claude/agents/workflow-reviewer.md: sha256:39d1cae7c1d59b461ce728d3cfbf39a64b492648f1082ebc45caaba5d65df971
+    .claude/agents/workflow-reviewer.md: sha256:13ea0945404942e718bae8c3eefe451eb877f2118335706f2cdf6690fc918924
     .claude/skills/orchestrate/SKILL.md: sha256:87f5e153b30ca33ddf8b4d2bf2d115ce8f0e2ea5ad20a0db7e3d2a8e7927bdb8
     .claude/skills/orchestrate/references/comms-block.md: sha256:2cc072ef95e04f370ca55c6f6e04cdee59b1c1979d852a5e4858417bb1a76359
     .claude/skills/orchestrate/references/ledger-and-dag.md: sha256:b75d4716b8f542faebe735e17781bed13e5f91dadbc5b4e338574973b910320a
@@ -292,13 +292,13 @@ dependencies:
     .codex/agents/ledger-scribe.toml: sha256:7d135b1f529382bdee4c5095417cbab7ebafc41eff84f9365ba24ea4e6d58967
     .codex/agents/workflow-advisor.toml: sha256:8883bbbb993afda305179e1e36656250bedf81d006124aaddf5a3d32a0cd0199
     .codex/agents/workflow-coder.toml: sha256:2285a9b9bb1abd0833751fa046428920fbe28e46d810e162df88c59425da6d2e
-    .codex/agents/workflow-reviewer.toml: sha256:c1f7f82f9b4ec1758fff271608c4a39afc09a8782b7cc0f0dc2a45874a7d9e0e
-  content_hash: sha256:2ad6df52a01001c762b8f7268ca1f21c9b8d91b24bf491e011e3a488345fee98
+    .codex/agents/workflow-reviewer.toml: sha256:3778a273960ead9c6e89f678b5d3abcfe81fd76d83a3f324c0a812ed4801d07a
+  content_hash: sha256:69bb4f736435404463c255f937e624a23f2fdd1050f8ad4e3623d5f5e521614d
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: release-please
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/release-please
@@ -353,9 +353,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: speckit
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 5.1.0
+  version: 5.1.1
   virtual_path: packages/speckit
   is_virtual: true
   package_type: marketplace_plugin
@@ -418,7 +418,7 @@ dependencies:
     .claude/hooks/speckit/scripts/speckit-deferred-issues.sh: sha256:84ae87584b66e548a86b2219558751dc9aacfbc45138be3d7b185341ce396414
     .claude/hooks/speckit/scripts/speckit-issue-close-guard.sh: sha256:75799a3fbb56438863fdc8e9efe904c4a7d17ecd46a851bbb1096688d4c5f8b3
     .claude/hooks/speckit/scripts/speckit-issue-label-guard.sh: sha256:772d1ce24eb26ee22484f1648e5a4ea4bd3c5deb9d573f505561a87011aaf713
-    .claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh: sha256:9debbcaa2501d016cd6ce4dd5c9c479e8df55cc8cfdde3bee075eb8b021b52b6
+    .claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh: sha256:6ab1d509a00f8c8b8902537dfb0ceabd483870977596609b54da2a7a1350f25c
     .claude/hooks/speckit/scripts/speckit-stop-gate.sh: sha256:4279db19539b2dfe0877b7099308d96e58fd9f68939b0f381cea95d524e1124b
     .claude/hooks/speckit/scripts/speckit-task-commit-check.sh: sha256:8270264dae03a623b9ac5e6c185a2eb4eba3d7d0ebd5055438ea89cc8c6445f0
     .claude/hooks/speckit/scripts/speckit-task-issue-sync.sh: sha256:3681b2097776b90bdca1440a2d4d01c71065fd8fb73ab2626cf609c8e603ef9a
@@ -435,18 +435,18 @@ dependencies:
     .codex/hooks/speckit/scripts/speckit-deferred-issues.sh: sha256:84ae87584b66e548a86b2219558751dc9aacfbc45138be3d7b185341ce396414
     .codex/hooks/speckit/scripts/speckit-issue-close-guard.sh: sha256:75799a3fbb56438863fdc8e9efe904c4a7d17ecd46a851bbb1096688d4c5f8b3
     .codex/hooks/speckit/scripts/speckit-issue-label-guard.sh: sha256:772d1ce24eb26ee22484f1648e5a4ea4bd3c5deb9d573f505561a87011aaf713
-    .codex/hooks/speckit/scripts/speckit-pr-issue-refs.sh: sha256:9debbcaa2501d016cd6ce4dd5c9c479e8df55cc8cfdde3bee075eb8b021b52b6
+    .codex/hooks/speckit/scripts/speckit-pr-issue-refs.sh: sha256:6ab1d509a00f8c8b8902537dfb0ceabd483870977596609b54da2a7a1350f25c
     .codex/hooks/speckit/scripts/speckit-stop-gate.sh: sha256:4279db19539b2dfe0877b7099308d96e58fd9f68939b0f381cea95d524e1124b
     .codex/hooks/speckit/scripts/speckit-task-commit-check.sh: sha256:8270264dae03a623b9ac5e6c185a2eb4eba3d7d0ebd5055438ea89cc8c6445f0
     .codex/hooks/speckit/scripts/speckit-task-issue-sync.sh: sha256:3681b2097776b90bdca1440a2d4d01c71065fd8fb73ab2626cf609c8e603ef9a
     .codex/hooks/speckit/scripts/test_validate_dag.py: sha256:4ad1b3996bbcf8c2b4f5da4289c09ea8f87885bd3cd93f315ae05623948681dc
     .codex/hooks/speckit/scripts/validate-dag.py: sha256:0de4fcced8e7edde6782475921a15810fb90ecc8040860589c43ddd08d5c4edb
-  content_hash: sha256:4e004b4c8bf85b1fbb423b9e8c3f7339d6c4f77185cb05a4a7970549f58862e6
+  content_hash: sha256:ee09f3e1c7626ffbe9f24324f6f43ed3ce348734fb6da15b6db266543815dde4
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: steering-data
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/steering-data
@@ -461,7 +461,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-docs-specs
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 3.1.0
   virtual_path: packages/steering-docs-specs
@@ -476,7 +476,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-infrastructure
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 2.1.0
   virtual_path: packages/steering-infrastructure
@@ -491,7 +491,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-pragmatic
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 4.3.0
   virtual_path: packages/steering-pragmatic
@@ -510,7 +510,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-speckit
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 3.1.0
   virtual_path: packages/steering-speckit
@@ -525,7 +525,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-tools-scripts
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/steering-tools-scripts
@@ -540,9 +540,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: user-journeys
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   resolved_ref: main
-  version: 0.3.0
+  version: 0.3.1
   virtual_path: packages/user-journeys
   is_virtual: true
   package_type: marketplace_plugin
@@ -600,8 +600,8 @@ dependencies:
     .agents/skills/journey-verify-changed/SKILL.md: sha256:5cf34028c62764305643e78e10ba88dca548fe41f5736ebd125d45a85466b6a5
     .agents/skills/journey-verify/SKILL.md: sha256:68b2b5e441a2c9f92dd91d44301a3f68c304369446c93d06d1f7247fe9ba330e
     .agents/skills/journey-write/SKILL.md: sha256:a82aca760281612ae40cabee990d8b1869dd2a1f533c5de70c3c9801f008bc2f
-    .claude/agents/journey-scribe.md: sha256:70da1cecee16bec516853a9f7c6d4cc7903b32cb4e9558ad39b6c2a02ca5f58e
-    .claude/agents/journey-validator.md: sha256:ac4ebb44a511fabe1aa59d4060b2c13f193d4346c06ebe8af14e9d3454c66c07
+    .claude/agents/journey-scribe.md: sha256:fd20cc23ffea08519512f6aa404abf888882408c4c0c7c2133a31ca99e27b6b9
+    .claude/agents/journey-validator.md: sha256:1cff9f9d8cdc9f27655a0db27ccc2dacf55307bc135bb9cb71eb06e63dc5d827
     .claude/skills/journey-campaign/SKILL.md: sha256:4cc7f7bacf1a22adbf6c5d25def41ea56d10a87daae19f03a054bf8f7ffb1f76
     .claude/skills/journey-consolidate/SKILL.md: sha256:3bca6aa058cc39ccd7fe9d0082c422490914789c7568bcba5d98db26cce39494
     .claude/skills/journey-init/SKILL.md: sha256:f5714db899199edb33d2128a410abfaf21c9dbef37a8e6364568bf4aa14607f3
@@ -616,12 +616,12 @@ dependencies:
     .claude/skills/journey-write/SKILL.md: sha256:a82aca760281612ae40cabee990d8b1869dd2a1f533c5de70c3c9801f008bc2f
     .codex/agents/journey-scribe.toml: sha256:fdb8d720900d67aa91edd4d9cc076bc3a5b2a851c9fe4fbdea6d36d98db3ec52
     .codex/agents/journey-validator.toml: sha256:3ba8746661c250a471c08ebbad6a241af50eceda7d5fd04e80e5bdaee8d64706
-  content_hash: sha256:7677396e968d93d831c8918cbc5a1ec108af54d90a5445d8114d45a41ec2fc4e
+  content_hash: sha256:50e13e8f558f9b7970283fb56e7a187968ba704f3355fa917247681dc4281e44
   declared_license: Apache-2.0
 - repo_url: wshobson/agents
   name: database-design
   host: github.com
-  resolved_commit: b6af3711058190e4b5c5274b9758498fe626ec5a
+  resolved_commit: c4b82b0ad771190355eb8e204b1329732a18449a
   version: 1.2.1
   virtual_path: plugins/database-design
   is_virtual: true
@@ -1228,20 +1228,20 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agentic-maintenance
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
-  version: 4.1.0
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
+  version: 4.2.0
   virtual_path: packages/agentic-maintenance
   is_virtual: true
   depth: 2
   resolved_by: srobroek/agentic-packages
   package_type: marketplace_plugin
-  content_hash: sha256:180e35ba7e046bfa926b062132996e553c9fe04ab4195369d5571ba9e348deac
+  content_hash: sha256:3a86701c2d74ad53ddd9d29ec0cb515466811453d25f165836499e5dc4a4f02d
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: code-intelligence
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
-  version: 6.1.0
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
+  version: 6.2.0
   virtual_path: packages/code-intelligence
   is_virtual: true
   depth: 2
@@ -1253,12 +1253,12 @@ dependencies:
   deployed_file_hashes:
     .claude/hooks/code-intelligence/scripts/subagent-context-inject.sh: sha256:28a37eaae5c2a19d3b8f666f3c7876e3dee7b4630718dcf66e19e8ba0493850d
     .codex/hooks/code-intelligence/scripts/subagent-context-inject.sh: sha256:28a37eaae5c2a19d3b8f666f3c7876e3dee7b4630718dcf66e19e8ba0493850d
-  content_hash: sha256:1bf2ab2a003d8e42ba2e9c73a6fff30a7e2a5552ed34af6c96bbc0d327e9f65c
+  content_hash: sha256:48dee59128bec4764f86a20bebeb34f99fe3585c863532377fd5bce9c3e351e1
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-steering-rust
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/language-steering-rust
   is_virtual: true
@@ -1270,7 +1270,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-steering-typescript
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/language-steering-typescript
   is_virtual: true
@@ -1282,7 +1282,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-rust
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 0.3.0
   virtual_path: packages/lsp-rust
   is_virtual: true
@@ -1294,7 +1294,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-shell
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 0.3.0
   virtual_path: packages/lsp-shell
   is_virtual: true
@@ -1306,7 +1306,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-typescript
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 0.3.0
   virtual_path: packages/lsp-typescript
   is_virtual: true
@@ -1318,8 +1318,8 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: playwright
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
-  version: 3.1.0
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
+  version: 3.2.0
   virtual_path: packages/playwright
   is_virtual: true
   depth: 2
@@ -1333,24 +1333,24 @@ dependencies:
   deployed_file_hashes:
     .agents/skills/playwright/SKILL.md: sha256:f719e69d6373869c5b8c975b8301e42d808ecc98cbf5b60cae907b3be61c0bcc
     .claude/skills/playwright/SKILL.md: sha256:f719e69d6373869c5b8c975b8301e42d808ecc98cbf5b60cae907b3be61c0bcc
-  content_hash: sha256:576d0ebe832f2322775ab9a8f8e5d7b71afd4623f3df8993f22608b681d8d7c4
+  content_hash: sha256:41c35ed2c0e95c82cf111129b98ac84d4dfad2eac231e7a0d00f603479b5d504
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: project-lifecycle
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
-  version: 3.2.0
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
+  version: 3.3.0
   virtual_path: packages/project-lifecycle
   is_virtual: true
   depth: 2
   resolved_by: srobroek/agentic-packages
   package_type: marketplace_plugin
-  content_hash: sha256:aa6db78c735c25f08773b08c5e2da6b882bcf4dd4d9250ee5fca1242eaf2b2ae
+  content_hash: sha256:02aad9308d9e154d8c0a2db79c57731e1e2fbc3c8fb0c0b260e5430e3e0b9af1
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: resume-session
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/resume-session
   is_virtual: true
@@ -1390,7 +1390,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: rust-quality
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/rust-quality
   is_virtual: true
@@ -1422,7 +1422,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-delivery
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 1.1.0
   virtual_path: packages/steering-delivery
   is_virtual: true
@@ -1438,7 +1438,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-frontend
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/steering-frontend
   is_virtual: true
@@ -1456,7 +1456,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: typescript-quality
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/typescript-quality
   is_virtual: true
@@ -2036,7 +2036,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agent-coder
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 4.1.0
   virtual_path: packages/agent-coder
   is_virtual: true
@@ -2064,7 +2064,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agent-pr-reviewer
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/agent-pr-reviewer
   is_virtual: true
@@ -2080,7 +2080,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: audit-steering
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/audit-steering
   is_virtual: true
@@ -2116,7 +2116,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: catchup
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/catchup
   is_virtual: true
@@ -2140,7 +2140,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: codebase-memory
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/codebase-memory
   is_virtual: true
@@ -2176,7 +2176,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: handover
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/handover
   is_virtual: true
@@ -2208,7 +2208,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-git-workflow
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.2.0
   virtual_path: packages/steering-git-workflow
   is_virtual: true
@@ -2224,7 +2224,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-project-structure
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 1.1.0
   virtual_path: packages/steering-project-structure
   is_virtual: true
@@ -2240,7 +2240,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: verify
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/verify
   is_virtual: true
@@ -2264,7 +2264,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: web-fetch
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 2.1.0
   virtual_path: packages/web-fetch
   is_virtual: true
@@ -2288,7 +2288,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: write-agentic
   host: github.com
-  resolved_commit: bb7a3781e7c628f69adc04e0fc0dcc765fc90a4b
+  resolved_commit: 516509df50b1a0e2c10be6ccef0154bc5d913e54
   version: 3.2.0
   virtual_path: packages/write-agentic
   is_virtual: true
@@ -5687,7 +5687,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/user-journeys
   active_owner: srobroek/agentic-packages/packages/user-journeys
-  content_hash: sha256:70da1cecee16bec516853a9f7c6d4cc7903b32cb4e9558ad39b6c2a02ca5f58e
+  content_hash: sha256:fd20cc23ffea08519512f6aa404abf888882408c4c0c7c2133a31ca99e27b6b9
 - kind: project-relative
   target: claude
   value: .claude/agents/journey-validator.md
@@ -5696,7 +5696,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/user-journeys
   active_owner: srobroek/agentic-packages/packages/user-journeys
-  content_hash: sha256:ac4ebb44a511fabe1aa59d4060b2c13f193d4346c06ebe8af14e9d3454c66c07
+  content_hash: sha256:1cff9f9d8cdc9f27655a0db27ccc2dacf55307bc135bb9cb71eb06e63dc5d827
 - kind: project-relative
   target: claude
   value: .claude/agents/ledger-scribe.md
@@ -5840,7 +5840,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:39d1cae7c1d59b461ce728d3cfbf39a64b492648f1082ebc45caaba5d65df971
+  content_hash: sha256:13ea0945404942e718bae8c3eefe451eb877f2118335706f2cdf6690fc918924
 - kind: project-relative
   target: claude
   value: .claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh
@@ -5948,7 +5948,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:9debbcaa2501d016cd6ce4dd5c9c479e8df55cc8cfdde3bee075eb8b021b52b6
+  content_hash: sha256:6ab1d509a00f8c8b8902537dfb0ceabd483870977596609b54da2a7a1350f25c
 - kind: project-relative
   target: claude
   value: .claude/hooks/speckit/scripts/speckit-stop-gate.sh
@@ -9422,7 +9422,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:c1f7f82f9b4ec1758fff271608c4a39afc09a8782b7cc0f0dc2a45874a7d9e0e
+  content_hash: sha256:3778a273960ead9c6e89f678b5d3abcfe81fd76d83a3f324c0a812ed4801d07a
 - kind: project-relative
   target: codex
   value: .codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh
@@ -9530,7 +9530,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:9debbcaa2501d016cd6ce4dd5c9c479e8df55cc8cfdde3bee075eb8b021b52b6
+  content_hash: sha256:6ab1d509a00f8c8b8902537dfb0ceabd483870977596609b54da2a7a1350f25c
 - kind: project-relative
   target: codex
   value: .codex/hooks/speckit/scripts/speckit-stop-gate.sh

@@ -82,3 +82,10 @@ Repo-specific gotchas for future `/design-sync` runs. One bullet per quirk.
   deleted or merged away, the next build hits a missing source. `ConfirmOverlay` (merged
   into `Modal`) and the `ProjectStatusTag` alias were both retired this way. Re-check the
   map against `src/ui` + `src/components` whenever a component is removed or renamed.
+- **Palette cards are generated — never hand-edit them.** Run
+  `node .design-sync/generate-palette-cards.mjs` to rebuild the whole set from
+  `tokens.css` (per-theme values) and the `THEMES` registry (id/label/mode). The cards were
+  hand-authored once and drifted badly: no destructive family, a pre-correction Warm Clay
+  red, and only four of six themes. The generator exits 1 if the card count and theme count
+  disagree, so a theme added to the registry but not to `tokens.css` fails loudly instead of
+  producing a quietly short set.

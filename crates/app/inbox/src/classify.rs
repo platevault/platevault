@@ -1833,15 +1833,41 @@ mod tests {
     ) {
         let pool = db.pool();
         // Insert registered_sources row (FK required by inbox_source_groups).
+        //
+        // This INSERT must succeed: any query under test that JOINs
+        // `registered_sources` measures an empty table otherwise, and
+        // assertions of *absence* ("no rows", "item hidden") then pass
+        // vacuously — for the wrong reason, and they would keep passing if the
+        // production query broke (#1252).
+        //
+        // The old statement violated the 0006 schema four ways at once
+        // (missing NOT NULL `created_at` and `created_via`, `scan_depth` given
+        // `1` against `CHECK (IN ('recursive','single'))`, and a non-existent
+        // `organization_state` column), so it had never once inserted a row.
+        //
+        // What HID that was `INSERT OR IGNORE`, not the `.ok()` it was paired
+        // with: `OR IGNORE` makes SQLite swallow the constraint violation
+        // itself, so no error ever reaches sqlx and an `.expect()` here would
+        // have been equally silent. Verified both ways — `OR IGNORE` with
+        // `.expect()` still passes; the form below panics with
+        // `NOT NULL constraint failed: registered_sources.created_at`.
+        //
+        // So idempotency is expressed as a bare `ON CONFLICT DO NOTHING`,
+        // which suppresses only genuine uniqueness conflicts (the PK and
+        // `UNIQUE(kind, path)`, both expected when this helper runs more than
+        // once per test) while letting NOT NULL and CHECK violations surface.
+        // That, not the `.expect()`, is what keeps this from drifting again.
         sqlx::query(
-            "INSERT OR IGNORE INTO registered_sources \
-             (id, path, kind, scan_depth, organization_state) \
-             VALUES (?, '/test/root', 'inbox', 1, 'unorganized')",
+            "INSERT INTO registered_sources \
+             (id, path, kind, scan_depth, created_at, created_via) \
+             VALUES (?, '/test/root', 'inbox', 'recursive', \
+             '2026-01-01T00:00:00Z', 'first_run') \
+             ON CONFLICT DO NOTHING",
         )
         .bind(root_id)
         .execute(pool)
         .await
-        .ok();
+        .expect("test fixture: registered_sources INSERT must succeed");
 
         // Insert source group.
         sqlx::query(
@@ -1872,6 +1898,34 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+    }
+
+    /// #1252: guard the fixture's own precondition.
+    ///
+    /// `insert_source_group_with_item` seeds `registered_sources` because
+    /// queries under test JOIN it. That INSERT silently inserted nothing for
+    /// its whole existence, so every such JOIN was measuring an empty table
+    /// and any assertion of absence passed vacuously.
+    ///
+    /// Asserting the row is present — rather than merely that the statement
+    /// did not error — is the part that survives future schema drift, since
+    /// a conflict-suppressing INSERT can succeed while writing nothing.
+    #[tokio::test]
+    async fn fixture_actually_seeds_registered_sources_1252() {
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-fixture", "item-fixture", "root-fixture", "a/b")
+            .await;
+
+        let (count, path): (i64, String) = sqlx::query_as(
+            "SELECT COUNT(*), COALESCE(MAX(path), '') FROM registered_sources WHERE id = ?",
+        )
+        .bind("root-fixture")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+
+        assert_eq!(count, 1, "the fixture must actually create its registered_sources row");
+        assert_eq!(path, "/test/root", "and it must be the row the helper claims to insert");
     }
 
     #[tokio::test]
