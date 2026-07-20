@@ -31,7 +31,7 @@
  * `VITE_USE_MOCKS`, independent of both.
  */
 
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page } from '@playwright/test';
 
 /**
  * Install the minimal `window.__TAURI_INTERNALS__.transformCallback` the
@@ -42,11 +42,13 @@ export async function installTauriChannelPolyfill(page: Page): Promise<void> {
   await page.addInitScript(() => {
     // Preserve any pre-existing internals object; only supply the one method.
     const w = window as unknown as {
-      __TAURI_INTERNALS__?: { transformCallback?: (cb: unknown, once?: boolean) => number };
+      __TAURI_INTERNALS__?: {
+        transformCallback?: (cb: unknown, once?: boolean) => number;
+      };
     };
     let nextCallbackId = 1;
     const existing = w.__TAURI_INTERNALS__ ?? {};
-    if (typeof existing.transformCallback !== "function") {
+    if (typeof existing.transformCallback !== 'function') {
       existing.transformCallback = () => nextCallbackId++;
     }
     w.__TAURI_INTERNALS__ = existing;
@@ -72,7 +74,7 @@ export function seedSetupComplete(
 ): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      "alm-preferences",
+      'alm-preferences',
       JSON.stringify({ setupCompleted: true }),
     );
   });
@@ -105,7 +107,7 @@ export function seedOnboarding(
   },
 ): void {
   page.addInitScript((s) => {
-    const KEY = "alm-e2e-onboarding";
+    const KEY = 'alm-e2e-onboarding';
     const raw = window.localStorage.getItem(KEY);
     const cur = (raw ? JSON.parse(raw) : {}) as {
       flags?: Record<string, unknown>;
@@ -131,7 +133,7 @@ export function seedOnboarding(
 export function seedOnboardingUnmet(page: Page, itemIds: string[]): void {
   page.addInitScript((ids) => {
     window.localStorage.setItem(
-      "alm-e2e-onboarding-unmet",
+      'alm-e2e-onboarding-unmet',
       JSON.stringify(ids),
     );
   }, itemIds);
@@ -140,7 +142,7 @@ export function seedOnboardingUnmet(page: Page, itemIds: string[]): void {
 /** Make the mock library report zero sessions (`inventory.list` → no sources). */
 export function seedEmptyInventory(page: Page): void {
   page.addInitScript(() => {
-    window.localStorage.setItem("alm-e2e-empty-inventory", "true");
+    window.localStorage.setItem('alm-e2e-empty-inventory', 'true');
   });
 }
 
@@ -159,7 +161,7 @@ export async function disableOnboarding(page: Page): Promise<void> {
   // Init script: present before the app boots on the next (and every future)
   // navigation — the deterministic pre-boot path (mirrors seedSetupComplete).
   await page.addInitScript(() => {
-    window.localStorage.setItem("alm-onboarding-suppressed", "true");
+    window.localStorage.setItem('alm-onboarding-suppressed', 'true');
   });
   // Also set it on the already-loaded origin: the existing call sites invoke
   // this after `page.goto`, and the onboarding store reads the flag live
@@ -168,7 +170,7 @@ export async function disableOnboarding(page: Page): Promise<void> {
   await page
     .evaluate(() => {
       try {
-        window.localStorage.setItem("alm-onboarding-suppressed", "true");
+        window.localStorage.setItem('alm-onboarding-suppressed', 'true');
       } catch {
         /* opaque origin (about:blank) — the init script covers this case */
       }
@@ -191,14 +193,14 @@ export async function disableOnboarding(page: Page): Promise<void> {
  * since the walk's first stop navigates to `/inbox` before it is dismissed.
  */
 export async function dismissOrientationWalk(page: Page): Promise<void> {
-  const overlay = page.locator(".react-joyride__overlay");
+  const overlay = page.locator('.react-joyride__overlay');
   try {
-    await overlay.waitFor({ state: "visible", timeout: 6_000 });
+    await overlay.waitFor({ state: 'visible', timeout: 6_000 });
   } catch {
     return; // the walk never launched (e.g. onboarding suppressed)
   }
-  await page.keyboard.press("Escape");
-  await overlay.waitFor({ state: "detached", timeout: 6_000 }).catch(() => {
+  await page.keyboard.press('Escape');
+  await overlay.waitFor({ state: 'detached', timeout: 6_000 }).catch(() => {
     /* best-effort: proceed even if teardown lags */
   });
 }
@@ -216,7 +218,7 @@ export async function landOnMockRoute(page: Page, hash: string): Promise<void> {
   seedSetupComplete(page);
   await page.goto(hash);
   await dismissOrientationWalk(page);
-  const route = hash.replace(/^\/#/, "");
+  const route = hash.replace(/^\/#/, '');
   if (!page.url().includes(route)) {
     await page.goto(hash);
     await dismissOrientationWalk(page);
@@ -224,9 +226,9 @@ export async function landOnMockRoute(page: Page, hash: string): Promise<void> {
 }
 
 /** Sidebar trigger that opens the Getting-started flyout. */
-export const ONB_RING = ".pv-onb-ring";
+export const ONB_RING = '.pv-onb-ring';
 /** The checklist itself — only in the DOM while the flyout is open. */
-export const ONB_SECTION = ".pv-onb-checklist";
+export const ONB_SECTION = '.pv-onb-checklist';
 
 /**
  * Open the Getting-started flyout and wait for the checklist inside it.
@@ -245,7 +247,7 @@ export const ONB_SECTION = ".pv-onb-checklist";
 export async function openChecklist(page: Page): Promise<void> {
   const ring = page.locator(ONB_RING);
   await expect(ring).toBeVisible({ timeout: 8_000 });
-  if ((await ring.getAttribute("aria-expanded")) !== "true") {
+  if ((await ring.getAttribute('aria-expanded')) !== 'true') {
     await ring.click();
   }
   await expect(page.locator(ONB_SECTION)).toBeVisible({ timeout: 8_000 });

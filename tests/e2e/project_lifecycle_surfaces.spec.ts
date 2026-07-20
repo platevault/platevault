@@ -39,7 +39,12 @@
  *   projects_source_remove → returns `lifecycle.last_confirmed_source` unless
  *                            confirmLastSource is set, exercising the guard.
  */
-import { test, expect, seedSetupComplete, disableOnboarding } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
 
 test.beforeEach(async ({ page }) => {
   await disableOnboarding(page);

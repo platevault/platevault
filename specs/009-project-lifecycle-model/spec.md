@@ -73,6 +73,10 @@ As a user, I want the project side panel and opened project view to show structu
 - **FR-001**: Project lifecycle state MUST be a domain field, not a decorative badge-only UI treatment.
 - **FR-002**: Project rows MUST NOT use an ambiguous "Plan" column unless it is explicitly a cleanup/archive plan count or link.
 - **FR-003**: Project actions MUST be phase-aware and use the shared primary action plus More menu pattern.
+  *(Reconciliation note, 2026-07-19, issue #764: `ProjectDetail.tsx` has no
+  "More menu"/overflow pattern — this shape was never rebuilt after later UI
+  passes; `specs/SPEC_STATUS.md`'s "21/21" complete framing for this spec
+  overstates given this gap.)*
 - **FR-004**: The project surface MUST NOT show unexplained top action strips such as Candidate, Source mapping, Prepared, or Processing when those states are already represented by project data.
 - **FR-005**: Project details MUST list sources directly.
 - **FR-006**: Clicking a source in a project MUST navigate to or open the linked Inventory item.

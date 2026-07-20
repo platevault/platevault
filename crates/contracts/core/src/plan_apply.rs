@@ -20,7 +20,9 @@ use specta::Type;
 #[serde(rename_all = "camelCase")]
 pub struct PlanApplyRequest {
     pub plan_id: String,
-    /// Approval token from `plans.approve` (HMAC over plan id + content hash).
+    /// Approval token from `plans.approve` — v1 is an opaque
+    /// `tok-{plan_id}-{uuid_v4}` string (no cryptographic binding to plan
+    /// content; see `app_core::plans::approve_plan`).
     pub approval_token: String,
 }
 

@@ -548,11 +548,7 @@ function ChecklistItemRow({
         data-item-id={item.itemId}
         data-completing="true"
       >
-        <Check
-          size={14}
-          aria-hidden
-          className="pv-onb-checklist__check-icon"
-        />
+        <Check size={14} aria-hidden className="pv-onb-checklist__check-icon" />
         <span className="pv-onb-checklist__item-main">
           <span className="pv-onb-checklist__item-label">{label}</span>
         </span>

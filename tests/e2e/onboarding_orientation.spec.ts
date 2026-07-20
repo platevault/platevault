@@ -24,21 +24,21 @@
  * round-trip (owned by consolidation).
  */
 
-import { test, expect, seedSetupComplete } from "./support/harness";
-import type { Page } from "@playwright/test";
+import { test, expect, seedSetupComplete } from './support/harness';
+import type { Page } from '@playwright/test';
 
-const TOOLTIP = ".pv-onboarding-tooltip";
-const PRIMARY = ".pv-onboarding-tooltip__primary";
-const BACK = ".pv-onboarding-tooltip__back";
-const SKIP = ".pv-onboarding-tooltip__skip";
+const TOOLTIP = '.pv-onboarding-tooltip';
+const PRIMARY = '.pv-onboarding-tooltip__primary';
+const BACK = '.pv-onboarding-tooltip__back';
+const SKIP = '.pv-onboarding-tooltip__skip';
 
 const STOP_TITLES = [
-  "Start in the Inbox",
-  "See your sessions",
-  "Reuse calibration",
-  "Resolve your targets",
-  "Build a project",
-  "Your getting-started checklist",
+  'Start in the Inbox',
+  'See your sessions',
+  'Reuse calibration',
+  'Resolve your targets',
+  'Build a project',
+  'Your getting-started checklist',
 ];
 
 // The real route each stop must navigate to (FR-002); the final section stop
@@ -62,14 +62,14 @@ async function injectSectionAnchor(page: Page): Promise<void> {
     const add = () => {
       const sel = '[data-guide-anchor="onboarding.getting-started"]';
       if (document.querySelector(sel)) return;
-      const el = document.createElement("div");
-      el.setAttribute("data-guide-anchor", "onboarding.getting-started");
+      const el = document.createElement('div');
+      el.setAttribute('data-guide-anchor', 'onboarding.getting-started');
       el.style.cssText =
-        "position:fixed;left:8px;bottom:80px;width:180px;height:40px;";
+        'position:fixed;left:8px;bottom:80px;width:180px;height:40px;';
       document.body.appendChild(el);
     };
     if (document.body) add();
-    else document.addEventListener("DOMContentLoaded", add);
+    else document.addEventListener('DOMContentLoaded', add);
   });
 }
 
@@ -83,7 +83,7 @@ async function expectStop(page: Page, index: number): Promise<void> {
 /** VC-002: the walk never introduces modal-dialog ARIA. */
 async function expectNoModalAria(page: Page): Promise<void> {
   await expect(page.locator('[role="alertdialog"]')).toHaveCount(0);
-  await expect(page.locator("[aria-modal]")).toHaveCount(0);
+  await expect(page.locator('[aria-modal]')).toHaveCount(0);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -94,22 +94,22 @@ test.beforeEach(async ({ page }) => {
   await injectSectionAnchor(page);
 });
 
-test("auto-runs on first launch and spotlights the first stop", async ({
+test('auto-runs on first launch and spotlights the first stop', async ({
   page,
 }) => {
-  await page.goto("/#/inbox");
+  await page.goto('/#/inbox');
   await expectStop(page, 0);
   // FR-002 whole-page spotlight: the full-page dim overlay renders (the
   // `center`-placement guard — an anchored placement fails to render on the
   // viewport-filling target).
-  await expect(page.locator(".react-joyride__overlay")).toBeVisible();
+  await expect(page.locator('.react-joyride__overlay')).toBeVisible();
   await expectNoModalAria(page);
 });
 
-test("traverses all six stops with Next/Back and finishes", async ({
+test('traverses all six stops with Next/Back and finishes', async ({
   page,
 }) => {
-  await page.goto("/#/inbox");
+  await page.goto('/#/inbox');
 
   for (let i = 0; i < STOP_TITLES.length; i++) {
     await expectStop(page, i);
@@ -129,59 +129,59 @@ test("traverses all six stops with Next/Back and finishes", async ({
   await expect(page.locator(TOOLTIP)).toBeHidden();
 });
 
-test("Skip closes the walk immediately", async ({ page }) => {
-  await page.goto("/#/inbox");
+test('Skip closes the walk immediately', async ({ page }) => {
+  await page.goto('/#/inbox');
   await expectStop(page, 0);
   await page.locator(SKIP).click();
   await expect(page.locator(TOOLTIP)).toBeHidden();
 });
 
-test("Escape closes the walk immediately", async ({ page }) => {
-  await page.goto("/#/inbox");
+test('Escape closes the walk immediately', async ({ page }) => {
+  await page.goto('/#/inbox');
   await expectStop(page, 0);
-  await page.keyboard.press("Escape");
+  await page.keyboard.press('Escape');
   await expect(page.locator(TOOLTIP)).toBeHidden();
 });
 
-test("does not auto-run a second time within the session", async ({ page }) => {
-  await page.goto("/#/inbox");
+test('does not auto-run a second time within the session', async ({ page }) => {
+  await page.goto('/#/inbox');
   await expectStop(page, 0);
   await page.locator(SKIP).click();
   await expect(page.locator(TOOLTIP)).toBeHidden();
 
   // Client-side navigation away and back must not re-trigger the walk: the
   // backend `orientationDone` flag (flipped by the Skip) gates auto-run.
-  await page.goto("/#/sessions");
-  await page.goto("/#/inbox");
+  await page.goto('/#/sessions');
+  await page.goto('/#/inbox');
   await expect(page.locator(TOOLTIP)).toBeHidden();
 });
 
-test("replays from Settings → Advanced, ignoring the done flag", async ({
+test('replays from Settings → Advanced, ignoring the done flag', async ({
   page,
 }) => {
-  await page.goto("/#/inbox");
+  await page.goto('/#/inbox');
   await expectStop(page, 0);
   await page.locator(SKIP).click();
   await expect(page.locator(TOOLTIP)).toBeHidden();
 
-  await page.goto("/#/settings/advanced");
-  await page.getByTestId("onboarding-replay-btn").click();
+  await page.goto('/#/settings/advanced');
+  await page.getByTestId('onboarding-replay-btn').click();
 
   // Replay restarts from the first stop even though orientation is done.
   await expectStop(page, 0);
   await expectNoModalAria(page);
 });
 
-test("does not auto-run after a restart (reload)", async ({ page }) => {
+test('does not auto-run after a restart (reload)', async ({ page }) => {
   // The mock persists `orientationDone` to localStorage, so Skip's
   // `orientation.complete` survives a full page reload (app restart) and the
   // walk must not auto-run again.
-  await page.goto("/#/inbox");
+  await page.goto('/#/inbox');
   await expectStop(page, 0);
   await page.locator(SKIP).click();
   await expect(page.locator(TOOLTIP)).toBeHidden();
 
   await page.reload();
-  await page.goto("/#/inbox");
+  await page.goto('/#/inbox');
   await expect(page.locator(TOOLTIP)).toBeHidden();
 });

@@ -65,7 +65,7 @@ keys are dropped (see notes).
 |---|---|---|---|---|---|
 | `current_library_id` | `String?` (uuid) | `null` | No | Currently-open library id; drives `?lib=` URL injection (spec 020 R-Lib-V1). | No |
 | `devMode` | `bool` | `false` | No | Runtime developer-mode toggle. Only meaningful in `dev-tools` builds; release gating enforced via `#[cfg(not(feature = "dev-tools"))]` in `descriptors.rs` (T036 done). | No |
-| `plans_list_default_age_cutoff_days` | `f64` | `90` | No | UI hides terminal plans older than this; `0` = show all (spec 017 R-Ret-1). | Yes |
+| ~~`plans_list_default_age_cutoff_days`~~ | — | — | — | **DROPPED** (2026-07-19, issue #624) — never had a UI consumer (no Plans list page ever shipped); removed as vestigial, re-addable if a Plans page is built. | — |
 | `rememberFollowLogs` | `bool` | `false` | No | Persists log viewer "follow tail" state across restarts (spec 019 E-019-3). | Yes |
 | ~~`target_lookup.active_catalogs`~~ | — | — | — | **DROPPED** — spec 014 catalog manifest superseded by spec 035 (SIMBAD). | — |
 | `calibration_dark_temp_tolerance` | `f64` (°C) | `2.0` | No | Dark frame temperature matching tolerance (spec 007 A5). | No |

@@ -27,96 +27,104 @@
  *  test below verbatim.
  */
 
-import { test, expect, landOnMockRoute, openChecklist, ONB_SECTION as SECTION, ONB_RING as RING } from "./support/harness";
-import type { Page } from "@playwright/test";
-
+import {
+  test,
+  expect,
+  landOnMockRoute,
+  openChecklist,
+  ONB_SECTION as SECTION,
+  ONB_RING as RING,
+} from './support/harness';
+import type { Page } from '@playwright/test';
 
 /** Open the checklist flyout and wait for its body (no-op when already open). */
-test.describe("onboarding completion choreography (spec 056 US3)", () => {
-	test("renders a polite aria-live region for per-tick announcements (T024)", async ({
-		page,
-	}) => {
-		await landOnMockRoute(page, "/#/sessions");
-		await openChecklist(page);
+test.describe('onboarding completion choreography (spec 056 US3)', () => {
+  test('renders a polite aria-live region for per-tick announcements (T024)', async ({
+    page,
+  }) => {
+    await landOnMockRoute(page, '/#/sessions');
+    await openChecklist(page);
 
-		const announcer = page.locator(
-			`${SECTION} [role="status"][aria-live="polite"]`,
-		);
-		await expect(announcer).toHaveCount(1);
-	});
+    const announcer = page.locator(
+      `${SECTION} [role="status"][aria-live="polite"]`,
+    );
+    await expect(announcer).toHaveCount(1);
+  });
 
-	test("manual check-off plays the in-place choreography then moves the item to the completed area", async ({
-		page,
-	}) => {
-		await landOnMockRoute(page, "/#/sessions");
-		await openChecklist(page);
+  test('manual check-off plays the in-place choreography then moves the item to the completed area', async ({
+    page,
+  }) => {
+    await landOnMockRoute(page, '/#/sessions');
+    await openChecklist(page);
 
-		const row = page.locator('[data-item-id="sessions.review_first"]');
-		await page.getByRole("checkbox", { name: "Review a session" }).click();
+    const row = page.locator('[data-item-id="sessions.review_first"]');
+    await page.getByRole('checkbox', { name: 'Review a session' }).click();
 
-		// In place first: the row carries the completing marker while it animates.
-		await expect(row).toHaveAttribute("data-completing", "true");
-		// Then it settles into the greyed, checked completed area of its group.
-		await expect(
-			page.locator(
-				`.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
-			),
-		).toBeVisible();
-	});
+    // In place first: the row carries the completing marker while it animates.
+    await expect(row).toHaveAttribute('data-completing', 'true');
+    // Then it settles into the greyed, checked completed area of its group.
+    await expect(
+      page.locator(
+        `.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+      ),
+    ).toBeVisible();
+  });
 
-	test("a completed item can be un-checked from the completed area", async ({
-		page,
-	}) => {
-		await landOnMockRoute(page, "/#/sessions");
-		await openChecklist(page);
+  test('a completed item can be un-checked from the completed area', async ({
+    page,
+  }) => {
+    await landOnMockRoute(page, '/#/sessions');
+    await openChecklist(page);
 
-		const done = page.locator(
-			`.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
-		);
+    const done = page.locator(
+      `.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+    );
 
-		await page.getByRole("checkbox", { name: "Review a session" }).click();
-		await expect(done).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Review a session' }).click();
+    await expect(done).toBeVisible();
 
-		// The completed row is struck through and greyed rather than hidden
-		// precisely so it can be taken back — its tick is a live control, not
-		// decoration. A click landing on a crossed-out row and doing nothing
-		// would read as broken.
-		await done.getByRole("checkbox").click();
+    // The completed row is struck through and greyed rather than hidden
+    // precisely so it can be taken back — its tick is a live control, not
+    // decoration. A click landing on a crossed-out row and doing nothing
+    // would read as broken.
+    await done.getByRole('checkbox').click();
 
-		await expect(done).toHaveCount(0);
-		// Back among the group's open items, checkable again.
-		await expect(
-			page.getByRole("checkbox", { name: "Review a session" }),
-		).toBeVisible();
-	});
+    await expect(done).toHaveCount(0);
+    // Back among the group's open items, checkable again.
+    await expect(
+      page.getByRole('checkbox', { name: 'Review a session' }),
+    ).toBeVisible();
+  });
 
-	test.describe("reduced motion parity", () => {
-		test.use({ reducedMotion: "reduce" });
+  test.describe('reduced motion parity', () => {
+    test.use({ reducedMotion: 'reduce' });
 
-		test("completion applies the final state instantly with no animation (FR-020)", async ({
-			page,
-		}) => {
-			await landOnMockRoute(page, "/#/sessions");
-			await openChecklist(page);
+    test('completion applies the final state instantly with no animation (FR-020)', async ({
+      page,
+    }) => {
+      await landOnMockRoute(page, '/#/sessions');
+      await openChecklist(page);
 
-			await page.getByRole("checkbox", { name: "Review a session" }).click();
+      await page.getByRole('checkbox', { name: 'Review a session' }).click();
 
-			// No transient completing marker under reduced motion …
-			await expect(page.locator('[data-completing="true"]')).toHaveCount(0);
-			// … the item is in its final completed-area state immediately.
-			await expect(
-				page.locator(
-					`.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
-				),
-			).toBeVisible();
-		});
-	});
+      // No transient completing marker under reduced motion …
+      await expect(page.locator('[data-completing="true"]')).toHaveCount(0);
+      // … the item is in its final completed-area state immediately.
+      await expect(
+        page.locator(
+          `.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+        ),
+      ).toBeVisible();
+    });
+  });
 
-	// eslint-disable-next-line no-empty-pattern
-	test.skip("automatic tick pulses the progress line / ring (VC-002)", async ({}) => {
-		// NOT mock-coverable: an `auto_checked` tick (`source === 'event'`) is only
-		// ever produced by the real backend bus subscriber (research R5). The mock
-		// cannot fabricate one, so the progress-line / progress-ring pulse on a
-		// side-effect tick is covered by the backend / Layer-2 lane, not here.
-	});
+  // No fixtures are destructured: an empty pattern would trip both eslint's
+  // no-empty-pattern and biome's noEmptyPattern, and the eslint-disable comment
+  // cannot suppress the biome rule.
+  test.skip('automatic tick pulses the progress line / ring (VC-002)', async () => {
+    // NOT mock-coverable: an `auto_checked` tick (`source === 'event'`) is only
+    // ever produced by the real backend bus subscriber (research R5). The mock
+    // cannot fabricate one, so the progress-line / progress-ring pulse on a
+    // side-effect tick is covered by the backend / Layer-2 lane, not here.
+  });
 });

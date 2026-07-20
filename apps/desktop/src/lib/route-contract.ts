@@ -10,14 +10,13 @@
 // Rules (FR-005): unknown keys are dropped; invalid values of known keys coerce
 // to `undefined` (and are therefore omitted from the URL on the next write).
 
-import type { CalibrationKind, ProjectState } from '@/bindings';
+import type { ProjectState } from '@/bindings';
 
 // --- Local enums not present in bindings (UI-only filter/group vocab) ---
 
 export type FrameType = 'light' | 'dark' | 'flat' | 'bias';
 /** Inventory frame filter — includes 'mixed' sentinel (spec 006 FR-002). */
 export type InventoryFrameFilter = 'light' | 'dark' | 'flat' | 'bias' | 'mixed';
-export type SessionsGroup = 'none' | 'target' | 'month';
 export type InboxGroup = 'none' | 'type' | 'date';
 
 // --- Runtime allow-lists (typed against bindings so they cannot drift) ---
@@ -32,14 +31,6 @@ export const PROJECT_STATES = [
   'blocked',
 ] as const satisfies readonly ProjectState[];
 
-export const CALIBRATION_KINDS = [
-  'dark',
-  'flat',
-  'bias',
-  'dark_flat',
-  'bad_pixel_map',
-] as const satisfies readonly CalibrationKind[];
-
 export const FRAME_TYPES = [
   'light',
   'dark',
@@ -53,11 +44,6 @@ export const INVENTORY_FRAME_FILTERS = [
   'bias',
   'mixed',
 ] as const satisfies readonly InventoryFrameFilter[];
-export const SESSIONS_GROUPS = [
-  'none',
-  'target',
-  'month',
-] as const satisfies readonly SessionsGroup[];
 export const INBOX_GROUPS = [
   'none',
   'type',

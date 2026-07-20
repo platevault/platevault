@@ -105,7 +105,7 @@ As a user, I want the log to keep a bounded buffer in the UI and be exportable t
 - **FR-014**: When `logLevel != "debug"` (spec 018 setting), diagnostic entries MUST be hidden in the viewer and the diagnostics filter chip MUST be locked off (A3).
 - **FR-015**: When the viewer's cursor predates retained history (vacuum gap), the stream response MUST include `truncated: true` and the UI MUST render an inline "History gap" marker at the top of the log list (A4).
 - **FR-016**: `log.stream` requests MUST support an optional `source_filter: string[]` parameter to restrict entries to one or more source values (R-SourceFilter).
-- **FR-017**: Each `LogEntry` MUST carry a `contract_version` field set to `"1"` (H1).
+- **FR-017**: Each `LogEntry` MUST carry a `contract_version` field, currently `"2.0.0"` (H1). *(Reconciliation note, 2026-07-19, issue #764: originally specified as `"1"`; code and the JSON contract have agreed on `"2.0.0"` — `LOG_ENTRY_CONTRACT_VERSION` in `crates/contracts/core/src/log.rs` — since 2026-05-22. `data-model.md` and tasks.md T034 still say `"1"`; treat this spec.md line as authoritative.)*
 
 ### Key Entities
 
@@ -141,6 +141,12 @@ The desktop mockup implements the user-visible behavior of US1 and US2 today.
 Promotion to a backend-canonical log stream is plan work, not spec work.
 
 ### Mockup Files
+
+> **Reconciliation note (2026-07-19, issue #764)**: both paths below moved —
+> `apps/desktop/src/app/LogPanel.tsx` (not `ui/`) and
+> `apps/desktop/src/data/logStore.ts` (not `store.ts`). The described
+> behavior, including the collapsed-state idle preview line, is intact at
+> the new paths.
 
 - `apps/desktop/src/ui/LogPanel.tsx` - Bottom fold-out shell. Expand/collapse
   state, level filter chips (`all`/`info`/`warn`/`error`/`debug`), per-entry

@@ -150,9 +150,6 @@ pub struct SettingsState {
     /// Runtime developer-mode toggle. Always `false` in release builds.
     pub dev_mode: bool,
 
-    /// UI hides terminal plans older than this many days. Noisy.
-    pub plans_list_default_age_cutoff_days: f64,
-
     /// Dark frame temperature matching tolerance in °C (spec 007 A5).
     pub calibration_dark_temp_tolerance: f64,
 
@@ -291,7 +288,6 @@ impl Default for SettingsState {
             ],
             current_library_id: None,
             dev_mode: false,
-            plans_list_default_age_cutoff_days: 90.0,
             calibration_dark_temp_tolerance: 2.0,
             calibration_prefill_suggestion: true,
             calibration_dark_override_penalty: 0.3,

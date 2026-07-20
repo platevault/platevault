@@ -141,12 +141,28 @@ As a user, when I confirm new light sessions at the Inbox gate, I want the app t
 - **FR-004**: Initial sources are optional at create; omitting them is valid and results in `setup_incomplete`. The system auto-transitions to `ready` once the tool is set (always true post-create) and at least one confirmed source is mapped.
 - **FR-005**: Project creation MUST create required folder structure, project marker, and workflow resources as part of the operation.
 - **FR-006**: Project creation MUST roll back, log, and notify on failure.
+  *(Reconciliation note, 2026-07-19, issue #764: "roll back" describes the
+  original all-or-nothing design; per the 2026-07-04 user decision
+  (`crates/app/core/src/project_create.rs` module doc), a failed or
+  non-starting scaffolding apply never fails project creation or unwinds
+  partial writes — the plan stays reviewable and retryable through the
+  normal plan surfaces, exactly like a failed manual apply. Treat "roll
+  back" as historical intent, not the shipped failure-recovery model.)*
 - **FR-007**: Onboarding MUST support existing project folders.
 - **FR-008**: Project edit MUST be a single pane for project fields and source mappings.
 - **FR-009**: Technical actions named Create project envelope, Generate/update prepared sources, Project label, or Retry marker write MUST NOT appear as normal user actions.
 - **FR-010**: After source additions, projects with manually-overridden channels MUST surface `channelDrift.hasNewSources = true` on `project.get` until the user re-infers (calls `project.channels.reinfer`) or dismisses (calls `project.channels.dismiss_drift`).
 - **FR-011**: `project.source.remove` MUST be permitted when `lifecycle in {setup_incomplete, ready, blocked}` and refused with `lifecycle.read_only` when `lifecycle in {prepared, processing, completed, archived}`.
 - **FR-012**: `project.source.add` use case MUST verify the referenced Inventory session has `state == "confirmed"`. Unconfirmed sessions are rejected with `source.not_confirmed`.
+  *(Reconciliation note, 2026-07-19, issue #764: this gate was never
+  implemented and was formally descoped by decision D9, 2026-07-03 —
+  `docs/development/orchestrator-handover-2026-07-03.md` — superseded by
+  spec 041's universal Inbox confirm gate, which makes every session
+  reaching this code path already-confirmed by construction; D9's verdict
+  found all production session-creation paths safe without an explicit
+  runtime check. `contracts/project.source.add.json` still declares
+  `source.not_confirmed` + `actualState` for this dead gate — kept in the
+  schema for now but not enforced.)*
 - **FR-013**: A project's light sessions MUST be groupable into **framings**, where a framing is the set of light sessions sharing target + optic-train + pointing + rotation within a configured **tolerance** (never an exact key). A framing is the co-registerable integration unit spanning all filters and nights of one pointing.
 - **FR-014**: Framing tolerance (FOV-relative pointing offset; rotation drift in degrees) MUST be a tunable parameter with a sensible default; it MUST NOT be an exact-match key.
 - **FR-015**: Framing clustering MUST be presented as a **suggestion** the user can adjust — **merge**, **split**, and **reassign** sessions between framings — and MUST NOT be treated as authoritative.

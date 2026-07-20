@@ -558,11 +558,6 @@
 
 /* === SETTINGS ADVANCED === */
 
-/* Database location code — smaller mono text */
-.pv-adv-settings__db-path {
-  font-size: var(--pv-text-xs);
-}
-
 /* Last row in a group — strip the bottom border */
 .pv-adv-settings__row--no-border {
   border-bottom: none;

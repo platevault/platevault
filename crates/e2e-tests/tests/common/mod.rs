@@ -181,6 +181,25 @@ pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(240);
 /// cold CI runner without masking a genuinely-absent element for long.
 pub const DEFAULT_FIND_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Deadline for a single `execute_async` script, set explicitly on the session
+/// (#1205). Before this existed the suite silently inherited the driver's own
+/// default — the W3C default is 30 s, which a legitimate IPC invoke can exceed
+/// on a saturated Windows runner, producing a bare "Script execution timed out"
+/// that names neither the command nor the budget it blew.
+///
+/// 90 s is chosen to sit *below* nextest's per-attempt hard kill (`period = 60s,
+/// terminate-after = 5` => 300 s in `.config/nextest.toml`) so a script timeout
+/// still fails as a readable test error rather than as a process kill, while
+/// leaving room for several sequential invokes in one journey. Raising this
+/// cannot mask a true hang: [`E2eApp::invoke`] names the in-flight command in
+/// its error context, so a script that never calls back still fails loudly.
+pub const SCRIPT_TIMEOUT: Duration = Duration::from_secs(90);
+
+/// Deadline for a document navigation. `goto_route` is followed by an explicit
+/// [`E2eApp::wait_bridge_ready`] poll, so this only needs to bound the raw
+/// navigation itself.
+pub const SCRIPT_TIMEOUT_PAGE_LOAD: Duration = Duration::from_secs(60);
+
 // ---------------------------------------------------------------------------
 // Private deserialization target for invoke() responses
 // ---------------------------------------------------------------------------
@@ -366,6 +385,38 @@ impl E2eApp {
             }
         };
 
+        // Set the script timeout EXPLICITLY (#1205). Until this call existed,
+        // every `execute_async` inherited whatever default the driver happened
+        // to use (W3C says 30s) — never a deliberate choice. A legitimate IPC
+        // invoke on a loaded Windows runner can exceed 30s, which surfaces as a
+        // bare "Script execution timed out" with no indication of which command
+        // was in flight.
+        //
+        // This does NOT hide a genuine hang: `invoke` names the command in its
+        // error context, so a script that never calls back still fails — it just
+        // fails at a budget we chose, naming the culprit, instead of at an
+        // undocumented default anonymously.
+        // Argument order is (script, page_load, implicit) — NOT the
+        // page-load-first order the name ordering might suggest. Passing these
+        // reversed silently swaps the two budgets and still compiles, so keep
+        // the labels below when editing.
+        let timeouts = TimeoutConfiguration::new(
+            /* script */ Some(SCRIPT_TIMEOUT),
+            /* page_load */ Some(SCRIPT_TIMEOUT_PAGE_LOAD),
+            // Implicit wait stays ZERO: every wait in this harness is an
+            // explicit poll loop, and thirtyfour's own default notes that
+            // ElementQuery requires zero. A non-zero implicit wait would
+            // silently stack on top of those and inflate every negative
+            // assertion.
+            /* implicit */
+            Some(Duration::from_secs(0)),
+        );
+        if let Err(e) = driver.update_timeouts(timeouts).await {
+            blocking_session_delete(env.proxy_port);
+            kill_driver_proc(&mut driver_proc);
+            return Err(e).context("failed to set explicit WebDriver timeouts");
+        }
+
         Ok(Self { driver, driver_proc: Some(driver_proc) })
     }
 
@@ -419,10 +470,22 @@ impl E2eApp {
             .driver
             .execute_async(script, vec![json!(command), args])
             .await
-            .context("execute_async failed")?;
+            // Name the command (#1205). This used to be a bare
+            // "execute_async failed", so a script timeout told us nothing about
+            // WHICH invoke never called back — the CI log was undiagnosable.
+            // With the command named, raising SCRIPT_TIMEOUT stays safe: a
+            // genuine hang still fails, and now says what hung.
+            .with_context(|| {
+                format!(
+                    "execute_async failed for command {command:?} \
+                     (script timeout is {SCRIPT_TIMEOUT:?}); a timeout here means the \
+                     bridge never invoked the WebDriver callback for that command"
+                )
+            })?;
 
-        let outcome: InvokeOutcome =
-            ret.convert().context("failed to deserialise InvokeOutcome from bridge response")?;
+        let outcome: InvokeOutcome = ret.convert().with_context(|| {
+            format!("failed to deserialise InvokeOutcome from bridge response for {command:?}")
+        })?;
 
         outcome.into_result::<T>()
     }
@@ -599,15 +662,63 @@ impl E2eApp {
         ret.convert::<bool>().context("failed to deserialise bridge_ready result")
     }
 
+    /// Page state captured when a bridge wait times out (#1204).
+    ///
+    /// Returns a human-readable one-liner and never fails: this runs on an
+    /// already-failing path, so a diagnostic that could itself error would
+    /// replace the real failure with its own.
+    async fn bridge_failure_context(&self) -> String {
+        let url = match self.driver.current_url().await {
+            Ok(u) => u.to_string(),
+            Err(e) => format!("<current_url failed: {e}>"),
+        };
+
+        // One script, so a dying session yields one error rather than four.
+        let probe = r#"
+            var boundary = document.querySelector('[data-testid="app-error-boundary-fallback"]');
+            return JSON.stringify({
+                readyState: document.readyState,
+                hasBridge:  !!window.__ALM_E2E__,
+                bridgeKeys: window.__ALM_E2E__ ? Object.keys(window.__ALM_E2E__) : [],
+                errorBoundary: boundary ? (boundary.innerText || '').slice(0, 300) : null,
+                bodyChars: document.body ? document.body.innerHTML.length : 0
+            });
+        "#;
+        let page = match self.driver.execute(probe, vec![]).await {
+            Ok(ret) => {
+                ret.convert::<String>().unwrap_or_else(|e| format!("<undeserialisable: {e}>"))
+            }
+            Err(e) => format!("<probe script failed: {e}>"),
+        };
+
+        format!("url={url}; page={page}")
+    }
+
     /// Wait for [`Self::bridge_ready`] to become `true`.
     pub async fn wait_bridge_ready(&self, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
+        // Retain the last probe error (#1204). This loop used to call
+        // `.unwrap_or(false)`, which DISCARDED the underlying WebDriver error on
+        // every iteration — so a dead session or a crashed page spun silently to
+        // the deadline and reported the generic "never became ready", throwing
+        // away the actual cause each time round.
+        let mut last_err: Option<String>;
         loop {
-            if self.bridge_ready().await.unwrap_or(false) {
-                return Ok(());
+            match self.bridge_ready().await {
+                Ok(true) => return Ok(()),
+                Ok(false) => last_err = None,
+                Err(e) => last_err = Some(format!("{e:#}")),
             }
             if Instant::now() >= deadline {
-                return Err(anyhow!("window.__ALM_E2E__ bridge never became ready"));
+                let probed = self.bridge_failure_context().await;
+                let cause = last_err.map_or_else(
+                    || "no probe error — the bridge simply never appeared".to_owned(),
+                    |e| format!("last probe error: {e}"),
+                );
+                return Err(anyhow!(
+                    "window.__ALM_E2E__ bridge never became ready within {timeout:?}; \
+                     {cause}; {probed}"
+                ));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
