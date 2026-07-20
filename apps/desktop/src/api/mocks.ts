@@ -34,7 +34,6 @@ import type {
   TransitionError_Serialize,
   InboxReclassifyResponse_Serialize,
   InboxReclassifyV2Response_Serialize,
-  TargetListItem,
   TargetDetailV3_Serialize,
   TargetSearchResponse_Serialize,
   TargetResolveSimbadResponse_Serialize,
@@ -840,6 +839,7 @@ export const mockHandlers = {
           constellation: 'Andromeda',
           magnitude: 3.44,
           aliases: ['M 31', 'NGC 224', 'Andromeda Galaxy'],
+          sessionCount: 3,
         },
         {
           id: 'tgt-ngc7000',
@@ -851,8 +851,9 @@ export const mockHandlers = {
           constellation: 'Cygnus',
           magnitude: 4.0,
           aliases: ['NGC 7000', 'North America Nebula'],
+          sessionCount: 5,
         },
-      ] satisfies TargetListItem[];
+      ];
     },
     target_get: async (_args) => {
       const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
@@ -1197,16 +1198,8 @@ export const mockHandlers = {
         ];
         return { plans: historyPlans };
       }
-      // Pre-existing static fixture. NOTE: this branch returns the bare
-      // `FilesystemPlan[]` array, not `{ plans: [...] }` (the real
-      // `PlanListResponse_Serialize` shape) — a latent mismatch that
-      // predates T019 and has gone unnoticed because nothing previously
-      // consumed `plans.list` in mock mode. Left as-is (out of this lane's
-      // scope to fix retroactively for the fixture's other, untested
-      // fields) since the new origin-filtered branch above is what T019
-      // actually exercises.
       const { plans } = await import('@/data/fixtures/plans');
-      return plans;
+      return { plans };
     },
     plans_get: async () => {
       const { planDetail } = await import('@/data/fixtures/plans');
@@ -1434,8 +1427,9 @@ export const mockHandlers = {
       return sessions[0];
     },
     projects_create_plan: async () => {
-      const { plans } = await import('@/data/fixtures/plans');
-      return plans[0];
+      // Answers with a full PlanDetail (summary + items), not a PlanSummary.
+      const { planDetail } = await import('@/data/fixtures/plans');
+      return planDetail;
     },
     plans_approve: async (_args) => {
       // Real contract shape (PlanApproveResponse): the overlay consumes
@@ -1465,6 +1459,7 @@ export const mockHandlers = {
             matchedCategories: ['masters'],
             originalAction: 'archive',
             rewrittenAction: null,
+            requiresAcknowledgement: true,
           },
         ],
         nonBlockingSummary: { normalCount: 2, unprotectedCount: 0 },
@@ -1580,8 +1575,11 @@ export const mockHandlers = {
         newState: 'applied',
       } satisfies PlanApplyResponse;
     },
-    plans_discard: async () => {
-      return null;
+    plans_discard: async (_args) => {
+      return {
+        planId: (_args?.id as string) ?? 'plan-001',
+        discardedAt: new Date().toISOString(),
+      };
     },
     settings_update: async (_args) => {
       // The `observing` scope round-trips into the seedable values bag so a
@@ -1631,8 +1629,16 @@ export const mockHandlers = {
       mockCalibrationTolerances = { ...mockCalibrationTolerances, ...req };
       return mockCalibrationTolerances satisfies CalibrationTolerances;
     },
-    roots_register: async () => {
-      return mockRoots[0];
+    roots_register: async (_args) => {
+      // `rootsRegister(path, category, scanSettings)` answers with the source
+      // envelope, not the LibraryRoot row the Settings list renders.
+      return {
+        sourceId: `src-${crypto.randomUUID()}`,
+        kind: 'light_frames',
+        path: (_args?.path as string) ?? '/astro/raw',
+        createdAt: new Date().toISOString(),
+        organizationState: 'unorganized',
+      };
     },
     roots_remap: async (_args) => {
       // Generated `RemapVerification` is camelCase; mirror the real contract so
@@ -2301,6 +2307,7 @@ export const mockHandlers = {
               kind: 'symlink',
               state: 'current',
               createdAt: '2026-05-19T20:00:00Z',
+              removedAt: null,
               itemCount: 1,
               items: [
                 {
@@ -2318,6 +2325,7 @@ export const mockHandlers = {
               kind: 'symlink',
               state: 'current',
               createdAt: '2026-05-19T20:00:00Z',
+              removedAt: null,
               itemCount: 1,
               items: [
                 {
@@ -2339,6 +2347,7 @@ export const mockHandlers = {
               kind: 'symlink',
               state: 'stale',
               createdAt: '2026-05-19T20:00:00Z',
+              removedAt: null,
               itemCount: 2,
               items: [
                 {
