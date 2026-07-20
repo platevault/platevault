@@ -412,6 +412,7 @@
   "logpanel_diagnostics": "Diagnostics",
   "logpanel_empty": "No log entries",
   "logpanel_empty_filtered": "No entries match the current filter.",
+  "logpanel_empty_filtered_named": "No entries match {filter}",
   "logpanel_export": "Export",
   "logpanel_export_aria": "Export log to JSON file",
   "logpanel_export_failed": "Could not export: {error}",

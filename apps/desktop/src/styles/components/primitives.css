@@ -126,6 +126,17 @@
   -webkit-mask-size: contain;
 }
 .pv-btn--sm { height: var(--pv-control-h-sm); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
+/* --xs / --ghost were used in markup (log panel chips, dev call list,
+   ProcessingTools) but had no rule anywhere, so those controls silently fell
+   back to full-size bordered buttons (#734). Defined once here rather than
+   per-feature. */
+.pv-btn--xs { height: var(--pv-control-h-xs); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
+.pv-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pv-text-muted);
+}
+.pv-btn--ghost:hover { background: var(--pv-hover-bg); border-color: transparent; color: var(--pv-text); }
 
 /* === SECTION === */
 .pv-section { margin-bottom: var(--pv-sp-4); }
