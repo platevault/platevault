@@ -242,10 +242,13 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
 // ── Scenario 3 — Layout convention (spec 043) ───────────────────────────────
 
 test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
-  // The Settings Cleanup pane has a long per-type table, so its content region
-  // (`.pv-two-pane__detail`, overflow-y:auto) actually overflows at 720px —
-  // making it a faithful probe for "action bar always visible, only content
-  // scrolls".
+  // The Settings Naming & Structure pane renders the per-frame-type
+  // destination-pattern editor (`PerTypeDestinationPatterns`), so its content
+  // region (`.pv-two-pane__detail`, overflow-y:auto) genuinely overflows at
+  // 720px — making it a faithful probe for "action bar always visible, only
+  // content scrolls". Cleanup used to be this probe, but #804 replaced its
+  // 15-row fixture table with a 3-row policy control that no longer overflows
+  // at 720px — switched the probe pane rather than weakening this assertion.
   async function assertBarPinnedWhileContentScrolls(
     page: Page,
     height: number,
@@ -282,9 +285,9 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto('/#/settings/cleanup');
+    await page.goto('/#/settings/naming');
     await expect(
-      page.getByText('Cleanup Policy', { exact: true }),
+      page.getByText('Project Folder Pattern', { exact: true }),
     ).toBeVisible();
     // The top action bar carries the page title.
     await expect(
