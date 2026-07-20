@@ -123,7 +123,6 @@ describe('DataSources — Rescan', () => {
       expect(mockScanFolder).toHaveBeenCalledWith({
         rootId: 'root-1',
         rootAbsolutePath: '/astro/raw',
-        followSymlinks: false,
       });
     });
 

@@ -54,14 +54,30 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     await expect(
       page.getByText('Scan defaults', { exact: true }),
     ).toBeVisible();
-    const hashing = page.getByLabel('Hashing mode');
-    // Current (seeded) value from mockIngestionSettings.
-    await expect(hashing).toHaveValue('lazy');
 
-    // Edit → auto-save (FR-004: no global Save button). Selecting the option
-    // fires `ingestion_settings_update`, which mutates the mock fixture.
-    await hashing.selectOption('eager');
-    await expect(hashing).toHaveValue('eager');
+    // Issue #878: only followSymlinks has a scan-pipeline consumer
+    // (`inbox.scan.folder` → `app_core::inbox_scan::resolve_scan_options`).
+    // The other three controls (scan on startup, follow NTFS junctions,
+    // hashing mode) render disabled — they must not misrepresent themselves
+    // as working settings — so the round-trip proof below exercises
+    // followSymlinks instead of the now-disabled hashing-mode selector.
+    const hashing = page.getByLabel('Hashing mode');
+    await expect(hashing).toBeDisabled();
+
+    const followSymlinks = page.getByLabel('Follow symbolic links');
+    // Current (seeded) value from mockIngestionSettings: default-off, per the
+    // product rule that scans must not follow symlinks/junctions unless the
+    // user explicitly opts in.
+    await expect(followSymlinks).not.toBeChecked();
+
+    // Edit → auto-save (FR-004: no global Save button). The underlying
+    // checkbox is zero-size and visually hidden
+    // (`.pv-toggle input { opacity: 0; width: 0; height: 0 }`) behind the
+    // track/thumb it drives, so a real click lands on the wrapping
+    // `<label class="pv-toggle">`, not the input itself. Toggling fires
+    // `ingestion_settings_update`, which mutates the mock fixture.
+    await followSymlinks.locator('xpath=..').click();
+    await expect(followSymlinks).toBeChecked();
 
     // Round-trip proof: leave the pane (Ingestion unmounts) and return
     // (it re-mounts and re-fetches via `ingestion_settings_get`). The value
@@ -71,68 +87,66 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     await expect(page.getByText('Theme', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Ingestion', exact: true }).click();
 
-    const hashingAfter = page.getByLabel('Hashing mode');
-    await expect(hashingAfter).toBeVisible();
-    await expect(hashingAfter).toHaveValue('eager');
+    const followSymlinksAfter = page.getByLabel('Follow symbolic links');
+    await expect(followSymlinksAfter).toBeAttached();
+    await expect(followSymlinksAfter).toBeChecked();
   });
 
-  test('Cleanup pane renders the per-type override table and persists an override via the settings mock round-trip', async ({
+  test('Cleanup pane edits the real cleanup policy and persists it via the cleanup_policy mock round-trip', async ({
     page,
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/settings/cleanup');
 
-    // Per-type action table present (spec 018 cleanup override surface).
+    // The policy `cleanup_scan`/`cleanup_plan_generate` actually read (#804).
+    // Replaced the former 15-row CLEANUP_TYPES fixture table, which wrote a
+    // `cleanupTypeOverrides` blob no scan path consulted.
     await expect(
-      page.getByText('Per-Type Default Actions', { exact: true }),
+      page.getByText('Cleanup Policy', { exact: true }),
     ).toBeVisible();
 
-    // "Raw dark frames" defaults to "Archive"; flip it to "Keep" (a non-default
-    // choice, so the override is observable). This now fires
-    // `settings_update('cleanup', { cleanupTypeOverrides })` (spec 051 US3),
-    // not a localStorage write.
-    const row = page.getByRole('row').filter({ hasText: 'Raw dark frames' });
+    // Every data type defaults to Keep (mirrors `default_cleanup_policy()`);
+    // flip intermediates to Archive so the change is observable. Fires
+    // `cleanup_policy_update`, not `settings_update`.
+    const row = page
+      .locator('.pv-settings__row')
+      .filter({ hasText: 'Intermediate files' });
     await expect(row).toBeVisible();
     // SegControl renders WAI-ARIA radio-group semantics (#1010): options are
     // role="radio", not role="button".
-    await expect(row.getByRole('radio', { name: 'Archive' })).toHaveClass(
+    await expect(row.getByRole('radio', { name: 'Keep' })).toHaveClass(
       /pv-seg__btn--active/,
     );
-    // Cleanup's mount effect fires `settings_get('cleanup')` (mock IPC has a
+    // Cleanup's mount effect fires `cleanup_policy_get` (mock IPC has a
     // randomized 50-150ms artificial latency, see `apps/desktop/src/api/mocks.ts`
-    // `mockInvoke`'s `delay(50 + random*100)`). That in-flight fetch used to be
-    // able to resolve AFTER this click and clobber the just-set local state
-    // back to "Archive"; Cleanup.tsx now tracks whether an edit happened and
-    // ignores a mount fetch that resolves afterwards, so a single click+assert
-    // is sufficient (no retry needed).
-    await row.getByRole('radio', { name: 'Keep' }).click();
-    await expect(row.getByRole('radio', { name: 'Keep' })).toHaveClass(
+    // `mockInvoke`'s `delay(50 + random*100)`). That in-flight fetch must not
+    // resolve after this click and clobber the just-set local state back to
+    // "Keep" — Cleanup.tsx tracks whether a policy edit happened and ignores a
+    // mount fetch that resolves afterwards, so a single click+assert suffices.
+    await row.getByRole('radio', { name: 'Archive' }).click();
+    await expect(row.getByRole('radio', { name: 'Archive' })).toHaveClass(
       /pv-seg__btn--active/,
       { timeout: 15_000 },
     );
 
-    // `save()` debounces via useAutoSave (300ms) before it actually calls
-    // `settings_update`; wait it out so the mock has genuinely persisted the
-    // override before we navigate away (otherwise this proves nothing about
-    // backend persistence — just lingering component state).
-    await page.waitForTimeout(400);
-
     // Round-trip proof: leave the pane (Cleanup unmounts) and return (it
-    // re-mounts and re-fetches via `settings_get('cleanup')`). The value must
+    // re-mounts and re-fetches via `cleanup_policy_get`). The value must
     // survive because the mock persisted it, not because component state
-    // lingered — mirrors the Ingestion pane proof above.
+    // lingered — mirrors the Ingestion pane proof above. The policy writes
+    // straight through `cleanup_policy_update` (no useAutoSave debounce), so
+    // no settle wait is needed before navigating away.
     await page.getByRole('button', { name: 'Appearance', exact: true }).click();
     await expect(page.getByText('Theme', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Cleanup', exact: true }).click();
 
     const rowAfter = page
-      .getByRole('row')
-      .filter({ hasText: 'Raw dark frames' });
+      .locator('.pv-settings__row')
+      .filter({ hasText: 'Intermediate files' });
     await expect(rowAfter).toBeVisible();
-    // No stomp risk here (single settings_get after remount, no competing
+    // No stomp risk here (single cleanup_policy_get after remount, no competing
     // local click) — just the same mock IPC latency, so a longer read-only
     // wait is sufficient.
-    await expect(rowAfter.getByRole('radio', { name: 'Keep' })).toHaveClass(
+    await expect(rowAfter.getByRole('radio', { name: 'Archive' })).toHaveClass(
       /pv-seg__btn--active/,
       { timeout: 15_000 },
     );
@@ -244,10 +258,13 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
 // ── Scenario 3 — Layout convention (spec 043) ───────────────────────────────
 
 test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
-  // The Settings Cleanup pane has a long per-type table, so its content region
-  // (`.pv-two-pane__detail`, overflow-y:auto) actually overflows at 720px —
-  // making it a faithful probe for "action bar always visible, only content
-  // scrolls".
+  // The Settings Naming & Structure pane renders the per-frame-type
+  // destination-pattern editor (`PerTypeDestinationPatterns`), so its content
+  // region (`.pv-two-pane__detail`, overflow-y:auto) genuinely overflows at
+  // 720px — making it a faithful probe for "action bar always visible, only
+  // content scrolls". Cleanup used to be this probe, but #804 replaced its
+  // 15-row fixture table with a 3-row policy control that no longer overflows
+  // at 720px — switched the probe pane rather than weakening this assertion.
   async function assertBarPinnedWhileContentScrolls(
     page: Page,
     height: number,
@@ -284,9 +301,9 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto('/#/settings/cleanup');
+    await page.goto('/#/settings/naming');
     await expect(
-      page.getByText('Per-Type Default Actions', { exact: true }),
+      page.getByText('Project Folder Pattern', { exact: true }),
     ).toBeVisible();
     // The top action bar carries the page title.
     await expect(
