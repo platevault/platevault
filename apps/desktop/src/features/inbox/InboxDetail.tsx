@@ -24,322 +24,37 @@
  * No breakdown-filter interaction — the breakdown table is gone from the detail.
  */
 
-import { Popover } from '@base-ui-components/react/popover';
-import { Fragment, useCallback, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { commands } from '@/bindings/index';
+import { useCallback, useMemo } from 'react';
 import type {
   InboxFileMetadata_Serialize as InboxFileMetadata,
   InboxItemSummary,
   InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
-  PropertyRegistryEntry_Serialize as PropertyRegistryEntry,
 } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
-import { ipcArgs } from '@/lib/ipc-args';
-import { queryKeys } from '@/data/queryKeys';
-import type { PropertyDef } from '@/components';
-import {
-  DetailPanel,
-  PropertyTable,
-  TwoColDetailLayout,
-  renderValue,
-} from '@/components';
-import { errMessage } from '@/lib/errors';
-import { fieldApplicability } from '@/lib/field-applicability';
+import { DetailPanel, PropertyTable, TwoColDetailLayout } from '@/components';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { copyToClipboard, revealInOs } from '@/shared/native/reveal';
 import { addToast } from '@/shared/toast';
-import type { PillVariant } from '@/ui';
-import { Banner, Btn, Pill, Section, Table } from '@/ui';
+import { Banner, Btn, Pill } from '@/ui';
 import type { InboxClassifyResponse } from './store';
 import { ConeSearchSuggestions } from './ConeSearchSuggestions';
-
-/**
- * Resolve an inbox item's reveal target: the source root joined with the
- * item's `relativePath`. Mirrors `features/sessions/revealInventory.ts`'s
- * `resolveRevealPath` (same tested contract: backend `relativePath` is always
- * forward-slash-normalized — `crates/app/inbox/src/scan.rs` — while the root
- * is native, so every separator is rewritten to the root's own). Duplicated
- * rather than imported to keep this feature's scope self-contained; the two
- * helpers must stay behaviorally identical if either changes.
- */
-function resolveInboxRevealPath(
-  rootPath: string,
-  relativePath: string,
-): string {
-  if (!relativePath) return rootPath;
-  const sep = rootPath.includes('\\') ? '\\' : '/';
-  const root = rootPath.replace(/[/\\]+$/, '');
-  const rel = relativePath.replace(/^[/\\]+/, '').replace(/[/\\]+/g, sep);
-  return `${root}${sep}${rel}`;
-}
-
-// ── reclassify_v2 (spec 041 R-13/T068, issue #755) ────────────────────────────
-//
-// Field-agnostic + bulk reclassify. Lives here (not `./store`) so this file's
-// scope stays self-contained; the v1 `useInboxReclassify` hook in `./store`
-// is untouched for other/legacy callers.
-
-interface ReclassifyV2Args {
-  /** Per-file property overrides (frameType correction, R-13). */
-  overrides?: Array<{ filePath: string; properties: Record<string, unknown> }>;
-  /** Bulk "set all" entries applied to a subset of files. */
-  bulk?: Array<{ property: string; value: unknown; filePaths?: string[] }>;
-}
-
-/**
- * Returns a `reclassify_v2` callback + loading state, scoped to one inbox item.
- *
- * Scoped to the STABLE `sourceGroupId` when the item carries one: sub-item ids
- * are volatile across re-splits — the first `inbox.classify` of a folder
- * materializes single-type sub-items and PURGES the superseded placeholder row
- * (`materialize_sub_items`), so the id the pane mounted with can already be
- * deleted by the time the user clicks Apply. Sending that stale id fails the
- * whole apply with `inbox.item.not_found` (observed as the CI-red Layer-2
- * journey `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`); the
- * source-group id survives every re-split. `inboxItemId` remains the fallback
- * for legacy rows that predate source groups.
- */
-function useInboxReclassifyV2(
-  inboxItemId: string,
-  rootAbsolutePath: string,
-  sourceGroupId?: string | null,
-) {
-  const queryClient = useQueryClient();
-  const [loading, setLoading] = useState(false);
-
-  const reclassifyV2 = useCallback(
-    async (args: ReclassifyV2Args) => {
-      setLoading(true);
-      try {
-        const result = unwrap(
-          await commands.inboxReclassifyV2(
-            ipcArgs<typeof commands.inboxReclassifyV2>({
-              // Exactly ONE scope key: the stable source group when known,
-              // else the item id (legacy rows predating source groups).
-              ...(sourceGroupId ? { sourceGroupId } : { inboxItemId }),
-              overrides: args.overrides ?? [],
-              bulk: args.bulk ?? [],
-              // Lets the re-split hash the group's real files, so each
-              // re-materialized sub-item gets a per-group content signature
-              // the confirm staleness guard can actually compare.
-              rootAbsolutePath,
-            }),
-          ),
-        );
-        // v2 re-splits the source group into sub-items (R-14), so the item
-        // list itself may have changed shape, not just this item's evidence.
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.inbox.list('all'),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: [queryKeys.inbox.list('all')[0], 'classify'],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.inbox.metadata(inboxItemId),
-        });
-        return result;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [inboxItemId, rootAbsolutePath, sourceGroupId, queryClient],
-  );
-
-  return { reclassifyV2, loading };
-}
-
-/** "exposureS" → "exposure S" (best-effort label for a registry key with no i18n entry). */
-function humanizeKey(key: string): string {
-  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function classificationVariant(type: string): PillVariant {
-  switch (type) {
-    case 'single_type':
-      return 'info';
-    case 'mixed':
-      return 'warn';
-    case 'unclassified':
-      return 'neutral';
-    default:
-      return 'neutral';
-  }
-}
-
-const FRAME_TYPE_OPTIONS = [
-  'light',
-  'dark',
-  'bias',
-  'flat',
-  'dark_flat',
-] as const;
-
-/**
- * Applicable destination-root category for a frame type (point 1: only show
- * libraries that can actually receive this image type). Light frames go to a
- * "raw" root; calibration frames (bias/dark/flat) + their masters go to a
- * "calibration" root. Returns null when we can't narrow (e.g. mixed) — then all
- * roots are shown. NOTE: this is a pragmatic frontend mapping; the spec-045
- * iterate (single-type sub-items) will make this authoritative per item.
- */
-function applicableRootCategory(frameType?: string | null): string | null {
-  if (!frameType) return null;
-  const ft = frameType.toLowerCase();
-  if (ft.includes('light')) return 'raw';
-  if (ft.includes('bias') || ft.includes('dark') || ft.includes('flat'))
-    return 'calibration';
-  return null;
-}
-
-/** Last path segment of a relative file path (forward- or back-slash separated). */
-function basename(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/');
-  return parts[parts.length - 1] || path;
-}
-
-/** Second-to-last path segment (the basename's parent directory name). */
-function parentSegment(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.length >= 2 ? parts[parts.length - 2] : '';
-}
-
-/**
- * Build destination-root option labels, disambiguating roots that share a
- * basename (issue #866): two registered roots at different locations but the
- * same folder name (e.g. two "Lights" folders) rendered identically as
- * "Lights · raw" with no way to tell which one a pick actually targets.
- * Duplicates get their parent directory appended; unique basenames are
- * unaffected.
- */
-function buildRootLabels(
-  roots: Array<{ id: string; path: string; category: string }>,
-): Map<string, string> {
-  const counts = new Map<string, number>();
-  for (const r of roots) {
-    const base = basename(r.path);
-    counts.set(base, (counts.get(base) ?? 0) + 1);
-  }
-  const labels = new Map<string, string>();
-  for (const r of roots) {
-    const base = basename(r.path);
-    const parent = parentSegment(r.path);
-    const disambiguated =
-      (counts.get(base) ?? 0) > 1 && parent ? `${base} (${parent})` : base;
-    labels.set(r.id, `${disambiguated} · ${r.category}`);
-  }
-  return labels;
-}
-
-/**
- * Build a plain-language composition summary for a mixed classification.
- * Example: "12 light · 4 dark · 1 bias"
- */
-function buildMixedSummary(
-  breakdown: InboxClassifyResponse['breakdown'],
-): string {
-  if (!breakdown || breakdown.length === 0) return '';
-  return breakdown.map((e) => `${e.count} ${e.kind}`).join(' · ');
-}
-
-/**
- * Format an exposure length in seconds for display (issue #789): raw FITS
- * EXPTIME floats carry IEEE-754 noise (e.g. `6.92447668013071`) that reads as
- * fabricated/slop rather than a real capture value. Whole-second exposures
- * show no decimal; fractional exposures round to 2 decimal places.
- */
-function formatExposureSeconds(s: number): string {
-  const rounded = Math.round(s * 100) / 100;
-  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded} s`;
-}
-
-// ── FileInspector ─────────────────────────────────────────────────────────────
-
-/**
- * Compact inspector for per-file fields NOT already shown in the metadata table:
- *   instrume, telescop, naxis1×naxis2, stackCount, imageTyp.
- *
- * Rendered inside the Files popover when a row is clicked.
- */
-function FileInspector({ file }: { file: InboxFileMetadata | null }) {
-  if (!file) {
-    return (
-      <div
-        className="pv-inbox-inspector pv-inbox-inspector--empty"
-        data-testid="file-inspector"
-      />
-    );
-  }
-
-  const rows: Array<{ label: string; value: React.ReactNode; testid: string }> =
-    [
-      {
-        label: m.inbox_field_instrument(),
-        value: renderValue(file.instrume ?? null, {
-          applicability: 'applicable',
-        }),
-        testid: 'inspector-instrume',
-      },
-      {
-        label: m.inbox_field_telescope(),
-        value: renderValue(file.telescop ?? null, {
-          applicability: fieldApplicability(
-            file.frameTypeEffective,
-            'telescope',
-          ),
-        }),
-        testid: 'inspector-telescop',
-      },
-      {
-        label: m.inbox_field_dimensions(),
-        value: renderValue(
-          file.naxis1 != null || file.naxis2 != null
-            ? `${file.naxis1 ?? '?'}×${file.naxis2 ?? '?'}`
-            : null,
-          { applicability: 'applicable' },
-        ),
-        testid: 'inspector-dims',
-      },
-      {
-        label: m.inbox_field_stack_count(),
-        value: renderValue(file.stackCount ?? null, {
-          applicability: 'applicable',
-        }),
-        testid: 'inspector-stackcount',
-      },
-      {
-        label: m.inbox_field_raw_imagetyp(),
-        value: renderValue(file.imageTyp ?? null, {
-          applicability: 'applicable',
-        }),
-        testid: 'inspector-imagetyp',
-      },
-    ];
-
-  return (
-    <div className="pv-inbox-inspector" data-testid="file-inspector">
-      <div className="pv-inbox-inspector__name" title={file.relativeFilePath}>
-        {basename(file.relativeFilePath)}
-      </div>
-      <dl className="pv-inbox-inspector__dl">
-        {rows.map((r) => (
-          <div
-            key={r.label}
-            className="pv-inbox-inspector__row"
-            data-testid={r.testid}
-          >
-            <dt className="pv-inbox-inspector__label">{r.label}</dt>
-            <dd className="pv-inbox-inspector__value">{r.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
+import {
+  buildDetectionProps,
+  splitDetectionColumns,
+} from './inboxDetectionProps';
+import { InboxNeedsReview } from './InboxNeedsReview';
+import { InboxFilesColumn } from './InboxFilesColumn';
+import { useInboxReclassifyState } from './useInboxReclassifyState';
+import {
+  applicableRootCategory,
+  basename,
+  buildMixedSummary,
+  buildRootLabels,
+  classificationVariant,
+  FRAME_TYPE_OPTIONS,
+  humanizeKey,
+  resolveInboxRevealPath,
+} from './inboxDetailHelpers';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -414,225 +129,24 @@ export function InboxDetail({
   onReclassified,
   sourceGroupId,
 }: InboxDetailProps) {
-  const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
-    item.inboxItemId,
+  const reclassify = useInboxReclassifyState({
+    inboxItemId: item.inboxItemId,
     rootAbsolutePath,
     sourceGroupId,
-  );
-
-  // Per-file overrides pending submission (single-file flow).
-  const [pendingOverrides, setPendingOverrides] = useState<
-    Record<string, string>
-  >({});
-  const [applyError, setApplyError] = useState<string | null>(null);
-
-  // T027: multi-select + bulk override state.
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [bulkFrameType, setBulkFrameType] = useState('');
-  // Field-agnostic bulk values (spec 041 R-13/US11, issue #755): any
-  // overridable property from `inbox.property_registry` keyed by its
-  // registry `key` (e.g. "filter", "exposureS", "gain", "temperatureC").
-  const [bulkPropValues, setBulkPropValues] = useState<Record<string, string>>(
-    {},
-  );
-  const [bulkError, setBulkError] = useState<string | null>(null);
-
-  // #611: acknowledgement gate for a HETEROGENEOUS bulk frame-type override
-  // (the selection spans more than one currently-detected frame type).
-  // Keyed by a signature of (selected files, chosen type) so the checkbox
-  // un-acknowledges itself the instant either changes — an acknowledgement
-  // must never silently carry over to a DIFFERENT selection/value.
-  const [heterogeneousAckKey, setHeterogeneousAckKey] = useState<string | null>(
-    null,
-  );
-  // #611: last bulk frame-type override applied, so the user can undo it —
-  // restores each file's PRE-OVERRIDE detected frame type via a per-file
-  // `overrides` call (never a bulk one — the prior values are heterogeneous
-  // by construction here). Files that had no prior detected type (genuinely
-  // unclassified) are omitted: there is nothing valid to restore them to.
-  const [lastFrameTypeUndo, setLastFrameTypeUndo] = useState<{
-    count: number;
-    overrides: Array<{ filePath: string; properties: { frameType: string } }>;
-  } | null>(null);
-  const [undoLoading, setUndoLoading] = useState(false);
-  const [undoError, setUndoError] = useState<string | null>(null);
-
-  // Files popover: which row is "inspected" inside the popover.
-  const [inspectedIdx, setInspectedIdx] = useState<number | null>(null);
-
-  // Property registry (FR-044) — drives the generic bulk editor below.
-  // Static per app session, so fetched lazily (only once the bulk editor can
-  // actually be shown) and cached indefinitely.
-  const { data: propertyRegistry } = useQuery<PropertyRegistryEntry[]>({
-    queryKey: ['inbox', 'propertyRegistry'],
-    queryFn: async () => unwrap(await commands.inboxPropertyRegistry()),
-    enabled: selectedFiles.size > 0,
-    staleTime: Number.POSITIVE_INFINITY,
+    classification,
+    fileMetadata,
+    onReclassified,
   });
-
-  const handleOverrideChange = (filePath: string, frameType: string) => {
-    setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
-  };
-
-  const handleApplyOverrides = async () => {
-    const overrides = Object.entries(pendingOverrides).map(
-      ([filePath, frameType]) => ({
-        filePath,
-        properties: { frameType },
-      }),
-    );
-    if (overrides.length === 0) return;
-    setApplyError(null);
-    try {
-      const result = await reclassifyV2({ overrides });
-      setPendingOverrides({});
-      onReclassified?.(result);
-    } catch (err) {
-      setApplyError(errMessage(err));
-    }
-  };
-
-  // T027 selection helpers.
-  //
-  // #1114: the needs-review set is every file that still blocks promotion, NOT
-  // just the ones with no frame type. `classification.unclassifiedFiles` drops
-  // a file the instant a frame-type override is written (classify.rs: the
-  // `unclassified != 0 && manual_override.is_none()` filter), which used to
-  // unmount this whole section — including the generic property editor — while
-  // the file was still blocked on a mandatory attribute like exposureS. The
-  // per-file `missingMandatory` set (metadata.rs `compute_missing_mandatory`,
-  // override-applied and re-fetched after every reclassify) is the truthful
-  // gate. Unioned rather than swapped because per-file metadata can be absent
-  // or still loading, and losing the frame-type affordance then would be the
-  // same class of bug in the other direction.
-  const filesNeedingReview = useMemo(() => {
-    const paths = new Set(classification?.unclassifiedFiles ?? []);
-    for (const f of fileMetadata ?? []) {
-      if ((f.missingMandatory?.length ?? 0) > 0) paths.add(f.relativeFilePath);
-    }
-    return Array.from(paths);
-  }, [classification?.unclassifiedFiles, fileMetadata]);
-
-  const handleToggleFile = (filePath: string) => {
-    setSelectedFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(filePath)) next.delete(filePath);
-      else next.add(filePath);
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedFiles.size === filesNeedingReview.length)
-      setSelectedFiles(new Set());
-    else setSelectedFiles(new Set(filesNeedingReview));
-  };
-
-  const handleBulkPropChange = (key: string, value: string) => {
-    setBulkPropValues((prev) => ({ ...prev, [key]: value }));
-  };
-
-  // #611: the currently-detected frame type for each selected file, keyed by
-  // path, sourced from the per-file metadata table (not the classification
-  // response — that only lists WHICH files are unclassified, not what each
-  // one's own already-detected type is). Used to warn before a bulk override
-  // silently overwrites a heterogeneous selection.
-  const selectedDetectedTypes = new Map<string, string | null>();
-  for (const fp of selectedFiles) {
-    const meta = fileMetadata?.find((f) => f.relativeFilePath === fp);
-    selectedDetectedTypes.set(fp, meta?.frameTypeEffective ?? null);
-  }
-  const distinctSelectedTypes = new Set(
-    Array.from(selectedDetectedTypes.values()).filter(
-      (t): t is string => t != null,
-    ),
-  );
-  const isHeterogeneousFrameTypeBulk =
-    bulkFrameType !== '' && distinctSelectedTypes.size > 1;
-  const heterogeneousSignature = isHeterogeneousFrameTypeBulk
-    ? `${bulkFrameType}::${Array.from(selectedFiles).sort().join(',')}`
-    : null;
-  const heterogeneousAcked =
-    !isHeterogeneousFrameTypeBulk ||
-    heterogeneousAckKey === heterogeneousSignature;
-
-  const handleBulkApply = async () => {
-    if (selectedFiles.size === 0) return;
-    if (isHeterogeneousFrameTypeBulk && !heterogeneousAcked) return;
-    const filePaths = Array.from(selectedFiles);
-    const bulk: Array<{
-      property: string;
-      value: unknown;
-      filePaths: string[];
-    }> = [];
-    if (bulkFrameType !== '') {
-      bulk.push({ property: 'frameType', value: bulkFrameType, filePaths });
-    }
-    for (const [key, raw] of Object.entries(bulkPropValues)) {
-      if (raw === '') continue;
-      const entry = propertyRegistry?.find((e) => e.key === key);
-      const isNumeric = entry?.kind === 'number' || entry?.kind === 'integer';
-      const value = isNumeric ? Number(raw) : raw;
-      if (isNumeric && Number.isNaN(value)) continue;
-      bulk.push({ property: key, value, filePaths });
-    }
-    if (bulk.length === 0) return;
-    setBulkError(null);
-    setUndoError(null);
-    // #611: snapshot each selected file's PRE-OVERRIDE detected frame type
-    // before applying, so a bad bulk override is recoverable. Only captured
-    // when this call actually changes frameType, and only for files that had
-    // a known prior type (nothing valid to restore an unclassified file to).
-    const undoOverrides =
-      bulkFrameType !== ''
-        ? filePaths
-            .map((fp) => {
-              const prev = selectedDetectedTypes.get(fp);
-              return prev
-                ? { filePath: fp, properties: { frameType: prev } }
-                : null;
-            })
-            .filter(
-              (
-                o,
-              ): o is { filePath: string; properties: { frameType: string } } =>
-                o != null,
-            )
-        : [];
-    try {
-      const result = await reclassifyV2({ bulk });
-      setSelectedFiles(new Set());
-      setBulkFrameType('');
-      setBulkPropValues({});
-      setHeterogeneousAckKey(null);
-      if (undoOverrides.length > 0) {
-        setLastFrameTypeUndo({
-          count: undoOverrides.length,
-          overrides: undoOverrides,
-        });
-      }
-      onReclassified?.(result);
-    } catch (err) {
-      setBulkError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const handleUndoBulkFrameType = async () => {
-    if (!lastFrameTypeUndo) return;
-    setUndoLoading(true);
-    setUndoError(null);
-    try {
-      const result = await reclassifyV2({
-        overrides: lastFrameTypeUndo.overrides,
-      });
-      setLastFrameTypeUndo(null);
-      onReclassified?.(result);
-    } catch (err) {
-      setUndoError(errMessage(err));
-    } finally {
-      setUndoLoading(false);
-    }
-  };
+  // Everything else this component still renders itself; the bulk-override
+  // surface reads the rest straight off `reclassify` (see InboxNeedsReview).
+  // `filesNeedingReview` is #1114's union gate, which the hook now owns.
+  const {
+    filesNeedingReview,
+    pendingOverrides,
+    handleOverrideChange,
+    selectedFiles,
+    handleToggleFile,
+  } = reclassify;
 
   const title = item.relativePath || m.inbox_list_root_label();
   const classType = classification?.type ?? 'pending';
@@ -713,51 +227,6 @@ export function InboxDetail({
         : (destinationRoots ?? []);
   const rootLabels = buildRootLabels(applicableRoots);
 
-  // Generic bulk-editable properties (FR-044/US11, issue #755): every
-  // overridable registry entry other than frameType (which keeps its own
-  // enum select above), narrowed to the ones applicable to this item's frame
-  // type. Unknown/mixed frame type (itemFrameType == null) shows all of them.
-  const genericBulkFields = (propertyRegistry ?? []).filter((e) => {
-    if (e.key === 'frameType' || !e.overridable) return false;
-    if (!itemFrameType) return true;
-    return e.appliesTo.includes(itemFrameType);
-  });
-
-  // Reuse existing translated labels/placeholders for the well-known keys;
-  // any other registry key falls back to `humanizeKey` in the render loop.
-  const KNOWN_BULK_FIELD_LABELS: Record<
-    string,
-    { label: string; placeholder?: string; testid: string }
-  > = {
-    filter: {
-      label: m.common_filter(),
-      placeholder: m.inbox_filter_placeholder(),
-      testid: 'bulk-filter',
-    },
-    exposureS: {
-      label: m.inbox_exposure_label(),
-      placeholder: m.inbox_exposure_placeholder(),
-      testid: 'bulk-exposure-s',
-    },
-    binning: {
-      label: m.settings_calmatch_binning(),
-      placeholder: m.inbox_binning_placeholder(),
-      testid: 'bulk-binning',
-    },
-    gain: { label: m.inbox_col_gain(), testid: 'bulk-gain' },
-    temperatureC: {
-      label: m.settings_calmatch_sensor_temp(),
-      testid: 'bulk-temperature-c',
-    },
-  };
-
-  // ── Unclassified ("Needs review") table ───────────────────────────────────
-
-  const allSelected =
-    filesNeedingReview.length > 0 &&
-    selectedFiles.size === filesNeedingReview.length;
-  const someSelected = selectedFiles.size > 0 && !allSelected;
-
   const unclassifiedColumns = [
     { key: 'select', label: '', style: { width: 36 } },
     { key: 'file', label: m.inbox_col_file(), style: { width: 160 } },
@@ -797,90 +266,6 @@ export function InboxDetail({
     ),
   }));
 
-  // ── Per-file metadata table (FR-010) ──────────────────────────────────────
-
-  const metadataColumns = [
-    { key: 'file', label: m.inbox_col_file(), style: { minWidth: 160 } },
-    { key: 'type', label: m.inbox_col_type(), style: { width: 80 } },
-    { key: 'filter', label: m.common_filter(), style: { width: 70 } },
-    { key: 'exposure', label: m.inbox_col_exposure(), style: { width: 80 } },
-    { key: 'binning', label: m.inbox_col_binning(), style: { width: 70 } },
-    { key: 'gain', label: m.inbox_col_gain(), style: { width: 60 } },
-    { key: 'temp', label: m.inbox_col_temp(), style: { width: 70 } },
-    { key: 'object', label: m.inbox_col_object(), style: { width: 100 } },
-    { key: 'date', label: m.archive_prop_date(), style: { width: 110 } },
-  ];
-
-  // FR-032 (US9): files missing a path-load-bearing attribute.
-  const filesMissingAttrs = (fileMetadata ?? []).filter(
-    (f) => (f.missingPathAttributes?.length ?? 0) > 0,
-  );
-
-  const metadataRows = (fileMetadata ?? []).map((f, rowIdx) => {
-    const missingAttrs = f.missingPathAttributes ?? [];
-    const fileName = basename(f.relativeFilePath);
-    const needsAttention = f.overrideStale || missingAttrs.length > 0;
-    const isInspected = inspectedIdx === rowIdx;
-    return {
-      file: (
-        <span title={f.relativeFilePath} className="pv-inbox-detail__file-cell">
-          {f.relativeFilePath}
-          {missingAttrs.length > 0 && (
-            <span
-              data-testid={`inbox-missing-attr-${fileName}`}
-              title={m.inbox_missing_attrs_title({
-                attrs: missingAttrs.join(', '),
-              })}
-              className="pv-inbox-detail__missing-attr-badge"
-            >
-              {m.inbox_needs_attrs({ attrs: missingAttrs.join(', ') })}
-            </span>
-          )}
-        </span>
-      ),
-      // Per-row applicability (spec-030 Q16 / FR-135, FR-137): each file in a
-      // mixed folder can have its own effective frame type, so a field that
-      // doesn't apply to THIS row's type renders blank while a genuinely
-      // missing-but-applicable value renders the unresolved chip — never the
-      // same dash for both.
-      type: renderValue(f.frameTypeEffective ?? null, {
-        applicability: 'applicable',
-      }),
-      filter: renderValue(f.filter ?? null, {
-        applicability: fieldApplicability(f.frameTypeEffective, 'filter'),
-      }),
-      exposure: renderValue(
-        f.exposureS ?? null,
-        { applicability: fieldApplicability(f.frameTypeEffective, 'exposure') },
-        (v) => formatExposureSeconds(Number(v)),
-      ),
-      binning: renderValue(
-        f.binningX != null || f.binningY != null
-          ? `${f.binningX ?? '?'}x${f.binningY ?? '?'}`
-          : null,
-        { applicability: 'applicable' },
-      ),
-      gain: renderValue(f.gain ?? null, { applicability: 'applicable' }),
-      temp: renderValue(
-        f.temperatureC ?? null,
-        { applicability: fieldApplicability(f.frameTypeEffective, 'setTemp') },
-        (v) => `${v} °C`,
-      ),
-      object: renderValue(f.object ?? null, {
-        applicability: fieldApplicability(f.frameTypeEffective, 'target'),
-      }),
-      date: renderValue(f.dateObs ?? null, { applicability: 'applicable' }),
-      _rowClassName: [
-        needsAttention ? 'pv-inbox-meta-row--warn' : '',
-        isInspected ? 'pv-inbox-meta-row--inspected' : '',
-        'pv-inbox-meta-row',
-      ]
-        .filter(Boolean)
-        .join(' '),
-      _onClick: () => setInspectedIdx(isInspected ? null : rowIdx),
-    };
-  });
-
   // ── Mixed composition summary (FR-011) ────────────────────────────────────
 
   const mixedSummary =
@@ -889,115 +274,16 @@ export function InboxDetail({
       : null;
 
   // ── Detection property table (col A) ─────────────────────────────────────
-  // Representative file for FITS metadata display (best-effort).
-
   const repFile = fileMetadata?.[0] ?? null;
-
-  const detectionProps: PropertyDef[] = [
-    {
-      key: 'classification',
-      label: m.inbox_prop_classification(),
-      value:
-        classType === 'single_type'
-          ? (classification?.frameType ?? 'single_type')
-          : classType,
-    },
-    {
-      key: 'files',
-      label: m.inbox_col_files(),
-      // #653: the breakdown only tallies CLASSIFIED files — it excludes
-      // `unclassifiedFiles`, so a needs-review item (the one a user is most
-      // likely scrutinizing) undercounted here vs the list row's total
-      // `fileCount`. Add the unclassified count back in before falling back.
-      value: classification
-        ? String(
-            (classification.breakdown?.reduce((s, e) => s + e.count, 0) ?? 0) +
-              (classification.unclassifiedFiles?.length ?? 0) || item.fileCount,
-          )
-        : String(item.fileCount),
-    },
-    // Rows below are always present (never conditionally omitted for a
-    // missing value — that collapsed "missing" into "not-applicable", spec-030
-    // Q16 / FR-135); applicability per frame type comes from the shared
-    // `fieldApplicability` matrix (data-model.md), so an applicable-but-absent
-    // field renders the unresolved chip instead of silently vanishing.
-    {
-      key: 'target',
-      label: m.inbox_dim_target(),
-      value: repFile?.object ?? null,
-      source: 'fits',
-      applicability: fieldApplicability(itemFrameType, 'target'),
-    },
-    {
-      key: 'filter',
-      label: m.common_filter(),
-      value: repFile?.filter ?? null,
-      source: 'fits',
-      applicability: fieldApplicability(itemFrameType, 'filter'),
-    },
-    {
-      key: 'exposure',
-      label: m.inbox_col_exposure(),
-      value:
-        repFile?.exposureS != null
-          ? formatExposureSeconds(repFile.exposureS)
-          : null,
-      source: 'fits',
-      applicability: fieldApplicability(itemFrameType, 'exposure'),
-    },
-    {
-      key: 'binning',
-      label: m.settings_calmatch_binning(),
-      value:
-        repFile?.binningX != null || repFile?.binningY != null
-          ? `${repFile?.binningX ?? '?'}x${repFile?.binningY ?? '?'}`
-          : null,
-      source: 'fits',
-    },
-    {
-      key: 'gain',
-      label: m.inbox_col_gain(),
-      value: repFile?.gain ?? null,
-      source: 'fits',
-    },
-    {
-      key: 'temp',
-      label: m.settings_calmatch_sensor_temp(),
-      value:
-        repFile?.temperatureC != null ? `${repFile.temperatureC} °C` : null,
-      source: 'fits',
-      applicability: fieldApplicability(itemFrameType, 'setTemp'),
-    },
-    {
-      key: 'instrume',
-      label: m.inbox_field_instrument(),
-      value: repFile?.instrume ?? null,
-      source: 'fits',
-    },
-    {
-      key: 'dims',
-      label: m.inbox_field_dimensions(),
-      value:
-        repFile != null && (repFile.naxis1 != null || repFile.naxis2 != null)
-          ? `${repFile.naxis1 ?? '?'}×${repFile.naxis2 ?? '?'}`
-          : null,
-      source: 'fits',
-    },
-    {
-      key: 'date',
-      label: m.sessions_col_night(),
-      value: repFile?.dateObs ?? null,
-      source: 'fits',
-      applicability: fieldApplicability(itemFrameType, 'date'),
-    },
-  ];
-
-  // Spread the detection facts across two left-packed columns (the canonical
-  // SessionDetail shape) so the bottom panel reads as multi-column, not one
-  // cramped stack.
-  const detMid = Math.ceil(detectionProps.length / 2);
-  const detColA = detectionProps.slice(0, detMid);
-  const detColB = detectionProps.slice(detMid);
+  const { colA: detColA, colB: detColB } = splitDetectionColumns(
+    buildDetectionProps({
+      item,
+      classification,
+      classType,
+      repFile,
+      itemFrameType,
+    }),
+  );
 
   // ── Inline header actions ─────────────────────────────────────────────────
 
@@ -1060,8 +346,6 @@ export function InboxDetail({
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
-
-  const hasMetadata = metadataRows.length > 0;
 
   return (
     <DetailPanel
@@ -1145,365 +429,24 @@ export function InboxDetail({
           }
           extraCols={[
             /* Files — mixed-composition summary + the metadata popover */
-            <Fragment key="files">
-              <div className="pv-session-detail2__head">
-                {m.inbox_col_files()}
-              </div>
-
-              {/* FR-011: compact mixed-composition summary */}
-              {mixedSummary && (
-                <section
-                  aria-label={m.inbox_mixed_composition_summary_aria()}
-                  className="pv-inbox-detail__mixed-summary"
-                >
-                  {mixedSummary}
-                </section>
-              )}
-
-              {/* Files popover — trigger + portaled popup with metadata table + inspector */}
-              {hasMetadata ? (
-                <Popover.Root
-                  onOpenChange={() => {
-                    // Reset inspector selection whenever the popover is closed.
-                    setInspectedIdx(null);
-                  }}
-                >
-                  <Popover.Trigger
-                    className="pv-inbox-detail__files-trigger"
-                    aria-label={m.inbox_file_metadata_count({
-                      count: metadataRows.length,
-                    })}
-                    data-testid="inbox-files-popover-trigger"
-                  >
-                    {m.inbox_file_metadata_count({
-                      count: metadataRows.length,
-                    })}{' '}
-                    ▾
-                  </Popover.Trigger>
-                  <Popover.Portal>
-                    <Popover.Positioner
-                      side="bottom"
-                      align="start"
-                      sideOffset={4}
-                    >
-                      <Popover.Popup
-                        className="pv-inbox-detail__files-popup"
-                        data-testid="inbox-files-popup"
-                        aria-label={m.inbox_file_metadata_aria()}
-                      >
-                        {/* Scrollable metadata table */}
-                        <div className="pv-inbox-detail__files-popup-table">
-                          <Table
-                            columns={metadataColumns}
-                            rows={metadataRows}
-                          />
-                        </div>
-                        {/* Inspector — updates on row click */}
-                        {inspectedIdx != null && (
-                          <div className="pv-inbox-detail__files-popup-inspector">
-                            <FileInspector
-                              file={fileMetadata?.[inspectedIdx] ?? null}
-                            />
-                          </div>
-                        )}
-                      </Popover.Popup>
-                    </Popover.Positioner>
-                  </Popover.Portal>
-                </Popover.Root>
-              ) : (
-                !mixedSummary && (
-                  <span className="pv-session-detail2__muted">
-                    {m.inbox_no_file_metadata()}
-                    {/* #551: no per-file metadata means the required-destination-
-                    attribute gate has no data to evaluate here — say so
-                    explicitly instead of silently reading as "nothing to
-                    worry about" (confirm can still be rejected server-side
-                    for these files; see inbox.missing_path_attributes). */}
-                    {' — '}
-                    {m.inbox_no_file_metadata_caveat()}
-                  </span>
-                )
-              )}
-
-              {/* FR-032 (US9) / #554: missing-required-attribute warning lives
-              INLINE in the Files column (the field it explains) rather than
-              as its own full-width alert column competing with the property
-              tables (#554 — "stands out horribly"). */}
-              {filesMissingAttrs.length > 0 && (
-                <Banner
-                  variant="danger"
-                  className="pv-inbox-detail__banner-mt2 pv-inbox-alert"
-                  data-testid="inbox-missing-attr-banner"
-                >
-                  <div className="pv-inbox-alert__msg">
-                    <span className="pv-inbox-alert__title">
-                      {m.inbox_required_metadata_missing_title()}
-                    </span>
-                    <span className="pv-inbox-alert__body">
-                      {m.inbox_required_metadata_body({
-                        count: filesMissingAttrs.length,
-                      })}
-                    </span>
-                  </div>
-                </Banner>
-              )}
-            </Fragment>,
+            <InboxFilesColumn
+              key="files"
+              fileMetadata={fileMetadata}
+              mixedSummary={mixedSummary}
+            />,
             /* Needs review — rendered when unclassified files exist */
+            /* Needs review — null (not an empty component) when there is
+               nothing to review: TwoColDetailLayout allocates a `__col` per
+               non-null entry, so an element that merely renders null would
+               still claim a column (#813 layout test). */
             unclassifiedRows.length > 0 ? (
-              <Section
+              <InboxNeedsReview
                 key="needs-review"
-                title={m.inbox_needs_review_title({
-                  count: unclassifiedRows.length,
-                })}
-              >
-                <div className="pv-inbox-detail__select-all-row">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected;
-                    }}
-                    onChange={handleSelectAll}
-                    aria-label={m.inbox_select_all_unclassified_aria()}
-                    data-testid="reclassify-select-all"
-                  />
-                  <span className="pv-inbox-detail__select-all-label">
-                    {selectedFiles.size === 0
-                      ? m.common_select_all()
-                      : m.inbox_n_selected({ count: selectedFiles.size })}
-                  </span>
-                </div>
-                <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
-
-                {selectedFiles.size > 0 && (
-                  <fieldset className="pv-inbox-detail__bulk-controls">
-                    <legend className="pv-visually-hidden">
-                      {m.inbox_bulk_override_controls_aria()}
-                    </legend>
-                    <div className="pv-inbox-detail__bulk-field">
-                      {}
-                      <label
-                        htmlFor="bulk-frame-type"
-                        className="pv-inbox-detail__bulk-label"
-                      >
-                        {m.inbox_frame_type_label()}
-                      </label>
-                      <select
-                        id="bulk-frame-type"
-                        value={bulkFrameType}
-                        onChange={(e) => setBulkFrameType(e.target.value)}
-                        aria-label={m.inbox_bulk_frame_type_aria()}
-                        data-testid="bulk-frame-type"
-                        className="pv-select pv-select--sm"
-                      >
-                        <option value="">
-                          {m.inbox_unchanged_placeholder()}
-                        </option>
-                        {FRAME_TYPE_OPTIONS.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Field-agnostic bulk properties (FR-044/US11, issue #755):
-                        every OTHER overridable registry property applicable to
-                        this item's frame type — filter/exposureS/binning/gain/
-                        temperatureC/etc, whichever the registry returns. Known
-                        keys reuse their existing translated label; unrecognised
-                        future registry keys fall back to a humanized label so
-                        new properties are reachable without a UI change. */}
-                    {genericBulkFields.map((field) => {
-                      const known = KNOWN_BULK_FIELD_LABELS[field.key];
-                      const label =
-                        known?.label ??
-                        humanizeKey(field.key) +
-                          (field.unit ? ` (${field.unit})` : '');
-                      const testid = known?.testid ?? `bulk-prop-${field.key}`;
-                      const inputType =
-                        field.kind === 'number' || field.kind === 'integer'
-                          ? 'number'
-                          : 'text';
-                      return (
-                        <div
-                          className="pv-inbox-detail__bulk-field"
-                          key={field.key}
-                        >
-                          {}
-                          <label
-                            htmlFor={testid}
-                            className="pv-inbox-detail__bulk-label"
-                            title={field.validation ?? undefined}
-                          >
-                            {label}
-                          </label>
-                          <input
-                            id={testid}
-                            type={inputType}
-                            value={bulkPropValues[field.key] ?? ''}
-                            onChange={(e) =>
-                              handleBulkPropChange(field.key, e.target.value)
-                            }
-                            placeholder={
-                              known?.placeholder ??
-                              m.inbox_unchanged_placeholder()
-                            }
-                            aria-label={label}
-                            data-testid={testid}
-                            className="pv-input pv-input--sm pv-inbox-detail__bulk-input-w80"
-                          />
-                        </div>
-                      );
-                    })}
-
-                    {/* #611: the selection spans more than one currently-
-                        detected frame type — warn before the override is
-                        silently applied to files it may not actually belong
-                        to (e.g. calibration files stranded under a light's
-                        target/filter/date destination). Require an explicit
-                        acknowledgement before Apply proceeds. */}
-                    {isHeterogeneousFrameTypeBulk && (
-                      <Banner
-                        variant="warn"
-                        className="pv-inbox-detail__banner-mt2"
-                        data-testid="bulk-heterogeneous-warning"
-                      >
-                        <div className="pv-inbox-alert__msg">
-                          <span className="pv-inbox-alert__title">
-                            {m.inbox_bulk_heterogeneous_title()}
-                          </span>
-                          <span className="pv-inbox-alert__body">
-                            {m.inbox_bulk_heterogeneous_body({
-                              type: bulkFrameType,
-                            })}
-                          </span>
-                        </div>
-                        <label className="pv-inbox-detail__select-all-row">
-                          <input
-                            type="checkbox"
-                            checked={heterogeneousAcked}
-                            onChange={(e) =>
-                              setHeterogeneousAckKey(
-                                e.target.checked
-                                  ? heterogeneousSignature
-                                  : null,
-                              )
-                            }
-                            aria-label={m.inbox_bulk_heterogeneous_ack_label({
-                              type: bulkFrameType,
-                            })}
-                            data-testid="bulk-heterogeneous-ack"
-                          />
-                          {m.inbox_bulk_heterogeneous_ack_label({
-                            type: bulkFrameType,
-                          })}
-                        </label>
-                      </Banner>
-                    )}
-
-                    <button
-                      type="button"
-                      className="pv-btn pv-btn--sm pv-btn--primary"
-                      onClick={handleBulkApply}
-                      disabled={reclassifyLoading || !heterogeneousAcked}
-                      aria-label={m.inbox_bulk_override_apply_aria({
-                        count: selectedFiles.size,
-                      })}
-                      data-testid="bulk-apply-btn"
-                    >
-                      {reclassifyLoading
-                        ? m.common_applying()
-                        : isHeterogeneousFrameTypeBulk
-                          ? m.inbox_bulk_apply_anyway({
-                              count: selectedFiles.size,
-                            })
-                          : m.inbox_apply_to_selected({
-                              count: selectedFiles.size,
-                            })}
-                    </button>
-                  </fieldset>
-                )}
-
-                {bulkError && (
-                  <Banner
-                    variant="danger"
-                    className="pv-inbox-detail__banner-mt2"
-                  >
-                    {bulkError}
-                  </Banner>
-                )}
-
-                {/* #611: recoverable bulk frame-type override — restores each
-                    file's pre-override detected type via a per-file
-                    `overrides` call. */}
-                {lastFrameTypeUndo && (
-                  <Banner
-                    variant="info"
-                    className="pv-inbox-detail__banner-mt2"
-                    data-testid="bulk-undo-banner"
-                  >
-                    <div className="pv-inbox-alert__msg">
-                      <span className="pv-inbox-alert__body">
-                        {m.inbox_bulk_undo_message({
-                          count: lastFrameTypeUndo.count,
-                        })}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="pv-btn pv-btn--sm"
-                      onClick={() => void handleUndoBulkFrameType()}
-                      disabled={undoLoading}
-                      aria-label={m.inbox_bulk_undo_aria()}
-                      data-testid="bulk-undo-btn"
-                    >
-                      {undoLoading
-                        ? m.common_applying()
-                        : m.inbox_bulk_undo_button()}
-                    </button>
-                  </Banner>
-                )}
-
-                {undoError && (
-                  <Banner
-                    variant="danger"
-                    className="pv-inbox-detail__banner-mt2"
-                  >
-                    {undoError}
-                  </Banner>
-                )}
-
-                {Object.keys(pendingOverrides).length > 0 && (
-                  <div className="pv-inbox-detail__apply-row">
-                    <button
-                      type="button"
-                      className="pv-btn pv-btn--sm pv-btn--primary"
-                      onClick={handleApplyOverrides}
-                      disabled={
-                        Object.keys(pendingOverrides).length === 0 ||
-                        reclassifyLoading
-                      }
-                      aria-label={m.inbox_apply_manual_overrides_aria()}
-                    >
-                      {reclassifyLoading
-                        ? m.common_applying()
-                        : m.inbox_apply_n_overrides({
-                            count: Object.keys(pendingOverrides).length,
-                          })}
-                    </button>
-                  </div>
-                )}
-
-                {applyError && (
-                  <Banner
-                    variant="danger"
-                    className="pv-inbox-detail__banner-mt2"
-                  >
-                    {applyError}
-                  </Banner>
-                )}
-              </Section>
+                reclassify={reclassify}
+                itemFrameType={itemFrameType}
+                columns={unclassifiedColumns}
+                rows={unclassifiedRows}
+              />
             ) : null,
           ]}
         />

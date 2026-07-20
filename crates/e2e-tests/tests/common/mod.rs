@@ -269,6 +269,13 @@ impl InvokeOutcome {
 pub struct E2eApp {
     pub driver: WebDriver,
     driver_proc: Option<Child>,
+    /// Retained past launch so failures *after* a successful launch can still
+    /// read it (#1204). [`drain_into`] threads keep filling these buffers for
+    /// the session's lifetime, so this stays current rather than frozen at
+    /// launch. Previously `launch_with` dropped it on the success path, which
+    /// left the only Windows-side evidence of a broken webview session
+    /// unreachable exactly when a bridge wait timed out.
+    proc_log: ProcLog,
 }
 
 /// How much persisted state [`E2eApp::launch_with`] wipes before spawning
@@ -446,7 +453,7 @@ impl E2eApp {
             return Err(e).context("failed to set explicit WebDriver timeouts");
         }
 
-        Ok(Self { driver, driver_proc: Some(driver_proc) })
+        Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
     }
 
     /// Issue a Tauri command through the `window.__ALM_E2E__` bridge.
@@ -744,9 +751,15 @@ impl E2eApp {
                     || "no probe error — the bridge simply never appeared".to_owned(),
                     |e| format!("last probe error: {e}"),
                 );
+                // The in-page probe above can only speak if the webview session
+                // is alive enough to evaluate script — and #1204's signature is
+                // precisely that it is not. The driver/app log is the one
+                // channel that does not depend on the faulty session, so dump
+                // it here rather than only on a launch failure.
                 return Err(anyhow!(
                     "window.__ALM_E2E__ bridge never became ready within {timeout:?}; \
-                     {cause}; {probed}"
+                     {cause}; {probed}\n{}",
+                    self.proc_log.dump()
                 ));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1759,20 +1772,31 @@ fn app_binary_path() -> Result<PathBuf> {
     Ok(workspace_root.join("target").join("debug").join(binary_name))
 }
 
-/// Cap on buffered lines per stream in [`ProcLog`] — [`E2eApp::launch_with`]'s
-/// failure path is the only reader and only cares about the tail of a
-/// [`LAUNCH_TIMEOUT`]-bounded window, so this stays cheap even if the CLI or
-/// app is chatty for the rest of a long-running journey.
+/// Cap on buffered lines per stream in [`ProcLog`]. Every reader wants the
+/// *tail* — the lines immediately preceding the failure — so a ring buffer of
+/// this size stays cheap even when a chatty app runs for a whole journey.
+///
+/// Note this is no longer a [`LAUNCH_TIMEOUT`]-bounded window: since #1204,
+/// [`E2eApp::wait_bridge_ready`] also reads it, arbitrarily far into a
+/// journey. The tail is still the right window, but on a long, noisy journey
+/// these 200 lines may be mostly unrelated chatter — raise it if a real
+/// investigation ever gets truncated.
 const DIAGNOSTIC_LOG_LINES: usize = 200;
 
 /// Bounded ring-buffer capture of the `tauri-webdriver` CLI child process's
 /// stdout/stderr, drained continuously by background threads (see
-/// [`drain_into`]) — diagnostics only, never read except on a launch failure
-/// in [`E2eApp::launch_with`]. Previously nothing surfaced whether the app
-/// even started on a launch failure (undiagnosable macOS `Connection refused`
-/// runs, issue #489); the CLI's own child (`desktop_shell`) inherits stdio
-/// from the CLI by default, so piping the CLI's streams transitively
-/// captures the app's own console output too, not just the CLI's log.
+/// [`drain_into`]) — diagnostics only, read on a launch failure in
+/// [`E2eApp::launch_with`] and on a bridge-wait timeout in
+/// [`E2eApp::wait_bridge_ready`] (#1204). Previously nothing surfaced whether
+/// the app even started on a launch failure (undiagnosable macOS
+/// `Connection refused` runs, issue #489); the CLI's own child
+/// (`desktop_shell`) inherits stdio from the CLI by default, so piping the
+/// CLI's streams transitively captures the app's own console output too, not
+/// just the CLI's log.
+///
+/// This is the only diagnostic channel that does not run *through* the
+/// webview session, which is what makes it the useful one when the session
+/// itself is the fault.
 struct ProcLog {
     stdout: Arc<Mutex<VecDeque<String>>>,
     stderr: Arc<Mutex<VecDeque<String>>>,

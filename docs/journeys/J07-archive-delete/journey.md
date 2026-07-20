@@ -1,7 +1,7 @@
 ---
 id: J07
 title: Archive a completed project, then trash or permanently delete it
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -19,6 +19,8 @@ trace:
   - PR #401, PR #415, PR #826, PR #849
   - issue #732 (send-to-trash / permanently-delete are audit-only stubs, open)
   - spec-054-adaptive-detail-dock (FR-004 — shared adaptive dock)
+  - PR #1190 (design-refresh handoff 06 — Approve & apply variant scoped to
+    delete-only plans)
 ---
 
 ## Goal
@@ -68,6 +70,10 @@ user typing the literal word `DELETE`.
 
 ### S3 — Apply the archive plan {#S3}
 - **Do:** Approve and apply the reviewed plan.
+- **Expect:** "Approve & apply" renders in the app's neutral primary button
+  style, not the red destructive style — an archive plan only moves files,
+  it never deletes; the shared plan-review overlay (also used by J06)
+  reserves the destructive style for plans containing a delete.
 - **Expect:** Files move into an app-managed, collision-free archive folder
   scoped to this plan (`.astro-plan-archive/<planId>/…`, a documented
   deviation from the originally specced token-pattern destination, D24).
@@ -207,3 +213,11 @@ user typing the literal word `DELETE`.
   Sessions/Calibration/Projects/Targets.
   Evidence: spec-054-adaptive-detail-dock (FR-004) · by: journey-scribe
   (intent-gated)
+
+- **Δ4** 2026-07-20 · S3 · behavior-change
+  "Approve & apply" on the archive plan now renders in the neutral primary
+  button style instead of the red destructive style, since an archive plan
+  never deletes — previously the button was unconditionally styled
+  destructive regardless of plan content, on every plan reviewed through
+  the shared `PlanReviewOverlay` (also used by J06).
+  Evidence: PR #1190 · by: journey-scribe (intent-gated)

@@ -77,6 +77,25 @@ if (import.meta.env.VITE_E2E) {
   });
 }
 
+// Handoff 07: tell the splash window it can close. `onRendered` fires once
+// the first route has actually rendered — for the common path that's after
+// `checkFirstRunComplete()`'s real IPC round-trip in the index route's
+// `beforeLoad` (router.tsx), so this is closer to "the app responded" than a
+// bare paint signal. It is still a boot-paint proxy, not a true
+// migration-complete signal — no such IPC surface exists yet (open item,
+// see handoff 07 report). No-ops outside a Tauri window (browser dev
+// preview, vitest): `emit` rejects there and the splash window doesn't
+// exist to listen anyway.
+let bootReadySent = false;
+const unsubscribeBootReady = router.subscribe('onRendered', () => {
+  if (bootReadySent) return;
+  bootReadySent = true;
+  unsubscribeBootReady();
+  void import('@tauri-apps/api/event').then(({ emit }) =>
+    emit('app:boot-ready').catch(() => {}),
+  );
+});
+
 const root = document.getElementById('root');
 if (!root) {
   throw new Error('Root element #root is missing from index.html');
