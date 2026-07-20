@@ -45,6 +45,27 @@ pub enum SessionsView {
     Calendar,
 }
 
+/// Detail-panel dock placement for a list page.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum DockPlacement {
+    Side,
+    Bottom,
+}
+
+/// Per-page detail-dock state.
+///
+/// `placement` is three-state: `Some(Side)` / `Some(Bottom)` pin the dock,
+/// `None` means "auto" — follow the window-width rule (#1066).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailDockPref {
+    pub placement: Option<DockPlacement>,
+    pub width: Option<f64>,
+}
+
 /// Application-level user preferences.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -57,4 +78,6 @@ pub struct AppPreferences {
     pub sessions_view: SessionsView,
     pub tour_completed: TourCompleted,
     pub setup_completed: bool,
+    /// Keyed by `dockId` (the adopting list page, e.g. `"sessions"`).
+    pub detail_dock: std::collections::HashMap<String, DetailDockPref>,
 }
