@@ -12,6 +12,8 @@
 //!   - inbox_classification_evidence has the new override columns.
 //!   - plan_items accepts 'catalogue' as a valid action value.
 
+mod common;
+
 use persistence_db::Database;
 use uuid::Uuid;
 
@@ -27,28 +29,9 @@ async fn setup() -> Database {
     db
 }
 
-/// Run the chain up to and including `version`, so a test can observe the
-/// database as it stood before the migration it covers (#1231).
-///
-/// Uses the same embedded migrations as production, truncated -- there is no
-/// second copy of the SQL to drift.
-async fn migrate_through(db: &Database, version: i64) {
-    let migrator = sqlx::migrate::Migrator {
-        migrations: Database::migrator()
-            .iter()
-            .filter(|migration| migration.version <= version)
-            .cloned()
-            .collect(),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
-    migrator.run(db.pool()).await.expect("migrations should apply cleanly");
-}
-
 /// A database migrated to 0044 -- the last version before 0045.
 async fn setup_pre_0045() -> Database {
-    let db = Database::in_memory().await.expect("in-memory db");
-    migrate_through(&db, 44).await;
-    db
+    common::migrated_to(44).await
 }
 
 /// Seed a registered_source row with the given kind (bypassing the ORM so we
@@ -106,7 +89,7 @@ async fn backfill_sets_organization_state_from_source_kind() {
         "organization_state must not exist before 0045, or this test is not testing the backfill"
     );
 
-    migrate_through(&db, 45).await;
+    common::migrate_through(&db, 45).await;
 
     let state_of = async |id: &str| -> String {
         sqlx::query_as::<_, (String,)>(
