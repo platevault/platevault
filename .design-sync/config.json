@@ -42,12 +42,8 @@
     "DetailPanel": "src/components/DetailPanel.tsx",
     "FactsKV": "src/components/DetailPanel.tsx",
     "MetricLine": "src/components/MetricLine.tsx",
-    "DetailGrid": "src/components/DetailGrid.tsx",
-    "Rail": "src/components/DetailGrid.tsx",
-    "RailCard": "src/components/DetailGrid.tsx",
     "Lifecycle": "src/components/Lifecycle.tsx",
     "Modal": "src/components/Modal.tsx",
-    "ConfirmOverlay": "src/components/ConfirmOverlay.tsx",
     "StatusTag": "src/components/StatusTag.tsx",
     "PropertyTable": "src/components/PropertyTable.tsx",
     "TargetSearch": null
