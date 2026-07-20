@@ -14,7 +14,7 @@
  * Off-track ('blocked') projects get a trailing danger chip so the rail's prior
  * blocked marker is preserved in the horizontal form.
  *
- * Token-only styling via `.alm-stepper*` (new) + the shared `.alm-section`
+ * Token-only styling via `.pv-stepper*` (new) + the shared `.pv-section`
  * collapsible. No inline styles.
  */
 
@@ -81,15 +81,15 @@ export function ProjectLifecycleStepper({
   } = useProjectHistory(resolvedProjectId);
 
   return (
-    <div className="alm-stepper" data-testid="project-lifecycle-stepper">
-      <ol className="alm-stepper__track" aria-label={m.projects_stepper_aria()}>
+    <div className="pv-stepper" data-testid="project-lifecycle-stepper">
+      <ol className="pv-stepper__track" aria-label={m.projects_stepper_aria()}>
         {PROJECT_LIFECYCLE.map((step, i) => {
           const isDone = !isBlocked && i < currentIdx;
           const isCurrent = !isBlocked && i === currentIdx;
           const chipClass = [
-            'alm-stepper__chip',
-            isDone && 'alm-stepper__chip--done',
-            isCurrent && 'alm-stepper__chip--active',
+            'pv-stepper__chip',
+            isDone && 'pv-stepper__chip--done',
+            isCurrent && 'pv-stepper__chip--active',
           ]
             .filter(Boolean)
             .join(' ');
@@ -105,7 +105,7 @@ export function ProjectLifecycleStepper({
         })}
         {isBlocked && (
           <li
-            className="alm-stepper__chip alm-stepper__chip--blocked"
+            className="pv-stepper__chip pv-stepper__chip--blocked"
             aria-current="step"
           >
             {m.projects_stepper_blocked_chip()}
@@ -113,15 +113,15 @@ export function ProjectLifecycleStepper({
         )}
       </ol>
 
-      <p className="alm-stepper__next">{nextActionText(state)}</p>
+      <p className="pv-stepper__next">{nextActionText(state)}</p>
 
       <Section title={m.projects_stepper_history_title()} defaultOpen={false}>
-        <div className="alm-stepper__history">
-          <div className="alm-stepper__history-row">
+        <div className="pv-stepper__history">
+          <div className="pv-stepper__history-row">
             {m.projects_stepper_created()}{' '}
             {new Date(createdAt).toLocaleDateString()}
           </div>
-          <div className="alm-stepper__history-row">
+          <div className="pv-stepper__history-row">
             {m.projects_stepper_updated()}{' '}
             {new Date(updatedAt).toLocaleDateString()}
           </div>
@@ -164,7 +164,7 @@ export function ProjectLifecycleStepper({
             ]}
             rows={history.map((entry) => ({
               ts: (
-                <span className="alm-mono">
+                <span className="pv-mono">
                   {formatDateTime(entry.timestamp)}
                 </span>
               ),
@@ -181,7 +181,7 @@ export function ProjectLifecycleStepper({
                   {auditOutcomeLabel(entry.outcome)}
                 </Pill>
               ),
-              actor: <span className="alm-mono">{entry.actor}</span>,
+              actor: <span className="pv-mono">{entry.actor}</span>,
             }))}
           />
         )}

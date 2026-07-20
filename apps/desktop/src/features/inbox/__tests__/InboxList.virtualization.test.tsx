@@ -127,12 +127,12 @@ afterEach(() => {
 });
 
 // Off-window scroll extent. The shared Table windows with the padding-spacer
-// pattern (two sentinel <tr class="alm-table__spacer"> bracket the mounted
+// pattern (two sentinel <tr class="pv-table__spacer"> bracket the mounted
 // slice), so the extent the window is NOT showing is the sum of the spacer
 // heights — the windowed-pattern stand-in for the old single-sizer height.
 function sizerHeight(): number {
   let h = 0;
-  document.querySelectorAll('.alm-table__spacer td').forEach((td) => {
+  document.querySelectorAll('.pv-table__spacer td').forEach((td) => {
     h += parseFloat((td as HTMLElement).style.height || '0');
   });
   return h;

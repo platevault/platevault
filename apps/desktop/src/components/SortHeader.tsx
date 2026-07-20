@@ -7,7 +7,7 @@
  * Every list table (Sessions / Calibration / Projects / Targets / Inbox) renders
  * the SAME header affordance: a borderless button carrying the column label and,
  * when it is the active sort column, a direction arrow. Layout, spacing, hover,
- * active color, and the arrow glyph live HERE and in the single `.alm-sorth` CSS
+ * active color, and the arrow glyph live HERE and in the single `.pv-sorth` CSS
  * block — callers parameterise CONTENT only (`label`, `active`, `dir`, `onClick`,
  * `ariaLabel`, optional `title`). Do NOT re-implement per-feature `*-sorth`
  * classes; that is what previously drifted (and left Inbox unstyled).
@@ -67,14 +67,14 @@ export function SortHeader({
   return (
     <button
       type="button"
-      className={`alm-sorth${active ? ' alm-sorth--active' : ''}`}
+      className={`pv-sorth${active ? ' pv-sorth--active' : ''}`}
       onClick={onClick}
       aria-label={ariaLabel}
       title={title}
     >
       {label}
       {active && (
-        <span className="alm-sorth__arrow" aria-hidden="true">
+        <span className="pv-sorth__arrow" aria-hidden="true">
           {dir === 'asc' ? '▲' : '▼'}
         </span>
       )}

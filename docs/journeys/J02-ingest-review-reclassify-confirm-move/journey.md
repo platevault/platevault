@@ -1,7 +1,7 @@
 ---
 id: J02
 title: Move newly-arrived frames from an inbox drop folder into the library
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -63,11 +63,18 @@ explicit, reviewed plan, and the action is visible in the audit history.
   contents using one normalized name per frame type. The inbox badge counts
   a split folder once per resulting single-type item — the superseded source
   folder is hidden from the queue and must not be counted, so the badge and
-  the visible rows always agree.
+  the visible rows always agree. A folder whose files resolve to NO frame
+  type at all (e.g. an unrecognized `IMAGETYP`) does not split, so its folder
+  row stays in the queue alongside the needs-review item its files landed in;
+  that folder row's Type column reads "unclassified", matching what the
+  detail panel says about the same item.
 - **Expect (negative):** No queue item is shown as an undifferentiated
   "mixed" type when its files can be split by detected frame type. The badge
   never reads higher than the number of visible queue rows — a split folder
-  must not be counted as its items *plus* its own hidden source folder.
+  must not be counted as its items *plus* its own hidden source folder. A
+  queue row never reports "classified" in the Type column while its own
+  detail panel reports the item unclassified — the two surfaces never
+  disagree about the same item.
   Opening the Inbox page and leaving it open never spins the page in a runaway
   re-render loop (previously the page re-rendered continuously the entire
   time it was open, driven by an unstable page-status node identity and a
@@ -119,10 +126,10 @@ explicit, reviewed plan, and the action is visible in the audit history.
   cut off below the window — this was a real, previously-observed defect
   (the file list overflowed past the viewport and its bottom rows were
   unreachable) that the detail body's own scroll region
-  (`.alm-inbox-detail__scroll`) fixes, independent of side/bottom placement.
+  (`.pv-inbox-detail__scroll`) fixes, independent of side/bottom placement.
 - **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
   `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring,
-  `.alm-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
+  `.pv-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
   mixed-folder banner copy per PR #939 fixes #552, #569);
   `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
   Sessions-only — no `nativeReveal` call anywhere under
@@ -320,3 +327,14 @@ explicit, reviewed plan, and the action is visible in the audit history.
   #939 fixes #554).
   Evidence: PR #938 (fixes #557), PR #939 (fixes #552, #553, #554, #569) ·
   by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-19 · S1 · behavior-change
+  A folder row whose files resolve to no frame type no longer reports
+  "classified" in the Type column. It now reads "unclassified", agreeing
+  with what the detail panel already said about that same item — the list
+  badge is read from the item's own cached classification instead of from
+  its scan state, which is set to "classified" for every scanned folder
+  regardless of the result.
+  Evidence: commit 4a96389b (fix(inbox): list badge no longer reports
+  Classified for an unsplit folder), issue #711 Instance A · by:
+  journey-scribe (intent-gated)

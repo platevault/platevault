@@ -275,9 +275,13 @@ pub fn run_app(
         let snap_pool = pool.clone();
         let snap_bus = bus.clone();
         tokio::spawn(async move {
+            // #668 suppression state, scoped to this loop — the only emitter
+            // of settings.snapshot.
+            let dedupe = app_core::settings::SnapshotDedupe::new();
             // Session-start snapshot.
             if let Err(e) =
-                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start").await
+                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start", &dedupe)
+                    .await
             {
                 tracing::warn!("settings.snapshot (session_start) failed: {e:?}");
             }
@@ -285,8 +289,13 @@ pub fn run_app(
             let interval = std::time::Duration::from_mins(5);
             loop {
                 tokio::time::sleep(interval).await;
-                if let Err(e) =
-                    app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "debounce_5min").await
+                if let Err(e) = app_core::settings::emit_snapshot(
+                    &snap_pool,
+                    &snap_bus,
+                    "debounce_5min",
+                    &dedupe,
+                )
+                .await
                 {
                     tracing::warn!("settings.snapshot (debounce_5min) failed: {e:?}");
                 }

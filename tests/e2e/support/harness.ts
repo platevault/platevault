@@ -31,7 +31,7 @@
  * `VITE_USE_MOCKS`, independent of both.
  */
 
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page } from '@playwright/test';
 
 /**
  * Install the minimal `window.__TAURI_INTERNALS__.transformCallback` the
@@ -42,11 +42,13 @@ export async function installTauriChannelPolyfill(page: Page): Promise<void> {
   await page.addInitScript(() => {
     // Preserve any pre-existing internals object; only supply the one method.
     const w = window as unknown as {
-      __TAURI_INTERNALS__?: { transformCallback?: (cb: unknown, once?: boolean) => number };
+      __TAURI_INTERNALS__?: {
+        transformCallback?: (cb: unknown, once?: boolean) => number;
+      };
     };
     let nextCallbackId = 1;
     const existing = w.__TAURI_INTERNALS__ ?? {};
-    if (typeof existing.transformCallback !== "function") {
+    if (typeof existing.transformCallback !== 'function') {
       existing.transformCallback = () => nextCallbackId++;
     }
     w.__TAURI_INTERNALS__ = existing;
@@ -57,7 +59,7 @@ export async function installTauriChannelPolyfill(page: Page): Promise<void> {
 export function seedSetupComplete(page: Page): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      "alm-preferences",
+      'alm-preferences',
       JSON.stringify({ setupCompleted: true }),
     );
   });
@@ -71,7 +73,7 @@ export function seedSetupComplete(page: Page): void {
  */
 export async function disableGuidedTourOverlay(page: Page): Promise<void> {
   await page.addStyleTag({
-    content: "#react-joyride-portal { display: none !important; }",
+    content: '#react-joyride-portal { display: none !important; }',
   });
 }
 

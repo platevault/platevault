@@ -41,12 +41,12 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    const body = container.querySelector('.alm-listpage__body');
+    const body = container.querySelector('.pv-listpage__body');
     expect(body).toBeInTheDocument();
-    expect(body).not.toHaveClass('alm-listpage__body--side');
-    const detail = container.querySelector('.alm-listpage__detail');
+    expect(body).not.toHaveClass('pv-listpage__body--side');
+    const detail = container.querySelector('.pv-listpage__detail');
     expect(detail).toBeInTheDocument();
-    expect(detail).not.toHaveClass('alm-listpage__detail--side');
+    expect(detail).not.toHaveClass('pv-listpage__detail--side');
   });
 
   it('does not render the detail panel when detail is null', () => {
@@ -55,7 +55,7 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    expect(container.querySelector('.alm-listpage__detail')).toBeNull();
+    expect(container.querySelector('.pv-listpage__detail')).toBeNull();
   });
 
   it('applies the side variant classes when detailPlacement="side"', () => {
@@ -69,11 +69,11 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    expect(container.querySelector('.alm-listpage__body')).toHaveClass(
-      'alm-listpage__body--side',
+    expect(container.querySelector('.pv-listpage__body')).toHaveClass(
+      'pv-listpage__body--side',
     );
-    expect(container.querySelector('.alm-listpage__detail')).toHaveClass(
-      'alm-listpage__detail--side',
+    expect(container.querySelector('.pv-listpage__detail')).toHaveClass(
+      'pv-listpage__detail--side',
     );
   });
 
@@ -123,13 +123,11 @@ describe('ListPageLayout', () => {
     ).toBeInTheDocument();
     // Body carries the dual modifier class.
     expect(
-      container.querySelector('.alm-listpage__body--dual'),
+      container.querySelector('.pv-listpage__body--dual'),
     ).toBeInTheDocument();
     // Side panel and bottom strip use their own classes (not the old detail classes).
-    expect(container.querySelector('.alm-listpage__side')).toBeInTheDocument();
-    expect(
-      container.querySelector('.alm-listpage__bottom'),
-    ).toBeInTheDocument();
+    expect(container.querySelector('.pv-listpage__side')).toBeInTheDocument();
+    expect(container.querySelector('.pv-listpage__bottom')).toBeInTheDocument();
     expect(screen.getByText('side content')).toBeInTheDocument();
     expect(screen.getByText('bottom content')).toBeInTheDocument();
   });
@@ -144,10 +142,8 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    expect(container.querySelector('.alm-listpage__side')).toBeNull();
-    expect(
-      container.querySelector('.alm-listpage__bottom'),
-    ).toBeInTheDocument();
+    expect(container.querySelector('.pv-listpage__side')).toBeNull();
+    expect(container.querySelector('.pv-listpage__bottom')).toBeInTheDocument();
   });
 
   it('(#104) dual: does not render bottom strip when bottomDetail is null', () => {
@@ -161,8 +157,8 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    expect(container.querySelector('.alm-listpage__side')).toBeInTheDocument();
-    expect(container.querySelector('.alm-listpage__bottom')).toBeNull();
+    expect(container.querySelector('.pv-listpage__side')).toBeInTheDocument();
+    expect(container.querySelector('.pv-listpage__bottom')).toBeNull();
   });
 
   it('(#104) dual: close affordances call their respective callbacks', () => {
@@ -198,13 +194,11 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    expect(container.querySelector('.alm-listpage__body--dual')).toBeNull();
-    expect(container.querySelector('.alm-listpage__side')).toBeNull();
-    expect(container.querySelector('.alm-listpage__bottom')).toBeNull();
+    expect(container.querySelector('.pv-listpage__body--dual')).toBeNull();
+    expect(container.querySelector('.pv-listpage__side')).toBeNull();
+    expect(container.querySelector('.pv-listpage__bottom')).toBeNull();
     // Original detail class still present.
-    expect(
-      container.querySelector('.alm-listpage__detail'),
-    ).toBeInTheDocument();
+    expect(container.querySelector('.pv-listpage__detail')).toBeInTheDocument();
   });
 
   // ── Escape-to-close (#771) ────────────────────────────────────────────────
@@ -384,8 +378,8 @@ describe('ListPageLayout', () => {
           <div>main</div>
         </ListPageLayout>,
       );
-      expect(container.querySelector('.alm-listpage__detail')).not.toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container.querySelector('.pv-listpage__detail')).not.toHaveClass(
+        'pv-listpage__detail--side',
       );
 
       resizeWindowTo(1600);
@@ -398,8 +392,8 @@ describe('ListPageLayout', () => {
           <div>main</div>
         </ListPageLayout>,
       );
-      expect(container.querySelector('.alm-listpage__detail')).toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container.querySelector('.pv-listpage__detail')).toHaveClass(
+        'pv-listpage__detail--side',
       );
     });
 
@@ -416,8 +410,8 @@ describe('ListPageLayout', () => {
         </ListPageLayout>,
       );
       // 1450 < 1500 → still bottom, even though it clears the generic default.
-      expect(container.querySelector('.alm-listpage__detail')).not.toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container.querySelector('.pv-listpage__detail')).not.toHaveClass(
+        'pv-listpage__detail--side',
       );
     });
 
@@ -433,8 +427,8 @@ describe('ListPageLayout', () => {
         </ListPageLayout>,
       );
       fireEvent.click(screen.getByRole('radio', { name: 'Right' }));
-      expect(container.querySelector('.alm-listpage__detail')).toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container.querySelector('.pv-listpage__detail')).toHaveClass(
+        'pv-listpage__detail--side',
       );
       unmount();
 
@@ -448,8 +442,8 @@ describe('ListPageLayout', () => {
         </ListPageLayout>,
       );
       // Narrow window (1024), but the pin from the previous mount survives.
-      expect(container2.querySelector('.alm-listpage__detail')).toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container2.querySelector('.pv-listpage__detail')).toHaveClass(
+        'pv-listpage__detail--side',
       );
     });
 
@@ -468,15 +462,15 @@ describe('ListPageLayout', () => {
           <div>main</div>
         </ListPageLayout>,
       );
-      const detailEl = () => container.querySelector('.alm-listpage__detail');
+      const detailEl = () => container.querySelector('.pv-listpage__detail');
 
       // Pin to Right on a narrow window — placement defies the width rule.
       fireEvent.click(screen.getByRole('radio', { name: 'Right' }));
-      expect(detailEl()).toHaveClass('alm-listpage__detail--side');
+      expect(detailEl()).toHaveClass('pv-listpage__detail--side');
 
       // Back to Auto: 1024 is below the threshold, so it must fall to bottom.
       fireEvent.click(screen.getByRole('radio', { name: 'Auto' }));
-      expect(detailEl()).not.toHaveClass('alm-listpage__detail--side');
+      expect(detailEl()).not.toHaveClass('pv-listpage__detail--side');
       expect(screen.getByRole('radio', { name: 'Auto' })).toBeChecked();
 
       // And Auto must survive a remount — i.e. the persisted pin was actually
@@ -491,14 +485,14 @@ describe('ListPageLayout', () => {
           <div>main</div>
         </ListPageLayout>,
       );
-      expect(container2.querySelector('.alm-listpage__detail')).not.toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container2.querySelector('.pv-listpage__detail')).not.toHaveClass(
+        'pv-listpage__detail--side',
       );
 
       // Auto still follows the width rule upward, not just downward.
       resizeWindowTo(1600);
-      expect(container2.querySelector('.alm-listpage__detail')).toHaveClass(
-        'alm-listpage__detail--side',
+      expect(container2.querySelector('.pv-listpage__detail')).toHaveClass(
+        'pv-listpage__detail--side',
       );
     });
 

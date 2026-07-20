@@ -40,14 +40,14 @@ export function PlannerDatePicker() {
   const overridden = useIsPlannerDateOverridden();
 
   return (
-    <div className="alm-planner-date-picker" data-testid="planner-date-picker">
-      <label className="alm-field-label" htmlFor="planner-date-input">
+    <div className="pv-planner-date-picker" data-testid="planner-date-picker">
+      <label className="pv-field-label" htmlFor="planner-date-input">
         {m.targets_planner_date_label()}
       </label>
       <input
         id="planner-date-input"
         type="date"
-        className="alm-input"
+        className="pv-input"
         value={toDateInputValue(dateMs)}
         aria-label={m.targets_planner_date_label()}
         onChange={(e) => {

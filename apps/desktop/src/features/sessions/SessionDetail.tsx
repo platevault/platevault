@@ -107,25 +107,25 @@ function CalibrationLinkage({
   return (
     <>
       <div
-        className="alm-session-detail2__linked-list"
+        className="pv-session-detail2__linked-list"
         data-testid="session-calib-list"
       >
         {matches.map((match) => (
           <div
             key={`${match.kind}-${match.masterId}`}
-            className="alm-session-detail2__calib-row"
+            className="pv-session-detail2__calib-row"
           >
             <Pill variant="info">{match.kind}</Pill>
-            <span className="alm-mono">{match.masterId}</span>
+            <span className="pv-mono">{match.masterId}</span>
             {match.score != null && (
-              <span className="alm-session-detail2__calib-note">
+              <span className="pv-session-detail2__calib-note">
                 {m.sessions_calib_score({
                   pct: Math.round(match.score * 100),
                 })}
               </span>
             )}
             {match.softMismatches.length > 0 && (
-              <span className="alm-session-detail2__calib-note">
+              <span className="pv-session-detail2__calib-note">
                 {m.sessions_calib_soft_mismatch({
                   dims: match.softMismatches.join(', '),
                 })}
@@ -319,7 +319,7 @@ export function SessionDetail({
   // button apart. Spec 041 FR-051 (T076): the review actions that used to
   // share this row (Confirm/Re-open/Reject/Ignore) are removed.
   const actionButtons = (
-    <span className="alm-session-detail2__actions">
+    <span className="pv-session-detail2__actions">
       {/* Backing-source connectivity (#889): a session on a missing/disabled/
           reconnect-required root is not "healthy" — surface the reason
           file-touching actions like Reveal are unavailable. */}
@@ -355,16 +355,16 @@ export function SessionDetail({
         colB={<PropertyTable mode="view" showSource properties={colB} />}
         linked={
           <>
-            <div className="alm-session-detail2__head">
+            <div className="pv-session-detail2__head">
               {m.sessions_linked_projects_heading()}
             </div>
             {isLinked ? (
-              <div className="alm-session-detail2__linked-list">
+              <div className="pv-session-detail2__linked-list">
                 {session.linked?.projects?.map((p) => (
                   <button
                     key={p.id}
                     type="button"
-                    className="alm-session-detail2__link"
+                    className="pv-session-detail2__link"
                     onClick={() => onOpenProject?.(p.id)}
                   >
                     {p.name}
@@ -372,7 +372,7 @@ export function SessionDetail({
                 ))}
               </div>
             ) : (
-              <span className="alm-session-detail2__muted">
+              <span className="pv-session-detail2__muted">
                 {m.common_none()}
               </span>
             )}

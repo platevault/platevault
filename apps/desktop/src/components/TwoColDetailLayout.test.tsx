@@ -17,11 +17,11 @@ describe('TwoColDetailLayout', () => {
     const { container } = render(
       <TwoColDetailLayout colA={<span>A</span>} colB={<span>B</span>} />,
     );
-    const wrapper = container.querySelector('.alm-session-detail2');
+    const wrapper = container.querySelector('.pv-session-detail2');
     expect(
-      wrapper?.querySelectorAll(':scope > .alm-session-detail2__col'),
+      wrapper?.querySelectorAll(':scope > .pv-session-detail2__col'),
     ).toHaveLength(2);
-    expect(wrapper?.querySelector('.alm-session-detail2__linked')).toBeNull();
+    expect(wrapper?.querySelector('.pv-session-detail2__linked')).toBeNull();
   });
 
   it('renders the linked slot with an optional modifier class', () => {
@@ -30,11 +30,11 @@ describe('TwoColDetailLayout', () => {
         colA={<span>A</span>}
         colB={<span>B</span>}
         linked={<span>linked</span>}
-        linkedClassName="alm-session-detail2__linked--stack"
+        linkedClassName="pv-session-detail2__linked--stack"
       />,
     );
     const linked = container.querySelector(
-      '.alm-session-detail2__linked.alm-session-detail2__linked--stack',
+      '.pv-session-detail2__linked.pv-session-detail2__linked--stack',
     );
     expect(linked).toBeInTheDocument();
     expect(linked).toHaveTextContent('linked');
@@ -48,9 +48,7 @@ describe('DetailLinkedGroup', () => {
         <span>content</span>
       </DetailLinkedGroup>,
     );
-    expect(screen.getByText('Used by')).toHaveClass(
-      'alm-session-detail2__head',
-    );
+    expect(screen.getByText('Used by')).toHaveClass('pv-session-detail2__head');
     expect(screen.getByText('content')).toBeInTheDocument();
   });
 
@@ -61,6 +59,6 @@ describe('DetailLinkedGroup', () => {
       </DetailLinkedGroup>,
     );
     expect(screen.queryByText('content')).not.toBeInTheDocument();
-    expect(screen.getByText('None')).toHaveClass('alm-session-detail2__muted');
+    expect(screen.getByText('None')).toHaveClass('pv-session-detail2__muted');
   });
 });

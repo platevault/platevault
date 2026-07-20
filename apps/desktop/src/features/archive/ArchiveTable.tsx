@@ -81,19 +81,19 @@ const COLUMNS: Array<{
     key: 'reason',
     label: () => m.archive_prop_reason(),
     sort: 'reason',
-    className: 'alm-cell--muted',
+    className: 'pv-cell--muted',
   },
   {
     key: 'size',
     label: () => m.archive_prop_size(),
     sort: 'size',
-    className: 'alm-cell--num',
+    className: 'pv-cell--num',
   },
   {
     key: 'archived',
     label: () => m.archive_prop_archived_at(),
     sort: 'archived',
-    className: 'alm-cell--mono',
+    className: 'pv-cell--mono',
   },
 ];
 
@@ -137,8 +137,8 @@ export function ArchiveTable({
   const rows: TableRow[] = sorted.map((a) => ({
     _testid: `archive-row-${a.id}`,
     _rowClassName:
-      'alm-densetable__row' +
-      (selected === a.id ? ' alm-densetable__row--selected' : ''),
+      'pv-densetable__row' +
+      (selected === a.id ? ' pv-densetable__row--selected' : ''),
     _onClick: () => onSelect(a.id),
     _selected: selected === a.id,
     name: a.name,
@@ -153,8 +153,8 @@ export function ArchiveTable({
   }));
 
   return (
-    <div className="alm-listtable" data-testid="archive-list">
-      <Table className="alm-densetable" columns={columns} rows={rows} />
+    <div className="pv-listtable" data-testid="archive-list">
+      <Table className="pv-densetable" columns={columns} rows={rows} />
     </div>
   );
 }

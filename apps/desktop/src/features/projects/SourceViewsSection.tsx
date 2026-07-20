@@ -208,7 +208,7 @@ export function SourceViewsSection({
         defaultOpen={defaultOpen}
         right={generateButton}
       >
-        <p className="alm-text-sm alm-text-muted">{m.common_loading()}</p>
+        <p className="pv-text-sm pv-text-muted">{m.common_loading()}</p>
         {dialog}
       </Section>
     );
@@ -236,7 +236,7 @@ export function SourceViewsSection({
         defaultOpen={defaultOpen}
         right={generateButton}
       >
-        <p className="alm-text-sm alm-text-muted">
+        <p className="pv-text-sm pv-text-muted">
           {m.projects_source_views_empty()}
         </p>
         {dialog}
@@ -251,23 +251,23 @@ export function SourceViewsSection({
       right={generateButton}
     >
       {dialog}
-      <ul className="alm-source-views__list">
+      <ul className="pv-source-views__list">
         {views.map((view) => (
           <li
             key={view.id}
-            className="alm-source-views__row"
+            className="pv-source-views__row"
             data-testid={`source-view-row-${view.id}`}
           >
-            <div className="alm-stack-1 alm-rail">
-              <div className="alm-source-views__row-head">
-                <span className="alm-source-views__id" title={view.id}>
+            <div className="pv-stack-1 pv-rail">
+              <div className="pv-source-views__row-head">
+                <span className="pv-source-views__id" title={view.id}>
                   {view.id.slice(0, 8)}…
                 </span>
                 <Pill variant={viewStateVariant(view.state)}>
                   {viewStateLabel(view.state)}
                 </Pill>
-                <span className="alm-text-xs alm-text-muted">{view.kind}</span>
-                <span className="alm-text-xs alm-text-muted">
+                <span className="pv-text-xs pv-text-muted">{view.kind}</span>
+                <span className="pv-text-xs pv-text-muted">
                   {view.itemCount} {m.projects_source_views_items_unit()}
                 </span>
               </div>
@@ -278,14 +278,14 @@ export function SourceViewsSection({
                   broken-reference detail, distinct from the on-demand Verify
                   report below. */}
               {view.items.length > 0 && (
-                <details className="alm-source-views__refs-details alm-text-xs alm-text-muted">
-                  <summary className="alm-source-views__refs-summary">
+                <details className="pv-source-views__refs-details pv-text-xs pv-text-muted">
+                  <summary className="pv-source-views__refs-summary">
                     {m.projects_source_views_inventory_ref_count({
                       count: view.items.length,
                     })}
                   </summary>
                   <ul
-                    className="alm-source-views__refs-list"
+                    className="pv-source-views__refs-list"
                     data-testid={`source-view-items-${view.id}`}
                   >
                     {view.items.map((item: PreparedViewItemDetail) => (
@@ -294,7 +294,7 @@ export function SourceViewsSection({
                         title={m.projects_source_view_item_title({
                           id: item.inventoryItemId,
                         })}
-                        className="alm-source-views__refs-item"
+                        className="pv-source-views__refs-item"
                       >
                         {item.viewRelativePath}
                         {item.lastObservedState !== 'present' && (
@@ -352,12 +352,12 @@ export function SourceViewsSection({
                           ),
                         })}
                       </span>
-                      <ul className="alm-source-views__refs-list">
+                      <ul className="pv-source-views__refs-list">
                         {(verifyResults[view.id].brokenItems ?? []).map(
                           (item) => (
                             <li
                               key={item.inventoryItemId}
-                              className="alm-source-views__refs-item"
+                              className="pv-source-views__refs-item"
                             >
                               {item.viewRelativePath} —{' '}
                               {brokenItemStateLabel(item.state)}
@@ -375,7 +375,7 @@ export function SourceViewsSection({
               <ViewAuditHistory viewId={view.id} onViewPlan={onPlanCreated} />
             </div>
 
-            <div className="alm-source-views__actions">
+            <div className="pv-source-views__actions">
               {canVerifyView(view.state) && (
                 <Btn
                   size="sm"

@@ -26,24 +26,24 @@ describe('ProjectStatusTag', () => {
     const { container } = render(
       <ProjectStatusTag variant="danger">Blocked</ProjectStatusTag>,
     );
-    const tag = container.querySelector('.alm-status-tag');
-    expect(tag).toHaveClass('alm-status-tag--danger');
+    const tag = container.querySelector('.pv-status-tag');
+    expect(tag).toHaveClass('pv-status-tag--danger');
   });
 
   it('renders a dot span that is aria-hidden', () => {
     const { container } = render(
       <ProjectStatusTag variant="info">Processing</ProjectStatusTag>,
     );
-    const dot = container.querySelector('.alm-status-tag__dot');
+    const dot = container.querySelector('.pv-status-tag__dot');
     expect(dot).toBeInTheDocument();
     expect(dot).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('does not use the alm-pill class', () => {
+  it('does not use the pv-pill class', () => {
     const { container } = render(
       <ProjectStatusTag variant="neutral">Ready</ProjectStatusTag>,
     );
-    expect(container.querySelector('.alm-pill')).toBeNull();
+    expect(container.querySelector('.pv-pill')).toBeNull();
   });
 
   it('renders all PillVariant-equivalent states without throwing', () => {

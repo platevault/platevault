@@ -95,6 +95,10 @@ pub mod native;
 pub mod path_set;
 pub mod patterns;
 pub mod plan_apply;
+/// `plans.free_space_estimate` (issue #876) — split out of `plans.rs` to stay
+/// clear of the in-flight #979 split on that file; depends only on
+/// `plans::get_plan`.
+pub mod plan_free_space;
 pub mod plans;
 /// Project-create orchestration (create + mkdir-only scaffolding auto-apply,
 /// user decision 2026-07-04). Lives in `app_core` (not `app_core_projects`)

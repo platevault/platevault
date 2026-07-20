@@ -311,7 +311,7 @@ export function SessionsPage() {
       detailLabel={m.cmp_listpage_close_session_details_aria()}
     >
       {error != null ? (
-        <div className="alm-listtable__empty">{m.sessions_load_error()}</div>
+        <div className="pv-listtable__empty">{m.sessions_load_error()}</div>
       ) : (
         <SessionsTable
           sources={sources}

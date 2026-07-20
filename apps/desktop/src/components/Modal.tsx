@@ -126,29 +126,29 @@ export function Modal({
     >
       <Dialog.Portal>
         <Dialog.Backdrop
-          className="alm-modal__backdrop"
+          className="pv-modal__backdrop"
           onClick={closeOnBackdrop ? onClose : undefined}
         />
         <Dialog.Popup
-          className={`alm-modal alm-modal--${size}${className ? ` ${className}` : ''}`}
+          className={`pv-modal pv-modal--${size}${className ? ` ${className}` : ''}`}
           aria-label={label}
           data-testid={testId}
           initialFocus={initialFocus}
           finalFocus={() => invoker}
         >
-          <div className="alm-modal__header">
+          <div className="pv-modal__header">
             {title != null ? (
-              <Dialog.Title className="alm-modal__title">{title}</Dialog.Title>
+              <Dialog.Title className="pv-modal__title">{title}</Dialog.Title>
             ) : (
               // Keep the close button right-aligned even without a title.
-              <span className="alm-modal__title-spacer" />
+              <span className="pv-modal__title-spacer" />
             )}
             {subtitle != null && (
-              <span className="alm-modal__subtitle">{subtitle}</span>
+              <span className="pv-modal__subtitle">{subtitle}</span>
             )}
             {!hideClose && (
               <Dialog.Close
-                className="alm-modal__close"
+                className="pv-modal__close"
                 aria-label={m.common_close()}
               >
                 ✕
@@ -157,12 +157,12 @@ export function Modal({
           </div>
 
           <div
-            className={`alm-modal__body${bodyClassName ? ` ${bodyClassName}` : ''}`}
+            className={`pv-modal__body${bodyClassName ? ` ${bodyClassName}` : ''}`}
           >
             {children}
           </div>
 
-          {footer != null && <div className="alm-modal__footer">{footer}</div>}
+          {footer != null && <div className="pv-modal__footer">{footer}</div>}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

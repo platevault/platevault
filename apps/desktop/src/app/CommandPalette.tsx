@@ -279,41 +279,41 @@ export function CommandPalette() {
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="alm-palette-backdrop" />
+        <Dialog.Backdrop className="pv-palette-backdrop" />
         <Dialog.Popup
-          className="alm-palette"
+          className="pv-palette"
           aria-label={m.cmdk_aria_label()}
           initialFocus={inputRef}
         >
           <Command shouldFilter={false}>
             <Command.Input
               ref={inputRef}
-              className="alm-palette__input"
+              className="pv-palette__input"
               placeholder={m.cmdk_placeholder()}
               value={query}
               onValueChange={setQuery}
             />
-            <Command.List className="alm-palette__list">
+            <Command.List className="pv-palette__list">
               {query.trim() && results.length === 0 && (
-                <Command.Empty className="alm-palette__empty">
+                <Command.Empty className="pv-palette__empty">
                   {m.cmdk_no_results({ query: query.trim() })}
                 </Command.Empty>
               )}
               {results.length > 0 && (
                 <Command.Group
-                  className="alm-palette__group"
+                  className="pv-palette__group"
                   heading={m.cmdk_group_results()}
                 >
                   {results.map((r) => (
                     <Command.Item
                       key={r.id}
-                      className="alm-palette__item"
+                      className="pv-palette__item"
                       onSelect={() => select(r.route)}
                     >
-                      <span className="alm-palette__item-kind">{r.kind}</span>
-                      <span className="alm-palette__item-label">{r.label}</span>
+                      <span className="pv-palette__item-kind">{r.kind}</span>
+                      <span className="pv-palette__item-label">{r.label}</span>
                       {r.sublabel && (
-                        <span className="alm-palette__item-sub">
+                        <span className="pv-palette__item-sub">
                           {r.sublabel}
                         </span>
                       )}
@@ -322,41 +322,41 @@ export function CommandPalette() {
                 </Command.Group>
               )}
               <Command.Group
-                className="alm-palette__group"
+                className="pv-palette__group"
                 heading={m.cmdk_group_pages()}
               >
                 {visiblePages.map((p) => (
                   <Command.Item
                     key={p.route}
-                    className="alm-palette__item"
+                    className="pv-palette__item"
                     onSelect={() => select(p.route)}
                   >
-                    <span className="alm-palette__item-label">{p.label()}</span>
+                    <span className="pv-palette__item-label">{p.label()}</span>
                   </Command.Item>
                 ))}
               </Command.Group>
               <Command.Group
-                className="alm-palette__group"
+                className="pv-palette__group"
                 heading={m.cmdk_group_actions()}
               >
                 {ALL_ACTIONS.map((a) => (
                   <Command.Item
                     key={a.label()}
-                    className="alm-palette__item"
+                    className="pv-palette__item"
                     onSelect={() => selectAction(a)}
                   >
-                    <span className="alm-palette__item-label">{a.label()}</span>
+                    <span className="pv-palette__item-label">{a.label()}</span>
                   </Command.Item>
                 ))}
                 <Command.Item
-                  className="alm-palette__item"
+                  className="pv-palette__item"
                   onSelect={() => {
                     setOpen(false);
                     setQuery('');
                     void openInNewWindow(currentHref);
                   }}
                 >
-                  <span className="alm-palette__item-label">
+                  <span className="pv-palette__item-label">
                     {m.cmdk_open_new_window()}
                   </span>
                 </Command.Item>

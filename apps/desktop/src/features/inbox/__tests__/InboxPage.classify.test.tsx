@@ -406,8 +406,8 @@ describe('InboxList', () => {
     // count — the single search lives in the top bar and the folder/master
     // counts live in the top-bar summary + status bar (computed by
     // deriveInboxStats, covered by inboxStatsFromItems.test.ts), not here.
-    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
-    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__search')).toBeNull();
     expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
   });
 });

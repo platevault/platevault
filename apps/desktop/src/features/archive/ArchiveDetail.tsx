@@ -112,14 +112,14 @@ export function ArchiveDetail({ item }: Props) {
               },
             ]}
             rows={history.map((h) => ({
-              ts: <span className="alm-mono">{h.timestamp}</span>,
+              ts: <span className="pv-mono">{h.timestamp}</span>,
               detail: h.detail,
               outcome: (
                 <Pill variant={outcomeVariant(h.outcome)}>
                   {outcomeLabel(h.outcome)}
                 </Pill>
               ),
-              actor: <span className="alm-mono">{h.actor}</span>,
+              actor: <span className="pv-mono">{h.actor}</span>,
             }))}
           />
         )}

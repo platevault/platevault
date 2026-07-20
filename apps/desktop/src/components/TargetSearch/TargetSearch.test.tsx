@@ -330,7 +330,7 @@ describe('TargetSearch', () => {
 
     const option = screen.getByRole('option');
     expect(option).toHaveTextContent('IC 1396');
-    expect(option.querySelector('.alm-target-search__secondary')).toBeNull();
+    expect(option.querySelector('.pv-target-search__secondary')).toBeNull();
   });
 
   it('calls onSelect with the suggestion (targetId) on click', async () => {

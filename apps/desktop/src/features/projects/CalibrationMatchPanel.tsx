@@ -129,7 +129,7 @@ export function CalibrationMatchPanel({
         defaultOpen={defaultOpen}
       >
         <div
-          className="alm-calib-match-panel__loading"
+          className="pv-calib-match-panel__loading"
           data-testid="cal-panel-loading"
         >
           {m.projects_calib_checking()}
@@ -145,7 +145,7 @@ export function CalibrationMatchPanel({
         defaultOpen={defaultOpen}
       >
         <div
-          className="alm-calib-match-panel__error"
+          className="pv-calib-match-panel__error"
           data-testid="cal-panel-error"
         >
           {fetchError}
@@ -184,25 +184,25 @@ export function CalibrationMatchPanel({
       defaultOpen={defaultOpen}
       data-testid="cal-panel"
     >
-      <div className="alm-calib-match-panel__list">
+      <div className="pv-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
             key={sid}
-            className="alm-calib-match-panel__session"
+            className="pv-calib-match-panel__session"
             data-testid={`cal-session-${sid}`}
           >
-            <div className="alm-calib-match-panel__session-id">
+            <div className="pv-calib-match-panel__session-id">
               {sessionNames.get(
                 entityNameKey({ entityType: 'session', entityId: sid }),
               ) ?? `${sid.slice(0, 12)}…`}
             </div>
-            <div className="alm-calib-match-panel__type-row">
+            <div className="pv-calib-match-panel__type-row">
               {typeResults.map((r) => {
                 const topConfidence = r.candidates?.[0]?.confidence;
                 return (
                   <div
                     key={r.calibrationType}
-                    className="alm-calib-match-panel__type-item"
+                    className="pv-calib-match-panel__type-item"
                     data-testid={`cal-type-${r.calibrationType}-${sid}`}
                   >
                     <Pill
@@ -221,7 +221,7 @@ export function CalibrationMatchPanel({
                     </Pill>
                     {topConfidence != null && (
                       <span
-                        className="alm-mono alm-calib-match-panel__confidence"
+                        className="pv-mono pv-calib-match-panel__confidence"
                         data-testid={`cal-confidence-${r.calibrationType}-${sid}`}
                       >
                         {Math.round(topConfidence * 100)}%
@@ -234,7 +234,7 @@ export function CalibrationMatchPanel({
           </div>
         ))}
       </div>
-      <div className="alm-calib-match-panel__hint">
+      <div className="pv-calib-match-panel__hint">
         {m.projects_calib_assign_hint()}
       </div>
     </Section>

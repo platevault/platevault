@@ -10,7 +10,7 @@
  * from the project-scoped `cleanup.scan`, see `contracts_core::cleanup`) so
  * users can review and select individual light/dark/flat/bias frames and
  * reclaim disk space — previously impossible (constitution II: reviewable,
- * never silent). Reuses the existing `alm-cleanup-scan__*` classes from the
+ * never silent). Reuses the existing `pv-cleanup-scan__*` classes from the
  * project cleanup flow rather than introducing new CSS.
  */
 
@@ -133,7 +133,7 @@ export function RawFrameCleanupSection({
         />
       ),
       file: (
-        <span className="alm-mono" title={c.relativePath}>
+        <span className="pv-mono" title={c.relativePath}>
           {c.relativePath}
         </span>
       ),
@@ -154,7 +154,7 @@ export function RawFrameCleanupSection({
       defaultOpen={defaultOpen}
       data-testid="session-raw-cleanup"
     >
-      <div className="alm-cleanup-scan__controls">
+      <div className="pv-cleanup-scan__controls">
         <Btn
           size="sm"
           onClick={runScan}
@@ -167,7 +167,7 @@ export function RawFrameCleanupSection({
         </Btn>
         {hasCandidates && (
           <span
-            className="alm-cleanup-scan__reclaimable"
+            className="pv-cleanup-scan__reclaimable"
             data-testid="raw-cleanup-reclaimable"
           >
             {m.projects_cleanup_reclaimable({
@@ -188,7 +188,7 @@ export function RawFrameCleanupSection({
       {hasCandidates && (
         <>
           <Table columns={candidateColumns()} rows={rows} />
-          <div className="alm-cleanup-scan__generate">
+          <div className="pv-cleanup-scan__generate">
             <RadioGroup
               aria-label={m.projects_cleanup_dest_label()}
               options={[

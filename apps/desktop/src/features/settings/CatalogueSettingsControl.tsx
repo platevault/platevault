@@ -93,7 +93,7 @@ export function CatalogueSettingsControl() {
       ))}
 
       {saveError && (
-        <div className="alm-settings__error" role="alert">
+        <div className="pv-settings__error" role="alert">
           {m.settings_catalogue_save_error({ error: saveError })}
         </div>
       )}

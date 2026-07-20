@@ -16,10 +16,10 @@ trace:
   - issue #771 (Sessions detail panel does not close on Escape, open)
   - issue #842 (Log panel expand state does not persist across restart, open)
   - issue #844 (Modal overlays do not return focus to the invoking control, open)
-  - issue #581 (Command palette unstyled — no .alm-palette* CSS anywhere; search/nav/click
+  - issue #581 (Command palette unstyled — no .pv-palette* CSS anywhere; search/nav/click
     confirmed functional in a 2026-07-12 follow-up, open)
   - issue #617 (Command palette Pages group lists 3 dead routes: /review, /plans, /audit, open)
-  - issue #810 (--alm-focus-ring token misused as outline-color on 3 selectors, open)
+  - issue #810 (--pv-focus-ring token misused as outline-color on 3 selectors, open)
   - issue #660 (Projects Edit pane overlay has no dialog chrome/Escape/focus-trap, open)
   - issue #767 (Plan-review overlay can get stuck open after Apply all, open)
   - docs/development/journey-run-2026-07-14.md (Journey 16 section — real Windows-app
@@ -54,7 +54,7 @@ operable, and observable using only the keyboard, from any page.
 - **Do:** Press Ctrl+K (Cmd+K on macOS) from any page; type to filter; press
   Enter on a highlighted entry; press Escape.
 - **Expect:** The palette now opens as a styled floating overlay (a
-  `.alm-palette*` CSS block ships it; it previously rendered as bare
+  `.pv-palette*` CSS block ships it; it previously rendered as bare
   document-flow markup). It shows Pages and Actions groups; after a short
   pause (200ms debounce), typing a query that matches a target/session/
   project adds a Results group — matching is now alias-aware and
@@ -72,7 +72,7 @@ operable, and observable using only the keyboard, from any page.
   closes it rather than opening a second instance.
 - **Trace:** `apps/desktop/src/app/CommandPalette.tsx` (cmdk + base-ui
   Dialog), `apps/desktop/src/styles/components/target-search.css`
-  (`.alm-palette*`). PR #884 fixes #581 (unstyled palette, broken alias
+  (`.pv-palette*`). PR #884 fixes #581 (unstyled palette, broken alias
   matching, dead keyboard nav/clicks — a focus-ownership race between the
   input's `autoFocus` and the dialog's own focus management left cmdk's
   already-correct keyboard/click handlers unreachable). Known gap G6 (dead

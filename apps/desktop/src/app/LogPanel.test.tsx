@@ -218,8 +218,8 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
       .filter((el) => el.tagName === 'SPAN');
     expect(sourceSpans.length).toBeGreaterThan(0);
     for (const span of sourceSpans) {
-      expect(span).toHaveClass('alm-logpanel__event-source');
-      expect(span).toHaveClass('alm-logpanel__event-source--audit');
+      expect(span).toHaveClass('pv-logpanel__event-source');
+      expect(span).toHaveClass('pv-logpanel__event-source--audit');
       // Regression guard: must not render the un-interpolated literal template.
       expect(span.className).not.toContain('{entry.source}');
     }
@@ -251,7 +251,7 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
     // With reduced motion, the follow-tail effect pins scrollTop directly
     // (no smooth `scrollTo` animation call). Assert the scroll container is
     // present and matchMedia is consulted and reports reduced motion.
-    const list = document.querySelector('.alm-logpanel__events');
+    const list = document.querySelector('.pv-logpanel__events');
     expect(list).not.toBeNull();
     expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(
       true,

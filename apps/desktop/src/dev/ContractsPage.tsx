@@ -28,13 +28,13 @@ import { getCallSnapshot, subscribeRecorder } from './recorder';
 function DevModeDisabledStub() {
   return (
     <div
-      className="alm-dev-stub alm-page__scroll alm-dev-contracts-page__stub-body"
+      className="pv-dev-stub pv-page__scroll pv-dev-contracts-page__stub-body"
       data-testid="dev-disabled-stub"
     >
-      <h2 className="alm-dev-contracts-page__stub-heading">
+      <h2 className="pv-dev-contracts-page__stub-heading">
         Developer mode disabled
       </h2>
-      <p className="alm-dev-contracts-page__stub-text">
+      <p className="pv-dev-contracts-page__stub-text">
         Enable <strong>devMode</strong> in Settings › Advanced, then restart the
         app to access developer diagnostics.
       </p>
@@ -175,7 +175,7 @@ export function ContractsPage() {
   if (devMode === null) {
     return (
       <PageShell>
-        <div className="alm-page__scroll alm-dev-contracts-page__loading">
+        <div className="pv-page__scroll pv-dev-contracts-page__loading">
           Loading…
         </div>
       </PageShell>
@@ -193,15 +193,15 @@ export function ContractsPage() {
 
   return (
     <PageShell>
-      <div className="alm-dev-contracts alm-page__scroll alm-dev-contracts-page__body">
-        <div className="alm-dev-contracts-page__header">
-          <h1 className="alm-dev-contracts-page__title">
+      <div className="pv-dev-contracts pv-page__scroll pv-dev-contracts-page__body">
+        <div className="pv-dev-contracts-page__header">
+          <h1 className="pv-dev-contracts-page__title">
             Developer Contract Diagnostics
           </h1>
-          <div className="alm-dev-contracts-page__actions">
+          <div className="pv-dev-contracts-page__actions">
             <button
               type="button"
-              className="alm-btn alm-btn--sm"
+              className="pv-btn pv-btn--sm"
               onClick={refreshCalls}
               aria-label="Refresh calls"
             >
@@ -209,7 +209,7 @@ export function ContractsPage() {
             </button>
             <button
               type="button"
-              className="alm-btn alm-btn--sm"
+              className="pv-btn pv-btn--sm"
               onClick={handleExport}
               disabled={exporting}
               aria-label="Export diagnostics"
@@ -220,26 +220,26 @@ export function ContractsPage() {
         </div>
 
         {error && (
-          <div role="alert" className="alm-dev-contracts-page__error">
+          <div role="alert" className="pv-dev-contracts-page__error">
             Error: {error}
           </div>
         )}
 
         {exportResult && (
-          <div role="status" className="alm-dev-contracts-page__export-result">
+          <div role="status" className="pv-dev-contracts-page__export-result">
             {exportResult}
           </div>
         )}
 
         <section>
-          <h2 className="alm-dev-contracts-page__section-heading">
+          <h2 className="pv-dev-contracts-page__section-heading">
             Contracts ({contracts.length})
           </h2>
           <ContractList contracts={contracts} onViewSchema={handleViewSchema} />
         </section>
 
         <section>
-          <h2 className="alm-dev-contracts-page__section-heading">
+          <h2 className="pv-dev-contracts-page__section-heading">
             Recent Calls ({calls.length})
           </h2>
           <CallList

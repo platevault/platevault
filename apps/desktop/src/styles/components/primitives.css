@@ -2,7 +2,7 @@
  * Popup for the shared base-ui Tooltip (Tooltip.tsx). Caps width so hover
  * help can't span the viewport; overflow-wrap guards a long unbroken token
  * (e.g. a path) from overflowing the cap. */
-.alm-tooltip {
+.pv-tooltip {
   max-width: 280px;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -11,204 +11,204 @@
      floats over. Without its own background/border it drew as bare text on top
      of whatever was underneath — unreadable over tables and panels. It carries
      a full surface of its own, all token-driven so the four themes track it. */
-  background: var(--alm-surface-raised);
-  color: var(--alm-text);
-  border: 1px solid var(--alm-rule);
-  border-radius: var(--alm-radius-md);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  font-size: var(--alm-text-xs);
+  background: var(--pv-surface-raised);
+  color: var(--pv-text);
+  border: 1px solid var(--pv-rule);
+  border-radius: var(--pv-radius-md);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  font-size: var(--pv-text-xs);
   line-height: 1.5;
-  box-shadow: var(--alm-shadow-sm);
+  box-shadow: var(--pv-shadow-sm);
   z-index: 60;
 }
 
 /* === PILL === */
-.alm-pill {
+.pv-pill {
   display: inline-flex; align-items: center;
-  padding: 1px var(--alm-sp-2); border-radius: 99px;
-  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
+  padding: 1px var(--pv-sp-2); border-radius: 99px;
+  font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium);
   line-height: 1.6; white-space: nowrap;
   border: 1px solid transparent;
   /* Pills are labels/placeholders, never data values: stay sans even when
      rendered inside a mono value cell (e.g. UnresolvedChip in PropertyTable
      or calibration list columns). */
-  font-family: var(--alm-font-sans);
+  font-family: var(--pv-font-sans);
 }
-.alm-pill--neutral { background: var(--alm-chip); color: var(--alm-text-secondary); border-color: var(--alm-rule); }
-.alm-pill--ghost { background: transparent; color: var(--alm-text-muted); border-color: var(--alm-rule); }
-.alm-pill--ok { background: var(--alm-ok-bg); color: var(--alm-ok); border-color: var(--alm-ok-border); }
-.alm-pill--warn { background: var(--alm-warn-bg); color: var(--alm-warn); border-color: var(--alm-warn-border); }
-.alm-pill--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
-.alm-pill--info { background: var(--alm-info-bg); color: var(--alm-info); border-color: var(--alm-info-border); }
-.alm-pill--accent { background: var(--alm-accent-bg); color: var(--alm-accent-text); border-color: var(--alm-info-border); }
+.pv-pill--neutral { background: var(--pv-chip); color: var(--pv-text-secondary); border-color: var(--pv-rule); }
+.pv-pill--ghost { background: transparent; color: var(--pv-text-muted); border-color: var(--pv-rule); }
+.pv-pill--ok { background: var(--pv-ok-bg); color: var(--pv-ok); border-color: var(--pv-ok-border); }
+.pv-pill--warn { background: var(--pv-warn-bg); color: var(--pv-warn); border-color: var(--pv-warn-border); }
+.pv-pill--danger { background: var(--pv-danger-bg); color: var(--pv-danger); border-color: var(--pv-danger-border); }
+.pv-pill--info { background: var(--pv-info-bg); color: var(--pv-info); border-color: var(--pv-info-border); }
+.pv-pill--accent { background: var(--pv-accent-bg); color: var(--pv-accent-text); border-color: var(--pv-info-border); }
 
 /* === BUTTON === */
-.alm-btn {
+.pv-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  gap: var(--alm-sp-1); height: var(--alm-control-h);
-  padding: 0 var(--alm-sp-3);
-  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
+  gap: var(--pv-sp-1); height: var(--pv-control-h);
+  padding: 0 var(--pv-sp-3);
+  font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium);
 
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
-  background: var(--alm-bg); color: var(--alm-text-secondary);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-bg); color: var(--pv-text-secondary);
   cursor: pointer; white-space: nowrap;
-  transition: all var(--alm-transition-fast);
+  transition: all var(--pv-transition-fast);
 }
-.alm-btn:hover { border-color: var(--alm-ink3); color: var(--alm-text); }
+.pv-btn:hover { border-color: var(--pv-ink3); color: var(--pv-text); }
 /* #628: disabled must read as unambiguously inert — lower opacity than
    hover/active states use anywhere else, and strip the primary/danger fill so
    a disabled CTA never still reads as "the" accent-colored action. */
-.alm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.alm-btn:disabled:hover { border-color: var(--alm-border); color: var(--alm-text-secondary); }
-/* Primary = theme accent. Was var(--alm-ink), which inverts to a light button
+.pv-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pv-btn:disabled:hover { border-color: var(--pv-border); color: var(--pv-text-secondary); }
+/* Primary = theme accent. Was var(--pv-ink), which inverts to a light button
    in dark themes (ink is the light text color there). Accent stays correct in
    every theme; the former separate `accent` variant was byte-identical to
    `primary` (#627) and was removed rather than kept as a same-looking alias. */
-.alm-btn--primary { background: var(--alm-accent); color: var(--alm-on-accent); border-color: var(--alm-accent); }
-.alm-btn--primary:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
-.alm-btn--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
-.alm-btn--danger:hover { background: var(--alm-danger-bg-hover); }
-.alm-btn--primary:disabled,
-.alm-btn--danger:disabled {
-  background: var(--alm-bg);
-  color: var(--alm-text-secondary);
-  border-color: var(--alm-border);
+.pv-btn--primary { background: var(--pv-accent); color: var(--pv-on-accent); border-color: var(--pv-accent); }
+.pv-btn--primary:hover { background: var(--pv-accent-hover); border-color: var(--pv-accent-hover); }
+.pv-btn--danger { background: var(--pv-danger-bg); color: var(--pv-danger); border-color: var(--pv-danger-border); }
+.pv-btn--danger:hover { background: var(--pv-danger-bg-hover); }
+.pv-btn--primary:disabled,
+.pv-btn--danger:disabled {
+  background: var(--pv-bg);
+  color: var(--pv-text-secondary);
+  border-color: var(--pv-border);
 }
-.alm-btn--sm { height: var(--alm-control-h-sm); padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
+.pv-btn--sm { height: var(--pv-control-h-sm); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
 
 /* === SECTION === */
-.alm-section { margin-bottom: var(--alm-sp-4); }
-.alm-section__header {
-  display: flex; align-items: center; gap: var(--alm-sp-2);
-  padding-bottom: var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border-subtle);
-  margin-bottom: var(--alm-sp-3);
+.pv-section { margin-bottom: var(--pv-sp-4); }
+.pv-section__header {
+  display: flex; align-items: center; gap: var(--pv-sp-2);
+  padding-bottom: var(--pv-sp-2);
+  border-bottom: 1px solid var(--pv-border-subtle);
+  margin-bottom: var(--pv-sp-3);
   cursor: pointer; user-select: none;
 }
-.alm-section__toggle {
-  font-size: var(--alm-text-xs); color: var(--alm-text-faint);
+.pv-section__toggle {
+  font-size: var(--pv-text-xs); color: var(--pv-text-faint);
   width: 14px; text-align: center; flex-shrink: 0;
 }
-.alm-section__title {
-  font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+.pv-section__title {
+  font-size: var(--pv-text-sm); font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
 }
-.alm-section__count { font-size: var(--alm-text-xs); color: var(--alm-text-muted); }
-.alm-section__right { margin-left: auto; }
+.pv-section__count { font-size: var(--pv-text-xs); color: var(--pv-text-muted); }
+.pv-section__right { margin-left: auto; }
 
 /* === DETAIL v4: METRIC LINE + DASHBOARD GRID + UNIFIED RAIL === */
 /* Quiet summary-stat row (not hero numbers): value and label share the same
    size; value is medium-weight ink, label is muted. One consistent treatment
    across every detail header. */
-.alm-metricline {
+.pv-metricline {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--alm-sp-1) var(--alm-sp-4);
+  gap: var(--pv-sp-1) var(--pv-sp-4);
   align-items: baseline;
-  padding: var(--alm-sp-3) 0;
-  border-bottom: 1px solid var(--alm-border-subtle);
-  font-size: var(--alm-text-sm);
+  padding: var(--pv-sp-3) 0;
+  border-bottom: 1px solid var(--pv-border-subtle);
+  font-size: var(--pv-text-sm);
 }
-.alm-metricline__m { font-size: var(--alm-text-sm); color: var(--alm-text-muted); }
-.alm-metricline__m b {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
-  margin-right: var(--alm-sp-1);
+.pv-metricline__m { font-size: var(--pv-text-sm); color: var(--pv-text-muted); }
+.pv-metricline__m b {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
+  margin-right: var(--pv-sp-1);
 }
 
-.alm-dash {
+.pv-dash {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--alm-rail-width);
-  gap: var(--alm-sp-5);
-  margin-top: var(--alm-sp-4);
+  grid-template-columns: minmax(0, 1fr) var(--pv-rail-width);
+  gap: var(--pv-sp-5);
+  margin-top: var(--pv-sp-4);
 }
-.alm-dash__primary { min-width: 0; }
+.pv-dash__primary { min-width: 0; }
 
-.alm-rail { min-width: 0; }
-.alm-rail__panel {
+.pv-rail { min-width: 0; }
+.pv-rail__panel {
   display: flex;
   flex-direction: column;
-  background: var(--alm-surface);
-  border: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-md);
+  background: var(--pv-surface);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-md);
   overflow: hidden;
 }
 
 /* Dashboard fill mode (DetailPane fill): the pane fills the available height,
  * header + metric line stay pinned, and the PRIMARY column scrolls on its own
  * while the rail stays put as a separate region. Robust — no position:sticky. */
-.alm-detail--fill {
+.pv-detail--fill {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
-.alm-detail--fill > .alm-dash {
+.pv-detail--fill > .pv-dash {
   flex: 1;
   min-height: 0;
   grid-template-rows: minmax(0, 1fr);
-  margin-top: var(--alm-sp-3);
+  margin-top: var(--pv-sp-3);
 }
-.alm-detail--fill .alm-dash__primary {
+.pv-detail--fill .pv-dash__primary {
   overflow-y: auto;
   min-height: 0;
-  padding-right: var(--alm-sp-3);
+  padding-right: var(--pv-sp-3);
 }
-.alm-detail--fill .alm-rail { min-height: 0; }
-.alm-detail--fill .alm-rail__panel {
+.pv-detail--fill .pv-rail { min-height: 0; }
+.pv-detail--fill .pv-rail__panel {
   max-height: 100%;
   overflow-y: auto;
 }
-.alm-rail__card { padding: var(--alm-sp-3) var(--alm-sp-4); }
-.alm-rail__card + .alm-rail__card { border-top: 1px solid var(--alm-border-subtle); }
-.alm-rail__card-h {
-  font-size: var(--alm-text-xs);
+.pv-rail__card { padding: var(--pv-sp-3) var(--pv-sp-4); }
+.pv-rail__card + .pv-rail__card { border-top: 1px solid var(--pv-border-subtle); }
+.pv-rail__card-h {
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
-  color: var(--alm-text-faint);
-  font-weight: var(--alm-weight-semibold);
-  margin-bottom: var(--alm-sp-2);
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-faint);
+  font-weight: var(--pv-weight-semibold);
+  margin-bottom: var(--pv-sp-2);
 }
 
 /* === BOX / CARD === */
-.alm-box {
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-bg);
+.pv-box {
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-bg);
   overflow: hidden;
 }
-.alm-box__header {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  background: var(--alm-surface);
-  border-bottom: 1px solid var(--alm-border-subtle);
-  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-semibold);
-  text-transform: uppercase; letter-spacing: var(--alm-tracking-normal);
-  color: var(--alm-text-muted);
+.pv-box__header {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  background: var(--pv-surface);
+  border-bottom: 1px solid var(--pv-border-subtle);
+  font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold);
+  text-transform: uppercase; letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
 }
-.alm-box__body { padding: var(--alm-sp-3); }
+.pv-box__body { padding: var(--pv-sp-3); }
 
 /* === TABLE === */
-.alm-table { width: 100%; border-collapse: collapse; }
-.alm-table th {
-  text-align: left; font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text-muted); text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border);
-  background: var(--alm-surface);
+.pv-table { width: 100%; border-collapse: collapse; }
+.pv-table th {
+  text-align: left; font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-muted); text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-normal);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border-bottom: 1px solid var(--pv-border);
+  background: var(--pv-surface);
   white-space: nowrap;
   /* Fixed-layout columns: truncate the header instead of clipping it mid-glyph
      or letting it spill. Columns carry a title= tooltip with the full label. */
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alm-table td {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border-subtle);
-  font-size: var(--alm-text-sm);
+.pv-table td {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border-bottom: 1px solid var(--pv-border-subtle);
+  font-size: var(--pv-text-sm);
   vertical-align: middle;
   /* Keep cell content within its column box: with table-layout:fixed an
      un-clipped cell (e.g. a Type pill) visually overflows into the next column
@@ -219,16 +219,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alm-table td.mono { font-family: var(--alm-font-mono); font-size: var(--alm-text-xs); }
-.alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
-.alm-table td.muted { color: var(--alm-text-muted); }
+.pv-table td.mono { font-family: var(--pv-font-mono); font-size: var(--pv-text-xs); }
+.pv-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
+.pv-table td.muted { color: var(--pv-text-muted); }
 
 /* Group-header rows (sessions/calibration/projects/inbox/targets grouping): the
    expand/label button sits in the FIRST cell with NO colspan and intentionally
    overflows across the empty adjacent cells to show the full "label · count".
    Exempt these cells from the global clip above — otherwise the group label is
    chopped to the first column's width (looks like a boxed/truncated chip). */
-.alm-table tr[class*="__group"] > td {
+.pv-table tr[class*="__group"] > td {
   overflow: visible;
 }
 
@@ -236,127 +236,127 @@
    grey background) and lay out caret + label + count inline with spacing. Only
    the inbox table had this; sessions/calibration/projects/targets rendered the
    default button box with the count jammed against the label. Unified globally. */
-.alm-table [class*="__group-cell"] {
+.pv-table [class*="__group-cell"] {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   text-align: left;
   font: inherit;
-  font-size: var(--alm-text-xs);
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text-muted);
+  letter-spacing: var(--pv-tracking-normal);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
 }
 
 /* Selectable rows (`_onClick`): pointer affordance + a keyboard focus ring.
-   `--alm-focus-ring` is a box-shadow triple that does not render on a
+   `--pv-focus-ring` is a box-shadow triple that does not render on a
    border-collapsed <tr>, so the ring is drawn with an inset outline (the accent
    token) which paints on table rows in both WebKit and Chromium webviews. */
-.alm-table__row--clickable {
+.pv-table__row--clickable {
   cursor: pointer;
 }
-.alm-table__row--clickable:focus-visible {
-  outline: 2px solid var(--alm-accent);
+.pv-table__row--clickable:focus-visible {
+  outline: 2px solid var(--pv-accent);
   outline-offset: -2px;
 }
 
-/* Grouped/nested rows (`_indent`): the per-row `--alm-row-indent` variable set
+/* Grouped/nested rows (`_indent`): the per-row `--pv-row-indent` variable set
    on the <tr> pads the first cell's content (group-header button or leaf label),
    replacing the per-table inline paddingLeft clones. */
-.alm-table__row--indented > td:first-child > :first-child {
-  padding-left: var(--alm-row-indent, 0);
+.pv-table__row--indented > td:first-child > :first-child {
+  padding-left: var(--pv-row-indent, 0);
 }
 
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
    header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
-.alm-table__scroll {
+.pv-table__scroll {
   min-height: 0;
   overflow: auto;
 }
-.alm-table__scroll thead th {
+.pv-table__scroll thead th {
   position: sticky;
   top: 0;
   z-index: 1;
 }
-.alm-table__spacer td {
+.pv-table__spacer td {
   padding: 0;
   border: 0;
 }
 
 /* === KV ROW === */
-.alm-kv { display: flex; padding: var(--alm-sp-1) 0; gap: var(--alm-sp-3); }
-.alm-kv__label {
+.pv-kv { display: flex; padding: var(--pv-sp-1) 0; gap: var(--pv-sp-3); }
+.pv-kv__label {
   width: 120px; flex-shrink: 0;
-  font-size: var(--alm-text-xs); color: var(--alm-text-muted);
-  text-transform: uppercase; letter-spacing: var(--alm-tracking-tight);
-  font-weight: var(--alm-weight-medium);
+  font-size: var(--pv-text-xs); color: var(--pv-text-muted);
+  text-transform: uppercase; letter-spacing: var(--pv-tracking-tight);
+  font-weight: var(--pv-weight-medium);
 }
-.alm-kv__value { font-size: var(--alm-text-sm); }
-.alm-kv__provenance {
-  font-size: var(--alm-text-xs); color: var(--alm-text-faint);
-  margin-left: var(--alm-sp-1);
+.pv-kv__value { font-size: var(--pv-text-sm); }
+.pv-kv__provenance {
+  font-size: var(--pv-text-xs); color: var(--pv-text-faint);
+  margin-left: var(--pv-sp-1);
 }
 
 /* === COVERAGE BAR === */
-.alm-coverage { display: flex; align-items: center; gap: var(--alm-sp-2); }
-.alm-coverage__label {
-  width: 32px; font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
+.pv-coverage { display: flex; align-items: center; gap: var(--pv-sp-2); }
+.pv-coverage__label {
+  width: 32px; font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium);
   text-align: right; flex-shrink: 0;
 }
-.alm-coverage__bar {
-  flex: 1; height: 6px; background: var(--alm-rule2);
+.pv-coverage__bar {
+  flex: 1; height: 6px; background: var(--pv-rule2);
   border-radius: 3px; overflow: hidden;
 }
-.alm-coverage__fill {
+.pv-coverage__fill {
   height: 100%; border-radius: 3px;
-  background: var(--alm-accent);
-  transition: width var(--alm-transition-slow);
+  background: var(--pv-accent);
+  transition: width var(--pv-transition-slow);
 }
-.alm-coverage__fill--low { background: var(--alm-warn); }
-.alm-coverage__fill--ok { background: var(--alm-ok); }
-.alm-coverage__value {
-  width: 36px; font-size: var(--alm-text-xs); color: var(--alm-text-muted);
+.pv-coverage__fill--low { background: var(--pv-warn); }
+.pv-coverage__fill--ok { background: var(--pv-ok); }
+.pv-coverage__value {
+  width: 36px; font-size: var(--pv-text-xs); color: var(--pv-text-muted);
   text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
 
 /* === BANNER === */
-.alm-banner {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-xs);
-  display: flex; align-items: center; gap: var(--alm-sp-2);
+.pv-banner {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border-radius: var(--pv-radius-sm);
+  font-size: var(--pv-text-xs);
+  display: flex; align-items: center; gap: var(--pv-sp-2);
 }
-.alm-banner--warn { background: var(--alm-warn-bg); color: var(--alm-warn); border: 1px solid var(--alm-warn-border); }
-.alm-banner--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border: 1px solid var(--alm-danger-border); }
-.alm-banner--info { background: var(--alm-info-bg); color: var(--alm-info); border: 1px solid var(--alm-info-border); }
+.pv-banner--warn { background: var(--pv-warn-bg); color: var(--pv-warn); border: 1px solid var(--pv-warn-border); }
+.pv-banner--danger { background: var(--pv-danger-bg); color: var(--pv-danger); border: 1px solid var(--pv-danger-border); }
+.pv-banner--info { background: var(--pv-info-bg); color: var(--pv-info); border: 1px solid var(--pv-info-border); }
 /* Optional inline call-to-action link inside a banner (e.g. "no site" -> Settings). */
-.alm-banner__action-link { color: inherit; font-weight: var(--alm-weight-medium); text-decoration: underline; white-space: nowrap; }
+.pv-banner__action-link { color: inherit; font-weight: var(--pv-weight-medium); text-decoration: underline; white-space: nowrap; }
 
 /* === PROPERTY TABLE === */
-.alm-prop-table { width: 100%; }
-.alm-prop-table__row {
-  display: flex; border-bottom: 1px solid var(--alm-border-subtle);
-  padding: var(--alm-sp-2) 0;
+.pv-prop-table { width: 100%; }
+.pv-prop-table__row {
+  display: flex; border-bottom: 1px solid var(--pv-border-subtle);
+  padding: var(--pv-sp-2) 0;
 }
-.alm-prop-table__label {
+.pv-prop-table__label {
   width: 140px; flex-shrink: 0;
-  font-size: var(--alm-text-xs); color: var(--alm-text-muted);
-  font-weight: var(--alm-weight-medium);
+  font-size: var(--pv-text-xs); color: var(--pv-text-muted);
+  font-weight: var(--pv-weight-medium);
 }
-.alm-prop-table__value {
-  flex: 1; font-size: var(--alm-text-sm);
-  display: flex; align-items: center; gap: var(--alm-sp-2);
+.pv-prop-table__value {
+  flex: 1; font-size: var(--pv-text-sm);
+  display: flex; align-items: center; gap: var(--pv-sp-2);
 }
-.alm-prop-table__source {
-  font-size: var(--alm-text-xs); color: var(--alm-text-faint);
+.pv-prop-table__source {
+  font-size: var(--pv-text-xs); color: var(--pv-text-faint);
   margin-left: auto;
 }
-.alm-prop-table__row--conflict { background: var(--alm-warn-bg); }
+.pv-prop-table__row--conflict { background: var(--pv-warn-bg); }
 
 /* === GLOBAL UTILITIES ===
  * Shared presentational classes extracted from duplicated component rules.
@@ -366,23 +366,23 @@
 
 /* Vertical stack with the tightest standard gap (label-above-control fields,
    short lists). Canonical form of the duplicated
-   `display:flex; flex-direction:column; gap:var(--alm-sp-1)` rule. */
-.alm-stack-1 {
+   `display:flex; flex-direction:column; gap:var(--pv-sp-1)` rule. */
+.pv-stack-1 {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
 /* Atomic text utilities — replace the removed Tailwind `text-sm` / `text-xs` /
    `text-muted` no-ops with token-only classes. Compose (e.g.
-   `alm-text-sm alm-text-muted`) instead of cloning per-feature muted-text
+   `pv-text-sm pv-text-muted`) instead of cloning per-feature muted-text
    rules. */
-.alm-text-sm { font-size: var(--alm-text-sm); }
-.alm-text-xs { font-size: var(--alm-text-xs); }
-.alm-text-muted { color: var(--alm-text-muted); }
+.pv-text-sm { font-size: var(--pv-text-sm); }
+.pv-text-xs { font-size: var(--pv-text-xs); }
+.pv-text-muted { color: var(--pv-text-muted); }
 
 /* Shared monospace surface (spec 055 T022): filesystem paths, source-view
  * IDs, manifest paths, dev-tools contract names, RA/Dec coordinate values.
  * Referenced by ~40 call sites across features/*; was a no-op while the
  * blanket `* { font-family !important }` reset overrode it (reset.css). */
-.alm-mono { font-family: var(--alm-font-mono); }
+.pv-mono { font-family: var(--pv-font-mono); }

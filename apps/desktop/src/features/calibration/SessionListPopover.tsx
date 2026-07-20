@@ -30,7 +30,7 @@ export function SessionListPopover({ label, names }: Props) {
 
   return (
     // #813: shared DetailLinkedGroup (head + muted-or-content) instead of
-    // hand-rolling the `alm-session-detail2__head`/`__muted` classes here.
+    // hand-rolling the `pv-session-detail2__head`/`__muted` classes here.
     <DetailLinkedGroup
       label={label}
       empty={names.length === 0}
@@ -45,33 +45,33 @@ export function SessionListPopover({ label, names }: Props) {
           }
         }}
       >
-        <Popover.Trigger className="alm-session-popover__trigger">
+        <Popover.Trigger className="pv-session-popover__trigger">
           {names.length} ▾
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="start" sideOffset={4}>
-            <Popover.Popup className="alm-session-popover__popup">
+            <Popover.Popup className="pv-session-popover__popup">
               {}
-              <label htmlFor={inputId} className="alm-visually-hidden">
+              <label htmlFor={inputId} className="pv-visually-hidden">
                 {m.calibration_session_popover_filter_label()}
               </label>
               <input
                 ref={inputRef}
                 id={inputId}
-                className="alm-session-popover__search"
+                className="pv-session-popover__search"
                 placeholder={m.calibration_session_popover_filter_placeholder()}
                 aria-label={m.calibration_session_popover_filter_label()}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              <ul className="alm-session-popover__list">
+              <ul className="pv-session-popover__list">
                 {filtered.length === 0 ? (
-                  <li className="alm-session-popover__empty">
+                  <li className="pv-session-popover__empty">
                     {m.calibration_session_popover_no_matches()}
                   </li>
                 ) : (
                   filtered.map((name) => (
-                    <li key={name} className="alm-session-popover__item">
+                    <li key={name} className="pv-session-popover__item">
                       {name}
                     </li>
                   ))

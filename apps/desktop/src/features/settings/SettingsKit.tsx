@@ -30,14 +30,14 @@ export function SettingsSection({
   children,
 }: SettingsSectionProps) {
   return (
-    <div className="alm-settings__group">
+    <div className="pv-settings__group">
       {action ? (
-        <div className="alm-settings__group-header alm-settings__group-header--ruled">
-          <div className="alm-settings__group-title">{title}</div>
+        <div className="pv-settings__group-header pv-settings__group-header--ruled">
+          <div className="pv-settings__group-title">{title}</div>
           {action}
         </div>
       ) : (
-        <div className="alm-settings__group-title">{title}</div>
+        <div className="pv-settings__group-title">{title}</div>
       )}
       {children}
     </div>
@@ -53,12 +53,12 @@ export interface SettingsRowProps {
 
 export function SettingsRow({ label, info, children }: SettingsRowProps) {
   return (
-    <div className="alm-settings__row">
-      <div className="alm-settings__row-label">
+    <div className="pv-settings__row">
+      <div className="pv-settings__row-label">
         <span>{label}</span>
         {info ? <InfoTip tip={info} /> : null}
       </div>
-      <div className="alm-settings__row-content">{children}</div>
+      <div className="pv-settings__row-content">{children}</div>
     </div>
   );
 }
@@ -72,7 +72,7 @@ export interface SettingsFormShellProps {
   saving: boolean;
   onCancel: () => void;
   onSave: () => void | Promise<void>;
-  /** The entity-specific field controls (each wrapped in `.alm-stack-1`). */
+  /** The entity-specific field controls (each wrapped in `.pv-stack-1`). */
   children: ReactNode;
 }
 
@@ -82,7 +82,7 @@ export interface SettingsFormShellProps {
  * differ per entity type (shared-component mandate — no per-pane clones).
  * Originally lived only in `Equipment.tsx`; promoted here so other panes
  * (e.g. observing-site management, spec 044 US3) reuse it verbatim, and to
- * keep the `.alm-equipment__form*` markup as one generic settings-form frame
+ * keep the `.pv-equipment__form*` markup as one generic settings-form frame
  * rather than a per-feature copy.
  */
 export function SettingsFormShell({
@@ -93,10 +93,10 @@ export function SettingsFormShell({
   children,
 }: SettingsFormShellProps) {
   return (
-    <div className="alm-equipment__form">
-      <div className="alm-equipment__form-grid">{children}</div>
-      {error && <span className="alm-field-error">{error}</span>}
-      <div className="alm-equipment__form-actions">
+    <div className="pv-equipment__form">
+      <div className="pv-equipment__form-grid">{children}</div>
+      {error && <span className="pv-field-error">{error}</span>}
+      <div className="pv-equipment__form-actions">
         <Btn size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
           {m.common_cancel()}
         </Btn>

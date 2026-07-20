@@ -4,7 +4,7 @@
 /**
  * Legacy types previously exported from ListSidebar and TopActionBar.
  * Feature files import these via @/components. Migrate callers to inline
- * patterns with alm-* CSS classes and remove this file when all usages
+ * patterns with pv-* CSS classes and remove this file when all usages
  * are gone.
  */
 

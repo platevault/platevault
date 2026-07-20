@@ -6,7 +6,7 @@
  * MasterDetail — two-col layout migration (#813).
  *
  * Proves the fingerprint columns + stacked session popovers still render
- * through the shared `.alm-session-detail2` structure now that MasterDetail
+ * through the shared `.pv-session-detail2` structure now that MasterDetail
  * builds it via `TwoColDetailLayout` instead of hand-copied divs.
  */
 
@@ -68,14 +68,14 @@ describe('MasterDetail — two-col layout (#813)', () => {
       />,
     );
 
-    const wrapper = container.querySelector('.alm-session-detail2');
+    const wrapper = container.querySelector('.pv-session-detail2');
     expect(wrapper).toBeInTheDocument();
     expect(
-      wrapper?.querySelectorAll(':scope > .alm-session-detail2__col'),
+      wrapper?.querySelectorAll(':scope > .pv-session-detail2__col'),
     ).toHaveLength(2);
 
     const linked = wrapper?.querySelector(
-      ':scope > .alm-session-detail2__linked.alm-session-detail2__linked--stack',
+      ':scope > .pv-session-detail2__linked.pv-session-detail2__linked--stack',
     );
     expect(linked).toBeInTheDocument();
 
