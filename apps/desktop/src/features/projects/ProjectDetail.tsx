@@ -38,6 +38,7 @@ import {
   DetailPane,
   DetailPanel,
   MetricLine,
+  Modal,
   StatusTag,
   TopActionBar,
 } from '@/components';
@@ -435,15 +436,21 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         </div>
       )}
 
-      {/* ── Edit pane overlay ───────────────────────────────────────────── */}
-      {editOpen && (
-        <div className="pv-project-detail__edit-overlay">
-          <EditProjectPane
-            project={project}
-            onClose={() => setEditOpen(false)}
-          />
-        </div>
-      )}
+      {/* ── Edit pane overlay (#660) ────────────────────────────────────────
+          Uses the shared Modal rather than a bare positioned div: the old
+          `absolute; inset:0` overlay had no positioned ancestor, so it sized
+          against the viewport and hid the whole app shell. Modal also supplies
+          the dialog semantics Journey 16 requires (role=dialog, Escape,
+          focus trap). */}
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title={m.projects_edit_pane_aria()}
+        size="lg"
+        data-testid="project-edit-modal"
+      >
+        <EditProjectPane project={project} onClose={() => setEditOpen(false)} />
+      </Modal>
 
       {/* ── Archive plan review overlay (spec 017 US2/WP-B) ──────────────────
           Opens automatically when the plan-gated Archive transition refuses
