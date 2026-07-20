@@ -21,6 +21,7 @@
 
 import type {
   InboxListItem,
+  InboxSourceGroupListItem,
   InboxStatsResponse,
   InboxStatsPerType,
 } from '@/bindings/index';
@@ -65,6 +66,7 @@ function bucketKey(frameType: string | null | undefined): string {
  */
 export function deriveInboxStats(
   items: readonly InboxListItem[],
+  sourceGroups: readonly InboxSourceGroupListItem[] = [],
 ): InboxStatsResponse {
   const byType = new Map<string, InboxStatsPerType>();
   let folders = 0;
@@ -93,6 +95,19 @@ export function deriveInboxStats(
       row.folderCount += 1;
       row.imageCount += item.fileCount;
     }
+  }
+
+  // Spec 058 T013 / CHK010: source-group rows ARE counted. They are folders
+  // the user can see in the list, so leaving them out would make the summary
+  // report fewer rows than the list shows — the SC-004 disagreement this
+  // feature exists to remove. They always land in the "unresolved" bucket: an
+  // unclassified folder has no frame type by definition.
+  for (const group of sourceGroups) {
+    images += group.fileCount;
+    folders += 1;
+    const row = rowFor(UNRESOLVED_KEY);
+    row.folderCount += 1;
+    row.imageCount += group.fileCount;
   }
 
   // Stable display order: alphabetical by frame type, "unresolved" last.

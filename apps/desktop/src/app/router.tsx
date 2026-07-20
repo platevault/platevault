@@ -81,6 +81,11 @@ const inboxRoute = createRoute({
     // search/filters change the array shape (Sessions/Calibration already use
     // this id-based pattern).
     selected: parseString,
+    // Spec 058 T013: a scanned-but-unclassified folder is selected through its
+    // OWN param, never through `selected`. Keeping the two apart is what makes
+    // a source-group row structurally non-confirmable: confirm reads the
+    // selected item, and a source group can never become one.
+    selectedGroup: parseString,
     type: parseEnum(FRAME_TYPES),
     group: parseEnum(INBOX_GROUPS),
   }),

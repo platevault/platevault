@@ -53,13 +53,18 @@ import { Btn } from '@/ui';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from './InboxControls';
 import { InboxDetail } from './InboxDetail';
 import { InboxList, DEFAULT_INBOX_SORT } from './InboxList';
+import { InboxSourceGroupDetail } from './InboxSourceGroupDetail';
 import type { InboxSortCol, InboxSort } from './InboxList';
 import { InboxStatsSummary } from './InboxStatsSummary';
 import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanApprovalOverlay } from './PlanApprovalOverlay';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
-import type { InboxBreakdownTarget, InboxListItem } from './store';
+import type {
+  InboxBreakdownTarget,
+  InboxListItem,
+  InboxSourceGroupListItem,
+} from './store';
 import {
   inboxClassifyQueryKey,
   mergeRescanRoots,
@@ -168,9 +173,11 @@ function asRootRequiredDetails(
 // etc.) and recomputed their outputs every render too — feeding an unstable
 // value into `useSetPageStatus` and re-triggering its effect indefinitely.
 const EMPTY_ITEMS: InboxListItem[] = [];
+/** Same stable-identity reasoning as `EMPTY_ITEMS`, for the source-group list. */
+const EMPTY_SOURCE_GROUPS: InboxSourceGroupListItem[] = [];
 
 export function InboxPage() {
-  const { selected, type } = useSearch({ from: '/shell/inbox' });
+  const { selected, selectedGroup, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
   const queryClient = useQueryClient();
 
@@ -181,6 +188,12 @@ export function InboxPage() {
     refresh: refreshList,
   } = useInboxList();
   const items = listData?.items ?? EMPTY_ITEMS;
+  // Spec 058 T013/FR-016: folders the scan found that carry no item row yet.
+  // Empty while the scan-time placeholder still exists (T012/T020), so this
+  // wiring is inert until that lands — but it is what makes the placeholder
+  // removable at all: without a rendered source-group row, deleting the
+  // placeholder would make every scanned folder invisible.
+  const sourceGroups = listData?.sourceGroups ?? EMPTY_SOURCE_GROUPS;
 
   // Search + grouping / sort / frame-type controls now live in the top bar
   // (spec 043 #73/#31). `useGrouping` owns the persisted ordered grouping
@@ -293,6 +306,19 @@ export function InboxPage() {
     return result;
   }, [items, search]);
 
+  // The same text search over source-group rows. A source group has no
+  // `groupTarget` (it is unclassified — that is the whole point), so only the
+  // path is searchable.
+  const filteredSourceGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sourceGroups;
+    return sourceGroups.filter((g) => g.relativePath.toLowerCase().includes(q));
+  }, [sourceGroups, search]);
+
+  const selectedSourceGroup = selectedGroup
+    ? filteredSourceGroups.find((g) => g.sourceGroupId === selectedGroup)
+    : undefined;
+
   // URL-backed selection is by item id (issue #644), not list position — an
   // index silently points at whatever item now occupies that slot once
   // search/lane/kind filters reshape the array. Sessions and Calibration
@@ -322,13 +348,32 @@ export function InboxPage() {
       }),
   );
 
+  // The two selection channels are mutually exclusive — there is one detail
+  // pane — so each clears the other. They stay SEPARATE params rather than one
+  // tagged value so that no id-shaped string from a source-group row can ever
+  // be read back out as `selected` and reach the confirm path.
   const onSelect = (id: string) =>
-    navigate({ search: (prev) => ({ ...prev, selected: id }) });
+    navigate({
+      search: (prev) => ({ ...prev, selected: id, selectedGroup: undefined }),
+    });
+
+  const onSelectSourceGroup = (sourceGroupId: string) =>
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        selected: undefined,
+        selectedGroup: sourceGroupId,
+      }),
+    });
 
   const clearSelection = useCallback(
     () =>
       navigate({
-        search: (prev) => ({ ...prev, selected: undefined }),
+        search: (prev) => ({
+          ...prev,
+          selected: undefined,
+          selectedGroup: undefined,
+        }),
         replace: true,
       }),
     [navigate],
@@ -875,7 +920,13 @@ export function InboxPage() {
   // summary sitting above a filtered list and disagreeing with it is the same
   // class of lie this feature exists to remove, so the counts now describe what
   // the user is actually looking at.
-  const derivedStats = useMemo(() => deriveInboxStats(filteredItems), [filteredItems]);
+  // spec 058 T013 / CHK010: source-group rows are counted here too — they are
+  // rows the list renders, and a summary that omits them under-reports what the
+  // user is looking at.
+  const derivedStats = useMemo(
+    () => deriveInboxStats(filteredItems, filteredSourceGroups),
+    [filteredItems, filteredSourceGroups],
+  );
 
   // #75: frame-type hint per ingestion, derived from the inbox item's
   // classification/breakdown (here: the dominant `groupFrameType`, or the
@@ -974,8 +1025,17 @@ export function InboxPage() {
   ]);
 
   // Summary count (no page title — top-bar convention): folders / masters.
-  const folderCount = items.filter((it) => !it.isMaster).length;
-  const masterCount = items.filter((it) => it.isMaster).length;
+  //
+  // spec 058 T013: counted off the FILTERED lists, matching `derivedStats`
+  // above. These two surfaces previously disagreed — the stats strip was moved
+  // onto `filteredItems` for SC-004 while the header stayed on the unfiltered
+  // `items`, so with any filter active the header and the strip sitting beside
+  // it reported different totals. Source-group rows are folders and count as
+  // such (CHK010).
+  const folderCount =
+    filteredItems.filter((it) => !it.isMaster).length +
+    filteredSourceGroups.length;
+  const masterCount = filteredItems.filter((it) => it.isMaster).length;
   const summary = useMemo(() => {
     if (listLoading) return m.common_loading();
     const parts: string[] = [];
@@ -1139,7 +1199,14 @@ export function InboxPage() {
         dockId="inbox"
         detailLabel={m.inbox_detection_details()}
         detail={
-          selectedItem != null ? (
+          selectedSourceGroup != null ? (
+            // Spec 058 T013: a source-group selection routes to its OWN panel,
+            // which has no confirm affordance at all. `selectedItem` is
+            // necessarily undefined here — the two search params are mutually
+            // exclusive — so `InboxDetail` (and with it the confirm path) is
+            // not merely disabled but unreachable for this row.
+            <InboxSourceGroupDetail group={selectedSourceGroup} />
+          ) : selectedItem != null ? (
             <InboxDetail
               // Remount per SOURCE GROUP (not per raw item id) so per-item
               // state (pending overrides, the "Needs review" bulk-select /
@@ -1184,12 +1251,19 @@ export function InboxPage() {
             />
           ) : undefined
         }
-        onCloseDetail={selectedItem != null ? clearSelection : undefined}
+        onCloseDetail={
+          selectedItem != null || selectedSourceGroup != null
+            ? clearSelection
+            : undefined
+        }
       >
         <InboxList
           items={filteredItems}
+          sourceGroups={filteredSourceGroups}
           selectedId={selected ?? null}
+          selectedSourceGroupId={selectedGroup ?? null}
           onSelect={onSelect}
+          onSelectSourceGroup={onSelectSourceGroup}
           filterType={type ?? 'all'}
           dims={dims}
           kindFilter={kindFilter}

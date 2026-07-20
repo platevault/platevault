@@ -15,6 +15,10 @@
  * page / top-bar (FilterToolbar + useGrouping); this is a controlled
  * presentational list.
  *
+ * Rows are of two kinds: inbox items, and — spec 058 T013/FR-016 —
+ * scanned-but-unclassified source-group folders, which are visible and
+ * selectable but have no item id and therefore nothing to confirm.
+ *
  * Sort: column headers are <button> elements that call onSort (SessionsTable
  * convention). The page owns sort state and passes sortCol + sortDir.
  * Kind filter: the page passes a `kindFilter` string that filters by the item's
@@ -22,7 +26,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import type { InboxListItem } from '@/bindings/index';
+import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
 import {
   Table,
   tableIndent,
@@ -189,10 +193,97 @@ function detectionLabel(item: InboxListItem): string {
   return base || m.inbox_list_root_label();
 }
 
+/**
+ * Short, uppercase format tag for a source-group row. Mirrors `formatTag` but
+ * reads the group's own `format`, because a source group has no `lane` in the
+ * `fits`/`video` sense — its `lane` column is the `move`/`catalogue` lane, a
+ * different axis that happens to share the name (see `InboxSourceGroupListItem`).
+ */
+function sourceGroupFormatTag(group: InboxSourceGroupListItem): string {
+  switch (group.format) {
+    case 'video':
+      return 'VIDEO';
+    case 'xisf':
+      return 'XISF';
+    case 'mixed':
+      return 'MIXED';
+    default:
+      return 'FITS';
+  }
+}
+
+/**
+ * The `fits`/`video` lane a source-group row answers to for the lane filter.
+ * Derived from `format` for the reason above: filtering source groups on their
+ * own `lane` column would silently match the `move`/`catalogue` values against
+ * `fits`/`video` and hide every group whatever the user picked.
+ */
+function sourceGroupLane(group: InboxSourceGroupListItem): string {
+  return group.format === 'video' ? 'video' : 'fits';
+}
+
+/** Path label for a source-group row — same root-basename fallback as items (#556). */
+function sourceGroupLabel(group: InboxSourceGroupListItem): string {
+  if (group.relativePath) return group.relativePath;
+  const base = pathBasename(group.rootAbsolutePath);
+  return base || m.inbox_list_root_label();
+}
+
 /** Dominant frame-type key for kind-filtering (matches the Kind filter options). */
 function itemKind(item: InboxListItem): string {
   if (item.isMaster) return item.masterFrameType ?? 'master';
   return item.frameType ?? item.groupFrameType ?? '';
+}
+
+/**
+ * The four sortable values, projected off either row kind so one comparator
+ * orders items and source-group rows in a single sequence. Sorting the two
+ * kinds separately would pin every source group above (or below) the items
+ * regardless of the chosen column, which reads as a broken sort.
+ */
+interface SortKey {
+  detection: string;
+  type: string;
+  count: number;
+  format: string;
+}
+
+function itemSortKey(item: InboxListItem): SortKey {
+  return {
+    detection: item.relativePath,
+    type: classificationLabel(item),
+    count: item.fileCount,
+    format: formatDisplayLabel(item),
+  };
+}
+
+function sourceGroupSortKey(group: InboxSourceGroupListItem): SortKey {
+  return {
+    detection: group.relativePath,
+    type: m.inbox_source_group_state(),
+    count: group.fileCount,
+    format: sourceGroupFormatTag(group),
+  };
+}
+
+/** Sort comparator over the projected keys of either row kind. */
+function compareSortKeys(a: SortKey, b: SortKey, sort: InboxSort): number {
+  let cmp = 0;
+  switch (sort.col) {
+    case 'detection':
+      cmp = a.detection.localeCompare(b.detection);
+      break;
+    case 'type':
+      cmp = a.type.localeCompare(b.type);
+      break;
+    case 'count':
+      cmp = a.count - b.count;
+      break;
+    case 'format':
+      cmp = a.format.localeCompare(b.format);
+      break;
+  }
+  return sort.dir === 'asc' ? cmp : -cmp;
 }
 
 /** Sort comparator for inbox items. */
@@ -201,28 +292,27 @@ function compareItems(
   b: InboxListItem,
   sort: InboxSort,
 ): number {
-  let cmp = 0;
-  switch (sort.col) {
-    case 'detection':
-      cmp = a.relativePath.localeCompare(b.relativePath);
-      break;
-    case 'type':
-      cmp = classificationLabel(a).localeCompare(classificationLabel(b));
-      break;
-    case 'count':
-      cmp = a.fileCount - b.fileCount;
-      break;
-    case 'format':
-      cmp = formatDisplayLabel(a).localeCompare(formatDisplayLabel(b));
-      break;
-  }
-  return sort.dir === 'asc' ? cmp : -cmp;
+  return compareSortKeys(itemSortKey(a), itemSortKey(b), sort);
 }
 
 // ── Component types ─────────────────────────────────────────────────────────────
 
 export interface InboxListProps {
   items: InboxListItem[];
+  /**
+   * Spec 058 T013/FR-016: folders the scan found but that carry no inbox item
+   * yet. These render as rows so the folder is visible and selectable, but they
+   * are **structurally** non-confirmable — a source group has no item id, and
+   * selection is reported through `onSelectSourceGroup`, a channel entirely
+   * separate from `onSelect`. Confirm reads the selected *item*, so there is no
+   * value it could be handed; nothing here refuses a confirm, there is simply
+   * nothing to refuse.
+   */
+  sourceGroups?: InboxSourceGroupListItem[];
+  /** Currently selected source group, if the selection is a source-group row. */
+  selectedSourceGroupId?: string | null;
+  /** Called when the user selects a source-group row. */
+  onSelectSourceGroup?: (sourceGroupId: string) => void;
   /** Issue #644: selection is by item identity, not list position — an index
    * silently points at whatever item now occupies that slot after search/lane/
    * kind filters change the array shape. */
@@ -270,7 +360,19 @@ export interface ItemVisualRow {
   indent: number;
 }
 
-export type VisualRow = HeaderVisualRow | ItemVisualRow;
+/**
+ * A scanned-but-unclassified folder row (spec 058 T013). Deliberately carries
+ * the group — never an `InboxListItem`-shaped stand-in — so no downstream
+ * consumer can read an `inboxItemId` off it.
+ */
+export interface SourceGroupVisualRow {
+  kind: 'sourceGroup';
+  group: InboxSourceGroupListItem;
+  /** Left indent (px), to match leaf alignment when grouping is active. */
+  indent: number;
+}
+
+export type VisualRow = HeaderVisualRow | ItemVisualRow | SourceGroupVisualRow;
 
 /**
  * Walk the grouped tree in render order and produce the flat list of VISIBLE
@@ -316,8 +418,11 @@ export function flattenVisibleTree(
 
 export function InboxList({
   items,
+  sourceGroups = [],
   selectedId,
+  selectedSourceGroupId = null,
   onSelect,
+  onSelectSourceGroup,
   filterType,
   dims = [],
   kindFilter,
@@ -341,6 +446,23 @@ export function InboxList({
     const sorted = [...result].sort((a, b) => compareItems(a, b, sort));
     return sorted;
   }, [items, filterType, kindFilter, sort]);
+
+  /**
+   * Source-group rows surviving the same two filters.
+   *
+   * The kind filter drops them whenever it is set to a specific frame type: an
+   * unclassified folder has no frame type, so it matches no kind. Showing it
+   * under "bias" would be the exact class of claim-what-you-are-not this
+   * feature removes.
+   */
+  const filteredGroups = useMemo(() => {
+    let result = sourceGroups;
+    if (filterType !== 'all') {
+      result = result.filter((g) => sourceGroupLane(g) === filterType);
+    }
+    if (kindFilter && kindFilter !== 'all') return [];
+    return result;
+  }, [sourceGroups, filterType, kindFilter]);
 
   const tree = useMemo(
     () => groupByDimensions(filtered, dims, ACCESSORS),
@@ -367,14 +489,50 @@ export function InboxList({
   const grouped = dims.length > 0;
 
   const visualRows = useMemo<VisualRow[]>(() => {
-    if (grouped) return flattenVisibleTree(tree, collapsed, originalIndexById);
-    return filtered.map((item) => ({
+    const groupRows: SourceGroupVisualRow[] = filteredGroups.map((group) => ({
+      kind: 'sourceGroup' as const,
+      group,
+      indent: 0,
+    }));
+
+    // Grouping dimensions read item fields (frame type, target, lane…) that an
+    // unclassified folder has none of, so source-group rows cannot be placed in
+    // the tree. They render as a flat block above it rather than being dropped
+    // — a folder disappearing because the user grouped the list would be the
+    // invisible-folder failure FR-016 exists to prevent.
+    if (grouped) {
+      return [
+        ...groupRows,
+        ...flattenVisibleTree(tree, collapsed, originalIndexById),
+      ];
+    }
+
+    const itemRows: ItemVisualRow[] = filtered.map((item) => ({
       kind: 'item' as const,
       item,
       originalIdx: originalIndexById.get(item.inboxItemId) ?? -1,
       indent: 0,
     }));
-  }, [grouped, tree, collapsed, originalIndexById, filtered]);
+
+    // Ungrouped, both kinds sort as one sequence off the shared key projection.
+    // Keys are computed once per row up front (rather than inside the
+    // comparator, which would re-derive every label on each of the O(n log n)
+    // comparisons) and carried alongside the row.
+    const keyed: { row: VisualRow; key: SortKey }[] = [
+      ...groupRows.map((row) => ({ row, key: sourceGroupSortKey(row.group) })),
+      ...itemRows.map((row) => ({ row, key: itemSortKey(row.item) })),
+    ];
+    keyed.sort((a, b) => compareSortKeys(a.key, b.key, sort));
+    return keyed.map((entry) => entry.row);
+  }, [
+    grouped,
+    tree,
+    collapsed,
+    originalIndexById,
+    filtered,
+    filteredGroups,
+    sort,
+  ]);
 
   // ── Sortable column headers (SessionsTable convention) ──────────────────────
   const makeSortHeader = (
@@ -471,6 +629,40 @@ export function InboxList({
             format: '',
           };
         }
+        if (row.kind === 'sourceGroup') {
+          const { group, indent } = row;
+          const selected = selectedSourceGroupId === group.sourceGroupId;
+          return {
+            _testid: `inbox-source-group-${group.sourceGroupId}`,
+            _rowClassName: [
+              'pv-inbox-table__row',
+              'pv-inbox-table__row--source-group',
+              selected ? 'pv-inbox-table__row--selected' : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+            _onClick: () => onSelectSourceGroup?.(group.sourceGroupId),
+            _selected: selected,
+            _indent: indent || undefined,
+            detection: (
+              <span className="pv-inbox-cell__path-wrap">
+                <span
+                  className="pv-inbox-cell__path"
+                  title={sourceGroupLabel(group)}
+                >
+                  {sourceGroupLabel(group)}
+                </span>
+              </span>
+            ),
+            type: (
+              <span className="pv-inbox-row__classification pv-inbox-row__classification--pending">
+                {m.inbox_source_group_state()}
+              </span>
+            ),
+            count: m.inbox_list_file_count({ count: group.fileCount }),
+            format: sourceGroupFormatTag(group),
+          };
+        }
         const { item, indent } = row;
         const selected = selectedId === item.inboxItemId;
         const mod = classificationMod(item);
@@ -522,7 +714,14 @@ export function InboxList({
           format: formatDisplayLabel(item),
         };
       }),
-    [visualRows, selectedId, onSelect, toggle],
+    [
+      visualRows,
+      selectedId,
+      selectedSourceGroupId,
+      onSelect,
+      onSelectSourceGroup,
+      toggle,
+    ],
   );
 
   const groupingHint = grouped

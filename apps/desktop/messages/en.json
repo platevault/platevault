@@ -1949,6 +1949,10 @@
     }
   ],
   "inbox_list_root_label": "(root)",
+  "inbox_source_group_state": "not classified",
+  "inbox_source_group_detail_title": "Scanned folder",
+  "inbox_source_group_detail_body": "This folder has been scanned but not classified yet, so there is nothing to confirm. Classify it to see its frames.",
+  "inbox_source_group_scanned_at": "Discovered {when}",
   "inbox_dest_root_label": "Library:",
   "inbox_dest_root_aria": "Destination library",
   "inbox_no_file_metadata": "No file metadata",

@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { deriveInboxStats } from './inboxStatsFromItems';
-import type { InboxListItem } from '@/bindings/index';
+import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
 
 function folder(
   id: string,
@@ -132,5 +132,58 @@ describe('deriveInboxStats', () => {
     const stats = deriveInboxStats([]);
     expect(stats.totals).toEqual({ folders: 0, masters: 0, images: 0 });
     expect(stats.perType).toEqual([]);
+  });
+
+  // Spec 058 T013 / CHK010: source-group rows ARE counted. They are folders the
+  // list renders, so omitting them would make the summary report fewer rows
+  // than the list shows — the SC-004 disagreement 058 exists to remove.
+  describe('source-group rows (058 T013 / CHK010)', () => {
+    function sourceGroup(id: string, files: number): InboxSourceGroupListItem {
+      return {
+        sourceGroupId: id,
+        rootId: 'r1',
+        rootAbsolutePath: '/lib',
+        relativePath: id,
+        fileCount: files,
+        format: 'fits',
+        lane: 'move',
+        contentSignature: 'sig',
+        discoveredAt: '2026-07-20T10:00:00Z',
+      } as InboxSourceGroupListItem;
+    }
+
+    it('counts a source group as a folder and its files as images', () => {
+      const stats = deriveInboxStats(
+        [folder('a', 'light', 10)],
+        [sourceGroup('sg-1', 7)],
+      );
+
+      expect(stats.totals.folders).toBe(2);
+      expect(stats.totals.images).toBe(17);
+      expect(stats.totals.masters).toBe(0);
+    });
+
+    it('buckets source groups as unresolved — an unclassified folder has no frame type', () => {
+      const stats = deriveInboxStats(
+        [folder('a', 'light', 10)],
+        [sourceGroup('sg-1', 7), sourceGroup('sg-2', 3)],
+      );
+
+      const unresolved = stats.perType.find(
+        (r) => r.frameType === 'unresolved',
+      );
+      expect(unresolved?.folderCount).toBe(2);
+      expect(unresolved?.imageCount).toBe(10);
+    });
+
+    it('keeps the per-type sum reconciled with the folder total', () => {
+      const stats = deriveInboxStats(
+        [folder('a', 'light', 10)],
+        [sourceGroup('sg-1', 7)],
+      );
+
+      const folderSum = stats.perType.reduce((n, r) => n + r.folderCount, 0);
+      expect(folderSum).toBe(stats.totals.folders);
+    });
   });
 });
