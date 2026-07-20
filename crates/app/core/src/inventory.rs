@@ -25,7 +25,9 @@
 
 use std::collections::HashMap;
 
+use app_core_calibration::equipment::resolve_camera_display_name;
 use contracts_core::calibration::CalibrationKind;
+use contracts_core::equipment::Camera;
 use contracts_core::inventory::{
     InventoryFrameType, InventoryLinkedRefs, InventoryListFilters, InventoryProvenanceSummary,
     InventorySession, InventorySource, InventorySourceKind, InventorySourceState, LinkedProjectRef,
@@ -34,8 +36,8 @@ use contracts_core::inventory::{
 use contracts_core::sessions::SessionCalibrationMatch;
 use persistence_db::repositories::inventory::{
     list_calibration_matches_for_sessions, list_project_links_for_sessions,
-    list_roots_with_sessions, list_sessions_for_root, set_session_notes, InventoryFilters,
-    SessionCalibrationLinkRow, SessionProjectionRow,
+    list_roots_with_sessions, list_session_cameras, list_sessions_for_root, set_session_notes,
+    InventoryFilters, SessionCalibrationLinkRow, SessionProjectionRow,
 };
 use persistence_db::repositories::q_core::file_records_by_ids;
 use sqlx::SqlitePool;
@@ -58,6 +60,11 @@ pub async fn list(
     let db_filters = filters_to_db(filters.as_ref());
 
     let roots = list_roots_with_sessions(pool).await.map_err(|e| e.to_string())?;
+
+    // Registered equipment, loaded once for the whole ledger: every root's
+    // rows resolve their raw header camera against the same set.
+    let cameras =
+        app_core_calibration::equipment::list_cameras(pool).await.map_err(|e| e.message.clone())?;
 
     let mut sources: Vec<InventorySource> = Vec::new();
 
@@ -106,9 +113,12 @@ pub async fn list(
         // Batch-load the first frame of every session in one query (no N+1).
         let folder_map = build_folder_map(pool, &sessions).await?;
 
+        // Build a map: session_id → camera display name (#1343).
+        let camera_map = build_camera_map(pool, &session_ids, &cameras).await?;
+
         let inventory_sessions: Vec<InventorySession> = sessions
             .into_iter()
-            .map(|row| project_row_to_session(row, &proj_map, &cal_map, &folder_map))
+            .map(|row| project_row_to_session(row, &proj_map, &cal_map, &folder_map, &camera_map))
             .collect();
 
         sources.push(InventorySource {
@@ -219,6 +229,33 @@ async fn build_folder_map(
     Ok(folder_map)
 }
 
+/// Map each session id to the camera name shown on its inventory row
+/// (#1343): the registered camera's user-facing name when the header string
+/// matches one of its aliases, else the raw header string, so an unregistered
+/// camera still identifies the gear instead of rendering blank.
+///
+/// Sessions whose frames carry no camera string are absent from the map.
+async fn build_camera_map(
+    pool: &SqlitePool,
+    session_ids: &[String],
+    cameras: &[Camera],
+) -> Result<HashMap<String, String>, String> {
+    let rows = list_session_cameras(pool, session_ids).await.map_err(|e| e.to_string())?;
+
+    let mut camera_map: HashMap<String, String> = HashMap::new();
+    for row in rows {
+        // Rows arrive winner-first per session; a later row is a losing
+        // camera string for a session already decided.
+        if camera_map.contains_key(&row.session_id) {
+            continue;
+        }
+        let display =
+            resolve_camera_display_name(cameras, &row.camera).unwrap_or_else(|| row.camera.clone());
+        camera_map.insert(row.session_id, display);
+    }
+    Ok(camera_map)
+}
+
 /// `(target, filter, binning, gain, night)`, each `None` for an absent or
 /// blank field.
 type SessionKeyFields =
@@ -308,6 +345,7 @@ fn project_row_to_session(
     proj_map: &HashMap<String, Vec<(String, String)>>,
     cal_map: &HashMap<String, Vec<SessionCalibrationMatch>>,
     folder_map: &HashMap<String, String>,
+    camera_map: &HashMap<String, String>,
 ) -> InventorySession {
     let frames = count_frames(&row.frame_ids);
     let relative_path = folder_map.get(&row.id).cloned();
@@ -353,8 +391,10 @@ fn project_row_to_session(
     });
 
     // No exposure in session_key; would come from the fingerprint/provenance
-    // join in a full implementation (camera has the same gap — TODO(037)).
+    // join in a full implementation (TODO(037)).
     let exposure = None;
+
+    let camera = camera_map.get(&row.id).cloned();
 
     let calibration_matches = cal_map.get(&row.id).cloned().unwrap_or_default();
 
@@ -367,7 +407,7 @@ fn project_row_to_session(
         target,
         filter,
         exposure,
-        camera: None,
+        camera,
         gain,
         binning,
         set_temp: None,

@@ -5525,11 +5525,17 @@ export type InboxReclassifyV2Response_Serialize = {
 	needsReviewCount: number,
 };
 
-/**  Request to scan a root directory and discover inbox items. */
+/**
+ *  Request to scan a root directory and discover inbox items.
+ * 
+ *  Traversal behaviour is deliberately not a request field: `inbox.scan.folder`
+ *  resolves `followSymlinks` from persisted ingestion settings so every caller
+ *  gets the behaviour the user configured (issue #878). Every previous caller
+ *  hardcoded `false`, which silently overrode that setting.
+ */
 export type InboxScanFolderRequest = {
 	rootId: string,
 	rootAbsolutePath: string,
-	followSymlinks?: boolean,
 };
 
 /**  Response from `inbox.scan.folder`. */
