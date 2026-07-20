@@ -2241,7 +2241,7 @@ mod tests {
     // ── T070 tests — needs-review sentinel gate at confirm ───────────────────
 
     /// T070/FR-049/SC-015: confirm of an item whose group_key is the sentinel
-    /// __needs_review__ must be rejected with InboxMissingPathAttributes.
+    /// flagged `needs_review` must be rejected with InboxMissingPathAttributes.
     #[tokio::test]
     async fn t070_confirm_of_needs_review_item_is_rejected() {
         let tmp = tempfile::tempdir().unwrap();

@@ -170,28 +170,28 @@ pub async fn reclassify(
         _ => ("unclassified".to_owned(), "mixed".to_owned(), None),
     };
 
-    // issue #711 Instance B: an item still carrying the `__needs_review__`
-    // sentinel must not be reported classified from frame-type agreement
-    // alone. `inbox_confirm` gates on `inbox_items.group_key ==
-    // SENTINEL_NEEDS_REVIEW` directly, and the frame-type aggregation above
+    // issue #711 Instance B: an item still flagged `needs_review` must not be
+    // reported classified from frame-type agreement alone. `inbox_confirm`
+    // gates on `inbox_items.needs_review` directly, and the frame-type
+    // aggregation above
     // only tracks whether overrides agree on ONE type — not whether every
     // mandatory attribute (filter/exposureS/gain/target) is now actually
     // present. Left unchecked, the cached classification (and hence
     // `inbox.classify`/the detail panel) can flip to "single_type" while the
-    // list row and `inbox_confirm` still correctly see the sentinel,
+    // list row and `inbox_confirm` still correctly see needs-review,
     // producing the exact list/detail disagreement #711 reports. Re-check
     // against the same mandatory-attribute gate `materialize_sub_items` uses
     // before promoting a row, and downgrade the result when it fails.
-    // Scoped to items that already carry the sentinel — a non-sentinel
-    // item's reclassify aggregation is unaffected (issue #724 precedent).
-    let mut sentinel_resolved_ft: Option<metadata_core::FrameType> = None;
+    // Scoped to items already flagged needs-review — an unflagged item's
+    // reclassify aggregation is unaffected (issue #724 precedent).
+    let mut needs_review_resolved_ft: Option<metadata_core::FrameType> = None;
     if item.needs_review != 0 {
         match single_frame_type.as_deref().and_then(metadata_core::FrameType::from_str_ci) {
             Some(ft)
                 if mandatory_attrs_present(pool, &req.inbox_item_id, ft, &updated_evidence)
                     .await =>
             {
-                sentinel_resolved_ft = Some(ft);
+                needs_review_resolved_ft = Some(ft);
             }
             _ => {
                 "unclassified".clone_into(&mut db_result);
@@ -227,7 +227,7 @@ pub async fn reclassify(
     // identity, and `ON CONFLICT(root_id, relative_path, group_key)` converges
     // it onto any sibling already holding that identity, because two rows
     // sharing a classification identity in one folder ARE the same item.
-    if let Some(ft) = sentinel_resolved_ft {
+    if let Some(ft) = needs_review_resolved_ft {
         if let Some(source_group_id) = item.source_group_id.as_deref() {
             inbox_repo::upsert_inbox_sub_item(
                 pool,
@@ -626,7 +626,7 @@ pub async fn reclassify_v2(
     // ── 8. Re-run classification + grouping via materialize_sub_items ─────────
     //
     // We call the T066 pub(crate) API directly. This re-partitions all files in
-    // the source group into single-type sub-items (and the needs-review sentinel)
+    // the source group into single-type sub-items (some flagged needs-review)
     // based on their current effective metadata (header + overrides). It upserts
     // inbox_items rows and updates child_count on the source group.
     //
@@ -884,7 +884,7 @@ pub async fn reclassify_v2(
             frame_type: row.frame_type.clone(),
             file_count: u32::try_from(row.file_count).unwrap_or(u32::MAX),
             // missing_mandatory population is T070's responsibility; here we
-            // surface an empty list (or "needs review" flag via the sentinel).
+            // surface an empty list (or the "needs review" flag).
             missing_mandatory: if is_needs_review { vec!["frameType".to_owned()] } else { vec![] },
         });
     }
@@ -897,8 +897,8 @@ pub async fn reclassify_v2(
 /// `true` when every evidence row's effective filter/exposure/gain/object
 /// (override, else the extracted `inbox_file_metadata` value) satisfies the
 /// mandatory-attribute gate (T070/FR-047/FR-048) for `ft`. Shared by the
-/// needs-review sentinel-clear decision (issue #724) and the classification
-/// aggregation's own sentinel downgrade (issue #711 Instance B) — both need
+/// needs-review resolve decision (issue #724) and the classification
+/// aggregation's own downgrade (issue #711 Instance B) — both need
 /// the identical per-file check.
 async fn mandatory_attrs_present(
     pool: &SqlitePool,
@@ -1162,7 +1162,7 @@ mod tests {
 
     /// Issue #711 Instance B: overriding every file's frame_type to a single
     /// agreed type is not enough to report "classified" while the item is
-    /// still a needs-review sentinel and a DIFFERENT mandatory attribute for
+    /// still flagged needs-review and a DIFFERENT mandatory attribute for
     /// that type (dark requires exposureS + gain) remains unsupplied.
     /// Without the fix, step 6's frame-type-only aggregation reported
     /// "single_type"/"dark" (matching `inbox_classify`'s cached response and
