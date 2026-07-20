@@ -25,6 +25,8 @@
   --pv-leading-tight: 1.2;
   --pv-leading-normal: 1.5;
   --pv-leading-relaxed: 1.6;
+  --pv-leading-none: 1; /** Line-height 1 — deliberate for icon and single-glyph alignment, where any leading misaligns the box. Named so it is visibly a choice rather than a magic literal. */
+  --pv-sp-none: 0; /** Explicit zero spacing. Not a lever — nobody re-points this at a non-zero value. It exists so the spacing properties can be linted absolutely: every padding/margin/gap states a token, so a bare literal is always a violation with no carve-out to slip through. NOTE: sp-0 below is 2px, not zero. */
   --pv-sp-0: 2px; /** Spacing — geometric base-4 */
   --pv-sp-1: 4px;
   --pv-sp-2: 8px;
@@ -39,4 +41,7 @@
   --pv-radius-sm: 3px; /** Radius */
   --pv-radius-md: 5px;
   --pv-radius-lg: 8px;
+  --pv-radius-full: 50%; /** Circle/pill. Not a length: it tracks the box at any size, so it states the intent (round this completely) that a px radius cannot. Used for avatars, status dots and icon buttons. */
+  --pv-border-w: 1px; /** Hairline border. Used 202 times across the app, so it is a system decision, not per-component geometry: one value to change if the UI ever moves off a 1px rule. */
+  --pv-border-w-thick: 2px; /** Emphasis border (selected/active edges). The lone 1.5px in the tree was drift and is folded into this. */
 }
