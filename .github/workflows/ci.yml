@@ -417,15 +417,23 @@ jobs:
           # Changed files under this package, rebased to package-relative paths
           # and filtered to ones that exist (a deleted file has no dependents to
           # resolve and makes `vitest related` error).
-          mapfile -t files < <(
+          #
+          # Read with `while read`, NOT `mapfile`: the macOS runner's /bin/bash
+          # is 3.2 (Apple ships no GPLv3 bash), where `mapfile` does not exist.
+          # It exits 127 and takes the whole step with it, so the frontend suite
+          # never runs on macOS at all. The existence filter is folded into the
+          # same loop rather than kept as a second pass over an intermediate
+          # array — one loop cannot disagree with itself about which files it
+          # collected.
+          existing=()
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ -f "$f" ] && existing+=("$f")
+          done < <(
             printf '%s' "$CHANGED_FILES" | tr ',' '\n' \
               | sed -n 's#^apps/desktop/##p' \
               | grep -E '^src/.*\.(ts|tsx)$' || true
           )
-          existing=()
-          for f in "${files[@]}"; do
-            [ -f "$f" ] && existing+=("$f")
-          done
 
           if [ ${#existing[@]} -eq 0 ]; then
             echo "No existing apps/desktop/src TS files changed -> full suite (conservative)."
