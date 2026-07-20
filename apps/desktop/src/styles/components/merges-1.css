@@ -756,7 +756,7 @@
   flex-wrap: wrap;
 }
 .pv-listpage__detail-body .pv-plan-panel__summary-dest,
-.pv-listpage__detail-body .pv-plan-panel__dest {
+.pv-listpage__detail-body .pv-plan-panel__path {
   word-break: break-all;
 }
 
