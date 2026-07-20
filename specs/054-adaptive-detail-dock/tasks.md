@@ -41,15 +41,26 @@ pending verification).
 
 ## Phase 2: Foundational — US1 shared mechanism
 
-- [ ] T002 Unit test `useDetailDock` (threshold, pin fallback, hysteresis).
-  **SUPERSEDED** — `useDetailDock` was never built (shipped hook is
-  `useAdaptiveDock`, a different, simpler design). No dedicated unit-test
-  file for `useAdaptiveDock` was found in this reconciliation pass — flag as
-  a test-coverage gap if precision here matters for future work.
-- [ ] T003 Unit test `preferences.detailDock` persistence. **SUPERSEDED** —
-  `AppPreferences.detailDock` was never built; persistence is raw
-  `localStorage`, untested by a dedicated unit-test file as of this
-  reconciliation.
+- [x] T002 Unit test `useDetailDock` (threshold, pin fallback, hysteresis).
+  **DELIVERED (renamed, minus hysteresis), #1195.** `useDetailDock` was never
+  built — the shipped hook is `useAdaptiveDock`, a simpler design — and the
+  previous pass correctly found no tests for it. #1195 added them: threshold
+  resolution, pin-overrides-threshold, `setOverride(null)` restoring auto
+  (the #1066 path), the `sideAvailable` narrow-window fallback, width clamping,
+  and per-`dockId` isolation across remount.
+  Two honest deviations. They live in `ListPageLayout.test.tsx` rather than a
+  dedicated file — deliberate, since adding a React-rendering test file
+  previously tipped the suite into load-induced timeouts in unrelated suites.
+  And **hysteresis is not covered because it does not exist**: the hook
+  resolves placement from a single threshold with no damping band.
+  The assertions are mutation-checked, not merely green — forcing
+  `sideAvailable` true fails the narrow-window test, and making
+  `setOverride(null)` a no-op (re-introducing #1066) fails both the new hook
+  test and the existing layout test.
+- [x] T003 Unit test `preferences.detailDock` persistence.
+  **DELIVERED, #1195.** No longer superseded: `AppPreferences.detailDock` now
+  exists (see T007), and its persistence is covered by the per-`dockId`
+  remount-restore assertion added in the same PR.
 - [x] T004 Component test: containment for a plain overflowing block, no
   special internal scroll structure. **DELIVERED, PR #1076; REVISED, #1107.**
   Originally landed as tests 19–20 in `DetailPanel.test.tsx` ("content-only
@@ -92,9 +103,18 @@ pending verification).
   `useAdaptiveDock.ts` instead: single `window.innerWidth` signal (not
   `ResizeObserver` page-width + window-width), no `pageWidth` return value.
   `apps/desktop/src/ui/useAdaptiveDock.ts`.
-- [ ] T007 Extend `preferences.ts` / `AppPreferences.detailDock`.
-  **SUPERSEDED** — shipped as raw `localStorage` keys instead
-  (`useAdaptiveDock.ts:58-71`). No tracked issue for adding typed persistence.
+- [x] T007 Extend `preferences.ts` / `AppPreferences.detailDock`.
+  **DELIVERED, #1195.** Previously recorded as superseded by raw `localStorage`
+  keys; that gap was tracked from #1158 and has now been closed.
+  `detail_dock: HashMap<String, DetailDockPref>` is on the Rust
+  `AppPreferences` contract (the generated source of truth) with bindings
+  regenerated, and `useAdaptiveDock` reads/writes through
+  `getPreferences()`/`setPreference()` instead of raw keys.
+  `placement` is deliberately three-state — `Some(Side)`/`Some(Bottom)` pin the
+  dock, `None` means "auto, follow the width rule". Collapsing that to two
+  states is precisely what #1066 was.
+  No migration of the old `pv-dock-*` keys, per an explicit product decision:
+  users take a one-time placement reset, as they already did in #1106.
 - [x] T008 Container-level scroll containment in `DetailPanel.tsx` /
   `tables-lists.css`. **DELIVERED, #1035 + PR #1072.** #1035 closed #816 for
   the Target detail specifically, via a CSS direct-child selector contract
@@ -206,8 +226,16 @@ pending verification).
   (D3 in research.md). Functionally similar outcome at the 1100px minimum
   width, unverified for intermediate cases.
 - [ ] T023 Component test: pin two pages differently, drag one, reload,
-  verify exact restore. **Not confirmed** — no dedicated multi-page
-  persistence-restore test was found in this reconciliation pass.
+  verify exact restore. **DELIVERED IN PART, #1195 — deliberately left open.**
+  The "persists across remount, scoped per dockId" assertion covers the
+  multi-page half: `page-a` is pinned and resized, unmounted, and restored with
+  both values intact, while `page-b` is confirmed untouched by it.
+  Two parts of this task are still NOT covered, which is why it stays open
+  rather than being ticked: the restore is verified across a **remount**, not a
+  real page **reload**, and the width is set via `setWidth` rather than by
+  **dragging** the resize handle. Neither shortcut is free — a genuine reload
+  is what would exercise the preference cache, and the drag path has its own
+  pointer-event handling.
 
 ---
 
@@ -312,17 +340,28 @@ pending verification).
 
 ## Summary by disposition
 
-- **Delivered** (fully or partially, cites a PR): T004, T005, T008, T009
-  (partial — dual path not deleted), T010, T011, T012, T012a, T013–T017,
-  T021, T022, T027, T028, T029, T031 (partial — see drift note), T032, T033.
+- **Delivered** (fully or partially, cites a PR): T002 (minus hysteresis,
+  which was never built), T003, T004, T005, T007, T008, T009 (partial — dual
+  path not deleted), T010, T011, T012, T012a, T013–T017, T021, T022, T024
+  (partial — pinning shipped, column reorder did not), T025 (pre-existing),
+  T027, T028, T029, T031 (partial — see drift note), T032, T033.
 - **Withdrawn** (designed, decided against — do not build without a new
-  product ask): T018, T019, T020 → **#1068**.
-- **Superseded** (no tracked follow-up as of this reconciliation): T001,
-  T002, T003, T006, T007, T024, T025, T026, T030.
-- **Not confirmed** (verify before relying on): T023, T034.
+  product ask): T018, T019, T020 → **#1068**; T004a (`DetailPanel` facts/aux
+  rails) → **#1107**.
+- **Superseded** (no tracked follow-up as of this reconciliation): T001, T006,
+  T030.
+- **Open**: T023 (partial — remount covered, reload + drag not), T026 (E2E
+  assertion for the now-shipped pinned columns).
+- **Not confirmed** (verify before relying on): T034.
 
-No task remains in the **Open** disposition as of this pass — #1066 (T021)
-and #1067 (T011/T012/T012a) both shipped (PR #1070, PR #1072). Three
+**Two tasks are Open as of the #1158 pass** (T023, T026) — both test coverage
+for behaviour that now ships, not unbuilt product. The earlier statement that
+no task remained Open was true when written, before #1195 and #1158 delivered
+T002/T003/T007/T024/T025 and thereby created a genuine gap between the shipped
+behaviour and its regression cover.
+
+Historically: #1066 (T021) and #1067 (T011/T012/T012a) both shipped (PR #1070,
+PR #1072). Three
 follow-up gaps found by real-app validation of the shipped mechanism are
 tracked outside this task list entirely, not against any T0xx here: **#1106**
 (icon-only placement control, detail-panel overflow, stable `dockId`s, open
