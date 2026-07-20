@@ -347,7 +347,14 @@ jobs:
           set -euo pipefail
           # Non-desktop workspaces run plain node scripts; they are cheap and
           # have no vitest graph, so they always run in full.
-          pnpm --filter '!./apps/desktop' -r --if-present test
+          #
+          # The `!.` filter is load-bearing: `pnpm -r` excludes the workspace
+          # root by default, but adding ANY --filter re-includes it. The root's
+          # `test` script is `cargo test --workspace && pnpm -r --if-present
+          # test`, so omitting `!.` makes this step run the entire Rust suite
+          # inside a step named "Frontend unit tests" — which is how it was
+          # first caught, as an app_core_calibration failure on macOS.
+          pnpm --filter='!./apps/desktop' --filter='!.' -r --if-present test
 
           cd apps/desktop
           if [ "$FRONTEND_FULL" = "true" ]; then
