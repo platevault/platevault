@@ -83,20 +83,20 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
         }}
       >
         <Select.Trigger
-          className="alm-select alm-select--sm"
+          className="pv-select pv-select--sm"
           aria-label={prop.label}
         >
           <Select.Value />
-          <Select.Icon className="alm-select__icon" />
+          <Select.Icon className="pv-select__icon" />
         </Select.Trigger>
         <Select.Portal>
           <Select.Positioner>
-            <Select.Popup className="alm-select__popup">
+            <Select.Popup className="pv-select__popup">
               {options.map((opt) => (
                 <Select.Item
                   key={opt.value}
                   value={opt.value}
-                  className="alm-select__item"
+                  className="pv-select__item"
                 >
                   <Select.ItemText>{opt.label}</Select.ItemText>
                 </Select.Item>
@@ -111,12 +111,12 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
   if (type === 'boolean') {
     return (
       <Checkbox.Root
-        className="alm-checkbox"
+        className="pv-checkbox"
         checked={value === true}
         onCheckedChange={(checked) => onChange?.(String(checked))}
         aria-label={prop.label}
       >
-        <Checkbox.Indicator className="alm-checkbox__indicator">
+        <Checkbox.Indicator className="pv-checkbox__indicator">
           &#x2713;
         </Checkbox.Indicator>
       </Checkbox.Root>
@@ -126,7 +126,7 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
   return (
     <input
       type={type === 'number' ? 'number' : 'text'}
-      className="alm-input alm-input--sm"
+      className="pv-input pv-input--sm"
       value={value !== null && value !== undefined ? String(value) : ''}
       onChange={(e) => onChange?.(e.target.value)}
       aria-label={prop.label}
@@ -142,27 +142,27 @@ export function PropertyTable({
 }: PropertyTableProps) {
   return (
     <div
-      className="alm-property-table"
+      className="pv-property-table"
       role="table"
       aria-label={m.cmp_property_table_aria()}
     >
       {/* Header row */}
-      <div className="alm-property-table__header" role="row">
+      <div className="pv-property-table__header" role="row">
         <span
-          className="alm-property-table__cell alm-property-table__cell--label"
+          className="pv-property-table__cell pv-property-table__cell--label"
           role="columnheader"
         >
           {m.cmp_property_table_col_property()}
         </span>
         <span
-          className="alm-property-table__cell alm-property-table__cell--value"
+          className="pv-property-table__cell pv-property-table__cell--value"
           role="columnheader"
         >
           {m.cmp_property_table_col_value()}
         </span>
         {showSource && (
           <span
-            className="alm-property-table__cell alm-property-table__cell--source"
+            className="pv-property-table__cell pv-property-table__cell--source"
             role="columnheader"
           >
             {m.projects_wizard_col_source()}
@@ -170,7 +170,7 @@ export function PropertyTable({
         )}
         {showConfirm && (
           <span
-            className="alm-property-table__cell alm-property-table__cell--confirm"
+            className="pv-property-table__cell pv-property-table__cell--confirm"
             role="columnheader"
           >
             {m.cmp_property_table_col_confirmed()}
@@ -185,9 +185,9 @@ export function PropertyTable({
         const state = valueState(prop.value, applicability);
 
         return (
-          <div key={prop.key} className="alm-property-table__row" role="row">
+          <div key={prop.key} className="pv-property-table__row" role="row">
             <span
-              className="alm-property-table__cell alm-property-table__cell--label"
+              className="pv-property-table__cell pv-property-table__cell--label"
               role="rowheader"
             >
               {prop.label}
@@ -195,8 +195,8 @@ export function PropertyTable({
 
             <span
               className={
-                'alm-property-table__cell alm-property-table__cell--value' +
-                (prop.mono ? ' alm-mono' : '')
+                'pv-property-table__cell pv-property-table__cell--value' +
+                (prop.mono ? ' pv-mono' : '')
               }
               role="cell"
             >
@@ -205,6 +205,12 @@ export function PropertyTable({
               ) : prop.tooltip ? (
                 <Tooltip
                   content={prop.tooltip}
+                  // `tabIndex` makes the tooltip reachable without a pointer
+                  // (the shared Tooltip trigger is a bare <span>); `role` is
+                  // what actually exposes `aria-label` — naming is ignored on
+                  // a role-less <span>, so without it assistive tech hears the
+                  // value and never the tooltip. Same pairing as `ui/Lock`.
+                  role="note"
                   tabIndex={0}
                   data-testid={`proptable-tooltip-${prop.key}`}
                   aria-label={
@@ -222,7 +228,7 @@ export function PropertyTable({
 
             {showSource && (
               <span
-                className="alm-property-table__cell alm-property-table__cell--source"
+                className="pv-property-table__cell pv-property-table__cell--source"
                 role="cell"
               >
                 {/* Source pills couple to value presence (FR-138) — never
@@ -235,17 +241,17 @@ export function PropertyTable({
 
             {showConfirm && (
               <span
-                className="alm-property-table__cell alm-property-table__cell--confirm"
+                className="pv-property-table__cell pv-property-table__cell--confirm"
                 role="cell"
               >
                 {prop.onConfirmToggle !== undefined && (
                   <Checkbox.Root
-                    className="alm-checkbox"
+                    className="pv-checkbox"
                     checked={prop.confirmed ?? false}
                     onCheckedChange={() => prop.onConfirmToggle?.()}
                     aria-label={m.proptable_confirm_aria({ label: prop.label })}
                   >
-                    <Checkbox.Indicator className="alm-checkbox__indicator">
+                    <Checkbox.Indicator className="pv-checkbox__indicator">
                       &#x2713;
                     </Checkbox.Indicator>
                   </Checkbox.Root>

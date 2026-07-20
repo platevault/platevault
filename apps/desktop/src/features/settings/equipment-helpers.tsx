@@ -141,7 +141,7 @@ export function filterCategoryLabel(category: FilterCategory): string {
 
 export function autoDetectedBadge(autoDetected: boolean) {
   return (
-    <span className="alm-equipment__badges">
+    <span className="pv-equipment__badges">
       {autoDetected ? (
         <Pill variant="info">{m.settings_equipment_auto_detected()}</Pill>
       ) : (

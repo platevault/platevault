@@ -51,28 +51,28 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
   const current = STRATEGIES.find((s) => s.id === selected);
 
   return (
-    <div className="alm-svs">
-      <div className="alm-svs__field">
+    <div className="pv-svs">
+      <div className="pv-svs__field">
         {}
-        <label className="alm-svs__label">
+        <label className="pv-svs__label">
           {m.settings_sourceview_default_strategy()}
         </label>
         <Select.Root value={selected} onValueChange={handleChange}>
           <Select.Trigger
-            className="alm-select"
+            className="pv-select"
             aria-label={m.settings_sourceview_strategy_aria()}
           >
             <Select.Value />
-            <Select.Icon className="alm-select__icon" />
+            <Select.Icon className="pv-select__icon" />
           </Select.Trigger>
           <Select.Portal>
             <Select.Positioner>
-              <Select.Popup className="alm-select__popup">
+              <Select.Popup className="pv-select__popup">
                 {STRATEGIES.map((s) => (
                   <Select.Item
                     key={s.id}
                     value={s.id}
-                    className="alm-select__item"
+                    className="pv-select__item"
                   >
                     <Select.ItemText>{s.label()}</Select.ItemText>
                   </Select.Item>
@@ -84,14 +84,14 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
       </div>
 
       {current && (
-        <p className="alm-svs__description">{current.description()}</p>
+        <p className="pv-svs__description">{current.description()}</p>
       )}
 
-      <div className="alm-svs__all-options">
+      <div className="pv-svs__all-options">
         {STRATEGIES.map((s) => (
-          <div key={s.id} className="alm-svs__option-card">
-            <strong className="alm-svs__option-name">{s.label()}</strong>
-            <p className="alm-svs__option-desc">{s.description()}</p>
+          <div key={s.id} className="pv-svs__option-card">
+            <strong className="pv-svs__option-name">{s.label()}</strong>
+            <p className="pv-svs__option-desc">{s.description()}</p>
           </div>
         ))}
       </div>

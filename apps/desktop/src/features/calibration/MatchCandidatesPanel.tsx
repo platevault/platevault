@@ -97,21 +97,21 @@ function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const barColor =
     pct >= 90
-      ? 'var(--alm-ok)'
+      ? 'var(--pv-ok)'
       : pct >= 70
-        ? 'var(--alm-warn)'
-        : 'var(--alm-danger)';
+        ? 'var(--pv-warn)'
+        : 'var(--pv-danger)';
   return (
-    <div className="alm-match-candidates__conf-bar">
-      <div className="alm-match-candidates__conf-track">
+    <div className="pv-match-candidates__conf-bar">
+      <div className="pv-match-candidates__conf-track">
         <div
-          className="alm-match-candidates__conf-fill"
+          className="pv-match-candidates__conf-fill"
           // eslint-disable-next-line no-restricted-syntax -- dynamic: confidence bar width % and conditional token color
           style={{ width: `${pct}%`, background: barColor }}
           data-testid="confidence-bar"
         />
       </div>
-      <span className="alm-mono alm-match-candidates__conf-label">
+      <span className="pv-mono pv-match-candidates__conf-label">
         {confidencePct(value)}
       </span>
     </div>
@@ -132,21 +132,21 @@ type MatchWithRotation = CalibrationMatchDto & {
 function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
   return (
-    <div className="alm-match-candidates__dim-list">
+    <div className="pv-match-candidates__dim-list">
       <RotationWarningNotice warning={match.rotationWarning} />
 
       {match.dimensionsMatched.map((d) => (
-        <span key={d.dimension} className="alm-match-candidates__dim-matched">
+        <span key={d.dimension} className="pv-match-candidates__dim-matched">
           <Check
             size={12}
             role="img"
             aria-label={m.calibration_dim_matched_aria()}
-            className="alm-match-candidates__dim-check"
+            className="pv-match-candidates__dim-check"
           />{' '}
           {d.dimension}
           {/* eslint-disable alm/no-user-string -- mathematical delta notation, not translatable prose */}
           {d.delta != null && d.delta > 0 && (
-            <span className="alm-match-candidates__dim-delta">
+            <span className="pv-match-candidates__dim-delta">
               {' '}
               (Δ{d.delta.toFixed(2)})
             </span>
@@ -158,18 +158,18 @@ function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
         match.dimensionsMismatched.map((d) => (
           <span
             key={d.dimension}
-            className="alm-match-candidates__dim-mismatch"
+            className="pv-match-candidates__dim-mismatch"
             data-testid={`mismatch-${d.dimension}`}
           >
             <AlertTriangle
               size={12}
               aria-label={m.calibration_dim_mismatch_aria()}
-              className="alm-match-candidates__dim-mismatch-icon"
+              className="pv-match-candidates__dim-mismatch-icon"
             />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
             {/* eslint-disable alm/no-user-string -- mathematical delta notation, not translatable prose */}
             {d.delta != null && (
-              <span className="alm-match-candidates__dim-delta">
+              <span className="pv-match-candidates__dim-delta">
                 {' '}
                 (Δ{d.delta.toFixed(2)})
               </span>
@@ -254,8 +254,8 @@ function AssignButton({
 
   if (pending === 'confirming') {
     return (
-      <div className="alm-match-candidates__assign-col">
-        <div className="alm-match-candidates__assign-row">
+      <div className="pv-match-candidates__assign-col">
+        <div className="pv-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="primary"
@@ -282,14 +282,14 @@ function AssignButton({
 
   if (pending === 'override_confirm') {
     return (
-      <div className="alm-match-candidates__assign-col">
+      <div className="pv-match-candidates__assign-col">
         <span
-          className="alm-match-candidates__override-warning"
+          className="pv-match-candidates__override-warning"
           data-testid="override-warning"
         >
           {errorMsg}
         </span>
-        <div className="alm-match-candidates__assign-row">
+        <div className="pv-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="danger"
@@ -303,7 +303,7 @@ function AssignButton({
             {m.common_cancel()}
           </Btn>
         </div>
-        <div className="alm-match-candidates__override-dims">
+        <div className="pv-match-candidates__override-dims">
           {m.calibration_assign_violates({ dims: overrideDims.join(', ') })}
         </div>
       </div>
@@ -356,7 +356,7 @@ export function MatchCandidatesPanel({
   if (loading) {
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
-        <div className="alm-match-candidates__loading">
+        <div className="pv-match-candidates__loading">
           <Skeleton
             count={4}
             data-testid="suggest-loading"
@@ -453,7 +453,7 @@ export function MatchCandidatesPanel({
       title={m.calibration_compatible_sessions_title()}
       count={matches.length}
     >
-      <div className="alm-match-candidates__status-row">
+      <div className="pv-match-candidates__status-row">
         <Pill
           variant={statusVariant(suggestStatus)}
           data-testid="suggest-status-pill"
@@ -462,7 +462,7 @@ export function MatchCandidatesPanel({
         </Pill>
         {}
         {suggestStatus === 'ambiguous' && (
-          <span className="alm-match-candidates__ambiguous-hint">
+          <span className="pv-match-candidates__ambiguous-hint">
             {m.calibration_ambiguous_hint()}
           </span>
         )}
@@ -501,7 +501,7 @@ export function MatchCandidatesPanel({
         rows={matches.map((m) => ({
           session: (
             <span
-              className="alm-mono alm-match-candidates__session-id"
+              className="pv-mono pv-match-candidates__session-id"
               data-testid={`candidate-session-${m.sessionId}`}
             >
               {m.sessionId.slice(0, 12)}

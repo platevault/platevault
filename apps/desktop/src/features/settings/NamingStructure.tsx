@@ -49,8 +49,8 @@ export function NamingStructure({ save }: NamingStructureProps) {
           />
         }
       >
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-content">
+        <div className="pv-settings__row">
+          <div className="pv-settings__row-content">
             <PatternChipsEditor
               pattern={pattern}
               onChange={handlePatternChange}
@@ -67,17 +67,14 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
       <PerTypeDestinationPatterns />
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__row">
-          <label
-            className="alm-settings__row-label"
-            htmlFor="naming-auto-apply"
-          >
+      <div className="pv-settings__group">
+        <div className="pv-settings__row">
+          <label className="pv-settings__row-label" htmlFor="naming-auto-apply">
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
             <input
               id="naming-auto-apply"
               type="checkbox"
-              className="alm-naming__checkbox"
+              className="pv-naming__checkbox"
               checked={autoApplyPattern}
               onChange={(e) => handleAutoApplyChange(e.target.checked)}
             />
@@ -87,27 +84,27 @@ export function NamingStructure({ save }: NamingStructureProps) {
       </div>
 
       <SettingsSection title={m.settings_naming_live_preview_title()}>
-        <div className="alm-naming__preview-sample">
+        <div className="pv-naming__preview-sample">
           {m.settings_naming_live_preview_sample()}
         </div>
         {!canSave && (
-          <div className="alm-naming__preview-empty">
+          <div className="pv-naming__preview-empty">
             {m.settings_naming_invalid_pattern()}
           </div>
         )}
         {previewError && (
-          <div className="alm-naming__preview-error">{previewError}</div>
+          <div className="pv-naming__preview-error">{previewError}</div>
         )}
         {preview && canSave && (
-          <div className="alm-naming__preview-path-row">
-            <code className="alm-mono alm-naming__preview-code">
+          <div className="pv-naming__preview-path-row">
+            <code className="pv-mono pv-naming__preview-code">
               {preview.missingTokens.length > 0
                 ? // Render path with fallback segments dimmed.
                   preview.resolvedPath
                 : preview.resolvedPath}
             </code>
             {preview.missingTokens.length > 0 && (
-              <span className="alm-naming__preview-fallback">
+              <span className="pv-naming__preview-fallback">
                 {m.settings_naming_fallback_used({
                   tokens: preview.missingTokens.join(', '),
                 })}

@@ -23,6 +23,8 @@
 #   - the example reference module (query_builder_example.rs)
 #   - query sites that appear at/after the first `#[cfg(test)]` line in a file
 #     (inline unit-test modules are not production code)
+#   - entire files the compiler excludes from production builds, i.e. file-level
+#     test modules (see is_test_only_file)
 #
 # Usage:
 #   scripts/check-db-boundary.sh            # enforce zero (CI mode)
@@ -39,10 +41,64 @@ BASELINE="$SCRIPT_DIR/db-boundary-baseline.txt"
 # Patterns that denote a raw sqlx query/exec site.
 PATTERN='sqlx::query|query_as|query_scalar|\.fetch_(one|all|optional)|\.execute\('
 
+# True when the compiler excludes this ENTIRE file from production builds.
+#
+# Two ways a whole file can be test-only, both checked against the compiler's
+# actual rule rather than the file's name — a production file called `tests.rs`
+# is still counted, which is why this is not a name-based exemption:
+#
+#   1. The file declares the inner attribute `#![cfg(test)]` in its header
+#      region (blank/comment/attribute lines only). Note this is NOT matched by
+#      the inline `#[cfg(test)]` cutoff regex below: the `!` makes it an inner
+#      attribute applying to the whole file, not a cutoff for what follows.
+#   2. The file is a module whose parent declares it `#[cfg(test)] mod <name>;`.
+#      Extracting an inline `#[cfg(test)] mod tests { .. }` into its own file
+#      leaves the attribute on the parent's declaration, so the file itself
+#      contains no cfg(test) marker at all.
+is_test_only_file() {
+  local file="$1"
+  local first_item modname dir parent inner
+
+  # (1) Inner attribute in the header region. Restricted to the leading run of
+  # blank/comment/attribute lines so an `#![cfg(test)]` nested inside an inline
+  # `mod foo { .. }` (legal, but scopes to that module only) does not count.
+  first_item="$(grep -nvE '^[[:space:]]*(//.*)?$|^[[:space:]]*#!?\[' "$file" | head -1 | cut -d: -f1 || true)"
+  inner="$(grep -nE '^[[:space:]]*#!\[cfg\(test\)\]' "$file" | head -1 | cut -d: -f1 || true)"
+  if [[ -n "$inner" ]] && { [[ -z "$first_item" ]] || [[ "$inner" -lt "$first_item" ]]; }; then
+    return 0
+  fi
+
+  # (2) Parent declares this module under #[cfg(test)].
+  modname="$(basename "$file" .rs)"
+  dir="$(dirname "$file")"
+  if [[ "$modname" == "mod" ]]; then
+    # `foo/mod.rs` is module `foo`, declared by foo's own parent directory.
+    modname="$(basename "$dir")"
+    dir="$(dirname "$dir")"
+  elif [[ "$modname" == "lib" || "$modname" == "main" ]]; then
+    return 1 # crate roots have no parent module
+  fi
+  for parent in "$dir/mod.rs" "$dir.rs" "$dir/lib.rs" "$dir/main.rs"; do
+    [[ -f "$parent" ]] || continue
+    # `#[cfg(test)]` on the line immediately preceding the `mod <name>;` decl.
+    if grep -A1 -E '^[[:space:]]*#\[cfg\(test\)\][[:space:]]*$' "$parent" \
+      | grep -qE "^[[:space:]]*(pub[[:space:]]*(\([^)]*\))?[[:space:]]+)?mod[[:space:]]+${modname}[[:space:]]*;"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Count production query sites in a single file (sites before first #[cfg(test)]).
 count_file() {
   local file="$1"
   local cutoff
+
+  if is_test_only_file "$file"; then
+    echo 0
+    return
+  fi
+
   # Line number of the first #[cfg(test)] (inline unit-test module marker).
   cutoff="$(grep -nE '#\[cfg\(test\)\]' "$file" | head -1 | cut -d: -f1 || true)"
   if [[ -n "$cutoff" ]]; then

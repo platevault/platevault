@@ -119,21 +119,21 @@ describe('ProjectsTable', () => {
 
   it('(#105) state column uses ProjectStatusTag: dot+text, not a filled pill', () => {
     const { container } = renderTable();
-    // alm-status-tag class present in the state column — no alm-pill class.
-    const tags = container.querySelectorAll('.alm-status-tag');
+    // pv-status-tag class present in the state column — no pv-pill class.
+    const tags = container.querySelectorAll('.pv-status-tag');
     expect(tags.length).toBeGreaterThan(0);
     // Each tag contains a dot span and the label text.
     tags.forEach((tag) => {
-      expect(tag.querySelector('.alm-status-tag__dot')).toBeInTheDocument();
+      expect(tag.querySelector('.pv-status-tag__dot')).toBeInTheDocument();
     });
     // No filled-background pill class from the old implementation.
-    expect(container.querySelector('.alm-pill')).toBeNull();
+    expect(container.querySelector('.pv-pill')).toBeNull();
   });
 
   it('marks the selected row with the selected CSS class', () => {
     const { container } = renderTable({ selectedId: 'proj-001' });
     const selected = container.querySelectorAll(
-      '.alm-projects-table__row--selected',
+      '.pv-projects-table__row--selected',
     );
     expect(selected).toHaveLength(1);
     expect(selected[0]).toHaveTextContent('NGC 7000 Narrowband');

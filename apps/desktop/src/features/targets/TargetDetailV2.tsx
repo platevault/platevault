@@ -471,10 +471,10 @@ export function TargetDetailV2({
   // Title identity (h2, unchanged content/markup — just relocated into
   // DetailPanel's `title` slot, spec 054 T011/#1067).
   const titleContent = (
-    <h2 className="alm-planner__title">
+    <h2 className="pv-planner__title">
       {detail.effectiveLabel}
       {commonName && commonName !== detail.effectiveLabel && (
-        <span className="alm-planner__subtitle"> — {commonName}</span>
+        <span className="pv-planner__subtitle"> — {commonName}</span>
       )}
     </h2>
   );
@@ -482,11 +482,11 @@ export function TargetDetailV2({
   // Pills + "New project" action, inline-left beside the title. Both go in
   // `titleExtra` (not the `actions` slot): SessionDetail/MasterDetail already
   // established this idiom — `actions` renders far-right in the header
-  // (`.alm-detail__actions`), which would break the "inline-left, matches
+  // (`.pv-detail__actions`), which would break the "inline-left, matches
   // Sessions" grouping this file's own header CSS documents.
   const titleExtraContent = (
     <>
-      <div className="alm-planner__actions">
+      <div className="pv-planner__actions">
         {/* Primary/contextual action FIRST (Sessions convention: the
             highlight action leads the inline-left group). */}
         <Btn
@@ -502,12 +502,12 @@ export function TargetDetailV2({
           {m.targets_detail_new_project()}
         </Btn>
       </div>
-      <div className="alm-planner__pill-row">
+      <div className="pv-planner__pill-row">
         <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
         {catalogPills.map((a) => (
           <Pill key={a.id} variant="ghost">
             <span title={m.targets_detail_alias_kind_title({ kind: a.kind })}>
-              <span className="alm-target-detail__alias-kind">
+              <span className="pv-target-detail__alias-kind">
                 [{kindLabel(a.kind)}]
               </span>
               {a.alias}
@@ -520,33 +520,33 @@ export function TargetDetailV2({
 
   return (
     <DetailPanel fill title={titleContent} titleExtra={titleExtraContent}>
-      {/* #816: DetailPane fill-mode contract (primitives.css .alm-detail--fill)
+      {/* #816: DetailPane fill-mode contract (primitives.css .pv-detail--fill)
           requires ONE descendant establishing overflow-y:auto. DetailPanel is
           deliberately used in "content-only" mode here (no facts/aux slots) —
           that mode renders `children` as a direct sibling of DetailHeader
-          inside `.alm-detail--fill` (see DetailPanel.tsx), identical to the
+          inside `.pv-detail--fill` (see DetailPanel.tsx), identical to the
           pre-migration structure this comment originally documented. facts/
           aux were NOT used for the identity columns below: that would nest
-          this region under `.alm-detailpanel__cols` > `.alm-detailpanel__content`
-          instead of as a direct child of `.alm-detail--fill`, breaking the
-          `.alm-detail--fill > .alm-planner__scroll` CSS rule (redesign-detail.css)
+          this region under `.pv-detailpanel__cols` > `.pv-detailpanel__content`
+          instead of as a direct child of `.pv-detail--fill`, breaking the
+          `.pv-detail--fill > .pv-planner__scroll` CSS rule (redesign-detail.css)
           this fix depends on — everything below (identity/tonight, coverage,
           links, display label, aliases, projects, notes, back button) lives
           in this single scrollable region so it isn't silently clipped by
           the pane's own overflow:hidden. */}
-      <div className="alm-planner__scroll">
+      <div className="pv-planner__scroll">
         {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
-        <div className="alm-planner__cols">
-          <div className="alm-planner__col">
+        <div className="pv-planner__cols">
+          <div className="pv-planner__col">
             <PropertyTable mode="view" properties={identityA} />
           </div>
-          <div className="alm-planner__col">
+          <div className="pv-planner__col">
             <PropertyTable mode="view" properties={identityB} />
           </div>
 
           {/* Tonight column: a small transit graph + the planner stats. */}
-          <div className="alm-planner__tonight">
-            <div className="alm-planner__graph-title">
+          <div className="pv-planner__tonight">
+            <div className="pv-planner__graph-title">
               {site
                 ? m.targets_detail_tonight_title({
                     lat: Math.round(site.latitudeDeg),
@@ -559,7 +559,7 @@ export function TargetDetailV2({
                 <Link
                   to="/settings/$pane"
                   params={{ pane: 'planner' }}
-                  className="alm-banner__action-link"
+                  className="pv-banner__action-link"
                 >
                   {m.targets_planner_no_site_banner_action()}
                 </Link>
@@ -602,14 +602,14 @@ export function TargetDetailV2({
                     {/* #758/FR-020: the transit/min-over-dark/dark-midpoint
                       Moon-separation trio — computed since spec 044 T028 but
                       never rendered anywhere in the app until now. */}
-                    <div className="alm-planner__tonight-filters">
-                      <span className="alm-planner__tonight-filters-label">
+                    <div className="pv-planner__tonight-filters">
+                      <span className="pv-planner__tonight-filters-label">
                         {m.targets_detail_moon_trio_title()}
                       </span>
                       <PropertyTable mode="view" properties={moonTrio} />
                     </div>
-                    <div className="alm-planner__tonight-filters">
-                      <span className="alm-planner__tonight-filters-label">
+                    <div className="pv-planner__tonight-filters">
+                      <span className="pv-planner__tonight-filters-label">
                         {m.common_filters()}
                       </span>
                       <GuidanceCell
@@ -630,27 +630,27 @@ export function TargetDetailV2({
         {/* ── Coverage bars ────────────────────────────────────────────────── */}
         {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
           per-filter coverage. Render the section header with a stub note. */}
-        <div className="alm-planner__coverage">
-          <p className="alm-planner__section-title">{m.common_coverage()}</p>
-          <div className="alm-planner__coverage-list">
-            <span className="alm-planner__coverage-stub">
+        <div className="pv-planner__coverage">
+          <p className="pv-planner__section-title">{m.common_coverage()}</p>
+          <div className="pv-planner__coverage-list">
+            <span className="pv-planner__coverage-stub">
               {m.targets_detail_no_coverage()}
             </span>
           </div>
         </div>
 
         {/* ── Linked sessions + projects ───────────────────────────────────── */}
-        <div className="alm-planner__links">
+        <div className="pv-planner__links">
           <div>
-            <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
+            <p className="pv-planner__link-col-title">{m.common_sessions()}</p>
             {sessionsLoading ? (
               <Skeleton count={3} width="80%" label={m.common_loading()} />
             ) : sessions.length === 0 ? (
-              <span className="alm-planner__link-empty">
+              <span className="pv-planner__link-empty">
                 {m.targets_detail_no_sessions()}
               </span>
             ) : (
-              <ul className="alm-planner__link-list">
+              <ul className="pv-planner__link-list">
                 {sessions.map((s) => {
                   const dateStr = new Date(s.createdAt).toLocaleDateString(
                     undefined,
@@ -661,9 +661,9 @@ export function TargetDetailV2({
                     },
                   );
                   return (
-                    <li key={s.id} className="alm-planner__link-item">
+                    <li key={s.id} className="pv-planner__link-item">
                       <button
-                        className="alm-planner__link-btn"
+                        className="pv-planner__link-btn"
                         onClick={() =>
                           void navigate({
                             to: '/sessions',
@@ -671,15 +671,13 @@ export function TargetDetailV2({
                           })
                         }
                       >
-                        <span className="alm-planner__link-date">
-                          {dateStr}
-                        </span>
+                        <span className="pv-planner__link-date">{dateStr}</span>
                         {s.filter !== '' && (
-                          <span className="alm-planner__link-meta">
+                          <span className="pv-planner__link-meta">
                             {s.filter}
                           </span>
                         )}
-                        <span className="alm-planner__link-meta">
+                        <span className="pv-planner__link-meta">
                           {m.targets_detail_session_frames({
                             count: s.frameCount,
                           })}
@@ -692,19 +690,19 @@ export function TargetDetailV2({
             )}
           </div>
           <div>
-            <p className="alm-planner__link-col-title">{m.common_projects()}</p>
+            <p className="pv-planner__link-col-title">{m.common_projects()}</p>
             {projectsLoading ? (
               <Skeleton count={3} width="80%" label={m.common_loading()} />
             ) : projects.length === 0 ? (
-              <span className="alm-planner__link-empty">
+              <span className="pv-planner__link-empty">
                 {m.targets_detail_no_projects_linked()}
               </span>
             ) : (
-              <ul className="alm-planner__link-list">
+              <ul className="pv-planner__link-list">
                 {projects.map((p) => (
-                  <li key={p.id} className="alm-planner__link-item">
+                  <li key={p.id} className="pv-planner__link-item">
                     <button
-                      className="alm-planner__link-btn"
+                      className="pv-planner__link-btn"
                       onClick={() =>
                         void navigate({
                           to: '/projects',
@@ -712,8 +710,8 @@ export function TargetDetailV2({
                         })
                       }
                     >
-                      <span className="alm-planner__link-name">{p.name}</span>
-                      <span className="alm-planner__link-state">
+                      <span className="pv-planner__link-name">{p.name}</span>
+                      <span className="pv-planner__link-state">
                         {p.lifecycle}
                       </span>
                     </button>
@@ -727,7 +725,7 @@ export function TargetDetailV2({
         {/* ── Display label ────────────────────────────────────────────────── */}
         <Section title={m.targets_detail_display_label_title()}>
           {displayAliasEditing ? (
-            <div className="alm-target-detail__display-alias-edit">
+            <div className="pv-target-detail__display-alias-edit">
               <input
                 aria-label={m.targets_detail_display_label_title()}
                 placeholder={detail.primaryDesignation}
@@ -737,43 +735,43 @@ export function TargetDetailV2({
                   if (e.key === 'Enter') void handleDisplayAliasSet();
                   if (e.key === 'Escape') setDisplayAliasEditing(false);
                 }}
-                className="alm-target-detail__text-input"
+                className="pv-target-detail__text-input"
                 // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: the inline display-label editor mounts on demand and must receive focus so the user can type immediately
                 autoFocus
               />
               <button
                 onClick={handleDisplayAliasSet}
-                className="alm-target-detail__action-btn"
+                className="pv-target-detail__action-btn"
               >
                 {m.common_save()}
               </button>
               {detail.displayAlias != null && (
                 <button
                   onClick={handleDisplayAliasClear}
-                  className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+                  className="pv-target-detail__action-btn pv-target-detail__action-btn--muted"
                 >
                   {m.common_clear()}
                 </button>
               )}
               <button
                 onClick={() => setDisplayAliasEditing(false)}
-                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+                className="pv-target-detail__action-btn pv-target-detail__action-btn--muted"
               >
                 {m.common_cancel()}
               </button>
             </div>
           ) : (
-            <div className="alm-target-detail__display-alias-view">
-              <span className="alm-target-detail__display-alias-value">
+            <div className="pv-target-detail__display-alias-view">
+              <span className="pv-target-detail__display-alias-value">
                 {detail.displayAlias ?? (
-                  <em className="alm-target-detail__display-alias-placeholder">
+                  <em className="pv-target-detail__display-alias-placeholder">
                     {m.targets_detail_display_label_unset()}
                   </em>
                 )}
               </span>
               <button
                 onClick={() => setDisplayAliasEditing(true)}
-                className="alm-target-detail__edit-btn"
+                className="pv-target-detail__edit-btn"
               >
                 {detail.displayAlias != null
                   ? m.common_edit()
@@ -785,13 +783,13 @@ export function TargetDetailV2({
 
         {/* ── Aliases ──────────────────────────────────────────────────────── */}
         <Section title={m.common_aliases()} count={detail.aliases.length}>
-          <div className="alm-target-detail__alias-list">
+          <div className="pv-target-detail__alias-list">
             {detail.aliases.map((a) => (
               <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
                 <span
                   title={m.targets_detail_alias_kind_title({ kind: a.kind })}
                 >
-                  <span className="alm-target-detail__alias-kind">
+                  <span className="pv-target-detail__alias-kind">
                     [{kindLabel(a.kind)}]
                   </span>
                   {a.alias}
@@ -801,7 +799,7 @@ export function TargetDetailV2({
                     aria-label={m.targets_detail_alias_remove_aria({
                       alias: a.alias,
                     })}
-                    className="alm-target-detail__alias-remove"
+                    className="pv-target-detail__alias-remove"
                     onClick={() => handleAliasRemove(a.id)}
                   >
                     <X size={14} aria-hidden="true" />
@@ -810,14 +808,14 @@ export function TargetDetailV2({
               </Pill>
             ))}
             {detail.aliases.length === 0 && (
-              <span className="alm-target-detail__alias-empty">
+              <span className="pv-target-detail__alias-empty">
                 {m.targets_detail_no_aliases()}
               </span>
             )}
           </div>
 
           {/* Add user alias form */}
-          <div className="alm-target-detail__alias-add-row">
+          <div className="pv-target-detail__alias-add-row">
             <input
               aria-label={m.targets_detail_alias_input_aria()}
               placeholder={m.targets_detail_alias_placeholder()}
@@ -826,22 +824,22 @@ export function TargetDetailV2({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleAliasAdd();
               }}
-              className="alm-target-detail__text-input"
+              className="pv-target-detail__text-input"
             />
             <button
               onClick={handleAliasAdd}
-              className="alm-target-detail__action-btn"
+              className="pv-target-detail__action-btn"
             >
               {m.common_add()}
             </button>
           </div>
           {aliasError && (
-            <Banner variant="danger" className="alm-target-detail__banner">
+            <Banner variant="danger" className="pv-target-detail__banner">
               {aliasError}
             </Banner>
           )}
           {actionError && (
-            <Banner variant="danger" className="alm-target-detail__banner">
+            <Banner variant="danger" className="pv-target-detail__banner">
               {actionError}
             </Banner>
           )}
@@ -859,11 +857,11 @@ export function TargetDetailV2({
         {/* ── Observing notes (spec 023 US4) ──────────────────────────────── */}
         <Section title={m.targets_detail_notes_title()}>
           {notesEditing ? (
-            <div className="alm-target-detail__notes-edit">
+            <div className="pv-target-detail__notes-edit">
               <textarea
                 data-testid="target-notes-textarea"
                 aria-label={m.targets_detail_notes_title()}
-                className="alm-target-detail__notes-textarea"
+                className="pv-target-detail__notes-textarea"
                 placeholder={m.targets_detail_notes_placeholder()}
                 value={notesDraft}
                 rows={5}
@@ -874,9 +872,9 @@ export function TargetDetailV2({
                   setNotesError(null);
                 }}
               />
-              <div className="alm-target-detail__notes-actions">
+              <div className="pv-target-detail__notes-actions">
                 <button
-                  className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+                  className="pv-target-detail__action-btn pv-target-detail__action-btn--muted"
                   disabled={notesSaving}
                   onClick={() => {
                     setNotesDraft(notes ?? '');
@@ -887,7 +885,7 @@ export function TargetDetailV2({
                   {m.common_cancel()}
                 </button>
                 <button
-                  className="alm-target-detail__action-btn"
+                  className="pv-target-detail__action-btn"
                   disabled={notesSaving}
                   onClick={() => void handleNotesSave()}
                 >
@@ -895,31 +893,31 @@ export function TargetDetailV2({
                 </button>
               </div>
               {notesError && (
-                <Banner variant="danger" className="alm-target-detail__banner">
+                <Banner variant="danger" className="pv-target-detail__banner">
                   {notesError}
                 </Banner>
               )}
             </div>
           ) : (
-            <div className="alm-target-detail__notes-view">
+            <div className="pv-target-detail__notes-view">
               {notes ? (
                 <div
                   data-testid="target-notes-body"
-                  className="alm-target-detail__notes-body"
+                  className="pv-target-detail__notes-body"
                 >
                   {notes}
                 </div>
               ) : (
                 <span
                   data-testid="target-notes-empty"
-                  className="alm-target-detail__notes-empty"
+                  className="pv-target-detail__notes-empty"
                 >
                   {m.targets_detail_notes_empty()}
                 </span>
               )}
-              <div className="alm-target-detail__notes-footer">
+              <div className="pv-target-detail__notes-footer">
                 <button
-                  className="alm-target-detail__edit-btn"
+                  className="pv-target-detail__edit-btn"
                   onClick={() => {
                     setNotesDraft(notes ?? '');
                     setNotesEditing(true);
@@ -929,7 +927,7 @@ export function TargetDetailV2({
                   {m.common_edit()}
                 </button>
                 {notesSaved && (
-                  <span className="alm-target-detail__notes-saved">
+                  <span className="pv-target-detail__notes-saved">
                     {m.targets_detail_notes_saved()}
                   </span>
                 )}
@@ -940,7 +938,7 @@ export function TargetDetailV2({
 
         {/* Back button */}
         <button
-          className="alm-target-detail__back-btn"
+          className="pv-target-detail__back-btn"
           onClick={() => navigate({ to: '/targets' })}
         >
           {m.targets_detail_back()}

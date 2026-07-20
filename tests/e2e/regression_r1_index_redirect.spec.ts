@@ -24,27 +24,27 @@
  *   - docs/development/test-strategy-033.md § J-1.1
  *   - apps/desktop/src/app/router.tsx  indexRoute.beforeLoad
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
 // The app uses createHashHistory — routes are in the URL hash (#/sessions).
 // Seed preferences via the `alm-preferences` localStorage key so the
 // `checkFirstRunComplete()` call in indexRoute.beforeLoad reads the flag.
-function seedSetupComplete(page: import("@playwright/test").Page): void {
+function seedSetupComplete(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      "alm-preferences",
+      'alm-preferences',
       JSON.stringify({ setupCompleted: true }),
     );
   });
 }
 
-function seedSetupIncomplete(page: import("@playwright/test").Page): void {
+function seedSetupIncomplete(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {
-    window.localStorage.removeItem("alm-preferences");
+    window.localStorage.removeItem('alm-preferences');
   });
 }
 
-test.describe("Regression R-1 · index route redirect", () => {
+test.describe('Regression R-1 · index route redirect', () => {
   /**
    * When `setupCompleted` is true (returning user), navigating to `/#/` must
    * redirect to `/#/sessions`, NOT render SessionsPage at the index match.
@@ -56,7 +56,7 @@ test.describe("Regression R-1 · index route redirect", () => {
    * The error boundary text "Something went wrong!" must NOT appear.
    * The final hash must contain `sessions`.
    */
-  test("R-1.1 · /#/ redirects to /#/sessions when setup is complete (not crash)", async ({
+  test('R-1.1 · /#/ redirects to /#/sessions when setup is complete (not crash)', async ({
     page,
   }) => {
     // Seed setup-complete flag before navigation so the router's beforeLoad
@@ -64,21 +64,21 @@ test.describe("Regression R-1 · index route redirect", () => {
     seedSetupComplete(page);
 
     // Navigate to the index hash route.
-    await page.goto("/#/");
+    await page.goto('/#/');
 
     // The router redirects via TanStack Router's hash history. The hash in
     // the URL changes from `#/` to `#/sessions`. Wait for the hash to settle.
     await page.waitForFunction(
-      () => window.location.hash.includes("sessions"),
+      () => window.location.hash.includes('sessions'),
       { timeout: 10_000 },
     );
 
     // Belt-and-braces: the error boundary fallback must NOT be visible.
-    const errorBoundary = page.getByTestId("app-error-boundary-fallback");
+    const errorBoundary = page.getByTestId('app-error-boundary-fallback');
     await expect(errorBoundary).not.toBeVisible();
 
     // The TanStack invariant error text must NOT appear.
-    const invariantError = page.getByText("Invariant failed");
+    const invariantError = page.getByText('Invariant failed');
     await expect(invariantError).not.toBeVisible();
   });
 
@@ -86,20 +86,19 @@ test.describe("Regression R-1 · index route redirect", () => {
    * When `setupCompleted` is false (new user), navigating to `/#/` must
    * redirect to `/#/setup`, NOT crash.
    */
-  test("R-1.2 · /#/ redirects to /#/setup when setup is incomplete", async ({
+  test('R-1.2 · /#/ redirects to /#/setup when setup is incomplete', async ({
     page,
   }) => {
     seedSetupIncomplete(page);
 
-    await page.goto("/#/");
+    await page.goto('/#/');
 
     // Should redirect to the setup wizard hash route.
-    await page.waitForFunction(
-      () => window.location.hash.includes("setup"),
-      { timeout: 10_000 },
-    );
+    await page.waitForFunction(() => window.location.hash.includes('setup'), {
+      timeout: 10_000,
+    });
 
-    const errorBoundary = page.getByTestId("app-error-boundary-fallback");
+    const errorBoundary = page.getByTestId('app-error-boundary-fallback');
     await expect(errorBoundary).not.toBeVisible();
   });
 
@@ -109,19 +108,19 @@ test.describe("Regression R-1 · index route redirect", () => {
    * include it as a baseline to distinguish the index-route crash from a
    * deeper render issue on /sessions itself.
    */
-  test("R-1.3 · /#/sessions renders without invariant error when navigated directly", async ({
+  test('R-1.3 · /#/sessions renders without invariant error when navigated directly', async ({
     page,
   }) => {
     seedSetupComplete(page);
 
-    await page.goto("/#/sessions");
+    await page.goto('/#/sessions');
 
     // No error boundary.
-    const errorBoundary = page.getByTestId("app-error-boundary-fallback");
+    const errorBoundary = page.getByTestId('app-error-boundary-fallback');
     await expect(errorBoundary).not.toBeVisible();
 
     // No invariant error text.
-    const invariantError = page.getByText("Invariant failed");
+    const invariantError = page.getByText('Invariant failed');
     await expect(invariantError).not.toBeVisible();
   });
 });

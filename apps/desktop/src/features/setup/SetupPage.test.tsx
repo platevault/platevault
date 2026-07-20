@@ -4,7 +4,7 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
  * SetupPage tests — #505: the setup wizard renders outside Shell.tsx, so it
- * carries its own `density-*` class (mirroring `.alm-frame density-${density}`
+ * carries its own `density-*` class (mirroring `.pv-frame density-${density}`
  * in app/Shell.tsx) for a live density preview during setup.
  */
 
@@ -43,9 +43,7 @@ describe('SetupPage — live density preview (#505)', () => {
     await waitFor(() =>
       expect(screen.getByTestId('setup-wizard-stub')).toBeInTheDocument(),
     );
-    expect(container.querySelector('.alm-page')).toHaveClass(
-      'density-spacious',
-    );
+    expect(container.querySelector('.pv-page')).toHaveClass('density-spacious');
   });
 
   it('defaults to the comfortable density class', async () => {
@@ -53,7 +51,7 @@ describe('SetupPage — live density preview (#505)', () => {
     await waitFor(() =>
       expect(screen.getByTestId('setup-wizard-stub')).toBeInTheDocument(),
     );
-    expect(container.querySelector('.alm-page')).toHaveClass(
+    expect(container.querySelector('.pv-page')).toHaveClass(
       'density-comfortable',
     );
   });

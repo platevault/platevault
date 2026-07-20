@@ -9,7 +9,7 @@
  * write is invalidated back into the inventory query.
  *
  * Reuses the shared note constraints (`@/lib/notes`) and the project notes CSS
- * (`alm-project-notes__*`) so the two note editors stay visually identical
+ * (`pv-project-notes__*`) so the two note editors stay visually identical
  * without duplicating rules.
  */
 
@@ -90,10 +90,10 @@ export function SessionNotesSection({
   };
 
   return (
-    <div className="alm-project-notes__root">
+    <div className="pv-project-notes__root">
       <textarea
         data-testid="session-notes-textarea"
-        className="alm-input alm-project-notes__textarea"
+        className="pv-input pv-project-notes__textarea"
         aria-label={m.sessions_notes_label()}
         placeholder={m.sessions_notes_placeholder()}
         value={draft}
@@ -102,27 +102,27 @@ export function SessionNotesSection({
         aria-invalid={overLimit}
         aria-describedby={overLimit ? 'session-notes-error' : undefined}
       />
-      <div className="alm-project-notes__toolbar">
+      <div className="pv-project-notes__toolbar">
         <span
           data-testid="session-notes-byte-counter"
           className={
             overLimit
-              ? 'alm-project-notes__byte-counter--over'
+              ? 'pv-project-notes__byte-counter--over'
               : nearLimit
-                ? 'alm-project-notes__byte-counter--near'
-                : 'alm-project-notes__byte-counter'
+                ? 'pv-project-notes__byte-counter--near'
+                : 'pv-project-notes__byte-counter'
           }
         >
           {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()}{' '}
           {m.projects_notes_bytes_unit()}
         </span>
         {saving ? (
-          <span className="alm-project-notes__saved">{m.common_saving()}</span>
+          <span className="pv-project-notes__saved">{m.common_saving()}</span>
         ) : (
           saved && (
             <span
               data-testid="session-notes-saved"
-              className="alm-project-notes__saved"
+              className="pv-project-notes__saved"
             >
               {m.sessions_notes_saved()}
             </span>
@@ -134,7 +134,7 @@ export function SessionNotesSection({
           id="session-notes-error"
           role="alert"
           data-testid="session-notes-error"
-          className="alm-field-error"
+          className="pv-field-error"
         >
           {m.projects_notes_byte_limit_exceeded({
             max: MAX_NOTE_BYTES.toLocaleString(),

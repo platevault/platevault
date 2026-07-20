@@ -166,15 +166,21 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
       expect(mockRestartFirstRun).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockResetWizardStateWithSources).toHaveBeenCalledWith([
-      {
-        path: '/astro/lights',
-        kind: 'light_frames',
-        organizationState: 'organized',
-      },
-    ]);
-    expect(mockSetPreference).toHaveBeenCalledWith('setupCompleted', false);
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/setup' });
+    // All three run only after `await restartFirstRun()` RESOLVES
+    // (Advanced.tsx:154-169); the waitFor above proves only that the IPC was
+    // dispatched. Asserting them synchronously fails with "Number of calls: 0"
+    // whenever the response lands a tick late (#1083).
+    await waitFor(() => {
+      expect(mockResetWizardStateWithSources).toHaveBeenCalledWith([
+        {
+          path: '/astro/lights',
+          kind: 'light_frames',
+          organizationState: 'organized',
+        },
+      ]);
+      expect(mockSetPreference).toHaveBeenCalledWith('setupCompleted', false);
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/setup' });
+    });
   });
 
   it('shows an inline error and stays on the pane when restartFirstRun fails', async () => {

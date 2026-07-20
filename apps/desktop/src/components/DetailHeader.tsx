@@ -19,16 +19,16 @@ export function DetailHeader({
   children,
 }: DetailHeaderProps) {
   return (
-    <div className="alm-detail__header">
-      <div className="alm-detail__header-content">
-        <div className="alm-detail__title">
+    <div className="pv-detail__header">
+      <div className="pv-detail__header-content">
+        <div className="pv-detail__title">
           {title}
           {titleExtra}
         </div>
-        {subtitle && <div className="alm-detail__subtitle">{subtitle}</div>}
+        {subtitle && <div className="pv-detail__subtitle">{subtitle}</div>}
         {children}
       </div>
-      {actions && <div className="alm-detail__actions">{actions}</div>}
+      {actions && <div className="pv-detail__actions">{actions}</div>}
     </div>
   );
 }

@@ -202,7 +202,7 @@ describe('InboxList — configurable grouping', () => {
 
     // No grouping yet → no hint footer, and no legacy sidebar count.
     expect(screen.queryByTestId('inbox-grouping-hint')).toBeNull();
-    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__count')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Group by'), {
       target: { value: 'target' },
@@ -216,8 +216,8 @@ describe('InboxList — configurable grouping', () => {
   it('(5b) renders no duplicate search box or count footer (single search lives in the top bar)', () => {
     render(<Harness items={items} />);
 
-    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
-    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__search')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__count')).toBeNull();
     expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
   });
 

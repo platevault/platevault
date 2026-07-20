@@ -10,7 +10,7 @@
 // screen: a few defaults the user can set up front (all changeable later in
 // Settings).
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
 import { usePreference } from '@/data/preferences';
 import { useThemeChoice, THEMES, type ThemeChoice } from '@/data/theme';
@@ -47,6 +47,16 @@ type DefaultProtection = 'protected' | 'unprotected';
 function DefaultProtectionControl() {
   const [value, setValue] = useState<DefaultProtection>('protected');
 
+  // Set once the user picks a value, so the mount read below can never
+  // overwrite a deliberate choice. `cancelled` only covers unmount, not the
+  // still-mounted case where the user has already chosen.
+  const chosenRef = useRef(false);
+
+  // Load the persisted value on mount. This resolves asynchronously, so on a
+  // slow backend it can land AFTER the user has already picked from the select
+  // — and `onChange` has by then persisted their pick, so applying the read
+  // would show a value the backend no longer holds. Same defect as the
+  // Settings → Cleanup pane guards with `editedRef`.
   useEffect(() => {
     let cancelled = false;
     commands
@@ -55,7 +65,7 @@ function DefaultProtectionControl() {
       .then((data) => {
         const vals = data?.values as Record<string, unknown> | undefined;
         const v = vals?.defaultProtection;
-        if (!cancelled && typeof v === 'string')
+        if (!cancelled && !chosenRef.current && typeof v === 'string')
           setValue(v as DefaultProtection);
       })
       .catch(() => {
@@ -67,6 +77,9 @@ function DefaultProtectionControl() {
   }, []);
 
   const onChange = (v: DefaultProtection) => {
+    // Claim the setting before the mount read can answer (see the effect
+    // above) — from here on the user owns it for this session.
+    chosenRef.current = true;
     setValue(v);
     void commands
       .settingsUpdate('cleanup', { defaultProtection: v })
@@ -76,7 +89,7 @@ function DefaultProtectionControl() {
 
   return (
     <select
-      className="alm-select"
+      className="pv-select"
       value={value}
       aria-label={m.setup_config_default_protection_title()}
       onChange={(e) => onChange(e.target.value as DefaultProtection)}
@@ -97,7 +110,7 @@ function DensityControl() {
   const [density, setDensity] = usePreference('density');
   return (
     <select
-      className="alm-select"
+      className="pv-select"
       value={density}
       aria-label={m.settings_density_legend()}
       onChange={(e) => setDensity(e.target.value as Density)}
@@ -119,7 +132,7 @@ function ThemeControl() {
   const [choice, setChoice] = useThemeChoice();
   return (
     <select
-      className="alm-select"
+      className="pv-select"
       value={choice}
       aria-label={m.settings_general_theme()}
       onChange={(e) => setChoice(e.target.value as ThemeChoice)}
@@ -146,12 +159,12 @@ function ConfigOption({
   control: ReactNode;
 }) {
   return (
-    <div className="alm-setup-catalogs__option">
-      <div className="alm-setup-catalogs__option-header">
-        <span className="alm-setup-catalogs__option-title">{title}</span>
+    <div className="pv-setup-catalogs__option">
+      <div className="pv-setup-catalogs__option-header">
+        <span className="pv-setup-catalogs__option-title">{title}</span>
         {control}
       </div>
-      <div className="alm-settings__row-desc">{description}</div>
+      <div className="pv-settings__row-desc">{description}</div>
     </div>
   );
 }
@@ -167,7 +180,7 @@ function ConfigOption({
  */
 export function StepCatalogs(_props: StepCatalogsProps) {
   return (
-    <div className="alm-step-catalogs">
+    <div className="pv-step-catalogs">
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 

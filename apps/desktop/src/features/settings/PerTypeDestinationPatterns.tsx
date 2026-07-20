@@ -224,9 +224,9 @@ export function PerTypeDestinationPatterns() {
             info={m.settings_naming_dest_info()}
           >
             {/* Editor and its buttons live on separate lines (spec 043 §4). */}
-            <div className="alm-naming__pertype-stack">
+            <div className="pv-naming__pertype-stack">
               <div
-                className="alm-naming__pertype-editor-wrap"
+                className="pv-naming__pertype-editor-wrap"
                 role="group"
                 aria-labelledby={`${rowId}-label`}
                 data-testid={rowId}
@@ -244,25 +244,25 @@ export function PerTypeDestinationPatterns() {
 								    politely so screen-reader users hear updates while editing. */}
               {preview && preview.path !== '' && (
                 <div
-                  className="alm-naming__pertype-preview"
+                  className="pv-naming__pertype-preview"
                   aria-live="polite"
                   data-testid={`${rowId}-preview`}
                 >
-                  <span className="alm-naming__pertype-preview-label">
+                  <span className="pv-naming__pertype-preview-label">
                     {m.settings_naming_preview_label()}
                   </span>{' '}
-                  <code className="alm-mono alm-naming__pertype-preview-code">
+                  <code className="pv-mono pv-naming__pertype-preview-code">
                     {preview.path}
                   </code>
                   {preview.missingTokens.length > 0 && (
-                    <span className="alm-naming__preview-fallback">
+                    <span className="pv-naming__preview-fallback">
                       {m.settings_naming_fallback_used({
                         tokens: preview.missingTokens.join(', '),
                       })}
                     </span>
                   )}
                   {!isOverridden && (
-                    <span className="alm-naming__pertype-preview-default">
+                    <span className="pv-naming__pertype-preview-default">
                       {m.settings_naming_preview_default()}
                     </span>
                   )}
@@ -270,7 +270,7 @@ export function PerTypeDestinationPatterns() {
               )}
               {previewUnavailable && (
                 <div
-                  className="alm-naming__preview-error"
+                  className="pv-naming__preview-error"
                   role="alert"
                   data-testid={`${rowId}-preview-error`}
                 >
@@ -279,7 +279,7 @@ export function PerTypeDestinationPatterns() {
               )}
 
               {/* Buttons on their own line. */}
-              <div className="alm-naming__pertype-actions">
+              <div className="pv-naming__pertype-actions">
                 <Btn
                   size="sm"
                   disabled={!isOverridden}

@@ -14,10 +14,10 @@
  *   4. Regression net for the removed `* { font-family !important }` blanket
  *      (reset.css): every rendered element's computed font-family either
  *      starts with Inter, or is an intentional mono surface
- *      (code/pre/kbd or `.alm-mono`).
+ *      (code/pre/kbd or `.pv-mono`).
  *
  * See apps/desktop/src/styles/reset.css (semantic base layer),
- * apps/desktop/src/styles/components/primitives.css (`.alm-mono`), and
+ * apps/desktop/src/styles/components/primitives.css (`.pv-mono`), and
  * specs/055-typography-rework/tasks.md Phase 3.
  */
 import {
@@ -25,30 +25,30 @@ import {
   expect,
   seedSetupComplete,
   disableGuidedTourOverlay,
-} from "./support/harness";
-import type { Page } from "@playwright/test";
+} from './support/harness';
+import type { Page } from '@playwright/test';
 
 /** Seed an active observing site (mirrors targets_planner.spec.ts) so the M 31
  * seed target's detail view renders its resolved RA/Dec property row. */
 function seedObservingSite(page: Page): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      "alm-e2e-observing",
+      'pv-e2e-observing',
       JSON.stringify({
         observingSites: [
           {
-            id: "site-e2e-1",
-            name: "Backyard (Amsterdam)",
+            id: 'site-e2e-1',
+            name: 'Backyard (Amsterdam)',
             latitudeDeg: 52.37,
             longitudeDeg: 4.9,
             elevationM: 5,
-            timezone: "Europe/Amsterdam",
-            twilight: "astronomical",
+            timezone: 'Europe/Amsterdam',
+            twilight: 'astronomical',
             minHorizonAltDeg: 0,
           },
         ],
-        observingActiveSiteId: "site-e2e-1",
-        observingDefaultSiteId: "site-e2e-1",
+        observingActiveSiteId: 'site-e2e-1',
+        observingDefaultSiteId: 'site-e2e-1',
         usableAltitudeDeg: 30,
       }),
     );
@@ -57,22 +57,22 @@ function seedObservingSite(page: Page): void {
 
 /** Locate a target row by its designation text (mirrors targets_planner.spec.ts). */
 function targetRow(page: Page, designation: string) {
-  return page.locator(".alm-targets-table__row", { hasText: designation });
+  return page.locator('.pv-targets-table__row', { hasText: designation });
 }
 
-test.describe("Spec 055 · semantic base layer + mono restoration (Phase 3)", () => {
-  test("no rendered element computes synthetic-bold font-weight 700", async ({
+test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', () => {
+  test('no rendered element computes synthetic-bold font-weight 700', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/sessions");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/sessions');
+    await page.waitForLoadState('networkidle');
 
     const violations = await page.evaluate(() => {
       const bad: string[] = [];
-      document.querySelectorAll("body *").forEach((el) => {
+      document.querySelectorAll('body *').forEach((el) => {
         const cs = getComputedStyle(el);
-        if (cs.fontWeight === "700") {
+        if (cs.fontWeight === '700') {
           bad.push(`${el.tagName}.${(el as HTMLElement).className}`);
         }
       });
@@ -82,25 +82,25 @@ test.describe("Spec 055 · semantic base layer + mono restoration (Phase 3)", ()
     expect(violations).toEqual([]);
   });
 
-  test("italic-rendering elements resolve against a loaded Inter italic face", async ({
+  test('italic-rendering elements resolve against a loaded Inter italic face', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/sessions");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/sessions');
+    await page.waitForLoadState('networkidle');
 
     const result = await page.evaluate(async () => {
       await document.fonts.ready;
       const italics: { weight: string }[] = [];
-      document.querySelectorAll("body *").forEach((el) => {
+      document.querySelectorAll('body *').forEach((el) => {
         const cs = getComputedStyle(el);
-        if (cs.fontStyle === "italic" && cs.fontFamily.includes("Inter")) {
+        if (cs.fontStyle === 'italic' && cs.fontFamily.includes('Inter')) {
           italics.push({ weight: cs.fontWeight });
         }
       });
       const loadedItalicWeights = new Set(
         Array.from(document.fonts)
-          .filter((f) => f.family === "Inter" && f.style === "italic")
+          .filter((f) => f.family === 'Inter' && f.style === 'italic')
           .map((f) => f.weight),
       );
       const unmatched = italics.filter(
@@ -115,83 +115,81 @@ test.describe("Spec 055 · semantic base layer + mono restoration (Phase 3)", ()
     expect(result.unmatched).toEqual([]);
   });
 
-  test("code/pre content and a representative filesystem path render in the monospace stack", async ({
+  test('code/pre content and a representative filesystem path render in the monospace stack', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/settings/sources");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/settings/sources');
+    await page.waitForLoadState('networkidle');
 
     // A registered data-source root's path (real, mock-fixture-backed data —
     // apps/desktop/src/api/mocks.ts `mockRoots`) — not the fabricated Advanced
-    // pane db-path #601/#602 removed. Same `<code class="alm-mono">` mechanism.
-    const rootPath = page.locator(".alm-data-sources__root-path", {
-      hasText: "/astro/raw",
+    // pane db-path #601/#602 removed. Same `<code class="pv-mono">` mechanism.
+    const rootPath = page.locator('.pv-data-sources__root-path', {
+      hasText: '/astro/raw',
     });
     await expect(rootPath).toBeVisible();
-    await expect(rootPath).toHaveText("/astro/raw");
+    await expect(rootPath).toHaveText('/astro/raw');
 
     const family = await rootPath.evaluate(
       (el) => getComputedStyle(el).fontFamily,
     );
-    expect(family).not.toContain("Inter");
-    expect(family.toLowerCase()).toContain("mono");
+    expect(family).not.toContain('Inter');
+    expect(family.toLowerCase()).toContain('mono');
 
     // `code, pre, kbd` base-layer rule (reset.css): the root-path element itself
     // is a <code>, which is the same mechanism as every other code/pre surface.
     const tag = await rootPath.evaluate((el) => el.tagName.toLowerCase());
-    expect(tag).toBe("code");
+    expect(tag).toBe('code');
   });
 
-  test("RA/Dec coordinate value renders in the monospace stack", async ({
+  test('RA/Dec coordinate value renders in the monospace stack', async ({
     page,
   }) => {
     seedSetupComplete(page);
     seedObservingSite(page);
-    await page.goto("/#/targets");
+    await page.goto('/#/targets');
     await disableGuidedTourOverlay(page);
 
-    const m31 = targetRow(page, "M 31");
+    const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
     await m31.click();
 
-    const radecValue = page.locator(
-      ".alm-property-table__cell--value.alm-mono",
-    );
+    const radecValue = page.locator('.pv-property-table__cell--value.pv-mono');
     await expect(radecValue.first()).toBeVisible({ timeout: 8_000 });
 
     const family = await radecValue
       .first()
       .evaluate((el) => getComputedStyle(el).fontFamily);
-    expect(family).not.toContain("Inter");
-    expect(family.toLowerCase()).toContain("mono");
+    expect(family).not.toContain('Inter');
+    expect(family.toLowerCase()).toContain('mono');
   });
 
-  test("regression net: every rendered element is Inter or an intentional mono surface", async ({
+  test('regression net: every rendered element is Inter or an intentional mono surface', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/settings/advanced");
-    await page.waitForLoadState("networkidle");
+    await page.goto('/#/settings/advanced');
+    await page.waitForLoadState('networkidle');
 
     const stragglers = await page.evaluate(() => {
       const bad: { tag: string; cls: string; family: string }[] = [];
-      document.querySelectorAll("body *").forEach((el) => {
+      document.querySelectorAll('body *').forEach((el) => {
         // SVG <text> declares font-family explicitly per-surface (spec 055
         // T021) rather than through inheritance — out of scope for this sweep.
-        if (el.closest("svg")) return;
+        if (el.closest('svg')) return;
         const cs = getComputedStyle(el);
         const family = cs.fontFamily;
         if (!family) return;
         const tag = el.tagName.toLowerCase();
         const isMonoIntent =
-          (el as HTMLElement).classList?.contains("alm-mono") ||
-          tag === "code" ||
-          tag === "pre" ||
-          tag === "kbd" ||
-          !!el.closest("code, pre, kbd, .alm-mono");
-        const isInter = family.includes("Inter");
-        const isMono = family.toLowerCase().includes("mono");
+          (el as HTMLElement).classList?.contains('pv-mono') ||
+          tag === 'code' ||
+          tag === 'pre' ||
+          tag === 'kbd' ||
+          !!el.closest('code, pre, kbd, .pv-mono');
+        const isInter = family.includes('Inter');
+        const isMono = family.toLowerCase().includes('mono');
         if (isMonoIntent ? !isMono : !isInter) {
           bad.push({ tag, cls: (el as HTMLElement).className, family });
         }

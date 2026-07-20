@@ -19,21 +19,21 @@ export function ListDetailLayout({
   if (sidebar) {
     return (
       <>
-        {topBar && <div className="alm-page__bar">{topBar}</div>}
-        <div className="alm-three-pane">
+        {topBar && <div className="pv-page__bar">{topBar}</div>}
+        <div className="pv-three-pane">
           {list}
-          <div className="alm-three-pane__content">{detail}</div>
-          <div className="alm-three-pane__sidebar">{sidebar}</div>
+          <div className="pv-three-pane__content">{detail}</div>
+          <div className="pv-three-pane__sidebar">{sidebar}</div>
         </div>
       </>
     );
   }
   return (
     <>
-      {topBar && <div className="alm-page__bar">{topBar}</div>}
-      <div className="alm-two-pane">
+      {topBar && <div className="pv-page__bar">{topBar}</div>}
+      <div className="pv-two-pane">
         {list}
-        <div className="alm-two-pane__detail">{detail}</div>
+        <div className="pv-two-pane__detail">{detail}</div>
       </div>
     </>
   );

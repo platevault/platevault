@@ -283,7 +283,7 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     // written) moved every per-source action — including "Reconcile now" —
     // behind a per-root kebab (⋯) menu trigger
     // (`apps/desktop/src/features/settings/DataSources.tsx`,
-    // `alm-data-sources__kebab-btn`): `reconcile-now-<rootId>` is now a MENU
+    // `pv-data-sources__kebab-btn`): `reconcile-now-<rootId>` is now a MENU
     // ITEM that only exists in the DOM once its OWN card's kebab is open, so
     // it must be opened first. Only two roots exist on this page at this
     // point (this journey's own `light_frames`/`raw`-category root, and the
@@ -294,7 +294,7 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     app.goto_route("/settings/sources").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.driver
-        .find(By::Css(".alm-data-sources__kebab-btn"))
+        .find(By::Css(".pv-data-sources__kebab-btn"))
         .await
         .map_err(|e| anyhow::anyhow!("failed to find the root's kebab (⋯) menu trigger: {e}"))?
         .click()

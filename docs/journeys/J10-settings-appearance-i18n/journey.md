@@ -81,10 +81,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   Espresso) or "System" (follows OS) applies live with no reload; the choice
   survives a full app restart (confirmed by a live Windows kill+relaunch
   test, docs/development/journey-run-2026-07-14.md). Density
-  (compact/comfortable/spacious) rescales the `--alm-sp-*` spacing tokens
-  (plus `--alm-row-height`); font size is a three-stop dial — Small/Default/
+  (compact/comfortable/spacious) rescales the `--pv-sp-*` spacing tokens
+  (plus `--pv-row-height`); font size is a three-stop dial — Small/Default/
   Large writes a single integer `<html>` font-size of 12/14/16px (bumped
-  from a 13px default) that the `--alm-text-*` type-scale tokens (rem,
+  from a 13px default) that the `--pv-text-*` type-scale tokens (rem,
   re-derived from the 14px default) resolve against app-wide, so every
   consuming surface (Sessions, Inbox, Calibration, sidebar/settings group
   labels, wizard fine print, the Planner SVG axis labels, the toast dismiss
@@ -98,7 +98,7 @@ Note: Release builds lack the /dev/contracts palette entry by design
   same persisted choice; Ctrl+0 always resets to 100%. Zoom persists the
   same way as font size (settings DB + localStorage boot cache) and is
   re-applied once at startup.
-- **Expect (negative):** The `--alm-row-height` token itself — the actual
+- **Expect (negative):** The `--pv-row-height` token itself — the actual
   row *height* — is still consumed only by the Targets table, the
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
   Inbox, and Calibration list rows do not get taller or shorter with
@@ -131,10 +131,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   apps/desktop/src/features/settings/General.tsx,
   apps/desktop/src-tauri/capabilities/default.json
   (`core:webview:allow-set-webview-zoom`),
-  apps/desktop/src/styles/tokens.css (`--alm-text-*` rem scale),
+  apps/desktop/src/styles/tokens.css (`--pv-text-*` rem scale),
   apps/desktop/src/styles/reset.css (`html { font-size: 14px }`),
   apps/desktop/src/styles/components/merges-1.css:556. PR #882 fixes #587:
-  density previously only ever touched `--alm-row-height`; font size was
+  density previously only ever touched `--pv-row-height`; font size was
   fully inert local state with no layout effect at all. Spec 055 Phase 2
   (T010–T012) replaced the 0.9/1.0/1.15 fractional-px multiplier with the
   integer dial described above; Phase 4 (T030) adds Zoom.
@@ -212,7 +212,7 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Expect:** Sidebar collapse state persists across reload and keeps
   per-item tooltips. Every page keeps its header/action bar pinned while
   only its content scrolls, down to 1100×720. The command palette now
-  renders fully styled (a `.alm-palette*` floating overlay, not bare
+  renders fully styled (a `.pv-palette*` floating overlay, not bare
   document flow); search matching is alias-aware and reuses the Targets
   page's own tested matcher (a compact query like "M31" now matches a
   spaced designation like "M 31"); arrow-key navigation and clicking a
@@ -396,7 +396,7 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Δ6** 2026-07-17 · S2 · behavior-change
   Font size is now a three-integer-stop dial (12/14/16px root, default
   bumped from 13px) instead of a 0.9/1.0/1.15 fractional-px multiplier; the
-  `--alm-text-*` scale is rem-derived so every stop's computed size is
+  `--pv-text-*` scale is rem-derived so every stop's computed size is
   integer, never fractional, with an 11px floor guaranteed at Default. The
   11 previously-hardcoded px sizes (sidebar/settings group labels, wizard
   titles/fine print, Planner SVG axis text, toast glyph) now scale with the

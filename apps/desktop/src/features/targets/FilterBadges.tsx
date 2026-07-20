@@ -51,8 +51,8 @@ export function FilterBadges({ viability, recommendation }: Props) {
 
   if (viability === null) {
     return (
-      <span className="alm-filter-badges" title={label}>
-        <span className="alm-filter-badge alm-filter-badge--unknown">
+      <span className="pv-filter-badges" title={label}>
+        <span className="pv-filter-badge pv-filter-badge--unknown">
           {label}
         </span>
       </span>
@@ -60,17 +60,17 @@ export function FilterBadges({ viability, recommendation }: Props) {
   }
 
   return (
-    <span className="alm-filter-badges" title={label}>
+    <span className="pv-filter-badges" title={label}>
       {BANDS.map((band) => {
         const viable = viability[band];
         return (
           <span
             key={band}
             className={
-              `alm-filter-badge alm-filter-badge--${bandTier(band)}` +
+              `pv-filter-badge pv-filter-badge--${bandTier(band)}` +
               (viable
-                ? ' alm-filter-badge--viable'
-                : ' alm-filter-badge--not-viable')
+                ? ' pv-filter-badge--viable'
+                : ' pv-filter-badge--not-viable')
             }
             aria-label={
               viable

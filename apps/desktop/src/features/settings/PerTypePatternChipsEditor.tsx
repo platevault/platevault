@@ -89,9 +89,9 @@ export function PerTypePatternChipsEditor({
   return (
     <div>
       {/* Chip row */}
-      <div className="alm-naming__chip-row">
+      <div className="pv-naming__chip-row">
         {isEmpty && (
-          <span className="alm-naming__chip-placeholder">
+          <span className="pv-naming__chip-placeholder">
             {defaultPlaceholder}
           </span>
         )}
@@ -105,15 +105,15 @@ export function PerTypePatternChipsEditor({
                 : chip.value;
           const chipClass =
             chip.kind === 'token'
-              ? 'alm-token-chip'
+              ? 'pv-token-chip'
               : chip.kind === 'sep'
-                ? 'alm-sep-chip'
-                : 'alm-literal-chip';
+                ? 'pv-sep-chip'
+                : 'pv-literal-chip';
           return (
             <span key={chip.id} className={chipClass}>
               {label}
               <span
-                className="alm-token-chip__x"
+                className="pv-token-chip__x"
                 role="button"
                 tabIndex={0}
                 aria-label={m.settings_naming_remove_token({ label })}
@@ -132,7 +132,7 @@ export function PerTypePatternChipsEditor({
         })}
 
         {/* Add Token menu */}
-        <div className="alm-naming__menu-anchor">
+        <div className="pv-naming__menu-anchor">
           <Btn
             size="sm"
             onClick={() => {
@@ -143,12 +143,12 @@ export function PerTypePatternChipsEditor({
             {m.settings_naming_add_token()}
           </Btn>
           {showTokenMenu && (
-            <div className="alm-naming__dropdown alm-naming__dropdown--token">
+            <div className="pv-naming__dropdown pv-naming__dropdown--token">
               {AVAILABLE_TOKENS.map((t) => (
                 <button
                   key={t}
                   type="button"
-                  className="alm-naming__menu-item"
+                  className="pv-naming__menu-item"
                   onClick={() => handleAddToken(t)}
                 >
                   {`{${t}}`}
@@ -164,7 +164,7 @@ export function PerTypePatternChipsEditor({
         </Btn>
 
         {/* Add Literal segment */}
-        <div className="alm-naming__menu-anchor">
+        <div className="pv-naming__menu-anchor">
           <Btn
             size="sm"
             onClick={() => {
@@ -179,11 +179,11 @@ export function PerTypePatternChipsEditor({
             {m.settings_naming_add_literal()}
           </Btn>
           {showLiteralInput && (
-            <div className="alm-naming__dropdown alm-naming__dropdown--literal">
+            <div className="pv-naming__dropdown pv-naming__dropdown--literal">
               <input
                 ref={literalInputRef}
                 type="text"
-                className="alm-naming__literal-input"
+                className="pv-naming__literal-input"
                 value={literalInput}
                 placeholder={m.settings_naming_literal_placeholder()}
                 spellCheck={false}
@@ -195,7 +195,7 @@ export function PerTypePatternChipsEditor({
               />
               <button
                 type="button"
-                className="alm-naming__literal-add-btn"
+                className="pv-naming__literal-add-btn"
                 onClick={handleAddLiteral}
               >
                 {m.common_add()}
@@ -207,7 +207,7 @@ export function PerTypePatternChipsEditor({
 
       {/* Validation / error feedback */}
       {error && (
-        <div id={`${rowId}-error`} role="alert" className="alm-naming__error">
+        <div id={`${rowId}-error`} role="alert" className="pv-naming__error">
           {error}
         </div>
       )}

@@ -62,9 +62,9 @@ function RelinkControl({
   }
 
   return (
-    <span className="alm-settings__row-content">
+    <span className="pv-settings__row-content">
       <input
-        className="alm-input"
+        className="pv-input"
         value={candidate}
         onChange={(e) => setCandidate(e.target.value)}
         placeholder={m.sessions_frame_inventory_relink_path_placeholder()}
@@ -109,7 +109,7 @@ function RelinkControl({
       </Btn>
       {relink.isError && (
         <span
-          className="alm-field-error"
+          className="pv-field-error"
           data-testid={`relink-error-${frame.frameId}`}
         >
           {errMessage(relink.error)}
@@ -130,7 +130,7 @@ export function SessionFrameInventory({
   const rows = (result?.frames ?? []).map((f) => ({
     _testid: `frame-inventory-row-${f.frameId}`,
     path: (
-      <span className="alm-mono" title={f.relativePath}>
+      <span className="pv-mono" title={f.relativePath}>
         {f.relativePath}
       </span>
     ),
@@ -151,7 +151,7 @@ export function SessionFrameInventory({
       title={m.sessions_frame_inventory_title()}
       data-testid="session-frame-inventory"
     >
-      <div className="alm-cleanup-scan__controls">
+      <div className="pv-cleanup-scan__controls">
         <Btn
           size="sm"
           onClick={runScan}
@@ -164,7 +164,7 @@ export function SessionFrameInventory({
         </Btn>
         {result && (
           <span
-            className="alm-cleanup-scan__reclaimable"
+            className="pv-cleanup-scan__reclaimable"
             data-testid="frame-inventory-summary"
           >
             {m.sessions_frame_inventory_summary({

@@ -5,7 +5,7 @@
  * PageTopBar — shared pinned top band for list/detail pages (spec 043, task #62).
  *
  * Renders inside the always-visible page header region (follows the page-layout
- * convention: it carries `.alm-page__bar`, so it NEVER scrolls — only the page
+ * convention: it carries `.pv-page__bar`, so it NEVER scrolls — only the page
  * body below it scrolls). Four optional slots laid out on a consistent,
  * token-driven row:
  *
@@ -44,17 +44,17 @@ export function PageTopBar({
   actions,
 }: PageTopBarProps) {
   return (
-    <div className="alm-page__bar alm-topbar">
+    <div className="pv-page__bar pv-topbar">
       {(title != null || summary != null) && (
-        <div className="alm-topbar__lead">
-          {title != null && <div className="alm-topbar__title">{title}</div>}
+        <div className="pv-topbar__lead">
+          {title != null && <div className="pv-topbar__title">{title}</div>}
           {summary != null && (
-            <div className="alm-topbar__summary">{summary}</div>
+            <div className="pv-topbar__summary">{summary}</div>
           )}
         </div>
       )}
-      {filters != null && <div className="alm-topbar__filters">{filters}</div>}
-      {actions != null && <div className="alm-topbar__actions">{actions}</div>}
+      {filters != null && <div className="pv-topbar__filters">{filters}</div>}
+      {actions != null && <div className="pv-topbar__actions">{actions}</div>}
     </div>
   );
 }

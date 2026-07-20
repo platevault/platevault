@@ -209,6 +209,15 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint
 
+      # `tests/` is outside the pnpm workspace globs (`apps/*`, `packages/*`),
+      # so `pnpm -r lint` never reaches it and `apps/desktop/biome.json` scopes
+      # itself to `src/**`. Without this step the E2E suite is unlinted and
+      # unformatted. Runs off the root biome.json, which is scoped to `tests/**`
+      # so it cannot shadow the nested desktop config.
+      - name: Test-suite lint (Biome over tests/)
+        if: needs.changes.outputs.frontend == 'true'
+        run: pnpm run lint:tests
+
       # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
       - name: Rust format
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'

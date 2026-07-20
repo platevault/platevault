@@ -2,83 +2,83 @@
 
 /* Live long-op apply progress line (spec 042 US16). Token-only; moved off an
    inline style block to satisfy the no-inline-style gate. */
-.alm-plan-panel__progress {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
-  margin-top: var(--alm-sp-1);
+.pv-plan-panel__progress {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
+  margin-top: var(--pv-sp-1);
 }
 
 /* ── Root picker ────────────────────────────────────────────── */
 
-.alm-plan-panel__root-picker {
-  margin-bottom: var(--alm-sp-3);
-  padding: var(--alm-sp-3);
-  border: 1px solid var(--alm-warn, var(--alm-border));
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface-raised, var(--alm-bg3));
+.pv-plan-panel__root-picker {
+  margin-bottom: var(--pv-sp-3);
+  padding: var(--pv-sp-3);
+  border: 1px solid var(--pv-warn, var(--pv-border));
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised, var(--pv-bg3));
 }
 
-.alm-plan-panel__root-picker-title {
-  font-size: var(--alm-text-sm);
+.pv-plan-panel__root-picker-title {
+  font-size: var(--pv-text-sm);
   font-weight: 600;
-  margin-bottom: var(--alm-sp-1);
+  margin-bottom: var(--pv-sp-1);
 }
 
-.alm-plan-panel__root-picker-desc {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  margin-bottom: var(--alm-sp-2);
+.pv-plan-panel__root-picker-desc {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  margin-bottom: var(--pv-sp-2);
 }
 
-.alm-plan-panel__root-picker-options {
+.pv-plan-panel__root-picker-options {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* The Btn inside the root picker needs left-aligned text */
-.alm-plan-panel__root-option {
+.pv-plan-panel__root-option {
   justify-content: flex-start;
   text-align: left;
 }
 
-.alm-plan-panel__root-option-inner {
+.pv-plan-panel__root-option-inner {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
-.alm-plan-panel__root-option-path {
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__root-option-path {
+  font-size: var(--pv-text-xs);
 }
 
-.alm-plan-panel__root-option-kind {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-plan-panel__root-option-kind {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* ── Bar (pinned header) ────────────────────────────────────── */
 
-.alm-plan-panel__select-all {
+.pv-plan-panel__select-all {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   cursor: pointer;
 }
 
-.alm-plan-panel__select-all-label {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-secondary);
+.pv-plan-panel__select-all-label {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-secondary);
 }
 
-.alm-plan-panel__count-summary {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__count-summary {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
 }
 
-.alm-plan-panel__bar-actions {
+.pv-plan-panel__bar-actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   align-items: center;
 }
 
@@ -86,8 +86,8 @@
 
 /* ── Plan group ─────────────────────────────────────────────── */
 
-.alm-plan-panel__group {
-  margin-bottom: var(--alm-sp-3);
+.pv-plan-panel__group {
+  margin-bottom: var(--pv-sp-3);
 }
 
 /* Aligned plan grid: the list head and every group header share ONE column
@@ -97,8 +97,8 @@
    plan row, AND the expanded per-file rows, so all columns line up. FIXED
    side columns (not `auto`/`fr`) are required: each row is an independent grid,
    so auto widths would resolve differently per row and break alignment. */
-.alm-plan-panel {
-  --alm-plan-cols:
+.pv-plan-panel {
+  --pv-plan-cols:
     60px                  /* select + expand */
     minmax(120px, 1.4fr)  /* plan name / file name */
     minmax(150px, 1.6fr)  /* composition / action */
@@ -107,213 +107,213 @@
     92px;                 /* discard */
 }
 
-.alm-plan-panel__list-head,
-.alm-plan-panel__group-header,
-.alm-plan-panel__file-row {
+.pv-plan-panel__list-head,
+.pv-plan-panel__group-header,
+.pv-plan-panel__file-row {
   display: grid;
-  grid-template-columns: var(--alm-plan-cols);
+  grid-template-columns: var(--pv-plan-cols);
   align-items: center;
-  column-gap: var(--alm-sp-3);
+  column-gap: var(--pv-sp-3);
 }
 
 /* ── Expanded per-file rows (aligned under the parent plan columns) ── */
-.alm-plan-panel__file-rows {
-  padding: var(--alm-sp-1) 0 var(--alm-sp-2);
+.pv-plan-panel__file-rows {
+  padding: var(--pv-sp-1) 0 var(--pv-sp-2);
 }
-.alm-plan-panel__file-row {
+.pv-plan-panel__file-row {
   padding: 1px 0;
-  font-size: var(--alm-text-xs);
+  font-size: var(--pv-text-xs);
 }
-.alm-plan-panel__file-name {
+.pv-plan-panel__file-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--alm-text-secondary);
+  color: var(--pv-text-secondary);
 
 }
-.alm-plan-panel__file-action {
+.pv-plan-panel__file-action {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
-  color: var(--alm-text-muted);
+  gap: var(--pv-sp-1);
+  color: var(--pv-text-muted);
 }
-.alm-plan-panel__file-dest {
+.pv-plan-panel__file-dest {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
   min-width: 0;
 }
-.alm-plan-panel__inplace {
-  color: var(--alm-text-muted);
+.pv-plan-panel__inplace {
+  color: var(--pv-text-muted);
   font-style: italic;
 }
-.alm-plan-panel__file-flag {
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__file-flag {
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-tight);
-  color: var(--alm-danger, var(--alm-warn));
+  letter-spacing: var(--pv-tracking-tight);
+  color: var(--pv-danger, var(--pv-warn));
   border: 1px solid currentColor;
-  border-radius: var(--alm-radius-sm);
-  padding: 0 var(--alm-sp-1);
+  border-radius: var(--pv-radius-sm);
+  padding: 0 var(--pv-sp-1);
 }
 
-.alm-plan-panel__list-head {
-  padding: 0 0 var(--alm-sp-1);
-  margin-bottom: var(--alm-sp-1);
-  border-bottom: 1px solid var(--alm-border);
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__list-head {
+  padding: 0 0 var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-1);
+  border-bottom: 1px solid var(--pv-border);
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
-  color: var(--alm-text-muted);
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
 }
 
-.alm-plan-panel__group-header {
-  padding-bottom: var(--alm-sp-1);
-  border-bottom: 1px solid var(--alm-border);
+.pv-plan-panel__group-header {
+  padding-bottom: var(--pv-sp-1);
+  border-bottom: 1px solid var(--pv-border);
 }
 
-.alm-plan-panel__group-lead {
+.pv-plan-panel__group-lead {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
-.alm-plan-panel__group-name {
+.pv-plan-panel__group-name {
   font-weight: 600;
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alm-plan-panel__group-breakdown {
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__group-breakdown {
+  font-size: var(--pv-text-xs);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alm-plan-panel__group-dest {
+.pv-plan-panel__group-dest {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   min-width: 0;
 }
 
-.alm-plan-panel__group-count {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-plan-panel__group-count {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
   white-space: nowrap;
   justify-self: end;
 }
 
-.alm-plan-panel__group-actions {
+.pv-plan-panel__group-actions {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   justify-self: end;
 }
 
 /* ── Expand/collapse control + chevron ──────────────────────── */
 
-.alm-plan-panel__expand {
+.pv-plan-panel__expand {
   flex-shrink: 0;
-  padding-left: var(--alm-sp-1);
-  padding-right: var(--alm-sp-1);
+  padding-left: var(--pv-sp-1);
+  padding-right: var(--pv-sp-1);
 }
 
-.alm-plan-panel__chevron {
+.pv-plan-panel__chevron {
   display: inline-block;
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  transition: transform var(--alm-transition-fast);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  transition: transform var(--pv-transition-fast);
 }
 
-.alm-plan-panel__chevron--open {
+.pv-plan-panel__chevron--open {
   transform: rotate(90deg);
 }
 
 /* ── Collapsed per-group summary ────────────────────────────── */
 
-.alm-plan-panel__summary {
+.pv-plan-panel__summary {
   list-style: none;
-  margin: var(--alm-sp-1) 0 0;
-  padding: 0 0 0 var(--alm-sp-4);
+  margin: var(--pv-sp-1) 0 0;
+  padding: 0 0 0 var(--pv-sp-4);
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
-.alm-plan-panel__summary-line {
+.pv-plan-panel__summary-line {
   display: flex;
   align-items: baseline;
-  gap: var(--alm-sp-2);
-  font-size: var(--alm-text-xs);
+  gap: var(--pv-sp-2);
+  font-size: var(--pv-text-xs);
   min-width: 0;
 }
 
-.alm-plan-panel__summary-count {
-  color: var(--alm-text);
+.pv-plan-panel__summary-count {
+  color: var(--pv-text);
   font-weight: 600;
   flex-shrink: 0;
 }
 
-.alm-plan-panel__summary-arrow {
-  color: var(--alm-text-muted);
+.pv-plan-panel__summary-arrow {
+  color: var(--pv-text-muted);
   flex-shrink: 0;
 }
 
-.alm-plan-panel__summary-dest {
-  color: var(--alm-text-secondary);
+.pv-plan-panel__summary-dest {
+  color: var(--pv-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
 }
 
-.alm-plan-panel__stale-badge {
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__stale-badge {
+  font-size: var(--pv-text-xs);
   font-weight: 600;
-  color: var(--alm-danger, var(--alm-warn));
+  color: var(--pv-danger, var(--pv-warn));
   border: 1px solid currentColor;
-  border-radius: var(--alm-radius-md);
-  padding: 0 var(--alm-sp-1);
+  border-radius: var(--pv-radius-md);
+  padding: 0 var(--pv-sp-1);
 }
 
-.alm-plan-panel__stale-banner {
-  margin-top: var(--alm-sp-1);
+.pv-plan-panel__stale-banner {
+  margin-top: var(--pv-sp-1);
 }
 
 /* ── Action rows ────────────────────────────────────────────── */
 
-.alm-plan-panel__row {
+.pv-plan-panel__row {
   display: grid;
   grid-template-columns: auto 1fr 1fr;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-1) 0;
-  border-bottom: 1px solid var(--alm-border);
-  font-size: var(--alm-text-xs);
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-1) 0;
+  border-bottom: 1px solid var(--pv-border);
+  font-size: var(--pv-text-xs);
   align-items: baseline;
 }
 
-.alm-plan-panel__kind {
-  color: var(--alm-text-secondary);
+.pv-plan-panel__kind {
+  color: var(--pv-text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
+  letter-spacing: var(--pv-tracking-normal);
   font-weight: 600;
 }
 
-.alm-plan-panel__filename {
-  color: var(--alm-text);
+.pv-plan-panel__filename {
+  color: var(--pv-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alm-plan-panel__dest {
-  color: var(--alm-text-secondary);
+.pv-plan-panel__dest {
+  color: var(--pv-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -322,35 +322,35 @@
 
 /* ── Destructive destination control ────────────────────────── */
 
-.alm-plan-panel__destructive {
-  margin-top: var(--alm-sp-3);
-  padding: var(--alm-sp-3);
-  background: var(--alm-surface-raised, var(--alm-bg3));
-  border-radius: var(--alm-radius-md);
+.pv-plan-panel__destructive {
+  margin-top: var(--pv-sp-3);
+  padding: var(--pv-sp-3);
+  background: var(--pv-surface-raised, var(--pv-bg3));
+  border-radius: var(--pv-radius-md);
 }
 
-.alm-plan-panel__destructive-title {
-  font-size: var(--alm-text-xs);
+.pv-plan-panel__destructive-title {
+  font-size: var(--pv-text-xs);
   font-weight: 600;
-  margin-bottom: var(--alm-sp-2);
-  color: var(--alm-text-secondary);
+  margin-bottom: var(--pv-sp-2);
+  color: var(--pv-text-secondary);
 }
 
-.alm-plan-panel__dest-options {
+.pv-plan-panel__dest-options {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-plan-panel__dest-label {
+.pv-plan-panel__dest-label {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   cursor: pointer;
 }
 
-.alm-plan-panel__dest-label-hint {
+.pv-plan-panel__dest-label-hint {
   display: block;
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }

@@ -33,46 +33,55 @@
  * per-step advance gates so the walk-through does not need real session/
  * calibration selections.
  */
-import { test, expect, seedSetupComplete, disableGuidedTourOverlay } from "./support/harness";
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableGuidedTourOverlay,
+} from './support/harness';
 
 // The six wizard "Next" labels in order (StepName → … → Review). Clicking each
 // advances one step; the final step swaps in the Create button.
 const NEXT_LABELS = [
-  "Next: sources →",
-  "Next: calibration →",
-  "Next: source views →",
-  "Next: naming →",
-  "Next: review →",
+  'Next: sources →',
+  'Next: calibration →',
+  'Next: source views →',
+  'Next: naming →',
+  'Next: review →',
 ];
 
-async function openWizard(page: import("@playwright/test").Page): Promise<void> {
+async function openWizard(
+  page: import('@playwright/test').Page,
+): Promise<void> {
   seedSetupComplete(page);
-  await page.goto("/#/projects");
-  await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+  await page.goto('/#/projects');
+  await expect(
+    page.getByTestId('app-error-boundary-fallback'),
+  ).not.toBeVisible();
   await disableGuidedTourOverlay(page);
-  await page.getByRole("button", { name: "+ New project" }).click();
+  await page.getByRole('button', { name: '+ New project' }).click();
   // Wizard toolbar title confirms we landed on /#/projects/new.
   await expect(page.getByText(/New project —/)).toBeVisible({ timeout: 8_000 });
 }
 
-test.describe("project lifecycle · creation wizard (spec 008 US1 / Journey 5)", () => {
-  test("happy path: unique name walked through all steps creates the project", async ({
+test.describe('project lifecycle · creation wizard (spec 008 US1 / Journey 5)', () => {
+  test('happy path: unique name walked through all steps creates the project', async ({
     page,
   }) => {
     await openWizard(page);
 
     // ── Step 0: Name & profile ────────────────────────────────────────────────
-    const nameInput = page.locator("#project-name");
+    const nameInput = page.locator('#project-name');
     await expect(nameInput).toBeVisible();
-    await nameInput.fill("Pelican Nebula HOO");
+    await nameInput.fill('Pelican Nebula HOO');
 
     // ── Walk Name → Review (six steps, five Next clicks) ──────────────────────
     for (const label of NEXT_LABELS) {
-      await page.getByRole("button", { name: label }).click();
+      await page.getByRole('button', { name: label }).click();
     }
 
     // ── Review step: Create is enabled (name present) ─────────────────────────
-    const createBtn = page.getByTestId("wizard-create-btn");
+    const createBtn = page.getByTestId('wizard-create-btn');
     await expect(createBtn).toBeVisible({ timeout: 5_000 });
     await expect(createBtn).toBeEnabled();
 
@@ -83,24 +92,26 @@ test.describe("project lifecycle · creation wizard (spec 008 US1 / Journey 5)",
     await expect(
       page.getByText(/created — project folders created on disk/i),
     ).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 
-  test("validation: a duplicate name is blocked and the wizard bounces back to the Name step", async ({
+  test('validation: a duplicate name is blocked and the wizard bounces back to the Name step', async ({
     page,
   }) => {
     await openWizard(page);
 
     // Use a name that already exists in projects.list (mockProjectSummaries).
-    await page.locator("#project-name").fill("NGC 7000 Narrowband");
+    await page.locator('#project-name').fill('NGC 7000 Narrowband');
 
     for (const label of NEXT_LABELS) {
-      await page.getByRole("button", { name: label }).click();
+      await page.getByRole('button', { name: label }).click();
     }
 
     // Attempt to create — the live duplicate pre-check (findDuplicateProjectName)
     // must intercept before any projects.create call.
-    await page.getByTestId("wizard-create-btn").click();
+    await page.getByTestId('wizard-create-btn').click();
 
     // Observable outcome (constitution II — no silent mutation on bad input):
     // creation is BLOCKED and the wizard routes BACK to the Name step. (The
@@ -110,12 +121,18 @@ test.describe("project lifecycle · creation wizard (spec 008 US1 / Journey 5)",
     // report.) The proofs: we are on step 1 again, the Review step's Create
     // button is gone, and no "created" success toast fired.
     await expect(
-      page.getByRole("heading", { name: /Step 1 · Name & profile/ }),
+      page.getByRole('heading', { name: /Step 1 · Name & profile/ }),
     ).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator("#project-name")).toHaveValue("NGC 7000 Narrowband");
-    await expect(page.getByTestId("wizard-create-btn")).toHaveCount(0);
-    await expect(page.getByText(/created — project folders created on disk/i)).toHaveCount(0);
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(page.locator('#project-name')).toHaveValue(
+      'NGC 7000 Narrowband',
+    );
+    await expect(page.getByTestId('wizard-create-btn')).toHaveCount(0);
+    await expect(
+      page.getByText(/created — project folders created on disk/i),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 
   test("empty-name gate: the Review step's Create button is disabled without a name", async ({
@@ -125,10 +142,10 @@ test.describe("project lifecycle · creation wizard (spec 008 US1 / Journey 5)",
 
     // Do NOT type a name; devSkip lets us advance through the gated steps.
     for (const label of NEXT_LABELS) {
-      await page.getByRole("button", { name: label }).click();
+      await page.getByRole('button', { name: label }).click();
     }
 
-    const createBtn = page.getByTestId("wizard-create-btn");
+    const createBtn = page.getByTestId('wizard-create-btn');
     await expect(createBtn).toBeVisible({ timeout: 5_000 });
     await expect(createBtn).toBeDisabled();
   });
@@ -138,19 +155,19 @@ test.describe("project lifecycle · creation wizard (spec 008 US1 / Journey 5)",
 // CreateProjectDialog retired, its target picker + validation folded into
 // the wizard, zero-source creation reachable, "From target context" no
 // longer fabricated, redundant "Save draft" button removed.
-test.describe("project creation wizard convergence (#887/#719/#586/#783/#795)", () => {
-  test("#719: zero-source creation is reachable — Create succeeds without selecting any session", async ({
+test.describe('project creation wizard convergence (#887/#719/#586/#783/#795)', () => {
+  test('#719: zero-source creation is reachable — Create succeeds without selecting any session', async ({
     page,
   }) => {
     await openWizard(page);
-    await page.locator("#project-name").fill("Zero Source Project");
+    await page.locator('#project-name').fill('Zero Source Project');
 
     // Advance past Sources (step 1) WITHOUT selecting any session.
     for (const label of NEXT_LABELS) {
-      await page.getByRole("button", { name: label }).click();
+      await page.getByRole('button', { name: label }).click();
     }
 
-    const createBtn = page.getByTestId("wizard-create-btn");
+    const createBtn = page.getByTestId('wizard-create-btn');
     await expect(createBtn).toBeEnabled();
     await createBtn.click();
 
@@ -163,9 +180,9 @@ test.describe("project creation wizard convergence (#887/#719/#586/#783/#795)", 
     page,
   }) => {
     await openWizard(page);
-    await expect(
-      page.getByRole("button", { name: "Save draft" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(
+      0,
+    );
   });
 
   test("#783/#887/#612: 'From target context' is absent until a real target is picked, then reflects it", async ({
@@ -174,16 +191,16 @@ test.describe("project creation wizard convergence (#887/#719/#586/#783/#795)", 
     await openWizard(page);
 
     // Typed name alone must never fabricate a "From target context" line.
-    await page.locator("#project-name").fill("Andromeda Wide Field");
+    await page.locator('#project-name').fill('Andromeda Wide Field');
     await expect(page.getByText(/From target context:/)).toHaveCount(0);
 
     // The folded-in target picker (from the retired CreateProjectDialog) —
     // pick a real target via the mock target.search fixture.
-    const targetCombobox = page.getByRole("combobox", {
-      name: "Target (optional)",
+    const targetCombobox = page.getByRole('combobox', {
+      name: 'Target (optional)',
     });
-    await targetCombobox.fill("Andromeda");
-    await page.getByRole("option", { name: /M 31/ }).click();
+    await targetCombobox.fill('Andromeda');
+    await page.getByRole('option', { name: /M 31/ }).click();
 
     // Now the sub-toolbar reflects the REAL picked target, not typed text.
     await expect(
@@ -196,15 +213,17 @@ test.describe("project creation wizard convergence (#887/#719/#586/#783/#795)", 
   // manual TargetSearch pick covered above. The wizard must resolve that id
   // via `target.get` and prefill the name step from it, not require the user
   // to re-pick the same target they started from.
-  test("#612: a real ?targetId= search param resolves and prefills the name step", async ({
+  test('#612: a real ?targetId= search param resolves and prefills the name step', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects/new?targetId=tgt-m31");
-    await expect(page.getByText(/New project —/)).toBeVisible({ timeout: 8_000 });
+    await page.goto('/#/projects/new?targetId=tgt-m31');
+    await expect(page.getByText(/New project —/)).toBeVisible({
+      timeout: 8_000,
+    });
 
     // Prefilled from the resolved target (mock target.get echoes 'M 31').
-    await expect(page.locator("#project-name")).toHaveValue("M 31", {
+    await expect(page.locator('#project-name')).toHaveValue('M 31', {
       timeout: 5_000,
     });
     await expect(page.getByText(/From target context:.*M 31/)).toBeVisible({

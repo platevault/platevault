@@ -316,7 +316,7 @@ export function groupTargets(
 //
 // The virtualizer windows a single flat list, so groups + targets are flattened
 // into a discriminated union. Group-header rows and target rows estimate to the
-// same row height (keyed off --alm-row-height in CSS).
+// same row height (keyed off --pv-row-height in CSS).
 
 export type FlatRow =
   | {

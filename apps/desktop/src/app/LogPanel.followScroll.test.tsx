@@ -169,7 +169,7 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     expect(getFollowButton().title).toBeFalsy();
 
     const list = document.querySelector<HTMLUListElement>(
-      '.alm-logpanel__events',
+      '.pv-logpanel__events',
     );
     expect(list).not.toBeNull();
     if (!list) throw new Error('scroll list not found');
@@ -214,7 +214,7 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     });
 
     const list = document.querySelector<HTMLUListElement>(
-      '.alm-logpanel__events',
+      '.pv-logpanel__events',
     );
     if (!list) throw new Error('scroll list not found');
 
@@ -245,7 +245,7 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     });
 
     const list = document.querySelector<HTMLUListElement>(
-      '.alm-logpanel__events',
+      '.pv-logpanel__events',
     );
     if (!list) throw new Error('scroll list not found');
 

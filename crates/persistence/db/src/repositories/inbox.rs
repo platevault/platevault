@@ -1820,6 +1820,20 @@ pub struct InboxItemGroupingKeys {
     pub group_filter: Option<String>,
     pub group_exposure: Option<String>,
     pub group_instrument: Option<String>,
+    /// `inbox_classifications.result` for this item, DB vocabulary
+    /// (`"classified"` / `"unclassified"`) — the SAME cached value
+    /// `inbox.classify` reads (`classify.rs::build_response_from_cache`).
+    /// `None` when the item has never been classified.
+    ///
+    /// Added for issue #711 Instance A's *unsplit*-folder variant: `classify()`
+    /// unconditionally sets `inbox_items.state = "classified"` (step 9) once a
+    /// folder has been scanned, regardless of whether it actually resolved to
+    /// a single type — so the list's `state`-based badge fallback lies for a
+    /// folder that is empty/mixed/needs-review with no dominant frame type
+    /// (`group_frame_type` is also `None` in that case). Sourcing this field
+    /// from the same cache `inbox.classify` uses, rather than trusting
+    /// `state`, makes the list and detail panel agree by construction.
+    pub classification_result: Option<String>,
 }
 
 /// Raw per-dimension aggregate row from the metadata GROUP BY.
@@ -1952,6 +1966,21 @@ pub async fn grouping_keys_for_items(
         out.entry(item_id).or_default().group_frame_type = eff;
     }
 
+    // ── 3. Cached classification result (issue #711 Instance A unsplit) ──────
+    // One row per item at most (`inbox_classifications` is keyed by
+    // `inbox_item_id`) — plain lookup, not a GROUP BY.
+    let cls_sql = format!(
+        "SELECT inbox_item_id, result FROM inbox_classifications
+         WHERE inbox_item_id IN ({placeholders})"
+    );
+    let mut cls_q = sqlx::query_as::<_, (String, String)>(sqlx::AssertSqlSafe(cls_sql));
+    for id in item_ids {
+        cls_q = cls_q.bind(id);
+    }
+    for (item_id, result) in cls_q.fetch_all(pool).await? {
+        out.entry(item_id).or_default().classification_result = Some(result);
+    }
+
     Ok(out)
 }
 
@@ -1978,6 +2007,21 @@ mod tests {
             relative_path: "2025-10-10/lights",
             file_count: 20,
             content_signature: Some("sig-abc"),
+            lane: "fits",
+        }
+    }
+
+    /// Like `sample_item`, but with an explicit `relative_path` — needed
+    /// whenever a test inserts more than one item, since `sample_item`'s
+    /// fixed path collides on the `(root_id, relative_path, group_key)`
+    /// UNIQUE index once a second item shares it.
+    fn sample_item_at<'a>(id: &'a str, path: &'a str) -> InsertInboxItem<'a> {
+        InsertInboxItem {
+            id,
+            root_id: "root-1",
+            relative_path: path,
+            file_count: 2,
+            content_signature: Some("sig"),
             lane: "fits",
         }
     }
@@ -2871,6 +2915,72 @@ mod tests {
 
         let keys = grouping_keys_for_items(pool, &["g-ovr".to_owned()]).await.unwrap();
         assert_eq!(keys.get("g-ovr").unwrap().group_frame_type.as_deref(), Some("flat"));
+    }
+
+    /// Issue #711 Instance A (unsplit-folder variant): `grouping_keys_for_items`
+    /// must surface the item's own cached `inbox_classifications.result` so the
+    /// list badge can distinguish a genuinely-unclassified unsplit folder from
+    /// one that resolved to a single type, instead of trusting
+    /// `inbox_items.state` (which `classify()` sets to `"classified"`
+    /// unconditionally regardless of the actual result).
+    #[tokio::test]
+    async fn grouping_surfaces_cached_classification_result() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item_at("g-cls-unclassified", "folder-a")).await.unwrap();
+        upsert_classification(
+            pool,
+            &UpsertClassification {
+                inbox_item_id: "g-cls-unclassified",
+                result: "unclassified",
+                frame_type: None,
+                content_signature: "sig",
+                unclassified_file_count: 2,
+            },
+        )
+        .await
+        .unwrap();
+
+        insert_inbox_item(pool, &sample_item_at("g-cls-classified", "folder-b")).await.unwrap();
+        upsert_classification(
+            pool,
+            &UpsertClassification {
+                inbox_item_id: "g-cls-classified",
+                result: "classified",
+                frame_type: Some("dark"),
+                content_signature: "sig",
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Never classified — no inbox_classifications row at all.
+        insert_inbox_item(pool, &sample_item_at("g-cls-never", "folder-c")).await.unwrap();
+
+        let keys = grouping_keys_for_items(
+            pool,
+            &[
+                "g-cls-unclassified".to_owned(),
+                "g-cls-classified".to_owned(),
+                "g-cls-never".to_owned(),
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            keys.get("g-cls-unclassified").unwrap().classification_result.as_deref(),
+            Some("unclassified")
+        );
+        assert_eq!(
+            keys.get("g-cls-classified").unwrap().classification_result.as_deref(),
+            Some("classified")
+        );
+        assert_eq!(
+            keys.get("g-cls-never").cloned().unwrap_or_default().classification_result,
+            None
+        );
     }
 
     #[tokio::test]

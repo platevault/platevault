@@ -90,7 +90,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       <SettingsSection
         title={m.common_sources()}
         action={
-          <div className="alm-datasources__action-row">
+          <div className="pv-datasources__action-row">
             <RestoreDefaultsBtn
               scope="sources"
               keys={SOURCES_KEYS}
@@ -112,16 +112,16 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         }
       >
         {showAdd && (
-          <div className="alm-data-sources__add-form">
+          <div className="pv-data-sources__add-form">
             <DirPicker
               value={addingPath}
               onChange={setAddingPath}
               label={m.settings_datasources_folder_label()}
               lastPathKind="inbox"
             />
-            <div className="alm-data-sources__add-controls">
+            <div className="pv-data-sources__add-controls">
               <select
-                className="alm-select"
+                className="pv-select"
                 value={addingCategory}
                 onChange={(e) =>
                   setAddingCategory(e.target.value as RootCategory)
@@ -161,36 +161,36 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               </Btn>
             </div>
             {addError && (
-              <div className="alm-data-sources__add-error">{addError}</div>
+              <div className="pv-data-sources__add-error">{addError}</div>
             )}
           </div>
         )}
 
         {loading && (
-          <div className="alm-data-sources__status">{m.common_loading()}</div>
+          <div className="pv-data-sources__status">{m.common_loading()}</div>
         )}
 
         {loadError && (
-          <div className="alm-data-sources__load-error">
+          <div className="pv-data-sources__load-error">
             {m.settings_datasources_load_error({ error: loadError })}
           </div>
         )}
 
         {!loading && !loadError && roots.length === 0 && (
-          <div className="alm-data-sources__status">
+          <div className="pv-data-sources__status">
             {m.settings_datasources_empty()}
           </div>
         )}
 
         {reconcileError && (
-          <div className="alm-data-sources__add-error">
+          <div className="pv-data-sources__add-error">
             {m.settings_datasources_reconcile_error({ error: reconcileError })}
           </div>
         )}
 
         {grouped.map(({ category, roots: groupRoots }) => (
-          <div key={category} className="alm-data-sources__group">
-            <h4 className="alm-data-sources__group-label">
+          <div key={category} className="pv-data-sources__group">
+            <h4 className="pv-data-sources__group-label">
               {categoryLabel(category)}
             </h4>
             {groupRoots.map((root) => (
@@ -237,7 +237,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         confirmVariant="danger"
       >
         {toggleActiveError && (
-          <span className="alm-field-error">{toggleActiveError}</span>
+          <span className="pv-field-error">{toggleActiveError}</span>
         )}
       </ConfirmOverlay>
 
@@ -260,7 +260,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         }
         confirmVariant="danger"
       >
-        {deleteError && <span className="alm-field-error">{deleteError}</span>}
+        {deleteError && <span className="pv-field-error">{deleteError}</span>}
       </ConfirmOverlay>
     </>
   );

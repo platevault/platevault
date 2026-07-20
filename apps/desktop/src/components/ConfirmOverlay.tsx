@@ -54,7 +54,7 @@ export function ConfirmOverlay({
         </>
       }
     >
-      {description && <p className="alm-modal__message">{description}</p>}
+      {description && <p className="pv-modal__message">{description}</p>}
       {children}
     </Modal>
   );

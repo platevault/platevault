@@ -29,11 +29,8 @@ export function PlannerComputedFor({ usableAltDeg }: { usableAltDeg: number }) {
       : m.settings_observing_sites_twilight_astronomical();
 
   return (
-    <div
-      className="alm-planner-computed-for"
-      data-testid="planner-computed-for"
-    >
-      <span className="alm-planner-computed-for__text">
+    <div className="pv-planner-computed-for" data-testid="planner-computed-for">
+      <span className="pv-planner-computed-for__text">
         {m.targets_computed_for({
           site: site.name,
           lat,
@@ -44,7 +41,7 @@ export function PlannerComputedFor({ usableAltDeg }: { usableAltDeg: number }) {
       <Link
         to="/settings/$pane"
         params={{ pane: 'planner' }}
-        className="alm-planner-computed-for__change"
+        className="pv-planner-computed-for__change"
       >
         {m.targets_computed_for_change()}
       </Link>

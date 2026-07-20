@@ -159,10 +159,10 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     expect(factsEl).not.toBeNull();
     expect(contentEl).not.toBeNull();
     // The cols wrapper must be present.
-    const cols = container.querySelector('.alm-detailpanel__cols');
+    const cols = container.querySelector('.pv-detailpanel__cols');
     expect(cols).not.toBeNull();
     // Facts must be inside the facts aside; content must NOT be inside it.
-    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    const factsAside = container.querySelector('.pv-detailpanel__facts');
     expect(factsAside).not.toBeNull();
     expect(factsAside?.contains(factsEl)).toBe(true);
     expect(factsAside?.contains(contentEl)).toBe(false);
@@ -174,7 +174,7 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
         <span>just children</span>
       </DetailPanel>,
     );
-    expect(container.querySelector('.alm-detailpanel__cols')).toBeNull();
+    expect(container.querySelector('.pv-detailpanel__cols')).toBeNull();
     expect(screen.getByText('just children')).toBeDefined();
   });
 
@@ -215,9 +215,9 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     expect(auxEl).not.toBeNull();
     expect(contentEl).not.toBeNull();
     // The cols wrapper and aux aside must be present.
-    const cols = container.querySelector('.alm-detailpanel__cols');
+    const cols = container.querySelector('.pv-detailpanel__cols');
     expect(cols).not.toBeNull();
-    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    const auxAside = container.querySelector('.pv-detailpanel__aux');
     expect(auxAside).not.toBeNull();
     expect(auxAside?.contains(auxEl)).toBe(true);
     // Content must NOT be inside the aux aside.
@@ -233,10 +233,10 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
         <span data-testid="content-node">Content</span>
       </DetailPanel>,
     );
-    const cols = container.querySelector('.alm-detailpanel__cols');
+    const cols = container.querySelector('.pv-detailpanel__cols');
     expect(cols).not.toBeNull();
-    expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
-    expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(false);
+    expect(cols?.classList.contains('pv-detailpanel--has-aux')).toBe(true);
+    expect(cols?.classList.contains('pv-detailpanel--has-facts')).toBe(false);
   });
 
   it('19. 3-zone: facts + children + aux are all in separate DOM regions', () => {
@@ -256,9 +256,9 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     expect(contentEl).not.toBeNull();
     expect(auxEl).not.toBeNull();
 
-    const factsAside = container.querySelector('.alm-detailpanel__facts');
-    const contentDiv = container.querySelector('.alm-detailpanel__content');
-    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    const factsAside = container.querySelector('.pv-detailpanel__facts');
+    const contentDiv = container.querySelector('.pv-detailpanel__content');
+    const auxAside = container.querySelector('.pv-detailpanel__aux');
 
     expect(factsAside).not.toBeNull();
     expect(contentDiv).not.toBeNull();
@@ -278,9 +278,9 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     expect(auxAside?.contains(contentEl)).toBe(false);
 
     // Both modifiers present.
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(true);
-    expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
+    const cols = container.querySelector('.pv-detailpanel__cols');
+    expect(cols?.classList.contains('pv-detailpanel--has-facts')).toBe(true);
+    expect(cols?.classList.contains('pv-detailpanel--has-aux')).toBe(true);
   });
 });
 
@@ -310,7 +310,7 @@ describe('FactsKV', () => {
   // silently clipped by DetailPane fill-mode overflow:hidden". The fix (#1035)
   // is a CSS rule in redesign-detail.css:
   //
-  //     .alm-detail--fill > .alm-planner__scroll { flex:1; min-height:0; overflow-y:auto }
+  //     .pv-detail--fill > .pv-planner__scroll { flex:1; min-height:0; overflow-y:auto }
   //
   // That is a DIRECT-CHILD selector, which makes it a structural contract on
   // DetailPanel rather than a mere stylesheet detail: nest the scroll wrapper
@@ -324,29 +324,29 @@ describe('FactsKV', () => {
   // jsdom has no layout engine, so these assert the STRUCTURAL contract the
   // CSS depends on, not actual pixel scrolling.
 
-  it('19. content-only children stay direct children of .alm-detail--fill (#816)', () => {
+  it('19. content-only children stay direct children of .pv-detail--fill (#816)', () => {
     const { container } = render(
       <DetailPanel fill title="Selected target">
-        <div className="alm-planner__scroll">tall unstructured content</div>
+        <div className="pv-planner__scroll">tall unstructured content</div>
       </DetailPanel>,
     );
     // The exact selector redesign-detail.css relies on.
     expect(
-      container.querySelector('.alm-detail--fill > .alm-planner__scroll'),
+      container.querySelector('.pv-detail--fill > .pv-planner__scroll'),
     ).not.toBeNull();
   });
 
   it('20. the facts slot does NOT satisfy that selector — why TargetDetailV2 avoids it', () => {
     const { container } = render(
       <DetailPanel fill title="Selected target" facts={<dl>identity</dl>}>
-        <div className="alm-planner__scroll">tall unstructured content</div>
+        <div className="pv-planner__scroll">tall unstructured content</div>
       </DetailPanel>,
     );
-    // Present in the tree, but nested under .alm-detailpanel__content — the
+    // Present in the tree, but nested under .pv-detailpanel__content — the
     // direct-child rule no longer applies and #816's clipping would return.
-    expect(container.querySelector('.alm-planner__scroll')).not.toBeNull();
+    expect(container.querySelector('.pv-planner__scroll')).not.toBeNull();
     expect(
-      container.querySelector('.alm-detail--fill > .alm-planner__scroll'),
+      container.querySelector('.pv-detail--fill > .pv-planner__scroll'),
     ).toBeNull();
   });
 });

@@ -62,7 +62,7 @@ describe('openInNewWindow', () => {
       string,
       { url: string },
     ];
-    expect(label).toMatch(/^alm-win-/);
+    expect(label).toMatch(/^pv-win-/);
     expect(options.url).toContain('#/targets');
     expect(openSpy).not.toHaveBeenCalled();
   });

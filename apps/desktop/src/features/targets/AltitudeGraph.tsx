@@ -102,10 +102,10 @@ export function AltitudeGraph({
   const yTicks = [0, 30, 60, 90];
 
   return (
-    <div className="alm-planner__graph-wrap">
+    <div className="pv-planner__graph-wrap">
       {/* viewBox and width/height are geometry — inline SVG attributes */}
       <svg
-        className="alm-planner__graph-svg"
+        className="pv-planner__graph-svg"
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         aria-label={m.targets_detail_alt_graph_aria()}
         role="img"
@@ -121,7 +121,7 @@ export function AltitudeGraph({
               y={0}
               width={PLOT_W}
               height={PLOT_H}
-              className="alm-planner__graph-twilight"
+              className="pv-planner__graph-twilight"
             />
           )}
           {darkWindowHours && darkWindowHours.startHour > 0 && (
@@ -130,7 +130,7 @@ export function AltitudeGraph({
               y={0}
               width={Math.max(0, xScale(darkWindowHours.startHour))}
               height={PLOT_H}
-              className="alm-planner__graph-twilight"
+              className="pv-planner__graph-twilight"
             />
           )}
           {darkWindowHours && darkWindowHours.endHour < 12 && (
@@ -139,7 +139,7 @@ export function AltitudeGraph({
               y={0}
               width={Math.max(0, PLOT_W - xScale(darkWindowHours.endHour))}
               height={PLOT_H}
-              className="alm-planner__graph-twilight"
+              className="pv-planner__graph-twilight"
             />
           )}
 
@@ -157,8 +157,8 @@ export function AltitudeGraph({
             // usable imaging time the stats correctly report as zero.
             aboveAreaProps={
               noDark
-                ? { fill: 'var(--alm-text-faint)', opacity: 0.25 }
-                : { fill: 'var(--alm-ok-bg)', opacity: 0.6 }
+                ? { fill: 'var(--pv-text-faint)', opacity: 0.25 }
+                : { fill: 'var(--pv-ok-bg)', opacity: 0.6 }
             }
             belowAreaProps={{ fill: 'none' }}
           />
@@ -176,7 +176,7 @@ export function AltitudeGraph({
                 y={PLOT_H - 6}
                 width={Math.max(1, x1 - x0)}
                 height={6}
-                className="alm-planner__graph-moon"
+                className="pv-planner__graph-moon"
               />
             );
           })}
@@ -187,7 +187,7 @@ export function AltitudeGraph({
             y1={usableYPx}
             x2={PLOT_W}
             y2={usableYPx}
-            stroke="var(--alm-ok-border)"
+            stroke="var(--pv-ok-border)"
             strokeWidth={1}
             strokeDasharray="3 3"
           />
@@ -197,7 +197,7 @@ export function AltitudeGraph({
             data={points}
             x={(p) => xScale(p.tHour)}
             y={(p) => yScale(p.altDeg)}
-            stroke="var(--alm-accent)"
+            stroke="var(--pv-accent)"
             strokeWidth={1.5}
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -209,7 +209,7 @@ export function AltitudeGraph({
             y1={0}
             x2={transitXPx}
             y2={PLOT_H}
-            stroke="var(--alm-accent)"
+            stroke="var(--pv-accent)"
             strokeWidth={1}
             strokeDasharray="2 2"
             opacity={0.6}
@@ -217,7 +217,7 @@ export function AltitudeGraph({
           <text
             x={transitXPx + 3}
             y={9}
-            className="alm-planner__graph-label-text"
+            className="pv-planner__graph-label-text"
           >
             {m.targets_detail_transit()}
           </text>
@@ -228,7 +228,7 @@ export function AltitudeGraph({
             y1={0}
             x2={0}
             y2={PLOT_H}
-            stroke="var(--alm-border)"
+            stroke="var(--pv-border)"
             strokeWidth={1}
           />
           {/* X-axis */}
@@ -237,7 +237,7 @@ export function AltitudeGraph({
             y1={PLOT_H}
             x2={PLOT_W}
             y2={PLOT_H}
-            stroke="var(--alm-border)"
+            stroke="var(--pv-border)"
             strokeWidth={1}
           />
 
@@ -249,14 +249,14 @@ export function AltitudeGraph({
                 y1={yScale(alt)}
                 x2={0}
                 y2={yScale(alt)}
-                stroke="var(--alm-border)"
+                stroke="var(--pv-border)"
                 strokeWidth={1}
               />
               <text
                 x={-5}
                 y={yScale(alt) + 3}
                 textAnchor="end"
-                className="alm-planner__graph-axis-text"
+                className="pv-planner__graph-axis-text"
               >
                 {alt}°
               </text>
@@ -271,14 +271,14 @@ export function AltitudeGraph({
                 y1={PLOT_H}
                 x2={xScale(tHour)}
                 y2={PLOT_H + 3}
-                stroke="var(--alm-border)"
+                stroke="var(--pv-border)"
                 strokeWidth={1}
               />
               <text
                 x={xScale(tHour)}
                 y={PLOT_H + 12}
                 textAnchor="middle"
-                className="alm-planner__graph-axis-text"
+                className="pv-planner__graph-axis-text"
               >
                 {label}
               </text>

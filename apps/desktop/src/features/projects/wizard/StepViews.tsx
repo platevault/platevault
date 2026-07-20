@@ -71,14 +71,14 @@ export function StepViews({
       : m.projects_wizard_views_metadata_only();
 
   return (
-    <div className="alm-wizard-views">
+    <div className="pv-wizard-views">
       {/* Step description */}
-      <div className="alm-wizard-views__desc">
+      <div className="pv-wizard-views__desc">
         {m.projects_wizard_views_desc()}{' '}
         <button
           type="button"
           onClick={(e) => e.preventDefault()}
-          className="alm-wizard-views__link"
+          className="pv-wizard-views__link"
         >
           {m.projects_wizard_views_settings_link()}
         </button>{' '}
@@ -87,32 +87,32 @@ export function StepViews({
 
       {/* ── Strategy (from settings) ── */}
       <Box title={m.projects_wizard_strategy_title()}>
-        <div className="alm-wizard-views__box-header">
+        <div className="pv-wizard-views__box-header">
           <button
             type="button"
             onClick={(e) => e.preventDefault()}
-            className="alm-wizard-views__box-link"
+            className="pv-wizard-views__box-link"
           >
             {m.projects_wizard_strategy_override_link()}
           </button>
         </div>
-        <div className="alm-wizard-views__strategy-row">
+        <div className="pv-wizard-views__strategy-row">
           <Pill variant="ok">{m.projects_wizard_strategy_ntfs()}</Pill>
-          <span className="alm-wizard-views__strategy-label">
+          <span className="pv-wizard-views__strategy-label">
             {m.projects_wizard_strategy_ntfs_label()}
           </span>
         </div>
-        <div className="alm-wizard-views__strategy-note">
+        <div className="pv-wizard-views__strategy-note">
           {m.projects_wizard_strategy_fallback_note()}
         </div>
       </Box>
 
       {/* ── Views to generate ── */}
       <Section title={m.projects_wizard_views_title()}>
-        <div className="alm-wizard-views__table-hint">
+        <div className="pv-wizard-views__table-hint">
           {m.projects_wizard_views_hint()}
         </div>
-        <table className="alm-simple-table">
+        <table className="pv-simple-table">
           <thead>
             <tr>
               <th>{m.projects_wizard_col_view_name()}</th>
@@ -124,44 +124,44 @@ export function StepViews({
           </thead>
           <tbody>
             <tr>
-              <td className="alm-mono">
+              <td className="pv-mono">
                 <input
                   value={viewName}
                   onChange={(e) => setViewName(e.target.value)}
-                  className="alm-wizard-views__name-input"
+                  className="pv-wizard-views__name-input"
                   aria-label={m.projects_wizard_col_view_name()}
                 />
               </td>
               <td>
                 <Pill variant="ok">{data.strategy}</Pill>
               </td>
-              <td className="alm-wizard-views__td-scope">{scope}</td>
-              <td className="alm-mono alm-wizard-views__td-small">{items}</td>
-              <td className="alm-mono alm-wizard-views__td-small">
+              <td className="pv-wizard-views__td-scope">{scope}</td>
+              <td className="pv-mono pv-wizard-views__td-small">{items}</td>
+              <td className="pv-mono pv-wizard-views__td-small">
                 {estimatedSize}
               </td>
             </tr>
           </tbody>
         </table>
-        <Btn size="sm" className="alm-wizard-views__add-btn">
+        <Btn size="sm" className="pv-wizard-views__add-btn">
           {m.projects_wizard_add_view_btn()}
         </Btn>
       </Section>
 
       {/* ── Conflict policy ── */}
       <Box title={m.projects_wizard_conflict_title()}>
-        <div className="alm-wizard-views__box-header">
+        <div className="pv-wizard-views__box-header">
           <button
             type="button"
             onClick={(e) => e.preventDefault()}
-            className="alm-wizard-views__box-link"
+            className="pv-wizard-views__box-link"
           >
             {m.projects_wizard_conflict_defaults_link()}
           </button>
         </div>
-        <div className="alm-wizard-views__radio-group">
+        <div className="pv-wizard-views__radio-group">
           <label
-            className="alm-wizard-views__radio-label"
+            className="pv-wizard-views__radio-label"
             htmlFor="conflict-policy-fail"
           >
             <input
@@ -175,7 +175,7 @@ export function StepViews({
             {m.projects_wizard_conflict_fail()}
           </label>
           <label
-            className="alm-wizard-views__radio-label"
+            className="pv-wizard-views__radio-label"
             htmlFor="conflict-policy-rename"
           >
             <input
@@ -189,7 +189,7 @@ export function StepViews({
             {m.projects_wizard_conflict_rename()}
           </label>
           <label
-            className="alm-wizard-views__radio-label"
+            className="pv-wizard-views__radio-label"
             htmlFor="conflict-policy-skip"
           >
             <input
@@ -203,7 +203,7 @@ export function StepViews({
             {m.projects_wizard_conflict_skip()}
           </label>
           <label
-            className="alm-wizard-views__radio-label"
+            className="pv-wizard-views__radio-label"
             htmlFor="conflict-policy-manual"
           >
             <input

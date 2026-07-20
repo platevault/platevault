@@ -172,7 +172,7 @@ export function Cleanup({ save }: CleanupProps) {
           info={m.settings_cleanup_protection_info()}
         >
           <select
-            className="alm-select alm-cleanup__protection-select"
+            className="pv-select pv-cleanup__protection-select"
             value={defaultProtection}
             onChange={(e) => {
               editedRef.current = true;
@@ -195,15 +195,15 @@ export function Cleanup({ save }: CleanupProps) {
       {/* TODO(spec 017 US2): replace CLEANUP_TYPES fixture with the archive plan generator once it lands */}
       <SettingsSection title={m.settings_cleanup_pertype_title()}>
         {warnedTypes.length > 0 && (
-          <Banner variant="danger" className="alm-cleanup__warning">
+          <Banner variant="danger" className="pv-cleanup__warning">
             {m.settings_cleanup_pertype_desc({ types: warnedTypes.join(', ') })}
           </Banner>
         )}
-        <table className="alm-table">
+        <table className="pv-table">
           <thead>
             <tr>
               <th>{m.settings_cleanup_col_datatype()}</th>
-              <th className="alm-cleanup__action-col">
+              <th className="pv-cleanup__action-col">
                 {m.settings_cleanup_col_action()}
               </th>
             </tr>
@@ -211,7 +211,7 @@ export function Cleanup({ save }: CleanupProps) {
           <tbody>
             {CLEANUP_STAGE_ORDER.map((stage) => (
               <Fragment key={stage}>
-                <tr className="alm-cleanup__group-row">
+                <tr className="pv-cleanup__group-row">
                   <td colSpan={2}>{stage}</td>
                 </tr>
                 {CLEANUP_TYPES.filter((row) => row.stage === stage).map(
@@ -220,7 +220,7 @@ export function Cleanup({ save }: CleanupProps) {
                     return (
                       <tr key={row.id}>
                         <td>
-                          <span className="alm-cleanup__type-cell">
+                          <span className="pv-cleanup__type-cell">
                             {row.type}
                             {row.warnOnChange && (
                               <Pill variant="neutral">

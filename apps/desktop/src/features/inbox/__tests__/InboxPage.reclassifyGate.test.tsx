@@ -310,7 +310,7 @@ describe('InboxPage bulk-reclassify unblocks Confirm (#724/#755 CI-red)', () => 
 // `allReclassifyV2CallCount: 0` — the real `inbox.reclassify_v2` command was
 // NEVER invoked — while `bulkFieldsetPresent: false` at dump time is a RED
 // HERRING for "the fieldset never renders": that testid is
-// `.alm-inbox-detail__bulk-controls`, gated on local `selectedFiles.size > 0`
+// `.pv-inbox-detail__bulk-controls`, gated on local `selectedFiles.size > 0`
 // (`InboxDetail.tsx:1011`) — a POST-interaction state, not a structural
 // render condition. The banner (`inbox-unclassified-alert`,
 // `InboxDetail.tsx:847`) is gated purely on `classification.type`, unrelated

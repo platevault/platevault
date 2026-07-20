@@ -47,7 +47,7 @@ describe('General — density', () => {
     const select = screen.getByDisplayValue('Comfortable (32px row)');
     fireEvent.change(select, { target: { value: 'compact' } });
 
-    expect(document.documentElement.style.getPropertyValue('--alm-sp-2')).toBe(
+    expect(document.documentElement.style.getPropertyValue('--pv-sp-2')).toBe(
       '6.00px',
     );
     expect(document.documentElement.classList.contains('density-compact')).toBe(
@@ -64,7 +64,7 @@ describe('General — font size', () => {
     fireEvent.change(select, { target: { value: 'large' } });
 
     expect(
-      document.documentElement.style.getPropertyValue('--alm-text-base'),
+      document.documentElement.style.getPropertyValue('--pv-text-base'),
     ).toBe('16px');
     expect(document.documentElement.style.getPropertyValue('font-size')).toBe(
       '16px',
@@ -80,6 +80,35 @@ describe('General — font size', () => {
 
     render(<General />);
     expect(screen.getByDisplayValue('Large (16px)')).toBeInTheDocument();
+  });
+});
+
+describe('General — theme picker (handoff 03: canonical themes, grouped)', () => {
+  it('shows the four canonical themes grouped Warm/Cool, and hides the two disabled variants', () => {
+    render(<General />);
+
+    expect(screen.getByText('Warm')).toBeInTheDocument();
+    expect(screen.getByText('Cool')).toBeInTheDocument();
+
+    expect(
+      screen.getByRole('button', { name: /^Warm Slate/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Observatorydark$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Observatory Cool · Light/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Observatory Cooldark$/i }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole('button', { name: /warm clay/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /espresso/i }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -100,15 +129,22 @@ describe('General — restore defaults (#802)', () => {
     // rather than assuming a starting display value.
     const densityRow = screen
       .getByText('Density')
-      .closest('.alm-settings__row') as HTMLElement;
+      .closest('.pv-settings__row') as HTMLElement;
     const densitySelect = within(densityRow).getByRole('combobox');
 
-    fireEvent.click(screen.getByRole('button', { name: /espresso/i }));
+    // Espresso Dark is a disabled (registry-only) variant as of handoff 03 —
+    // it no longer renders in the picker, so this exercises a canonical
+    // theme instead. The exact-anchored name avoids matching the
+    // "Observatory Cool · Light" card, whose accessible name also starts
+    // with "Observatory Cool".
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Observatory Cooldark$/i }),
+    );
     fireEvent.change(screen.getByDisplayValue('Default (14px)'), {
       target: { value: 'large' },
     });
     fireEvent.change(densitySelect, { target: { value: 'compact' } });
-    expect(getThemeChoice()).toBe('espresso-dark');
+    expect(getThemeChoice()).toBe('observatory-cool');
     expect(getFontSizeChoice()).toBe('large');
     expect(densitySelect).toHaveValue('compact');
 

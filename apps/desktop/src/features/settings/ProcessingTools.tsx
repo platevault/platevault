@@ -149,7 +149,7 @@ export function ProcessingTools() {
   if (loadError) {
     return (
       <SettingsSection title={m.settings_tools_title()}>
-        <p className="alm-proc-tools__error">
+        <p className="pv-proc-tools__error">
           {m.settings_tools_load_error({ error: loadError })}
         </p>
       </SettingsSection>
@@ -159,7 +159,7 @@ export function ProcessingTools() {
   const reDetectBtn = (
     <button
       type="button"
-      className="alm-btn alm-btn--ghost alm-proc-tools__auto-detect-btn"
+      className="pv-btn pv-btn--ghost pv-proc-tools__auto-detect-btn"
       onClick={handleAutoDetect}
       disabled={detecting}
       aria-label={m.settings_tools_redetect_aria()}
@@ -171,25 +171,25 @@ export function ProcessingTools() {
   return (
     <SettingsSection title={m.settings_tools_title()} action={reDetectBtn}>
       {tools.length === 0 && !loadError && (
-        <p className="alm-proc-tools__loading">{m.common_loading()}</p>
+        <p className="pv-proc-tools__loading">{m.common_loading()}</p>
       )}
 
       {tools.map((tool) => {
         const label = (
-          <span className="alm-proc-tools__tool-header">
+          <span className="pv-proc-tools__tool-header">
             <strong>{tool.name}</strong>
             {tool.autoDetected && (
-              <Pill variant="neutral" className="alm-proc-tools__pill">
+              <Pill variant="neutral" className="pv-proc-tools__pill">
                 {m.settings_tools_auto_detected()}
               </Pill>
             )}
             {tool.available && (
-              <Pill variant="ok" className="alm-proc-tools__pill">
+              <Pill variant="ok" className="pv-proc-tools__pill">
                 {m.settings_tools_available()}
               </Pill>
             )}
             {tool.configured && !tool.available && (
-              <Pill variant="warn" className="alm-proc-tools__pill">
+              <Pill variant="warn" className="pv-proc-tools__pill">
                 {m.settings_tools_missing()}
               </Pill>
             )}
@@ -198,10 +198,10 @@ export function ProcessingTools() {
 
         return (
           <SettingsRow key={tool.id} label={label}>
-            <div className="alm-proc-tools__tool-controls">
+            <div className="pv-proc-tools__tool-controls">
               <input
                 type="text"
-                className="alm-input alm-proc-tools__path-input"
+                className="pv-input pv-proc-tools__path-input"
                 value={pathDraft[tool.id] ?? ''}
                 placeholder={m.settings_tools_path_placeholder()}
                 aria-label={m.settings_tools_path_aria({ name: tool.name })}
@@ -225,7 +225,7 @@ export function ProcessingTools() {
                 }}
               />
               {(saving[tool.id] || validating[tool.id]) && (
-                <span className="alm-proc-tools__status">
+                <span className="pv-proc-tools__status">
                   {saving[tool.id]
                     ? m.common_saving()
                     : m.settings_tools_checking()}
@@ -240,7 +240,7 @@ export function ProcessingTools() {
               />
             </div>
             {saveError[tool.id] && (
-              <div className="alm-settings__error" role="alert">
+              <div className="pv-settings__error" role="alert">
                 {m.settings_tools_save_error({
                   name: tool.name,
                   error: saveError[tool.id],

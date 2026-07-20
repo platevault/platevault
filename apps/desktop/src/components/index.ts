@@ -56,7 +56,7 @@ export { DetailGrid, Rail, RailCard } from './DetailGrid';
 export type { DetailGridProps, RailProps, RailCardProps } from './DetailGrid';
 
 // #813: the shared two-col-properties + linked-entity detail recipe
-// (`.alm-session-detail2`), wrapped once instead of hand-copied per feature.
+// (`.pv-session-detail2`), wrapped once instead of hand-copied per feature.
 export { TwoColDetailLayout, DetailLinkedGroup } from './TwoColDetailLayout';
 export type {
   TwoColDetailLayoutProps,
@@ -80,7 +80,7 @@ export { TargetSearch } from './TargetSearch';
 export type { TargetSearchProps } from './TargetSearch';
 
 // PropertyTable is retained for feature files that still import it directly.
-// Migrate callers to inline prop-table markup with alm-* CSS classes over time.
+// Migrate callers to inline prop-table markup with pv-* CSS classes over time.
 export { PropertyTable } from './PropertyTable';
 export type { PropertyDef, PropertyTableProps } from './PropertyTable';
 

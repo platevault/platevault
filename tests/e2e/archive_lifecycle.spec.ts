@@ -49,75 +49,85 @@
  * First-run seeding:
  *   Reads `alm-preferences.setupCompleted` from localStorage.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
-function seedSetupComplete(page: import("@playwright/test").Page): void {
+function seedSetupComplete(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      "alm-preferences",
+      'alm-preferences',
       JSON.stringify({ setupCompleted: true }),
     );
   });
 }
 
-test.describe("archive lifecycle (spec 017 US6 / Journey 7)", () => {
-  test("archive page lists entries; selecting one opens detail with canonical archive|trash actions", async ({
+test.describe('archive lifecycle (spec 017 US6 / Journey 7)', () => {
+  test('archive page lists entries; selecting one opens detail with canonical archive|trash actions', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/archive");
+    await page.goto('/#/archive');
 
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
 
     // ── 1. Archive list renders both fixture entries ─────────────────────────
-    const list = page.getByTestId("archive-list");
+    const list = page.getByTestId('archive-list');
     await expect(list).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByTestId("archive-row-arch-proj-001")).toBeVisible();
-    await expect(page.getByTestId("archive-row-arch-proj-002")).toBeVisible();
-    await expect(list.getByText("NGC 7000 · HOO (v1)")).toBeVisible();
-    await expect(list.getByText("M31 · LRGB (2025)")).toBeVisible();
+    await expect(page.getByTestId('archive-row-arch-proj-001')).toBeVisible();
+    await expect(page.getByTestId('archive-row-arch-proj-002')).toBeVisible();
+    await expect(list.getByText('NGC 7000 · HOO (v1)')).toBeVisible();
+    await expect(list.getByText('M31 · LRGB (2025)')).toBeVisible();
 
     // ── 2. Select the first entry → single-column detail panel opens ────────
-    await page.getByTestId("archive-row-arch-proj-001").click();
+    await page.getByTestId('archive-row-arch-proj-001').click();
 
     // Detail-as-delta (spec-030 Q16 T133 / FR-139): the detail panel no
     // longer echoes list-row facts. The reason renders on the LIST row only;
     // the detail keeps header identity (name/type/status/path) and leads
     // with Audit history — the panel's one real information class.
     await expect(
-      page.getByTestId("archive-row-arch-proj-001").getByText("Superseded by reprocess"),
+      page
+        .getByTestId('archive-row-arch-proj-001')
+        .getByText('Superseded by reprocess'),
     ).toBeVisible();
-    const detail = page.locator(".alm-detail");
+    const detail = page.locator('.pv-detail');
     await expect(detail).toBeVisible({ timeout: 5_000 });
-    await expect(detail.getByText("Audit history")).toBeVisible();
+    await expect(detail.getByText('Audit history')).toBeVisible();
     // The original path renders as the header subtitle.
-    await expect(detail.getByText("Projects/NGC7000_HOO_v1").first()).toBeVisible();
+    await expect(
+      detail.getByText('Projects/NGC7000_HOO_v1').first(),
+    ).toBeVisible();
     // Status pill from the shared archive vocabulary (scoped + case-sensitive
     // regex — "Archived" also appears as a PropertyTable field label).
     await expect(
-      detail.locator(".alm-pill").filter({ hasText: /^archived$/ }),
+      detail.locator('.pv-pill').filter({ hasText: /^archived$/ }),
     ).toBeVisible();
 
     // ── 3. Management actions use the canonical archive|trash vocabulary,
     //       never the legacy "os_trash" term ────────────────────────────────
-    const sendToTrashBtn = page.getByRole("button", { name: "Send to trash" });
-    const deletePermBtn = page.getByRole("button", { name: "Delete permanently" });
+    const sendToTrashBtn = page.getByRole('button', { name: 'Send to trash' });
+    const deletePermBtn = page.getByRole('button', {
+      name: 'Delete permanently',
+    });
     await expect(sendToTrashBtn).toBeVisible();
     await expect(deletePermBtn).toBeVisible();
     await expect(page.getByText(/os_trash/i)).toHaveCount(0);
 
     // ── 4. Reveal is disabled — no fabricated archive-location data ─────────
-    const revealBtn = page.getByTestId("archive-reveal-btn");
+    const revealBtn = page.getByTestId('archive-reveal-btn');
     await expect(revealBtn).toBeVisible();
     await expect(revealBtn).toBeDisabled();
   });
 
-  test('"Send to trash" completes against the mock without error', async ({ page }) => {
+  test('"Send to trash" completes against the mock without error', async ({
+    page,
+  }) => {
     seedSetupComplete(page);
-    await page.goto("/#/archive");
+    await page.goto('/#/archive');
 
-    await page.getByTestId("archive-row-arch-proj-001").click();
-    const sendToTrashBtn = page.getByRole("button", { name: "Send to trash" });
+    await page.getByTestId('archive-row-arch-proj-001').click();
+    const sendToTrashBtn = page.getByRole('button', { name: 'Send to trash' });
     await expect(sendToTrashBtn).toBeEnabled({ timeout: 5_000 });
 
     await sendToTrashBtn.click();
@@ -125,32 +135,38 @@ test.describe("archive lifecycle (spec 017 US6 / Journey 7)", () => {
     // The mutation completes (button re-enables once settled) with no error
     // boundary or crash — mock archive_send_to_trash always succeeds.
     await expect(sendToTrashBtn).toBeEnabled({ timeout: 5_000 });
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 
   test('"Delete permanently" is gated behind the typed "DELETE" confirmation (FR-017)', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/archive");
+    await page.goto('/#/archive');
 
-    await page.getByTestId("archive-row-arch-proj-001").click();
-    await page.getByRole("button", { name: "Delete permanently" }).click();
+    await page.getByTestId('archive-row-arch-proj-001').click();
+    await page.getByRole('button', { name: 'Delete permanently' }).click();
 
-    const modal = page.getByRole("dialog", { name: "Delete permanently" });
+    const modal = page.getByRole('dialog', { name: 'Delete permanently' });
     await expect(modal).toBeVisible({ timeout: 5_000 });
-    await expect(modal.getByText(/permanently deletes the archived/i)).toBeVisible();
+    await expect(
+      modal.getByText(/permanently deletes the archived/i),
+    ).toBeVisible();
 
-    const confirmBtn = modal.getByRole("button", { name: "Delete permanently" });
+    const confirmBtn = modal.getByRole('button', {
+      name: 'Delete permanently',
+    });
     // Disabled until the exact literal "DELETE" is typed (constitution II —
     // destructive operations require explicit confirmation).
     await expect(confirmBtn).toBeDisabled();
 
-    const confirmInput = modal.getByLabel("Type DELETE to confirm");
-    await confirmInput.fill("delete");
+    const confirmInput = modal.getByLabel('Type DELETE to confirm');
+    await confirmInput.fill('delete');
     await expect(confirmBtn).toBeDisabled();
 
-    await confirmInput.fill("DELETE");
+    await confirmInput.fill('DELETE');
     await expect(confirmBtn).toBeEnabled();
 
     await confirmBtn.click();
@@ -158,6 +174,8 @@ test.describe("archive lifecycle (spec 017 US6 / Journey 7)", () => {
     // On success the modal closes (archive.permanently_delete mock always
     // succeeds); no crash, no leftover error boundary.
     await expect(modal).not.toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
   });
 });

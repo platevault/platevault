@@ -15,17 +15,17 @@ export const KV = forwardRef<HTMLDivElement, KVProps>(function KV(
   { label, value, provenance, mono, className, ...rest },
   ref,
 ) {
-  const cls = ['alm-kv', className].filter(Boolean).join(' ');
+  const cls = ['pv-kv', className].filter(Boolean).join(' ');
   return (
     <div ref={ref} className={cls} {...rest}>
-      <span className="alm-kv__label">{label}</span>
+      <span className="pv-kv__label">{label}</span>
       <span
-        className={`alm-kv__value${mono ? ' alm-mono' : ''}`}
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional compact-size passthrough (caller-supplied prop). Family comes from the shared `.alm-mono` utility (spec 055), not an inline override.
-        style={mono ? { fontSize: 'var(--alm-text-xs)' } : undefined}
+        className={`pv-kv__value${mono ? ' pv-mono' : ''}`}
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional compact-size passthrough (caller-supplied prop). Family comes from the shared `.pv-mono` utility (spec 055), not an inline override.
+        style={mono ? { fontSize: 'var(--pv-text-xs)' } : undefined}
       >
         {value}
-        {provenance && <span className="alm-kv__provenance">{provenance}</span>}
+        {provenance && <span className="pv-kv__provenance">{provenance}</span>}
       </span>
     </div>
   );

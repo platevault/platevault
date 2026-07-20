@@ -16,7 +16,7 @@ export interface InfoTipProps {
 /**
  * Small ⓘ affordance that reveals help text on hover/focus — the de-vibe
  * replacement for always-on help prose under form rows (settings mock).
- * Token-only styling lives in components.css under `.alm-info-tip`.
+ * Token-only styling lives in components.css under `.pv-info-tip`.
  *
  * Uses the shared base-ui `Tooltip`; the tip text is also mirrored into
  * `aria-label` so screen readers get it without a hover. The trigger is
@@ -28,7 +28,7 @@ export function InfoTip({
   className,
 }: InfoTipProps) {
   const text = typeof tip === 'string' ? tip : undefined;
-  const cls = ['alm-info-tip', className].filter(Boolean).join(' ');
+  const cls = ['pv-info-tip', className].filter(Boolean).join(' ');
   return (
     <Tooltip
       content={tip}
