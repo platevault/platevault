@@ -11,11 +11,29 @@
 //! This module is pure orchestration: DB reads/writes via
 //! `persistence_db::repositories::inbox`; metadata reads via
 //! `metadata_fits::FitsExtractor` / `metadata_xisf::XisfExtractor`.
+//!
+//! # Write-failure policy (issue #1101)
+//!
+//! Writes here split into two classes and are handled differently:
+//!
+//! - **Load-bearing** — the classification result itself (the stale-row wipe
+//!   that the fresh rows assume, the evidence rows, the classification cache
+//!   row, the item's scan columns and its `state = 'classified'`). A failure
+//!   propagates: returning `Ok` would report a classification the database
+//!   does not hold, and the `state` write in particular would leave a false
+//!   statement in the DB (#711 badge disagreement).
+//! - **Best-effort** — rows that are re-derivable from the next classify run
+//!   (per-file metadata seeded for materialized sub-items, override
+//!   restoration and staleness flags, breakdown cache rows, orphan sub-item
+//!   cleanup, denormalized child counts). These keep going, but every failure
+//!   is logged with the item id and path so a partial classify is diagnosable
+//!   after the fact instead of surfacing as a data bug months later.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use app_core_errors::db_internal_ctx;
 use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput};
 use camino::Utf8Path;
@@ -147,11 +165,17 @@ pub async fn classify(
         snapshot_overrides(pool, &req.inbox_item_id, &file_paths, &req.root_absolute_path).await;
 
     // Delete stale evidence
-    repo::delete_evidence_for_item(pool, &req.inbox_item_id).await.ok();
-    repo::delete_breakdown_for_item(pool, &req.inbox_item_id).await.ok();
+    repo::delete_evidence_for_item(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: delete stale evidence"))?;
+    repo::delete_breakdown_for_item(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: delete stale breakdown"))?;
     // spec 041 US2/T016: clear stale per-file metadata so removed files do not
     // leave orphaned rows behind after a re-scan.
-    repo::delete_file_metadata_for_item(pool, &req.inbox_item_id).await.ok();
+    repo::delete_file_metadata_for_item(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: delete stale file metadata"))?;
 
     let mut frame_type_files: HashMap<String, Vec<String>> = HashMap::new();
     let mut unclassified_files: Vec<String> = Vec::new();
@@ -249,12 +273,16 @@ pub async fn classify(
             is_master,
             master_detector,
         };
-        repo::insert_evidence(pool, &ev).await.ok();
+        repo::insert_evidence(pool, &ev)
+            .await
+            .map_err(|e| db_internal_ctx(e, "classify: insert classification evidence"))?;
 
         // spec 041 US2/T016: persist per-file extracted header metadata. The
         // raw extractor returns string fields; we parse the numeric ones here
         // (gain stays a string — some cameras report scaled/non-integer gain).
-        persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref()).await;
+        persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref())
+            .await
+            .map_err(|e| db_internal_ctx(e, "classify: persist per-file metadata"))?;
 
         // T066: collect for sub-item grouping and the folder tallies — both
         // computed AFTER the loop, once user overrides are layered on top of
@@ -265,7 +293,7 @@ pub async fn classify(
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
     // evidence rows, then mark stale the subset whose file identity changed.
     for entry in &override_snapshot {
-        repo::set_overrides(
+        if let Err(e) = repo::set_overrides(
             pool,
             &req.inbox_item_id,
             &entry.relative_file_path,
@@ -275,11 +303,23 @@ pub async fn classify(
             entry.override_binning.as_deref(),
         )
         .await
-        .ok();
+        {
+            tracing::warn!(
+                item = %req.inbox_item_id,
+                file = %entry.relative_file_path,
+                "classify: restoring overrides failed, file reverts to its raw header state: {e}"
+            );
+        }
         if entry.stale {
             repo::mark_override_stale(pool, &req.inbox_item_id, &entry.relative_file_path)
                 .await
-                .ok();
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        item = %req.inbox_item_id,
+                        file = %entry.relative_file_path,
+                        "classify: marking override stale failed, file shows as fresh: {e}"
+                    );
+                });
         }
     }
 
@@ -380,7 +420,15 @@ pub async fn classify(
                     .ok()
                     .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
                 if cur_size != Some(stored_size) || cur_mtime.as_deref() != Some(stored_mtime) {
-                    repo::mark_file_override_stale(pool, sg_id, &ov.relative_file_path).await.ok();
+                    repo::mark_file_override_stale(pool, sg_id, &ov.relative_file_path)
+                        .await
+                        .unwrap_or_else(|e| {
+                            tracing::warn!(
+                                source_group = %sg_id,
+                                file = %ov.relative_file_path,
+                                "classify: marking file override stale failed, changed file shows as fresh: {e}"
+                            );
+                        });
                 }
             }
         }
@@ -465,7 +513,9 @@ pub async fn classify(
         content_signature: &content_signature,
         unclassified_file_count: unclassified_count,
     };
-    repo::upsert_classification(pool, &classification).await.ok();
+    repo::upsert_classification(pool, &classification)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: upsert classification"))?;
 
     // 9. Update item state and signature.
     // #549: `file_records.len()` (not `file_paths.len()`) — extracted-master
@@ -479,9 +529,11 @@ pub async fn classify(
         i64::try_from(file_records.len()).unwrap_or(i64::MAX),
     )
     .await
-    .ok();
+    .map_err(|e| db_internal_ctx(e, "classify: update item scan columns"))?;
 
-    repo::update_inbox_item_state(pool, &req.inbox_item_id, "classified").await.ok();
+    repo::update_inbox_item_state(pool, &req.inbox_item_id, "classified")
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: mark item classified"))?;
 
     // 10. Build + persist breakdown with destination previews
     let breakdown =
@@ -523,7 +575,7 @@ async fn persist_file_metadata(
     rel: &str,
     abs_path: &Path,
     raw_meta: Option<&metadata_core::RawFileMetadata>,
-) {
+) -> persistence_db::DbResult<()> {
     // Parse a trimmed numeric string (e.g. "120.0", "2") to a target number.
     fn parse_f64(s: Option<&String>) -> Option<f64> {
         s.and_then(|v| v.trim().parse::<f64>().ok())
@@ -606,7 +658,7 @@ async fn persist_file_metadata(
         }
     };
 
-    repo::upsert_inbox_file_metadata(pool, &m).await.ok();
+    repo::upsert_inbox_file_metadata(pool, &m).await
 }
 
 /// Collect relative file paths that need to be marked as stale after the
@@ -757,6 +809,26 @@ pub fn mandatory_set_for(ft: FrameType) -> Vec<&'static str> {
     out
 }
 
+/// Whether the `target` hard-mandatory key (R-14) counts as absent.
+///
+/// Single shared formula for the `target` arm of both mandatory-attribute
+/// gates — [`check_mandatory_missing`] here and
+/// [`crate::metadata::compute_missing_mandatory`] — so the two consumers
+/// agree on "target missing" **by construction**, not because every caller
+/// happens to pass the same `target_resolved` constant (issue #1132).
+///
+/// Satisfied by an explicit target resolution (`target_resolved`: coordinate
+/// auto-resolution or a user pick, R-17) **or** a non-empty (trimmed) `OBJECT`
+/// header/override. Every current call site pins `target_resolved` to
+/// `false` — R-17's coordinate resolver (`target_recommendations`,
+/// `cone_search`) is implemented and reachable from the UI, but nothing yet
+/// threads a resolved-target signal back into this gate; that wiring is the
+/// open product decision tracked in #1132.
+#[must_use]
+pub fn target_missing(object: Option<&str>, target_resolved: bool) -> bool {
+    !target_resolved && object.map_or("", str::trim).is_empty()
+}
+
 /// Check which mandatory attributes are absent for a classified file.
 ///
 /// `raw_meta` is `None` when FITS extraction failed entirely (→ all mandatory
@@ -776,11 +848,7 @@ pub fn check_mandatory_missing(
 
     for key in mandatory {
         let absent = match key {
-            "target" => {
-                // light-only: satisfied by coordinate resolution or user pick.
-                !target_resolved
-                    && raw_meta.and_then(|m| m.object.as_deref()).map_or("", str::trim).is_empty()
-            }
+            "target" => target_missing(raw_meta.and_then(|m| m.object.as_deref()), target_resolved),
             "filter" => raw_meta.and_then(|m| m.filter.as_deref()).map_or("", str::trim).is_empty(),
             "exposureS" => !raw_meta
                 .and_then(|m| m.exposure.as_deref())
@@ -803,9 +871,13 @@ pub fn check_mandatory_missing(
 /// the first mandatory attribute, and until it is known no per-type set can be
 /// derived. Empty means the file can leave the needs-review bucket.
 ///
-/// `target_resolved` is pinned to `false` for the same reason as
-/// [`materialize_sub_items`]: coordinate resolution (FR-052) is not integrated
-/// at classify time, so the OBJECT header is the proxy.
+/// `target_resolved` is pinned to `false` here because coordinate resolution
+/// (FR-052) needs the sub-group's persisted pointing rows, which this pass is
+/// still producing — so at classify time the OBJECT header remains the proxy.
+/// A light with pointing but no OBJECT therefore starts in needs-review and
+/// leaves it on the next reclassify, where
+/// [`crate::target_recommendations::auto_resolve_target`] can run against the
+/// stored pointing.
 #[must_use]
 pub(crate) fn missing_mandatory_for_file(
     frame_type: Option<FrameType>,
@@ -1026,12 +1098,26 @@ pub(crate) async fn materialize_sub_items(
     if let Ok(existing) = repo::list_inbox_sub_items(pool, source_group_id).await {
         for row in existing {
             if !current_keys.contains(row.group_key.as_str()) {
-                repo::delete_sub_item_if_unlinked(pool, &row.id).await.ok();
+                repo::delete_sub_item_if_unlinked(pool, &row.id).await.unwrap_or_else(|e| {
+                    tracing::warn!(
+                        source_group = %source_group_id,
+                        sub_item = %row.id,
+                        "classify: deleting orphaned sub-item failed, stale group remains: {e}"
+                    );
+                });
             }
         }
     }
 
-    repo::update_source_group_child_count(pool, source_group_id, child_count).await.ok();
+    repo::update_source_group_child_count(pool, source_group_id, child_count).await.unwrap_or_else(
+        |e| {
+            tracing::warn!(
+                source_group = %source_group_id,
+                child_count,
+                "classify: updating source-group child count failed, badge count is stale: {e}"
+            );
+        },
+    );
 }
 
 /// Seed one materialized sub-item's evidence, per-file metadata, breakdown,
@@ -1051,9 +1137,25 @@ async fn seed_sub_item_cache(
 ) {
     let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
 
-    repo::delete_evidence_for_item(pool, sub_id).await.ok();
-    repo::delete_breakdown_for_item(pool, sub_id).await.ok();
-    repo::delete_file_metadata_for_item(pool, sub_id).await.ok();
+    // Every write below seeds a cache the next classify re-derives, so a
+    // failure degrades rather than corrupts: log and continue (#1101).
+    let warn_seed = |op: &'static str, e: persistence_db::DbError| {
+        tracing::warn!(
+            sub_item = %sub_id,
+            group_key,
+            "classify: seeding sub-item cache failed at {op}, cache is partial: {e}"
+        );
+    };
+
+    repo::delete_evidence_for_item(pool, sub_id)
+        .await
+        .unwrap_or_else(|e| warn_seed("delete evidence", e));
+    repo::delete_breakdown_for_item(pool, sub_id)
+        .await
+        .unwrap_or_else(|e| warn_seed("delete breakdown", e));
+    repo::delete_file_metadata_for_item(pool, sub_id)
+        .await
+        .unwrap_or_else(|e| warn_seed("delete file metadata", e));
 
     let mut sample_files: Vec<String> = Vec::new();
     for (rel, abs_opt, raw_meta_opt) in files {
@@ -1070,7 +1172,7 @@ async fn seed_sub_item_cache(
             is_master: false,
             master_detector: None,
         };
-        repo::insert_evidence(pool, &ev).await.ok();
+        repo::insert_evidence(pool, &ev).await.unwrap_or_else(|e| warn_seed("insert evidence", e));
 
         // Real abs path when available (initial classify's own re-split) for
         // accurate file_size_bytes/file_mtime; falls back to an unreadable
@@ -1078,7 +1180,9 @@ async fn seed_sub_item_cache(
         // already treats a failed stat as None/None, same as its documented
         // "no abs path available" behaviour elsewhere in this module.
         let abs_for_stat = abs_opt.as_deref().unwrap_or_else(|| Path::new(""));
-        persist_file_metadata(pool, sub_id, rel, abs_for_stat, raw_meta_opt.as_ref()).await;
+        persist_file_metadata(pool, sub_id, rel, abs_for_stat, raw_meta_opt.as_ref())
+            .await
+            .unwrap_or_else(|e| warn_seed("persist file metadata", e));
 
         if sample_files.len() < 10 {
             sample_files.push(rel.clone());
@@ -1098,7 +1202,7 @@ async fn seed_sub_item_cache(
             &sample_json,
         )
         .await
-        .ok();
+        .unwrap_or_else(|e| warn_seed("upsert breakdown", e));
     }
 
     let (db_result, unclassified_count) = if is_needs_review {
@@ -1114,7 +1218,9 @@ async fn seed_sub_item_cache(
         content_signature,
         unclassified_file_count: unclassified_count,
     };
-    repo::upsert_classification(pool, &classification).await.ok();
+    repo::upsert_classification(pool, &classification)
+        .await
+        .unwrap_or_else(|e| warn_seed("upsert classification", e));
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
@@ -1192,7 +1298,15 @@ async fn build_breakdown(
             &sample_json,
         )
         .await
-        .ok();
+        .unwrap_or_else(|e| {
+            // The returned `entries` are built in memory regardless, so the
+            // response stays correct; only the persisted cache row is lost.
+            tracing::warn!(
+                item = %inbox_item_id,
+                kind,
+                "classify: persisting breakdown row failed, cached breakdown is partial: {e}"
+            );
+        });
 
         entries.push(BreakdownEntry {
             kind: kind.clone(),
@@ -1349,6 +1463,103 @@ mod tests {
         assert_eq!(resp.classification_type, "single_type");
         assert_eq!(resp.frame_type, Some("light".to_owned()));
         assert!(!resp.content_signature.is_empty());
+    }
+
+    /// Build the standard one-light-frame fixture used by the #1101 regression
+    /// tests: a temp dir holding one classifiable FITS file plus its inbox row.
+    async fn single_light_fixture(db: &Database, item_id: &str) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        tmp
+    }
+
+    /// Regression (#1101, headline site): when the `state = 'classified'` write
+    /// fails, classify MUST NOT return `Ok`. Previously the result was dropped
+    /// with `.await.ok()`, so the caller was told the item was classified while
+    /// the row still said otherwise — a false statement in the DB and the root
+    /// of the #711 badge disagreement.
+    ///
+    /// The failure is injected with a trigger scoped to exactly that write, so
+    /// every earlier write in the run still succeeds and only the state
+    /// transition breaks.
+    #[tokio::test]
+    async fn classify_surfaces_failed_item_state_write() {
+        let db = test_db().await;
+        let item_id = "item-1101-state";
+        let tmp = single_light_fixture(&db, item_id).await;
+
+        sqlx::query(
+            "CREATE TRIGGER block_classified BEFORE UPDATE ON inbox_items \
+             WHEN NEW.state = 'classified' \
+             BEGIN SELECT RAISE(ABORT, 'injected: state write failed'); END",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let err = classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .expect_err("classify must not report success when the state write fails");
+
+        assert_eq!(err.code, ErrorCode::InternalDatabase);
+        assert!(
+            err.message.contains("mark item classified"),
+            "error must name the failed operation, got: {}",
+            err.message
+        );
+
+        // The DB must not claim the item is classified either.
+        let state: String = sqlx::query_scalar("SELECT state FROM inbox_items WHERE id = ?")
+            .bind(item_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_ne!(state, "classified");
+    }
+
+    /// Regression (#1101): evidence rows ARE the classification result, so a
+    /// failed evidence write must surface rather than yielding a response
+    /// describing rows that were never persisted.
+    #[tokio::test]
+    async fn classify_surfaces_failed_evidence_write() {
+        let db = test_db().await;
+        let item_id = "item-1101-evidence";
+        let tmp = single_light_fixture(&db, item_id).await;
+
+        sqlx::query("DROP TABLE inbox_classification_evidence").execute(db.pool()).await.unwrap();
+
+        let err = classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .expect_err("classify must not report success when the evidence write fails");
+
+        assert_eq!(err.code, ErrorCode::InternalDatabase);
     }
 
     /// Regression (PR #457 Layer-2 Inbox journeys): a SECOND classify of an
@@ -2879,6 +3090,29 @@ mod tests {
         let set = mandatory_set_for(FrameType::Flat);
         assert!(set.contains(&"filter"), "flat must require filter");
         assert!(!set.contains(&"gain"), "flat must NOT require gain by default");
+    }
+
+    /// Issue #1132: `target_missing` is the single formula both mandatory
+    /// gates share for the `target` key (R-14/R-17). Pins the semantics:
+    /// resolution (coordinate or user pick) OR a non-empty, trimmed OBJECT
+    /// satisfies the requirement; neither does not.
+    #[test]
+    fn target_missing_r17_semantics() {
+        assert!(target_missing(None, false), "unresolved + no OBJECT is missing");
+        assert!(target_missing(Some(""), false), "unresolved + empty OBJECT is missing");
+        assert!(
+            target_missing(Some("   "), false),
+            "unresolved + whitespace-only OBJECT is missing"
+        );
+        assert!(
+            !target_missing(Some("M 42"), false),
+            "unresolved + non-empty OBJECT is not missing"
+        );
+        // R-17: coordinate/user resolution alone satisfies the requirement, even
+        // with no OBJECT header at all — the case #1131's equivalence test
+        // cannot exercise and #1132 flags as currently unreachable in production.
+        assert!(!target_missing(None, true), "resolved + no OBJECT is not missing");
+        assert!(!target_missing(Some(""), true), "resolved + empty OBJECT is not missing");
     }
 
     /// T070: check_mandatory_missing correctly flags absent attributes.

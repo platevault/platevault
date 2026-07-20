@@ -27,6 +27,7 @@
 //! `pattern.unset`.
 #![allow(clippy::doc_markdown)]
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use app_core_targets::metadata_cache::cached_extract;
@@ -36,6 +37,7 @@ use contracts_core::first_run::{OrganizationState, SourceKind};
 use contracts_core::framing::{
     AttributionAppliedDto, ChosenAttributionDto, IngestionAttributionCandidateDto,
 };
+use contracts_core::plans::ProvenanceEntry;
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
@@ -365,6 +367,11 @@ pub async fn confirm(
         let basename = ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
         let item_name = format!("[{}] {basename}", ft.to_uppercase());
 
+        // Built once per file for both branches so a catalogued item carries the
+        // same frozen context as a moved one; the unorganized branch below also
+        // resolves its destination pattern against this bundle.
+        let bundle = build_metadata_bundle(&abs_path, ft, &norm_table);
+
         match org_state {
             OrganizationState::Organized => {
                 // Catalogue-in-place: dest == source; stays under its own root.
@@ -374,6 +381,7 @@ pub async fn confirm(
                     item_name,
                     action: "catalogue",
                     to_root_id: item.root_id.clone(),
+                    provenance: freeze_confirm_provenance(&bundle, is_master, None),
                 });
             }
             OrganizationState::Unorganized => {
@@ -403,8 +411,6 @@ pub async fn confirm(
                         .push((ev.relative_file_path.clone(), vec!["image type".to_owned()]));
                     continue;
                 };
-
-                let bundle = build_metadata_bundle(&abs_path, ft, &norm_table);
 
                 let result = match resolve_pattern_str(&pattern, &bundle) {
                     Ok(r) => r,
@@ -460,6 +466,7 @@ pub async fn confirm(
                     item_name,
                     action: "move",
                     to_root_id: dest_root.root_id,
+                    provenance: freeze_confirm_provenance(&bundle, is_master, Some(&pattern)),
                 });
             }
         }
@@ -565,7 +572,7 @@ pub async fn confirm(
             reason: "inbox_confirm",
             protection: "normal",
             linked_entity: None,
-            provenance_json: None,
+            provenance_json: row.provenance.as_deref(),
             archive_path: None,
             source_id: None,
             category: None,
@@ -600,7 +607,12 @@ pub async fn confirm(
         .await
         .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
 
-    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
+    // Load-bearing (#1101): the plan and its link were just committed above, so
+    // an item left off `plan_open` contradicts them — same class as the two
+    // propagating writes it follows.
+    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open")
+        .await
+        .map_err(|e| db_internal_ctx(e, "mark inbox item plan_open"))?;
 
     // 14. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
     // plan now exists, so the pick can be persisted (`plans.chosen_framing_id`)
@@ -673,6 +685,8 @@ struct ResolvedRow {
     item_name: String,
     action: &'static str,
     to_root_id: String,
+    /// Frozen inferred context at approval time (`freeze_confirm_provenance`).
+    provenance: Option<String>,
 }
 
 /// A chosen destination library root (id + absolute path) for inbox moves.
@@ -836,6 +850,41 @@ pub(crate) async fn load_active_pattern(
         .into_iter()
         .map(|p| PatternPart { id: p.id, kind: p.kind, value: p.value })
         .collect())
+}
+
+/// Freeze the inferred context that produced this plan item's destination, as
+/// the free-form `[{label,value}]` JSON the `plan_items.provenance` column
+/// already carries (spec 002 FR-005, applied at the spec 041 Inbox confirm
+/// gate).
+///
+/// The snapshot is self-contained by construction: a later rescan re-extracts
+/// headers and overwrites the live metadata, so anything that referenced a
+/// metadata row instead of copying it would silently answer with today's values
+/// rather than the ones the approver saw.
+///
+/// `destination_pattern` is stored next to the metadata because the destination
+/// is a function of both. Without it, a path that no longer matches cannot be
+/// attributed to metadata drift as opposed to a changed pattern setting. It is
+/// `None` for catalogue-in-place items, which resolve no pattern.
+///
+/// `BTreeMap` fixes entry order so two snapshots of the same context compare
+/// equal byte-for-byte.
+fn freeze_confirm_provenance(
+    bundle: &MetadataBundle,
+    is_master: bool,
+    destination_pattern: Option<&str>,
+) -> Option<String> {
+    let mut frozen: BTreeMap<&str, String> =
+        bundle.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+    frozen.insert("is_master", is_master.to_string());
+    if let Some(pattern) = destination_pattern {
+        frozen.insert("destination_pattern", pattern.to_owned());
+    }
+    let entries: Vec<ProvenanceEntry> = frozen
+        .into_iter()
+        .map(|(label, value)| ProvenanceEntry { label: label.to_owned(), value })
+        .collect();
+    serde_json::to_string(&entries).ok()
 }
 
 /// Build a `MetadataBundle` for pattern resolution from extracted FITS/XISF
@@ -2666,5 +2715,152 @@ mod tests {
             Some("framing-attr2"),
             "the apply-path must persist the pick on the plan confirm() itself created"
         );
+    }
+
+    /// Read the single plan item's frozen provenance for `plan_id`.
+    async fn read_item_provenance(db: &Database, plan_id: &str) -> Vec<ProvenanceEntry> {
+        let raw = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT provenance FROM plan_items WHERE plan_id = ?",
+        )
+        .bind(plan_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        let json = raw.0.expect("confirm must write plan_items.provenance");
+        serde_json::from_str(&json).unwrap()
+    }
+
+    fn prov(entries: &[ProvenanceEntry], label: &str) -> Option<String> {
+        entries.iter().find(|e| e.label == label).map(|e| e.value.clone())
+    }
+
+    async fn confirm_defaults(
+        db: &Database,
+        bus: &EventBus,
+        item_id: &str,
+        sig: &str,
+        root_absolute_path: &std::path::Path,
+    ) -> ConfirmResponse {
+        confirm(
+            db.pool(),
+            bus,
+            ConfirmRequest {
+                inbox_item_id: item_id.to_owned(),
+                content_signature: sig.to_owned(),
+                destructive_destination: None,
+                root_absolute_path: root_absolute_path.to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Spec 002 FR-005 at the spec 041 Inbox confirm gate: the inferred context
+    /// behind an approved destination is frozen on the plan item, so a later
+    /// rescan that reads different headers cannot rewrite the record of what
+    /// was known at approval time — while still producing a new snapshot of
+    /// its own.
+    #[tokio::test]
+    async fn confirm_provenance_survives_later_metadata_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("light_001.fits");
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        register_source_org_state(&db, "root-1", "light_frames", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-prov",
+            "classified",
+            Some("light"),
+            "sig-prov",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let first = confirm_defaults(&db, &bus, "item-prov", "sig-prov", tmp.path()).await;
+
+        let approved = read_item_provenance(&db, &first.plan_id).await;
+        assert_eq!(prov(&approved, "target").as_deref(), Some("M42"));
+        assert_eq!(prov(&approved, "filter").as_deref(), Some("Ha"));
+        assert_eq!(prov(&approved, "date").as_deref(), Some("2025-10-10"));
+        assert_eq!(prov(&approved, "frame_type").as_deref(), Some("light"));
+        assert_eq!(prov(&approved, "is_master").as_deref(), Some("false"));
+        assert!(
+            prov(&approved, "destination_pattern").is_some_and(|p| !p.is_empty()),
+            "a moved item records the pattern its destination was resolved from"
+        );
+
+        // Rescan simulation: the same file now reports different headers.
+        // The metadata cache is keyed by (path, mtime, size), so this rewrite
+        // also changes the byte length — a same-second rewrite of identical
+        // length would be a cache hit and would make the "the live value really
+        // did change" leg below vacuous rather than failing loudly.
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("NGC7000"),
+            Some("Oiii"),
+            Some("2025-12-31T21:00:00"),
+        );
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file_path)
+            .unwrap()
+            .write_all(&[b' '; 2880])
+            .unwrap();
+        assert_eq!(
+            cached_extract(&file_path).unwrap().object.as_deref(),
+            Some("NGC7000"),
+            "precondition: the live metadata must actually have changed"
+        );
+
+        let after_rescan = read_item_provenance(&db, &first.plan_id).await;
+        assert_eq!(
+            prov(&after_rescan, "target").as_deref(),
+            Some("M42"),
+            "the approved snapshot must still report what was known at approval time"
+        );
+        assert_eq!(prov(&after_rescan, "filter").as_deref(), Some("Ha"));
+        assert_eq!(prov(&after_rescan, "date").as_deref(), Some("2025-10-10"));
+
+        // FR-005 also requires later rescans to produce their own snapshots.
+        // A second root: `inbox_items` is unique on (root_id, relative_path,
+        // group_key), so the rescanned item cannot reuse root-1.
+        // `registered_sources` is unique on (kind, path), so root-2 needs its
+        // own path rather than `register_source_org_state`'s fixed one.
+        sqlx::query(
+            "INSERT INTO registered_sources
+                (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES ('root-2', 'light_frames', '/tmp/src-2', NULL, 'recursive',
+                     '2026-01-01T00:00:00Z', 'first_run', 'unorganized')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        setup_classified_item_rooted(
+            &db,
+            "item-prov-2",
+            "root-2",
+            Some("light"),
+            "sig-prov-2",
+            &["light_001.fits"],
+        )
+        .await;
+        let second = confirm_defaults(&db, &bus, "item-prov-2", "sig-prov-2", tmp.path()).await;
+        let rescanned = read_item_provenance(&db, &second.plan_id).await;
+        assert_eq!(prov(&rescanned, "target").as_deref(), Some("NGC7000"));
+        assert_eq!(prov(&rescanned, "filter").as_deref(), Some("Oiii"));
     }
 }

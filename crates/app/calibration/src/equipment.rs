@@ -185,6 +185,32 @@ pub async fn list_cameras(pool: &SqlitePool) -> Result<Vec<Camera>, ContractErro
     repo::list_cameras(pool).await.map_err(db_to_contract)
 }
 
+/// Resolve a raw fingerprint equipment string (as captured from a FITS
+/// header) to the registered camera's user-facing name.
+///
+/// Matching is case- and surrounding-whitespace-insensitive against each
+/// camera's name and its aliases: capture programs write the same physical
+/// camera with differing case and spacing, and `find_or_create_camera_by_alias`
+/// stores whichever spelling was seen first.
+///
+/// Returns `None` when no registered camera claims the string, so callers fall
+/// back to the raw value instead of synthesizing an absent one (Q16 / FR-136).
+#[must_use]
+pub fn resolve_camera_display_name(cameras: &[Camera], raw: &str) -> Option<String> {
+    let needle = raw.trim();
+    if needle.is_empty() {
+        return None;
+    }
+    cameras
+        .iter()
+        .find(|c| {
+            std::iter::once(&c.name)
+                .chain(c.aliases.iter())
+                .any(|candidate| candidate.trim().eq_ignore_ascii_case(needle))
+        })
+        .map(|c| c.name.clone())
+}
+
 /// Create a new camera.
 ///
 /// # Errors
@@ -206,6 +232,9 @@ pub async fn create_camera(
                 serde_json::json!({"name": camera.name}),
             )
             .await?;
+            // The masters snapshot embeds resolved camera names, so a new
+            // camera can change how an already-cached fingerprint renders.
+            crate::caches::invalidate_calibration_masters();
             Ok(camera)
         }
         Err(e) => {
@@ -245,6 +274,9 @@ pub async fn update_camera(
                 serde_json::json!({"name": camera.name}),
             )
             .await?;
+            // A rename changes every master fingerprint that resolves to this
+            // camera; the cached snapshot would otherwise serve the old name.
+            crate::caches::invalidate_calibration_masters();
             Ok(camera)
         }
         Err(e) => {
@@ -273,7 +305,12 @@ pub async fn delete_camera(
     bus: &EventBus,
     id: &str,
 ) -> Result<(), ContractError> {
-    delete_equipment(bus, "equipment.camera.delete", id, repo::delete_camera(pool, id).await).await
+    delete_equipment(bus, "equipment.camera.delete", id, repo::delete_camera(pool, id).await)
+        .await?;
+    // Master fingerprints that resolved to this camera revert to their raw
+    // header string.
+    crate::caches::invalidate_calibration_masters();
+    Ok(())
 }
 
 /// Find a camera by alias, or create one if not found.
@@ -762,6 +799,57 @@ mod tests {
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
         (db, bus)
+    }
+
+    fn camera(name: &str, aliases: &[&str]) -> Camera {
+        Camera {
+            id: "cam-1".to_owned(),
+            name: name.to_owned(),
+            aliases: aliases.iter().map(|a| (*a).to_owned()).collect(),
+            auto_detected: false,
+            sensor_type: None,
+            passband: None,
+        }
+    }
+
+    /// #879: an alias hit resolves to the camera's user-facing name.
+    #[test]
+    fn resolve_camera_display_name_maps_alias_to_registered_name() {
+        let cams = vec![camera("Main Imaging Rig", &["ASI2600MM"])];
+        assert_eq!(
+            resolve_camera_display_name(&cams, "ASI2600MM"),
+            Some("Main Imaging Rig".to_owned())
+        );
+    }
+
+    /// #879: the camera's own name resolves too, not only its aliases.
+    #[test]
+    fn resolve_camera_display_name_matches_the_name_itself() {
+        let cams = vec![camera("ZWO ASI2600MM", &[])];
+        assert_eq!(
+            resolve_camera_display_name(&cams, "ZWO ASI2600MM"),
+            Some("ZWO ASI2600MM".to_owned())
+        );
+    }
+
+    /// #879: capture programs differ in case and padding for one camera.
+    #[test]
+    fn resolve_camera_display_name_ignores_case_and_surrounding_whitespace() {
+        let cams = vec![camera("Main Imaging Rig", &["ASI2600MM"])];
+        assert_eq!(
+            resolve_camera_display_name(&cams, " asi2600mm  "),
+            Some("Main Imaging Rig".to_owned())
+        );
+    }
+
+    /// #879: unknown and blank strings stay unresolved so callers can fall
+    /// back to the raw header value rather than inventing a name.
+    #[test]
+    fn resolve_camera_display_name_returns_none_when_unclaimed_or_blank() {
+        let cams = vec![camera("Main Imaging Rig", &["ASI2600MM"])];
+        assert_eq!(resolve_camera_display_name(&cams, "Some Other Cam"), None);
+        assert_eq!(resolve_camera_display_name(&cams, "   "), None);
+        assert_eq!(resolve_camera_display_name(&[], "ASI2600MM"), None);
     }
 
     /// T124/SC-009: `create_camera` writes a durable `Outcome::Applied`
