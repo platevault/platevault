@@ -4,8 +4,7 @@
 //! `inbox.target_recommendations` use case (spec 041 R-17 / FR-052, T074).
 //!
 //! Resolves a light sub-group's **target by sky-coordinate proximity**, never by
-//! the free-text `OBJECT` header (R-17). Given an inbox item (or its source
-//! group), it:
+//! the free-text `OBJECT` header (R-17). Given one inbox item, it:
 //!
 //! 1. loads the sub-group's per-file pointing + optics from `inbox_file_metadata`
 //!    (the T062 extended columns) and derives a single sub-group pointing,
@@ -36,6 +35,16 @@
 //! best-effort fallback (mechanical ≈ sky PA only when the optical train has
 //! no field-derotation offset baked in) — better than the un-rotated
 //! rectangle, but not as correct as the true sky PA.
+//!
+//! # A recommendation belongs to exactly one inbox item (spec 058, #1102)
+//!
+//! There is no source-group entry point. A folder splits into N independent
+//! single-type siblings with no parent row, so "the item for this folder" does
+//! not exist: resolving a source group to one representative sibling would
+//! designate that sibling primary, which FR-006/D-002 forbid. Merging siblings
+//! is worse — a light/dark/flat split genuinely wants different answers, and one
+//! merged result hides that disagreement. Callers wanting per-sibling
+//! recommendations call this once per `inbox_item_id`.
 //!
 //! This operation is **read-only**: it recommends, it does not write the chosen
 //! target (that is reclassify, T068). Propagation to a linked project (T075)
@@ -72,18 +81,9 @@ fn not_found(msg: String) -> ContractError {
     ContractError::new(ErrorCode::InboxItemNotFound, msg, ErrorSeverity::Blocking, false)
 }
 
-/// Identifies the light sub-group to resolve a target for: either a concrete
-/// inbox item, or a source group whose (single light) item is resolved here.
-#[derive(Clone, Debug)]
-pub enum RecommendationTarget {
-    /// A concrete single-type inbox item id.
-    InboxItem(String),
-    /// A source group id; its constituent item(s) are looked up (R-12).
-    SourceGroup(String),
-}
-
-/// Recommend canonical targets for a light sub-group by coordinate proximity
-/// (R-17). See the module docs for the algorithm.
+/// Recommend canonical targets for one light inbox item by coordinate proximity
+/// (R-17). See the module docs for the algorithm, and for why this takes an item
+/// id rather than a source group.
 ///
 /// `fixed_radius_deg` is the fallback radius used when a FOV-aware radius cannot
 /// be derived from the sub-group's optics; pass [`DEFAULT_FIXED_RADIUS_DEG`] for
@@ -91,19 +91,20 @@ pub enum RecommendationTarget {
 ///
 /// # Errors
 ///
-/// - [`ErrorCode::InboxItemNotFound`] — the item / source group has no resolvable
-///   inbox item.
+/// - [`ErrorCode::InboxItemNotFound`] — no such inbox item.
 /// - [`ErrorCode::InternalDatabase`] — a query failed.
 pub async fn target_recommendations(
     pool: &SqlitePool,
-    target: &RecommendationTarget,
+    inbox_item_id: &str,
     fixed_radius_deg: f64,
 ) -> Result<InboxTargetRecommendationsResponse, ContractError> {
-    // 1. Resolve to a concrete inbox item id.
-    let item_id = resolve_item_id(pool, target).await?;
+    // 1. Confirm the item exists, for a clean not-found rather than empty results.
+    repo::get_inbox_item(pool, inbox_item_id)
+        .await
+        .map_err(|_| not_found(format!("InboxItem not found: {inbox_item_id}")))?;
 
-    // 2. Load per-file pointing + optics for the sub-group.
-    let rows = repo::list_inbox_pointing(pool, &item_id).await.map_err(db_err)?;
+    // 2. Load per-file pointing + optics for this item.
+    let rows = repo::list_inbox_pointing(pool, inbox_item_id).await.map_err(db_err)?;
 
     // Display hint only (R-17): first non-blank OBJECT, never used for matching.
     let object_hint = rows
@@ -206,31 +207,6 @@ fn has_pointing(r: &InboxPointingRow) -> bool {
 /// Map a resolver-cache error onto a contract error.
 fn cache_err(e: &cache::CacheError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
-
-/// Resolve a [`RecommendationTarget`] to a concrete inbox item id.
-///
-/// For a source group, the first constituent item is used (a single-type light
-/// source group has one light item; R-9/R-12).
-async fn resolve_item_id(
-    pool: &SqlitePool,
-    target: &RecommendationTarget,
-) -> Result<String, ContractError> {
-    match target {
-        RecommendationTarget::InboxItem(id) => {
-            // Confirm it exists for a clean not-found rather than empty results.
-            repo::get_inbox_item(pool, id)
-                .await
-                .map_err(|_| not_found(format!("InboxItem not found: {id}")))?;
-            Ok(id.clone())
-        }
-        RecommendationTarget::SourceGroup(sg) => {
-            let ids = repo::list_item_ids_for_source_group(pool, sg).await.map_err(db_err)?;
-            ids.into_iter()
-                .next()
-                .ok_or_else(|| not_found(format!("no inbox items for source group: {sg}")))
-        }
-    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -375,13 +351,8 @@ mod tests {
         )
         .await;
 
-        let resp = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-1".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let resp =
+            target_recommendations(db.pool(), "item-1", DEFAULT_FIXED_RADIUS_DEG).await.unwrap();
 
         assert_eq!(
             resp.candidates.len(),
@@ -431,13 +402,10 @@ mod tests {
             None,
         )
         .await;
-        let unrotated = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-unrotated".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let unrotated =
+            target_recommendations(db.pool(), "item-unrotated", DEFAULT_FIXED_RADIUS_DEG)
+                .await
+                .unwrap();
         assert_eq!(
             unrotated.candidates.len(),
             1,
@@ -459,13 +427,10 @@ mod tests {
             None,
         )
         .await;
-        let rotated = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-sky-rotated".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let rotated =
+            target_recommendations(db.pool(), "item-sky-rotated", DEFAULT_FIXED_RADIUS_DEG)
+                .await
+                .unwrap();
         assert!(
             rotated.candidates.is_empty(),
             "the same East target falls outside the sky_rotation_deg=90° frame: {:?}",
@@ -497,13 +462,9 @@ mod tests {
             None,
         )
         .await;
-        let resp = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-conflict".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let resp = target_recommendations(db.pool(), "item-conflict", DEFAULT_FIXED_RADIUS_DEG)
+            .await
+            .unwrap();
         assert!(
             resp.candidates.is_empty(),
             "sky_rotation_deg=90 must govern over the misleading rotator_angle_deg=0: {:?}",
@@ -533,13 +494,9 @@ mod tests {
             None,
         )
         .await;
-        let resp = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-fallback".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let resp = target_recommendations(db.pool(), "item-fallback", DEFAULT_FIXED_RADIUS_DEG)
+            .await
+            .unwrap();
         assert!(
             resp.candidates.is_empty(),
             "rotator_angle_deg=90 fallback still excludes the East target: {:?}",
@@ -559,23 +516,11 @@ mod tests {
 
         // A tight fixed radius (0.1°) keeps only the exact match; a wide one (5°)
         // keeps both — proving the fixed fallback governs membership.
-        let tight = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-2".to_owned()),
-            0.1,
-        )
-        .await
-        .unwrap();
+        let tight = target_recommendations(db.pool(), "item-2", 0.1).await.unwrap();
         assert_eq!(tight.candidates.len(), 1, "tight fixed radius keeps only M31");
         assert_eq!(tight.candidates[0].name, "M 31");
 
-        let wide = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-2".to_owned()),
-            5.0,
-        )
-        .await
-        .unwrap();
+        let wide = target_recommendations(db.pool(), "item-2", 5.0).await.unwrap();
         assert_eq!(wide.candidates.len(), 2, "wide fixed radius keeps M31 + M110");
     }
 
@@ -586,13 +531,8 @@ mod tests {
         // Light item with OBJECT but no RA/Dec → needs-review (no coord match).
         seed_light_item(&db, "item-3", None, None, None, None, None, Some("M31")).await;
 
-        let resp = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-3".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let resp =
+            target_recommendations(db.pool(), "item-3", DEFAULT_FIXED_RADIUS_DEG).await.unwrap();
         assert!(resp.candidates.is_empty(), "no pointing ⇒ no candidates");
         assert!(resp.pointing.is_none(), "pointing is None when RA/Dec absent");
         // OBJECT is still surfaced as a display hint — but it did not match.
@@ -620,13 +560,8 @@ mod tests {
         )
         .await;
 
-        let resp = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("item-4".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
+        let resp =
+            target_recommendations(db.pool(), "item-4", DEFAULT_FIXED_RADIUS_DEG).await.unwrap();
         // Coordinates win: nearest is M31, NOT the OBJECT-named M42.
         assert_eq!(resp.candidates.first().map(|c| c.name.as_str()), Some("M 31"));
         assert!(
@@ -636,81 +571,79 @@ mod tests {
         assert_eq!(resp.object_hint.as_deref(), Some("M42"), "OBJECT only a hint");
     }
 
+    /// Spec 058 / #1102 (FR-006/D-002): a source group with N>1 siblings yields
+    /// one recommendation **per sibling**, computed from that sibling's own
+    /// pointing — no sibling is designated primary for the others.
+    ///
+    /// This guards the per-item invariant, not the removed source-group entry
+    /// point. That regression is now a compile error instead: the
+    /// `RecommendationTarget::SourceGroup` arm which collapsed a group to
+    /// `ids.next()` was deleted, not fixed. Resolution by item id was unchanged
+    /// by that deletion, so this test would also pass on the pre-change code.
     #[tokio::test]
-    async fn resolves_via_source_group() {
+    async fn siblings_of_one_source_group_each_get_their_own_recommendation() {
         let db = test_db().await;
         seed_target(&db, "M 31", 1, 10.684_708, 41.268_75).await;
+        seed_target(&db, "M 42", 2, 83.822_08, -5.391_11).await;
 
-        // Create a source group and attach the light item to it.
         let sg_id = "sg-1";
         sqlx::query(
             "INSERT INTO inbox_source_groups
                 (id, root_id, relative_path, discovered_at, last_scanned_at, child_count)
-             VALUES (?, 'root-1', 'lights', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 1)",
+             VALUES (?, 'root-1', 'lights', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 2)",
         )
         .bind(sg_id)
         .execute(db.pool())
         .await
         .unwrap();
 
-        seed_light_item(
-            &db,
-            "item-sg",
-            Some(10.684_708),
-            Some(41.268_75),
-            Some(800.0),
-            Some(3.76),
-            Some(6248),
-            None,
-        )
-        .await;
-        sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = 'item-sg'")
-            .bind(sg_id)
-            .execute(db.pool())
-            .await
-            .unwrap();
+        // Two siblings of ONE folder, pointed at different targets.
+        for (item_id, ra, dec) in
+            [("item-sg-a", 10.684_708, 41.268_75), ("item-sg-b", 83.822_08, -5.391_11)]
+        {
+            seed_light_item(
+                &db,
+                item_id,
+                Some(ra),
+                Some(dec),
+                Some(800.0),
+                Some(3.76),
+                Some(6248),
+                None,
+            )
+            .await;
+            sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = ?")
+                .bind(sg_id)
+                .bind(item_id)
+                .execute(db.pool())
+                .await
+                .unwrap();
+        }
 
-        let resp = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::SourceGroup(sg_id.to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap();
-        assert_eq!(resp.candidates.first().map(|c| c.name.as_str()), Some("M 31"));
+        let a =
+            target_recommendations(db.pool(), "item-sg-a", DEFAULT_FIXED_RADIUS_DEG).await.unwrap();
+        let b =
+            target_recommendations(db.pool(), "item-sg-b", DEFAULT_FIXED_RADIUS_DEG).await.unwrap();
+
+        assert_eq!(
+            a.candidates.first().map(|c| c.name.as_str()),
+            Some("M 31"),
+            "sibling A must be answered from ITS OWN pointing: {:?}",
+            a.candidates
+        );
+        assert_eq!(
+            b.candidates.first().map(|c| c.name.as_str()),
+            Some("M 42"),
+            "sibling B must be answered from ITS OWN pointing, not sibling A's: {:?}",
+            b.candidates
+        );
     }
 
     #[tokio::test]
     async fn unknown_item_is_not_found() {
         let db = test_db().await;
-        let err = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::InboxItem("nope".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(err.code, ErrorCode::InboxItemNotFound);
-    }
-
-    #[tokio::test]
-    async fn empty_source_group_is_not_found() {
-        let db = test_db().await;
-        sqlx::query(
-            "INSERT INTO inbox_source_groups
-                (id, root_id, relative_path, discovered_at, last_scanned_at, child_count)
-             VALUES ('sg-empty', 'root-1', 'lights', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 0)",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
-        let err = target_recommendations(
-            db.pool(),
-            &RecommendationTarget::SourceGroup("sg-empty".to_owned()),
-            DEFAULT_FIXED_RADIUS_DEG,
-        )
-        .await
-        .unwrap_err();
+        let err =
+            target_recommendations(db.pool(), "nope", DEFAULT_FIXED_RADIUS_DEG).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxItemNotFound);
     }
 }
