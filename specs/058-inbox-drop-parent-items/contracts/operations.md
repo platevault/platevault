@@ -190,6 +190,55 @@ placeholder by another name.
 `lane` (`fits`/`video`). The two columns share a name and do not share a
 meaning; see `data-model.md`.
 
+### `inbox.classify.sourceGroup` — **[proposed]**, new operation
+
+FR-015 deletes the scan-time placeholder, and with it the only route into
+`materialize_sub_items`. Both existing entry points are keyed on an item id:
+`inbox.classify` takes `inboxItemId` and fails `inbox.item.not_found` without
+one, and `inbox.reclassify` v2 accepts a `sourceGroupId` but rebuilds its
+`file_records` from `inbox_classification_evidence` / `inbox_file_metadata`
+rows that are themselves only ever written against an item id. No item ⇒ no
+evidence ⇒ no item.
+
+A source-group row is therefore *visible* (above) but not yet *actionable*.
+This operation is what makes it actionable, and it is a **hard prerequisite for
+FR-015/T020**: deleting the placeholder without it makes every scanned folder
+permanently unclassifiable while every static check stays green.
+
+```jsonc
+// request
+{ "sourceGroupId": "string", "rootAbsolutePath": "string" }
+
+// response
+{ "sourceGroupId": "string", "materializedSubItemCount": 0 }
+```
+
+Errors: `inbox.item.not_found` (no such source group) | `metadata.unreadable`
+(the folder holds no readable FITS/XISF files).
+
+It goes straight from the group's own file list to `materialize_sub_items`,
+which is already fully group-keyed, and deliberately **skips every item-keyed
+step** `inbox.classify` performs — `snapshot_overrides`, the `delete_*_for_item`
+wipes, the classification cache read and write. There is no item id to key any
+of them on, and nothing downstream needs them: `materialize_sub_items` seeds
+each sub-item's own evidence, metadata and cache.
+
+FR-017 needs no separate step here either. Materialization writes item rows, so
+the group stops satisfying `sourceGroups`' zero-item predicate on the next
+`inbox.list` and its sub-items appear in `items` — the row is replaced by its
+items as a consequence of the query.
+
+**Not a second confirm path.** The operation returns a count, not a plan, and
+mints no id the caller can pass to `inbox.confirm`. Confirmation still happens
+only against the materialized item rows, so structural non-confirmability
+(above) is preserved: the source-group row is the thing you classify, never the
+thing you confirm.
+
+⚠️ **`lane` trap.** The implementation must derive the item lane from
+`sourceGroup.format`, never from `sourceGroup.lane` — the latter is
+`move`/`catalogue` while `inbox_items.lane` is `CHECK(lane IN ('fits','video'))`.
+Passing it through is issue #854.
+
 ### Harness consequence (PG-2)
 
 The two Layer-2 helpers assume a scan yields one *selectable, confirmable* item:

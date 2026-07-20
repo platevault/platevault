@@ -3246,4 +3246,87 @@ mod tests {
             "must name the mandatory attributes actually still absent for a dark frame"
         );
     }
+
+    /// **#1202 probe, requested on PR #1194 (2026-07-20).**
+    ///
+    /// `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` fails on
+    /// `main` with the Inbox list coming back **completely empty** after
+    /// classify (`Type cells were []`), not with a wrong badge. The open
+    /// question was which layer empties it, because the answer decides whether
+    /// T020 fixes #1202 or ships it:
+    ///
+    /// - rows returned here => the backend is fine, the defect is above it, and
+    ///   the placeholder is NOT the only row that renders — T020 is safe;
+    /// - no rows => the placeholder is currently the only thing rendering, and
+    ///   deleting it would make the empty list *guaranteed* while 058 believed
+    ///   it had fixed it.
+    ///
+    /// This asserts the FIRST outcome at Layer 1, on this branch, against the
+    /// #1202 fixture (one file, `IMAGETYP='Frame Unknown'`, OBJECT + FILTER
+    /// present).
+    ///
+    /// ⚠️ **The `registered_sources` row is inserted by hand and in full on
+    /// purpose.** `list_unacknowledged_across_roots` JOINs that table for
+    /// `r.path`, so a missing row yields zero results and a false "backend is
+    /// broken" reading. The long-standing `insert_source_group_with_item`
+    /// helper in `classify.rs` gets this wrong four ways (writes a
+    /// non-existent `organization_state`, `scan_depth = 1` against a
+    /// `CHECK (scan_depth IN ('recursive','single'))`, and omits NOT NULL
+    /// `created_at`/`created_via`) and swallows the failure via
+    /// `INSERT OR IGNORE`, which is why 17 classify tests join an empty table
+    /// (#1266). Do not "simplify" this back onto that helper.
+    #[tokio::test]
+    async fn unsplit_unclassified_folder_still_lists_rows_after_classify_1202() {
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("frame_001.fits"), "M42", 0);
+
+        // Valid registered_sources row — see the warning above.
+        sqlx::query(
+            "INSERT INTO registered_sources \
+             (id, kind, path, scan_depth, created_at, created_via) \
+             VALUES (?, 'inbox', ?, 'recursive', '2026-07-20T00:00:00Z', 'settings_add')",
+        )
+        .bind("root-1202")
+        .bind(root.path().to_string_lossy().into_owned())
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        seed_and_classify(db.pool(), root.path(), "sg-1202", "item-1202", "root-1202").await;
+
+        let rows =
+            persistence_db::repositories::inbox::list_unacknowledged_across_roots(db.pool(), 500)
+                .await
+                .unwrap();
+
+        // Composition, not just count. `!rows.is_empty()` would be satisfied
+        // by the placeholder alone — which is exactly the case that makes T020
+        // UNSAFE — so the placeholder (`group_key = ''`) and the materialized
+        // sub-items are counted separately.
+        let (placeholders, sub_items): (Vec<_>, Vec<_>) =
+            rows.iter().partition(|r| r.group_key.is_empty());
+
+        eprintln!(
+            "#1202 probe: {} row(s) total — {} placeholder, {} sub-item; keys {:?}",
+            rows.len(),
+            placeholders.len(),
+            sub_items.len(),
+            rows.iter().map(|r| r.group_key.clone()).collect::<Vec<_>>()
+        );
+
+        assert!(
+            !rows.is_empty(),
+            "#1202: the repository layer returned NO rows at all for an unsplit \
+             unclassified folder."
+        );
+        assert!(
+            !sub_items.is_empty(),
+            "#1202: the ONLY row the repository returned is the scan-time \
+             placeholder — no materialized sub-item survives the query. T020 \
+             deletes that placeholder, so it would make the empty list \
+             GUARANTEED rather than fixing it. rows: {:?}",
+            rows.iter().map(|r| (&r.id, &r.group_key, &r.state)).collect::<Vec<_>>()
+        );
+    }
 }

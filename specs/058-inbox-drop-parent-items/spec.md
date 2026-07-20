@@ -31,6 +31,19 @@ The scope claim is deliberately narrow, because ground is already held:
   landed after this specification was written, making the list badge read the
   item's own classification result rather than falling back to `state`.
 
+  ⚠️ **Corrected 2026-07-20 — do not read this as "the journey passes on
+  `main`".** An earlier revision of this section said
+  `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` passes on
+  `main` having been fixed by #1099. The #1208 bisect refutes that: the test
+  failed on the very commit credited with fixing it (`ef90b074`, before #1131)
+  **and** after it (`6fa1bf55`), on both the ubuntu 2/4 and windows 2/2 shards.
+  `main` merely looked green because its E2E runs were being cancelled by a
+  concurrency-group bug before they could report (#1268 fixes that) — silence
+  was mistaken for a pass. What #1099 actually fixed is the badge *expression*;
+  the journey has a separate failure whose symptom is an **empty list**, not a
+  wrong badge (#1202). The scope claim below is therefore stated against
+  SC-003, which is measurable independently of that journey.
+
 What remains — and what this feature is actually for — is the folder that
 produces exactly one item, and specifically **the false row underneath it**.
 #1081's narrowing knowingly returned Instance A for that case, because there is
