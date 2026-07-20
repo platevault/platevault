@@ -1074,22 +1074,130 @@ mod tests {
         .unwrap();
     }
 
-    /// Spec 058 phase 6b (T050-T052): resolving a needs-review item into TWO
-    /// frame types does NOT yet split it into siblings.
+    /// Spec 058 T052 (phase 6b, FR-014): a needs-review item resolved into TWO
+    /// frame types yields exactly two siblings, each carrying its own frame
+    /// type, with no `mixed` item and no orphaned original row.
     ///
-    /// This is a **characterization test**: it pins what the code does today,
-    /// not what T050 wants it to do, so the gap is visible in the suite instead
-    /// of living only in a task list. T050 is to make this resolve materialize
-    /// N siblings through the existing `materialize_sub_items` path; when it
-    /// lands, this test MUST be rewritten to assert two siblings — its failure
-    /// at that point is the intended signal, not a regression.
+    /// This is the real user flow: classify a folder whose headers are
+    /// unreadable (one needs-review item), then supply per-file frame types
+    /// AND the mandatory attributes each type requires, exactly as the
+    /// "Apply manual overrides" button does. `reclassify_v2` re-derives the
+    /// groups and reuses `materialize_sub_items` — no bespoke split path, which
+    /// is what T050 asks for.
     ///
-    /// What it also pins, and what T035 originally missed: the resolve reports
-    /// `unclassified` rather than `mixed`. The reclassify path had its own
-    /// `mixed` arm, so the label survived the classify-side retirement until
-    /// this commit.
+    /// The mandatory attributes are load-bearing, not fixture noise.
+    /// `materialize_sub_items` suppresses `frame_type` while a group is still
+    /// needs-review (`classify.rs`), so supplying frame types alone yields two
+    /// siblings that both carry `frame_type: None` and `needs_review: 1`. That
+    /// is correct — a light frame without OBJECT/FILTER/EXPTIME is genuinely
+    /// unresolved — but it means a test that omits them would assert a weaker
+    /// property than T050 states.
     #[tokio::test]
-    async fn t050_gap_two_frame_types_resolve_without_splitting() {
+    async fn t052_needs_review_resolved_into_two_types_yields_two_siblings() {
+        use contracts_core::inbox::{InboxReclassifyFileOverride, InboxReclassifyV2Request};
+
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("a.fits"), "M42", 0);
+        write_ambiguous_fits(&root.path().join("b.fits"), "M42", 1);
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-t052",
+                root_id: "root-t052",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 2,
+            },
+        )
+        .await
+        .unwrap();
+
+        crate::classify::classify_source_group(db.pool(), "sg-t052", root.path()).await.unwrap();
+
+        let before = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t052").await.unwrap();
+        assert_eq!(before.len(), 1, "unreadable headers must land as ONE needs-review item");
+        assert_eq!(before[0].needs_review, 1, "the pre-resolve item must be needs-review");
+
+        let mut light = std::collections::HashMap::new();
+        light.insert("frameType".to_owned(), serde_json::json!("light").into());
+        light.insert("filter".to_owned(), serde_json::json!("Ha").into());
+        light.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+        light.insert("target".to_owned(), serde_json::json!("M42").into());
+        let mut dark = std::collections::HashMap::new();
+        dark.insert("frameType".to_owned(), serde_json::json!("dark").into());
+        dark.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+        dark.insert("gain".to_owned(), serde_json::json!("100").into());
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-t052".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![
+                    InboxReclassifyFileOverride {
+                        file_path: "a.fits".to_owned(),
+                        properties: light,
+                    },
+                    InboxReclassifyFileOverride {
+                        file_path: "b.fits".to_owned(),
+                        properties: dark,
+                    },
+                ],
+                bulk: vec![],
+            },
+        )
+        .await
+        .unwrap();
+
+        let after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t052").await.unwrap();
+        assert_eq!(after.len(), 2, "two frame types must yield exactly two siblings");
+
+        let mut types: Vec<String> = after.iter().filter_map(|r| r.frame_type.clone()).collect();
+        types.sort();
+        assert_eq!(
+            types,
+            vec!["dark".to_owned(), "light".to_owned()],
+            "each sibling must carry its OWN frame type, not inherit one or none"
+        );
+        assert!(
+            after.iter().all(|r| r.needs_review == 0),
+            "with every mandatory attribute supplied, neither sibling stays needs-review"
+        );
+
+        // No orphaned original: every row for this group IS one of the two
+        // siblings, so the pre-resolve needs-review item is gone rather than
+        // lingering beside them.
+        let all = inbox_repo::list_item_ids_for_source_group(db.pool(), "sg-t052").await.unwrap();
+        assert_eq!(
+            all.len(),
+            2,
+            "the pre-resolve item must be replaced by its siblings, not left orphaned alongside them"
+        );
+    }
+
+    /// The v1 `reclassify` path does not split, and that is by design.
+    ///
+    /// Originally written as a "T050 gap" test on the belief that resolving a
+    /// needs-review item into two frame types never splits. That belief was
+    /// wrong: it came from probing this v1 entry point, which is item-scoped
+    /// and never calls `materialize_sub_items`. The path the UI actually uses,
+    /// `reclassify_v2`, splits correctly — see
+    /// `t052_needs_review_resolved_into_two_types_yields_two_siblings`.
+    ///
+    /// Kept, reframed, because the distinction is load-bearing and easy to trip
+    /// over: v1 reports an aggregate verdict for one item, v2 re-derives the
+    /// whole group. A future change that routes group-scoped work through v1
+    /// would silently stop splitting, and this pins that.
+    ///
+    /// It also pins that v1 reports `unclassified` rather than `mixed` — the
+    /// reclassify path had its own `mixed` arm that the first T035 pass missed.
+    #[tokio::test]
+    async fn v1_reclassify_reports_an_aggregate_verdict_without_splitting() {
         let db = test_db().await;
         setup_unclassified_item(&db, "item-t052").await;
 
@@ -1129,8 +1237,8 @@ mod tests {
         let subs = inbox_repo::list_inbox_sub_items(db.pool(), &sg).await.unwrap();
         assert!(
             subs.is_empty(),
-            "TODO(T050): this asserts the CURRENT behaviour — no split happens. \
-             When T050 lands, expect exactly two siblings carrying `light` and `dark`."
+            "v1 `reclassify` is item-scoped and must NOT materialise siblings; \
+             group-scoped re-derivation belongs to `reclassify_v2`"
         );
     }
 
