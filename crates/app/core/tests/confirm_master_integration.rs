@@ -196,7 +196,11 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
 
     let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
-    app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     let item_id = "master-item-001";
     let sig = "sig-master-001";
 
@@ -270,7 +274,11 @@ async fn organized_master_catalogues_then_registers_at_apply() {
 
     let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
-    app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     let item_id = "master-item-flat";
     let sig = "sig-master-flat";
 

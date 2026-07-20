@@ -46,10 +46,12 @@ import {
   DetailPane,
   DetailPanel,
   PropertyTable,
+  StatusTag,
   type PropertyDef,
 } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
+import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import {
   altitudeFor,
   moonExcludedSpanHours,
@@ -707,9 +709,12 @@ export function TargetDetailV2({
                       }
                     >
                       <span className="pv-planner__link-name">{p.name}</span>
-                      <span className="pv-planner__link-state">
-                        {p.lifecycle}
-                      </span>
+                      {/* #739 US3-AC2: lifecycle carries the shared tone (and
+                          localized label) every other project surface uses,
+                          so an archived project reads as archived here too. */}
+                      <StatusTag variant={projectStateVariant(p.lifecycle)}>
+                        {projectStateLabel(p.lifecycle)}
+                      </StatusTag>
                     </button>
                   </li>
                 ))}

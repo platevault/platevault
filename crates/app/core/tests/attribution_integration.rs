@@ -209,7 +209,11 @@ async fn chosen_framing_pick_materializes_as_session_membership_once_the_plan_ap
         .unwrap()
         .is_empty());
 
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     publish_applied(&bus, "plan-sc008").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
@@ -331,7 +335,11 @@ async fn geometry_less_two_frame_catalogue_in_place_confirm_forms_one_session() 
         .await
         .unwrap();
 
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     publish_applied(&bus, &confirm_resp.plan_id).await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 

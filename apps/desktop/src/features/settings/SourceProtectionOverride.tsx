@@ -18,6 +18,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
 import { sourceProtectionGet, sourceProtectionSet } from './settingsIpc';
 import type { ProtectionLevel } from './settingsIpc';
+import { protectionLabel } from '@/lib/protection-label';
 import { m } from '@/lib/i18n';
 
 interface SourceProtectionOverrideProps {
@@ -36,11 +37,6 @@ type LoadState = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
 // 2-level model (issue #506): the third "normal" level is retired — absence
 // of a per-source override already means inherit-global, so a distinct
 // explicit "normal" state added confusion without capability.
-const LEVEL_LABEL: Record<ProtectionLevel, () => string> = {
-  protected: m.settings_cleanup_protection_protected,
-  unprotected: m.settings_cleanup_protection_unprotected,
-};
-
 const LEVEL_VARIANT: Record<
   ProtectionLevel,
   'ok' | 'info' | 'warn' | 'danger' | 'neutral'
@@ -143,7 +139,7 @@ export function SourceProtectionOverride({
         variant={LEVEL_VARIANT[level]}
         title={levelHint(level, inheritsDefault)}
       >
-        {LEVEL_LABEL[level]()}
+        {protectionLabel(level)}
       </Pill>
 
       {open && (

@@ -44,6 +44,9 @@ vi.mock('@tanstack/react-router', () => ({
   // search param when its (optional) projectId prop isn't wired; unrelated to
   // this file's assertions, so a static empty selection is enough.
   useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+  // #735: the tool-launch toast's "Configure path" action now navigates
+  // through the router instead of assigning window.location.hash.
+  useNavigate: () => vi.fn(),
 }));
 
 vi.mock('./store', async (importOriginal) => {

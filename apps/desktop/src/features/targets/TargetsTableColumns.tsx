@@ -21,7 +21,8 @@ import { m } from '@/lib/i18n';
 //
 // Opposition: real next midnight-transit peak date (spec 047 US4,
 // astro/opposition.ts); unknown coordinates render '—'.
-// Sessions: linked-session count not on TargetListItem yet (#57). Renders '—'.
+// Sessions: real linked-session count from `TargetListItem.sessionCount`
+// (#877/#622); zero renders '—'.
 // All non-text columns are sortable on their mock value.
 
 // `label`/`title` are render-time thunks (spec 046 #8b) so headers re-read the active locale.
