@@ -80,6 +80,7 @@ pub fn is_valid_key(key: &str) -> bool {
         || is_workflow_profile_watch_extensions_key(key)
         || is_workflow_profile_attribution_window_key(key)
         || is_catalogues_enabled_key(key)
+        || is_locale_key(key)
 }
 
 /// `enabled` (#645, scope `"catalogues"`): default-enabled Planner catalogue
@@ -91,6 +92,24 @@ pub fn is_valid_key(key: &str) -> bool {
 /// `get_settings` (unused by the Planner/Settings pane for this key).
 pub(super) fn is_catalogues_enabled_key(key: &str) -> bool {
     key == "enabled"
+}
+
+// ── Locale (spec 061 T001, research D8) ─────────────────────────────────────
+
+/// Shipped BCP-47 application-language tags. The sole source of truth for
+/// what `locale` accepts on write and what an unrecognised stored value
+/// falls back to on read (data-model.md "Validation").
+pub const SHIPPED_LOCALES: [&str; 2] = ["en-GB", "pt-BR"];
+
+/// `locale`: the application-language preference (`general` scope). Not in
+/// the descriptor table — same reasoning as `is_catalogues_enabled_key`
+/// above: no dedicated `SettingsState` field, so read/write goes through the
+/// DB row + `default_value_for_key` only. Registering this (and wiring it
+/// into `is_valid_key`) is the fix for research D8: an unregistered key
+/// makes `settings.update` silently drop the write while still returning
+/// `Ok` to the caller.
+pub(super) fn is_locale_key(key: &str) -> bool {
+    key == "locale"
 }
 
 /// Return the names of all stable settings keys that can be overridden per source root.
