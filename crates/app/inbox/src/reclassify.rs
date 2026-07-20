@@ -2836,15 +2836,95 @@ mod tests {
                 bias_after.file_count,
                 bias_after.content_signature.as_deref(),
                 bias_after.needs_review,
+                bias_after.state.as_str(),
             ),
             (
                 bias_before.frame_type.as_deref(),
                 bias_before.file_count,
                 bias_before.content_signature.as_deref(),
                 bias_before.needs_review,
+                bias_before.state.as_str(),
             ),
             "re-deriving one sibling propagated state to the other: the bias \
              sibling changed although none of its files were named"
+        );
+    }
+
+    /// Companion to T038, covering the case its tuple cannot reach: a sibling
+    /// whose lifecycle has already moved PAST `classified`.
+    ///
+    /// Both siblings are `classified` in the T038 fixture, so the `state` entry
+    /// in its tuple is satisfied by any implementation and proves nothing on
+    /// its own. The clobber only becomes observable once a sibling is
+    /// `resolved`, which is reachable in production WITHOUT an open plan: on
+    /// `plan.applying.completed` with `terminal_state == "applied"`,
+    /// `handle_plan_completed` picks `new_state = "resolved"` and
+    /// `transition_via_plan_id` then deletes the plan link
+    /// (plan_listener.rs:390-397). The item is therefore `resolved` with no
+    /// link row, so the group-wide open-plan interlock above — which scans
+    /// `get_plan_link` per sibling — does not refuse the re-derivation.
+    ///
+    /// `upsert_inbox_sub_item` writes `state = 'classified'` unconditionally on
+    /// its conflict branch (persistence/db/src/repositories/inbox.rs:545), so
+    /// re-deriving the flat resurrects the already-organized bias sibling in
+    /// the Inbox.
+    ///
+    /// Ignored because the fix belongs to that conflict clause, which is
+    /// outside this file's ownership boundary in the concurrent spec 058 split.
+    /// Observe it with
+    /// `cargo nextest run -p app_core_inbox --run-ignored all resurrect`.
+    #[tokio::test]
+    #[ignore = "reproduces a latent state clobber; the fix belongs in \
+                persistence_db upsert_inbox_sub_item, not in this crate"]
+    async fn resplit_does_not_resurrect_a_resolved_sibling() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-res", "item-res", "root-res").await;
+
+        let bias_id = inbox_repo::list_inbox_sub_items(db.pool(), "sg-res")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .id;
+
+        // The post-apply resting state: resolved, and with no plan link, so the
+        // open-plan interlock cannot be what protects this sibling.
+        inbox_repo::update_inbox_item_state(db.pool(), &bias_id, "resolved").await.unwrap();
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), &bias_id).await.unwrap().is_none(),
+            "fixture must leave the resolved sibling without a plan link, or the \
+             interlock — not the upsert — is what this test measures"
+        );
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-res".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "frameType".to_owned(),
+                    value: serde_json::json!("dark").into(),
+                    file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        let bias_after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-res")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == bias_id)
+            .expect("the resolved sibling was destroyed by a re-derivation that never named it");
+
+        assert_eq!(
+            bias_after.state, "resolved",
+            "re-deriving the flat sibling reset the resolved bias sibling's \
+             state, resurrecting an already-organized item in the Inbox"
         );
     }
 
