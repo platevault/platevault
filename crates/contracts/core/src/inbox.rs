@@ -72,6 +72,39 @@ pub struct InboxClassifyRequest {
     pub root_absolute_path: String,
 }
 
+// ── inbox.classify.sourceGroup (spec 058 FR-015/T012) ────────────────────────
+
+/// Request for `inbox.classify.sourceGroup` — classify a scanned folder that
+/// has no `inbox_items` row yet.
+///
+/// Spec 058 removes the scan-time folder placeholder (FR-015/T020), and with it
+/// the only route into `materialize_sub_items`: both existing entry points are
+/// keyed on an item id. This request is keyed on the source group instead, so a
+/// bare group can become item rows without one ever having existed.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxClassifySourceGroupRequest {
+    pub source_group_id: String,
+    /// Absolute path to the registered root on disk, so the use case can locate
+    /// the group's files. Transport detail, as on `InboxClassifyRequest`.
+    pub root_absolute_path: String,
+}
+
+/// Response from `inbox.classify.sourceGroup`.
+///
+/// Deliberately returns a **count, not a plan, and no confirmable id**. The
+/// source-group row is the thing you classify, never the thing you confirm
+/// (FR-016) — confirmation continues to happen only against the item rows this
+/// materializes, which the next `inbox.list` returns in `items` while the group
+/// drops out of `sourceGroups` (FR-017, a consequence of that query's zero-item
+/// predicate rather than a separate step).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxClassifySourceGroupResponse {
+    pub source_group_id: String,
+    pub materialized_sub_item_count: u32,
+}
+
 /// One frame-type breakdown entry in a classify response.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]

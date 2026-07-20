@@ -9,7 +9,7 @@
 //!
 //! Legacy `inbox.scan` is retained for backward compatibility.
 
-use app_core::inbox::classify::{classify, ClassifyRequest};
+use app_core::inbox::classify::{classify, classify_source_group, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::property_registry::property_registry as get_property_registry;
@@ -27,13 +27,14 @@ use app_core::inbox_plan::{
 };
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
-    InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
-    InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
-    InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
-    InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
-    InboxReclassifyV2Request, InboxReclassifyV2Response, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult, InboxSourceGroupListItem, InboxStatsResponse,
-    InboxTargetRecommendationsRequest, InboxTargetRecommendationsResponse,
+    InboxClassifyResponse, InboxClassifySourceGroupRequest, InboxClassifySourceGroupResponse,
+    InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry, InboxItemMetadataRequest,
+    InboxItemMetadataResponse, InboxItemSummary, InboxListItem, InboxListResponse,
+    InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView, InboxPropertyRegistryResponse,
+    InboxReclassifyRequest, InboxReclassifyResponse, InboxReclassifyV2Request,
+    InboxReclassifyV2Response, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
+    InboxSourceGroupListItem, InboxStatsResponse, InboxTargetRecommendationsRequest,
+    InboxTargetRecommendationsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
@@ -97,6 +98,46 @@ pub async fn inbox_classify(
         unclassified_files: resp.unclassified_files,
         sample_files: resp.sample_files,
         computed_at: resp.computed_at,
+    })
+}
+
+// ── inbox.classify.sourceGroup ────────────────────────────────────────────────
+
+/// `inbox.classify.sourceGroup` — classify a scanned folder that has no
+/// `inbox_items` row yet, materializing its sub-items directly from the group
+/// (spec 058 FR-015/FR-016, T012).
+///
+/// This is the entry point that makes a source-group row actionable. Without
+/// it, removing the scan-time placeholder (T020) leaves every scanned folder
+/// permanently unclassifiable: `inbox.classify` is keyed on `inboxItemId` and
+/// fails `inbox.item.not_found` without one, and `inbox.reclassify` v2 rebuilds
+/// its file records from evidence rows that are only ever written against an
+/// item id. No item ⇒ no evidence ⇒ no item.
+///
+/// Mints nothing confirmable — it returns a count, not a plan and not an id.
+/// Confirmation continues to happen only against the materialized item rows,
+/// which preserves the source-group row's structural non-confirmability.
+///
+/// # Errors
+/// `inbox.item.not_found` (no such source group) | `metadata.unreadable` (the
+/// folder holds no readable FITS/XISF files)
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_classify_source_group(
+    req: InboxClassifySourceGroupRequest,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxClassifySourceGroupResponse, ContractError> {
+    let resp = classify_source_group(
+        &pool,
+        &req.source_group_id,
+        std::path::Path::new(&req.root_absolute_path),
+    )
+    .await?;
+
+    Ok(InboxClassifySourceGroupResponse {
+        source_group_id: resp.source_group_id,
+        materialized_sub_item_count: u32::try_from(resp.materialized_sub_item_count)
+            .unwrap_or(u32::MAX),
     })
 }
 
