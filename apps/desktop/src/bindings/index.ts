@@ -5106,6 +5106,12 @@ export type InboxListResponse = InboxListResponse_Serialize | InboxListResponse_
 /**  Response from `inbox.list`. */
 export type InboxListResponse_Deserialize = {
 	items: InboxListItem_Deserialize[],
+	/**
+	 *  Folders that have been scanned but have produced no items yet. Contains
+	 *  only groups with zero item rows, so FR-017's "replaced by its item
+	 *  rows" is a consequence of the query rather than a separate step.
+	 */
+	sourceGroups: InboxSourceGroupListItem[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -5115,6 +5121,12 @@ export type InboxListResponse_Deserialize = {
 /**  Response from `inbox.list`. */
 export type InboxListResponse_Serialize = {
 	items: InboxListItem_Serialize[],
+	/**
+	 *  Folders that have been scanned but have produced no items yet. Contains
+	 *  only groups with zero item rows, so FR-017's "replaced by its item
+	 *  rows" is a consequence of the query rather than a separate step.
+	 */
+	sourceGroups: InboxSourceGroupListItem[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -5497,6 +5509,34 @@ export type InboxScanResult = {
 	entries: InboxFileEntry[],
 	totalCount: number,
 	totalSizeBytes: number,
+};
+
+/**
+ *  A scanned-but-unclassified folder in `inbox.list` (spec 058 FR-016).
+ * 
+ *  Carries **no** `inboxItemId`. Non-confirmability is structural: there is
+ *  nothing to pass to `inbox.confirm`, so no new guard and no new error code
+ *  exist for it. A discriminated union with [`InboxListItem`] was rejected
+ *  precisely because it would restore a row that looks like an item and
+ *  carries an id the UI is tempted to confirm (FR-004).
+ */
+export type InboxSourceGroupListItem = {
+	sourceGroupId: string,
+	rootId: string,
+	/**  Absolute path of the registered root (for display). */
+	rootAbsolutePath: string,
+	relativePath: string,
+	/**  Sub-frames the scan found, excluding detected calibration masters. */
+	fileCount: number,
+	/**  Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`. */
+	format: string,
+	/**
+	 *  The source group's `"move"` | `"catalogue"` lane — NOT the
+	 *  `"fits"`/`"video"` item lane. The two columns share a name only.
+	 */
+	lane: string,
+	contentSignature: string,
+	discoveredAt: string,
 };
 
 /**  Per-frame-type queue stats entry. */

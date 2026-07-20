@@ -970,6 +970,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -1397,6 +1398,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -1802,6 +1804,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -1935,6 +1938,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -2071,6 +2075,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -2207,6 +2212,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -2555,6 +2561,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -2683,6 +2690,58 @@ mod tests {
             sigs_a, sigs_a_after,
             "sub-item signature did not change after its file changed on disk — \
              confirm would build a plan from a stale picture"
+        );
+    }
+
+    /// Spec 058 T012 blocker, pinned executable: **nothing today can turn a
+    /// bare source group into item rows.**
+    ///
+    /// FR-015 wants scan to create the source group and no inbox item, and
+    /// `data-model.md`'s state diagram then has classification materialize the
+    /// item rows. But the only two callers of `materialize_sub_items` both
+    /// require an item row to already exist:
+    ///
+    /// - `classify()` is keyed on `inbox_item_id` and fails with
+    ///   `InboxItemNotFound` without one (`classify.rs:87`);
+    /// - `reclassify_v2()` takes a `sourceGroupId`, but rebuilds its
+    ///   `file_records` from persisted `inbox_classification_evidence` /
+    ///   `inbox_file_metadata`, which are only ever written against an item id.
+    ///
+    /// So removing the scan-time placeholder without adding a group-scoped
+    /// classification entry point that reads headers from disk leaves the
+    /// folder permanently unclassifiable: no item, therefore no evidence,
+    /// therefore no item. This test asserts the missing capability from the
+    /// outside — real FITS on disk, a real source group, no item row — and
+    /// must be INVERTED (into "materializes >= 1 sub-item") by whoever builds
+    /// that entry point.
+    #[tokio::test]
+    async fn source_group_without_items_cannot_be_classified_today_058() {
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("frame.fits"), "M42", 0);
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-bare",
+                root_id: "root-bare",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Deliberately NO inbox_items row — this is the post-FR-015 shape.
+        let sigs = resplit_signatures(db.pool(), root.path(), "sg-bare").await;
+
+        assert!(
+            sigs.is_empty(),
+            "reclassify_v2 materialized sub-items for a source group with no prior \
+             item rows — the T012 blocker is gone and this test must be inverted"
         );
     }
 }

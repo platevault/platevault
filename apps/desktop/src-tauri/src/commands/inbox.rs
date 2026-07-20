@@ -33,7 +33,7 @@ use contracts_core::inbox::{
     InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
     InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
     InboxReclassifyV2Request, InboxReclassifyV2Response, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+    InboxScanFolderResponse, InboxScanResult, InboxSourceGroupListItem, InboxStatsResponse,
     InboxTargetRecommendationsRequest, InboxTargetRecommendationsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
@@ -42,7 +42,8 @@ use domain_core::first_run::OrganizationState;
 use persistence_db::repositories::first_run::get_source_organization_state;
 use persistence_db::repositories::inbox::{
     get_inbox_source_group_by_path, grouping_keys_for_items, link_placeholder_to_source_group,
-    list_unacknowledged_across_roots, upsert_inbox_source_group, UpsertSourceGroup,
+    list_unacknowledged_across_roots, list_unclassified_source_groups, upsert_inbox_source_group,
+    UpsertSourceGroup,
 };
 use persistence_db::repositories::q_desktop::{
     get_inbox_master_item_row, get_inbox_placeholder_row, insert_inbox_folder_placeholder,
@@ -321,6 +322,16 @@ pub async fn inbox_scan_folder(
         // refreshed on rescan. child_count stays 0 here; classify (T066) sets it.
         // No per-file header reads; reuses the cheap folder content_signature
         // already computed by scan_root (Constitution §I, lazy hashing).
+        //
+        // Sub-frame count excludes detected masters, which become their own
+        // item rows. Spec 058 T013 stores it on the group because the Inbox
+        // list row for a scanned-but-unclassified folder is the group itself,
+        // and a 0 here is what marks a masters-only folder as having nothing
+        // left to classify (`list_unclassified_source_groups`).
+        let sub_count = (scanned_item.fits_files.len() + scanned_item.xisf_files.len())
+            .saturating_sub(scanned_item.masters.len())
+            + scanned_item.video_files.len();
+
         let sg_id = Uuid::new_v4().to_string();
         upsert_inbox_source_group(
             &pool,
@@ -331,6 +342,7 @@ pub async fn inbox_scan_folder(
                 content_signature: Some(&scanned_item.content_signature),
                 format: Some(scanned_item.format.as_str()),
                 lane: Some(group_lane),
+                file_count: i64::try_from(sub_count).unwrap_or(i64::MAX),
             },
         )
         .await
@@ -348,26 +360,13 @@ pub async fn inbox_scan_folder(
         //
         // If ALL files in this folder are masters, skip the grouped row — there
         // are no remaining subs.
-        let master_count = scanned_item.masters.len();
-        let total_image_count = scanned_item.fits_files.len() + scanned_item.xisf_files.len();
-        let sub_count =
-            total_image_count.saturating_sub(master_count) + scanned_item.video_files.len();
-
         if sub_count == 0 && !scanned_item.masters.is_empty() {
             // Every file in this folder was a master — no grouped sub row.
             continue;
         }
 
-        // For sub-count: use total minus masters for FITS-lane items.
-        let persist_file_count = if scanned_item.masters.is_empty() {
-            total_image_count + scanned_item.video_files.len()
-        } else {
-            sub_count
-        };
-
         if let Some(summary) =
-            persist_folder_placeholder(&pool, &req.root_id, scanned_item, sg_id, persist_file_count)
-                .await?
+            persist_folder_placeholder(&pool, &req.root_id, scanned_item, sg_id, sub_count).await?
         {
             items.push(summary);
         }
@@ -575,8 +574,29 @@ pub async fn inbox_list(
         })
         .collect();
 
+    // Spec 058 FR-016 (T013): folders scan has discovered but classification
+    // has not yet split. These rows expose no item id and are therefore not
+    // confirmable.
+    let source_groups = list_unclassified_source_groups(&pool, INBOX_LIST_LIMIT)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?
+        .into_iter()
+        .map(|g| InboxSourceGroupListItem {
+            source_group_id: g.id,
+            root_id: g.root_id,
+            root_absolute_path: g.root_path,
+            relative_path: g.relative_path,
+            file_count: u32::try_from(g.file_count).unwrap_or(u32::MAX),
+            format: g.format.unwrap_or_else(|| "fits".to_owned()),
+            lane: g.lane.unwrap_or_else(|| "move".to_owned()),
+            content_signature: g.content_signature.unwrap_or_default(),
+            discovered_at: g.discovered_at,
+        })
+        .collect();
+
     Ok(InboxListResponse {
         items,
+        source_groups,
         capped,
         limit: u32::try_from(INBOX_LIST_LIMIT).unwrap_or(u32::MAX),
     })

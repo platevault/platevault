@@ -422,11 +422,41 @@ pub struct InboxListItem {
     pub needs_review: bool,
 }
 
+/// A scanned-but-unclassified folder in `inbox.list` (spec 058 FR-016).
+///
+/// Carries **no** `inboxItemId`. Non-confirmability is structural: there is
+/// nothing to pass to `inbox.confirm`, so no new guard and no new error code
+/// exist for it. A discriminated union with [`InboxListItem`] was rejected
+/// precisely because it would restore a row that looks like an item and
+/// carries an id the UI is tempted to confirm (FR-004).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxSourceGroupListItem {
+    pub source_group_id: String,
+    pub root_id: String,
+    /// Absolute path of the registered root (for display).
+    pub root_absolute_path: String,
+    pub relative_path: String,
+    /// Sub-frames the scan found, excluding detected calibration masters.
+    pub file_count: u32,
+    /// Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+    pub format: String,
+    /// The source group's `"move"` | `"catalogue"` lane — NOT the
+    /// `"fits"`/`"video"` item lane. The two columns share a name only.
+    pub lane: String,
+    pub content_signature: String,
+    pub discovered_at: String,
+}
+
 /// Response from `inbox.list`.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxListResponse {
     pub items: Vec<InboxListItem>,
+    /// Folders that have been scanned but have produced no items yet. Contains
+    /// only groups with zero item rows, so FR-017's "replaced by its item
+    /// rows" is a consequence of the query rather than a separate step.
+    pub source_groups: Vec<InboxSourceGroupListItem>,
     /// Whether the list was capped at `limit` (true = there may be more).
     pub capped: bool,
     /// Maximum items per response (matches the server-side cap).

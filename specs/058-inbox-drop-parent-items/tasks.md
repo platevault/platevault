@@ -76,6 +76,14 @@ the needs-review field and the scan/classify boundary land first.
 
 **T012–T016 are one landing.** See sequencing constraint 3.
 
+> ⛔ **T012 and T014–T017 are blocked** (2026-07-20) — see T012 for the proof and
+> the missing design decision. T014/T015's helper split was deliberately NOT
+> written ahead of it: the source-group variants must assert against detail-pane
+> testids that only exist once T012 renders a source-group row, so writing them
+> now would ship assertions that cannot be failed on purpose in either
+> direction. T013's backend half landed independently because it is additive
+> and inert (`sourceGroups` is always empty while the placeholder still exists).
+
 **Carried in from Phase 2a verification (2026-07-20) — stale `∅` identity on
 resolve.** `reclassify`'s step 6b writes `group_key: &item.group_key`
 unchanged, so once the user supplies a missing attribute via overrides the
@@ -90,12 +98,12 @@ current behaviour is asserted as-is in
 `reclassify_fully_resolved_clears_needs_review`; that assertion must be
 revisited here.
 
-- [ ] T012 Make scan create the source group and **no inbox item** in `crates/app/inbox/src/classify.rs` and the scan command path (FR-015)
-- [ ] T013 Represent the scanned-but-unclassified folder in `inbox.list` as a source-group row that is **structurally non-confirmable** — no item id to pass to confirm, rather than a guard that refuses one (FR-016, `contracts/operations.md`)
-- [ ] T014 Split `rescan_and_wait_for_item` in `crates/e2e-tests/tests/inbox_ui_journeys.rs:135-138` into a source-group-row variant and an item-row variant
-- [ ] T015 Split `select_only_item` (`crates/e2e-tests/tests/inbox_ui_journeys.rs:148-170`) likewise: selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present. The current helper waits for `inbox-confirm-btn` to mount, which is exactly what a source-group row must never provide
-- [ ] T016 Update the five journeys in `crates/e2e-tests/tests/inbox_ui_journeys.rs` that call those helpers — including all three SC-005 journeys — to use the correct variant per step
-- [ ] T017 Replace the source-group row with the folder's item rows when classification completes (FR-017), preserving selection (FR-023) per the **CHK011 rule**: N=1 -> select that item; N>1 -> select the folder group header, never a sibling; N=0 -> the source-group row stays selected ([#1178](https://github.com/platevault/platevault/issues/1178))
+- [ ] T012 Make scan create the source group and **no inbox item** in `crates/app/inbox/src/classify.rs` and the scan command path (FR-015) — ⛔ **BLOCKED 2026-07-20 on a missing design decision, proved executable.** Deleting the scan-time placeholder makes the folder permanently unclassifiable: the only two callers of `materialize_sub_items` both need an item row to already exist. `classify()` is keyed on `inbox_item_id` and fails `InboxItemNotFound` without one (`classify.rs:87`); `reclassify_v2()` accepts a `sourceGroupId` but rebuilds `file_records` from persisted `inbox_classification_evidence` / `inbox_file_metadata`, which are only ever written against an item id (`reclassify.rs:626-700`). No item ⇒ no evidence ⇒ no item. The UI compounds it: `useInboxClassification(itemId)` fires on selecting an *item* row, so with no row nothing ever triggers classification. **Pinned by `source_group_without_items_cannot_be_classified_today_058` (`crates/app/inbox/src/reclassify.rs`)** — real FITS on disk + real source group + no item row materializes zero sub-items; seed an item first and it materializes, so the test is not vacuous. Unblocking needs a **group-scoped classification entry point that reads headers from disk** (enumerate → extract → `materialize_sub_items`, which already seeds each sub-item's own evidence/metadata/cache, so nothing else has to be re-keyed). That operation is defined nowhere: `contracts/operations.md` redefines only `inbox.scan.folder` and `inbox.list`. Scan itself must NOT do it — no per-file header reads at scan time (Constitution §I, `commands/inbox.rs:322`)
+- [X] T013 Represent the scanned-but-unclassified folder in `inbox.list` as a source-group row that is **structurally non-confirmable** — no item id to pass to confirm, rather than a guard that refuses one (FR-016, `contracts/operations.md`) — **backend done**; the UI half lands with T012, which is the first thing that can make the array non-empty. `InboxSourceGroupListItem` + `sourceGroups` on `InboxListResponse` (`crates/contracts/core/src/inbox.rs`), populated by `list_unclassified_source_groups` (`crates/persistence/db/src/repositories/inbox.rs`). FR-017 is a **consequence of the predicate**, not a separate swap step: the query returns only groups with zero item rows, so the moment `materialize_sub_items` writes one the group drops out. Two carve-outs worth knowing: (a) master items carry a NULL `source_group_id` (`q_desktop.rs:108`), so `NOT EXISTS` alone would list a masters-only folder a SECOND time alongside its master rows — excluded via `file_count > 0`; (b) that required the scanned sub-frame count on the group itself, since it previously only ever existed on the placeholder → migration **`0075_source_group_file_count.sql`** (additive, no backfill), written by scan. Inert on this branch: every scanned folder still gets a placeholder, so `sourceGroups` is always empty until T012
+- [ ] ⛔ T014 Split `rescan_and_wait_for_item` in `crates/e2e-tests/tests/inbox_ui_journeys.rs:135-138` into a source-group-row variant and an item-row variant
+- [ ] ⛔ T015 Split `select_only_item` (`crates/e2e-tests/tests/inbox_ui_journeys.rs:148-170`) likewise: selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present. The current helper waits for `inbox-confirm-btn` to mount, which is exactly what a source-group row must never provide
+- [ ] ⛔ T016 Update the five journeys in `crates/e2e-tests/tests/inbox_ui_journeys.rs` that call those helpers — including all three SC-005 journeys — to use the correct variant per step
+- [ ] ⛔ T017 Replace the source-group row with the folder's item rows when classification completes (FR-017), preserving selection (FR-023) per the **CHK011 rule**: N=1 -> select that item; N>1 -> select the folder group header, never a sibling; N=0 -> the source-group row stays selected ([#1178](https://github.com/platevault/platevault/issues/1178))
 
 **Checkpoint** — foundational work complete. Layer-1 green, and the five
 journeys pass against the new boundary before any story phase begins.

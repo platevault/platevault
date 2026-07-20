@@ -831,6 +831,7 @@ mod tests {
                 content_signature: Some("sig-abc"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await

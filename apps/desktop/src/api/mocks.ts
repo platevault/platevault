@@ -1812,6 +1812,9 @@ export async function mockInvoke(
             isMaster: false,
           },
         ],
+        // Spec 058 FR-016: mock roots are all already classified, so no
+        // folder is awaiting its item rows.
+        sourceGroups: [],
         capped: false,
         limit: 500,
       } satisfies InboxListResponse_Serialize;

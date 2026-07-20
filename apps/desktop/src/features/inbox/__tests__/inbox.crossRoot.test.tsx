@@ -105,6 +105,7 @@ const itemRoot2a: InboxListItem = {
 
 const multiRootResponse: InboxListResponse = {
   items: [itemRoot1a, itemRoot1b, itemRoot2a],
+  sourceGroups: [],
   capped: false,
   limit: 500,
 };

@@ -277,6 +277,9 @@ pub struct UpsertSourceGroup<'a> {
     pub format: Option<&'a str>,
     /// Move-vs-catalogue lane: `"move"` (unorganized) or `"catalogue"` (organized).
     pub lane: Option<&'a str>,
+    /// Files the scan found in the folder, excluding detected calibration
+    /// masters (which get their own item rows). Refreshed on every rescan.
+    pub file_count: i64,
 }
 
 /// Upsert one `inbox_source_groups` row (spec 041 T065, R-10/R-12).
@@ -294,13 +297,14 @@ pub async fn upsert_inbox_source_group(
     sqlx::query(
         "INSERT INTO inbox_source_groups
             (id, root_id, relative_path, discovered_at, last_scanned_at,
-             content_signature, format, lane, child_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+             content_signature, format, lane, child_count, file_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
          ON CONFLICT(root_id, relative_path) DO UPDATE SET
              last_scanned_at   = excluded.last_scanned_at,
              content_signature = excluded.content_signature,
              format            = excluded.format,
-             lane              = excluded.lane",
+             lane              = excluded.lane,
+             file_count        = excluded.file_count",
     )
     .bind(group.id)
     .bind(group.root_id)
@@ -310,6 +314,7 @@ pub async fn upsert_inbox_source_group(
     .bind(group.content_signature)
     .bind(group.format)
     .bind(group.lane)
+    .bind(group.file_count)
     .execute(pool)
     .await?;
     Ok(())
@@ -1781,6 +1786,75 @@ pub async fn list_unacknowledged_across_roots(
     Ok(rows)
 }
 
+/// One scanned-but-unclassified folder for the Inbox list (spec 058 FR-016).
+///
+/// Deliberately carries no item id: a source-group row is non-confirmable
+/// *structurally*, because there is nothing to pass to `inbox.confirm` — not
+/// because a guard refuses one.
+///
+/// `lane` is the source group's `move`/`catalogue` value, NOT the `fits`/`video`
+/// item lane. The two columns share a name and do not share a meaning.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct InboxSourceGroupListRow {
+    pub id: String,
+    pub root_id: String,
+    pub root_path: String,
+    pub relative_path: String,
+    pub file_count: i64,
+    pub format: Option<String>,
+    pub lane: Option<String>,
+    pub content_signature: Option<String>,
+    pub discovered_at: String,
+}
+
+/// List source groups that have produced **no** `inbox_items` rows yet — the
+/// folders scan has discovered but classification has not yet split (FR-016).
+///
+/// FR-017 ("the source-group row is replaced by the folder's item rows") falls
+/// out of this predicate rather than being a separate step: the moment
+/// `materialize_sub_items` writes item rows the group stops matching here and
+/// its items appear in the item list instead.
+///
+/// `file_count > 0` carries the FR-015 master carve-out. A folder of detected
+/// calibration masters has nothing left for classification to split, and its
+/// masters are `inbox_items` rows with a NULL `source_group_id`
+/// (`q_desktop.rs::insert_inbox_master_item`), so the `NOT EXISTS` clause alone
+/// would surface such a folder as an unclassified row *in addition to* the
+/// master rows already representing it. Scan writes `file_count` excluding
+/// masters, so that folder scores 0 here.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_unclassified_source_groups(
+    pool: &SqlitePool,
+    limit: i64,
+) -> DbResult<Vec<InboxSourceGroupListRow>> {
+    let rows = sqlx::query_as::<_, InboxSourceGroupListRow>(
+        "SELECT
+             g.id,
+             g.root_id,
+             r.path AS root_path,
+             g.relative_path,
+             g.file_count,
+             g.format,
+             g.lane,
+             g.content_signature,
+             g.discovered_at
+         FROM inbox_source_groups g
+         JOIN registered_sources r ON r.id = g.root_id
+         WHERE g.file_count > 0
+           AND NOT EXISTS (
+             SELECT 1 FROM inbox_items i WHERE i.source_group_id = g.id
+         )
+         ORDER BY r.path, g.relative_path
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 // ── Per-item grouping aggregates (spec 041 — multi-level grouping UI) ──────────
 
 /// Per-item aggregate grouping keys for the inbox list, computed across each
@@ -2289,6 +2363,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -2417,6 +2492,7 @@ mod tests {
                     content_signature: Some("sig"),
                     format: Some("fits"),
                     lane: Some("move"),
+                    file_count: 1,
                 },
             )
             .await
@@ -2579,6 +2655,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -2676,6 +2753,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -3145,6 +3223,7 @@ mod tests {
                 content_signature: None,
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -3381,6 +3460,7 @@ mod tests {
                 content_signature: Some("sig-abc123"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -3416,6 +3496,7 @@ mod tests {
                 content_signature: Some("sig-old"),
                 format: Some("fits"),
                 lane: Some("catalogue"),
+                file_count: 1,
             },
         )
         .await
@@ -3439,6 +3520,7 @@ mod tests {
                 content_signature: Some("sig-new"),
                 format: Some("fits"),
                 lane: Some("catalogue"),
+                file_count: 1,
             },
         )
         .await
@@ -3484,6 +3566,7 @@ mod tests {
                     content_signature: Some("sig"),
                     format: Some("fits"),
                     lane: Some("move"),
+                    file_count: 1,
                 },
             )
             .await
@@ -3514,6 +3597,7 @@ mod tests {
                 content_signature: None,
                 format: Some("video"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -3554,6 +3638,7 @@ mod tests {
                 content_signature: Some("sig-a"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -3570,6 +3655,7 @@ mod tests {
                 content_signature: Some("sig-b"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -3604,6 +3690,7 @@ mod tests {
                     content_signature: None,
                     format: Some("fits"),
                     lane: Some("move"),
+                    file_count: 1,
                 },
             )
             .await
@@ -3675,5 +3762,126 @@ mod tests {
         let db = test_db().await;
         let rows = list_inbox_attribution_geometry(db.pool(), "no-such-item").await.unwrap();
         assert!(rows.is_empty());
+    }
+
+    /// Register one inbox source and return its id.
+    async fn seed_inbox_source(pool: &SqlitePool, path: &str) -> String {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+        let resp = crate::repositories::first_run::register_source_batch(
+            pool,
+            &RegisterSourceBatchRequest {
+                sources: vec![RegisterSourceRequest {
+                    kind: SourceKind::Inbox,
+                    path: path.to_owned(),
+                    kind_subtype: None,
+                    scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Unorganized,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+        resp.items[0].source_id.as_deref().unwrap().to_owned()
+    }
+
+    /// Spec 058 T013, FR-016 + FR-017: a scanned folder is represented in the
+    /// list by its source group *only* while it has produced no item rows, and
+    /// stops being represented that way the moment materialization writes one.
+    ///
+    /// FR-017's "the source-group row is replaced by the folder's item rows" is
+    /// asserted here as a property of the query, not of a separate swap step.
+    #[tokio::test]
+    async fn unclassified_source_group_is_listed_until_it_has_items_058() {
+        let db = test_db().await;
+        let pool = db.pool();
+        let source_id = seed_inbox_source(pool, "/astro/inbox").await;
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-unclassified",
+                root_id: &source_id,
+                relative_path: "2026-01-01/lights",
+                content_signature: Some("sig-folder"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 7,
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert_eq!(rows.len(), 1, "a scanned folder with no items must be listed (FR-016)");
+        assert_eq!(rows[0].id, "sg-unclassified");
+        assert_eq!(rows[0].root_path, "/astro/inbox", "root_path must join registered_sources");
+        assert_eq!(rows[0].relative_path, "2026-01-01/lights");
+        assert_eq!(rows[0].file_count, 7, "the scanned sub-frame count must survive on the group");
+        assert_eq!(rows[0].lane.as_deref(), Some("move"), "group lane, not the fits/video lane");
+
+        // Classification materializes one item for the group.
+        upsert_inbox_sub_item(
+            pool,
+            &UpsertInboxSubItem {
+                id: "sub-light",
+                root_id: &source_id,
+                relative_path: "2026-01-01/lights",
+                source_group_id: "sg-unclassified",
+                group_key: "type=light",
+                group_label: "(root) · light",
+                frame_type: Some("light"),
+                content_signature: "sig-sub",
+                file_count: 7,
+                lane: "fits",
+                needs_review: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert!(
+            rows.is_empty(),
+            "FR-017: once the group has item rows it must no longer be listed as a \
+             source-group row — otherwise the folder is represented twice"
+        );
+    }
+
+    /// Spec 058 FR-015 master carve-out: a folder whose files are all detected
+    /// calibration masters is already fully represented by its per-master item
+    /// rows. Those rows carry a NULL `source_group_id`
+    /// (`q_desktop::insert_inbox_master_item`), so the "has no items" clause
+    /// alone would list the folder a second time as unclassified. Scan records
+    /// `file_count = 0` for such a folder, which is what excludes it.
+    #[tokio::test]
+    async fn masters_only_folder_is_not_listed_as_an_unclassified_group_058() {
+        let db = test_db().await;
+        let pool = db.pool();
+        let source_id = seed_inbox_source(pool, "/astro/inbox").await;
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-masters",
+                root_id: &source_id,
+                relative_path: "masters",
+                content_signature: Some("sig-masters"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_unclassified_source_groups(pool, 100).await.unwrap();
+        assert!(
+            rows.is_empty(),
+            "a folder with no sub-frames left to classify must not appear as a \
+             scanned-but-unclassified row (FR-015 master carve-out)"
+        );
     }
 }
