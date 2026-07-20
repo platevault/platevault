@@ -1,0 +1,8 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_all": "Todos",
+  "common_yes": "Sim",
+  "common_no": "Não",
+  "common_cancel": "Cancelar",
+  "common_save": "Salvar"
+}
