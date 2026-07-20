@@ -238,6 +238,19 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
       expect(screen.getByText('Second entry')).toBeInTheDocument();
     });
 
+    // Gate on follow-tail having settled ON before toggling it, exactly as the
+    // two tests above do. The initial state arrives asynchronously from
+    // `settingsGet` (`rememberFollowLogs: true`), so a click fired before that
+    // promise resolves is undone by the resolution — leaving the button on
+    // '↓ Follow' where the assertion below expects '— Follow'. Passes on an
+    // idle machine, fails on a contended runner (#1209).
+    await waitFor(() => {
+      expect(getFollowButton()).toHaveAttribute(
+        'aria-label',
+        'Follow tail on (click to pause)',
+      );
+    });
+
     // Turn follow off first (repro starts with Follow inactive).
     fireEvent.click(getFollowButton());
     await waitFor(() => {
