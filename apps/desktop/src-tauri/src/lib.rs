@@ -228,7 +228,11 @@ pub fn run_app(
     //  - spec 010 (#722): guided-flow event forwarder → re-emits
     //    inventory.confirmed/project.created/tool.launch as named events so
     //    `eventBridge.ts` can advance the coach on real domain completions.
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        resolve_cache.clone(),
+    );
     crate::commands::log::start_log_forwarder(
         app.handle().clone(),
         &bus,
