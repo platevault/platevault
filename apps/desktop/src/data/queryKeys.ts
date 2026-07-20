@@ -66,6 +66,8 @@ export const queryKeys = {
   },
   plans: {
     detail: (id: string) => ['plans', 'detail', id] as const,
+    freeSpaceEstimate: (id: string) =>
+      ['plans', 'freeSpaceEstimate', id] as const,
   },
   roots: {
     all: () => ['roots'] as const,

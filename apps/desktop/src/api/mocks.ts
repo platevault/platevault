@@ -1194,6 +1194,17 @@ export async function mockInvoke(
       const { planDetail } = await import('@/data/fixtures/plans');
       return planDetail;
     }
+    case 'plans_free_space_estimate': {
+      // Issue #876: advisory destination free-space estimate. Mock mode has
+      // no real filesystem to probe — report comfortably more free space
+      // than the fixture plan requires so the mock UI shows the healthy
+      // (non-warning) state by default.
+      const { planDetail } = await import('@/data/fixtures/plans');
+      return {
+        requiredBytes: planDetail.totalBytesRequired,
+        availableBytes: planDetail.totalBytesRequired + 10_000_000_000,
+      };
+    }
     case 'audit_list': {
       const args = _args as
         | {

@@ -302,6 +302,27 @@ pub struct PlanGetResponse {
     pub plan: PlanDetail,
 }
 
+/// Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+/// destination free-space estimate surfaced at plan review time, before
+/// approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+/// still re-validates for real and pauses the apply run (R-Pause-1) if the
+/// destination genuinely runs out; this is only a heads-up so the user isn't
+/// first told about a space problem after already approving the plan.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanFreeSpaceEstimate {
+    /// Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+    /// all-trash/all-delete plan, which needs no destination space).
+    pub required_bytes: i64,
+    /// Free bytes on the destination volume, probed via
+    /// `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+    /// items to probe a destination from, or the probe itself fails (e.g. the
+    /// volume is momentarily unreachable) — the UI shows no comparison rather
+    /// than a false warning in that case.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_bytes: Option<i64>,
+}
+
 /// Response for `plans.approve` (A1, R-FS-1).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]

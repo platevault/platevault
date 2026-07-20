@@ -618,6 +618,16 @@ export const commands = {
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_get", { id })),
 	/**
+	 *  `plans.free_space_estimate` — advisory destination free-space estimate for
+	 *  a plan under review, before approval (issue #876). Never blocks approval;
+	 *  see `app_core::plans::estimate_free_space`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+	 */
+	plansFreeSpaceEstimate: (id: string) => typedError<PlanFreeSpaceEstimate_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_free_space_estimate", { id })),
+	/**
 	 *  `plans.approve` — move a plan to `approved`; snapshot item FS metadata (US3, T025).
 	 * 
 	 *  # Errors
@@ -7021,6 +7031,64 @@ export type PlanDetail_Serialize = {
 export type PlanDiscardResponse = {
 	planId: string,
 	discardedAt: string,
+};
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate = PlanFreeSpaceEstimate_Serialize | PlanFreeSpaceEstimate_Deserialize;
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate_Deserialize = {
+	/**
+	 *  Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+	 *  all-trash/all-delete plan, which needs no destination space).
+	 */
+	requiredBytes: number,
+	/**
+	 *  Free bytes on the destination volume, probed via
+	 *  `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+	 *  items to probe a destination from, or the probe itself fails (e.g. the
+	 *  volume is momentarily unreachable) — the UI shows no comparison rather
+	 *  than a false warning in that case.
+	 */
+	availableBytes: number | null,
+};
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate_Serialize = {
+	/**
+	 *  Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+	 *  all-trash/all-delete plan, which needs no destination space).
+	 */
+	requiredBytes: number,
+	/**
+	 *  Free bytes on the destination volume, probed via
+	 *  `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+	 *  items to probe a destination from, or the probe itself fails (e.g. the
+	 *  volume is momentarily unreachable) — the UI shows no comparison rather
+	 *  than a false warning in that case.
+	 */
+	availableBytes?: number | null,
 };
 
 /**  Action to perform on a single filesystem item. */
