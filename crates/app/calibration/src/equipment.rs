@@ -194,6 +194,31 @@ pub async fn list_cameras(pool: &SqlitePool) -> Result<Vec<Camera>, ContractErro
     repo::list_cameras(pool).await.map_err(db_to_contract)
 }
 
+/// Resolve a raw equipment string (as captured from a FITS header) to the
+/// registered camera's user-facing name.
+///
+/// Matching is case- and surrounding-whitespace-insensitive against each
+/// camera's name and its aliases: capture programs write the same physical
+/// camera with differing case and spacing.
+///
+/// Returns `None` when no registered camera claims the string, so callers fall
+/// back to the raw value instead of synthesizing an absent one.
+#[must_use]
+pub fn resolve_camera_display_name(cameras: &[Camera], raw: &str) -> Option<String> {
+    let needle = raw.trim();
+    if needle.is_empty() {
+        return None;
+    }
+    cameras
+        .iter()
+        .find(|c| {
+            std::iter::once(&c.name)
+                .chain(c.aliases.iter())
+                .any(|candidate| candidate.trim().eq_ignore_ascii_case(needle))
+        })
+        .map(|c| c.name.clone())
+}
+
 /// Create a new camera.
 ///
 /// # Errors
