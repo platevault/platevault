@@ -7,6 +7,13 @@ import { m } from '@/lib/i18n';
 
 export interface LockProps extends HTMLAttributes<HTMLSpanElement> {
   reason?: string;
+  /**
+   * Render as pure decoration: no tooltip, no role, no tab stop, hidden from
+   * assistive tech. Only correct where the reason is already stated in text
+   * nearby AND is identical for every instance — otherwise the padlock is the
+   * sole carrier of that information and must stay reachable (see below).
+   */
+  decorative?: boolean;
 }
 
 /**
@@ -25,9 +32,23 @@ export interface LockProps extends HTMLAttributes<HTMLSpanElement> {
  *   applies to elements with a role that supports it — so the role is what
  *   makes the label reach assistive tech at all.
  */
-export function Lock({ reason, className, ...rest }: LockProps) {
+export function Lock({ reason, decorative, className, ...rest }: LockProps) {
   const label = reason ?? m.settings_cleanup_protection_protected();
   const cls = ['pv-lock', className].filter(Boolean).join(' ');
+
+  // Decorative instances carry no information of their own, so giving each one
+  // a role and a tab stop would add N identical announcements to the tab order
+  // (the cleanup table's per-row hint is one static sentence, repeated on every
+  // protected row). The rule is stated once above that table instead, and the
+  // row's "Protected" pill still marks the state in text.
+  if (decorative) {
+    return (
+      <span className={cls} aria-hidden="true" {...rest}>
+        &#x1F512;
+      </span>
+    );
+  }
+
   return (
     <Tooltip
       content={label}
