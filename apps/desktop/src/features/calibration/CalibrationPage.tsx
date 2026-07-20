@@ -88,7 +88,11 @@ export function CalibrationPage() {
   );
   // #735: gated on `loading` so a cold reload's empty cache isn't mistaken for
   // a stale id — see ProjectsPage for the full rationale.
-  useStaleSelectionCleanup(selected, loading || master !== null, clearSelection);
+  useStaleSelectionCleanup(
+    selected,
+    loading || master !== null,
+    clearSelection,
+  );
 
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
