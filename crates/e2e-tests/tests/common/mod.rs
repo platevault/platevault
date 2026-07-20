@@ -87,21 +87,37 @@ impl InstanceEnv {
     fn new() -> Result<Self> {
         let root = tempfile::tempdir().context("failed to create isolated E2E instance dir")?;
         let db_path = root.path().join("e2e-test.db");
-        let vars: Vec<(&'static str, String)> = if cfg!(target_os = "windows") {
+        // Issue #1204: the per-OS location vars below are honoured on Linux
+        // (`XDG_*`) and macOS (`HOME`), and silently ignored on Windows —
+        // Tauri resolves app dirs through `dirs`, which calls
+        // `SHGetKnownFolderPath`, and the Known Folder API reads the user's
+        // shell profile rather than `APPDATA`/`LOCALAPPDATA`. So on Windows
+        // every concurrent instance shared one real app-data root however
+        // these were set, colliding over `simbad-cache.redb` and — fatally —
+        // over the WebView2 user-data folder.
+        //
+        // `ALM_DATA_DIR` is an explicit override the app itself honours
+        // (`desktop_shell::data_dir`), so isolation no longer depends on the
+        // OS agreeing to be redirected. The per-OS vars stay: they still
+        // place `app_config_dir` (window-state) under this root on Linux and
+        // macOS, which `ALM_DATA_DIR` does not cover.
+        let mut vars: Vec<(&'static str, String)> =
+            vec![("ALM_DATA_DIR", root.path().join("appdata").display().to_string())];
+        vars.extend(if cfg!(target_os = "windows") {
             vec![
                 ("APPDATA", root.path().join("appdata").display().to_string()),
                 ("LOCALAPPDATA", root.path().join("localappdata").display().to_string()),
             ]
         } else if cfg!(target_os = "macos") {
-            // app_data_dir/app_config_dir both resolve under $HOME on macOS
-            // (see `app_data_dir`/`app_config_dir` below).
+            // app_config_dir resolves under $HOME on macOS (see
+            // `app_config_dir` below).
             vec![("HOME", root.path().display().to_string())]
         } else {
             vec![
                 ("XDG_DATA_HOME", root.path().join("xdg-data").display().to_string()),
                 ("XDG_CONFIG_HOME", root.path().join("xdg-config").display().to_string()),
             ]
-        };
+        });
         let (proxy_port, native_port) = pick_port_pair()?;
         Ok(Self { _root: root, vars, db_path, proxy_port, native_port })
     }
@@ -1956,11 +1972,27 @@ fn reset_database(db_path: &Path) -> Result<()> {
 fn reset_webview_storage(vars: &[(&'static str, String)]) {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if cfg!(target_os = "windows") {
-        // WebView2 keeps ALL web storage under the user-data folder tauri
-        // points at `<app_local_data_dir>/EBWebView`.
-        if let Some(local) = lookup(vars, "LOCALAPPDATA") {
-            candidates
-                .push(PathBuf::from(local).join("dev.astro-plan.astro-library-manager/EBWebView"));
+        // Since #1204 the app points each window at a per-instance WebView2
+        // user-data folder (`desktop_shell::data_dir::webview_subdir`), and
+        // Tauri resolves that relative name to
+        // `dirs::data_local_dir()/<window label>/<name>`
+        // (`tauri-2.11.5/src/webview/mod.rs:411-413`).
+        //
+        // `dirs::data_local_dir()` is the real Known Folder — NOT the
+        // `LOCALAPPDATA` this instance sets, which is exactly the bug #1204
+        // was. This harness process has its own env unmodified, so its own
+        // `LOCALAPPDATA` is that same real folder, which is why we read it
+        // here rather than from `vars`.
+        //
+        // The previous target — `<isolated LOCALAPPDATA>/<identifier>/
+        // EBWebView` — never existed: the app had been writing to the real
+        // profile all along, so every "reset" silently deleted nothing and
+        // journeys shared one localStorage.
+        if let (Some(name), Ok(real_local)) = (webview_subdir(vars), std::env::var("LOCALAPPDATA"))
+        {
+            for label in ["main", "splash"] {
+                candidates.push(PathBuf::from(&real_local).join(label).join(&name));
+            }
         }
     } else if cfg!(target_os = "macos") {
         // WKWebView website data (incl. localStorage) lives under
@@ -2039,25 +2071,48 @@ fn app_config_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
     base.map(|b| b.join(APP_IDENTIFIER))
 }
 
-/// Resolve the per-OS Tauri `app_data_dir` for the app identifier
-/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`) under this
-/// instance's isolated env overrides (`vars`, [`InstanceEnv::vars`]) instead
-/// of the real OS env. Mirrors `tauri::path::PathResolver::app_data_dir`
-/// (`dirs::data_dir()/<identifier>`) without needing a Tauri runtime in the
-/// test harness:
-/// - Linux:   `$XDG_DATA_HOME`
-/// - macOS:   `~/Library/Application Support`
-/// - Windows: `%APPDATA%` (roaming)
+/// This instance's app-data root — the directory the app actually writes its
+/// SQLite default, `simbad-cache.redb`, and logs into.
+///
+/// Since #1204 this is simply `ALM_DATA_DIR`, which the app honours directly
+/// (`desktop_shell::data_dir::resolve`), on every platform. It deliberately
+/// does NOT mirror `tauri::path::PathResolver::app_data_dir`'s per-OS
+/// `dirs::data_dir()/<identifier>` derivation any more: that derivation is
+/// what the harness used to reimplement, and on Windows the reimplementation
+/// and the app disagreed silently — the harness resetting files under the
+/// isolated root while the app read and wrote the real one.
 fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
-    const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
-    let base = if cfg!(target_os = "windows") {
-        lookup(vars, "APPDATA").map(PathBuf::from)
-    } else if cfg!(target_os = "macos") {
-        lookup(vars, "HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
-    } else {
-        lookup(vars, "XDG_DATA_HOME").map(PathBuf::from)
-    };
-    base.map(|b| b.join(APP_IDENTIFIER))
+    lookup(vars, "ALM_DATA_DIR").map(PathBuf::from)
+}
+
+/// This instance's WebView2 user-data folder *name* (Windows; see
+/// [`reset_webview_storage`] for where it is rooted).
+///
+/// Reimplements `desktop_shell::data_dir::webview_subdir`, because this crate
+/// deliberately does not depend on the Tauri app crate (see `Cargo.toml`'s
+/// header — the whole point is that the heavy Tauri/thirtyfour stacks stay
+/// out of the shipping build). [`webview_subdir_matches_the_app`] pins the
+/// two copies to the same literal so drift is a test failure, not a silent
+/// "reset deleted nothing" — the failure mode this replaced.
+fn webview_subdir(vars: &[(&'static str, String)]) -> Option<String> {
+    let root = lookup(vars, "ALM_DATA_DIR")?;
+    if root.is_empty() {
+        return None;
+    }
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let hash = root.as_bytes().iter().fold(OFFSET, |h, &b| (h ^ u64::from(b)).wrapping_mul(PRIME));
+    Some(format!("pv-{hash:016x}"))
+}
+
+/// The other half of the pinned contract asserted by
+/// `apps/desktop/src-tauri/src/data_dir.rs::webview_dir_derivation_is_pinned`.
+/// Both must agree on this literal, or the harness resets a folder the app
+/// does not use.
+#[test]
+fn webview_subdir_matches_the_app() {
+    let vars = vec![("ALM_DATA_DIR", "/tmp/pv-instance-a".to_string())];
+    assert_eq!(webview_subdir(&vars).as_deref(), Some("pv-b51d4cf056f3eb58"));
 }
 
 // ---------------------------------------------------------------------------
