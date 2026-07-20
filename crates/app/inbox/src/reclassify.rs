@@ -162,12 +162,18 @@ pub async fn reclassify(
         }
     }
 
-    // DB values (migration 0048 CHECK): 'classified' / 'unclassified'.
-    // API values (stable frontend vocabulary): 'single_type' / 'mixed' / 'unclassified'.
+    // DB values (migration 0049 CHECK): 'classified' / 'unclassified'.
+    // API values (stable frontend vocabulary): 'single_type' / 'unclassified'.
+    //
+    // Spec 058 T035 retires 'mixed' here as well as in `classify`. This arm was
+    // missed by the first pass, and it is why a needs-review item resolved into
+    // two frame types still reported `mixed` after the classify-side change:
+    // the label survived on the reclassify path alone.
     let (mut db_result, mut updated_type, mut single_frame_type) = match frame_types.len() {
-        0 => ("unclassified".to_owned(), "unclassified".to_owned(), None),
         1 => ("classified".to_owned(), "single_type".to_owned(), frame_types.into_iter().next()),
-        _ => ("unclassified".to_owned(), "mixed".to_owned(), None),
+        // Zero resolved types and two-or-more are the same answer: not one
+        // thing, therefore not confirmable.
+        _ => ("unclassified".to_owned(), "unclassified".to_owned(), None),
     };
 
     // issue #711 Instance B: an item still flagged `needs_review` must not be
@@ -1066,6 +1072,66 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    /// Spec 058 phase 6b (T050-T052): resolving a needs-review item into TWO
+    /// frame types does NOT yet split it into siblings.
+    ///
+    /// This is a **characterization test**: it pins what the code does today,
+    /// not what T050 wants it to do, so the gap is visible in the suite instead
+    /// of living only in a task list. T050 is to make this resolve materialize
+    /// N siblings through the existing `materialize_sub_items` path; when it
+    /// lands, this test MUST be rewritten to assert two siblings — its failure
+    /// at that point is the intended signal, not a regression.
+    ///
+    /// What it also pins, and what T035 originally missed: the resolve reports
+    /// `unclassified` rather than `mixed`. The reclassify path had its own
+    /// `mixed` arm, so the label survived the classify-side retirement until
+    /// this commit.
+    #[tokio::test]
+    async fn t050_gap_two_frame_types_resolve_without_splitting() {
+        let db = test_db().await;
+        setup_unclassified_item(&db, "item-t052").await;
+
+        let resp = reclassify(
+            db.pool(),
+            ReclassifyRequest {
+                inbox_item_id: "item-t052".to_owned(),
+                overrides: vec![
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_001.fits".to_owned(),
+                        frame_type: "light".to_owned(),
+                        ..Default::default()
+                    },
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_002.fits".to_owned(),
+                        frame_type: "dark".to_owned(),
+                        ..Default::default()
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resp.updated_type, "unclassified",
+            "two distinct resolved frame types are not one thing; `mixed` is retired (T035)"
+        );
+        assert_eq!(resp.frame_type, None);
+        assert_eq!(resp.applied_count, 2, "both overrides must still be applied");
+
+        // The T050 gap itself: no siblings are materialized for the group.
+        let sg = inbox_repo::get_source_group_id_for_item(db.pool(), "item-t052")
+            .await
+            .unwrap()
+            .expect("the fixture item is linked to a source group");
+        let subs = inbox_repo::list_inbox_sub_items(db.pool(), &sg).await.unwrap();
+        assert!(
+            subs.is_empty(),
+            "TODO(T050): this asserts the CURRENT behaviour — no split happens. \
+             When T050 lands, expect exactly two siblings carrying `light` and `dark`."
+        );
     }
 
     #[tokio::test]
