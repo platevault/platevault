@@ -165,23 +165,21 @@ pub async fn get_inbox_item_metadata(
 /// Uses the same override-applied values as `missing_path_attributes` so that
 /// supplying a value via reclassify clears the gate on the next read.
 /// Returns an empty vec when all mandatory attributes are present.
+///
+/// The mandatory set itself comes from [`crate::classify::mandatory_set_for`]
+/// (R-14) — the single definition this and the classify-time gate both read, so
+/// the list shown to the user cannot drift from the list promotion is gated on.
 fn compute_missing_mandatory(m: &InboxFileMetadata) -> Vec<String> {
     let Some(ft_str) = m.frame_type_effective.as_deref() else {
         // Unclassified files are implicitly needs-review; frameType is the gate.
         return vec!["frameType".to_owned()];
     };
-
-    // Derive mandatory set from the same R-14 table as classify::mandatory_set_for.
-    let mandatory: &[&str] = match ft_str {
-        "light" => &["frameType", "target", "filter", "exposureS"],
-        "dark" | "dark_flat" => &["frameType", "exposureS", "gain"],
-        "bias" => &["frameType", "gain"],
-        "flat" => &["frameType", "filter"],
-        _ => return Vec::new(), // unknown type: no gate
+    let Some(ft) = metadata_core::FrameType::from_str_ci(ft_str) else {
+        return Vec::new(); // unknown type: no gate
     };
 
     let mut missing = Vec::new();
-    for &key in mandatory {
+    for key in crate::classify::mandatory_set_for(ft) {
         let absent = match key {
             "target" => {
                 // light: satisfied by OBJECT header (proxy for coord resolution).
@@ -280,6 +278,45 @@ mod tests {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
+    }
+
+    /// R-14 drift guard (#1116): the mandatory set the user is *shown* must equal
+    /// the one promotion is *gated* on, for every frame type.
+    ///
+    /// A file with no attributes at all is missing exactly the mandatory set minus
+    /// `frameType` (which is satisfied by the type being known), so both consumers
+    /// must reproduce [`crate::classify::mandatory_set_for`] verbatim. Fails if a
+    /// key is added to the shared set but handled in only one consumer, or if
+    /// either consumer reintroduces its own copy of the table.
+    #[test]
+    fn r14_mandatory_gate_agrees_between_classify_and_metadata() {
+        use metadata_core::FrameType;
+
+        for ft in [
+            FrameType::Light,
+            FrameType::Dark,
+            FrameType::Bias,
+            FrameType::Flat,
+            FrameType::DarkFlat,
+        ] {
+            let expected: Vec<String> = crate::classify::mandatory_set_for(ft)
+                .into_iter()
+                .filter(|k| *k != "frameType")
+                .map(str::to_owned)
+                .collect();
+
+            let gate = crate::classify::check_mandatory_missing(ft, None, false);
+            assert_eq!(gate, expected, "classify gate for {ft} diverged from mandatory_set_for");
+
+            let shown = compute_missing_mandatory(&InboxFileMetadata {
+                frame_type_effective: Some(ft.as_str().to_owned()),
+                ..Default::default()
+            });
+            assert_eq!(
+                shown, expected,
+                "metadata missing_mandatory for {ft} diverged from mandatory_set_for"
+            );
+        }
     }
 
     #[tokio::test]

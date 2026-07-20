@@ -449,7 +449,7 @@ pub struct InboxListResponse {
 /// `frame_type_effective` reflects override-if-present-else-extracted.
 /// `override_stale` is true when the file was changed (size/mtime) since the
 /// override was recorded (R-4); the override is surfaced but flagged.
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxFileMetadata {
     pub relative_file_path: String,
