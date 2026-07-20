@@ -137,6 +137,25 @@ pub struct ScannedInboxItem {
     pub masters: Vec<ScannedMasterFile>,
 }
 
+impl ScannedInboxItem {
+    /// Files in this folder that classification still has to split, i.e. every
+    /// file except the detected calibration masters, which become their own
+    /// `inbox_items` rows.
+    ///
+    /// Carries the spec 058 FR-015 master carve-out: a masters-only folder must
+    /// score 0 so `list_unclassified_source_groups` does not surface it as a
+    /// scanned-but-unclassified row *in addition to* its master rows. The
+    /// subtraction is sound only because `masters` is built by filtering
+    /// `fits_files ∪ xisf_files` (see [`scan_dir`]); it is saturating so a
+    /// future violation of that subset relation degrades to 0 rather than
+    /// panicking.
+    #[must_use]
+    pub fn sub_frame_count(&self) -> usize {
+        (self.fits_files.len() + self.xisf_files.len()).saturating_sub(self.masters.len())
+            + self.video_files.len()
+    }
+}
+
 /// Whether this item should be classified as FITS or routed to the video lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lane {

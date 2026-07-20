@@ -323,14 +323,12 @@ pub async fn inbox_scan_folder(
         // No per-file header reads; reuses the cheap folder content_signature
         // already computed by scan_root (Constitution §I, lazy hashing).
         //
-        // Sub-frame count excludes detected masters, which become their own
-        // item rows. Spec 058 T013 stores it on the group because the Inbox
-        // list row for a scanned-but-unclassified folder is the group itself,
-        // and a 0 here is what marks a masters-only folder as having nothing
-        // left to classify (`list_unclassified_source_groups`).
-        let sub_count = (scanned_item.fits_files.len() + scanned_item.xisf_files.len())
-            .saturating_sub(scanned_item.masters.len())
-            + scanned_item.video_files.len();
+        // Spec 058 T013 stores the sub-frame count on the group because the
+        // Inbox list row for a scanned-but-unclassified folder is the group
+        // itself, and a 0 marks a masters-only folder as having nothing left
+        // to classify (`list_unclassified_source_groups`). The FR-015 carve-out
+        // arithmetic lives on the scan record, next to the masters it excludes.
+        let sub_count = scanned_item.sub_frame_count();
 
         let sg_id = Uuid::new_v4().to_string();
         upsert_inbox_source_group(
@@ -503,8 +501,10 @@ async fn persist_master_item(
 /// `inbox.list` — return all unacknowledged inbox items across all registered
 /// roots (states `pending_classification` and `classified`).
 ///
-/// Results are capped at 500 items (FR-006). Each item carries its root's
-/// absolute path so the UI can group/label by root without a second call.
+/// Each of the two result arrays is capped at 500 rows (FR-006); `capped` is
+/// true when either hit its limit, so the UI never silently drops folders.
+/// Each item carries its root's absolute path so the UI can group/label by
+/// root without a second call.
 ///
 /// # Errors
 /// Returns a string error on database failure.
@@ -518,7 +518,6 @@ pub async fn inbox_list(
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let total = rows.len();
-    let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
 
     // Per-item grouping aggregates for the multi-level grouping UI (spec 041).
     // Single GROUP BY pass over the items we're about to return — no N+1.
@@ -577,22 +576,26 @@ pub async fn inbox_list(
     // Spec 058 FR-016 (T013): folders scan has discovered but classification
     // has not yet split. These rows expose no item id and are therefore not
     // confirmable.
-    let source_groups = list_unclassified_source_groups(&pool, INBOX_LIST_LIMIT)
-        .await
-        .map_err(|e| ContractError::internal(e.to_string()))?
-        .into_iter()
-        .map(|g| InboxSourceGroupListItem {
-            source_group_id: g.id,
-            root_id: g.root_id,
-            root_absolute_path: g.root_path,
-            relative_path: g.relative_path,
-            file_count: u32::try_from(g.file_count).unwrap_or(u32::MAX),
-            format: g.format.unwrap_or_else(|| "fits".to_owned()),
-            lane: g.lane.unwrap_or_else(|| "move".to_owned()),
-            content_signature: g.content_signature.unwrap_or_default(),
-            discovered_at: g.discovered_at,
-        })
-        .collect();
+    let source_groups: Vec<InboxSourceGroupListItem> =
+        list_unclassified_source_groups(&pool, INBOX_LIST_LIMIT)
+            .await
+            .map_err(|e| ContractError::internal(e.to_string()))?
+            .into_iter()
+            .map(|g| InboxSourceGroupListItem {
+                source_group_id: g.id,
+                root_id: g.root_id,
+                root_absolute_path: g.root_path,
+                relative_path: g.relative_path,
+                file_count: u32::try_from(g.file_count).unwrap_or(u32::MAX),
+                format: g.format.unwrap_or_else(|| "fits".to_owned()),
+                lane: g.lane.unwrap_or_else(|| "move".to_owned()),
+                content_signature: g.content_signature.unwrap_or_default(),
+                discovered_at: g.discovered_at,
+            })
+            .collect();
+
+    let limit = usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
+    let capped = total >= limit || source_groups.len() >= limit;
 
     Ok(InboxListResponse {
         items,

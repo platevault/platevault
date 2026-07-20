@@ -1818,7 +1818,11 @@ pub struct InboxSourceGroupListRow {
 /// `file_count > 0` carries the FR-015 master carve-out. A folder of detected
 /// calibration masters has nothing left for classification to split, and its
 /// masters are `inbox_items` rows with a NULL `source_group_id`
-/// (`q_desktop.rs::insert_inbox_master_item`), so the `NOT EXISTS` clause alone
+/// (`q_desktop.rs::insert_inbox_master_item`; a master row takes the same
+/// `group_key = ''` default as the folder placeholder, and stays unlinked only
+/// because its `relative_path` is the master FILE's path — `scan.rs` `rel_path`
+/// — which never equals the folder path [`link_placeholder_to_source_group`]
+/// matches on), so the `NOT EXISTS` clause alone
 /// would surface such a folder as an unclassified row *in addition to* the
 /// master rows already representing it. Scan writes `file_count` excluding
 /// masters, so that folder scores 0 here.
