@@ -402,15 +402,20 @@ jobs:
           # Changed files under this package, rebased to package-relative paths
           # and filtered to ones that exist (a deleted file has no dependents to
           # resolve and makes `vitest related` error).
-          mapfile -t files < <(
+          #
+          # `while read`, not `mapfile`: mapfile is a bash 4 builtin and the
+          # macOS runner still ships bash 3.2, where this step died with
+          # `mapfile: command not found` (exit 127) before running a single
+          # test. Keep this loop portable to bash 3.2.
+          existing=()
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ -f "$f" ] && existing+=("$f")
+          done < <(
             printf '%s' "$CHANGED_FILES" | tr ',' '\n' \
               | sed -n 's#^apps/desktop/##p' \
               | grep -E '^src/.*\.(ts|tsx)$' || true
           )
-          existing=()
-          for f in "${files[@]}"; do
-            [ -f "$f" ] && existing+=("$f")
-          done
 
           if [ ${#existing[@]} -eq 0 ]; then
             echo "No existing apps/desktop/src TS files changed -> full suite (conservative)."
