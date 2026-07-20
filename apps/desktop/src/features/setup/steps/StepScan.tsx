@@ -192,12 +192,12 @@ function SourceSummary({ state }: SourceSummaryProps) {
     return {
       _testid: `scan-item-${item.inboxItemId}`,
       folder: (
-        <>
+        <span className="pv-table__cell-inline">
           {item.isMaster && <Pill variant="info">{m.setup_scan_master()}</Pill>}
           {/* The root/top-level row of an expanded folder carries an empty
               relativePath; label it instead of leaving it blank (issue #513). */}
           {item.relativePath || m.setup_scan_root_label()}
-        </>
+        </span>
       ),
       files: item.fileCount,
       format: (item.format ?? item.lane).toUpperCase(),
