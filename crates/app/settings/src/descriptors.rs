@@ -37,8 +37,6 @@ pub(crate) enum ValidationRule {
     EnumStr { allowed: &'static [&'static str], expected_msg: &'static str },
     /// Must be a boolean (`"must be a boolean"`).
     Bool,
-    /// Must be a number (`"must be a number"`).
-    Number,
     /// Must be a number `>= 0` (`"must be a number"` then `"must be >= 0"`).
     NumberMinZero,
     /// Must be a number in an inclusive range, rendered as `"must be in [lo, hi]"`.
@@ -299,18 +297,6 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
             }
         },
         default: |s| Value::Bool(s.dev_mode),
-    },
-    Descriptor {
-        key: "plansListDefaultAgeCutoffDays",
-        noisy: true,
-        overridable: false,
-        validation: ValidationRule::Number,
-        apply: |v, s| {
-            if let Some(n) = v.as_f64() {
-                s.plans_list_default_age_cutoff_days = n;
-            }
-        },
-        default: |s| serde_json::json!(s.plans_list_default_age_cutoff_days),
     },
     Descriptor {
         key: "calibrationDarkTempTolerance",
@@ -718,11 +704,6 @@ pub(crate) fn check_rule(
         ValidationRule::Bool => {
             if !value.is_boolean() {
                 return Err(invalid("must be a boolean"));
-            }
-        }
-        ValidationRule::Number => {
-            if value.as_f64().is_none() {
-                return Err(invalid("must be a number"));
             }
         }
         ValidationRule::NumberMinZero => {

@@ -113,8 +113,15 @@ As a frontend developer, I can still run `VITE_USE_MOCKS=true` with `just dev` (
 **Command Surface**
 
 - **FR-001**: The Tauri backend MUST register a command handler for every command name the frontend invokes (30 commands as defined in `apps/desktop/src/api/commands.ts`).
+  *(Reconciliation note, 2026-07-19, issue #764: `apps/desktop/src/api/
+  commands.ts` no longer exists — spec 037's generated-bindings IPC
+  migration deleted it; the frontend now calls `commands.*` from
+  `apps/desktop/src/bindings/index.ts` directly.)*
 - **FR-002**: Each stub command handler MUST return data matching the shape and types the frontend expects (as defined by the generated specta bindings).
 - **FR-003**: Command naming MUST be aligned by using `#[specta(rename = "...")]` on Rust handlers to expose dotted names matching the frontend's existing invoke calls (e.g., `sessions.list`, `roots.register`). The frontend `commands.ts` is unchanged.
+  *(Reconciliation note, 2026-07-19, issue #764: same drift as FR-001 —
+  `commands.ts` is gone; the dotted names now come from tauri-specta's
+  generated bindings, not a hand-written wrapper.)*
 - **FR-004**: The existing 4 spec-002 lifecycle commands MUST continue to work unchanged.
 - **FR-005**: Stub handlers MUST be clearly marked and trivially replaceable — each command group (sessions, calibration, targets, projects, plans, audit, settings, roots, scan, search, preferences, equipment, review, tour) MUST be in its own module. Each stub MUST emit a `tracing::debug!` log line with the command name on invocation, so developers can identify which commands are still stubs via `RUST_LOG=debug`.
 
@@ -134,6 +141,13 @@ As a frontend developer, I can still run `VITE_USE_MOCKS=true` with `just dev` (
 **AppState**
 
 - **FR-013**: `AppState` MUST be expanded to hold service/repository references for all command groups, enabling domain specs to inject real implementations without restructuring.
+  *(Reconciliation note, 2026-07-19, issue #764: the shipped `AppState`
+  (`src-tauri/src/commands/lifecycle.rs`) stayed a thin pooled-handle
+  struct — `repo: Arc<SqliteLifecycleRepository>`, `bus: EventBus`, plus the
+  SIMBAD resolve-cache fields — not an expansion holding a
+  service/repository reference per command group. Individual commands
+  construct their own repositories from the shared pool/handles as needed,
+  rather than AppState pre-holding one per domain.)*
 - **FR-014**: `AppState` MUST be constructible with either real repositories (production) or stub/test fixtures.
 
 **Developer Experience**

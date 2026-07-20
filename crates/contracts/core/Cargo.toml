@@ -25,6 +25,7 @@ specta.workspace = true
 specta-typescript.workspace = true
 strum.workspace = true
 thiserror.workspace = true
+time.workspace = true
 uuid.workspace = true
 
 [lints]
