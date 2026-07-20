@@ -149,7 +149,7 @@ jobs:
   # and "the suite never ran" indistinguishable to humans and pollers alike
   # (see the PR that introduced this comment: job 88177101061).
   changes:
-    name: Detect changes
+    name: Detect changes (E2E)
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.decide.outputs.run }}
@@ -160,8 +160,14 @@ jobs:
         id: filter
         with:
           filters: |
+            # Deliberately NOT '.github/workflows/**': editing ci.yml or
+            # release-please.yml cannot change how e2e.yml runs its shards.
+            # The broad glob made every ci.yml touch — including one-line
+            # fixes like #1282 — force a full E2E run, which is a large part
+            # of the Windows/macOS runner contention. Mirrors the same
+            # narrowing ci.yml already applies (#1169).
             force_full:
-              - '.github/workflows/**'
+              - '.github/workflows/e2e.yml'
               - '**/Cargo.toml'
               - 'Cargo.lock'
               - '**/package.json'
