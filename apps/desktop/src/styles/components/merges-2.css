@@ -670,78 +670,27 @@
   padding-top: var(--pv-sp-2);
 }
 
-/* === Canonical DetailPanel 3-zone body (spec 043 §4, redesign-ui-platevault) ===
+/* === Canonical DetailPanel body (spec 043 §4, redesign-ui-platevault) ========
  *
- * DetailPanel renders up to 3 balanced zones. Grid template is driven by
- * modifier classes set by the component:
- *
- *   facts + content + aux   (.pv-detailpanel--has-facts.pv-detailpanel--has-aux)
- *     → minmax(220px, 0.26fr)  minmax(0, 1fr)  minmax(240px, 0.30fr)
- *   facts + content         (.pv-detailpanel--has-facts)
- *     → minmax(220px, 0.26fr)  minmax(0, 1fr)
- *   content + aux           (.pv-detailpanel--has-aux)
- *     → minmax(0, 1fr)  minmax(240px, 0.30fr)
- *   content only            (no modifier)
- *     → no wrapper; children render directly
+ * DetailPanel renders ONE body region, `.pv-detailpanel__content`, always.
+ * The facts/aux rails the 3-zone grid was built for were never adopted by any
+ * caller and are withdrawn (spec 054, #1107) — see DetailPanel.tsx.
  *
  * Auto-expand: .pv-listpage__detail is height:fit-content with a max-height
- * cap. The .pv-listpage__detail-body must NOT also scroll — only the
- * .pv-detailpanel__content column scrolls (scrollbar-gutter:stable).
+ * cap. The .pv-listpage__detail-body must NOT also scroll — only
+ * .pv-detailpanel__content scrolls (scrollbar-gutter:stable).
  *
  * Token-only — no raw hex/rgb/ms.
  * ============================================================================*/
 
-/* Base cols wrapper — content-only default (single col, no wrapper needed,
- * but --has-facts / --has-aux modifiers override grid-template-columns). */
-.pv-detailpanel__cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--pv-sp-5);
-  align-items: start;
-  padding: var(--pv-sp-3) var(--pv-sp-4);
-  min-height: 0;
-}
-
-/* 2-zone: facts + content */
-.pv-detailpanel__cols.pv-detailpanel--has-facts {
-  grid-template-columns: minmax(220px, 0.26fr) minmax(0, 1fr);
-}
-
-/* 2-zone: content + aux */
-.pv-detailpanel__cols.pv-detailpanel--has-aux {
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.30fr);
-}
-
-/* 3-zone: facts + content + aux */
-.pv-detailpanel__cols.pv-detailpanel--has-facts.pv-detailpanel--has-aux {
-  grid-template-columns: minmax(220px, 0.26fr) minmax(0, 1fr) minmax(240px, 0.30fr);
-}
-
-/* Facts rail (left): sizes to content, never scrolls on its own. */
-.pv-detailpanel__facts {
-  min-width: 0;
-}
-.pv-detailpanel__facts .pv-rail__panel {
-  /* Override fill-mode rail scroll so facts stay compact. */
-  max-height: none;
-  overflow: visible;
-}
-
-/* Content column (center): THE ONLY scroll region inside the body.
+/* Body region: THE ONLY scroll region inside the panel.
  * scrollbar-gutter:stable prevents dropdown-open layout shift. */
 .pv-detailpanel__content {
   min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-}
-
-/* Aux rail (right): secondary blocks, sizes to content, no own scroll. */
-.pv-detailpanel__aux {
-  min-width: 0;
-}
-.pv-detailpanel__aux .pv-rail__panel {
-  max-height: none;
-  overflow: visible;
 }
 
 /* FactsKV helper: a compact label/value row for use inside the facts column. */

@@ -21,8 +21,9 @@
 #   - crates/persistence/db/**         (the sanctioned home for SQL)
 #   - any path containing a `tests/` segment (integration tests)
 #   - the example reference module (query_builder_example.rs)
-#   - query sites that appear at/after the first `#[cfg(test)]` line in a file
-#     (inline unit-test modules are not production code)
+#   - query sites inside an inline `#[cfg(test)]` item (unit-test modules and
+#     test-only helpers are not production code). Only the item's own scope is
+#     exempt — production code following it in the same file is still counted.
 #   - entire files the compiler excludes from production builds, i.e. file-level
 #     test modules (see is_test_only_file)
 #
@@ -89,24 +90,51 @@ is_test_only_file() {
   return 1
 }
 
-# Count production query sites in a single file (sites before first #[cfg(test)]).
+# Count production query sites in a single file.
+#
+# An inline `#[cfg(test)]` item exempts ITS OWN SCOPE only, not the rest of the
+# file: production code may legally follow an inline test module, and SQL there
+# is a real leak. The item's extent is found by its closing brace at the
+# attribute's own indentation, which rustfmt guarantees. Brace *depth* counting
+# is deliberately avoided because braces inside string literals (multi-line SQL,
+# format strings) would desynchronise it; the indentation rule cannot be thrown
+# off that way, and its only failure mode — a string line starting `}` at
+# exactly that column — ends the exemption early, i.e. errs strict.
 count_file() {
   local file="$1"
-  local cutoff
 
   if is_test_only_file "$file"; then
     echo 0
     return
   fi
 
-  # Line number of the first #[cfg(test)] (inline unit-test module marker).
-  cutoff="$(grep -nE '#\[cfg\(test\)\]' "$file" | head -1 | cut -d: -f1 || true)"
-  if [[ -n "$cutoff" ]]; then
-    # Production region is everything strictly before the cfg(test) marker.
-    head -n "$((cutoff - 1))" "$file" | grep -cE "$PATTERN" || true
-  else
-    grep -cE "$PATTERN" "$file" || true
-  fi
+  PAT="$PATTERN" awk '
+    BEGIN { pat = ENVIRON["PAT"] }
+
+    # Inside a #[cfg(test)] item: nothing counts until its closing brace.
+    skipping {
+      if ($0 ~ ("^" indent "\\}")) { skipping = 0 }
+      next
+    }
+
+    # Line after a #[cfg(test)] attribute decides how far the exemption reaches.
+    pending {
+      if ($0 ~ /^[[:space:]]*#\[/) { next }        # stacked attributes
+      pending = 0
+      if ($0 ~ /\{/) { skipping = 1 }              # braced item: skip its scope
+      next                                         # else `mod x;` — just this line
+    }
+
+    /^[[:space:]]*#\[cfg\(test\)\]/ {
+      indent = $0
+      sub(/#.*$/, "", indent)
+      if ($0 ~ /\{/) { skipping = 1 } else { pending = 1 }
+      next
+    }
+
+    $0 ~ pat { n++ }
+    END { print n + 0 }
+  ' "$file"
 }
 
 # Enumerate candidate production files (sorted, repo-relative paths).

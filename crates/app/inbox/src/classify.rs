@@ -779,6 +779,27 @@ pub fn check_mandatory_missing(
     missing
 }
 
+/// Mandatory attributes absent for one file record, as the needs-review bucket
+/// judges it (T070 / FR-047 / R-14).
+///
+/// An unresolved frame type reports `["frameType"]`: the frame type is itself
+/// the first mandatory attribute, and until it is known no per-type set can be
+/// derived. Empty means the file can leave the needs-review bucket.
+///
+/// `target_resolved` is pinned to `false` for the same reason as
+/// [`materialize_sub_items`]: coordinate resolution (FR-052) is not integrated
+/// at classify time, so the OBJECT header is the proxy.
+#[must_use]
+pub(crate) fn missing_mandatory_for_file(
+    frame_type: Option<FrameType>,
+    raw_meta: Option<&metadata_core::RawFileMetadata>,
+) -> Vec<String> {
+    match frame_type {
+        Some(ft) => check_mandatory_missing(ft, raw_meta, false),
+        None => vec!["frameType".to_owned()],
+    }
+}
+
 /// Build a [`FrameMetadata`] from a [`metadata_core::RawFileMetadata`] for use
 /// with the grouping engine (T066). All extended fields (set_temp, pointing,
 /// rotation, optic-train, observing-night) are sourced from the core
@@ -890,13 +911,11 @@ pub(crate) async fn materialize_sub_items(
     for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
         let abs_path = file_paths.get(i).cloned();
 
-        let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
-            // T070 / FR-047: check mandatory attributes before grouping.
-            // target_resolved=false: coordinate resolution (FR-052) is not yet
-            // integrated at classify time; the user's OBJECT header value is
-            // used as the proxy. Lights with no OBJECT go to needs-review.
-            let missing = check_mandatory_missing(ft, raw_meta_opt.as_ref(), false);
-            if missing.is_empty() {
+        // T070 / FR-047: an unclassifiable file and one missing a mandatory
+        // attribute are the same outcome — the sentinel bucket (FR-048).
+        let missing = missing_mandatory_for_file(*frame_type_opt, raw_meta_opt.as_ref());
+        let (group_key, group_label) = match (*frame_type_opt, missing.is_empty()) {
+            (Some(ft), true) => {
                 // Build effective FrameMetadata for the grouping engine.
                 let meta = raw_meta_opt.as_ref().map_or_else(
                     || FrameMetadata { frame_type: ft, ..Default::default() },
@@ -906,13 +925,8 @@ pub(crate) async fn materialize_sub_items(
                 let config = GroupingConfig::default_for(ft);
                 let result = group_file(&meta, &config);
                 (result.key.0, result.label.0)
-            } else {
-                // Missing mandatory attributes — sentinel bucket (FR-048).
-                (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
             }
-        } else {
-            // Unclassifiable (no frame type) — sentinel bucket (FR-048).
-            (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
+            _ => (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned()),
         };
 
         // Files without a resolvable abs path (e.g. reclassify_v2's re-split,

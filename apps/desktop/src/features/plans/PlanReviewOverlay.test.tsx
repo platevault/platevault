@@ -686,6 +686,46 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     await waitFor(() => expect(approveBtn).not.toBeDisabled());
   });
 
+  // handoff 06: destructive red is scoped to plans that actually remove data
+  // — a move/archive-only plan must not render the destructive button.
+  it('renders Approve & apply as primary (not destructive) for a plan with no delete items', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    mockPlansGet.mockResolvedValue(
+      ok(
+        plan({
+          items: [item({ action: 'move', to: 'archive/light_001.xisf' })],
+        }),
+      ),
+    );
+    renderOverlay();
+
+    // Wait for the plan to load (item name renders) before reading the
+    // button's variant class — the button also renders pre-load (disabled),
+    // where `plan` is still null and the variant would trivially read
+    // 'primary' regardless of the eventual plan content.
+    await screen.findByText('light_001.xisf');
+    const approveBtn = screen.getByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).toHaveClass('pv-btn--primary'));
+    expect(approveBtn).not.toHaveClass('pv-btn--destructive');
+  });
+
+  it('renders Approve & apply as destructive for a plan with a delete item', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    mockPlansGet.mockResolvedValue(
+      ok(plan({ items: [item({ action: 'delete', to: '' })] })),
+    );
+    renderOverlay();
+
+    await screen.findByText('light_001.xisf');
+    const approveBtn = screen.getByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).toHaveClass('pv-btn--destructive'));
+    expect(approveBtn).not.toHaveClass('pv-btn--primary');
+  });
+
   it('offers Cancel apply during a running apply and calls plan.cancel (US3/FR-009, issue #743)', async () => {
     mockProtectionCheck.mockResolvedValue(
       ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),

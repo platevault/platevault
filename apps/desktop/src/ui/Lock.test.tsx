@@ -43,4 +43,23 @@ describe('Lock accessibility', () => {
     render(<Lock />);
     expect(screen.getByRole('note', { name: 'Protected' })).toBeInTheDocument();
   });
+
+  // The decorative variant is the deliberate exception: it is only correct
+  // where the reason is stated in text nearby AND is identical for every
+  // instance, so N focus stops would announce the same sentence N times.
+  it('decorative locks are hidden from assistive tech and out of the tab order', () => {
+    const { container } = render(<Lock decorative />);
+
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+
+    const glyph = container.querySelector('.pv-lock');
+    expect(glyph).not.toBeNull();
+    expect(glyph).toHaveAttribute('aria-hidden', 'true');
+    expect(glyph).not.toHaveAttribute('tabindex');
+  });
+
+  it('decorative locks still render the padlock glyph', () => {
+    const { container } = render(<Lock decorative />);
+    expect(container.querySelector('.pv-lock')?.textContent).toBe('\u{1F512}');
+  });
 });

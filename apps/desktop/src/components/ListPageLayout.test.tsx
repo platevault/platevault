@@ -15,11 +15,19 @@
  * `bottomDetail`), each with their own aria label and close affordance.
  */
 
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  renderHook,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ListPageLayout } from './ListPageLayout';
 import { Modal } from './Modal';
 import { Combobox } from '@base-ui-components/react/combobox';
+import { resetPreferences } from '@/data/preferences';
+import { useAdaptiveDock } from '@/ui/useAdaptiveDock';
 
 /** Simulate a browser window resize for the adaptive-dock hook (jsdom
  * doesn't resize on its own — `window.innerWidth` must be forced). */
@@ -360,7 +368,9 @@ describe('ListPageLayout', () => {
     const originalInnerWidth = window.innerWidth;
 
     beforeEach(() => {
-      window.localStorage.clear();
+      // Clears the in-memory preference cache too — plain localStorage.clear()
+      // would leave the module cache holding the previous test's dock pins.
+      resetPreferences();
     });
 
     afterEach(() => {
@@ -415,7 +425,7 @@ describe('ListPageLayout', () => {
       );
     });
 
-    it('pinning to side persists across remount (dockId-scoped localStorage)', () => {
+    it('pinning to side persists across remount (dockId-scoped preference)', () => {
       resizeWindowTo(1024);
       const { container, unmount } = render(
         <ListPageLayout
@@ -542,6 +552,111 @@ describe('ListPageLayout', () => {
       expect(region).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
       expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── useAdaptiveDock, directly (#1158) ────────────────────────────────────
+  //
+  // The hook drives all placement but was only ever covered indirectly, through
+  // this layout. That is how #1066 slipped through: `setOverride(null)` — the
+  // "return to Auto" path — had no call site at all, and no test caught it.
+  //
+  // Folded into this file rather than a new one on purpose: adding a
+  // React-rendering test file previously tipped the suite into load-induced
+  // timeouts in unrelated suites, so these live beside the layout tests that
+  // already exercise the same hook.
+
+  describe('useAdaptiveDock', () => {
+    const originalInnerWidth = window.innerWidth;
+
+    beforeEach(() => {
+      resetPreferences();
+    });
+
+    afterEach(() => {
+      resizeWindowTo(originalInnerWidth);
+    });
+
+    it('resolves placement from the threshold when unpinned', () => {
+      resizeWindowTo(1024);
+      const { result, rerender } = renderHook(() =>
+        useAdaptiveDock({ dockId: 'hook-threshold' }),
+      );
+      expect(result.current.placement).toBe('bottom');
+      expect(result.current.override).toBeNull();
+
+      act(() => resizeWindowTo(1600));
+      rerender();
+      expect(result.current.placement).toBe('side');
+    });
+
+    it('a pin overrides the threshold, and setOverride(null) restores it (#1066)', () => {
+      resizeWindowTo(1600);
+      const { result } = renderHook(() =>
+        useAdaptiveDock({ dockId: 'hook-override' }),
+      );
+      expect(result.current.placement).toBe('side');
+
+      act(() => result.current.setOverride('bottom'));
+      expect(result.current.placement).toBe('bottom');
+      expect(result.current.override).toBe('bottom');
+
+      // The regression: clearing the pin must resume the width rule, not
+      // persist a value that reads back as a pin.
+      act(() => result.current.setOverride(null));
+      expect(result.current.override).toBeNull();
+      expect(result.current.placement).toBe('side');
+    });
+
+    it('falls back to bottom when the window is too narrow for a side dock', () => {
+      // sideAvailable = innerWidth >= minWidth * 2. Below that an explicit
+      // 'side' pin must NOT win — the 1100x720 shell minimum stays workable.
+      resizeWindowTo(600);
+      const { result } = renderHook(() =>
+        useAdaptiveDock({ dockId: 'hook-narrow', minWidth: 320 }),
+      );
+      act(() => result.current.setOverride('side'));
+      expect(result.current.override).toBe('side');
+      expect(result.current.placement).toBe('bottom');
+    });
+
+    it('clamps width to [minWidth, window * maxWidthFraction]', () => {
+      resizeWindowTo(1600);
+      const { result } = renderHook(() =>
+        useAdaptiveDock({
+          dockId: 'hook-clamp',
+          minWidth: 320,
+          maxWidthFraction: 0.5,
+        }),
+      );
+      act(() => result.current.setWidth(50));
+      expect(result.current.width).toBe(320);
+
+      act(() => result.current.setWidth(5000));
+      expect(result.current.width).toBe(800); // 1600 * 0.5
+
+      act(() => result.current.setWidth(500));
+      expect(result.current.width).toBe(500);
+    });
+
+    it('persists across remount, scoped per dockId', () => {
+      resizeWindowTo(1600);
+      const first = renderHook(() => useAdaptiveDock({ dockId: 'page-a' }));
+      act(() => {
+        first.result.current.setOverride('bottom');
+        first.result.current.setWidth(500);
+      });
+      first.unmount();
+
+      // Same id: restored.
+      const restored = renderHook(() => useAdaptiveDock({ dockId: 'page-a' }));
+      expect(restored.result.current.override).toBe('bottom');
+      expect(restored.result.current.width).toBe(500);
+
+      // Different id: untouched by page-a's pin.
+      const other = renderHook(() => useAdaptiveDock({ dockId: 'page-b' }));
+      expect(other.result.current.override).toBeNull();
+      expect(other.result.current.placement).toBe('side');
     });
   });
 });

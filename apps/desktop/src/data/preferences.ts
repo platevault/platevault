@@ -20,6 +20,7 @@ const defaults: AppPreferences = {
   sessionsView: 'list',
   tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
+  detailDock: {},
 };
 
 function notify(): void {

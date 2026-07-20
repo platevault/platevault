@@ -123,3 +123,29 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
     );
   });
 });
+
+describe('resolveTheme — system + OS dark preference (#1181)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("resolves 'system' to the dark default (observatory-cool) when the OS prefers dark", async () => {
+    // Follows the matchMedia mock pattern in LogPanel.test.tsx (the only
+    // other matchMedia stub in the suite, there for prefers-reduced-motion).
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('prefers-color-scheme: dark'),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+
+    const { resolveTheme } = await import('./theme');
+    expect(resolveTheme('system')).toBe('observatory-cool');
+  });
+});

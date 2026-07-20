@@ -52,6 +52,7 @@ use domain_core::project::validate::{
 use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as repo;
+use persistence_db::repositories::q_core;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
 use sqlx::SqlitePool;
 
@@ -107,6 +108,67 @@ fn parse_exposure_seconds(exposure: &str) -> u64 {
             0
         }
     }
+}
+
+/// A project source's snapshot of its inventory session, taken at link time
+/// (#1218). Empty strings / `0` mean "the session does not carry this value",
+/// which is what every field was hardcoded to before this was wired.
+#[derive(Debug, Default)]
+struct SourceSnapshot {
+    name: String,
+    frames: i64,
+    filter: String,
+    exposure: String,
+}
+
+/// Read the snapshot fields for one inventory (acquisition) session.
+///
+/// - `filter` comes from the session key, whose format `crates/sessions`
+///   owns (`sessions::parse_session_key`); it is the same value the Sessions
+///   surfaces show.
+/// - `frames` is the ACTIVE (non-`missing`) frame count, matching
+///   `app_core::sessions`' honest counts rather than the raw `frame_ids` length.
+/// - `exposure` is a PER-SUB token (`"300s"`), never total integration time —
+///   `parse_exposure_seconds` and the source-view `{exposure}` path token both
+///   read it that way. Exposure is not part of the session key, so a session
+///   may hold several distinct per-sub exposures; only a session with exactly
+///   ONE distinct value gets a token. With zero (no metadata) or several, no
+///   scalar is truthful, so the field stays empty and the pattern registry's
+///   documented `unknown-exposure` fallback applies rather than inventing a
+///   directory name that reads like a real exposure.
+///
+/// An unknown session id yields an all-empty snapshot: source linking is
+/// best-effort and must never fail project creation.
+async fn source_snapshot(
+    pool: &SqlitePool,
+    inventory_session_id: &str,
+) -> Result<SourceSnapshot, ContractError> {
+    let Some(row) = q_core::get_session_joined(pool, inventory_session_id).await.map_err(db_err)?
+    else {
+        return Ok(SourceSnapshot::default());
+    };
+
+    let key = sessions::parse_session_key(&row.session_key);
+    let target = row.canonical_target_name.filter(|n| !n.is_empty()).or(key.target);
+    let filter = key.filter.unwrap_or_default();
+
+    let frame_ids: Vec<String> = serde_json::from_str(&row.frame_ids).unwrap_or_default();
+    let (frames, _bytes) = q_core::active_frame_summary(pool, &frame_ids).await.map_err(db_err)?;
+    let exposures = q_core::active_frame_exposures(pool, &frame_ids).await.map_err(db_err)?;
+    let exposure = match exposures.as_slice() {
+        [only] => persistence_db::repositories::inbox::format_exposure_label(*only),
+        _ => String::new(),
+    };
+
+    // Mirrors `app_core::inventory::derive_session_name`, so a linked source
+    // shows the same label the Sessions/Inventory surfaces show.
+    let name = target.map_or_else(String::new, |t| {
+        let filter_part = if filter.is_empty() { "?" } else { filter.as_str() };
+        let night = key.night.unwrap_or_default();
+        format!("{t} · {filter_part} — {night}")
+    });
+
+    Ok(SourceSnapshot { name, frames, filter, exposure })
 }
 
 /// Per-channel aggregate totals (sub-frame count, integration seconds),
@@ -517,26 +579,32 @@ pub async fn create(
         is_mosaic: req.is_mosaic,
     };
 
-    // Link initial sources (best-effort: if a source is not found in a future
-    // Inventory table we just skip it for now — spec 003 integration is
-    // pending). For now, initial_sources lists inventory_session_ids that we
-    // trust. Ids are pre-generated so `source_rows` (used for channel
-    // inference and the response DTOs) and `source_data` (borrowed into the
-    // composite insert) can share them without re-querying the DB.
+    // Link initial sources (best-effort: an id with no acquisition session is
+    // linked with an empty snapshot rather than failing the create). Ids are
+    // pre-generated so `source_rows` (used for channel inference and the
+    // response DTOs) and `source_data` (borrowed into the composite insert)
+    // can share them without re-querying the DB.
+    //
+    // Snapshots are resolved HERE, before `create_project_tx`, because that
+    // call must stay one atomic unit (see the comment above `insert`).
     let source_ids: Vec<String> = req.initial_sources.iter().map(|_| new_id()).collect();
+    let mut snapshots: Vec<SourceSnapshot> = Vec::with_capacity(req.initial_sources.len());
+    for inv_id in &req.initial_sources {
+        snapshots.push(source_snapshot(pool, inv_id).await?);
+    }
     let source_rows: Vec<repo::ProjectSourceRow> = req
         .initial_sources
         .iter()
         .zip(source_ids.iter())
-        .map(|(inv_id, src_id)| repo::ProjectSourceRow {
+        .zip(snapshots.iter())
+        .map(|((inv_id, src_id), snap)| repo::ProjectSourceRow {
             id: src_id.clone(),
             project_id: project_id.clone(),
             inventory_session_id: inv_id.clone(),
-            // Snapshot fields will be empty until spec 003 Inventory is wired.
-            name_snapshot: String::new(),
-            frames_snapshot: 0,
-            filter_snapshot: String::new(),
-            exposure_snapshot: String::new(),
+            name_snapshot: snap.name.clone(),
+            frames_snapshot: snap.frames,
+            filter_snapshot: snap.filter.clone(),
+            exposure_snapshot: snap.exposure.clone(),
             linked_at: now.clone(),
         })
         .collect();
@@ -544,14 +612,15 @@ pub async fn create(
         .initial_sources
         .iter()
         .zip(source_ids.iter())
-        .map(|(inv_id, src_id)| repo::InsertProjectSource {
+        .zip(snapshots.iter())
+        .map(|((inv_id, src_id), snap)| repo::InsertProjectSource {
             id: src_id,
             project_id: &project_id,
             inventory_session_id: inv_id,
-            name_snapshot: "",
-            frames_snapshot: 0,
-            filter_snapshot: "",
-            exposure_snapshot: "",
+            name_snapshot: &snap.name,
+            frames_snapshot: snap.frames,
+            filter_snapshot: &snap.filter,
+            exposure_snapshot: &snap.exposure,
             linked_at: &now,
         })
         .collect();
@@ -840,14 +909,15 @@ pub async fn add_source(
     let now = Timestamp::now_iso();
     let src_id = new_id();
 
+    let snap = source_snapshot(pool, &req.inventory_session_id).await?;
     let src_data = repo::InsertProjectSource {
         id: &src_id,
         project_id: &req.project_id,
         inventory_session_id: &req.inventory_session_id,
-        name_snapshot: "",
-        frames_snapshot: 0,
-        filter_snapshot: "",
-        exposure_snapshot: "",
+        name_snapshot: &snap.name,
+        frames_snapshot: snap.frames,
+        filter_snapshot: &snap.filter,
+        exposure_snapshot: &snap.exposure,
         linked_at: &now,
     };
     repo::insert_project_source(pool, &src_data).await.map_err(db_err)?;
@@ -895,10 +965,10 @@ pub async fn add_source(
         id: src_id,
         project_id: req.project_id.clone(),
         inventory_session_id: req.inventory_session_id.clone(),
-        name_snapshot: String::new(),
-        frames_snapshot: 0,
-        filter_snapshot: String::new(),
-        exposure_snapshot: String::new(),
+        name_snapshot: snap.name,
+        frames_snapshot: snap.frames,
+        filter_snapshot: snap.filter,
+        exposure_snapshot: snap.exposure,
         linked_at: now.clone(),
     };
 

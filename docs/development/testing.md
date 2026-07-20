@@ -102,3 +102,100 @@ New features **ship with real-stack coverage**:
 
 Tests that touch the filesystem MUST use `tempfile::tempdir()` — never real user
 libraries. Tests covering destructive operations assert the audit record.
+
+## Diagnosing load-state races in component tests
+
+This section is the durable record of the #1083 sweep (#1095, #1109, #1118,
+#1128). Read it before hunting async flakes again — the sweep's main output was
+learning which methods do *not* work.
+
+### Do not classify by pattern
+
+The sweep's candidate list came from grepping for "a `waitFor(...)` block
+followed by a synchronous `expect(someMock).toHaveBeenCalled…`". **4 of 31
+candidates were real races.** Two independent reasons the textual pattern fails:
+
+- It cannot see containment. The original scanner matched on *line proximity*
+  and never checked whether the `expect` was inside the `waitFor` callback, so
+  it flagged 11 already-correct `await waitFor(() => expect(...))` calls whose
+  own opening `waitFor(` happened to sit one line up.
+- Even with containment fixed, the shape is not the signal. The remaining
+  candidates were still overwhelmingly false positives, because whether a test
+  races is a question about the *component*, not the assertion.
+
+No scanner is committed for this, deliberately. The discriminator below is
+semantic and not statically decidable, so a candidate-list generator mostly
+manufactures triage cost. (`ast-grep` would fix the containment defect but not
+the underlying imprecision, and it is not a dependency of this repo.)
+
+### The actual discriminator
+
+**Does a React effect or an `await` sit between the trigger and the
+observable?**
+
+- The component calls the mock straight from a click handler → it cannot race.
+  Classifiable by reading alone; skip it.
+- The assertion targets work scheduled *after* a render commit (`useEffect`, a
+  `.then()`, a state-triggered fetch) → genuine candidate.
+
+`LogPanel.crosslink` was 0 for 4 on exactly this point: `void navigate({...})`
+discards the returned promise, but the call itself is synchronous.
+
+### Confirm empirically, with a positive control
+
+Inject a ~120 ms delay into the relevant mock's *resolution* — keeping the call
+itself synchronous — or make it never resolve, then run the test:
+
+- fails under delay → genuine race; fix it
+- still passes → false positive; leave it completely alone
+
+**A suite that passes under hanging mocks is indistinguishable from a suite
+that never ran.** Validate the instrumentation before trusting a negative
+result: deliberately break one assertion (swap an expected route for a bogus
+value) and confirm it fails. Both null-result lanes in the sweep did this.
+
+Triage the assertion *block*, not the matched line. In 2 of the 3 real races,
+the flagged line was a synchronous handler call (safe) and the racing assertion
+was the next one.
+
+### `waitFor` is the wrong fix for "must never happen"
+
+`waitFor` retries until the callback stops throwing, so it only ever proves
+**"the call hasn't arrived *yet*"**. Mock call counts never decrease, so a
+*negated* call assertion inside a `waitFor` callback is satisfied on the first
+attempt and asserts nothing — silently converting a regression test into a
+no-op:
+
+```ts
+// WRONG — passes immediately, proves nothing
+await waitFor(() => expect(mockIpc).not.toHaveBeenCalled());
+
+// RIGHT — await the observable that proves the work is done, then assert
+await waitFor(() => expect(screen.getByRole('status')).toBeVisible());
+expect(mockIpc).not.toHaveBeenCalled();
+```
+
+`AuditLog.test.tsx` (a keystroke must not trigger an immediate IPC round-trip)
+and `SchemaViewer.callVersion.test.tsx` (no extra re-fetch) are both correctly
+synchronous for this reason. The `alm/no-vacuous-waitfor` ESLint rule
+(`apps/desktop/eslint-rules/no-vacuous-waitfor.js`) enforces this, since the
+failure mode is silent and green. Waiting for a call to *arrive*
+(`await waitFor(() => expect(m).toHaveBeenCalledTimes(1))`) is monotonic,
+legitimate, and not flagged.
+
+### Element-exists vs value-changed
+
+Where an element renders unconditionally and only its **value** arrives late,
+`findByLabelText` does *not* fix the race — it resolves immediately against the
+pre-hydration element. Use a value-aware query, e.g.
+`findByRole('checkbox', { name, checked: true })`. That was the #1109 lesson,
+and the #1128 `SourceProtectionOverride` fix is the same shape: it had to gate
+on the editor's select *disappearing*, because the two nearby queries both
+matched something present from first render.
+
+### Sweep residue
+
+The sweep covered `apps/desktop/src/{app,ui,dev,features/{settings,setup,targets,projects,inbox,archive,plans}}`.
+Every other directory is unswept. Given the 4-in-31 hit rate and the triage cost
+per real bug, a broad rescan is not worth running; investigate a specific
+observed flake instead.

@@ -12,7 +12,9 @@ pub use clustering::{
     rotation_circular_distance_deg, Assignment, ClusteringResult, ExistingFraming, NewFramingGroup,
     SessionGeometry, ToleranceParams, UnassignedReason,
 };
-pub use key::{observing_night, session_key, KeyError, ObserverContext};
+pub use key::{
+    observing_night, parse_session_key, session_key, KeyError, ObserverContext, SessionKeyParts,
+};
 pub use optic_train::optic_train_key;
 
 pub const CRATE_NAME: &str = "sessions";
