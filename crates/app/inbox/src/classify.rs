@@ -464,7 +464,16 @@ pub async fn classify(
     .await
     .ok();
 
-    repo::update_inbox_item_state(pool, &req.inbox_item_id, "classified").await.ok();
+    // spec 058 FR-007/SC-003: only a row that carries its own frame type may
+    // report `classified`. A folder aggregate never gets one, so flipping it
+    // unconditionally was the #711 "Classified badge on a row that knows no
+    // frame type" defect. The error is surfaced rather than swallowed — a
+    // silently failed state write leaves the row lying about itself.
+    let next_state =
+        if item.frame_type.is_some() { "classified" } else { "pending_classification" };
+    repo::update_inbox_item_state(pool, &req.inbox_item_id, next_state)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     // 10. Build + persist breakdown with destination previews
     let breakdown =

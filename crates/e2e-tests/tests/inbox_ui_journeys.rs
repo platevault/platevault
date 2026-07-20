@@ -224,8 +224,11 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
     rescan_and_wait_for_item(&app).await?;
 
     // The split happens when the folder is CLASSIFIED (spec 041 T066:
-    // `materialize_sub_items` runs inside `inbox.classify`, then purges the
-    // superseded parent row) — scanning alone lists ONE folder-level item.
+    // `materialize_sub_items` runs inside `inbox.classify`). The superseded
+    // parent row is NOT purged — it is hidden from the list by the read-side
+    // `exclude_split_placeholder!` predicate and still exists in
+    // `inbox_items` (spec 058 T025; the row itself stops being created at
+    // T020). Scanning alone lists ONE folder-level item.
     // Selecting the row is the real user action that triggers that classify.
     select_only_item(&app).await?;
 
@@ -412,8 +415,9 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     // Both controls are CONTROLLED React inputs on a pane that InboxPage
     // REMOUNTS whenever the selected item's id changes (`key={inboxItemId}`)
     // — and the id DOES change right after the first classify (the
-    // placeholder row is purged and replaced by the materialized needs-review
-    // sub-item, `materialize_sub_items`). A remount mid-sequence resets the
+    // placeholder row is hidden by `exclude_split_placeholder!` — not deleted
+    // — and selection moves to the materialized needs-review sub-item).
+    // A remount mid-sequence resets the
     // pane's selection + bulk state and unmounts the fieldset, so any single
     // step can 404 or silently lose its committed value. Run the WHOLE
     // select-all → frame-type → exposure sequence, re-verify every value is

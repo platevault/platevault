@@ -2530,12 +2530,21 @@ mod tests {
     /// `unclassified` and the bulk reclassify below drives the re-split.
     /// `pad` varies the file's byte length to give it distinct content.
     fn write_ambiguous_fits(path: &std::path::Path, object: &str, pad: usize) {
+        write_fits_cards(
+            path,
+            &[
+                "IMAGETYP= 'Frame Unknown'".to_owned(),
+                format!("OBJECT  = '{object}'"),
+                "FILTER  = 'Ha'".to_owned(),
+            ],
+            pad,
+        );
+    }
+
+    /// Write a minimal single-block FITS file carrying `cards` in its header.
+    /// `pad` varies the file's byte length to give it distinct content.
+    fn write_fits_cards(path: &std::path::Path, cards: &[String], pad: usize) {
         let mut data = vec![b' '; 2880 + pad];
-        let cards = [
-            "IMAGETYP= 'Frame Unknown'".to_owned(),
-            format!("OBJECT  = '{object}'"),
-            "FILTER  = 'Ha'".to_owned(),
-        ];
         for (i, c) in cards.iter().enumerate() {
             let card = format!("{c:<80}");
             data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
@@ -2742,6 +2751,75 @@ mod tests {
             sigs.is_empty(),
             "reclassify_v2 materialized sub-items for a source group with no prior \
              item rows — the T012 blocker is gone and this test must be inverted"
+        );
+    }
+
+    /// Spec 058 SC-003 (T023): **no `inbox_items` row may report
+    /// `state = 'classified'` while carrying no frame type.**
+    ///
+    /// Swept table-wide after running the REAL classify pass over all three
+    /// folder shapes 058 names — uniform, mixed, and needs-review — because the
+    /// two writers that produced the violation are on different code paths:
+    /// the folder aggregate is flipped by `classify()`'s step 9, while a
+    /// needs-review sub-item is written by `upsert_inbox_sub_item`. A test
+    /// scoped to either one alone passes while the other still lies.
+    #[tokio::test]
+    async fn no_item_reports_classified_without_a_frame_type_sc003() {
+        let db = test_db().await;
+
+        let light = |object: &str| {
+            vec![
+                "IMAGETYP= 'LIGHT'".to_owned(),
+                format!("OBJECT  = '{object}'"),
+                "FILTER  = 'Ha'".to_owned(),
+                "EXPTIME =            300.0".to_owned(),
+                "GAIN    =              100".to_owned(),
+            ]
+        };
+        let dark = || {
+            vec![
+                "IMAGETYP= 'DARK'".to_owned(),
+                "EXPTIME =            300.0".to_owned(),
+                "GAIN    =              100".to_owned(),
+            ]
+        };
+
+        // Uniform — every file the same fully-attributed frame type.
+        let uniform = tempfile::tempdir().unwrap();
+        write_fits_cards(&uniform.path().join("a.fits"), &light("M42"), 0);
+        write_fits_cards(&uniform.path().join("b.fits"), &light("M42"), 80);
+        seed_and_classify(db.pool(), uniform.path(), "sg-u", "item-u", "root-u").await;
+
+        // Mixed — two frame types in one folder, so the aggregate resolves to
+        // no single frame type at all. This is the #711 shape.
+        let mixed = tempfile::tempdir().unwrap();
+        write_fits_cards(&mixed.path().join("a.fits"), &light("M31"), 0);
+        write_fits_cards(&mixed.path().join("b.fits"), &dark(), 160);
+        seed_and_classify(db.pool(), mixed.path(), "sg-m", "item-m", "root-m").await;
+
+        // Needs-review — an unmapped IMAGETYP yields no frame type.
+        let review = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&review.path().join("a.fits"), "M13", 240);
+        seed_and_classify(db.pool(), review.path(), "sg-r", "item-r", "root-r").await;
+
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_items")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert!(total >= 3, "fixture is vacuous — classify produced no item rows at all");
+
+        let offenders: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT id, state, COALESCE(group_key, '<null>') FROM inbox_items
+             WHERE state = 'classified' AND frame_type IS NULL",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+
+        assert!(
+            offenders.is_empty(),
+            "SC-003: {} row(s) report `classified` with no frame type: {offenders:?}",
+            offenders.len()
         );
     }
 }

@@ -525,6 +525,11 @@ pub async fn upsert_inbox_sub_item(
     item: &UpsertInboxSubItem<'_>,
 ) -> DbResult<String> {
     let now = Timestamp::now_iso();
+    // spec 058 FR-007/SC-003: a row carrying no authoritative frame type must
+    // not claim to be classified. `pending_classification` is the only other
+    // value the `state` CHECK permits for an unresolved queue row
+    // ('unclassified' is not in the constraint).
+    let state = if item.frame_type.is_some() { "classified" } else { "pending_classification" };
     // `RETURNING id` yields the id of the row that actually persists: the new
     // `item.id` on INSERT, but the PRE-EXISTING row's id on ON CONFLICT DO
     // UPDATE. Callers MUST seed evidence/metadata/classification against this
@@ -538,14 +543,14 @@ pub async fn upsert_inbox_sub_item(
             (id, root_id, relative_path, source_group_id, group_key, group_label,
              frame_type, file_count, discovered_at, last_scanned_at,
              content_signature, state, lane, needs_review)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'classified', ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(root_id, relative_path, group_key) DO UPDATE SET
              group_label        = excluded.group_label,
              frame_type         = excluded.frame_type,
              file_count         = excluded.file_count,
              last_scanned_at    = excluded.last_scanned_at,
              content_signature  = excluded.content_signature,
-             state              = 'classified',
+             state              = excluded.state,
              needs_review       = excluded.needs_review
          RETURNING id",
     )
@@ -560,6 +565,7 @@ pub async fn upsert_inbox_sub_item(
     .bind(&now)
     .bind(&now)
     .bind(item.content_signature)
+    .bind(state)
     .bind(item.lane)
     .bind(i64::from(item.needs_review))
     .fetch_one(pool)
@@ -2319,12 +2325,10 @@ mod tests {
     /// and resolving an item out of needs-review moves the flag, the frame
     /// type and the state in ONE statement (FR-029).
     ///
-    /// SC-003 is NOT yet met, and this test pins the violation rather than
-    /// claiming it away: the INSERT hardcodes `state = 'classified'`, so the
-    /// UNRESOLVED needs-review row reports `classified` with a NULL
-    /// `frame_type` for as long as it stays unresolved — an observable state,
-    /// not a transient window. T018 owns the fix; when it lands the
-    /// `state == "classified"` assertion below must flip, which is the point.
+    /// SC-003 closed here at T018: the state is now derived from whether the
+    /// row carries a frame type, so an UNRESOLVED needs-review row reports
+    /// `pending_classification` rather than claiming to be classified with a
+    /// NULL `frame_type`.
     ///
     /// The last assertion is the one that matters for T006: the resolve
     /// converges onto the item's NATURAL classification key via `ON CONFLICT`,
@@ -2399,11 +2403,9 @@ mod tests {
                 .unwrap();
         assert_eq!(nr, 1, "needs_review must persist as its own field, not as a group_key value");
         assert_eq!(ft, None, "an unresolved needs-review item carries no frame type");
-        // The pinned SC-003 violation — see this test's doc comment. T018.
         assert_eq!(
-            state, "classified",
-            "SC-003 gap: the INSERT hardcodes state='classified', so an unresolved \
-             needs-review row is classified with no frame type. T018 must change this."
+            state, "pending_classification",
+            "SC-003: a row with no frame type must not report `classified` (T018)"
         );
 
         // The user supplies the missing attributes; re-materialization writes
