@@ -9,6 +9,7 @@ test:
     cargo test --workspace --doc
     pnpm -r --if-present test
     node scripts/check-eslint-baseline.test.mjs
+    node scripts/check-mock-baseline.test.mjs
 
 # Lint and format. The extra `rustfmt` call covers bootstrap/specta.rs, which
 # `cargo fmt` cannot reach because it is `include!`d, not `mod`-declared.

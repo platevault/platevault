@@ -114,6 +114,12 @@ pub struct InboxEvidenceRow {
     /// race), this survives every evidence rebuild. Effective frame type
     /// resolves `manual_override` → `override_frame_type` → `frame_type`.
     pub override_frame_type: Option<String>,
+    /// Durable target override (property_key = 'target') from the same JOIN —
+    /// written by `cone_search::confirm`'s best-effort per-file link (#1294)
+    /// so the confirmed designation becomes the effective OBJECT for the
+    /// mandatory-attribute gate, not just the durable canonical_target row.
+    /// NULL when no override has been set.
+    pub override_target: Option<String>,
     /// 1 when any override recorded for this file is stale (file size/mtime
     /// changed since it was set — spec 041 R-4).
     pub override_stale: i64,
@@ -766,12 +772,12 @@ pub async fn list_evidence(
     pool: &SqlitePool,
     inbox_item_id: &str,
 ) -> DbResult<Vec<InboxEvidenceRow>> {
-    // Join inbox_file_overrides to recover the three non-type override values
-    // (filter/exposureS/binning) that were migrated out of the evidence table
-    // in migration 0048. The source_group_id is looked up from inbox_items.
-    // Three separate LEFT JOINs are used (one per property_key) so that each
-    // value is available as a distinct column in the result row, which
-    // sqlx::FromRow maps to the named struct fields.
+    // Join inbox_file_overrides to recover the non-type override values
+    // (filter/exposureS/binning/target) that live outside the evidence table
+    // (migration 0048, plus `target` for #1294). The source_group_id is
+    // looked up from inbox_items. Separate LEFT JOINs are used (one per
+    // property_key) so that each value is available as a distinct column in
+    // the result row, which sqlx::FromRow maps to the named struct fields.
     Ok(sqlx::query_as::<_, InboxEvidenceRow>(
         "SELECT
              ice.id,
@@ -787,6 +793,7 @@ pub async fn list_evidence(
              CAST(ov_exp.value AS REAL) AS override_exposure_s,
              ov_bin.value      AS override_binning,
              ov_ft.value       AS override_frame_type,
+             ov_target.value   AS override_target,
              ice.override_stale
          FROM inbox_classification_evidence ice
          LEFT JOIN inbox_items ii
@@ -807,6 +814,10 @@ pub async fn list_evidence(
              ON ov_ft.source_group_id = ii.source_group_id
             AND ov_ft.relative_file_path = ice.relative_file_path
             AND ov_ft.property_key = 'frameType'
+         LEFT JOIN inbox_file_overrides ov_target
+             ON ov_target.source_group_id = ii.source_group_id
+            AND ov_target.relative_file_path = ice.relative_file_path
+            AND ov_target.property_key = 'target'
          WHERE ice.inbox_item_id = ?
          ORDER BY ice.relative_file_path",
     )
@@ -3195,6 +3206,75 @@ mod tests {
         }
         let b = after.iter().find(|o| o.relative_file_path == "folder/b.fits").unwrap();
         assert_eq!(b.override_stale, 0, "unrelated file must be untouched");
+    }
+
+    /// #1294: `list_evidence` must join the `target` override the same way it
+    /// already joins filter/exposureS/binning/frameType — otherwise a target
+    /// override (written by `cone_search::confirm`) is a write nobody reads
+    /// back, and the mandatory-attribute gate in `app_core_inbox::metadata`
+    /// (which reads `list_evidence` rows) never sees it.
+    #[tokio::test]
+    async fn list_evidence_joins_target_override() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // inbox_file_overrides.source_group_id is FK-constrained to
+        // inbox_source_groups(id); the evidence row's item must link to it.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-target-1",
+                root_id: "root-1",
+                relative_path: "folder",
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+                // Spec 058 T013 added this field after #1294 was written. The
+                // group is only an FK anchor for the evidence row here, so the
+                // count is never asserted; 1 matches the single item below.
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, \
+              discovered_at, last_scanned_at, state, lane) \
+             VALUES ('item-target-1', 'root-1', 'folder', 'sg-target-1', '', \
+                     '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', \
+                     'pending_classification', 'fits')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-target-1",
+                inbox_item_id: "item-target-1",
+                relative_file_path: "folder/light.fits",
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let before = list_evidence(pool, "item-target-1").await.unwrap();
+        assert_eq!(before[0].override_target, None, "no override set yet");
+
+        set_file_override(pool, "sg-target-1", "folder/light.fits", "target", "M 31", None, None)
+            .await
+            .unwrap();
+
+        let after = list_evidence(pool, "item-target-1").await.unwrap();
+        assert_eq!(after[0].override_target.as_deref(), Some("M 31"));
     }
 
     /// get_file_metadata returns None before any classify and Some after upsert.

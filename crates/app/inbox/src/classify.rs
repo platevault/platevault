@@ -359,8 +359,11 @@ pub async fn classify(
     // that an assumption was wrong in a release build.
     let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
     let (db_result, api_result, single_frame_type) = match distinct_types.len() {
-        0 => ("unclassified", "unclassified", None),
         1 => ("classified", "single_type", Some(distinct_types[0].to_owned())),
+        // Zero readable frame types and two-or-more both mean "not one thing",
+        // and with `mixed` retired they are the same answer. Keeping them as
+        // separate arms with identical bodies would imply a distinction the
+        // vocabulary no longer draws.
         _ => ("unclassified", "unclassified", None),
     };
 

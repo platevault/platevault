@@ -446,7 +446,7 @@ export function MastersTable({
       _selected: selected === master.id,
       _indent: indentPx || undefined,
       master: (
-        <span className="pv-calib-cell__master">
+        <span className="pv-table__cell-inline">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
           <span className="pv-calib-cell__master-label">
             {masterLabel(master)}

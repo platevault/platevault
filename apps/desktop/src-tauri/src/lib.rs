@@ -8,6 +8,7 @@
 //! are emitted at test time by `tests/bindings.rs` via tauri-specta.
 
 pub mod commands;
+pub mod data_dir;
 pub mod resolve_cache;
 pub mod watcher;
 
@@ -66,9 +67,12 @@ pub fn build_app() -> tauri::App {
     // silently redirected/exited without ever opening a window, timing out the
     // WebDriver session (observed on the Windows shard). No journey exercises
     // single-instance behaviour, so when the var is set we skip the plugin
-    // entirely on every platform. Unset (real users, non-e2e builds), the
-    // guard is registered unchanged.
-    if std::env::var_os("ALM_E2E_INSTANCE_ID").is_none() {
+    // entirely on every platform. The bypass additionally requires the `e2e`
+    // feature at compile time, so release binaries ignore the variable — see
+    // `bootstrap::single_instance_guard_enabled`.
+    if crate::bootstrap::single_instance_guard_enabled(
+        std::env::var_os("ALM_E2E_INSTANCE_ID").is_some(),
+    ) {
         tb = tb.plugin(
             tauri_plugin_single_instance::Builder::new()
                 .callback(|app, argv, cwd| {
@@ -215,8 +219,63 @@ pub fn build_app() -> tauri::App {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(instance_context())
         .expect("error while building tauri application")
+}
+
+/// The compiled-in Tauri context, with each config-declared window pointed at
+/// a per-instance webview user-data folder when `ALM_DATA_DIR` is set.
+///
+/// Issue #1204: concurrent instances on Windows otherwise share one `WebView2`
+/// user-data folder, and the loser fails to create its webview at all
+/// (`WindowsError(0x80070057)`) — see [`crate::data_dir`] for the full chain
+/// and for why this has to go through the *config* (as a relative path)
+/// rather than [`tauri::webview::WebviewWindowBuilder::data_directory`]:
+/// windows declared in `tauri.conf.json` are built by Tauri itself, during
+/// `.build()`, so there is no builder for us to reach.
+///
+/// Unset (real users, non-E2E builds) leaves every window's `data_directory`
+/// as `None` — byte-for-byte the previous behaviour.
+///
+/// **Windows only, deliberately.** Linux and macOS already get real webview
+/// isolation from the harness's `XDG_*`/`HOME` overrides, which those
+/// platforms actually honour; there is no collision to fix. Setting
+/// `data_directory` there would instead *move* WebKitGTK/WKWebView storage
+/// out from under the isolated root it currently lives in — a regression
+/// bought for nothing.
+///
+/// That gate is a runtime `cfg!`, not a `#[cfg]` attribute, so this body is
+/// type-checked on every platform. A `#[cfg(target_os = "windows")]` block
+/// here would be invisible to the Linux and macOS CI legs and could only
+/// break on the one platform whose failures this is meant to stop.
+fn instance_context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+
+    let subdir = crate::data_dir::webview_subdir();
+
+    if let (true, Some(subdir)) = (cfg!(target_os = "windows"), subdir.as_ref()) {
+        for window in &mut context.config_mut().app.windows {
+            window.data_directory = Some(subdir.clone());
+        }
+    }
+
+    // `eprintln!`, deliberately, not `tracing`: `build_app()` runs BEFORE
+    // `main.rs` installs the tracing subscriber, so anything logged from here
+    // is dropped on the floor. A first attempt at this used `tracing::info!`
+    // and produced no line in CI — which said nothing about whether the code
+    // had run, and cost a full Windows round-trip to find out. stderr is
+    // captured by the E2E harness's `ProcLog`, so this always shows up.
+    if let Some(dir) = &subdir {
+        eprintln!(
+            "ALM_DATA_DIR is set; webview data_directory = {} (applied: {})",
+            dir.display(),
+            cfg!(target_os = "windows")
+        );
+    } else {
+        eprintln!("ALM_DATA_DIR is unset; webview data_directory left at Tauri's default");
+    }
+
+    context
 }
 
 // Sequential startup/subscriber-wiring assembly, not complex logic — same

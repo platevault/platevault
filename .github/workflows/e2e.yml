@@ -126,6 +126,21 @@ concurrency:
 
 env:
   CARGO_INCREMENTAL: 0
+  # Debuginfo is 53% of every compiled artifact and the runners have been
+  # exhausting disk on it: `target/debug` reaches 1.1 GB, the 11 e2e journey
+  # binaries total 356 MB (~32 MB each, 15.3 MB after `strip --strip-debug`),
+  # and that archive is then downloaded by six shard jobs. PR #1216's ubuntu
+  # leg died with `rustc-LLVM ERROR: IO failure on output stream: No space left
+  # on device`, which reads as a code failure and costs real triage time.
+  #
+  # `line-tables-only` keeps file/line information in panic backtraces -- the
+  # part that actually matters when a test or journey fails -- while dropping
+  # the type and variable debuginfo that dominates the size. A full strip would
+  # be smaller still but loses backtrace line numbers, a bad trade for a test
+  # suite. Set here rather than as a `[profile.*]` in Cargo.toml so local
+  # developer builds keep full debuginfo. See issue #1250.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
   # Fresh, disposable file-backed SQLite DB per run (FR-006). Relative to the
   # checkout root (the nextest working directory in this workflow). The app
   # binary itself creates the file + runs migrations on connect
@@ -149,7 +164,7 @@ jobs:
   # and "the suite never ran" indistinguishable to humans and pollers alike
   # (see the PR that introduced this comment: job 88177101061).
   changes:
-    name: Detect changes
+    name: Detect changes (E2E)
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.decide.outputs.run }}
@@ -160,8 +175,14 @@ jobs:
         id: filter
         with:
           filters: |
+            # Deliberately NOT '.github/workflows/**': editing ci.yml or
+            # release-please.yml cannot change how e2e.yml runs its shards.
+            # The broad glob made every ci.yml touch — including one-line
+            # fixes like #1282 — force a full E2E run, which is a large part
+            # of the Windows/macOS runner contention. Mirrors the same
+            # narrowing ci.yml already applies (#1169).
             force_full:
-              - '.github/workflows/**'
+              - '.github/workflows/e2e.yml'
               - '**/Cargo.toml'
               - 'Cargo.lock'
               - '**/package.json'
@@ -273,14 +294,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore app + test archive by content key
+      # The app binary and the nextest archive have DIFFERENT inputs, so they
+      # get different keys. Keying both on every *.rs (as before) meant editing
+      # a journey under crates/e2e-tests — which is NOT in desktop_shell's
+      # dependency closure — forced a full app rebuild for a byte-identical
+      # binary: ~340s on ubuntu, ~600s on windows, every E2E-test-only PR.
+      #
+      # The app key is derived from `cargo metadata` (desktop_shell's resolved
+      # closure) rather than a hand-maintained exclude list, so a newly added
+      # dependency is picked up automatically. If the closure cannot be
+      # resolved the script falls back to a BROADER key, i.e. it fails towards
+      # rebuilding — a stale binary would produce a meaningless green.
+      # `scripts/e2e-app-cache-key.sh --self-test` asserts both directions.
+      # Guards the closure logic itself: asserts the key CHANGES for a source
+      # file inside desktop_shell's closure and does NOT change for a crate
+      # outside it. Without this the key could silently narrow and start
+      # serving a stale binary. Ubuntu only — the logic is OS-independent.
+      - name: Cache-key self-test
+        shell: bash
+        run: bash scripts/e2e-app-cache-key.sh --self-test
+
+      - name: Compute app cache key
+        id: appkey
+        shell: bash
+        run: |
+          key=$(bash scripts/e2e-app-cache-key.sh)
+          # An empty key would silently degrade to a bare prefix shared by
+          # every commit — the worst case, a permanent stale hit. Fail loudly.
+          if [ -z "$key" ]; then
+            echo "::error::e2e-app-cache-key.sh produced an empty key; refusing to cache" >&2
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app binary by closure key
         id: app-cache
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.APP_BIN }}
-            e2e-archive.tar.zst
-          key: e2e-app-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
+          path: ${{ env.APP_BIN }}
+          key: e2e-app-v2-ubuntu-latest-${{ steps.appkey.outputs.key }}
+
+      # The archive DOES depend on test sources, so it keeps the broad key.
+      - name: Restore nextest archive by content key
+        id: archive-cache
+        uses: actions/cache@v4
+        with:
+          path: e2e-archive.tar.zst
+          key: e2e-archive-v2-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
 
       # A reported cache-hit is not proof the binary is actually there: run
       # 29591042499 hit a corrupted/partial e2e-app-ubuntu-latest cache entry
@@ -289,20 +349,30 @@ jobs:
       # failed at `chmod`. Treat cache-hit as provisional and re-verify both
       # paths on disk before trusting it, so a bad cache entry self-heals into
       # a rebuild instead of a wall of red shards.
-      - name: Verify cached binary is usable
+      # A reported cache-hit is not proof the artifact is on disk (run
+      # 29591042499 restored a partial entry and every shard died at chmod), so
+      # each artifact is re-verified independently. Checked separately because
+      # they now have separate keys: an E2E-test-only change hits the app cache
+      # and misses the archive, and must rebuild only the archive.
+      - name: Verify cached artifacts are usable
         id: verify-app-cache
         shell: bash
         run: |
-          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -x "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
-            echo "usable=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -x "${{ env.APP_BIN }}" ]; then
+            echo "app_usable=true" >> "$GITHUB_OUTPUT"
           else
-            echo "usable=false" >> "$GITHUB_OUTPUT"
+            echo "app_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.archive-cache.outputs.cache-hit }}" = "true" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "archive_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "archive_usable=false" >> "$GITHUB_OUTPUT"
           fi
 
       # Tauri needs system webview/GTK libs to build on Linux.
       # No webkit2gtk-driver — the plugin replaces the external driver.
       - name: Install Tauri Linux system deps
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -310,7 +380,7 @@ jobs:
             libayatana-appindicator3-dev
 
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
 
       # cache-on-failure deliberately left at its default (false). Saving from a
       # failed run persists whatever broken/partial state the failure produced,
@@ -320,28 +390,28 @@ jobs:
       # cache defect and cost real diagnostic time. A failed run should cost a
       # rebuild, never poison the next one.
       - uses: Swatinem/rust-cache@v2
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         with:
           shared-key: "rust-e2e-ubuntu-latest"
 
       - uses: taiki-e/install-action@nextest
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
 
       # Debug builds load the frontend from the Tauri devUrl at runtime, but
       # tauri-build still wants the configured frontendDist directory present.
       - name: Stub frontend dist for tauri-build
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         shell: bash
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
 
       - name: Build desktop_shell with e2e feature
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true'
         run: cargo build -p desktop_shell --features e2e
 
       # Package the compiled e2e_tests binaries so shards run them without a
       # Rust rebuild (`cargo nextest run --archive-file`).
       - name: Archive e2e test binaries
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.archive_usable != 'true'
         run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
 
       - uses: actions/upload-artifact@v4
@@ -364,50 +434,91 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore app + test archive by content key
+      # The app binary and the nextest archive have DIFFERENT inputs, so they
+      # get different keys. Keying both on every *.rs (as before) meant editing
+      # a journey under crates/e2e-tests — which is NOT in desktop_shell's
+      # dependency closure — forced a full app rebuild for a byte-identical
+      # binary: ~340s on ubuntu, ~600s on windows, every E2E-test-only PR.
+      #
+      # The app key is derived from `cargo metadata` (desktop_shell's resolved
+      # closure) rather than a hand-maintained exclude list, so a newly added
+      # dependency is picked up automatically. If the closure cannot be
+      # resolved the script falls back to a BROADER key, i.e. it fails towards
+      # rebuilding — a stale binary would produce a meaningless green.
+      # `scripts/e2e-app-cache-key.sh --self-test` asserts both directions.
+      - name: Compute app cache key
+        id: appkey
+        shell: bash
+        run: |
+          key=$(bash scripts/e2e-app-cache-key.sh)
+          # An empty key would silently degrade to a bare prefix shared by
+          # every commit — the worst case, a permanent stale hit. Fail loudly.
+          if [ -z "$key" ]; then
+            echo "::error::e2e-app-cache-key.sh produced an empty key; refusing to cache" >&2
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app binary by closure key
         id: app-cache
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.APP_BIN }}
-            e2e-archive.tar.zst
-          key: e2e-app-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
+          path: ${{ env.APP_BIN }}
+          key: e2e-app-v2-windows-latest-${{ steps.appkey.outputs.key }}
+
+      # The archive DOES depend on test sources, so it keeps the broad key.
+      - name: Restore nextest archive by content key
+        id: archive-cache
+        uses: actions/cache@v4
+        with:
+          path: e2e-archive.tar.zst
+          key: e2e-archive-v2-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
 
       # See the ubuntu chain's "Verify cached binary is usable" comment for
       # why a reported cache-hit alone is not trusted.
-      - name: Verify cached binary is usable
+      # A reported cache-hit is not proof the artifact is on disk (run
+      # 29591042499 restored a partial entry and every shard died at chmod), so
+      # each artifact is re-verified independently. Checked separately because
+      # they now have separate keys: an E2E-test-only change hits the app cache
+      # and misses the archive, and must rebuild only the archive.
+      - name: Verify cached artifacts are usable
         id: verify-app-cache
         shell: bash
         run: |
-          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
-            echo "usable=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ]; then
+            echo "app_usable=true" >> "$GITHUB_OUTPUT"
           else
-            echo "usable=false" >> "$GITHUB_OUTPUT"
+            echo "app_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.archive-cache.outputs.cache-hit }}" = "true" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "archive_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "archive_usable=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
 
       - uses: Swatinem/rust-cache@v2
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         with:
           shared-key: "rust-e2e-windows-latest"
           cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
 
       - name: Stub frontend dist for tauri-build
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         shell: bash
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
 
       - name: Build desktop_shell with e2e feature
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true'
         run: cargo build -p desktop_shell --features e2e
 
       - name: Archive e2e test binaries
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.archive_usable != 'true'
         run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
 
       - uses: actions/upload-artifact@v4
@@ -430,50 +541,91 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore app + test archive by content key
+      # The app binary and the nextest archive have DIFFERENT inputs, so they
+      # get different keys. Keying both on every *.rs (as before) meant editing
+      # a journey under crates/e2e-tests — which is NOT in desktop_shell's
+      # dependency closure — forced a full app rebuild for a byte-identical
+      # binary: ~340s on ubuntu, ~600s on windows, every E2E-test-only PR.
+      #
+      # The app key is derived from `cargo metadata` (desktop_shell's resolved
+      # closure) rather than a hand-maintained exclude list, so a newly added
+      # dependency is picked up automatically. If the closure cannot be
+      # resolved the script falls back to a BROADER key, i.e. it fails towards
+      # rebuilding — a stale binary would produce a meaningless green.
+      # `scripts/e2e-app-cache-key.sh --self-test` asserts both directions.
+      - name: Compute app cache key
+        id: appkey
+        shell: bash
+        run: |
+          key=$(bash scripts/e2e-app-cache-key.sh)
+          # An empty key would silently degrade to a bare prefix shared by
+          # every commit — the worst case, a permanent stale hit. Fail loudly.
+          if [ -z "$key" ]; then
+            echo "::error::e2e-app-cache-key.sh produced an empty key; refusing to cache" >&2
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app binary by closure key
         id: app-cache
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.APP_BIN }}
-            e2e-archive.tar.zst
-          key: e2e-app-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
+          path: ${{ env.APP_BIN }}
+          key: e2e-app-v2-macos-latest-${{ steps.appkey.outputs.key }}
+
+      # The archive DOES depend on test sources, so it keeps the broad key.
+      - name: Restore nextest archive by content key
+        id: archive-cache
+        uses: actions/cache@v4
+        with:
+          path: e2e-archive.tar.zst
+          key: e2e-archive-v2-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
 
       # See the ubuntu chain's "Verify cached binary is usable" comment for
       # why a reported cache-hit alone is not trusted.
-      - name: Verify cached binary is usable
+      # A reported cache-hit is not proof the artifact is on disk (run
+      # 29591042499 restored a partial entry and every shard died at chmod), so
+      # each artifact is re-verified independently. Checked separately because
+      # they now have separate keys: an E2E-test-only change hits the app cache
+      # and misses the archive, and must rebuild only the archive.
+      - name: Verify cached artifacts are usable
         id: verify-app-cache
         shell: bash
         run: |
-          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
-            echo "usable=true" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ]; then
+            echo "app_usable=true" >> "$GITHUB_OUTPUT"
           else
-            echo "usable=false" >> "$GITHUB_OUTPUT"
+            echo "app_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.archive-cache.outputs.cache-hit }}" = "true" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "archive_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "archive_usable=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
 
       - uses: Swatinem/rust-cache@v2
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         with:
           shared-key: "rust-e2e-macos-latest"
           cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
 
       - name: Stub frontend dist for tauri-build
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
         shell: bash
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
 
       - name: Build desktop_shell with e2e feature
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true'
         run: cargo build -p desktop_shell --features e2e
 
       - name: Archive e2e test binaries
-        if: steps.verify-app-cache.outputs.usable != 'true'
+        if: steps.verify-app-cache.outputs.archive_usable != 'true'
         run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
 
       - uses: actions/upload-artifact@v4
@@ -580,12 +732,21 @@ jobs:
       # its default DMA-BUF/compositing render paths were suspected of adding
       # ~25-30s of per-test overhead vs Windows. Linux-only; harmless no-op if
       # the hypothesis is wrong.
+      #
+      # `-s "-screen 0 1600x1200x24"` overrides xvfb-run's built-in default of
+      # 1280x1024x24 (`XVFBARGS` in /usr/bin/xvfb-run). 1280 is NARROWER than
+      # the 1400px viewport the docked-layout journeys request via
+      # `E2eApp::set_viewport`, and a resize past the screen edge is clamped —
+      # which would silently yield a too-small viewport and a journey that
+      # passes while asserting nothing. The larger framebuffer is plain memory
+      # (1600*1200*4 = ~7.7MB), not GPU, so it costs nothing on a runner that
+      # already has none.
       - name: Run E2E (xvfb)
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
           ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: xvfb-run -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition count:${{ matrix.shard }}/4
+        run: xvfb-run -s "-screen 0 1600x1200x24" -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/4
 
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
   real-ui-e2e-windows:
@@ -699,7 +860,7 @@ jobs:
         shell: bash
         env:
           ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition count:${{ matrix.shard }}/2
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/2
 
   # ---------------------------------------------------------------------------
   # Per-OS gates preserving the pre-DAG check names ("Real-UI E2E — <os>").

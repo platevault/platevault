@@ -10,6 +10,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
+import { Table } from '@/ui';
+import type { TableColumn, TableRow } from '@/ui';
 import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
@@ -164,6 +166,48 @@ function SourceSummary({ state }: SourceSummaryProps) {
       a.relativePath.localeCompare(b.relativePath),
   );
 
+  // Built per render rather than hoisted to module scope: the `m.*` accessors
+  // resolve against the active locale at call time, so hoisting would freeze
+  // the header labels to whichever locale was active at import.
+  const columns: TableColumn[] = [
+    { key: 'folder', label: m.setup_scan_col_folder() },
+    { key: 'files', label: m.setup_scan_col_files() },
+    { key: 'format', label: m.setup_scan_col_format() },
+    { key: 'types', label: m.setup_scan_col_types() },
+  ];
+
+  const rows: TableRow[] = sortedItems.map((item) => {
+    const cls = classifications.get(item.inboxItemId);
+    const typeParts = (cls?.breakdown ?? []).map((b) => `${b.count} ${b.kind}`);
+    // Reconcile against fileCount (issue #513): files with no IMAGETYP (or an
+    // unmapped one) don't appear in the classify breakdown at all, so the type
+    // list previously undercounted the row's file total with no indication why.
+    const unclassifiedCount = cls?.unclassifiedFiles.length ?? 0;
+    if (unclassifiedCount > 0) {
+      typeParts.push(
+        m.setup_scan_unclassified_count({ count: unclassifiedCount }),
+      );
+    }
+    const types = typeParts.join(', ');
+    return {
+      _testid: `scan-item-${item.inboxItemId}`,
+      folder: (
+        <span className="pv-table__cell-inline">
+          {item.isMaster && <Pill variant="info">{m.setup_scan_master()}</Pill>}
+          {/* The root/top-level row of an expanded folder carries an empty
+              relativePath; label it instead of leaving it blank (issue #513). */}
+          {item.relativePath || m.setup_scan_root_label()}
+        </span>
+      ),
+      files: item.fileCount,
+      format: (item.format ?? item.lane).toUpperCase(),
+      // Individual calibration masters carry their frame type on the item
+      // itself (spec 040 FR-006); grouped sub-frame folders rely on the
+      // classify breakdown instead.
+      types: item.isMaster ? masterLabel(item) : types || '—',
+    };
+  });
+
   // The detail panel (chips + table) is expandable only when scan is done and
   // there are items to show.
   const isExpandable = phase === 'done' && totalItems > 0;
@@ -267,81 +311,16 @@ function SourceSummary({ state }: SourceSummaryProps) {
             </div>
           )}
 
-          {/* Scrollable metadata table of detected ingestion groups */}
-          <div className="pv-setup-scan__table-wrap">
-            <table className="pv-setup-scan__table">
-              <thead>
-                <tr className="pv-setup-scan__thead-row">
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_folder()}
-                  </th>
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_files()}
-                  </th>
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_format()}
-                  </th>
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_types()}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedItems.map((item) => {
-                  const cls = classifications.get(item.inboxItemId);
-                  const breakdown = cls?.breakdown ?? [];
-                  const typeParts = breakdown.map(
-                    (b) => `${b.count} ${b.kind}`,
-                  );
-                  // Reconcile against fileCount (issue #513): files with no
-                  // IMAGETYP (or an unmapped one) don't appear in the classify
-                  // breakdown at all, so the type list previously undercounted
-                  // the row's file total with no indication why.
-                  const unclassifiedCount = cls?.unclassifiedFiles.length ?? 0;
-                  if (unclassifiedCount > 0) {
-                    typeParts.push(
-                      m.setup_scan_unclassified_count({
-                        count: unclassifiedCount,
-                      }),
-                    );
-                  }
-                  const types = typeParts.join(', ');
-                  // Individual calibration masters carry their frame type on the
-                  // item itself (spec 040 FR-006); grouped sub-frame folders rely
-                  // on the classify breakdown instead.
-                  const detectedTypes = item.isMaster
-                    ? masterLabel(item)
-                    : types || '—';
-                  // The root/top-level row of an expanded folder carries an
-                  // empty relativePath; label it instead of leaving it blank
-                  // (issue #513).
-                  const rowLabel =
-                    item.relativePath || m.setup_scan_root_label();
-                  return (
-                    <tr
-                      key={item.inboxItemId}
-                      data-testid={`scan-item-${item.inboxItemId}`}
-                      className="pv-setup-scan__tbody-row"
-                    >
-                      <td className="pv-setup-scan__cell--path">
-                        <span className="pv-setup-scan__path-cell-inner">
-                          {item.isMaster && (
-                            <Pill variant="info">{m.setup_scan_master()}</Pill>
-                          )}
-                          {rowLabel}
-                        </span>
-                      </td>
-                      <td className="pv-setup-scan__cell">{item.fileCount}</td>
-                      <td className="pv-setup-scan__cell">
-                        {(item.format ?? item.lane).toUpperCase()}
-                      </td>
-                      <td className="pv-setup-scan__cell">{detectedTypes}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {/* Scrollable metadata table of detected ingestion groups.
+              `virtualized` is used for its scroll container + sticky header
+              (primitives.css `.pv-table__scroll`), not for windowing — a
+              per-source detection list is small. */}
+          <Table
+            columns={columns}
+            rows={rows}
+            virtualized
+            scrollClassName="pv-setup-scan__table-wrap"
+          />
         </div>
       )}
     </div>
