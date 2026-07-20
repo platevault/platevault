@@ -702,7 +702,11 @@ describe('adaptive dock — drag + real persistence (T023)', () => {
   it('a drag on the resize handle really resizes the side panel', () => {
     resizeWindowTo(1600);
     const { getByTestId, container } = render(
-      <ListPageLayout topBar={<div>bar</div>} detail={<div>detail</div>} dockId="drag-page">
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        dockId="drag-page"
+      >
         <div>main</div>
       </ListPageLayout>,
     );
@@ -721,7 +725,11 @@ describe('adaptive dock — drag + real persistence (T023)', () => {
   it('the dragged width reaches localStorage, not just the in-memory cache', () => {
     resizeWindowTo(1600);
     const { getByTestId } = render(
-      <ListPageLayout topBar={<div>bar</div>} detail={<div>detail</div>} dockId="drag-persist">
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        dockId="drag-persist"
+      >
         <div>main</div>
       </ListPageLayout>,
     );
@@ -738,7 +746,11 @@ describe('adaptive dock — drag + real persistence (T023)', () => {
   it('a drag is clamped to the window fraction before it is persisted', () => {
     resizeWindowTo(1600);
     const { getByTestId } = render(
-      <ListPageLayout topBar={<div>bar</div>} detail={<div>detail</div>} dockId="drag-clamp">
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        dockId="drag-clamp"
+      >
         <div>main</div>
       </ListPageLayout>,
     );
@@ -755,7 +767,9 @@ describe('adaptive dock — drag + real persistence (T023)', () => {
 
   it('a pinned placement reaches localStorage too', () => {
     resizeWindowTo(1024);
-    const { result } = renderHook(() => useAdaptiveDock({ dockId: 'pin-persist' }));
+    const { result } = renderHook(() =>
+      useAdaptiveDock({ dockId: 'pin-persist' }),
+    );
     expect(result.current.placement).toBe('bottom');
 
     act(() => {
