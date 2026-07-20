@@ -230,12 +230,26 @@ pending verification).
   The "persists across remount, scoped per dockId" assertion covers the
   multi-page half: `page-a` is pinned and resized, unmounted, and restored with
   both values intact, while `page-b` is confirmed untouched by it.
-  Two parts of this task are still NOT covered, which is why it stays open
-  rather than being ticked: the restore is verified across a **remount**, not a
-  real page **reload**, and the width is set via `setWidth` rather than by
-  **dragging** the resize handle. Neither shortcut is free — a genuine reload
-  is what would exercise the preference cache, and the drag path has its own
-  pointer-event handling.
+  Two parts were NOT covered by #1195: the restore was verified across a
+  **remount** rather than a real **reload**, and the width was set via
+  `setWidth` rather than by **dragging** the resize handle.
+
+  **#1257 closed the drag half and the storage half.** The suspicion that a
+  remount proves less than it appears to is now measured, and the mechanism
+  is concrete: `getPreferences()` returns a module-level `cachedPreferences`
+  when one exists, and `persistPreferences()` assigns that cache BEFORE its
+  `localStorage.setItem`, whose failure is swallowed. A remount re-reads the
+  CACHE, never storage. With `setItem` stubbed out so nothing persists at
+  all, the new assertions fail and the existing "persists across remount"
+  tests still PASS — they were green against total persistence failure.
+  `ListPageLayout.test.tsx` now asserts the serialized bytes under the real
+  `alm-preferences` key, and pins that the CLAMPED width is what persists.
+
+  **Still open: the real reload.** A cold module cache reading back from
+  real storage cannot be exercised in jsdom, so it stays Layer-2.
+  `E2eApp::relaunch()` is the natural home — it already preserves webview
+  storage for exactly this kind of assertion. Deliberately not bundled into
+  #1257, which was already carrying shared harness and CI changes.
 
 ---
 
@@ -383,7 +397,8 @@ pending verification).
   rails) → **#1107**.
 - **Superseded** (no tracked follow-up as of this reconciliation): T001, T006,
   T030.
-- **Open**: T023 (partial — remount covered, reload + drag not).
+- **Open**: T023 (partial — remount, drag and storage covered; a real reload
+  is not, and cannot be at Layer 1).
 - **Not confirmed** (verify before relying on): T034.
 
 **One task is Open as of the #1257 pass** (T023) — test coverage for
