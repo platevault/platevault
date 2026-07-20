@@ -911,7 +911,8 @@ mod tests {
     use super::*;
     use audit::bus::EventBus;
     use persistence_db::repositories::inbox::{
-        InsertEvidence, InsertInboxItem, UpsertClassification,
+        InsertEvidence, InsertInboxItem, UpsertClassification, UpsertInboxSubItem,
+        UpsertSourceGroup,
     };
     use persistence_db::Database;
     use std::io::Write;
@@ -1169,6 +1170,212 @@ mod tests {
 
         assert_eq!(resp.plan_state, "ready_for_review");
         assert_eq!(resp.items_total, 3);
+    }
+
+    /// Build one classified sibling sub-item under `sg_id`.
+    ///
+    /// Deliberately not [`setup_classified_item`]: that writes a legacy row via
+    /// `insert_inbox_item` with no `source_group_id` and an empty `group_key`,
+    /// so two of them are not siblings in the sense SC-006 is about. Sibling
+    /// identity is `(root_id, relative_path, group_key)` — same folder, same
+    /// group, different classification identity.
+    async fn setup_sibling_sub_item(
+        db: &Database,
+        item_id: &str,
+        sg_id: &str,
+        group_key: &str,
+        frame_type: &str,
+        sig: &str,
+        file_names: &[&str],
+    ) {
+        inbox_repo::upsert_inbox_sub_item(
+            db.pool(),
+            &UpsertInboxSubItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                source_group_id: sg_id,
+                group_key,
+                group_label: group_key,
+                frame_type: Some(frame_type),
+                content_signature: sig,
+                file_count: i64::try_from(file_names.len()).unwrap_or(i64::MAX),
+                lane: "fits",
+                needs_review: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: item_id,
+                result: "classified",
+                frame_type: Some(frame_type),
+                content_signature: sig,
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        for (i, fname) in file_names.iter().enumerate() {
+            inbox_repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &format!("ev-{item_id}-{i}"),
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    frame_type: Some(frame_type),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some(frame_type),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    /// Spec 058 T026 / FR-010 / SC-006: `inbox.confirm` operates on exactly one
+    /// `inbox_item_id` and alters no sibling.
+    ///
+    /// Contracts say this needs no code change — the point of the test is that
+    /// dropping the parent row (FR-001) makes the N siblings of a split folder
+    /// the *only* rows, so sibling isolation stops being incidental and becomes
+    /// the whole correctness story. Asserted in both directions: the confirmed
+    /// item must move to `plan_open` and gain a plan link, the sibling must be
+    /// byte-identical to its pre-confirm snapshot and have no link.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn confirm_alters_exactly_one_item_and_leaves_its_sibling_untouched_sc006() {
+        let tmp = tempfile::tempdir().unwrap();
+        for (i, name) in ["light_001.fits", "light_002.fits"].iter().enumerate() {
+            write_fits(
+                tmp.path(),
+                name,
+                "Light Frame",
+                Some("M42"),
+                Some("Ha"),
+                Some(&format!("2025-10-10T22:0{i}:00")),
+            );
+        }
+        for (i, name) in ["flat_001.fits", "flat_002.fits"].iter().enumerate() {
+            write_fits_exp(
+                tmp.path(),
+                name,
+                "Flat Field",
+                None,
+                Some("Ha"),
+                Some(&format!("2025-10-10T18:0{i}:00")),
+                3.0,
+            );
+        }
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-sc006",
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig-folder"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 4,
+            },
+        )
+        .await
+        .unwrap();
+
+        setup_sibling_sub_item(
+            &db,
+            "item-lights",
+            "sg-sc006",
+            "type=light",
+            "light",
+            "sig-lights",
+            &["light_001.fits", "light_002.fits"],
+        )
+        .await;
+        setup_sibling_sub_item(
+            &db,
+            "item-flats",
+            "sg-sc006",
+            "type=flat",
+            "flat",
+            "sig-flats",
+            &["flat_001.fits", "flat_002.fits"],
+        )
+        .await;
+
+        let sibling_before = inbox_repo::get_inbox_item(db.pool(), "item-flats").await.unwrap();
+
+        confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: "item-lights".to_owned(),
+                content_signature: "sig-lights".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Positive direction — without this the assertions below pass on a
+        // confirm that did nothing at all.
+        let confirmed = inbox_repo::get_inbox_item(db.pool(), "item-lights").await.unwrap();
+        assert_eq!(
+            confirmed.state, "plan_open",
+            "the confirmed item must have moved to `plan_open` — otherwise this test proves nothing"
+        );
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), "item-lights").await.unwrap().is_some(),
+            "the confirmed item must own the new plan link"
+        );
+
+        let sibling_after = inbox_repo::get_inbox_item(db.pool(), "item-flats").await.unwrap();
+        assert_eq!(
+            (
+                sibling_after.state.as_str(),
+                sibling_after.frame_type.as_deref(),
+                sibling_after.needs_review,
+                sibling_after.content_signature.as_deref(),
+                sibling_after.group_key.as_str(),
+                sibling_after.file_count,
+            ),
+            (
+                sibling_before.state.as_str(),
+                sibling_before.frame_type.as_deref(),
+                sibling_before.needs_review,
+                sibling_before.content_signature.as_deref(),
+                sibling_before.group_key.as_str(),
+                sibling_before.file_count,
+            ),
+            "SC-006: confirming one item must not alter its sibling"
+        );
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), "item-flats").await.unwrap().is_none(),
+            "SC-006: the sibling must not be bound to the confirmed item's plan"
+        );
+
+        let sibling_classification =
+            inbox_repo::get_classification(db.pool(), "item-flats").await.unwrap().unwrap();
+        assert_eq!(
+            (sibling_classification.result.as_str(), sibling_classification.frame_type.as_deref()),
+            ("classified", Some("flat")),
+            "SC-006: the sibling's own classification must survive the confirm untouched"
+        );
     }
 
     /// US7 / T042-T043: the chosen destructive destination must be persisted on
