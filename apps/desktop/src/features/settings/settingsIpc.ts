@@ -215,7 +215,6 @@ export async function rescanRoot(args: {
     await commands.inboxScanFolder({
       rootId: args.rootId,
       rootAbsolutePath: args.rootAbsolutePath,
-      followSymlinks: false,
     }),
   );
 }
