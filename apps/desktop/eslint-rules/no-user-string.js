@@ -64,7 +64,12 @@ const TOAST_NAMES = new Set([
   "showToast",
   "addToast",
   "pushToast",
+  // Browser dialog APIs. Anything handed to these is rendered to a human by
+  // definition, so they belong with the toast sinks rather than needing their
+  // own visitor. `window.prompt(...)` matches on the member name.
   "confirm",
+  "alert",
+  "prompt",
 ]);
 
 
@@ -106,8 +111,22 @@ const TOAST_OBJECT_PROPS = new Set(["message", "title", "body", "description"]);
 // naming convention in this codebase for props that are documented to default
 // to a catalog message and flow into a rendered/aria-label position (see
 // ListPageLayout's `detailLabel`, ConfirmOverlay's `confirmLabel`).
+// Prose-bearing suffixes for custom component props. `Label` was the original
+// convention; the rest close the same gap for props that are just as clearly
+// rendered copy (`confirmText`, `panelTitle`, `errorMessage`,
+// `searchPlaceholder`, `emptyDesc`, `sectionHeading`, `cellTooltip`,
+// `tableCaption`). Suffix-matched so a new prop following the convention is
+// covered the day it is written, without editing this file.
+//
+// NOT included, deliberately: `*Name` and `*Id` (machine identifiers),
+// `*Value`, `*Key`, `*Type`, `*Path`, `*Url`, `*Icon`, `*Variant`, `*Class`.
+const USER_ATTR_SUFFIX =
+  /(?:Label|Text|Title|Message|Placeholder|Heading|Caption|Tooltip|Desc|Description)$/;
+
 const isUserAttrName = (name) =>
-  USER_ATTRS.has(name) || LABEL_PROP_KEYS.has(name) || /Label$/.test(name);
+  USER_ATTRS.has(name) ||
+  LABEL_PROP_KEYS.has(name) ||
+  USER_ATTR_SUFFIX.test(name);
 
 const hasLetter = (s) => /\p{L}/u.test(s);
 
@@ -217,6 +236,11 @@ const isUserStringExpr = (node) => {
   if (node.type === "LogicalExpression") {
     return isUserStringExpr(node.left) || isUserStringExpr(node.right);
   }
+  // String concatenation: `'Saved ' + n + ' items'`. Without this, splitting a
+  // sentence across `+` was a complete bypass of every sink below.
+  if (node.type === "BinaryExpression" && node.operator === "+") {
+    return isUserStringExpr(node.left) || isUserStringExpr(node.right);
+  }
   return false;
 };
 
@@ -235,6 +259,12 @@ const userStringPreview = (node) => {
     return isUserStringExpr(node.left)
       ? userStringPreview(node.left)
       : userStringPreview(node.right);
+  }
+  if (node.type === "BinaryExpression" && node.operator === "+") {
+    // Reassemble the concatenation, showing non-literal operands as `${…}` so
+    // the diagnostic reads like the sentence the user would see.
+    const side = (n) => (isUserStringExpr(n) ? userStringPreview(n) : "${…}");
+    return side(node.left) + side(node.right);
   }
   return "…";
 };
@@ -257,6 +287,9 @@ const userStringHasProse = (node) => {
     return userStringHasProse(node.consequent) || userStringHasProse(node.alternate);
   }
   if (node.type === "LogicalExpression") {
+    return userStringHasProse(node.left) || userStringHasProse(node.right);
+  }
+  if (node.type === "BinaryExpression" && node.operator === "+") {
     return userStringHasProse(node.left) || userStringHasProse(node.right);
   }
   return false;
@@ -550,6 +583,107 @@ const rule = {
             messageId: "attr",
             data: { attr: name, text: quote(userStringPreview(node.value.expression)) },
           });
+        }
+        // Concatenated value: aria-label={'Saved ' + n + ' items'}. Splitting a
+        // sentence across `+` otherwise bypassed every branch above — and it is
+        // the shape a developer reaches for precisely when interpolating, i.e.
+        // when a parameterized catalog message is most needed.
+        if (
+          node.value &&
+          node.value.type === "JSXExpressionContainer" &&
+          node.value.expression.type === "BinaryExpression" &&
+          node.value.expression.operator === "+" &&
+          isUserStringExpr(node.value.expression)
+        ) {
+          context.report({
+            node: node.value.expression,
+            messageId: "attr",
+            data: { attr: name, text: quote(userStringPreview(node.value.expression)) },
+          });
+        }
+      },
+
+      // Default value for a prop/param whose NAME marks it as display copy:
+      //   function Row({ detailLabel = 'Target details' }) …
+      //   function f(title = 'Untitled') …
+      // The default is what renders whenever the caller omits the prop, so it
+      // is exactly as user-facing as an inline JSX attribute. Gated on the same
+      // name test as attributes, so `function f(id = 'x')` is untouched.
+      AssignmentPattern(node) {
+        let name = node.left.type === "Identifier" ? node.left.name : null;
+        const p = node.parent;
+        if (
+          p &&
+          p.type === "Property" &&
+          !p.computed &&
+          p.key.type === "Identifier"
+        ) {
+          name = p.key.name;
+        }
+        if (!name || !isUserAttrName(name)) return;
+        if (isUserStringExpr(node.right) && userStringHasProse(node.right)) {
+          context.report({
+            node: node.right,
+            messageId: "attr",
+            data: { attr: name, text: quote(userStringPreview(node.right)) },
+          });
+        }
+      },
+
+      // `document.title = 'PlateVault — Targets'`. The window/tab title is user
+      // -facing chrome and is not reachable by any other visitor here.
+      AssignmentExpression(node) {
+        const l = node.left;
+        if (
+          l.type !== "MemberExpression" ||
+          l.computed ||
+          l.object.type !== "Identifier" ||
+          l.object.name !== "document" ||
+          l.property.type !== "Identifier" ||
+          l.property.name !== "title"
+        ) {
+          return;
+        }
+        if (isUserStringExpr(node.right) && userStringHasProse(node.right)) {
+          context.report({
+            node: node.right,
+            messageId: "variable",
+            data: {
+              name: "document.title",
+              text: quote(userStringPreview(node.right)),
+            },
+          });
+        }
+      },
+
+      // An array of prose assigned to a display-named binding, e.g.
+      // `const stepLabels = ['Choose folders', 'Pick tools']`. The elements are
+      // rendered one by one, so no single element is ever seen by the JSX
+      // visitors. Gated on the binding NAME (the same convention the
+      // return-literal check uses) to keep machine arrays — id lists, sort
+      // keys, route segments — untouched.
+      ArrayExpression(node) {
+        const p = node.parent;
+        let name = null;
+        if (p && p.type === "VariableDeclarator" && p.id.type === "Identifier") {
+          name = p.id.name;
+        } else if (
+          p &&
+          p.type === "Property" &&
+          !p.computed &&
+          p.key.type === "Identifier"
+        ) {
+          name = p.key.name;
+        }
+        if (!name || !DISPLAY_FN_NAME_RE.test(name)) return;
+        for (const el of node.elements) {
+          if (el && isUserStringExpr(el) && userStringHasProse(el)) {
+            context.report({
+              node: el,
+              messageId: "variable",
+              data: { name, text: quote(userStringPreview(el)) },
+            });
+          }
         }
       },
 
