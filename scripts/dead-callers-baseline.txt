@@ -9,6 +9,9 @@ delete_source_protection
 emit_block_transition
 emit_unarchive_transition
 file_record_exists
+# Uncalled by design pending epic astro-plan-v25w (#1370). Per PR #1364:
+# creating one equipment row per distinct header spelling mints sibling rows
+# for exactly the spellings an alias array exists to collapse.
 find_or_create_camera_by_alias
 find_or_create_filter_by_name
 find_or_create_telescope_by_alias
@@ -18,6 +21,9 @@ get_library_root_state
 get_override
 get_run
 hard_violations_to_mismatched
+# Deliberately not used by `warm_bundled_on_first_run`: cache emptiness is
+# unreliable after a crashed partial warm (#818), so production gates on a
+# version sentinel instead. See crates/targeting/resolver/src/seed.rs:204-224.
 is_first_run
 latest_snapshot
 list_events
