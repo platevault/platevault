@@ -54,12 +54,17 @@ function makeProject(id: string): ProjectSummaryDto {
   return {
     id,
     name: 'NGC 7000 · HOO',
-    tool: 'pixinsight',
+    tool: 'PixInsight',
     lifecycle: 'processing',
     path: 'D:/Astro/Projects/NGC7000',
+    notes: null,
+    channelDrift: false,
+    sourceCount: 0,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
-  } as ProjectSummaryDto;
+    blockedReasonKind: null,
+    blockedReasonNote: null,
+  };
 }
 
 beforeEach(() => {
