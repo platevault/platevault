@@ -53,7 +53,7 @@ pub struct BreakdownEntry {
 pub struct ClassifyResponse {
     pub inbox_item_id: String,
     /// API vocabulary (stable for frontend): "single_type" | "mixed" | "unclassified".
-    /// Note: the DB stores "classified" / "unclassified" (migration 0048 CHECK);
+    /// Note: the DB stores "classified" / "unclassified" (migration 0049 CHECK);
     /// the API vocabulary is mapped from the DB value so the frontend contract
     /// stays unchanged until T071/T072 update the contracts.
     pub classification_type: String,
@@ -340,14 +340,14 @@ pub async fn classify(
     //
     // Two distinct string spaces are used:
     //   db_result    — stored in inbox_classifications.result; must match the
-    //                  CHECK constraint introduced in migration 0048:
+    //                  CHECK constraint introduced in migration 0049:
     //                  ('classified', 'unclassified').  'single_type' and
     //                  'mixed' no longer exist at the DB level. A folder with
     //                  a single frame type → 'classified'; a folder with
     //                  multiple frame types → 'unclassified' (the mixed case
     //                  will be re-split into single-type sub-items in T066).
     //   api_result   — returned in ClassifyResponse.classification_type; kept
-    //                  on the stable pre-0048 vocabulary ('single_type' /
+    //                  on the stable pre-0049 vocabulary ('single_type' /
     //                  'mixed' / 'unclassified') so the frontend contract and
     //                  confirm routing remain unchanged until T071/T072 land.
     let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
@@ -397,7 +397,7 @@ pub async fn classify(
         .await;
     }
 
-    // 8. Persist classification (use db_result which satisfies migration 0048 CHECK).
+    // 8. Persist classification (use db_result which satisfies migration 0049 CHECK).
     let classification = UpsertClassification {
         inbox_item_id: &req.inbox_item_id,
         result: db_result,
@@ -442,7 +442,7 @@ pub async fn classify(
 
     Ok(ClassifyResponse {
         inbox_item_id: req.inbox_item_id,
-        // api_result retains the pre-0048 vocabulary for frontend stability.
+        // api_result retains the pre-0049 vocabulary for frontend stability.
         classification_type: api_result.to_owned(),
         frame_type: single_frame_type,
         content_signature,
@@ -1413,7 +1413,7 @@ async fn build_response_from_cache(
     let computed_at = cached.computed_at.clone();
 
     // `inbox_classifications.result` stores the DB vocabulary introduced by
-    // migration 0048 ('classified' / 'unclassified'), but
+    // migration 0049 ('classified' / 'unclassified'), but
     // `ClassifyResponse.classification_type` is contractually the stable API
     // vocabulary ('single_type' / 'mixed' / 'unclassified') — see step 7 of
     // `classify`. Returning `cached.result` verbatim leaked 'classified' to
@@ -1422,7 +1422,7 @@ async fn build_response_from_cache(
     // 'single_type' — permanently disabling Confirm for already-classified
     // items (caught by the spec 037 Layer-2 Inbox journeys, PR #457). Map DB
     // → API here, mirroring `reclassify`'s aggregation: 'classified' is
-    // single-type by the 0048 CHECK's definition; a DB 'unclassified' with
+    // single-type by the 0049 CHECK's definition; a DB 'unclassified' with
     // two or more distinct effective frame types is the mixed case.
     let classification_type = match cached.result.as_str() {
         "classified" => "single_type".to_owned(),
@@ -1437,7 +1437,7 @@ async fn build_response_from_cache(
                 "unclassified".to_owned()
             }
         }
-        // Pre-0048 rows can still carry the API vocabulary — pass through.
+        // Pre-0049 rows can still carry the API vocabulary — pass through.
         other => other.to_owned(),
     };
 
@@ -1522,7 +1522,7 @@ mod tests {
 
     /// Regression (PR #457 Layer-2 Inbox journeys): a SECOND classify of an
     /// unchanged item hits `build_response_from_cache`, which must translate
-    /// the persisted DB vocabulary ('classified', migration 0048) back to the
+    /// the persisted DB vocabulary ('classified', migration 0049) back to the
     /// API vocabulary ('single_type'). Leaking 'classified' permanently
     /// disabled the frontend's Confirm gate (`canConfirm` requires exactly
     /// 'single_type') for any already-classified item.

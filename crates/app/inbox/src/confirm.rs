@@ -207,7 +207,7 @@ pub async fn confirm(
     // 7. Validate the request. Spec 041 FR-050/T071/T072: the "split" action
     // and the mixed per-type confirm branch are removed — the request no
     // longer carries an `action` field at all; `classified` (migration
-    // 0048's CHECK-constrained single-type DB value) is the only confirmable
+    // 0049's CHECK-constrained single-type DB value) is the only confirmable
     // classification result. A folder that classified as `unclassified`
     // (zero or multiple distinct frame types) is not confirmable directly; it
     // must be re-split into single-type sub-items (T066 materialization)

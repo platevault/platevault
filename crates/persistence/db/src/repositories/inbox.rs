@@ -1776,7 +1776,13 @@ pub struct InboxListRow {
 /// Placeholders of genuinely split source groups are excluded — see
 /// `exclude_split_placeholder!` for why the split bound matters.
 ///
-/// Results are ordered by root path then by relative path.
+/// Results are ordered by root path, then relative path, then `group_key`
+/// (spec 058 CHK016). The third key is not decoration: siblings materialised
+/// from one folder share a root AND a relative path, so the first two keys both
+/// tie and SQLite is free to return them in any order — which reorders the
+/// Inbox list under the user between identical queries. `group_key` is the only
+/// column that distinguishes siblings, and it is what the sub-item query
+/// already orders by.
 /// Pass `limit` to cap the result set (FR-006 bounding).
 ///
 /// # Errors
@@ -1814,7 +1820,7 @@ pub async fn list_unacknowledged_across_roots(
            ",
         exclude_split_placeholder!(),
         "
-         ORDER BY r.path, i.relative_path
+         ORDER BY r.path, i.relative_path, i.group_key
          LIMIT ?"
     ))
     .bind(limit)
@@ -2322,6 +2328,100 @@ mod tests {
         assert_eq!(
             rows[0].organization_state, "unorganized",
             "org-state must be carried from registered_sources (inbox ⇒ unorganized)"
+        );
+    }
+
+    /// T034 / CHK016 (spec 058): siblings of one folder come back in a stable,
+    /// deterministic order.
+    ///
+    /// Siblings materialised from one folder share a root path AND a relative
+    /// path, so `ORDER BY r.path, i.relative_path` ties on *both* keys and
+    /// SQLite may return them in any order — the Inbox list could reorder under
+    /// the user between two identical queries. `group_key` is the only column
+    /// that distinguishes siblings.
+    ///
+    /// The fixture inserts the three siblings in *descending* `group_key` order
+    /// so insertion order (rowid) is the exact reverse of the expected result.
+    /// A query that has lost the tiebreak therefore cannot pass by coincidence.
+    ///
+    /// Two-direction control (recorded 2026-07-20): dropping `, i.group_key`
+    /// from the ORDER BY fails this test with
+    /// `["type=light", "type=dark", "type=bias"]` — i.e. rowid order, the exact
+    /// non-determinism CHK016 describes. Restoring it passes.
+    #[tokio::test]
+    async fn list_unacknowledged_orders_siblings_by_group_key() {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        // The siblings' owning source group must exist — `source_group_id` is a
+        // real FK, so this is not optional scaffolding.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-siblings",
+                root_id: &source_id,
+                relative_path: "2025-11-01/session",
+                content_signature: Some("sig-sg"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 3,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Deliberately inserted in reverse of the expected order.
+        for (id, key, ft) in [
+            ("sib-light", "type=light", "light"),
+            ("sib-dark", "type=dark", "dark"),
+            ("sib-bias", "type=bias", "bias"),
+        ] {
+            upsert_inbox_sub_item(
+                pool,
+                &UpsertInboxSubItem {
+                    id,
+                    root_id: &source_id,
+                    relative_path: "2025-11-01/session",
+                    source_group_id: "sg-siblings",
+                    group_key: key,
+                    group_label: "(root) · session",
+                    frame_type: Some(ft),
+                    content_signature: "sig-sib",
+                    file_count: 1,
+                    lane: "fits",
+                    needs_review: false,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+        let keys: Vec<&str> = rows.iter().map(|r| r.group_key.as_str()).collect();
+
+        assert_eq!(
+            keys,
+            vec!["type=bias", "type=dark", "type=light"],
+            "siblings of one folder must order by group_key; got insertion order instead, \
+             so the Inbox list can reorder under the user between identical queries"
         );
     }
 
