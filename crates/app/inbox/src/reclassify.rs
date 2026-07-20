@@ -868,6 +868,20 @@ pub async fn reclassify_v2(
         .await
         .map_err(|e| db_internal_ctx(e, "list re-materialized sub-items"))?;
 
+    // Union of the mandatory attributes still absent across the files the
+    // re-split just routed to the sentinel bucket (#1114). Recomputed from the
+    // same `file_records` `materialize_sub_items` partitioned on, so the
+    // response names what is actually missing: a file whose frame type the user
+    // has now supplied but whose EXPTIME is still absent reports
+    // `["exposureS"]`, not the frame type it no longer lacks. BTreeSet for a
+    // deduplicated, deterministically ordered list.
+    let needs_review_missing: Vec<String> = file_records
+        .iter()
+        .flat_map(|(_, ft, raw)| super::classify::missing_mandatory_for_file(*ft, raw.as_ref()))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
     let mut needs_review_count = 0u32;
     let mut sub_items: Vec<InboxSubItemSummary> = Vec::new();
 
@@ -883,9 +897,10 @@ pub async fn reclassify_v2(
             group_label: row.group_label.clone().unwrap_or_default(),
             frame_type: row.frame_type.clone(),
             file_count: u32::try_from(row.file_count).unwrap_or(u32::MAX),
-            // missing_mandatory population is T070's responsibility; here we
-            // surface an empty list (or the "needs review" flag).
-            missing_mandatory: if is_needs_review { vec!["frameType".to_owned()] } else { vec![] },
+            // #1126: the real missing set, deduplicated and deterministically
+            // ordered, rather than a hardcoded `["frameType"]` that asked the
+            // user for the one thing they had just supplied.
+            missing_mandatory: if is_needs_review { needs_review_missing.clone() } else { vec![] },
         });
     }
 
@@ -3169,6 +3184,66 @@ mod tests {
             "a group-wide bulk reached only the named item's files — \
              re-derivation is still anchored to a single item, so the sibling \
              the caller did not name was left out of its own folder's re-derivation"
+        );
+    }
+
+    /// Issue #1114: once the user supplies the frame type, the needs-review
+    /// sub-item must stop reporting `frameType` as missing and must name the
+    /// mandatory attributes that are ACTUALLY still absent (dark requires
+    /// exposureS + gain; the fixture header carries neither).
+    ///
+    /// Before the fix `missing_mandatory` was hardcoded to `vec!["frameType"]`
+    /// for every sentinel row, so the response asked the user for the one thing
+    /// they had just supplied and never named the real blockers.
+    ///
+    /// **Adapted for spec 058 on merge (2026-07-20).** On `main` this test
+    /// located the row by `group_key == SENTINEL_NEEDS_REVIEW`; 058 retires
+    /// that sentinel (T006/T007) so the key now carries classification
+    /// identity only. The row is found by `frame_type.is_none()` instead — a
+    /// needs-review row never carries one (T018 derives `state` from exactly
+    /// that). Deliberately NOT keyed on `missing_mandatory` being non-empty,
+    /// which would make the assertion below circular. The invariant #1114
+    /// pins is unchanged: only the way the row is addressed moved.
+    #[tokio::test]
+    async fn v2_partially_resolved_reports_real_missing_attrs_not_frame_type() {
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("ambiguous_001.fits"), "M42", 0);
+        seed_and_classify(db.pool(), root.path(), "sg-1114", "item-1114-ph", "root-1114").await;
+
+        // The user supplies ONLY the frame type — exactly the partially
+        // resolved state #1114 describes.
+        let resp = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-1114".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "frameType".to_owned(),
+                    value: serde_json::json!("dark").into(),
+                    file_paths: None,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        let needs_review =
+            resp.sub_items.iter().find(|s| s.frame_type.is_none()).unwrap_or_else(|| {
+                panic!("expected a needs-review sub-item: {:?}", resp.sub_items)
+            });
+
+        assert!(
+            !needs_review.missing_mandatory.iter().any(|k| k == "frameType"),
+            "must not ask again for the frame type the user just supplied: {:?}",
+            needs_review.missing_mandatory
+        );
+        assert_eq!(
+            needs_review.missing_mandatory,
+            vec!["exposureS".to_owned(), "gain".to_owned()],
+            "must name the mandatory attributes actually still absent for a dark frame"
         );
     }
 }

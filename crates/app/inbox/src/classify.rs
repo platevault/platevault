@@ -954,6 +954,27 @@ pub fn check_mandatory_missing(
     missing
 }
 
+/// Mandatory attributes absent for one file record, as the needs-review bucket
+/// judges it (T070 / FR-047 / R-14).
+///
+/// An unresolved frame type reports `["frameType"]`: the frame type is itself
+/// the first mandatory attribute, and until it is known no per-type set can be
+/// derived. Empty means the file can leave the needs-review bucket.
+///
+/// `target_resolved` is pinned to `false` for the same reason as
+/// [`materialize_sub_items`]: coordinate resolution (FR-052) is not integrated
+/// at classify time, so the OBJECT header is the proxy.
+#[must_use]
+pub(crate) fn missing_mandatory_for_file(
+    frame_type: Option<FrameType>,
+    raw_meta: Option<&metadata_core::RawFileMetadata>,
+) -> Vec<String> {
+    match frame_type {
+        Some(ft) => check_mandatory_missing(ft, raw_meta, false),
+        None => vec!["frameType".to_owned()],
+    }
+}
+
 /// Build a [`FrameMetadata`] from a [`metadata_core::RawFileMetadata`] for use
 /// with the grouping engine (T066). All extended fields (set_temp, pointing,
 /// rotation, optic-train, observing-night) are sourced from the core
@@ -1068,10 +1089,22 @@ pub(crate) async fn materialize_sub_items(
         // Spec 058 FR-028 (T007): `group_key` carries classification identity
         // ONLY; the needs-review verdict travels alongside it as its own bool
         // and is persisted to `inbox_items.needs_review`. A file missing a
-        // mandatory attribute still has an identity — `group_file` renders the
-        // absent dimension as `SENTINEL_MISSING`, which is what keeps its key
-        // distinct from a fully-resolved sibling of the same frame type.
-        let (group_key, group_label, needs_review) = if let Some(ft) = *frame_type_opt {
+        // mandatory attribute keeps the identity of its frame type, so it can
+        // converge with a resolved sibling via the OR-fold below rather than
+        // being split off into a separate bucket.
+        //
+        // #1126 merge (2026-07-20): `missing_mandatory_for_file` is adopted
+        // from `main` — it folds the no-frame-type case into the same helper
+        // instead of branching on it separately, which is a real
+        // simplification. What is NOT adopted is the `SENTINEL_NEEDS_REVIEW`
+        // group key it feeds on `main`: 058 retires that sentinel (T006/T007),
+        // so the verdict lands on the `needs_review` bool while the key stays
+        // pure classification identity. `missing_mandatory_for_file(None, _)`
+        // returns `vec!["frameType"]`, i.e. non-empty, so the no-frame-type
+        // file is flagged by the same expression rather than a literal `true`.
+        let missing = missing_mandatory_for_file(*frame_type_opt, raw_meta_opt.as_ref());
+        let needs_review = !missing.is_empty();
+        let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
             // Build effective FrameMetadata for the grouping engine.
             let meta = raw_meta_opt.as_ref().map_or_else(
                 || FrameMetadata { frame_type: ft, ..Default::default() },
@@ -1079,15 +1112,9 @@ pub(crate) async fn materialize_sub_items(
             );
             let config = GroupingConfig::default_for(ft);
             let result = group_file(&meta, &config);
-
-            // T070 / FR-047: target_resolved=false — coordinate resolution
-            // (FR-052) is not yet integrated at classify time; the user's
-            // OBJECT header value is used as the proxy, so lights with no
-            // OBJECT need review.
-            let missing = check_mandatory_missing(ft, raw_meta_opt.as_ref(), false);
-            (result.key.0, result.label.0, !missing.is_empty())
+            (result.key.0, result.label.0)
         } else {
-            (GROUP_KEY_TYPE_UNKNOWN.to_owned(), "(root) · needs review".to_owned(), true)
+            (GROUP_KEY_TYPE_UNKNOWN.to_owned(), "(root) · needs review".to_owned())
         };
 
         // Files without a resolvable abs path (e.g. reclassify_v2's re-split,

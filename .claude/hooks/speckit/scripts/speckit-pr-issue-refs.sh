@@ -47,8 +47,20 @@ Spec context goes at the bottom under "## Spec Context" (not in the title).
 The release-please draft PR will be manually curated before publish -- raw material matters.
 GUIDANCE
 
-# Detect current branch
-BRANCH=$(git branch --show-current 2>/dev/null)
+# Detect the branch the PR is actually being opened from.
+#
+# `git branch --show-current` alone is wrong: this hook runs with the session's
+# cwd, but `gh pr create` is routinely run from a linked worktree on a different
+# branch, and the main checkout may meanwhile be on something else entirely.
+# That mismatch stamped PRs with a completely unrelated branch and spec.
+#
+# Order of trust: the explicit `--head` on the command, then the branch of the
+# checkout the command actually runs in, then the session cwd as a last resort.
+HOOK_CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+BRANCH=$(echo "$COMMAND" | grep -oE -- '--head[ =]+[^ ]+' | head -1 | sed -E 's/--head[ =]+//')
+if [ -z "$BRANCH" ]; then
+  BRANCH=$(git -C "${HOOK_CWD:-.}" branch --show-current 2>/dev/null)
+fi
 if [ -z "$BRANCH" ]; then
   jq -n --arg ctx "$CONTEXT" '{
     hookSpecificOutput: {
@@ -59,8 +71,24 @@ if [ -z "$BRANCH" ]; then
   exit 0
 fi
 
-# Extract spec number from branch name (e.g., 023-lifecycle-testing -> 023)
-SPEC_ID=$(echo "$BRANCH" | grep -oE '[0-9]{3}' | head -1)
+# Extract spec number from branch name (e.g., 023-lifecycle-testing -> 023).
+#
+# The number must be a whole 3-digit path segment followed by `-`, so a branch
+# named after a 4-digit ISSUE (`fix/1050-wizard-site-skip-nag`) is not read as
+# spec `105` — an unanchored `[0-9]{3}` matched the first three digits of the
+# issue number and stamped every such PR with a spec it has nothing to do with.
+SPEC_ID=$(echo "$BRANCH" | grep -oE '(^|/)[0-9]{3}-' | head -1 | tr -dc '0-9')
+
+# Final guard: only treat this as a spec branch if that spec actually exists.
+# Cheap, and it fails closed on any pattern the regex above did not anticipate.
+if [ -n "$SPEC_ID" ]; then
+  # compgen, not `[ -d glob ]`: the latter passes every match as a separate
+  # argument to `[`, so two matching spec dirs would make it error out and
+  # silently discard a perfectly valid spec id.
+  if ! compgen -G "${HOOK_CWD:-.}/specs/${SPEC_ID}-*" >/dev/null 2>&1; then
+    SPEC_ID=""
+  fi
+fi
 
 if [ -z "$SPEC_ID" ]; then
   jq -n --arg ctx "$CONTEXT" '{
