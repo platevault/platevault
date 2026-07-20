@@ -230,12 +230,26 @@ pending verification).
   The "persists across remount, scoped per dockId" assertion covers the
   multi-page half: `page-a` is pinned and resized, unmounted, and restored with
   both values intact, while `page-b` is confirmed untouched by it.
-  Two parts of this task are still NOT covered, which is why it stays open
-  rather than being ticked: the restore is verified across a **remount**, not a
-  real page **reload**, and the width is set via `setWidth` rather than by
-  **dragging** the resize handle. Neither shortcut is free — a genuine reload
-  is what would exercise the preference cache, and the drag path has its own
-  pointer-event handling.
+  Two parts were NOT covered by #1195: the restore was verified across a
+  **remount** rather than a real **reload**, and the width was set via
+  `setWidth` rather than by **dragging** the resize handle.
+
+  **#1257 closed the drag half and the storage half.** The suspicion that a
+  remount proves less than it appears to is now measured, and the mechanism
+  is concrete: `getPreferences()` returns a module-level `cachedPreferences`
+  when one exists, and `persistPreferences()` assigns that cache BEFORE its
+  `localStorage.setItem`, whose failure is swallowed. A remount re-reads the
+  CACHE, never storage. With `setItem` stubbed out so nothing persists at
+  all, the new assertions fail and the existing "persists across remount"
+  tests still PASS — they were green against total persistence failure.
+  `ListPageLayout.test.tsx` now asserts the serialized bytes under the real
+  `alm-preferences` key, and pins that the CLAMPED width is what persists.
+
+  **Still open: the real reload.** A cold module cache reading back from
+  real storage cannot be exercised in jsdom, so it stays Layer-2.
+  `E2eApp::relaunch()` is the natural home — it already preserves webview
+  storage for exactly this kind of assertion. Deliberately not bundled into
+  #1257, which was already carrying shared harness and CI changes.
 
 ---
 
@@ -256,13 +270,34 @@ pending verification).
   `.pv-targets-table__scroll` already carried `overflow-x: auto` against the
   table's 1000px `min-width` floor, so non-pinned columns scroll only when the
   space is actually insufficient. T024 is what made that scrolling non-lossy.
-- [ ] T026 E2E: keep the existing full-width unclipped pin passing; add a
-  pinned-column + h-scroll assertion. **Open** — no longer moot now T024/T025
-  are delivered, but not authored. Verified manually instead (drift measured at
-  0px for star, designation and the designation header, against 240px of real
-  h-scroll, at 1400×900 with a 420px side dock). A Layer-1 assertion cannot
-  replace it: jsdom has no layout engine, so it cannot observe sticky offsets —
-  this needs a real-browser check.
+- [x] T026 E2E: keep the existing full-width unclipped pin passing; add a
+  pinned-column + h-scroll assertion. **DELIVERED (#1257).**
+  `targets_ui_identity_columns_stay_pinned_while_table_scrolls`
+  (`crates/e2e-tests/tests/targets_journeys.rs`) automates what had only been
+  measured by hand: 0px drift for star, designation and the designation
+  header, against real h-scroll at 1400×900. A Layer-1 assertion cannot
+  replace it — jsdom has no layout engine, so it reports 0 for every position
+  and would pass against a completely unpinned table.
+
+  The task as originally written understated the work. Two harness gaps had
+  to be closed first, and both are shared surface rather than spec-054 scope:
+
+  - Nothing could size the window. `tauri.conf.json` opens at 1280×820, below
+    `useAdaptiveDock`'s 1400px threshold, so the docked layout this asserts
+    did not occur at all. Added `E2eApp::set_viewport`, which corrects for
+    window chrome by measurement instead of assuming outer == inner (they are
+    equal under xvfb, which has no window manager, but not on Windows).
+  - The Ubuntu shards' display was too narrow to hold the window: `e2e.yml`
+    ran `xvfb-run -a`, whose built-in default screen is 1280 wide. Widened to
+    1600×1200.
+
+  **Not fully verified:** the Windows shards use the native display and its
+  resolution has not been confirmed ≥1400. If it is smaller, `set_viewport`
+  fails loudly naming the screen size rather than passing vacuously — the
+  failure mode is safe, but the shard would need the same treatment.
+
+  The journey asserts a non-pinned control column moves by the scroll
+  distance, so it cannot pass vacuously against a table that never scrolled.
 
 ---
 
@@ -362,15 +397,21 @@ pending verification).
   rails) → **#1107**.
 - **Superseded** (no tracked follow-up as of this reconciliation): T001, T006,
   T030.
-- **Open**: T023 (partial — remount covered, reload + drag not), T026 (E2E
-  assertion for the now-shipped pinned columns).
+- **Open**: T023 (partial — remount, drag and storage covered; a real reload
+  is not, and cannot be at Layer 1).
 - **Not confirmed** (verify before relying on): T034.
 
-**Two tasks are Open as of the #1158 pass** (T023, T026) — both test coverage
-for behaviour that now ships, not unbuilt product. The earlier statement that
-no task remained Open was true when written, before #1195 and #1158 delivered
-T002/T003/T007/T024/T025 and thereby created a genuine gap between the shipped
-behaviour and its regression cover.
+**One task is Open as of the #1257 pass** (T023) — test coverage for
+behaviour that ships, not unbuilt product. The count was two after #1158
+(T023, T026); #1257 closed T026 by automating the pinned-column assertion,
+which also required widening the Ubuntu E2E display and adding a viewport
+helper to the shared harness. The earlier statement that no task remained
+Open was true when written, before #1195 and #1158 delivered
+T002/T003/T007/T024/T025 and thereby created a genuine gap between the
+shipped behaviour and its regression cover.
+
+T023's two uncovered halves (restore across a real reload, and width set by
+dragging rather than `setWidth`) remain tracked in **#1257**.
 
 Historically: #1066 (T021) and #1067 (T011/T012/T012a) both shipped (PR #1070,
 PR #1072). Three
