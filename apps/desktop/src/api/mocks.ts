@@ -414,7 +414,8 @@ const E2E_ONBOARDING_UNMET_STORE_ID = 'alm-e2e-onboarding-unmet';
 function isE2EFlagSet(key: string): boolean {
   try {
     return (
-      typeof localStorage !== 'undefined' && localStorage.getItem(key) === 'true'
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem(key) === 'true'
     );
   } catch {
     return false;
