@@ -617,6 +617,8 @@ fn is_valid_key_cases(#[case] key: &str, #[case] expected: bool) {
 #[case("theme", serde_json::json!("warm-clay"))]
 #[case("theme", serde_json::json!("warm-slate"))]
 #[case("theme", serde_json::json!("observatory-dark"))]
+#[case("theme", serde_json::json!("observatory-cool"))]
+#[case("theme", serde_json::json!("observatory-cool-light"))]
 #[case("theme", serde_json::json!("espresso-dark"))]
 #[case("theme", serde_json::json!("system"))]
 #[case("framingPointingFractionOfFov", serde_json::json!(0.10))]

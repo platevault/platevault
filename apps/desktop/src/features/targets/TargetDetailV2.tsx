@@ -23,12 +23,16 @@
  *     // STUB: target↔session/project linkage backend pending.
  *   - Display-alias edit (FR-012).
  *   - Alias list + add-alias form.
+ *
+ * Split by responsibility (refactor sweep #982): `AltitudeGraph.tsx` is the
+ * self-contained tonight-altitude SVG chart; `target-detail-format.ts` is
+ * pure display-formatting helpers; `useTargetDetailMutations.ts` is the
+ * alias/display-alias/notes edit state + mutation handlers. This file is
+ * Props + data loading + the render.
  */
 
-import { useState, useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate, Link } from '@tanstack/react-router';
-import type { ContractError } from '@/lib/errors';
 import type { TargetListItem } from '@/bindings/index';
 import {
   useTargetDetail,
@@ -36,11 +40,6 @@ import {
   useTargetProjects,
   useTargetNotes,
   useTargetAstroFormat,
-  useAddTargetAlias,
-  useRemoveTargetAlias,
-  useSetTargetDisplayAlias,
-  useClearTargetDisplayAlias,
-  useUpdateTargetNotes,
 } from './store';
 import type { TargetDetailV3 } from './store';
 import {
@@ -59,7 +58,6 @@ import {
 } from './planner-altitude';
 import { BANDS } from './astro/moon-avoidance';
 import type { SensorConfig } from './planner-derive';
-import { errorMessage } from './target-error-message';
 import { useActiveSite } from './observing-sites/site-store';
 import { usePlannerDateMs } from './planner-date-store';
 import { GuidanceCell } from './GuidanceCell';
@@ -68,11 +66,9 @@ import type { ObservingNight } from './astro/moon-state';
 import { useGuidanceParams } from './guidance-settings';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
 import { bestMoonDate } from './astro/best-moon-date';
-import type { SeparationFigure } from './planner-derive';
-import { Group } from '@visx/group';
-import { LinePath } from '@visx/shape';
-import { Threshold } from '@visx/threshold';
-import { altitudeScale, hourScale, nightSpan } from './altitude-scale';
+import { AltitudeGraph, type AltPoint } from './AltitudeGraph';
+import { formatSeparationFigure, kindLabel } from './target-detail-format';
+import { useTargetDetailMutations } from './useTargetDetailMutations';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -110,317 +106,6 @@ type LoadState =
   | { status: 'error'; message: string }
   | { status: 'loaded'; data: TargetDetailV3 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * #758/FR-020: format one of the three real target↔Moon separation figures —
- * a whole-degree value, or the explicit "Moon not up" state (never a
- * fabricated number when the Moon is below the horizon at that reference).
- */
-function formatSeparationFigure(figure: SeparationFigure): string {
-  return figure === 'moon-not-up'
-    ? m.targets_moon_not_up()
-    : `${Math.round(figure)}°`;
-}
-
-/** Map an AliasKind string to a human label for the badge. */
-function kindLabel(kind: string): string {
-  switch (kind) {
-    case 'designation':
-      return m.targets_alias_kind_designation();
-    case 'common_name':
-      return m.targets_alias_kind_name();
-    case 'user':
-      return m.targets_alias_kind_user();
-    default:
-      return kind;
-  }
-}
-
-// ── Altitude curve helper ─────────────────────────────────────────────────────
-//
-// Real per-night altitude curve (spec 044 Track B, T012) via `planner-altitude`
-// (`planner-astronomy.ts` + `planner-derive.ts`, astronomy-engine, offline).
-// Replaces the prior sinusoidal placeholder curve at a fixed 52.1°N latitude.
-
-interface AltPoint {
-  /** Hours into the night (0 = night start … night end). */
-  tHour: number;
-  /** Altitude in degrees (-90..+90), refraction-corrected. */
-  altDeg: number;
-}
-
-// ── Tonight Altitude graph (spec 044 Track B, T035 — @visx) ──────────────────
-//
-// Rebuilt on `@visx/scale`/`shape`/`group`/`threshold` (replacing the prior
-// hand-rolled polyline): the usable-altitude shading now follows the CURVE
-// itself (Threshold clips the shaded area to where the curve is actually
-// above the threshold, not a static full-width band), and twilight-vs-dark
-// shading marks the evening/morning twilight either side of the real dark
-// window. The x/y scales are `altitude-scale.ts`, shared with the per-row
-// `AltitudeSparkline`.
-
-interface AltitudeGraphProps {
-  /** Pre-sampled altitude curve (shared with the list's max-alt computation). */
-  points: AltPoint[];
-  /** Usable-altitude threshold (Settings → Target Planner); shades the curve above it. */
-  usableAltDeg: number;
-  /** The dark window's `[startHour, endHour]` on the same axis as `points`; `null` = no dark window (US4). */
-  darkWindowHours: { startHour: number; endHour: number } | null;
-  /**
-   * Moon-excluded spans for the displayed band on the same axis as `points`
-   * (iteration 2026-07-15, FR-007 overlay); empty when the Moon never
-   * interferes or its geometry wasn't computed.
-   */
-  moonSpans?: Array<{ startHour: number; endHour: number }>;
-}
-
-const SVG_W = 400;
-const SVG_H = 140;
-const PAD_L = 32;
-const PAD_R = 12;
-const PAD_T = 10;
-const PAD_B = 28;
-const PLOT_W = SVG_W - PAD_L - PAD_R;
-const PLOT_H = SVG_H - PAD_T - PAD_B;
-
-function AltitudeGraph({
-  points,
-  usableAltDeg,
-  darkWindowHours,
-  moonSpans = [],
-}: AltitudeGraphProps) {
-  // #757 defense-in-depth: the caller (TargetDetailV2) already gates this
-  // component out of the render tree for the degrade states where `points`
-  // is `[]` (DEGRADE_ROW — no coordinates / no site). Guard here too so a
-  // future caller passing an empty curve degrades to nothing rather than
-  // crashing on `points.reduce(..., points[0])` → `undefined`.
-  if (points.length === 0) return null;
-
-  const yScale = altitudeScale(PLOT_H, 0);
-  // #759: the X-axis domain follows the curve's real sunset→sunrise span
-  // instead of a fixed 12 h, so long nights don't flatten their last third
-  // onto the rightmost pixel (data values were always correct; only the
-  // axis/guide geometry was wrong).
-  const maxHour = nightSpan(points);
-  const xScale = hourScale(0, PLOT_W, maxHour);
-
-  const usableYPx = yScale(usableAltDeg);
-
-  // FR-034 (#817): with no dark window the graph must AGREE with the 0-hour
-  // imaging stat — the whole plot is shaded non-dark and the above-threshold
-  // fill renders grey instead of the usable green.
-  const noDark = darkWindowHours === null;
-
-  const clampHour = (h: number) => Math.min(maxHour, Math.max(0, h));
-
-  // Transit marker: find point closest to peak altitude.
-  const peak = points.reduce(
-    (best, p) => (p.altDeg > best.altDeg ? p : best),
-    points[0],
-  );
-  const transitXPx = xScale(peak.tHour);
-
-  // X-axis tick labels, every 2 h from night start (clock = 18:00 + h,
-  // wrapping past midnight), through the real span rather than a fixed 12 h.
-  const xTicks: Array<{ tHour: number; label: string }> = [];
-  for (let h = 0; h <= maxHour; h += 2) {
-    const clock = (18 + h) % 24;
-    xTicks.push({ tHour: h, label: String(clock).padStart(2, '0') });
-  }
-
-  // Y-axis tick labels.
-  const yTicks = [0, 30, 60, 90];
-
-  return (
-    <div className="pv-planner__graph-wrap">
-      {/* viewBox and width/height are geometry — inline SVG attributes */}
-      <svg
-        className="pv-planner__graph-svg"
-        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        aria-label={m.targets_detail_alt_graph_aria()}
-        role="img"
-      >
-        <Group left={PAD_L} top={PAD_T}>
-          {/* US4/T031: twilight (not-dark) shading either side of the real
-              dark window. FR-034: with NO dark window the ENTIRE plot is
-              shaded non-dark (it used to be omitted, which read as an
-              all-dark night and contradicted the 0-hour stat — #817). */}
-          {noDark && (
-            <rect
-              x={0}
-              y={0}
-              width={PLOT_W}
-              height={PLOT_H}
-              className="pv-planner__graph-twilight"
-            />
-          )}
-          {darkWindowHours && darkWindowHours.startHour > 0 && (
-            <rect
-              x={0}
-              y={0}
-              width={Math.max(0, xScale(darkWindowHours.startHour))}
-              height={PLOT_H}
-              className="pv-planner__graph-twilight"
-            />
-          )}
-          {darkWindowHours && darkWindowHours.endHour < 12 && (
-            <rect
-              x={xScale(darkWindowHours.endHour)}
-              y={0}
-              width={Math.max(0, PLOT_W - xScale(darkWindowHours.endHour))}
-              height={PLOT_H}
-              className="pv-planner__graph-twilight"
-            />
-          )}
-
-          {/* Usable-altitude shading — clipped to where the CURVE is actually
-              above the threshold (T035), not a static full-width band. */}
-          <Threshold<AltPoint>
-            id="tonight-usable-threshold"
-            data={points}
-            x={(p) => xScale(p.tHour)}
-            y0={() => usableYPx}
-            y1={(p) => yScale(p.altDeg)}
-            clipAboveTo={0}
-            clipBelowTo={PLOT_H}
-            // FR-034: no dark window → grey the fill; green would claim
-            // usable imaging time the stats correctly report as zero.
-            aboveAreaProps={
-              noDark
-                ? { fill: 'var(--pv-text-faint)', opacity: 0.25 }
-                : { fill: 'var(--pv-ok-bg)', opacity: 0.6 }
-            }
-            belowAreaProps={{ fill: 'none' }}
-          />
-
-          {/* Moon-excluded spans for the displayed band (FR-007 overlay):
-              bottom-anchored band so it reads as a time-range exclusion
-              without hiding the curve. */}
-          {moonSpans.map((s) => {
-            const x0 = xScale(clampHour(s.startHour));
-            const x1 = xScale(clampHour(s.endHour));
-            return (
-              <rect
-                key={`moon-${s.startHour}`}
-                x={x0}
-                y={PLOT_H - 6}
-                width={Math.max(1, x1 - x0)}
-                height={6}
-                className="pv-planner__graph-moon"
-              />
-            );
-          })}
-
-          {/* Usable-altitude guide line. */}
-          <line
-            x1={0}
-            y1={usableYPx}
-            x2={PLOT_W}
-            y2={usableYPx}
-            stroke="var(--pv-ok-border)"
-            strokeWidth={1}
-            strokeDasharray="3 3"
-          />
-
-          {/* Altitude curve. */}
-          <LinePath<AltPoint>
-            data={points}
-            x={(p) => xScale(p.tHour)}
-            y={(p) => yScale(p.altDeg)}
-            stroke="var(--pv-accent)"
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-
-          {/* Transit vertical marker. */}
-          <line
-            x1={transitXPx}
-            y1={0}
-            x2={transitXPx}
-            y2={PLOT_H}
-            stroke="var(--pv-accent)"
-            strokeWidth={1}
-            strokeDasharray="2 2"
-            opacity={0.6}
-          />
-          <text
-            x={transitXPx + 3}
-            y={9}
-            className="pv-planner__graph-label-text"
-          >
-            {m.targets_detail_transit()}
-          </text>
-
-          {/* Y-axis */}
-          <line
-            x1={0}
-            y1={0}
-            x2={0}
-            y2={PLOT_H}
-            stroke="var(--pv-border)"
-            strokeWidth={1}
-          />
-          {/* X-axis */}
-          <line
-            x1={0}
-            y1={PLOT_H}
-            x2={PLOT_W}
-            y2={PLOT_H}
-            stroke="var(--pv-border)"
-            strokeWidth={1}
-          />
-
-          {/* Y-axis ticks + labels */}
-          {yTicks.map((alt) => (
-            <g key={alt}>
-              <line
-                x1={-3}
-                y1={yScale(alt)}
-                x2={0}
-                y2={yScale(alt)}
-                stroke="var(--pv-border)"
-                strokeWidth={1}
-              />
-              <text
-                x={-5}
-                y={yScale(alt) + 3}
-                textAnchor="end"
-                className="pv-planner__graph-axis-text"
-              >
-                {alt}°
-              </text>
-            </g>
-          ))}
-
-          {/* X-axis ticks + labels */}
-          {xTicks.map(({ tHour, label }) => (
-            <g key={tHour}>
-              <line
-                x1={xScale(tHour)}
-                y1={PLOT_H}
-                x2={xScale(tHour)}
-                y2={PLOT_H + 3}
-                stroke="var(--pv-border)"
-                strokeWidth={1}
-              />
-              <text
-                x={xScale(tHour)}
-                y={PLOT_H + 12}
-                textAnchor="middle"
-                className="pv-planner__graph-axis-text"
-              >
-                {label}
-              </text>
-            </g>
-          ))}
-        </Group>
-      </svg>
-    </div>
-  );
-}
-
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
 export function TargetDetailV2({
@@ -432,21 +117,6 @@ export function TargetDetailV2({
   onMutated,
 }: Props) {
   const guidanceParams = useGuidanceParams();
-  const [aliasInput, setAliasInput] = useState('');
-  const [aliasError, setAliasError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [displayAliasInput, setDisplayAliasInput] = useState('');
-  const [displayAliasEditing, setDisplayAliasEditing] = useState(false);
-  const [newProjectOpen, setNewProjectOpen] = useState(false);
-
-  // US4: observing notes (draft/editing/save-status stay local; the persisted
-  // value is TanStack-Query-backed via useTargetNotes/useUpdateTargetNotes).
-  const [notesEditing, setNotesEditing] = useState(false);
-  const [notesDraft, setNotesDraft] = useState('');
-  const [notesSaving, setNotesSaving] = useState(false);
-  const [notesSaved, setNotesSaved] = useState(false);
-  const [notesError, setNotesError] = useState<string | null>(null);
-
   const navigate = useNavigate();
 
   // US6/T015: real astronomy needs an active observing site; the graph/stats
@@ -478,123 +148,35 @@ export function TargetDetailV2({
       ? { status: 'loading' }
       : { status: 'loaded', data: detailQuery.data };
 
-  // Sync the display-alias draft from the server value whenever a fresh
-  // detail lands (mount, post-mutation refetch, or a display-alias mutation's
-  // own cache write) — guarded on `!displayAliasEditing` so an in-progress
-  // edit is never clobbered by a background refetch (mirrors
-  // ProjectNotesSection's initialContent-sync convention).
-  useEffect(() => {
-    if (detailQuery.data && !displayAliasEditing) {
-      setDisplayAliasInput(detailQuery.data.displayAlias ?? '');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detailQuery.data]);
-
-  // Sync the notes draft from the server value whenever it changes, and reset
-  // editing/saved/error state when the target itself changes.
-  useEffect(() => {
-    if (!notesEditing) setNotesDraft(notes ?? '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes]);
-
-  useEffect(() => {
-    setNotesEditing(false);
-    setNotesSaved(false);
-    setNotesError(null);
-  }, [targetId]);
-
-  const addAliasMutation = useAddTargetAlias();
-  const removeAliasMutation = useRemoveTargetAlias();
-  const setDisplayAliasMutation = useSetTargetDisplayAlias();
-  const clearDisplayAliasMutation = useClearTargetDisplayAlias();
-  const updateNotesMutation = useUpdateTargetNotes();
-
-  // US4: save notes handler.
-  const handleNotesSave = useCallback(async () => {
-    setNotesSaving(true);
-    setNotesError(null);
-    try {
-      const { notes: saved } = await updateNotesMutation.mutateAsync({
-        targetId,
-        notes: notesDraft,
-      });
-      setNotesDraft(saved ?? '');
-      setNotesEditing(false);
-      setNotesSaved(true);
-    } catch {
-      setNotesError(m.sessions_notes_save_failed());
-    } finally {
-      setNotesSaving(false);
-    }
-  }, [targetId, notesDraft, updateNotesMutation]);
-
-  // Add user alias.
-  const handleAliasAdd = useCallback(async () => {
-    const alias = aliasInput.trim();
-    if (!alias) {
-      setAliasError(m.targets_detail_alias_blank());
-      return;
-    }
-    setAliasError(null);
-    try {
-      await addAliasMutation.mutateAsync({ targetId, alias });
-      setAliasInput('');
-      onMutated?.();
-    } catch (err) {
-      const e = err as ContractError;
-      setAliasError(errorMessage(e, m.targets_detail_add_alias_failed()));
-    }
-  }, [targetId, aliasInput, addAliasMutation, onMutated]);
-
-  // Remove user alias by id.
-  const handleAliasRemove = useCallback(
-    async (aliasId: string) => {
-      setActionError(null);
-      try {
-        await removeAliasMutation.mutateAsync({ targetId, aliasId });
-        onMutated?.();
-      } catch (err) {
-        const e = err as ContractError;
-        setActionError(errorMessage(e, m.targets_detail_remove_alias_failed()));
-      }
-    },
-    [targetId, removeAliasMutation, onMutated],
-  );
-
-  // Set display alias.
-  const handleDisplayAliasSet = useCallback(async () => {
-    setActionError(null);
-    try {
-      const data = await setDisplayAliasMutation.mutateAsync({
-        targetId,
-        displayAlias: displayAliasInput.trim(),
-      });
-      setDisplayAliasInput(data.displayAlias ?? '');
-      setDisplayAliasEditing(false);
-      onMutated?.();
-    } catch (err) {
-      const e = err as ContractError;
-      setActionError(
-        errorMessage(e, m.targets_detail_set_display_alias_failed()),
-      );
-    }
-  }, [targetId, displayAliasInput, setDisplayAliasMutation, onMutated]);
-
-  // Clear display alias.
-  const handleDisplayAliasClear = useCallback(async () => {
-    setActionError(null);
-    try {
-      await clearDisplayAliasMutation.mutateAsync({ targetId });
-      setDisplayAliasInput('');
-      setDisplayAliasEditing(false);
-      onMutated?.();
-    } catch (err) {
-      const e = err as ContractError;
-      setActionError(
-        errorMessage(e, m.targets_detail_clear_display_alias_failed()),
-      );
-    }
-  }, [targetId, clearDisplayAliasMutation, onMutated]);
+  const {
+    aliasInput,
+    setAliasInput,
+    aliasError,
+    actionError,
+    displayAliasInput,
+    setDisplayAliasInput,
+    displayAliasEditing,
+    setDisplayAliasEditing,
+    notesEditing,
+    setNotesEditing,
+    notesDraft,
+    setNotesDraft,
+    notesSaving,
+    notesSaved,
+    setNotesSaved,
+    notesError,
+    setNotesError,
+    handleNotesSave,
+    handleAliasAdd,
+    handleAliasRemove,
+    handleDisplayAliasSet,
+    handleDisplayAliasClear,
+  } = useTargetDetailMutations({
+    targetId,
+    serverDisplayAlias: detailQuery.data?.displayAlias,
+    notes,
+    onMutated,
+  });
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -911,7 +493,6 @@ export function TargetDetailV2({
           size="sm"
           variant="primary"
           onClick={() => {
-            setNewProjectOpen(true);
             void navigate({
               to: '/projects/new',
               search: { targetId: detail.id },
@@ -939,9 +520,6 @@ export function TargetDetailV2({
 
   return (
     <DetailPanel fill title={titleContent} titleExtra={titleExtraContent}>
-      {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
-      {newProjectOpen && null}
-
       {/* #816 → #1107: this div used to be the pane's own scroll region,
           because DetailPanel rendered `children` as a bare sibling of the
           header with nothing establishing overflow — so everything below

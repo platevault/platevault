@@ -559,7 +559,7 @@ export function TargetsPage() {
           ) : undefined
         }
         onCloseDetail={selected ? clearSelection : undefined}
-        detailLabel="Target details"
+        detailLabel={m.targets_detail_label()}
         dockId="targets"
       >
         {listState.status === 'error' ? (

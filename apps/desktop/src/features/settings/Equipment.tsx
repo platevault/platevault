@@ -23,180 +23,26 @@
  *    gets an actionable message instead of a raw database error; the backend
  *    constraint remains the source of truth for correctness.
  */
-import { useCallback, useEffect, useState } from 'react';
-import { useMountedRef } from '@/hooks/useMountedRef';
-import { Btn, Table, Pill } from '@/ui';
+import { Btn, Table } from '@/ui';
 import type { TableRow } from '@/ui';
 import { Modal } from '@/components';
 import { m } from '@/lib/i18n';
-import { errMessage } from '@/lib/errors';
-import {
-  equipmentCamerasList,
-  equipmentCameraCreate,
-  equipmentCameraUpdate,
-  equipmentCameraDelete,
-  equipmentTelescopesList,
-  equipmentTelescopeCreate,
-  equipmentTelescopeUpdate,
-  equipmentTelescopeDelete,
-  equipmentTrainsList,
-  equipmentTrainCreate,
-  equipmentTrainUpdate,
-  equipmentTrainDelete,
-  equipmentFiltersList,
-  equipmentFilterCreate,
-  equipmentFilterUpdate,
-  equipmentFilterDelete,
-  type Camera,
-  type SensorType,
-  type Telescope,
-  type OpticalTrain,
-  type Filter,
-  type FilterCategory,
-} from './settingsIpc';
+import type { SensorType, FilterCategory } from './settingsIpc';
 import { SettingsSection, SettingsFormShell } from './SettingsKit';
+import {
+  autoDetectedBadge,
+  filterCategoryLabel,
+  formatAliases,
+  FILTER_CATEGORIES,
+  passbandChoiceFrom,
+  passbandLabel,
+  sensorSummary,
+  type PassbandChoice,
+} from './equipment-helpers';
+import { useEquipment } from './useEquipment';
 
 interface EquipmentProps {
   save: (scope: string, values: Record<string, unknown>) => void;
-}
-
-type DeleteTarget =
-  | { kind: 'camera'; id: string; name: string }
-  | { kind: 'telescope'; id: string; name: string }
-  | { kind: 'train'; id: string; name: string }
-  | { kind: 'filter'; id: string; name: string };
-
-// ── Shared helpers ─────────────────────────────────────────────────────────────
-
-function parseAliases(text: string): string[] {
-  return text
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function formatAliases(aliases: string[]): string {
-  return aliases.length > 0 ? aliases.join(', ') : '—';
-}
-
-/** Case/whitespace-insensitive name collision check against an entity list. */
-function isDuplicateName<T extends { id: string; name: string }>(
-  items: T[],
-  name: string,
-  excludeId: string | null,
-): boolean {
-  const normalized = name.trim().toLowerCase();
-  return items.some(
-    (item) =>
-      item.id !== excludeId && item.name.trim().toLowerCase() === normalized,
-  );
-}
-
-/**
- * True when any of `aliases` collides with another item's aliases
- * (case/whitespace-insensitive). Aliases are the FITS header join key
- * (`INSTRUME`/`TELESCOP`), so cross-item collisions make session→equipment
- * resolution ambiguous — worse than a duplicate display name (#659).
- */
-function hasDuplicateAlias<T extends { id: string; aliases: string[] }>(
-  items: T[],
-  aliases: string[],
-  excludeId: string | null,
-): boolean {
-  const normalized = new Set(aliases.map((a) => a.trim().toLowerCase()));
-  return items.some(
-    (item) =>
-      item.id !== excludeId &&
-      item.aliases.some((a) => normalized.has(a.trim().toLowerCase())),
-  );
-}
-
-/** Parses a focal-length input; blank → null, non-numeric → null. */
-function parseFocalLength(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed === '') return null;
-  const n = Number(trimmed);
-  return Number.isFinite(n) ? Math.round(n) : null;
-}
-
-// ── Camera sensor type (spec 044 iteration 2026-07-15, FR-035/T045) ──────────
-
-/** The OSC passband presets exposed in the form; stored as a band array. */
-type PassbandChoice = 'rgb' | 'ha_oiii' | 'ha_sii_oiii';
-
-const PASSBAND_BANDS: Record<Exclude<PassbandChoice, 'rgb'>, string[]> = {
-  ha_oiii: ['Ha', 'OIII'],
-  ha_sii_oiii: ['Ha', 'SII', 'OIII'],
-};
-
-/** Contract passband (`null` = plain color/rgb) → form preset. */
-function passbandChoiceFrom(passband: string[] | null): PassbandChoice {
-  if (!passband || passband.length === 0) return 'rgb';
-  return passband.includes('SII') ? 'ha_sii_oiii' : 'ha_oiii';
-}
-
-/** Form preset → contract passband (`null` = plain color/rgb default). */
-function passbandBandsFrom(choice: PassbandChoice): string[] | null {
-  return choice === 'rgb' ? null : PASSBAND_BANDS[choice];
-}
-
-/** Render-time factory (spec 046 #8b) so labels re-read the active locale. */
-function passbandLabel(choice: PassbandChoice): string {
-  switch (choice) {
-    case 'rgb':
-      return m.settings_equipment_passband_rgb();
-    case 'ha_oiii':
-      return m.settings_equipment_passband_ha_oiii();
-    case 'ha_sii_oiii':
-      return m.settings_equipment_passband_ha_sii_oiii();
-  }
-}
-
-/** Table-cell summary of a camera's sensor configuration; unknown → '—'. */
-function sensorSummary(camera: Camera): string {
-  if (camera.sensorType === 'mono') return m.settings_equipment_sensor_mono();
-  if (camera.sensorType === 'osc') {
-    return `${m.settings_equipment_sensor_osc()} · ${passbandLabel(
-      passbandChoiceFrom(camera.passband),
-    )}`;
-  }
-  return '—';
-}
-
-const FILTER_CATEGORIES: FilterCategory[] = [
-  'narrowband',
-  'broadband',
-  'dual_band',
-  'other',
-  'custom',
-];
-
-/** Render-time factory (spec 046 #8b) so category labels re-read the active locale. */
-function filterCategoryLabel(category: FilterCategory): string {
-  switch (category) {
-    case 'narrowband':
-      return m.settings_equipment_category_narrowband();
-    case 'broadband':
-      return m.settings_equipment_category_broadband();
-    case 'dual_band':
-      return m.settings_equipment_category_dual_band();
-    case 'other':
-      return m.settings_equipment_category_other();
-    case 'custom':
-      return m.settings_equipment_category_custom();
-  }
-}
-
-function autoDetectedBadge(autoDetected: boolean) {
-  return (
-    <span className="pv-equipment__badges">
-      {autoDetected ? (
-        <Pill variant="info">{m.settings_equipment_auto_detected()}</Pill>
-      ) : (
-        <Pill variant="neutral">{m.settings_equipment_manual()}</Pill>
-      )}
-    </span>
-  );
 }
 
 // The add/edit form shell (field grid + error line + cancel/save actions) now
@@ -205,420 +51,65 @@ function autoDetectedBadge(autoDetected: boolean) {
 // clone (shared-component mandate).
 
 export function Equipment({ save: _save }: EquipmentProps) {
-  // ── Cameras ────────────────────────────────────────────────────────────────
-  const [cameras, setCameras] = useState<Camera[]>([]);
-  const [camerasLoading, setCamerasLoading] = useState(true);
-  const [camerasError, setCamerasError] = useState<string | null>(null);
-  const [cameraForm, setCameraForm] = useState<{
-    id: string | null;
-    name: string;
-    aliasesText: string;
-    /** FR-035: '' = unknown (behaves as mono, FR-038). */
-    sensorType: '' | SensorType;
-    passband: PassbandChoice;
-  } | null>(null);
-  const [cameraFormError, setCameraFormError] = useState<string | null>(null);
-  const [cameraSaving, setCameraSaving] = useState(false);
+  const {
+    cameras,
+    camerasLoading,
+    camerasError,
+    cameraForm,
+    setCameraForm,
+    cameraFormError,
+    cameraSaving,
+    handleCameraSubmit,
+    requestDeleteCamera,
 
-  // ── Telescopes ───────────────────────────────────────────────────────────────
-  const [telescopes, setTelescopes] = useState<Telescope[]>([]);
-  const [telescopesLoading, setTelescopesLoading] = useState(true);
-  const [telescopesError, setTelescopesError] = useState<string | null>(null);
-  const [telescopeForm, setTelescopeForm] = useState<{
-    id: string | null;
-    name: string;
-    aliasesText: string;
-    focalLengthMmText: string;
-  } | null>(null);
-  const [telescopeFormError, setTelescopeFormError] = useState<string | null>(
-    null,
-  );
-  const [telescopeSaving, setTelescopeSaving] = useState(false);
+    telescopes,
+    telescopesLoading,
+    telescopesError,
+    telescopeForm,
+    setTelescopeForm,
+    telescopeFormError,
+    telescopeSaving,
+    handleTelescopeSubmit,
+    requestDeleteTelescope,
 
-  // ── Optical trains ───────────────────────────────────────────────────────────
-  const [trains, setTrains] = useState<OpticalTrain[]>([]);
-  const [trainsLoading, setTrainsLoading] = useState(true);
-  const [trainsError, setTrainsError] = useState<string | null>(null);
-  const [trainForm, setTrainForm] = useState<{
-    id: string | null;
-    name: string;
-    telescopeId: string;
-    cameraId: string;
-    focalLengthMmText: string;
-  } | null>(null);
-  const [trainFormError, setTrainFormError] = useState<string | null>(null);
-  const [trainSaving, setTrainSaving] = useState(false);
+    trains,
+    trainsLoading,
+    trainsError,
+    trainForm,
+    setTrainForm,
+    trainFormError,
+    trainSaving,
+    handleTrainSubmit,
+    requestDeleteTrain,
 
-  // ── Filters ──────────────────────────────────────────────────────────────────
-  const [filters, setFilters] = useState<Filter[]>([]);
-  const [filtersLoading, setFiltersLoading] = useState(true);
-  const [filtersError, setFiltersError] = useState<string | null>(null);
-  const [filterForm, setFilterForm] = useState<{
-    id: string | null;
-    name: string;
-    category: FilterCategory;
-  } | null>(null);
-  const [filterFormError, setFilterFormError] = useState<string | null>(null);
-  const [filterSaving, setFilterSaving] = useState(false);
+    filters,
+    filtersLoading,
+    filtersError,
+    filterForm,
+    setFilterForm,
+    filterFormError,
+    filterSaving,
+    handleFilterSubmit,
+    requestDeleteFilter,
 
-  // ── Shared delete confirmation ───────────────────────────────────────────────
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+    deleteTarget,
+    setDeleteTarget,
+    deleteBusy,
+    deleteError,
+    setDeleteError,
+    handleConfirmDelete,
 
-  // ── Loaders ──────────────────────────────────────────────────────────────────
+    cameraName,
+    telescopeName,
+  } = useEquipment();
 
-  // All four loaders are re-invoked after create/update/delete, not just on
-  // mount, so the guard lives in the callbacks rather than in the effect.
-  const mountedRef = useMountedRef();
-
-  const loadCameras = useCallback(() => {
-    setCamerasLoading(true);
-    setCamerasError(null);
-    equipmentCamerasList()
-      .then((rows) => {
-        if (mountedRef.current) setCameras(rows);
-      })
-      .catch((err: unknown) => {
-        if (!mountedRef.current) return;
-        setCamerasError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        );
-      })
-      .finally(() => {
-        if (mountedRef.current) setCamerasLoading(false);
-      });
-  }, []);
-
-  const loadTelescopes = useCallback(() => {
-    setTelescopesLoading(true);
-    setTelescopesError(null);
-    equipmentTelescopesList()
-      .then((rows) => {
-        if (mountedRef.current) setTelescopes(rows);
-      })
-      .catch((err: unknown) => {
-        if (!mountedRef.current) return;
-        setTelescopesError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        );
-      })
-      .finally(() => {
-        if (mountedRef.current) setTelescopesLoading(false);
-      });
-  }, []);
-
-  const loadTrains = useCallback(() => {
-    setTrainsLoading(true);
-    setTrainsError(null);
-    equipmentTrainsList()
-      .then((rows) => {
-        if (mountedRef.current) setTrains(rows);
-      })
-      .catch((err: unknown) => {
-        if (!mountedRef.current) return;
-        setTrainsError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        );
-      })
-      .finally(() => {
-        if (mountedRef.current) setTrainsLoading(false);
-      });
-  }, []);
-
-  const loadFilters = useCallback(() => {
-    setFiltersLoading(true);
-    setFiltersError(null);
-    equipmentFiltersList()
-      .then((rows) => {
-        if (mountedRef.current) setFilters(rows);
-      })
-      .catch((err: unknown) => {
-        if (!mountedRef.current) return;
-        setFiltersError(
-          m.settings_equipment_load_error({ error: errMessage(err) }),
-        );
-      })
-      .finally(() => {
-        if (mountedRef.current) setFiltersLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    loadCameras();
-    loadTelescopes();
-    loadTrains();
-    loadFilters();
-  }, [loadCameras, loadTelescopes, loadTrains, loadFilters]);
-
-  // ── Camera handlers ──────────────────────────────────────────────────────────
-
-  const handleCameraSubmit = async () => {
-    if (!cameraForm) return;
-    const name = cameraForm.name.trim();
-    if (!name) {
-      setCameraFormError(m.settings_equipment_name_required());
-      return;
-    }
-    if (isDuplicateName(cameras, name, cameraForm.id)) {
-      setCameraFormError(m.settings_equipment_name_duplicate());
-      return;
-    }
-    const aliases = parseAliases(cameraForm.aliasesText);
-    if (hasDuplicateAlias(cameras, aliases, cameraForm.id)) {
-      setCameraFormError(m.settings_equipment_alias_duplicate());
-      return;
-    }
-    setCameraSaving(true);
-    setCameraFormError(null);
-    try {
-      // FR-035: '' (unknown) persists as null; passband only matters for OSC.
-      const sensorType =
-        cameraForm.sensorType === '' ? null : cameraForm.sensorType;
-      const passband =
-        sensorType === 'osc' ? passbandBandsFrom(cameraForm.passband) : null;
-      if (cameraForm.id) {
-        await equipmentCameraUpdate({
-          id: cameraForm.id,
-          name,
-          aliases,
-          sensorType,
-          passband,
-        });
-      } else {
-        await equipmentCameraCreate({ name, aliases, sensorType, passband });
-      }
-      setCameraForm(null);
-      loadCameras();
-    } catch (err: unknown) {
-      setCameraFormError(
-        m.settings_equipment_save_error({ error: errMessage(err) }),
-      );
-    } finally {
-      setCameraSaving(false);
-    }
-  };
-
-  const requestDeleteCamera = (camera: Camera) => {
-    const inUse = trains.some((t) => t.cameraId === camera.id);
-    if (inUse) {
-      setCamerasError(m.settings_equipment_delete_in_use());
-      return;
-    }
-    setDeleteError(null);
-    setDeleteTarget({ kind: 'camera', id: camera.id, name: camera.name });
-  };
-
-  // ── Telescope handlers ───────────────────────────────────────────────────────
-
-  const handleTelescopeSubmit = async () => {
-    if (!telescopeForm) return;
-    const name = telescopeForm.name.trim();
-    if (!name) {
-      setTelescopeFormError(m.settings_equipment_name_required());
-      return;
-    }
-    if (isDuplicateName(telescopes, name, telescopeForm.id)) {
-      setTelescopeFormError(m.settings_equipment_name_duplicate());
-      return;
-    }
-    const aliases = parseAliases(telescopeForm.aliasesText);
-    if (hasDuplicateAlias(telescopes, aliases, telescopeForm.id)) {
-      setTelescopeFormError(m.settings_equipment_alias_duplicate());
-      return;
-    }
-    setTelescopeSaving(true);
-    setTelescopeFormError(null);
-    try {
-      const focalLengthMm = parseFocalLength(telescopeForm.focalLengthMmText);
-      if (telescopeForm.id) {
-        await equipmentTelescopeUpdate({
-          id: telescopeForm.id,
-          name,
-          aliases,
-          focalLengthMm,
-        });
-      } else {
-        await equipmentTelescopeCreate({ name, aliases, focalLengthMm });
-      }
-      setTelescopeForm(null);
-      loadTelescopes();
-    } catch (err: unknown) {
-      setTelescopeFormError(
-        m.settings_equipment_save_error({ error: errMessage(err) }),
-      );
-    } finally {
-      setTelescopeSaving(false);
-    }
-  };
-
-  const requestDeleteTelescope = (telescope: Telescope) => {
-    const inUse = trains.some((t) => t.telescopeId === telescope.id);
-    if (inUse) {
-      setTelescopesError(m.settings_equipment_delete_in_use());
-      return;
-    }
-    setDeleteError(null);
-    setDeleteTarget({
-      kind: 'telescope',
-      id: telescope.id,
-      name: telescope.name,
-    });
-  };
-
-  // ── Optical train handlers ───────────────────────────────────────────────────
-
-  const handleTrainSubmit = async () => {
-    if (!trainForm) return;
-    const name = trainForm.name.trim();
-    if (!name) {
-      setTrainFormError(m.settings_equipment_name_required());
-      return;
-    }
-    if (isDuplicateName(trains, name, trainForm.id)) {
-      setTrainFormError(m.settings_equipment_name_duplicate());
-      return;
-    }
-    // #835: a train without both parts selected has nothing to resolve
-    // camera/telescope-specific FITS metadata against.
-    if (!trainForm.cameraId || !trainForm.telescopeId) {
-      setTrainFormError(m.settings_equipment_train_parts_required());
-      return;
-    }
-    const focalLengthMm = parseFocalLength(trainForm.focalLengthMmText);
-    if (focalLengthMm == null) {
-      setTrainFormError(m.settings_equipment_focal_length_required());
-      return;
-    }
-    setTrainSaving(true);
-    setTrainFormError(null);
-    try {
-      const telescopeId = trainForm.telescopeId || null;
-      const cameraId = trainForm.cameraId || null;
-      if (trainForm.id) {
-        await equipmentTrainUpdate({
-          id: trainForm.id,
-          name,
-          telescopeId,
-          cameraId,
-          focalLengthMm,
-        });
-      } else {
-        await equipmentTrainCreate({
-          name,
-          telescopeId,
-          cameraId,
-          focalLengthMm,
-        });
-      }
-      setTrainForm(null);
-      loadTrains();
-    } catch (err: unknown) {
-      setTrainFormError(
-        m.settings_equipment_save_error({ error: errMessage(err) }),
-      );
-    } finally {
-      setTrainSaving(false);
-    }
-  };
-
-  const requestDeleteTrain = (train: OpticalTrain) => {
-    setDeleteError(null);
-    setDeleteTarget({ kind: 'train', id: train.id, name: train.name });
-  };
-
-  // ── Filter handlers ──────────────────────────────────────────────────────────
-
-  const handleFilterSubmit = async () => {
-    if (!filterForm) return;
-    const name = filterForm.name.trim();
-    if (!name) {
-      setFilterFormError(m.settings_equipment_name_required());
-      return;
-    }
-    if (isDuplicateName(filters, name, filterForm.id)) {
-      setFilterFormError(m.settings_equipment_name_duplicate());
-      return;
-    }
-    setFilterSaving(true);
-    setFilterFormError(null);
-    try {
-      if (filterForm.id) {
-        await equipmentFilterUpdate({
-          id: filterForm.id,
-          name,
-          category: filterForm.category,
-        });
-      } else {
-        await equipmentFilterCreate({ name, category: filterForm.category });
-      }
-      setFilterForm(null);
-      loadFilters();
-    } catch (err: unknown) {
-      setFilterFormError(
-        m.settings_equipment_save_error({ error: errMessage(err) }),
-      );
-    } finally {
-      setFilterSaving(false);
-    }
-  };
-
-  const requestDeleteFilter = (filter: Filter) => {
-    setDeleteError(null);
-    setDeleteTarget({ kind: 'filter', id: filter.id, name: filter.name });
-  };
-
-  // ── Shared delete confirm ────────────────────────────────────────────────────
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleteBusy(true);
-    setDeleteError(null);
-    try {
-      switch (deleteTarget.kind) {
-        case 'camera':
-          await equipmentCameraDelete(deleteTarget.id);
-          loadCameras();
-          break;
-        case 'telescope':
-          await equipmentTelescopeDelete(deleteTarget.id);
-          loadTelescopes();
-          break;
-        case 'train':
-          await equipmentTrainDelete(deleteTarget.id);
-          loadTrains();
-          break;
-        case 'filter':
-          await equipmentFilterDelete(deleteTarget.id);
-          loadFilters();
-          break;
-      }
-      setDeleteTarget(null);
-    } catch (err: unknown) {
-      setDeleteError(
-        m.settings_equipment_delete_error({ error: errMessage(err) }),
-      );
-    } finally {
-      setDeleteBusy(false);
-    }
-  };
-
+  // Dismissal is refused while the delete is in flight, so a half-applied
+  // removal can't be hidden behind a closed dialog (#1190).
   const closeDeleteConfirm = () => {
     if (deleteBusy) return;
     setDeleteTarget(null);
     setDeleteError(null);
   };
-
-  // ── Row lookups for the optical trains table ─────────────────────────────────
-
-  const cameraName = (id: string | null) =>
-    id
-      ? (cameras.find((c) => c.id === id)?.name ?? id)
-      : m.settings_equipment_field_none();
-  const telescopeName = (id: string | null) =>
-    id
-      ? (telescopes.find((t) => t.id === id)?.name ?? id)
-      : m.settings_equipment_field_none();
 
   return (
     <>

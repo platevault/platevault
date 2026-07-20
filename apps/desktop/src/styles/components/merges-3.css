@@ -792,8 +792,12 @@
  * STUB until task #54 (FITS OBJECT → target_id linkage) lands — stored
  * client-side in localStorage only. See useFavourites.ts. */
 
-/* Extra column for the star (sits leftmost, before Designation). */
-.pv-targets-col--star { width: 4.5%; }
+/* Extra column for the star (sits leftmost, before Designation).
+ * Fixed px rather than a percentage since #1158: this column is pinned, and the
+ * designation column's sticky `left` offset must equal this width EXACTLY (see
+ * --pv-targets-star-w in merges-2.css). A percentage would drift from that
+ * offset at any table width above the 1000px min-width floor. */
+.pv-targets-col--star { width: var(--pv-targets-star-w); }
 
 /* Star toggle button: tiny, borderless, centred in its cell. */
 .pv-targets-star {
