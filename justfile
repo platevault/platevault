@@ -47,6 +47,48 @@ db-boundary:
 dead-callers:
     bash scripts/check-dead-callers.sh
 
+# Periodic hygiene sweeps. NOT CI gates and deliberately so: these surface debt
+# to triage, not per-PR correctness, and a noisy blocking gate gets suppressed.
+# Run them when you want a health read, not on every push.
+#
+# Tools install on demand:
+#   cargo install cargo-machete cargo-public-api
+#
+# Deliberately NOT included, so nobody re-adds them:
+#   cargo-udeps  - same job as machete, and needs a nightly toolchain
+#   cargo-shear  - same job as machete; one dependency checker is enough,
+#                  three reporting overlapping findings guarantees all three
+#                  get ignored
+#   warnalyzer   - dead. Last release 2021-05-20, ~3.5k downloads, and it
+#                  depends on rustc save-analysis which no longer exists.
+
+# Unused dependencies declared in Cargo.toml but never used.
+hygiene-deps:
+    @command -v cargo-machete >/dev/null 2>&1 || { echo "cargo-machete not installed: cargo install cargo-machete"; exit 1; }
+    cargo machete
+
+# `pub` items that are not actually reachable from outside their crate, i.e.
+# should be pub(crate). Narrowing them lets rustc's own dead_code lint fire on
+# the unused ones for free -- which is the compiler-native half of what
+# scripts/check-dead-callers.sh approximates textually. Measured 0 on
+# persistence_db on 2026-07-20; other crates are unmeasured.
+#
+# `pub` items that should be pub(crate), across the workspace.
+hygiene-pub:
+    cargo clippy --workspace --all-targets --message-format=short -- -A warnings -W unreachable_pub
+
+# Public API surface per crate. Not a pass/fail check -- a read of what each
+# crate exposes. Large surface that the workspace never consumes is the same
+# debt the dead-caller ratchet tracks, seen from the other side.
+#
+# Public API surface of one crate (read, not pass/fail).
+hygiene-api CRATE:
+    @command -v cargo-public-api >/dev/null 2>&1 || { echo "cargo-public-api not installed: cargo install cargo-public-api"; exit 1; }
+    cargo public-api -p {{CRATE}}
+
+# All non-interactive hygiene sweeps.
+hygiene: hygiene-deps hygiene-pub
+
 # Regenerate the sqlx offline query cache (.sqlx/) for compile-time verification.
 # Requires a DATABASE_URL pointing at a migrated SQLite db, or run after the
 # crate's migrations have been applied. Commit the resulting .sqlx/ dir so CI can
