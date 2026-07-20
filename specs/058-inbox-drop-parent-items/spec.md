@@ -27,10 +27,23 @@ The scope claim is deliberately narrow, because ground is already held:
   PR #1086 (`22f94a9e`); see
   [Relationship to #711 Instance B](#relationship-to-711-instance-b).
 
+- **Instance A's visible badge is fixed on `main`.** PR #1099 (`ef90b074`)
+  landed after this specification was written, making the list badge read the
+  item's own classification result rather than falling back to `state`.
+
 What remains — and what this feature is actually for — is the folder that
-produces exactly one item. #1081's narrowing knowingly returned Instance A for
-that case, because there is no sibling whose existence could suppress the
-placeholder. This feature removes the placeholder itself.
+produces exactly one item, and specifically **the false row underneath it**.
+#1081's narrowing knowingly returned Instance A for that case, because there is
+no sibling whose existence could suppress the placeholder; #1099 then stopped
+the badge repeating the row's claim. Neither removed the row. This feature
+removes the placeholder itself.
+
+**Read the scope claim as SC-003, not as the badge.** After #1099 the
+user-visible disagreement is gone, so a reader checking this feature against a
+screenshot will find nothing wrong. The defect that remains is in the database:
+a row with `state = 'classified'` and no frame type, which confirm can still
+bind a filesystem plan to. That is what SC-003 measures and what this feature
+exists to remove.
 
 **Supersedes the read-side workarounds in**: PR #1038 and PR #1081. Those
 workarounds are removed (FR-026, SC-007) rather than corrected — with no
@@ -51,21 +64,37 @@ confirms for ordinary folders. For a folder that splits, the placeholder is
 superseded by the real single-type rows but is not removed, so it lingers in the
 list advertising a classification it does not have.
 
-This has produced a visible, reproducible lie. In #711 Instance A a list row
-reads **CLASSIFIED** while opening it shows `unclassified`, a blocking
-"Frame types required" banner, and a disabled Confirm button. The list and the
-detail panel disagree about the same item id.
+This produced a visible, reproducible lie. In #711 Instance A a list row read
+**CLASSIFIED** while opening it showed `unclassified`, a blocking "Frame types
+required" banner, and a disabled Confirm button. The list and the detail panel
+disagreed about the same item id.
 
-The badge is not rendering the wrong thing. The badge is rendering the database
-faithfully, and **the database contains a false statement**. Classification sets
-the placeholder's state to `classified` while leaving it with no frame type and
-no group key, so a row that has never been classified truthfully claims it has.
+**That visible symptom was closed on `main` by PR #1099 (`ef90b074`), after this
+specification was written.** The list badge now reads the item's own
+classification result instead of falling back to `state`, and the Layer-2
+journey asserting it —
+`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` — passes.
 
-Two attempts have already patched the read side rather than the cause, and the
-second exists only to repair the first. That is the signal that the model, not
-the query, is wrong. This feature removes the parent concept so that every row
-in the Inbox is a real, actionable item that states only true things about
-itself.
+**The cause did not go away.** The badge was never rendering the wrong thing: it
+was rendering the database faithfully, and **the database contains a false
+statement**. Classification sets the placeholder's state to `classified` while
+leaving it with no frame type and no group key, so a row that has never been
+classified truthfully claims it has. That row is still written today. The
+measure of this feature is therefore **SC-003** — zero inbox items carrying a
+`classified` state without a frame type — not the badge. SC-003 is violated on
+`main` and on this branch, pinned executably by
+`no_item_reports_classified_without_a_frame_type_sc003`
+(`crates/app/inbox/src/reclassify.rs`).
+
+**Three attempts have now patched the read side rather than the cause**, and the
+second existed only to repair the first. #1099 is the third, landing while this
+feature was being planned. Each was correct in isolation and none could reach
+the model underneath — which is exactly what
+[Not considered a real option](#not-considered-a-real-option--patch-the-read-side-again)
+predicted. That the read side keeps needing patches is the strongest available
+evidence that the model, not the query, is wrong. This feature removes the
+parent concept so that every row in the Inbox is a real, actionable item that
+states only true things about itself.
 
 ## Recorded Decisions
 
