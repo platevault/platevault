@@ -28,6 +28,10 @@ import type {
   SetSourceOverrideResponse,
   CalibrationTolerances,
   UpdateCalibrationTolerances,
+  CleanupPolicy,
+  CleanupPolicyEntry,
+  CleanupAction,
+  UpdateCleanupPolicy,
   IngestionSettings,
   UpdateIngestionSettings,
   ProtectionLevel,
@@ -103,6 +107,7 @@ export type {
   PathPatternPreviewResponse,
 };
 export type { CalibrationTolerances, UpdateCalibrationTolerances };
+export type { CleanupPolicy, CleanupPolicyEntry, CleanupAction };
 export type { IngestionSettings, UpdateIngestionSettings };
 
 // ── Settings scope read/write (spec 018) ──────────────────────────────────────
@@ -291,6 +296,24 @@ export async function calibrationTolerancesUpdate(
   request: UpdateCalibrationTolerances,
 ): Promise<CalibrationTolerances> {
   return unwrap(await commands.calibrationTolerancesUpdate(request));
+}
+
+// ── Cleanup policy (issue #804) ───────────────────────────────────────────────
+//
+// The policy `cleanup_scan`/`cleanup_plan_generate` actually read: a per-data-
+// type (`intermediate`/`master`/`final`) action plus an auto-on-completion
+// flag, persisted in the protection-defaults store. Deliberately NOT the
+// `cleanup` settings scope (block-permanent-delete, protected categories) —
+// the scan path never consults that scope.
+
+export async function cleanupPolicyGet(): Promise<CleanupPolicy> {
+  return unwrap(await commands.cleanupPolicyGet());
+}
+
+export async function cleanupPolicyUpdate(
+  request: UpdateCleanupPolicy,
+): Promise<CleanupPolicy> {
+  return unwrap(await commands.cleanupPolicyUpdate(request));
 }
 
 // ── Ingestion settings (spec 030, package P12) ────────────────────────────────
