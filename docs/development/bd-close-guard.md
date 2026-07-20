@@ -8,30 +8,42 @@ their linked PR still open at close time.
 
 ## The rule
 
-Close a bead only once its PR shows `MERGED`, not once its fix is pushed.
-"Fix pushed to the branch" and "fix landed on main" are different events; only
-the second one is safe to mark done.
+Close a bead only once its fix commit is on `origin/main`, not once its PR
+shows `MERGED`. **"MERGED" is not "on main"; ancestry is the only
+authoritative test.** GitHub reports a PR as `MERGED` as soon as it merges
+into ITS base branch. This repo uses stacked PRs, so that base branch is
+routinely a feature branch, not `main`.
+
+astro-plan-pjg was closed on the strength of PR #1310 reading `state:
+MERGED`. #1310 merged into `061-selectable-app-language`; its merge commit
+was never an ancestor of `origin/main`. The bead was reopened once
+`git merge-base --is-ancestor <mergeCommit> origin/main` returned false.
 
 ## The check
 
 `scripts/bd-close-guard.sh <bead-id> [<bead-id> ...]` resolves the PR linked
-to each bead and reports its merge state. Read-only: it never calls `bd
-close`, `bd update`, or any mutating `gh`/GitHub call.
+to each bead, then checks whether that PR's merge commit is an ancestor of
+`origin/main` — not just whether the PR's `state` field reads `MERGED`.
+Read-only: it never calls `bd close`, `bd update`, or any mutating
+`gh`/GitHub call, and never modifies the working tree beyond fetching the
+`origin/main` remote-tracking ref.
 
 ```
-$ scripts/bd-close-guard.sh astro-plan-6yx astro-plan-tlw
-PASS     astro-plan-6yx   PR #1315 MERGED (platevault/platevault)
+$ scripts/bd-close-guard.sh astro-plan-hew astro-plan-tlw astro-plan-pjg
+PASS     astro-plan-hew   PR #1364 merged into main, commit d4876d81528951e40901bb83f6799c3c54c0a94b is on origin/main (platevault/platevault)
 FAIL     astro-plan-tlw   PR #1048 is OPEN, not merged (platevault/platevault) — do not close
+FAIL     astro-plan-pjg   PR #1310 merged into 061-selectable-app-language, not on origin/main — do not close (platevault/platevault)
 ```
 
-Exit status is 0 only if every given bead resolved to a merged PR.
+Exit status is 0 only if every given bead's fix commit is on `origin/main`.
 
 | Result | Meaning |
 |---|---|
-| `PASS` | Linked PR is `MERGED`. Safe to close. |
-| `FAIL` | Linked PR is `OPEN` or `CLOSED` without merging. Do not close. |
+| `PASS` | Linked PR's merge commit is an ancestor of `origin/main`. Safe to close. |
+| `FAIL` (stacked base) | PR `state` is `MERGED`, but its merge commit merged into a non-main base and is not on `origin/main`. Do not close. |
+| `FAIL` (open/closed) | Linked PR is `OPEN` or `CLOSED` without merging. Do not close. |
 | `UNKNOWN` | No PR reference could be resolved. Do not close on the strength of this check; verify by hand. |
-| `ERROR` | `bd show` or the `gh` lookup failed (bad id, no network, PR not found). |
+| `ERROR` | `bd show`/`gh` lookup failed, or the PR reads `MERGED` with no merge commit reported (some squash/rebase merges) so ancestry cannot be verified. Do not close on the strength of this check. |
 
 PR resolution order:
 
@@ -58,5 +70,9 @@ that governs how `bd close` gets invoked, not in this repo's `scripts/`.
 
 ## Requires
 
-`bd`, `gh` (authenticated), `jq`. `scripts/bd-close-guard.sh --self-test`
-exercises the PR-resolution logic without network access.
+`bd`, `gh` (authenticated), `jq`, `git`. The script runs `git fetch origin
+main` before checking ancestry, so a stale local `origin/main` does not
+produce a false pass; a failed fetch degrades to a warning plus a check
+against whatever `origin/main` is already present locally.
+`scripts/bd-close-guard.sh --self-test` exercises the PR-resolution and
+ancestry-classification logic without network access.
