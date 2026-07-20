@@ -30,6 +30,8 @@
 #![allow(clippy::too_many_lines)] // orchestration functions are multi-step by design
 #![allow(clippy::doc_markdown)] // spec/domain terminology
 
+use crate::caches::project_block_debounce;
+use crate::project_health::{emit_block_transition, BlockCondition};
 use audit::bus::EventBus;
 use audit::event_bus::{Source, ToolLaunchEvent, TOPIC_TOOL_LAUNCH};
 use contracts_core::tools::{
@@ -171,6 +173,30 @@ fn common_ancestor_dir<'a>(paths: impl Iterator<Item = &'a str>) -> Option<Strin
     common.filter(|c| !c.is_empty()).map(|c| c.join("/"))
 }
 
+// ── US4-4: system-driven `tool_unconfigured` auto-block ─────────────────────────
+
+/// Fire the `tool_unconfigured` auto-block signal (spec 009 US4, P7 debounce)
+/// when a launch is attempted for a project whose tool has no usable
+/// configuration (disabled, or no executable path set). Best-effort: a
+/// failure here must never fail the launch response — the launch outcome
+/// (`ToolLaunchResponse`) is the primary durable record (Constitution II).
+async fn signal_tool_unconfigured_block(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+    tool_id: &str,
+) {
+    let condition = BlockCondition::ToolUnconfigured { tool: tool_id.to_owned() };
+    if let Err(e) =
+        emit_block_transition(pool, bus, project_block_debounce(), project_id, &condition).await
+    {
+        tracing::error!(
+            %project_id, %tool_id, error = %e,
+            "tool_unconfigured auto-block signal failed"
+        );
+    }
+}
+
 // ── launch ────────────────────────────────────────────────────────────────────
 
 /// Launch the configured processing tool for the given project.
@@ -219,6 +245,7 @@ pub async fn launch(
 
     let enabled = read_bool_setting(pool, &key_enabled(&req.tool_id), true).await;
     if !enabled {
+        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
         return Ok(ToolLaunchResponse {
             status: ToolLaunchStatus::Error,
             launch_id: None,
@@ -236,6 +263,7 @@ pub async fn launch(
 
     let executable_path = read_string_setting(pool, &key_executable_path(&req.tool_id)).await;
     let Some(executable_path) = executable_path.filter(|s| !s.trim().is_empty()) else {
+        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
         return Ok(ToolLaunchResponse {
             status: ToolLaunchStatus::Error,
             launch_id: None,
@@ -675,6 +703,41 @@ mod tests {
         let resp = launch(db.pool(), &bus, &spawner, req).await.unwrap();
         assert_eq!(resp.status, ToolLaunchStatus::Error);
         assert_eq!(resp.error.unwrap().code, "tool.not_configured");
+    }
+
+    /// astro-plan-akon: `launch` against an unconfigured tool must drive the
+    /// project into `blocked` via the real production path (not a direct
+    /// `emit_block_transition` call) — the auto-block wiring this test
+    /// guards against regressing to dead code.
+    #[tokio::test]
+    async fn launch_with_no_path_configured_auto_blocks_project() {
+        let db = setup_db().await;
+        let project_id = make_project(&db).await;
+        let bus = make_bus(db.pool().clone());
+        let spawner = FakeSpawner::ok();
+        // No executable path set for pixinsight.
+        let req = ToolLaunchRequest {
+            project_id: project_id.clone(),
+            tool_id: "pixinsight".to_owned(),
+            force: false,
+        };
+        let resp = launch(db.pool(), &bus, &spawner, req).await.unwrap();
+        assert_eq!(resp.status, ToolLaunchStatus::Error);
+
+        let project = proj_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(project.lifecycle, "blocked", "unconfigured-tool launch must auto-block");
+        assert_eq!(project.blocked_reason_kind.as_deref(), Some("tool_unconfigured"));
+
+        let audit_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM audit_log_entry \
+             WHERE entity_id = ? AND entity_type = 'project' AND to_state = 'blocked' \
+               AND actor = 'system' AND outcome = 'applied'",
+        )
+        .bind(&project_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(audit_count, 1, "auto-block from launch must write exactly one audit row");
     }
 
     #[tokio::test]
