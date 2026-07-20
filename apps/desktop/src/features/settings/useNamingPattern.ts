@@ -56,20 +56,23 @@ export function useNamingPattern(
   }, []);
 
   // ── Live validation (T1.3 / T1.4) ────────────────────────────────────────
-  const runValidation = useCallback((parts: PatternPart[]) => {
-    patternValidate(parts)
-      .then((resp) => {
-        if (!mountedRef.current) return;
-        setValidateResult({
-          valid: resp.valid,
-          warnings: resp.warnings,
-          errorCode: resp.errorCode ?? undefined,
+  const runValidation = useCallback(
+    (parts: PatternPart[]) => {
+      patternValidate(parts)
+        .then((resp) => {
+          if (!mountedRef.current) return;
+          setValidateResult({
+            valid: resp.valid,
+            warnings: resp.warnings,
+            errorCode: resp.errorCode ?? undefined,
+          });
+        })
+        .catch(() => {
+          // Ignore validation errors in mock/offline environments.
         });
-      })
-      .catch(() => {
-        // Ignore validation errors in mock/offline environments.
-      });
-  }, [mountedRef]);
+    },
+    [mountedRef],
+  );
 
   // ── Live preview (T2.2 / T3.11) ─────────────────────────────────────────
   const runPreview = useCallback((parts: PatternPart[]) => {
