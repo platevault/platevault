@@ -96,6 +96,9 @@ export function AttributionPicker({
       value: UNASSIGNED,
       label: m.inbox_attribution_unassigned(),
       desc: m.inbox_attribution_unassigned_desc(),
+      // Stable automation hook (real-UI journeys): the only option whose
+      // value never varies with backend-suggested candidates.
+      testId: 'inbox-attribution-option-unassigned',
     },
   ];
 
