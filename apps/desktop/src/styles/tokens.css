@@ -98,6 +98,9 @@
      select 25px, button 24px, Settings select 28px, all in one chrome). */
   --pv-control-h: 26px;
   --pv-control-h-sm: 24px;
+  /* Dense filter chips (log panel, dev lists) — below this the 4px text
+     padding stops clearing the --pv-text-xs cap height. */
+  --pv-control-h-xs: 20px;
 
   /* Transitions and radius now live in foundation.css (handoff 04). */
 }

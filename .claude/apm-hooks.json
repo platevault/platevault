@@ -60,6 +60,17 @@
         }
       ],
       "_apm_source": "agent-coder"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "statusMessage": "Checking gh issue command against beads policy...",
+          "command": ".claude/hooks/beads/scripts/beads-gh-issue-guard.sh"
+        }
+      ],
+      "_apm_source": "beads"
     }
   ],
   "PostToolUse": [
@@ -143,6 +154,17 @@
         }
       ],
       "_apm_source": "code-intelligence"
+    },
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "statusMessage": "Injecting beads work contract...",
+          "command": ".claude/hooks/beads/scripts/beads-subagent-reminder.sh"
+        }
+      ],
+      "_apm_source": "beads"
     }
   ]
 }

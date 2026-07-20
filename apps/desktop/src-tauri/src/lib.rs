@@ -297,7 +297,11 @@ pub fn run_app(
     //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        resolve_cache.clone(),
+    );
     crate::commands::log::start_log_forwarder(
         app.handle().clone(),
         &bus,

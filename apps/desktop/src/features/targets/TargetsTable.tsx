@@ -611,9 +611,16 @@ export function TargetsTable({
                   <td className="pv-targets-cell--num">
                     <ImagingTimeCell alt={altMoon} threshold={usableAltDeg} />
                   </td>
-                  {/* MOCK (#57): linked-session count not on TargetListItem yet. */}
+                  {/* #622: real linked-session count (`sessionCount`, #877).
+                      Zero renders '—' rather than a bare 0 — a target nothing
+                      has been shot on has no coverage to report, matching the
+                      muted placeholder the row's other unknown cells use. */}
                   <td className="pv-targets-cell--num">
-                    <span className="pv-targets-cell--muted">—</span>
+                    {(t.sessionCount ?? 0) > 0 ? (
+                      t.sessionCount
+                    ) : (
+                      <span className="pv-targets-cell--muted">—</span>
+                    )}
                   </td>
                 </tr>
               );

@@ -14,6 +14,8 @@
 /// snapshots (in-memory caching layer, F0 foundation). See each accessor's
 /// doc comment for its owning write-site invalidation calls.
 pub mod caches;
+
+mod audit_ids;
 pub mod equipment;
 mod matching;
 mod tolerances;

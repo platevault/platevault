@@ -16,6 +16,7 @@ export type PvTokenName =
   | 'pv-chip'
   | 'pv-control-h'
   | 'pv-control-h-sm'
+  | 'pv-control-h-xs'
   | 'pv-danger'
   | 'pv-danger-bg'
   | 'pv-danger-bg-hover'

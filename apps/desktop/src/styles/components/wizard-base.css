@@ -37,53 +37,6 @@
   flex-shrink: 0; background: var(--pv-surface);
 }
 
-/* === LOG PANEL === */
-.pv-logpanel { border-top: 1px solid var(--pv-border); background: var(--pv-surface); }
-.pv-logpanel__header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--pv-sp-1) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border-subtle);
-}
-.pv-logpanel__title { font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold); }
-.pv-logpanel__body { max-height: 200px; overflow-y: auto; }
-.pv-logpanel__op {
-  padding: var(--pv-sp-2) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border-subtle);
-}
-.pv-logpanel__op-label {
-  font-size: var(--pv-text-xs); color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-1); display: block;
-}
-.pv-logpanel__progress-root { display: flex; flex-direction: column; gap: var(--pv-sp-1); }
-.pv-logpanel__progress {
-  height: 4px; background: var(--pv-rule2); border-radius: 2px; overflow: hidden;
-}
-.pv-logpanel__progress-fill {
-  height: 100%; background: var(--pv-accent); border-radius: 2px;
-  transition: width 0.3s ease;
-}
-.pv-logpanel__events { list-style: none; padding: 0; margin: 0; }
-.pv-logpanel__event {
-  display: flex; align-items: center; gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) var(--pv-sp-3);
-  font-size: var(--pv-text-xs);
-  border-bottom: 1px solid var(--pv-border-subtle);
-}
-.pv-logpanel__event:last-child { border-bottom: none; }
-.pv-logpanel__event-time {
-color: var(--pv-text-muted);
-  min-width: 64px; flex-shrink: 0;
-}
-.pv-logpanel__event-level {
-  font-size: var(--pv-text-xs); font-weight: var(--pv-weight-medium);
-  text-transform: uppercase; min-width: 40px; flex-shrink: 0;
-}
-.pv-logpanel__event-level--info  { color: var(--pv-info); }
-.pv-logpanel__event-level--warn  { color: var(--pv-warn); }
-.pv-logpanel__event-level--error { color: var(--pv-danger); }
-.pv-logpanel__event-level--debug { color: var(--pv-text-muted); }
-.pv-logpanel__event-msg { color: var(--pv-text); }
-
 /* === SELECT === */
 .pv-select {
   height: var(--pv-control-h); padding: 0 var(--pv-sp-2);

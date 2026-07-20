@@ -433,13 +433,19 @@ test.describe('Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)', () =
 
 test.describe('Honest empty-state disclosure (no fabricated data)', () => {
   /**
-   * Not-yet-built data must be disclosed honestly, never fabricated:
-   *   - the Sessions column (backend linkage #57 not landed) is ALWAYS "—",
-   *     never a made-up linked-session count — even with an active site;
+   * Not-yet-built or not-yet-loaded data must be disclosed honestly, never
+   * fabricated:
+   *   - the Sessions column reads the real backend `sessionCount` (#622,
+   *     #877, #1293) — the seed fixture gives M 31 and NGC 7000 non-zero
+   *     counts, mirroring what the real backend returns for those targets.
+   *     The honest-"—"-for-zero rendering itself (never a bare 0, and never
+   *     fabricated for a target the backend reports as unshot) is covered at
+   *     the unit level in `TargetsTable.test.tsx` ("TargetsTable Sessions
+   *     column (#622)"), which exercises sessionCount: 0 and an absent field;
    *   - the favourite star column shows every row un-starred (#54 client-side
    *     favourites, no fabricated favourites) with aria-pressed=false.
    */
-  test('9.3a · sessions count and favourites are honestly empty, not fabricated', async ({
+  test('9.3a · sessions count reflects the real backend value and favourites are honestly empty', async ({
     page,
   }) => {
     seedSetupComplete(page);
@@ -450,12 +456,12 @@ test.describe('Honest empty-state disclosure (no fabricated data)', () => {
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
 
-    // Sessions column: always the honest "—" (linked-session count not on the
-    // list payload yet — #57), never a fabricated number.
-    await expect(m31.locator('td').nth(COL.sessions)).toHaveText('—');
+    // Sessions column: the real per-target count from the backend-aligned
+    // mock fixture (#1308), not a hardcoded placeholder.
+    await expect(m31.locator('td').nth(COL.sessions)).toHaveText('3');
     await expect(
       targetRow(page, 'NGC 7000').locator('td').nth(COL.sessions),
-    ).toHaveText('—');
+    ).toHaveText('5');
 
     // Favourites (#54): every star is un-filled and reports aria-pressed=false —
     // no fabricated "starred" state.

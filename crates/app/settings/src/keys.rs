@@ -93,6 +93,17 @@ pub(super) fn is_catalogues_enabled_key(key: &str) -> bool {
     key == "enabled"
 }
 
+/// Return the names of every stable v1 settings key, in declaration order.
+///
+/// Exposed so callers that must enumerate the whole settings surface (the
+/// `settings.get` catch-all scope) derive it from the descriptor table instead
+/// of maintaining a parallel list that silently drifts when a descriptor is
+/// added (#641).
+#[must_use]
+pub fn stable_keys() -> Vec<&'static str> {
+    descriptors::all_keys().collect()
+}
+
 /// Return the names of all stable settings keys that can be overridden per source root.
 ///
 /// Used by the `settings.overridable-keys` command (spec 018 T025) to provide the

@@ -102,10 +102,12 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
   // test's toggle-off whenever the loaded runner resolved the promise late
   // enough. The flakiness was the symptom; this race is the defect.
   useEffect(() => {
+    let cancelled = false;
     commands
       .settingsGet('advanced')
       .then(unwrap)
       .then((data) => {
+        if (cancelled) return;
         const vals = data.values as Record<string, unknown>;
         if (vals?.logLevel && typeof vals.logLevel === 'string') {
           setLogLevel(vals.logLevel as LogLevel);
@@ -120,6 +122,9 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         // Non-fatal; fall back to defaults.
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggle = useCallback(() => {
