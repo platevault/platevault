@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use common::E2eApp;
-use serde_json::json;
+use serde_json::{Value, json};
 use thirtyfour::{By, WebElement};
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
@@ -837,6 +837,160 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
              before: {before}\nafter:  {after}"
         );
     }
+
+    app.shutdown().await
+}
+
+/// Reads the app's REAL persisted `detailDock` entry for one dock, straight
+/// out of `localStorage` — the bytes, not a React value. Returns
+/// `(placement, width)`.
+async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, i64)> {
+    let script = format!(
+        "var raw = localStorage.getItem('alm-preferences');\
+         if (!raw) {{ return null; }}\
+         var dock = (JSON.parse(raw).detailDock || {{}})['{dock_id}'];\
+         return dock ? [String(dock.placement), Number(dock.width)] : null;"
+    );
+    let v: Value = app
+        .driver
+        .execute(&script, vec![])
+        .await
+        .context("failed to read the persisted detailDock preference")?
+        .convert()
+        .context("the detailDock preference did not deserialise")?;
+    anyhow::ensure!(!v.is_null(), "no persisted detailDock entry for {dock_id:?} at all");
+    let placement =
+        v.get(0).and_then(Value::as_str).context("persisted placement was not a string")?;
+    let width = v.get(1).and_then(Value::as_i64).context("persisted width was not a number")?;
+    Ok((placement.to_string(), width))
+}
+
+/// The rendered width of the side dock, as the browser actually lays it out.
+async fn rendered_side_width(app: &E2eApp) -> anyhow::Result<i64> {
+    let v: Value = app
+        .driver
+        .execute(
+            "var el = document.querySelector('.pv-listpage__detail--side');\
+             return el ? Math.round(el.getBoundingClientRect().width) : -1;",
+            vec![],
+        )
+        .await
+        .context("failed to measure the side dock")?
+        .convert()
+        .context("side dock width did not deserialise")?;
+    v.as_i64().context("side dock width was not a number")
+}
+
+/// Drives the Targets page to a pinned side dock holding a NON-DEFAULT width,
+/// using only real UI: the three-state placement control, then a real pointer
+/// drag of the resize handle. Returns the persisted `(placement, width)`.
+async fn pin_and_widen_dock(app: &E2eApp) -> anyhow::Result<(String, i64)> {
+    // Option order in `DetailDockPlacementControl` is Auto, Bottom, Right.
+    let side = app
+        .find_waiting(
+            By::Css("[data-testid='dock-placement-control'] button[role='radio']:nth-of-type(3)"),
+            "the 'Right' option of the dock placement control",
+        )
+        .await?;
+    side.click().await.context("clicking the 'Right' dock placement option failed")?;
+
+    let handle = app
+        .find_waiting(By::Css("[data-testid='dock-resize-handle']"), "the dock resize handle")
+        .await?;
+
+    // The side panel sits on the right edge, so dragging LEFT grows it.
+    app.driver
+        .action_chain()
+        .move_to_element_center(&handle)
+        .click_and_hold()
+        .move_by_offset(-DRAG_PX, 0)
+        .release()
+        .perform()
+        .await
+        .context("real pointer drag of the dock resize handle failed")?;
+
+    read_dock_pref(app, "targets").await
+}
+
+/// How far to drag the resize handle. Must land the width clear of the 420px
+/// default: restoring a value that happens to equal the default would pass
+/// against a restore that never happened.
+const DRAG_PX: i64 = 140;
+
+/// T023 (spec 054) — the reload half, and the last open task in that spec.
+///
+/// The dock's pin + width are covered across a REMOUNT at Layer 1 (#1195,
+/// #1265). A remount proves less than it looks: `getPreferences()` hands back
+/// a module-level `cachedPreferences` whenever one exists, so a remount
+/// re-reads the CACHE and never touches storage. Those tests stayed green even
+/// with `setItem` stubbed out entirely.
+///
+/// Only a real restart drops that module cache and forces a cold read back
+/// from real storage, and jsdom cannot do it — hence Layer 2. `relaunch()`
+/// preserves webview storage for exactly this; `graceful_shutdown()` is what
+/// makes it meaningful on Windows, where WebView2 flushes its LevelDB store on
+/// a clean window close but NOT on a forced kill.
+///
+/// Note `relaunch()` resets the SQLite DB, so the target added before the
+/// restart is gone afterwards and a fresh one is added to give the dock
+/// something to render. That is fine here: the dock preference lives in
+/// `localStorage`, which is the thing under test.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Result<()> {
+    const DEFAULT_WIDTH: i64 = 420;
+
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+    app.set_viewport(1400, 900).await?;
+
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    add_target_via_ui(&app, "M 1").await?;
+
+    let (placement, width) = pin_and_widen_dock(&app).await?;
+    anyhow::ensure!(
+        placement == "side",
+        "the 'Right' placement option should have persisted placement=side, got {placement:?}"
+    );
+    anyhow::ensure!(
+        width != DEFAULT_WIDTH,
+        "the drag must move the width OFF its {DEFAULT_WIDTH}px default, otherwise a restore \
+         that never happened would still satisfy this journey — got {width}px. Either the \
+         drag did not reach the handler, or clamping pinned it back to the default."
+    );
+
+    // Clean window close: WebView2 flushes localStorage here and not on a kill.
+    app.graceful_shutdown().await?;
+
+    // Cold start: new process, empty module cache, storage read from disk.
+    let app = E2eApp::relaunch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+    app.set_viewport(1400, 900).await?;
+
+    let (restored_placement, restored_width) = read_dock_pref(&app, "targets").await?;
+    anyhow::ensure!(
+        restored_placement == placement && restored_width == width,
+        "the dock preference must survive a real restart exactly, but {placement}/{width}px \
+         came back as {restored_placement}/{restored_width}px. This is the assertion a \
+         remount cannot make: it would read the module-level cache instead of storage."
+    );
+
+    // Storage surviving is only half of it — the app must also READ it back on
+    // a cold boot and lay the dock out at that width.
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    add_target_via_ui(&app, "M 1").await?;
+
+    let laid_out = rendered_side_width(&app).await?;
+    anyhow::ensure!(
+        (laid_out - restored_width).abs() <= 2,
+        "after a real restart the side dock should render at its restored {restored_width}px \
+         (±2px for borders), but measured {laid_out}px. A -1 here means no side dock rendered \
+         at all, so the restored 'side' pin never reached the layout."
+    );
 
     app.shutdown().await
 }
