@@ -25,6 +25,7 @@ pub mod operation_state;
 #[cfg(test)]
 mod query_builder_example;
 pub mod repositories;
+mod schema_cache;
 
 pub const CRATE_NAME: &str = "persistence_db";
 
@@ -140,9 +141,41 @@ impl Database {
     // produces), so the scan's only remaining effect was auto-corrupting
     // real cross-drive projects into the dead-end `kind_diverged` state on
     // every reopen. Removed along with `reconcile_kind_diverged_views`.
+    //
+    // #1230: this now prefers a cross-process snapshot of the migrated
+    // database (see `schema_cache`). The snapshot is keyed on the embedded
+    // migrator's content, is only ever applied to an empty database, and falls
+    // back to the real chain on any failure, so `migrate()` stays
+    // observationally identical -- it just stops paying for 66 migrations in
+    // each of ~1069 test processes. Tests that exist to cover the chain itself
+    // call `migrate_uncached`.
     pub async fn migrate(&self) -> DbResult<()> {
-        sqlx::migrate!("./migrations").run(&self.pool).await?;
+        if schema_cache::try_apply(&self.pool).await {
+            return Ok(());
+        }
+        self.migrate_uncached().await
+    }
+
+    /// Run the real migration chain, bypassing the snapshot cache.
+    ///
+    /// Migration tests must use this: replaying a snapshot would mean the
+    /// chain they exist to cover never actually executes (#1230).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Migration`] if any migration script fails.
+    pub async fn migrate_uncached(&self) -> DbResult<()> {
+        schema_cache::MIGRATOR.run(&self.pool).await?;
         Ok(())
+    }
+
+    /// The embedded migration chain, for tests that drive it directly.
+    ///
+    /// Exposed so a populated-database harness can run a prefix of the chain,
+    /// seed rows at that point, then apply the migration under test (#1231).
+    #[must_use]
+    pub fn migrator() -> &'static sqlx::migrate::Migrator {
+        &schema_cache::MIGRATOR
     }
 
     /// Expose the underlying pool for repository constructors.
