@@ -188,7 +188,9 @@ function _clickContinue() {
 /** Return the primary continue button. */
 function getContinueButton(): HTMLElement {
   const allButtons = screen.getAllByRole('button');
-  const match = allButtons.find((b) => b.textContent?.includes('Continue to'));
+  // Matches both "Continue to <step>" and the empty-site-step variant
+  // "Continue without a site".
+  const match = allButtons.find((b) => b.textContent?.includes('Continue'));
   if (!match) throw new Error('Continue button not found');
   return match;
 }
@@ -467,12 +469,66 @@ describe('SetupWizard 5-step flow', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/step 4 of 6/i)).toBeInTheDocument();
 
-    // Never required — Continue is enabled with every field blank.
+    // Never required — Continue stays enabled with every field blank (spec 044
+    // T016). Skipping is acknowledged, not blocked (#1050): the first click
+    // surfaces what is lost, the second proceeds.
     const continueBtn = getContinueButton();
     expect(continueBtn).not.toBeDisabled();
 
     fireEvent.click(continueBtn);
+
+    // Still on the site step, now with the consequence spelled out.
+    expect(screen.getByTestId('setup-site-skip-warning')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /where do you observe from/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(getContinueButton());
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+  });
+
+  it('re-arms the observing-site skip warning if the user edits then clears the step', () => {
+    const seeded = {
+      currentStep: 3,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames' },
+        { path: '/astro/projects', kind: 'project' },
+      ],
+      catalogSettings: { selectedCatalogIds: ['common', 'openngc'] },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
+      },
+      site: {
+        name: '',
+        latitudeDegText: '',
+        longitudeDegText: '',
+        elevationMText: '',
+        timezone: 'UTC',
+      },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+
+    // Acknowledge the skip once.
+    fireEvent.click(getContinueButton());
+    expect(screen.getByTestId('setup-site-skip-warning')).toBeInTheDocument();
+
+    // Touching the step withdraws that acknowledgement: typing a name hides the
+    // warning, and clearing it again must not inherit the earlier consent.
+    const nameField = screen.getByLabelText(/name/i);
+    fireEvent.change(nameField, { target: { value: 'Backyard' } });
+    expect(
+      screen.queryByTestId('setup-site-skip-warning'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(nameField, { target: { value: '' } });
+    fireEvent.click(getContinueButton());
+
+    // Warned again rather than advancing straight to Confirm.
+    expect(screen.getByTestId('setup-site-skip-warning')).toBeInTheDocument();
+    expect(screen.queryByText(/ready to go/i)).not.toBeInTheDocument();
   });
 
   it('blocks Continue on the Observing Site step when latitude is out of range', () => {

@@ -103,6 +103,9 @@ const STEPS = [
 // Index of the Scan step (last step).
 const SCAN_STEP = STEPS.length - 1;
 
+// Index of the (optional) Observing Site step.
+const SITE_STEP = 3;
+
 function loadWizardState(): WizardState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -202,7 +205,19 @@ export function SetupWizard() {
 
   const handleSiteChange = useCallback((site: SiteStepState) => {
     setState((prev) => ({ ...prev, site }));
+    // Editing the step withdraws a previous "skip anyway" acknowledgement, so
+    // clearing the fields again re-arms the warning rather than silently
+    // inheriting the earlier consent.
+    setSiteSkipAcked(false);
   }, []);
+
+  // Skipping the (optional) Observing Site step is acknowledged, not blocked:
+  // the first Continue on an empty step surfaces the consequence, the second
+  // proceeds. Spec 044 T016 keeps the step optional on purpose — a user may
+  // not have coordinates to hand — but silently skipping it leaves the Targets
+  // planner unable to compute visibility, which is invisible until they reach
+  // that page (#1050).
+  const [siteSkipAcked, setSiteSkipAcked] = useState(false);
 
   const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
 
@@ -440,7 +455,7 @@ export function SetupWizard() {
       if (i === 0 || i === SCAN_STEP - 1) {
         return getMissingRequiredKinds(state.sources).length === 0;
       }
-      if (i === 3) {
+      if (i === SITE_STEP) {
         return siteStepError(state.site) === null;
       }
       return true;
@@ -481,6 +496,12 @@ export function SetupWizard() {
   // The Scan step (SCAN_STEP) uses the shared footer Finish button, which is
   // enabled by scanComplete — canProceed is not consulted for that step.
   const canProceed = isStepValid(step);
+
+  // True while the user is sitting on an empty Observing Site step and has not
+  // yet acknowledged skipping it. Drives both the warning banner and the
+  // Continue button's label/behaviour.
+  const siteSkipNeedsAck =
+    step === SITE_STEP && !siteStepHasSite(state.site) && !siteSkipAcked;
 
   const stepMeta = STEPS[step];
 
@@ -530,12 +551,23 @@ export function SetupWizard() {
         // Steps 0–2: "Continue to <next>"
         <Btn
           variant="primary"
-          onClick={() => goTo(step + 1)}
+          onClick={() => {
+            // First click on an empty site step only acknowledges the skip;
+            // the banner it reveals explains what is lost. Second click moves on.
+            if (siteSkipNeedsAck) {
+              setSiteSkipAcked(true);
+              return;
+            }
+            goTo(step + 1);
+          }}
           disabled={!canProceed}
+          data-testid={siteSkipNeedsAck ? 'setup-site-skip-ack' : undefined}
         >
-          {m.setup_wizard_continue_to({
-            label: STEPS[step + 1].label().toLowerCase(),
-          })}
+          {siteSkipNeedsAck
+            ? m.setup_wizard_continue_without_site()
+            : m.setup_wizard_continue_to({
+                label: STEPS[step + 1].label().toLowerCase(),
+              })}
         </Btn>
       ) : (
         // Step 3 (Confirm): register + enter Scan
@@ -605,8 +637,15 @@ export function SetupWizard() {
             onSettingsChange={handleCatalogSettingsChange}
           />
         )}
-        {step === 3 && (
-          <StepSite state={state.site} onChange={handleSiteChange} />
+        {step === SITE_STEP && (
+          <>
+            <StepSite state={state.site} onChange={handleSiteChange} />
+            {siteSkipAcked && !siteStepHasSite(state.site) && (
+              <Banner variant="warn" data-testid="setup-site-skip-warning">
+                {m.setup_step_site_skip_warning()}
+              </Banner>
+            )}
+          </>
         )}
         {step === 4 && (
           <StepConfirm
