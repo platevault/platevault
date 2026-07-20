@@ -424,15 +424,17 @@
 
 /* === TARGETS PLANNER DETAIL === */
 
-/* #816: TargetDetailV2 is a flat-sibling consumer of DetailPane fill mode
-   (primitives.css .pv-detail--fill), not the .pv-dash/.pv-dash__primary
-   grid pattern — this wrapper is its own single scrollable region so content
-   below the altitude graph isn't silently clipped by the pane's own
-   overflow:hidden. */
-.pv-detail--fill > .pv-planner__scroll {
-  flex: 1;
+/* #816 → #1107: this wrapper had to be its own scroll region because
+   DetailPanel's content-only mode rendered `children` as a direct sibling of
+   the header inside `.pv-detail--fill`, leaving no scroll region — so content
+   below the altitude graph was silently clipped by the pane's overflow:hidden.
+   DetailPanel now always wraps children in `.pv-detailpanel__content`, which
+   owns scrolling for every page.
+   The #816 CONTRACT IS NOT GONE — it MOVED one level out, from this
+   direct-child rule to the shared wrapper. Do NOT re-add `overflow-y: auto`
+   here: it would nest a second scroller inside the shared one. */
+.pv-planner__scroll {
   min-height: 0;
-  overflow-y: auto;
 }
 
 /* ── Planner header row: title + catalog pills + action buttons ── */
