@@ -23,20 +23,22 @@
 //! original path — real, but simpler to reason about than the move variant
 //! the existing `plan_review_apply_with_audit` journey already covers.
 //!
-//! FINDING (documented, not silently worked around): `projects.source.add`
-//! and `projects.create`'s `initialSources` path
-//! (`crates/app/projects/src/project_setup.rs`) have hardcoded
-//! `filter_snapshot`/`exposure_snapshot` to `""` since spec 003
-//! ("Snapshot fields will be empty until spec 003 Inventory is wired") and
-//! this was never revisited even though the real per-session filter/exposure
-//! has been available via `sessions.get`/`sessions.list` since spec 048. As a
-//! result, `sourceview.generate`'s WBPP `{date}/{filter}/{exposure}` layout
-//! (`crates/app/projects/src/source_view_generate.rs`) always lands every
-//! real project-linked session in the pattern's documented `nofilter`/
-//! `unknown-exposure` fallback buckets, never the frame's real filter. This
-//! journey asserts the REAL (fallback) destination shape, not an aspirational
-//! one, and calls the gap out explicitly below rather than masking it with a
-//! looser assertion.
+//! RESOLVED FINDING (#1218): `projects.source.add` and `projects.create`'s
+//! `initialSources` path (`crates/app/projects/src/project_setup.rs`) used to
+//! hardcode `filter_snapshot`/`exposure_snapshot` to `""`, so
+//! `sourceview.generate`'s WBPP `{date}/{filter}/{exposure}` layout
+//! (`crates/app/projects/src/source_view_generate.rs`) landed EVERY real
+//! project-linked session in the pattern's `nofilter`/`unknown-exposure`
+//! fallback buckets. Both fields are now snapshotted from the session, so
+//! this journey asserts the frame's real filter below.
+//!
+//! Exposure still resolves to `unknown-exposure` HERE, and that is correct
+//! rather than a leftover: `write_minimal_fits` deliberately writes no
+//! `EXPTIME` card (see its docs), so this fixture's frame genuinely carries
+//! no per-sub exposure. `crates/app/core/tests/project_source_snapshots.rs`
+//! pins exactly this combination at Layer 1
+//! (`missing_exposure_metadata_keeps_the_real_filter`) alongside the real
+//! `Ha`/`300s` case.
 //!
 //! KNOWN GAP (documented, not faked — mirrors `cleanup_plan_review` in
 //! `journeys.rs`): materializing the real symlink/junction on disk requires
@@ -425,9 +427,9 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     //
     // The WBPP/PixInsight default profile groups lights 3 levels deep
     // (night / filter / exposure) under `<project>/source-views/<plan_id>/`.
-    // Per the FINDING documented in the module docs, filter/exposure resolve
-    // to their registry fallback names here ("nofilter"/"unknown-exposure"),
-    // not the frame's real "Ha" filter — this asserts that REAL behavior.
+    // Filter is the fixture frame's real "Ha" (#1218). Exposure is the
+    // registry's "unknown-exposure" fallback because this fixture writes no
+    // EXPTIME card at all — see the module docs.
     let detail: serde_json::Value = app.invoke("plans_get", json!({ "id": plan_id })).await?;
     let link_item = detail["items"]
         .as_array()
@@ -453,10 +455,15 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
          frame's basename, got: {layout_tail} (from {to_path})"
     );
     anyhow::ensure!(
-        layout_segments[1] == "nofilter" && layout_segments[2] == "unknown-exposure",
-        "the filter/exposure fallback bucket names changed (or `projects.source.add` now \
-         snapshots real filter/exposure) — re-verify the empty-snapshot FINDING documented in \
-         this file's module docs before updating this assertion: {layout_tail}"
+        layout_segments[1] == "Ha",
+        "the linked session's real filter must reach the layout (#1218 regression — a \
+         `nofilter` here means the project source snapshot went empty again): {layout_tail}"
+    );
+    anyhow::ensure!(
+        layout_segments[2] == "unknown-exposure",
+        "this fixture writes no EXPTIME, so exposure must stay the registry fallback; a real \
+         token here means the fixture changed and the module docs need re-verifying: \
+         {layout_tail}"
     );
 
     // Document which materialization path this run actually exercised
