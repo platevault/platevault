@@ -91,16 +91,18 @@ export const DEFAULT_MASTER_SORT: MasterSort = { col: 'created', dir: 'desc' };
  * Human-readable master label: kind-capitalized + a discriminator
  * (exposure for darks, filter for flats). Mirrors the old MastersList title.
  */
-function masterLabel(m: CalibrationMaster): string {
-  const k = m.kind.toLowerCase();
+// The parameter is `master`, not `m`: `m` is the Paraglide message object, and
+// shadowing it here is what made this helper unable to reach the catalog at all.
+function masterLabel(master: CalibrationMaster): string {
+  const k = master.kind.toLowerCase();
   const kindCap = k.charAt(0).toUpperCase() + k.slice(1);
-  const fp = m.fingerprint;
+  const fp = master.fingerprint;
   const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
   const filterStr = fp?.filter ?? '';
   const discriminator = k === 'dark' ? expStr : k === 'flat' ? filterStr : '';
   return discriminator
-    ? `Master ${kindCap} · ${discriminator}`
-    : `Master ${kindCap}`;
+    ? m.calibration_master_title_disc({ kind: kindCap, disc: discriminator })
+    : m.calibration_master_title({ kind: kindCap });
 }
 
 /**
@@ -444,7 +446,7 @@ export function MastersTable({
       _selected: selected === master.id,
       _indent: indentPx || undefined,
       master: (
-        <span className="pv-calib-cell__master">
+        <span className="pv-table__cell-inline">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
           <span className="pv-calib-cell__master-label">
             {masterLabel(master)}

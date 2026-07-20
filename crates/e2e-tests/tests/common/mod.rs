@@ -87,21 +87,37 @@ impl InstanceEnv {
     fn new() -> Result<Self> {
         let root = tempfile::tempdir().context("failed to create isolated E2E instance dir")?;
         let db_path = root.path().join("e2e-test.db");
-        let vars: Vec<(&'static str, String)> = if cfg!(target_os = "windows") {
+        // Issue #1204: the per-OS location vars below are honoured on Linux
+        // (`XDG_*`) and macOS (`HOME`), and silently ignored on Windows —
+        // Tauri resolves app dirs through `dirs`, which calls
+        // `SHGetKnownFolderPath`, and the Known Folder API reads the user's
+        // shell profile rather than `APPDATA`/`LOCALAPPDATA`. So on Windows
+        // every concurrent instance shared one real app-data root however
+        // these were set, colliding over `simbad-cache.redb` and — fatally —
+        // over the WebView2 user-data folder.
+        //
+        // `ALM_DATA_DIR` is an explicit override the app itself honours
+        // (`desktop_shell::data_dir`), so isolation no longer depends on the
+        // OS agreeing to be redirected. The per-OS vars stay: they still
+        // place `app_config_dir` (window-state) under this root on Linux and
+        // macOS, which `ALM_DATA_DIR` does not cover.
+        let mut vars: Vec<(&'static str, String)> =
+            vec![("ALM_DATA_DIR", root.path().join("appdata").display().to_string())];
+        vars.extend(if cfg!(target_os = "windows") {
             vec![
                 ("APPDATA", root.path().join("appdata").display().to_string()),
                 ("LOCALAPPDATA", root.path().join("localappdata").display().to_string()),
             ]
         } else if cfg!(target_os = "macos") {
-            // app_data_dir/app_config_dir both resolve under $HOME on macOS
-            // (see `app_data_dir`/`app_config_dir` below).
+            // app_config_dir resolves under $HOME on macOS (see
+            // `app_config_dir` below).
             vec![("HOME", root.path().display().to_string())]
         } else {
             vec![
                 ("XDG_DATA_HOME", root.path().join("xdg-data").display().to_string()),
                 ("XDG_CONFIG_HOME", root.path().join("xdg-config").display().to_string()),
             ]
-        };
+        });
         let (proxy_port, native_port) = pick_port_pair()?;
         Ok(Self { _root: root, vars, db_path, proxy_port, native_port })
     }
@@ -181,6 +197,35 @@ pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(240);
 /// cold CI runner without masking a genuinely-absent element for long.
 pub const DEFAULT_FIND_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Budget for waits that depend on the ingest-resolution drain
+/// (`apps/desktop/src-tauri/src/bootstrap/background.rs`,
+/// `spawn_ingest_resolution_drain`).
+///
+/// That task is the ONLY caller of `backfill_session_targets` in the app —
+/// there is no event-driven plan-applied listener for it — and its loop is
+/// `sleep(30s)` FIRST, then resolve, then back-fill. A session's `targetIds`
+/// therefore cannot populate until a drain tick lands, and ticks come every
+/// 30 s starting 30 s after launch.
+///
+/// Waiting on that with a 30 s budget is a coin flip: the poll window and the
+/// drain period are the SAME length, so whether a tick falls inside the window
+/// depends on where setup happens to finish relative to the drain's phase.
+/// That is what made `ingestion_sessions_search` flake (#1205) — it failed at
+/// 155 s and passed on retry at 38 s, on the same commit.
+///
+/// 90 s guarantees at least two ticks inside the window regardless of phase.
+///
+/// Use this ONLY for predicates that gate on `targetIds` being populated.
+/// Waits on `sessionKey`/`frameCount` observe session GROUPING, which is
+/// event-driven and genuinely prompt — those must keep the shorter budget so
+/// a real grouping regression still fails fast.
+///
+/// This is a test-side fix for a test-side race. It deliberately does NOT
+/// change the 30 s drain interval, because that interval also sets the real
+/// user-visible latency for target resolution after an ingest, and changing it
+/// is a product decision (see #1205).
+pub const DRAIN_BACKED_TIMEOUT: Duration = Duration::from_secs(90);
+
 /// Deadline for a single `execute_async` script, set explicitly on the session
 /// (#1205). Before this existed the suite silently inherited the driver's own
 /// default — the W3C default is 30 s, which a legitimate IPC invoke can exceed
@@ -240,6 +285,13 @@ impl InvokeOutcome {
 pub struct E2eApp {
     pub driver: WebDriver,
     driver_proc: Option<Child>,
+    /// Retained past launch so failures *after* a successful launch can still
+    /// read it (#1204). [`drain_into`] threads keep filling these buffers for
+    /// the session's lifetime, so this stays current rather than frozen at
+    /// launch. Previously `launch_with` dropped it on the success path, which
+    /// left the only Windows-side evidence of a broken webview session
+    /// unreachable exactly when a bridge wait timed out.
+    proc_log: ProcLog,
 }
 
 /// How much persisted state [`E2eApp::launch_with`] wipes before spawning
@@ -417,7 +469,7 @@ impl E2eApp {
             return Err(e).context("failed to set explicit WebDriver timeouts");
         }
 
-        Ok(Self { driver, driver_proc: Some(driver_proc) })
+        Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
     }
 
     /// Issue a Tauri command through the `window.__ALM_E2E__` bridge.
@@ -715,9 +767,15 @@ impl E2eApp {
                     || "no probe error — the bridge simply never appeared".to_owned(),
                     |e| format!("last probe error: {e}"),
                 );
+                // The in-page probe above can only speak if the webview session
+                // is alive enough to evaluate script — and #1204's signature is
+                // precisely that it is not. The driver/app log is the one
+                // channel that does not depend on the faulty session, so dump
+                // it here rather than only on a launch failure.
                 return Err(anyhow!(
                     "window.__ALM_E2E__ bridge never became ready within {timeout:?}; \
-                     {cause}; {probed}"
+                     {cause}; {probed}\n{}",
+                    self.proc_log.dump()
                 ));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1730,20 +1788,31 @@ fn app_binary_path() -> Result<PathBuf> {
     Ok(workspace_root.join("target").join("debug").join(binary_name))
 }
 
-/// Cap on buffered lines per stream in [`ProcLog`] — [`E2eApp::launch_with`]'s
-/// failure path is the only reader and only cares about the tail of a
-/// [`LAUNCH_TIMEOUT`]-bounded window, so this stays cheap even if the CLI or
-/// app is chatty for the rest of a long-running journey.
+/// Cap on buffered lines per stream in [`ProcLog`]. Every reader wants the
+/// *tail* — the lines immediately preceding the failure — so a ring buffer of
+/// this size stays cheap even when a chatty app runs for a whole journey.
+///
+/// Note this is no longer a [`LAUNCH_TIMEOUT`]-bounded window: since #1204,
+/// [`E2eApp::wait_bridge_ready`] also reads it, arbitrarily far into a
+/// journey. The tail is still the right window, but on a long, noisy journey
+/// these 200 lines may be mostly unrelated chatter — raise it if a real
+/// investigation ever gets truncated.
 const DIAGNOSTIC_LOG_LINES: usize = 200;
 
 /// Bounded ring-buffer capture of the `tauri-webdriver` CLI child process's
 /// stdout/stderr, drained continuously by background threads (see
-/// [`drain_into`]) — diagnostics only, never read except on a launch failure
-/// in [`E2eApp::launch_with`]. Previously nothing surfaced whether the app
-/// even started on a launch failure (undiagnosable macOS `Connection refused`
-/// runs, issue #489); the CLI's own child (`desktop_shell`) inherits stdio
-/// from the CLI by default, so piping the CLI's streams transitively
-/// captures the app's own console output too, not just the CLI's log.
+/// [`drain_into`]) — diagnostics only, read on a launch failure in
+/// [`E2eApp::launch_with`] and on a bridge-wait timeout in
+/// [`E2eApp::wait_bridge_ready`] (#1204). Previously nothing surfaced whether
+/// the app even started on a launch failure (undiagnosable macOS
+/// `Connection refused` runs, issue #489); the CLI's own child
+/// (`desktop_shell`) inherits stdio from the CLI by default, so piping the
+/// CLI's streams transitively captures the app's own console output too, not
+/// just the CLI's log.
+///
+/// This is the only diagnostic channel that does not run *through* the
+/// webview session, which is what makes it the useful one when the session
+/// itself is the fault.
 struct ProcLog {
     stdout: Arc<Mutex<VecDeque<String>>>,
     stderr: Arc<Mutex<VecDeque<String>>>,
@@ -1903,11 +1972,27 @@ fn reset_database(db_path: &Path) -> Result<()> {
 fn reset_webview_storage(vars: &[(&'static str, String)]) {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if cfg!(target_os = "windows") {
-        // WebView2 keeps ALL web storage under the user-data folder tauri
-        // points at `<app_local_data_dir>/EBWebView`.
-        if let Some(local) = lookup(vars, "LOCALAPPDATA") {
-            candidates
-                .push(PathBuf::from(local).join("dev.astro-plan.astro-library-manager/EBWebView"));
+        // Since #1204 the app points each window at a per-instance WebView2
+        // user-data folder (`desktop_shell::data_dir::webview_subdir`), and
+        // Tauri resolves that relative name to
+        // `dirs::data_local_dir()/<window label>/<name>`
+        // (`tauri-2.11.5/src/webview/mod.rs:411-413`).
+        //
+        // `dirs::data_local_dir()` is the real Known Folder — NOT the
+        // `LOCALAPPDATA` this instance sets, which is exactly the bug #1204
+        // was. This harness process has its own env unmodified, so its own
+        // `LOCALAPPDATA` is that same real folder, which is why we read it
+        // here rather than from `vars`.
+        //
+        // The previous target — `<isolated LOCALAPPDATA>/<identifier>/
+        // EBWebView` — never existed: the app had been writing to the real
+        // profile all along, so every "reset" silently deleted nothing and
+        // journeys shared one localStorage.
+        if let (Some(name), Ok(real_local)) = (webview_subdir(vars), std::env::var("LOCALAPPDATA"))
+        {
+            for label in ["main", "splash"] {
+                candidates.push(PathBuf::from(&real_local).join(label).join(&name));
+            }
         }
     } else if cfg!(target_os = "macos") {
         // WKWebView website data (incl. localStorage) lives under
@@ -1986,25 +2071,48 @@ fn app_config_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
     base.map(|b| b.join(APP_IDENTIFIER))
 }
 
-/// Resolve the per-OS Tauri `app_data_dir` for the app identifier
-/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`) under this
-/// instance's isolated env overrides (`vars`, [`InstanceEnv::vars`]) instead
-/// of the real OS env. Mirrors `tauri::path::PathResolver::app_data_dir`
-/// (`dirs::data_dir()/<identifier>`) without needing a Tauri runtime in the
-/// test harness:
-/// - Linux:   `$XDG_DATA_HOME`
-/// - macOS:   `~/Library/Application Support`
-/// - Windows: `%APPDATA%` (roaming)
+/// This instance's app-data root — the directory the app actually writes its
+/// SQLite default, `simbad-cache.redb`, and logs into.
+///
+/// Since #1204 this is simply `ALM_DATA_DIR`, which the app honours directly
+/// (`desktop_shell::data_dir::resolve`), on every platform. It deliberately
+/// does NOT mirror `tauri::path::PathResolver::app_data_dir`'s per-OS
+/// `dirs::data_dir()/<identifier>` derivation any more: that derivation is
+/// what the harness used to reimplement, and on Windows the reimplementation
+/// and the app disagreed silently — the harness resetting files under the
+/// isolated root while the app read and wrote the real one.
 fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
-    const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
-    let base = if cfg!(target_os = "windows") {
-        lookup(vars, "APPDATA").map(PathBuf::from)
-    } else if cfg!(target_os = "macos") {
-        lookup(vars, "HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
-    } else {
-        lookup(vars, "XDG_DATA_HOME").map(PathBuf::from)
-    };
-    base.map(|b| b.join(APP_IDENTIFIER))
+    lookup(vars, "ALM_DATA_DIR").map(PathBuf::from)
+}
+
+/// This instance's WebView2 user-data folder *name* (Windows; see
+/// [`reset_webview_storage`] for where it is rooted).
+///
+/// Reimplements `desktop_shell::data_dir::webview_subdir`, because this crate
+/// deliberately does not depend on the Tauri app crate (see `Cargo.toml`'s
+/// header — the whole point is that the heavy Tauri/thirtyfour stacks stay
+/// out of the shipping build). [`webview_subdir_matches_the_app`] pins the
+/// two copies to the same literal so drift is a test failure, not a silent
+/// "reset deleted nothing" — the failure mode this replaced.
+fn webview_subdir(vars: &[(&'static str, String)]) -> Option<String> {
+    let root = lookup(vars, "ALM_DATA_DIR")?;
+    if root.is_empty() {
+        return None;
+    }
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let hash = root.as_bytes().iter().fold(OFFSET, |h, &b| (h ^ u64::from(b)).wrapping_mul(PRIME));
+    Some(format!("pv-{hash:016x}"))
+}
+
+/// The other half of the pinned contract asserted by
+/// `apps/desktop/src-tauri/src/data_dir.rs::webview_dir_derivation_is_pinned`.
+/// Both must agree on this literal, or the harness resets a folder the app
+/// does not use.
+#[test]
+fn webview_subdir_matches_the_app() {
+    let vars = vec![("ALM_DATA_DIR", "/tmp/pv-instance-a".to_string())];
+    assert_eq!(webview_subdir(&vars).as_deref(), Some("pv-b51d4cf056f3eb58"));
 }
 
 // ---------------------------------------------------------------------------

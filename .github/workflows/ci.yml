@@ -29,11 +29,41 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on branches, but never on `main` (#1203).
+  #
+  # Every main push shares one concurrency group, because `github.ref` is
+  # `refs/heads/main` for all of them. A blanket `true` therefore made each
+  # merge cancel the previous merge's run, and during a merge campaign no main
+  # run survived to report: `6e624adc` and `67f48ee9` landed five minutes apart
+  # and both concluded `cancelled,cancelled`.
+  #
+  # That silently emptied main's gate for unit, integration and mock-mode UI —
+  # the suites this workflow owns. It is worse than a plain outage because it is
+  # merge-rate dependent: when merges space out a run completes and main looks
+  # green, so the gap only opens during periods of highest change velocity,
+  # which is exactly when verification matters most.
+  #
+  # e2e.yml took the same fix in #1268; this is the other half.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
 env:
   CARGO_INCREMENTAL: 0
+  # Debuginfo is 53% of every compiled artifact and the runners have been
+  # exhausting disk on it: `target/debug` reaches 1.1 GB, the 11 e2e journey
+  # binaries total 356 MB (~32 MB each, 15.3 MB after `strip --strip-debug`),
+  # and that archive is then downloaded by six shard jobs. PR #1216's ubuntu
+  # leg died with `rustc-LLVM ERROR: IO failure on output stream: No space left
+  # on device`, which reads as a code failure and costs real triage time.
+  #
+  # `line-tables-only` keeps file/line information in panic backtraces -- the
+  # part that actually matters when a test or journey fails -- while dropping
+  # the type and variable debuginfo that dominates the size. A full strip would
+  # be smaller still but loses backtrace line numbers, a bad trade for a test
+  # suite. Set here rather than as a `[profile.*]` in Cargo.toml so local
+  # developer builds keep full debuginfo. See issue #1250.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
   # Cheap change-detection gate (dorny/paths-filter). Downstream jobs read its
@@ -48,11 +78,12 @@ jobs:
   #   all_files — CSV of every changed path, consumed by the changed-crate
   #               scoping step for `cargo test -p`.
   changes:
-    name: Detect changes
+    name: Detect changes (CI)
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.decide.outputs.rust }}
       frontend: ${{ steps.decide.outputs.frontend }}
+      frontend_full: ${{ steps.decide.outputs.frontend_full }}
       docs_only: ${{ steps.decide.outputs.docs_only }}
       scripts: ${{ steps.filter.outputs.scripts }}
       all_files: ${{ steps.filter.outputs.all_files }}
@@ -65,16 +96,38 @@ jobs:
           filters: |
             all:
               - '**'
-            # force_full: any of these means "run the whole suite" — the build
-            # graph, dependency set, or CI itself may have changed.
-            force_full:
-              - '.github/workflows/**'
-              - '**/Cargo.toml'
-              - 'Cargo.lock'
-              - '**/package.json'
-              - 'pnpm-lock.yaml'
+            # force_full, split per lane: a dependency-graph change forces only
+            # the lane whose graph moved. A Cargo.lock bump does not invalidate
+            # the frontend suite, and a pnpm-lock.yaml bump does not invalidate
+            # the Rust suite. Shared drivers still force BOTH, because they can
+            # change how either lane executes.
+            #
+            # Deliberately NOT '.github/workflows/**': editing e2e.yml or
+            # release-please.yml cannot change how ci.yml runs its lanes, and
+            # treating every workflow edit as a full-suite trigger is what made
+            # a Rust-only refactor (#1169) run the entire frontend suite.
+            force_full_shared:
               - 'justfile'
               - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            force_full_rust:
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+            force_full_frontend:
+              - '**/package.json'
+              - 'pnpm-lock.yaml'
+            # Frontend inputs the vitest module graph cannot see, so `vitest
+            # related` would silently skip tests that depend on them: runner
+            # config, the setup file, global styles/tokens, the i18n
+            # catalogues, and the shared packages consumed via bindings.
+            frontend_full:
+              - 'apps/desktop/vitest.config.ts'
+              - 'apps/desktop/vite.config.ts'
+              - 'apps/desktop/vitest.setup.ts'
+              - 'apps/desktop/tsconfig*.json'
+              - 'apps/desktop/src/styles/**'
+              - 'apps/desktop/messages/**'
+              - 'packages/**'
             rust:
               - 'crates/**'
               - 'apps/desktop/src-tauri/**'
@@ -102,13 +155,23 @@ jobs:
       - id: decide
         shell: bash
         run: |
+          shared="${{ steps.filter.outputs.force_full_shared }}"
           rust=false
           frontend=false
-          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
+          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_rust }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
             rust=true
           fi
-          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
             frontend=true
+          fi
+          # frontend_full: run every vitest spec rather than the `related`
+          # subset. Any shared driver or lockfile change, or a frontend input
+          # invisible to the module graph, disables scoping.
+          frontend_full=false
+          if [ "$shared" = "true" ] \
+            || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] \
+            || [ "${{ steps.filter.outputs.frontend_full }}" = "true" ]; then
+            frontend_full=true
           fi
           # docs_only: at least one doc changed and nothing drives Rust/frontend.
           docs_only=false
@@ -118,9 +181,10 @@ jobs:
           {
             echo "rust=$rust"
             echo "frontend=$frontend"
+            echo "frontend_full=$frontend_full"
             echo "docs_only=$docs_only"
           } >> "$GITHUB_OUTPUT"
-          echo "changes: rust=$rust frontend=$frontend docs_only=$docs_only scripts=${{ steps.filter.outputs.scripts }}"
+          echo "changes: rust=$rust frontend=$frontend frontend_full=$frontend_full docs_only=$docs_only scripts=${{ steps.filter.outputs.scripts }}"
 
   # Two lanes share this matrix (Rust and frontend), each with its own step-level
   # gate, so it is NOT split into two jobs: whenever either lane is active every
@@ -130,7 +194,7 @@ jobs:
   # therefore fires only when BOTH lanes are idle, which is exactly the case
   # where the job had nothing to do and must not report `success`.
   integration:
-    name: Integration (Layer 1) — ${{ matrix.os }}
+    name: Unit + integration (L1+L2) — ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
     strategy:
@@ -193,6 +257,29 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
+      # Vite's dependency-optimizer output. Restored AFTER `pnpm install`
+      # because it lives inside `node_modules/`, which the install recreates.
+      #
+      # Without it every run pays a cold optimize+transform for all ~200 test
+      # files at once. That storm is not merely slow: vitest's `testTimeout`
+      # clock starts when a test is scheduled, not when it gets a worker, so
+      # a cold run charges queue time against unrelated tests and fails them
+      # on timeout (observed locally: 21s transform vs the 15s timeout, two
+      # suites red; both pass in isolation and pass warm).
+      #
+      # Vite validates this cache against its own hash of the lockfile and
+      # config and re-optimizes on mismatch, so a stale restore degrades to
+      # today's cold behaviour rather than serving wrong modules. The key
+      # mirrors those same inputs so the common case is a clean hit.
+      - name: Cache Vite transform/deps output
+        if: needs.changes.outputs.frontend == 'true'
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/vite.config.ts', 'apps/desktop/vitest.config.ts') }}
+          restore-keys: |
+            vite-${{ runner.os }}-
+
       # --- Fast checks first (FR-012) ---
       # Frontend lint gate: Biome (format check + syntactic rules) first, then
       # the slimmed ESLint layer Biome cannot replicate — the spec-046
@@ -219,9 +306,14 @@ jobs:
         run: pnpm run lint:tests
 
       # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
+      # `cargo fmt` only walks `mod` declarations, so it never reaches
+      # bootstrap/specta.rs, which is `include!`d rather than `mod`-declared
+      # (see that file's header). Check it explicitly so it cannot drift.
       - name: Rust format
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all --check
+          rustfmt --edition 2021 --check apps/desktop/src-tauri/src/bootstrap/specta.rs
 
       # Self-test the changed-crate scoping helper's mapping/closure logic
       # (runs once, on Linux, under the Rust lane).
@@ -244,7 +336,7 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # --- Layer 1: real-backend integration + unit tests ---
+      # --- L1 (isolated units) + L2 (real-backend integration) ---
       # No standalone `cargo build --workspace` step: clippy --all-targets
       # (above, Linux) and nextest (below, every OS) each already build every
       # target they need, so a dedicated build step only duplicated work.
@@ -263,7 +355,7 @@ jobs:
       # force_full trigger (Cargo.lock, workflows, …) or a rust-relevant file
       # outside every member yields the full-workspace fallback. Build/clippy
       # stay workspace-wide — conservative: when in doubt, run more.
-      - name: Rust tests (Layer 1 — real SQLite, real migrations)
+      - name: Rust tests (L1+L2 — real SQLite, real migrations)
         if: needs.changes.outputs.rust == 'true'
         shell: bash
         # CHANGED_FILES is passed via env (never interpolated into the script
@@ -293,9 +385,97 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo test --workspace --doc
 
+      # Scope vitest to the specs that transitively import the changed modules.
+      # `vitest related` resolves the real import graph, which is strictly more
+      # accurate than a directory convention and needs no maintenance as files
+      # move. Inputs the graph cannot see (runner config, setup file, global
+      # styles, i18n catalogues, shared packages) set frontend_full and fall
+      # back to the whole suite — see the `frontend_full` filter above.
+      #
+      # CHANGED_FILES is passed via env, never interpolated into the script
+      # body, so a crafted filename cannot inject shell commands (same rule as
+      # the Rust scoping step).
       - name: Frontend unit tests
         if: needs.changes.outputs.frontend == 'true'
-        run: pnpm -r --if-present test
+        shell: bash
+        env:
+          CHANGED_FILES: ${{ needs.changes.outputs.all_files }}
+          FRONTEND_FULL: ${{ needs.changes.outputs.frontend_full }}
+        run: |
+          set -euo pipefail
+          # Non-desktop workspaces run plain node scripts; they are cheap and
+          # have no vitest graph, so they always run in full.
+          #
+          # The `!.` filter is load-bearing: `pnpm -r` excludes the workspace
+          # root by default, but adding ANY --filter re-includes it. The root's
+          # `test` script is `cargo test --workspace && pnpm -r --if-present
+          # test`, so omitting `!.` makes this step run the entire Rust suite
+          # inside a step named "Frontend unit tests" — which is how it was
+          # first caught, as an app_core_calibration failure on macOS.
+          pnpm --filter='!./apps/desktop' --filter='!.' -r --if-present test
+
+          cd apps/desktop
+
+          # `apps/desktop` declares `"pretest": "pnpm i18n:compile"`, and
+          # `src/paraglide/` is gitignored, so the message catalogue only exists
+          # once that runs. Invoking vitest through `pnpm exec` skips npm
+          # lifecycle hooks, so pretest never fires and 145 of 199 spec files
+          # fail on a missing `@/paraglide/messages`. Compile explicitly.
+          pnpm i18n:compile
+
+          if [ "$FRONTEND_FULL" = "true" ]; then
+            echo "frontend_full=true -> running the complete vitest suite."
+            pnpm exec vitest run
+            exit 0
+          fi
+
+          # Changed files under this package, rebased to package-relative paths
+          # and filtered to ones that exist (a deleted file has no dependents to
+          # resolve and makes `vitest related` error).
+          #
+          # Read with `while read`, NOT `mapfile`: the macOS runner's /bin/bash
+          # is 3.2 (Apple ships no GPLv3 bash), where `mapfile` does not exist.
+          # It exits 127 and takes the whole step with it, so the frontend suite
+          # never runs on macOS at all. The existence filter is folded into the
+          # same loop rather than kept as a second pass over an intermediate
+          # array — one loop cannot disagree with itself about which files it
+          # collected.
+          existing=()
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ -f "$f" ] && existing+=("$f")
+          done < <(
+            printf '%s' "$CHANGED_FILES" | tr ',' '\n' \
+              | sed -n 's#^apps/desktop/##p' \
+              | grep -E '^src/.*\.(ts|tsx)$' || true
+          )
+
+          if [ ${#existing[@]} -eq 0 ]; then
+            echo "No existing apps/desktop/src TS files changed -> full suite (conservative)."
+            pnpm exec vitest run
+            exit 0
+          fi
+
+          echo "Running specs related to ${#existing[@]} changed file(s):"
+          printf '  %s\n' "${existing[@]}"
+
+          # `vitest related` prints "No test files found, exiting with code 0"
+          # when a changed module has no dependent spec — a green result having
+          # run nothing, which makes "the suite passed" and "the suite never
+          # ran" indistinguishable. Treat that as unscopable and fall back to
+          # the full suite rather than reporting a vacuous pass.
+          set +e
+          out=$(pnpm exec vitest related --run "${existing[@]}" 2>&1)
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+
+          if printf '%s' "$out" | grep -q 'No test files found'; then
+            echo "::notice::vitest related selected no specs; running the full suite instead."
+            pnpm exec vitest run
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
 
       - name: TypeScript typecheck
         if: needs.changes.outputs.frontend == 'true'
@@ -316,7 +496,7 @@ jobs:
   # the frontend lane and a change that cannot affect the frontend skips it
   # outright rather than reporting a green check for an empty run.
   ui-e2e:
-    name: UI E2E (mock-mode Playwright)
+    name: UI mock-mode (Playwright)
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest

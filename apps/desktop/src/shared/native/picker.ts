@@ -187,7 +187,10 @@ export async function pickDirectory(
 
   if (!isTauri()) {
     // Browser-only fallback
-    const path = window.prompt('Enter folder path:', resolvedDefault ?? '');
+    const path = window.prompt(
+      m.picker_prompt_folder_path(),
+      resolvedDefault ?? '',
+    );
     if (!path) return { path: null, cancelled: true };
     if (kind) setLastPath(kind, path);
     return { path, cancelled: false };
@@ -237,7 +240,10 @@ export async function pickFile(
 
   if (!isTauri()) {
     // Browser-only fallback
-    const path = window.prompt('Enter file path:', resolvedDefault ?? '');
+    const path = window.prompt(
+      m.picker_prompt_file_path(),
+      resolvedDefault ?? '',
+    );
     if (!path) return { path: null, selectedFilter: null, cancelled: true };
     if (kind) setLastPath(kind, path);
     return { path, selectedFilter: null, cancelled: false };

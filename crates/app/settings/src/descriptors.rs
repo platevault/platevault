@@ -565,8 +565,16 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         noisy: false,
         overridable: false,
         validation: ValidationRule::EnumStr {
-            allowed: &["warm-clay", "warm-slate", "observatory-dark", "espresso-dark", "system"],
-            expected_msg: "must be \"warm-clay\", \"warm-slate\", \"observatory-dark\", \"espresso-dark\", or \"system\"",
+            allowed: &[
+                "warm-clay",
+                "warm-slate",
+                "observatory-dark",
+                "observatory-cool",
+                "observatory-cool-light",
+                "espresso-dark",
+                "system",
+            ],
+            expected_msg: "must be \"warm-clay\", \"warm-slate\", \"observatory-dark\", \"observatory-cool\", \"observatory-cool-light\", \"espresso-dark\", or \"system\"",
         },
         apply: |v, s| {
             if let Some(x) = v.as_str() {
