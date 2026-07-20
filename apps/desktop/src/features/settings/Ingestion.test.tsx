@@ -122,7 +122,6 @@ describe('Ingestion', () => {
     expect(screen.getByLabelText(label)).toBeDisabled();
   });
 
-
   it('a slow initial fetch does not clobber an edit made before it resolves', async () => {
     // Reproduces a real race, not just CI flakiness: the mount-time
     // ingestionSettingsGet() fetch can still be in flight when the user's
