@@ -50,6 +50,10 @@ renders in Portuguese.
 4. **Given** the language chooser, **When** the user navigates by keyboard
    only, **Then** every language option is reachable and selectable, and the
    focused option shows a visible focus ring.
+5. **Given** the user has advanced past the language step, **When** they use
+   the wizard's Back navigation, **Then** they return to the language step and
+   can change the choice — a language selected by mistake is recoverable
+   without completing setup first.
 
 ---
 

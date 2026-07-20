@@ -266,6 +266,24 @@ a parallel mechanism.
 
 ---
 
+## D9 — Language selection is a wizard step, not a pre-wizard screen
+
+**Decision**: language selection is the first *step of the wizard* (FR-005),
+sharing the wizard's chrome, progress indicator, and back/next navigation.
+
+**Rationale**: a standalone pre-wizard screen frames language as a
+prerequisite rather than setup work, which reads better — but it has no back
+affordance. Once the user advances, the choice is unreachable until Settings
+exists, which is after setup completes. That is the wrong trade for a
+selection made in one second, easily mis-clicked, by someone who may not read
+the language they landed on. Inside the wizard, Back returns to it like any
+other step.
+
+**Alternative rejected**: pre-wizard screen with its own back control — that
+is a wizard step with extra steps.
+
+---
+
 ## Open questions for Phase 1
 
 - Does the first-run wizard render before the settings store is initialised? If
