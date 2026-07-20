@@ -70,13 +70,13 @@ pub fn is_global_protection_default_key(key: &str) -> bool {
 // ── Durable-data noisy keys (spec 030 FR-130, Q15/#647, T122) ───────────────
 //
 // `descriptors::DESCRIPTORS[].noisy` conflates two different concerns:
-// UI-state keys (`rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) that
-// FR-134 exempts from durable audit entirely, and durable-data keys whose
+// UI-state keys (`rememberFollowLogs`) that FR-134 exempts from durable
+// audit entirely, and durable-data keys whose
 // writes are debounced/frequent (`pattern`) but still get a single durable
 // row at the committed value, before→after (FR-130). This is the same
 // named-exception-list shape as `GLOBAL_PROTECTION_DEFAULT_KEYS` above, kept
-// separate from the descriptor table rather than adding a 36th field to every
-// one of its 35 literals for a single-member set.
+// separate from the descriptor table rather than adding a new field to every
+// one of its literals for a single-member set.
 const NOISY_AUDITED_KEYS: [&str; 1] = ["pattern"];
 
 /// Whether a `noisy` key still gets a durable audit row at its committed
@@ -535,8 +535,7 @@ pub async fn update_setting(
     // plan.md E-016-3: "MUST emit `protection.default.changed` whenever it is
     // updated"). Non-protection noisy keys audit only when in
     // `NOISY_AUDITED_KEYS` (durable-data, e.g. `pattern`); the rest
-    // (`rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) are UI state and
-    // stay fully exempt (FR-134).
+    // (`rememberFollowLogs`) are UI state and stay fully exempt (FR-134).
     let is_noisy = descriptors::is_noisy(key.as_str());
     let audit_id = if !is_protection_default && is_noisy && !is_noisy_audited_key(key.as_str()) {
         None
@@ -1597,7 +1596,6 @@ mod tests {
     #[case("calibrationPrefillSuggestion", serde_json::json!(false))]
     #[case("currentLibraryId", serde_json::json!(null))]
     #[case("currentLibraryId", serde_json::json!("lib-1"))]
-    #[case("plansListDefaultAgeCutoffDays", serde_json::json!(30))]
     #[case("pattern", serde_json::json!([]))]
     #[case("protectedCategories", serde_json::json!(["lights"]))]
     #[case("tools.pixinsight.bundle_id", serde_json::json!("com.x"))]
@@ -1655,7 +1653,6 @@ mod tests {
     #[case("calibrationFlatOverridePenalty", serde_json::json!(1.1))] // above [0,1]
     #[case("autoApplyPattern", serde_json::json!("true"))] // string, not boolean
     #[case("currentLibraryId", serde_json::json!(5))] // not string/null
-    #[case("plansListDefaultAgeCutoffDays", serde_json::json!("x"))] // not a number
     #[case("pattern", serde_json::json!("notarray"))]
     #[case("protectedCategories", serde_json::json!({}))] // object, not array
     #[case("tools.siril.enabled", serde_json::json!("yes"))] // not a boolean

@@ -198,8 +198,10 @@ group. Missing artifacts visibly distinguish their state and offer a
 - [x] **TX03** Constitution recheck. PASS — see plan.md §Constitution Check.
 - [x] **TX04** Cross-spec dependency check with spec 011 + 024. RE-ADJUDICATED
       (spec 024 has since shipped): `workflow.run_completed` now has a real
-      subscriber — `app_core_projects::project_manifests::spawn_workflow_run_completed_subscriber`
-      (`crates/app/projects/src/project_manifests.rs:275`) persists a
+      subscriber — `app_core_projects::project_manifests::spawn_workflow_run_subscriber`
+      (`crates/app/projects/src/project_manifests.rs:412`; *(reconciliation
+      note, 2026-07-19, issue #764: fn name/line corrected — was cited as
+      `spawn_workflow_run_completed_subscriber` at `:275`)*) persists a
       `WorkflowRunManifest` row on every event. Proven end-to-end (real tool
       launch → real `workflow.run_completed` publish → real manifest row) by
       `crates/app/core/tests/workflow_run_manifest_e2e.rs::real_tool_launch_completion_persists_a_workflow_run_manifest`

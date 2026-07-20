@@ -95,7 +95,20 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 
 ### Functional Requirements
 
-- **FR-001**: The product name for the stable library surface MUST be "Inventory".
+> **Reconciliation note (2026-07-19, issue #764)**: three drifts confirmed
+> against the current tree. **FR-001**: the shipped surface is labeled
+> "Sessions" everywhere (nav, command palette `common_sessions()`, route
+> `/sessions`), not "Inventory" — this spec's own prose already calls it
+> "Inventory/Sessions" throughout; treat "Sessions" as the actual product
+> name. **FR-004/SC-003**: 041 FR-051 removed the review-state lifecycle
+> almost entirely (no `reviewState`/`SessionState` rendering remains in
+> `features/sessions/`) rather than restyling it as plain text — only the
+> `ignored`/recoverable state survived (FR-010); FR-004/SC-003 describe a
+> milder "restyle" outcome than what actually shipped. **FR-006**: no
+> "primary action + small More menu" pattern exists in
+> `features/sessions/` — row actions did not converge on that shape.
+>
+> **FR-001**: The product name for the stable library surface MUST be "Inventory".
 - **FR-002**: The Inventory/Sessions view is lights-centric and MUST NOT expose a frame-type filter. Dark/flat/bias inventory is filtered on the Calibration page (spec 040), and Inbox single-type ingest (spec 041) means the Inventory ledger is already single-type. *(Superseded 2026-07-03: the original light/dark/flat/bias row filter was removed by the 043 redesign + 040 Calibration surface.)*
 - **FR-003**: Inventory MUST NOT use ambiguous "tags" or "handling" fields as primary workflow controls.
 - **FR-004**: Inventory MUST show review state as plain text or structured data, not as decorative state bubbles.
