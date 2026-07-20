@@ -7,7 +7,7 @@
 // Nothing needs the shebang: the file is mode 644 and is invoked as
 // `node scripts/gen-token-types.mjs` via the `tokens:types` package script.
 //
-// Parses src/styles/tokens.css and packages/tokens/foundation.css (handoff
+// Parses src/styles/tokens.css and packages/tokens/tokens-docs.css (handoff
 // 04 — shared spacing/type-scale/radius/motion/font tokens) for `--pv-*`
 // custom-property declarations and emits src/styles/tokens.d.ts exporting a
 // sorted TS union of token names.
@@ -30,7 +30,7 @@ import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const SRC = path.resolve(__dirname, '../src/styles/tokens.css');
-export const FOUNDATION_SRC = path.resolve(__dirname, '../../../packages/tokens/foundation.css');
+export const FOUNDATION_SRC = path.resolve(__dirname, '../../../packages/tokens/tokens-docs.css');
 export const OUT = path.resolve(__dirname, '../src/styles/tokens.d.ts');
 
 /**
@@ -40,7 +40,12 @@ export const OUT = path.resolve(__dirname, '../src/styles/tokens.d.ts');
  * across source files.
  */
 export function extractTokenNames(cssTexts) {
-  const tokenPattern = /--(pv-[a-z0-9-]+)\s*:/g;
+  // Character class deliberately wider than the kebab-case convention: a
+  // narrower `[a-z0-9-]` silently DROPS any token containing an uppercase
+  // letter or underscore, so such a token would ship in the CSS while being
+  // absent from the type — a hole that fails open. Naming is enforced
+  // elsewhere; this extractor's job is to miss nothing.
+  const tokenPattern = /--(pv-[A-Za-z0-9_-]+)\s*:/g;
   const names = new Set();
   for (const css of cssTexts) {
     let match;

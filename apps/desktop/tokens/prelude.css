@@ -1,8 +1,3 @@
-/* Shared non-color foundation (spacing, type scale, tracking, weights,
-   leading, radius, motion, font stacks) — handoff 04. Single source of
-   truth, also vendored by the docs repo; edit there, not here. */
-@import "../../../../packages/tokens/foundation.css";
-
 /* Inter, hinted woff2, bundled locally (spec 055 — see
    apps/desktop/src/assets/fonts/FONTS.md for provenance/licensing). Replaces
    the prior Google Fonts CDN @import so the UI renders identically offline
