@@ -21,6 +21,7 @@
 
 import type {
   InboxListItem,
+  InboxSourceGroupListItem,
   InboxStatsResponse,
   InboxStatsPerType,
 } from '@/bindings/index';
@@ -62,9 +63,22 @@ function bucketKey(frameType: string | null | undefined): string {
  * Derive a reconciled {@link InboxStatsResponse} from the active inbox item
  * list. Each item contributes to exactly one per-type bucket: non-master
  * folders by their dominant `groupFrameType`, masters by their `masterFrameType`.
+ *
+ * Spec 058 T022 / CHK010 ([#1178](https://github.com/platevault/platevault/issues/1178)):
+ * source-group rows ARE counted. A scanned-but-unclassified folder is a row the
+ * list renders, so a summary that omitted it would report fewer rows than the
+ * user can see — the same class of disagreement SC-004 exists to remove. Each
+ * source group counts as exactly one folder in the {@link UNRESOLVED_KEY}
+ * bucket: it has no frame type by definition (that is what "unclassified"
+ * means), so it can never key into a resolved bucket.
+ *
+ * `sourceGroups` is optional so existing single-argument callers and fixtures
+ * keep compiling; omitting it is equivalent to passing an empty array, which is
+ * also the runtime state until the scan-time placeholder is removed (T020).
  */
 export function deriveInboxStats(
   items: readonly InboxListItem[],
+  sourceGroups: readonly InboxSourceGroupListItem[] = [],
 ): InboxStatsResponse {
   const byType = new Map<string, InboxStatsPerType>();
   let folders = 0;
@@ -93,6 +107,18 @@ export function deriveInboxStats(
       row.folderCount += 1;
       row.imageCount += item.fileCount;
     }
+  }
+
+  // A source group is a folder the list shows but that has produced no item
+  // rows yet. It contributes a folder (never a master — a master item carries a
+  // NULL `source_group_id` and is excluded from `sourceGroups` by the query's
+  // `file_count > 0` carve-out) and its scanned sub-frame count.
+  for (const group of sourceGroups) {
+    images += group.fileCount;
+    folders += 1;
+    const row = rowFor(UNRESOLVED_KEY);
+    row.folderCount += 1;
+    row.imageCount += group.fileCount;
   }
 
   // Stable display order: alphabetical by frame type, "unresolved" last.

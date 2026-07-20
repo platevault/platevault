@@ -59,7 +59,11 @@ import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanApprovalOverlay } from './PlanApprovalOverlay';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
-import type { InboxBreakdownTarget, InboxListItem } from './store';
+import type {
+  InboxBreakdownTarget,
+  InboxListItem,
+  InboxSourceGroupListItem,
+} from './store';
 import {
   inboxClassifyQueryKey,
   mergeRescanRoots,
@@ -169,6 +173,13 @@ function asRootRequiredDetails(
 // value into `useSetPageStatus` and re-triggering its effect indefinitely.
 const EMPTY_ITEMS: InboxListItem[] = [];
 
+/**
+ * Stable empty source-group array — same rationale as {@link EMPTY_ITEMS}: a
+ * fresh `[]` literal per render is a new identity every time, which would make
+ * every `useMemo` downstream of it recompute forever.
+ */
+const EMPTY_SOURCE_GROUPS: InboxSourceGroupListItem[] = [];
+
 export function InboxPage() {
   const { selected, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
@@ -181,6 +192,9 @@ export function InboxPage() {
     refresh: refreshList,
   } = useInboxList();
   const items = listData?.items ?? EMPTY_ITEMS;
+  // Spec 058 FR-016 / T013: scanned folders that have produced no item rows.
+  // Empty until T020 removes the scan-time placeholder.
+  const sourceGroups = listData?.sourceGroups ?? EMPTY_SOURCE_GROUPS;
 
   // Search + grouping / sort / frame-type controls now live in the top bar
   // (spec 043 #73/#31). `useGrouping` owns the persisted ordered grouping
@@ -292,6 +306,16 @@ export function InboxPage() {
     }
     return result;
   }, [items, search]);
+
+  // Source groups run through the SAME page-level filter as `filteredItems`
+  // (search only — the lane and kind filters are applied inside `InboxList`),
+  // so the two arrays are always filtered to the same degree. A source group
+  // has no `groupTarget` to match on; its relative path is all there is.
+  const filteredSourceGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sourceGroups;
+    return sourceGroups.filter((g) => g.relativePath.toLowerCase().includes(q));
+  }, [sourceGroups, search]);
 
   // URL-backed selection is by item id (issue #644), not list position — an
   // index silently points at whatever item now occupies that slot once
@@ -875,7 +899,13 @@ export function InboxPage() {
   // summary sitting above a filtered list and disagreeing with it is the same
   // class of lie this feature exists to remove, so the counts now describe what
   // the user is actually looking at.
-  const derivedStats = useMemo(() => deriveInboxStats(filteredItems), [filteredItems]);
+  // T022 / CHK010: source-group rows are counted, and from the same filtered
+  // arrays `InboxList` renders — otherwise the strip and the list disagree the
+  // moment a scanned-but-unclassified folder exists.
+  const derivedStats = useMemo(
+    () => deriveInboxStats(filteredItems, filteredSourceGroups),
+    [filteredItems, filteredSourceGroups],
+  );
 
   // #75: frame-type hint per ingestion, derived from the inbox item's
   // classification/breakdown (here: the dominant `groupFrameType`, or the
@@ -1188,6 +1218,7 @@ export function InboxPage() {
       >
         <InboxList
           items={filteredItems}
+          sourceGroups={filteredSourceGroups}
           selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}

@@ -1546,6 +1546,8 @@
   "inbox_state_plan_open": "plan open",
   "inbox_state_resolved": "resolved",
   "inbox_state_unclassified": "unclassified",
+  "inbox_state_not_yet_classified": "not yet classified",
+  "inbox_source_group_row_aria": "{path} — scanned, not yet classified",
   "inbox_row_plan_pending": "Plan pending review",
   "inbox_sort_detection_aria": "Sort by Path",
   "inbox_sort_type_aria": "Sort by Type",

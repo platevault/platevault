@@ -21,6 +21,7 @@ import { unwrap } from '@/api/ipc';
 import { ipcArgs } from '@/lib/ipc-args';
 import type {
   InboxListItem,
+  InboxSourceGroupListItem,
   InboxListResponse,
   InboxConfirmResponse,
   InboxScanFolderResponse,
@@ -47,6 +48,7 @@ export type {
   InboxClassifyResponse,
   InboxConfirmResponse,
   InboxListItem,
+  InboxSourceGroupListItem,
   InboxListResponse,
   InboxReclassifyResponse,
   InboxScanFolderResponse,
