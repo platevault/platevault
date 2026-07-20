@@ -925,6 +925,11 @@ pub(crate) async fn materialize_sub_items(
         // the sub-item is upserted with the correct file_count and evidence.
         let entry =
             groups.entry(group_key).or_insert_with(|| (group_label, needs_review, Vec::new()));
+        // OR-folded, not first-file-wins: `target` is mandatory for lights yet
+        // is not a grouping dimension, so a file missing it shares a group_key
+        // with a resolved sibling. Any unresolved file must flag the whole
+        // group or it becomes confirmable on filename order alone.
+        entry.1 |= needs_review;
         entry.2.push((rel.clone(), abs_path, raw_meta_opt.clone()));
     }
 
@@ -2672,6 +2677,73 @@ mod tests {
             sub_items[0].group_key
         );
         assert!(sub_items[0].frame_type.is_none(), "needs-review sub-item must have no frame_type");
+    }
+
+    /// FR-047/FR-049: `target` is mandatory for lights but is NOT a grouping
+    /// dimension (`Dimension` has no Target variant), so a light with OBJECT
+    /// and one without collapse into a single `group_key`. The group's verdict
+    /// must therefore be the OR across its files, not whichever file the
+    /// scanner enumerated first — otherwise a file missing a mandatory
+    /// attribute rides a resolved sibling's row past the confirm gate.
+    ///
+    /// Asserted in both enumeration orders because the defect this pins was
+    /// filename-order-dependent.
+    #[tokio::test]
+    async fn light_missing_target_keeps_needs_review_beside_a_resolved_sibling() {
+        for (ok_name, bad_name) in
+            [("a_ok.fits", "b_no_object.fits"), ("z_ok.fits", "a_no_object.fits")]
+        {
+            let tmp = tempfile::tempdir().unwrap();
+            // Identical on every grouping dimension; differ only in OBJECT.
+            write_fits_full(
+                tmp.path(),
+                ok_name,
+                "Light Frame",
+                Some("M31"),
+                Some("Ha"),
+                Some(300.0),
+                Some("100"),
+            );
+            write_fits_full(
+                tmp.path(),
+                bad_name,
+                "Light Frame",
+                None,
+                Some("Ha"),
+                Some(300.0),
+                Some("100"),
+            );
+
+            let db = test_db().await;
+            insert_source_group_with_item(
+                &db,
+                "sg-mixed-obj",
+                "item-mixed-obj",
+                "root-mixed-obj",
+                "",
+            )
+            .await;
+
+            classify(
+                db.pool(),
+                ClassifyRequest {
+                    inbox_item_id: "item-mixed-obj".to_owned(),
+                    root_absolute_path: tmp.path().to_owned(),
+                    force_rescan: false,
+                },
+            )
+            .await
+            .unwrap();
+
+            let sub_items =
+                inbox_repo::list_inbox_sub_items(db.pool(), "sg-mixed-obj").await.unwrap();
+            assert!(
+                sub_items.iter().any(|s| s.needs_review == 1),
+                "a light missing its mandatory OBJECT must stay flagged when a resolved sibling \
+                 shares its group_key (order: {ok_name} / {bad_name}); got {:?}",
+                sub_items.iter().map(|s| (&s.group_key, s.needs_review)).collect::<Vec<_>>()
+            );
+        }
     }
 
     /// T070/FR-047/FR-048: a dark frame missing `exposureS` must route to the
