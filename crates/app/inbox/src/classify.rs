@@ -2194,6 +2194,63 @@ mod tests {
         assert_eq!(sg.child_count, 1, "source group child_count must be 1");
     }
 
+    /// Spec 058 T031 / FR-003 / SC-002: a folder with N distinct groups yields
+    /// exactly N items **and no aggregate**.
+    ///
+    /// The existing `t066_*` tests pin the N half, but they were written while
+    /// the folder placeholder still existed — they counted sub-items beside an
+    /// aggregate rather than instead of one. This asserts both halves together,
+    /// through the post-FR-015 entry point: a bare source group with no item
+    /// row, classified via `classify_source_group`.
+    ///
+    /// The no-aggregate half is asserted by comparing the UNFILTERED item count
+    /// for the group against the sub-item count. `list_inbox_sub_items` filters
+    /// `group_key != ''` in SQL, so asserting "no returned row has an empty
+    /// group_key" against it would be vacuous — it cannot return one. Only the
+    /// unfiltered `list_item_ids_for_source_group` can observe a resurrected
+    /// parent, so the two counts must agree.
+    #[tokio::test]
+    async fn t031_two_frame_types_yield_two_items_and_no_aggregate() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "dark.fits", "Dark Frame");
+
+        let db = test_db().await;
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &inbox_repo::UpsertSourceGroup {
+                id: "sg-t031",
+                root_id: "root-t031",
+                relative_path: "",
+                content_signature: Some("sig-t031"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 2,
+            },
+        )
+        .await
+        .unwrap();
+
+        // No inbox_items row exists — the post-FR-015 shape scan now produces.
+        let resp = classify_source_group(db.pool(), "sg-t031", tmp.path()).await.unwrap();
+        assert_eq!(
+            resp.materialized_sub_item_count, 2,
+            "a folder holding lights and darks must materialize exactly two items"
+        );
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t031").await.unwrap();
+        assert_eq!(sub_items.len(), 2, "expected exactly two sub-items for this source group");
+
+        let all_items =
+            inbox_repo::list_item_ids_for_source_group(db.pool(), "sg-t031").await.unwrap();
+        assert_eq!(
+            all_items.len(),
+            sub_items.len(),
+            "every inbox_items row for this group must BE one of its sub-items; \
+             a surplus row is an aggregate (group_key = ''), which FR-003 forbids"
+        );
+    }
+
     #[tokio::test]
     async fn t066_mixed_folder_produces_n_sub_items() {
         // A folder with lights + darks → two single-type sub-items.
