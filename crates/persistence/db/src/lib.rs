@@ -28,8 +28,15 @@ pub mod operation_state;
 #[cfg(test)]
 mod query_builder_example;
 pub mod repositories;
+mod schema_cache;
 
 pub const CRATE_NAME: &str = "persistence_db";
+
+/// How long a writer waits for the SQLite write lock before `SQLITE_BUSY`.
+///
+/// Matches sqlx's current default; stated here so the value is ours, not a
+/// transitively-inherited one (#1231).
+pub const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub type DbResult<T> = Result<T, DbError>;
 
@@ -88,12 +95,22 @@ impl Database {
     /// already fsynced at that setting, so durability of the audit record
     /// (constitution II/V) is unchanged; only the locking model differs.
     ///
+    /// `busy_timeout` is stated explicitly rather than inherited (#1231). WAL
+    /// removes reader/writer contention but NOT writer/writer contention: two
+    /// writers still serialise on the single write lock, and the loser gets
+    /// `SQLITE_BUSY` the moment the timeout expires. sqlx currently defaults
+    /// this to the same 5s (`SqliteConnectOptions::default`), so pinning it
+    /// changes no behaviour today — it stops the app's write-contention
+    /// tolerance from being an upstream default that a dependency bump can
+    /// silently move. `tests/two_writer_contention.rs` holds it to that.
+    ///
     /// # Errors
     ///
     /// Returns [`DbError::Database`] if the pool cannot connect to the given URL.
     pub async fn connect(connection_string: &str) -> DbResult<Self> {
-        let options =
-            SqliteConnectOptions::from_str(connection_string)?.journal_mode(SqliteJournalMode::Wal);
+        let options = SqliteConnectOptions::from_str(connection_string)?
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(BUSY_TIMEOUT);
         let pool = SqlitePoolOptions::new().max_connections(8).connect_with(options).await?;
         Ok(Self { pool })
     }
@@ -131,6 +148,29 @@ impl Database {
     // real cross-drive projects into the dead-end `kind_diverged` state on
     // every reopen. Removed along with `reconcile_kind_diverged_views`.
     //
+    // #1230: this now prefers a cross-process snapshot of the migrated
+    // database (see `schema_cache`). The snapshot is keyed on the embedded
+    // migrator's content, is only ever applied to an empty database, and falls
+    // back to the real chain on any failure, so `migrate()` stays
+    // observationally identical -- it just stops paying for 66 migrations in
+    // each of ~1069 test processes. Tests that exist to cover the chain itself
+    // call `migrate_uncached`.
+    pub async fn migrate(&self) -> DbResult<()> {
+        if schema_cache::try_apply(&self.pool).await {
+            return Ok(());
+        }
+        self.migrate_uncached().await
+    }
+
+    /// Run the real migration chain, bypassing the snapshot cache.
+    ///
+    /// Migration tests must use this: replaying a snapshot would mean the
+    /// chain they exist to cover never actually executes (#1230).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Migration`] if any migration script fails.
+    //
     // #1307: 15 migrations rebuild a table that has children under `ON DELETE
     // CASCADE` (e.g. `plans` -> `plan_items`) and open with `PRAGMA
     // foreign_keys = OFF` to make their `DROP TABLE` safe. sqlx runs every
@@ -146,16 +186,25 @@ impl Database {
     // every migration's own `BEGIN`/`COMMIT`, regardless of what that
     // migration's own pragma lines attempt. This protects every rebuild in
     // the chain, past and future, without touching the migration files.
-    pub async fn migrate(&self) -> DbResult<()> {
+    pub async fn migrate_uncached(&self) -> DbResult<()> {
         let mut conn = self.pool.acquire().await?;
         sqlx::query("PRAGMA foreign_keys = OFF;").execute(&mut *conn).await?;
-        let migrate_result = sqlx::migrate!("./migrations").run(&mut *conn).await;
+        let migrate_result = schema_cache::MIGRATOR.run(&mut *conn).await;
         // Always restore enforcement before the connection returns to the pool:
         // ordinary repository queries and legitimate runtime deletes rely on
         // FK cascade behaviour being active outside of migrations.
         sqlx::query("PRAGMA foreign_keys = ON;").execute(&mut *conn).await?;
         migrate_result?;
         Ok(())
+    }
+
+    /// The embedded migration chain, for tests that drive it directly.
+    ///
+    /// Exposed so a populated-database harness can run a prefix of the chain,
+    /// seed rows at that point, then apply the migration under test (#1231).
+    #[must_use]
+    pub fn migrator() -> &'static sqlx::migrate::Migrator {
+        &schema_cache::MIGRATOR
     }
 
     /// Expose the underlying pool for repository constructors.

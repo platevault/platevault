@@ -31,7 +31,8 @@
  *
  * Mock wiring (apps/desktop/src/api/mocks.ts):
  *   projects_get           → mockProjectDetailFor(id) — proj-001 processing
- *                            (2 channels: Ha 1.8h, OIII 1.3h), proj-002 ready.
+ *                            (2 channels: Ha 1h 48m, OIII 1h 16m), proj-002
+ *                            ready.
  *   note_get / note_update → persisted note body + update echo.
  *   manifest_list          → 2 snapshot rows (created, lifecycle_transition).
  *   tools_list             → (unhandled) → useToolProfiles degrades to no
@@ -108,11 +109,11 @@ test.describe('project lifecycle · detail surfaces (Journey 5)', () => {
     await expect(outputs).toBeVisible();
     await expect(outputs.getByText('No accepted outputs yet')).toBeVisible();
 
-    // ── Per-channel integration time (Ha 1.8h, OIII 1.3h) ────────────────────
+    // ── Per-channel integration time (Ha 1h 48m, OIII 1h 16m) ────────────────
     const channels = page.locator('.pv-project-detail__channels-section');
     await expect(channels).toBeVisible();
-    await expect(channels.getByText('1.8h')).toBeVisible();
-    await expect(channels.getByText('1.3h')).toBeVisible();
+    await expect(channels.getByText('1h 48m')).toBeVisible();
+    await expect(channels.getByText('1h 16m')).toBeVisible();
 
     // ── Tool-launch affordance: rendered but disabled (no profile configured) ─
     const launchBtn = page.getByTestId('tool-launch-btn');

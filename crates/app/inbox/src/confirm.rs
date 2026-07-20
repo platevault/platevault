@@ -25,6 +25,17 @@
 //! move into a chosen library root (`select_destination_root`, US8); non-inbox
 //! sources stay under their own root. A structural failure returns
 //! `pattern.unset`.
+//!
+//! Equipment resolution (#1342): the `camera` token resolves its raw
+//! `INSTRUME` string against the registered camera aliases, so one physical
+//! camera spelled several ways by different capture programs resolves to one
+//! destination directory. Resolution is read-only. Ingest deliberately does
+//! **not** call `find_or_create_camera_by_alias`: that function registers one
+//! camera per distinct spelling (`name = alias`, `aliases = [alias]`), so
+//! running it over a batch would mint sibling cameras for the very spellings
+//! the alias array exists to collapse. Growing the registry belongs to an
+//! explicit user action over the unclaimed strings, not to a batch write
+//! inferred during confirm.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::BTreeMap;
@@ -351,6 +362,10 @@ pub async fn confirm(
     // US9 gate (T056) is derived from it rather than a separate matrix. A hard
     // `Err(ResolveError)` signals a structural failure (traversal, length cap).
     let norm_table = v1_normalization_table();
+    // Loaded once per confirm, not per file: the whole registry is small and
+    // the resolve below runs for every plan file. Equipment being unreadable
+    // degrades to raw header strings rather than failing the confirm.
+    let cameras = app_core_calibration::equipment::list_cameras(pool).await.unwrap_or_default();
 
     let mut resolved_items: Vec<ResolvedRow> = Vec::with_capacity(plan_files.len());
     // Per-file missing path attributes for the US9 gate (FR-032/FR-033).
@@ -376,7 +391,7 @@ pub async fn confirm(
         // Built once per file for both branches so a catalogued item carries the
         // same frozen context as a moved one; the unorganized branch below also
         // resolves its destination pattern against this bundle.
-        let bundle = build_metadata_bundle(&abs_path, ft, &norm_table);
+        let bundle = build_metadata_bundle(&abs_path, ft, &norm_table, &cameras);
 
         match org_state {
             OrganizationState::Organized => {
@@ -886,6 +901,7 @@ pub(crate) fn build_metadata_bundle(
     abs_path: &std::path::Path,
     frame_type: &str,
     norm_table: &metadata_core::ImageTypNormalizationTable,
+    cameras: &[contracts_core::equipment::Camera],
 ) -> MetadataBundle {
     let mut bundle = MetadataBundle::new();
 
@@ -918,11 +934,19 @@ pub(crate) fn build_metadata_bundle(
                 bundle.insert("date".to_owned(), date_part.to_owned());
             }
         }
-        // camera
+        // camera — a registered camera claims the raw INSTRUME string under
+        // case/whitespace-insensitive alias matching, so every spelling one
+        // capture program or another wrote for the same physical camera
+        // resolves to a single destination directory. An unregistered string
+        // stays raw; nothing is created here (see the module note on why
+        // ingest resolves but never registers equipment).
         if let Some(instrume) = &meta.instrume {
             let cleaned = instrume.trim();
             if !cleaned.is_empty() {
-                bundle.insert("camera".to_owned(), cleaned.to_owned());
+                let resolved =
+                    app_core_calibration::equipment::resolve_camera_display_name(cameras, cleaned)
+                        .unwrap_or_else(|| cleaned.to_owned());
+                bundle.insert("camera".to_owned(), resolved);
             }
         }
         // exposure
@@ -959,6 +983,7 @@ pub(crate) fn build_metadata_bundle(
 mod tests {
     use super::*;
     use audit::bus::EventBus;
+    use persistence_db::repositories::equipment as equipment_repo;
     use persistence_db::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertClassification,
     };
@@ -975,14 +1000,18 @@ mod tests {
         db
     }
 
-    /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
-    fn write_fits(
+    /// Write a minimal single-block FITS file from the optional cards the
+    /// destination-pattern tests care about. The `write_fits*` helpers below
+    /// are thin presets over this.
+    fn write_fits_cards(
         dir: &std::path::Path,
         name: &str,
         imagetyp: &str,
         object: Option<&str>,
         filter: Option<&str>,
         date_obs: Option<&str>,
+        exptime: Option<f64>,
+        instrume: Option<&str>,
     ) {
         let path = dir.join(name);
         let mut block = vec![b' '; 2880];
@@ -1004,9 +1033,27 @@ mod tests {
         if let Some(d) = date_obs {
             write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
         }
+        if let Some(e) = exptime {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {e}")));
+        }
+        if let Some(i) = instrume {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("INSTRUME= '{i}'")));
+        }
         block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
         let mut f = std::fs::File::create(path).unwrap();
         f.write_all(&block).unwrap();
+    }
+
+    /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
+    fn write_fits(
+        dir: &std::path::Path,
+        name: &str,
+        imagetyp: &str,
+        object: Option<&str>,
+        filter: Option<&str>,
+        date_obs: Option<&str>,
+    ) {
+        write_fits_cards(dir, name, imagetyp, object, filter, date_obs, None, None);
     }
 
     /// Like [`write_fits`] but also writes an `EXPTIME` card. Used by calibration
@@ -1022,29 +1069,7 @@ mod tests {
         date_obs: Option<&str>,
         exptime: f64,
     ) {
-        let path = dir.join(name);
-        let mut block = vec![b' '; 2880];
-        let mut idx = 0usize;
-        let write_card = |block: &mut Vec<u8>, idx: &mut usize, card: &str| {
-            let bytes = card.as_bytes();
-            let len = bytes.len().min(80);
-            block[*idx * 80..*idx * 80 + len].copy_from_slice(&bytes[..len]);
-            *idx += 1;
-        };
-        write_card(&mut block, &mut idx, &format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
-        if let Some(obj) = object {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("OBJECT  = '{obj}'")));
-        }
-        if let Some(f) = filter {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("FILTER  = '{f}'")));
-        }
-        if let Some(d) = date_obs {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
-        }
-        write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {exptime}")));
-        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
-        let mut f = std::fs::File::create(path).unwrap();
-        f.write_all(&block).unwrap();
+        write_fits_cards(dir, name, imagetyp, object, filter, date_obs, Some(exptime), None);
     }
 
     async fn setup_classified_item(
@@ -2703,6 +2728,121 @@ mod tests {
             plans_repo::get_chosen_framing_id(db.pool(), &resp.plan_id).await.unwrap().as_deref(),
             Some("framing-attr2"),
             "the apply-path must persist the pick on the plan confirm() itself created"
+        );
+    }
+
+    // ── #1342: equipment resolution on the ingest path ────────────────────
+
+    /// Confirm a one-light item whose header names `instrume`, under a
+    /// `{camera}/light/` destination pattern, and return the destination
+    /// directory the plan recorded.
+    async fn confirm_camera_dest_dir(db: &Database, instrume: &str, item: &str) -> String {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_cards(
+            tmp.path(),
+            "frame_000.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+            None,
+            Some(instrume),
+        );
+        settings_repo::set_pattern_for(
+            db.pool(),
+            patterns::FrameTypeClass::Light,
+            "{camera}/light/",
+        )
+        .await
+        .unwrap();
+
+        let bus = make_bus(db);
+        let sig = format!("sig-{item}");
+        setup_classified_item(db, item, "classified", Some("light"), &sig, &["frame_000.fits"])
+            .await;
+
+        let resp = confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: item.to_owned(),
+                content_signature: sig,
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let items = persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+            .await
+            .unwrap();
+        dest_dir(items.first().expect("confirm must record a plan item"))
+    }
+
+    /// #1342: a header string claimed by a registered camera's alias resolves
+    /// to that camera's name, so the destination directory carries the name
+    /// the user chose rather than whatever the capture program wrote. Case and
+    /// padding differ here to pin the normalized match.
+    #[tokio::test]
+    async fn confirm_resolves_a_registered_camera_alias_to_its_name() {
+        let db = test_db().await;
+        equipment_repo::create_camera(
+            db.pool(),
+            &contracts_core::equipment::CreateCamera {
+                name: "Main Imaging Rig".to_owned(),
+                aliases: vec!["ASI2600MM".to_owned()],
+                sensor_type: None,
+                passband: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dir = confirm_camera_dest_dir(&db, " asi2600mm ", "item-cam-hit").await;
+        assert_eq!(
+            dir, "Main Imaging Rig/light",
+            "a registered alias must resolve to the camera's name in the destination path"
+        );
+    }
+
+    /// #1342: an unregistered header string keeps its raw spelling AND does
+    /// not register a camera. Ingest resolves equipment; it never creates it
+    /// (`find_or_create_camera_by_alias` stays uncalled here) — auto-creating
+    /// one camera per distinct spelling would defeat the alias model the
+    /// registry exists to provide.
+    #[tokio::test]
+    async fn confirm_leaves_an_unregistered_camera_raw_and_registers_nothing() {
+        let db = test_db().await;
+        equipment_repo::create_camera(
+            db.pool(),
+            &contracts_core::equipment::CreateCamera {
+                name: "Main Imaging Rig".to_owned(),
+                aliases: vec!["ASI2600MM".to_owned()],
+                sensor_type: None,
+                passband: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dir = confirm_camera_dest_dir(&db, "ASI6200MM Pro", "item-cam-miss").await;
+        assert_eq!(
+            dir, "ASI6200MM Pro/light",
+            "an unclaimed header string must stay raw rather than resolve to another camera"
+        );
+
+        let cameras = equipment_repo::list_cameras(db.pool()).await.unwrap();
+        assert_eq!(
+            cameras.len(),
+            1,
+            "confirm must not register a camera for an unclaimed header string"
+        );
+        assert!(
+            !cameras.iter().any(|c| c.auto_detected),
+            "confirm must not write auto-detected equipment rows"
         );
     }
 

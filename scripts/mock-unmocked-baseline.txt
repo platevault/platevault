@@ -15,8 +15,6 @@ calibration_masters_archive_plan_generate
 calibration_masters_archive_plan_generate_restore
 calibration_match_assign
 calibration_match_unassign
-cleanup_policy_get
-cleanup_policy_update
 cleanup_raw_frames_generate
 cleanup_raw_frames_scan
 dev_calls_push

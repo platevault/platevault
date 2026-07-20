@@ -353,4 +353,77 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     // The click is the more recent intent and must win.
     expect(getFollowButton().textContent).toBe('↓ Follow');
   });
+
+  it('cancels the virtualizer scroll-debounce timer on unmount (astro-plan-99u)', async () => {
+    // @tanstack/virtual-core's `observeOffset` (used by `useVirtualizer`'s
+    // default `observeElementOffset`) schedules a debounce fallback timer via
+    // a bare `setTimeout` whenever the `scrollend` event isn't supported —
+    // true for jsdom, so every scroll in this test file exercises it. The
+    // unsubscribe function the library returns only removes the scroll
+    // listeners; it never calls `clearTimeout` on that timer (confirmed
+    // unfixed through virtual-core 3.17.5, the latest at time of writing).
+    // A scroll shortly before unmount therefore leaves a real, uncancelled
+    // timer that fires later — after this test's jsdom environment may have
+    // been torn down by vitest's per-file isolation — producing the
+    // "ReferenceError: window is not defined" that failed CI despite every
+    // test passing. This test tracks pending timer ids directly so the leak
+    // is deterministic rather than dependent on cross-file timing/CI load.
+    // Tracks timers that were scheduled but neither fired nor explicitly
+    // cleared — i.e. genuinely still pending when the assertion runs. A
+    // timer that already fired naturally (e.g. testing-library's internal
+    // `waitFor` polling) is not a leak even though nothing called
+    // `clearTimeout` on it, so the wrapped callback below removes its own id
+    // from the set on invocation.
+    // `Window['setTimeout']`, not the bare global — the ambient global
+    // `setTimeout` resolves to Node's `NodeJS.Timeout`-returning overload in
+    // this project's type graph, which disagrees with `window.setTimeout`'s
+    // actual DOM (number-returning) signature at runtime.
+    const pendingTimeoutIds = new Set<ReturnType<Window['setTimeout']>>();
+    const originalSetTimeout = window.setTimeout.bind(window);
+    const originalClearTimeout = window.clearTimeout.bind(window);
+    vi.spyOn(window, 'setTimeout').mockImplementation(((
+      fn: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      // A holder object, not a reassigned `let` — `wrapped` closes over
+      // `idHolder.current` before it is known, since `setTimeout` returns
+      // the id only after scheduling the very callback that needs it.
+      const idHolder: { current?: ReturnType<Window['setTimeout']> } = {};
+      const wrapped = (...cbArgs: unknown[]) => {
+        if (idHolder.current !== undefined) {
+          pendingTimeoutIds.delete(idHolder.current);
+        }
+        (fn as (...a: unknown[]) => void)(...cbArgs);
+      };
+      idHolder.current = originalSetTimeout(wrapped, delay, ...args);
+      pendingTimeoutIds.add(idHolder.current);
+      return idHolder.current;
+    }) as typeof window.setTimeout);
+    vi.spyOn(window, 'clearTimeout').mockImplementation(((
+      id?: ReturnType<Window['setTimeout']>,
+    ) => {
+      if (id !== undefined) pendingTimeoutIds.delete(id);
+      originalClearTimeout(id);
+    }) as typeof window.clearTimeout);
+
+    seedEntries();
+    const { unmount } = renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Second entry')).toBeInTheDocument();
+    });
+
+    const list = document.querySelector<HTMLUListElement>(
+      '.pv-logpanel__events',
+    );
+    if (!list) throw new Error('scroll list not found');
+    setScrollMetrics(list, { scrollTop: 120 });
+    fireEvent.scroll(list);
+
+    unmount();
+
+    expect(pendingTimeoutIds.size).toBe(0);
+  });
 });

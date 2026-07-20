@@ -49,7 +49,6 @@ pub mod q_projects;
 pub mod q_resolver;
 pub mod q_targets_ingest;
 pub mod q_targets_mgmt;
-pub mod session_snapshot;
 pub mod settings;
 pub mod source_protection;
 pub mod target_favourites;
