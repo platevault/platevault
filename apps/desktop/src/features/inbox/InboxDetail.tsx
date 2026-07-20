@@ -26,17 +26,11 @@
 
 import { Popover } from '@base-ui-components/react/popover';
 import { Fragment, useCallback, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { commands } from '@/bindings/index';
 import type {
   InboxFileMetadata_Serialize as InboxFileMetadata,
   InboxItemSummary,
   InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
-  PropertyRegistryEntry_Serialize as PropertyRegistryEntry,
 } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
-import { ipcArgs } from '@/lib/ipc-args';
-import { queryKeys } from '@/data/queryKeys';
 import type { PropertyDef } from '@/components';
 import {
   DetailPanel,
@@ -44,302 +38,27 @@ import {
   TwoColDetailLayout,
   renderValue,
 } from '@/components';
-import { errMessage } from '@/lib/errors';
 import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { copyToClipboard, revealInOs } from '@/shared/native/reveal';
 import { addToast } from '@/shared/toast';
-import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
 import type { InboxClassifyResponse } from './store';
 import { ConeSearchSuggestions } from './ConeSearchSuggestions';
-
-/**
- * Resolve an inbox item's reveal target: the source root joined with the
- * item's `relativePath`. Mirrors `features/sessions/revealInventory.ts`'s
- * `resolveRevealPath` (same tested contract: backend `relativePath` is always
- * forward-slash-normalized — `crates/app/inbox/src/scan.rs` — while the root
- * is native, so every separator is rewritten to the root's own). Duplicated
- * rather than imported to keep this feature's scope self-contained; the two
- * helpers must stay behaviorally identical if either changes.
- */
-function resolveInboxRevealPath(
-  rootPath: string,
-  relativePath: string,
-): string {
-  if (!relativePath) return rootPath;
-  const sep = rootPath.includes('\\') ? '\\' : '/';
-  const root = rootPath.replace(/[/\\]+$/, '');
-  const rel = relativePath.replace(/^[/\\]+/, '').replace(/[/\\]+/g, sep);
-  return `${root}${sep}${rel}`;
-}
-
-// ── reclassify_v2 (spec 041 R-13/T068, issue #755) ────────────────────────────
-//
-// Field-agnostic + bulk reclassify. Lives here (not `./store`) so this file's
-// scope stays self-contained; the v1 `useInboxReclassify` hook in `./store`
-// is untouched for other/legacy callers.
-
-interface ReclassifyV2Args {
-  /** Per-file property overrides (frameType correction, R-13). */
-  overrides?: Array<{ filePath: string; properties: Record<string, unknown> }>;
-  /** Bulk "set all" entries applied to a subset of files. */
-  bulk?: Array<{ property: string; value: unknown; filePaths?: string[] }>;
-}
-
-/**
- * Returns a `reclassify_v2` callback + loading state, scoped to one inbox item.
- *
- * Scoped to the STABLE `sourceGroupId` when the item carries one: sub-item ids
- * are volatile across re-splits — the first `inbox.classify` of a folder
- * materializes single-type sub-items and PURGES the superseded placeholder row
- * (`materialize_sub_items`), so the id the pane mounted with can already be
- * deleted by the time the user clicks Apply. Sending that stale id fails the
- * whole apply with `inbox.item.not_found` (observed as the CI-red Layer-2
- * journey `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`); the
- * source-group id survives every re-split. `inboxItemId` remains the fallback
- * for legacy rows that predate source groups.
- */
-function useInboxReclassifyV2(
-  inboxItemId: string,
-  rootAbsolutePath: string,
-  sourceGroupId?: string | null,
-) {
-  const queryClient = useQueryClient();
-  const [loading, setLoading] = useState(false);
-
-  const reclassifyV2 = useCallback(
-    async (args: ReclassifyV2Args) => {
-      setLoading(true);
-      try {
-        const result = unwrap(
-          await commands.inboxReclassifyV2(
-            ipcArgs<typeof commands.inboxReclassifyV2>({
-              // Exactly ONE scope key: the stable source group when known,
-              // else the item id (legacy rows predating source groups).
-              ...(sourceGroupId ? { sourceGroupId } : { inboxItemId }),
-              overrides: args.overrides ?? [],
-              bulk: args.bulk ?? [],
-              // Lets the re-split hash the group's real files, so each
-              // re-materialized sub-item gets a per-group content signature
-              // the confirm staleness guard can actually compare.
-              rootAbsolutePath,
-            }),
-          ),
-        );
-        // v2 re-splits the source group into sub-items (R-14), so the item
-        // list itself may have changed shape, not just this item's evidence.
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.inbox.list('all'),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: [queryKeys.inbox.list('all')[0], 'classify'],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.inbox.metadata(inboxItemId),
-        });
-        return result;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [inboxItemId, rootAbsolutePath, sourceGroupId, queryClient],
-  );
-
-  return { reclassifyV2, loading };
-}
-
-/** "exposureS" → "exposure S" (best-effort label for a registry key with no i18n entry). */
-function humanizeKey(key: string): string {
-  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function classificationVariant(type: string): PillVariant {
-  switch (type) {
-    case 'single_type':
-      return 'info';
-    case 'mixed':
-      return 'warn';
-    case 'unclassified':
-      return 'neutral';
-    default:
-      return 'neutral';
-  }
-}
-
-const FRAME_TYPE_OPTIONS = [
-  'light',
-  'dark',
-  'bias',
-  'flat',
-  'dark_flat',
-] as const;
-
-/**
- * Applicable destination-root category for a frame type (point 1: only show
- * libraries that can actually receive this image type). Light frames go to a
- * "raw" root; calibration frames (bias/dark/flat) + their masters go to a
- * "calibration" root. Returns null when we can't narrow (e.g. mixed) — then all
- * roots are shown. NOTE: this is a pragmatic frontend mapping; the spec-045
- * iterate (single-type sub-items) will make this authoritative per item.
- */
-function applicableRootCategory(frameType?: string | null): string | null {
-  if (!frameType) return null;
-  const ft = frameType.toLowerCase();
-  if (ft.includes('light')) return 'raw';
-  if (ft.includes('bias') || ft.includes('dark') || ft.includes('flat'))
-    return 'calibration';
-  return null;
-}
-
-/** Last path segment of a relative file path (forward- or back-slash separated). */
-function basename(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/');
-  return parts[parts.length - 1] || path;
-}
-
-/** Second-to-last path segment (the basename's parent directory name). */
-function parentSegment(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts.length >= 2 ? parts[parts.length - 2] : '';
-}
-
-/**
- * Build destination-root option labels, disambiguating roots that share a
- * basename (issue #866): two registered roots at different locations but the
- * same folder name (e.g. two "Lights" folders) rendered identically as
- * "Lights · raw" with no way to tell which one a pick actually targets.
- * Duplicates get their parent directory appended; unique basenames are
- * unaffected.
- */
-function buildRootLabels(
-  roots: Array<{ id: string; path: string; category: string }>,
-): Map<string, string> {
-  const counts = new Map<string, number>();
-  for (const r of roots) {
-    const base = basename(r.path);
-    counts.set(base, (counts.get(base) ?? 0) + 1);
-  }
-  const labels = new Map<string, string>();
-  for (const r of roots) {
-    const base = basename(r.path);
-    const parent = parentSegment(r.path);
-    const disambiguated =
-      (counts.get(base) ?? 0) > 1 && parent ? `${base} (${parent})` : base;
-    labels.set(r.id, `${disambiguated} · ${r.category}`);
-  }
-  return labels;
-}
-
-/**
- * Build a plain-language composition summary for a mixed classification.
- * Example: "12 light · 4 dark · 1 bias"
- */
-function buildMixedSummary(
-  breakdown: InboxClassifyResponse['breakdown'],
-): string {
-  if (!breakdown || breakdown.length === 0) return '';
-  return breakdown.map((e) => `${e.count} ${e.kind}`).join(' · ');
-}
-
-/**
- * Format an exposure length in seconds for display (issue #789): raw FITS
- * EXPTIME floats carry IEEE-754 noise (e.g. `6.92447668013071`) that reads as
- * fabricated/slop rather than a real capture value. Whole-second exposures
- * show no decimal; fractional exposures round to 2 decimal places.
- */
-function formatExposureSeconds(s: number): string {
-  const rounded = Math.round(s * 100) / 100;
-  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded} s`;
-}
-
-// ── FileInspector ─────────────────────────────────────────────────────────────
-
-/**
- * Compact inspector for per-file fields NOT already shown in the metadata table:
- *   instrume, telescop, naxis1×naxis2, stackCount, imageTyp.
- *
- * Rendered inside the Files popover when a row is clicked.
- */
-function FileInspector({ file }: { file: InboxFileMetadata | null }) {
-  if (!file) {
-    return (
-      <div
-        className="pv-inbox-inspector pv-inbox-inspector--empty"
-        data-testid="file-inspector"
-      />
-    );
-  }
-
-  const rows: Array<{ label: string; value: React.ReactNode; testid: string }> =
-    [
-      {
-        label: m.inbox_field_instrument(),
-        value: renderValue(file.instrume ?? null, {
-          applicability: 'applicable',
-        }),
-        testid: 'inspector-instrume',
-      },
-      {
-        label: m.inbox_field_telescope(),
-        value: renderValue(file.telescop ?? null, {
-          applicability: fieldApplicability(
-            file.frameTypeEffective,
-            'telescope',
-          ),
-        }),
-        testid: 'inspector-telescop',
-      },
-      {
-        label: m.inbox_field_dimensions(),
-        value: renderValue(
-          file.naxis1 != null || file.naxis2 != null
-            ? `${file.naxis1 ?? '?'}×${file.naxis2 ?? '?'}`
-            : null,
-          { applicability: 'applicable' },
-        ),
-        testid: 'inspector-dims',
-      },
-      {
-        label: m.inbox_field_stack_count(),
-        value: renderValue(file.stackCount ?? null, {
-          applicability: 'applicable',
-        }),
-        testid: 'inspector-stackcount',
-      },
-      {
-        label: m.inbox_field_raw_imagetyp(),
-        value: renderValue(file.imageTyp ?? null, {
-          applicability: 'applicable',
-        }),
-        testid: 'inspector-imagetyp',
-      },
-    ];
-
-  return (
-    <div className="pv-inbox-inspector" data-testid="file-inspector">
-      <div className="pv-inbox-inspector__name" title={file.relativeFilePath}>
-        {basename(file.relativeFilePath)}
-      </div>
-      <dl className="pv-inbox-inspector__dl">
-        {rows.map((r) => (
-          <div
-            key={r.label}
-            className="pv-inbox-inspector__row"
-            data-testid={r.testid}
-          >
-            <dt className="pv-inbox-inspector__label">{r.label}</dt>
-            <dd className="pv-inbox-inspector__value">{r.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
+import { FileInspector } from './FileInspector';
+import { useInboxReclassifyState } from './useInboxReclassifyState';
+import {
+  applicableRootCategory,
+  basename,
+  buildMixedSummary,
+  buildRootLabels,
+  classificationVariant,
+  FRAME_TYPE_OPTIONS,
+  formatExposureSeconds,
+  humanizeKey,
+  resolveInboxRevealPath,
+} from './inboxDetailHelpers';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -414,207 +133,42 @@ export function InboxDetail({
   onReclassified,
   sourceGroupId,
 }: InboxDetailProps) {
-  const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
-    item.inboxItemId,
+  const {
+    reclassifyLoading,
+    unclassifiedFiles,
+    propertyRegistry,
+    pendingOverrides,
+    applyError,
+    handleOverrideChange,
+    handleApplyOverrides,
+    selectedFiles,
+    bulkFrameType,
+    setBulkFrameType,
+    bulkPropValues,
+    bulkError,
+    handleToggleFile,
+    handleSelectAll,
+    handleBulkPropChange,
+    handleBulkApply,
+    isHeterogeneousFrameTypeBulk,
+    heterogeneousSignature,
+    heterogeneousAcked,
+    setHeterogeneousAckKey,
+    lastFrameTypeUndo,
+    undoLoading,
+    undoError,
+    handleUndoBulkFrameType,
+  } = useInboxReclassifyState({
+    inboxItemId: item.inboxItemId,
     rootAbsolutePath,
     sourceGroupId,
-  );
-
-  // Per-file overrides pending submission (single-file flow).
-  const [pendingOverrides, setPendingOverrides] = useState<
-    Record<string, string>
-  >({});
-  const [applyError, setApplyError] = useState<string | null>(null);
-
-  // T027: multi-select + bulk override state.
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [bulkFrameType, setBulkFrameType] = useState('');
-  // Field-agnostic bulk values (spec 041 R-13/US11, issue #755): any
-  // overridable property from `inbox.property_registry` keyed by its
-  // registry `key` (e.g. "filter", "exposureS", "gain", "temperatureC").
-  const [bulkPropValues, setBulkPropValues] = useState<Record<string, string>>(
-    {},
-  );
-  const [bulkError, setBulkError] = useState<string | null>(null);
-
-  // #611: acknowledgement gate for a HETEROGENEOUS bulk frame-type override
-  // (the selection spans more than one currently-detected frame type).
-  // Keyed by a signature of (selected files, chosen type) so the checkbox
-  // un-acknowledges itself the instant either changes — an acknowledgement
-  // must never silently carry over to a DIFFERENT selection/value.
-  const [heterogeneousAckKey, setHeterogeneousAckKey] = useState<string | null>(
-    null,
-  );
-  // #611: last bulk frame-type override applied, so the user can undo it —
-  // restores each file's PRE-OVERRIDE detected frame type via a per-file
-  // `overrides` call (never a bulk one — the prior values are heterogeneous
-  // by construction here). Files that had no prior detected type (genuinely
-  // unclassified) are omitted: there is nothing valid to restore them to.
-  const [lastFrameTypeUndo, setLastFrameTypeUndo] = useState<{
-    count: number;
-    overrides: Array<{ filePath: string; properties: { frameType: string } }>;
-  } | null>(null);
-  const [undoLoading, setUndoLoading] = useState(false);
-  const [undoError, setUndoError] = useState<string | null>(null);
+    classification,
+    fileMetadata,
+    onReclassified,
+  });
 
   // Files popover: which row is "inspected" inside the popover.
   const [inspectedIdx, setInspectedIdx] = useState<number | null>(null);
-
-  // Property registry (FR-044) — drives the generic bulk editor below.
-  // Static per app session, so fetched lazily (only once the bulk editor can
-  // actually be shown) and cached indefinitely.
-  const { data: propertyRegistry } = useQuery<PropertyRegistryEntry[]>({
-    queryKey: ['inbox', 'propertyRegistry'],
-    queryFn: async () => unwrap(await commands.inboxPropertyRegistry()),
-    enabled: selectedFiles.size > 0,
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-
-  const handleOverrideChange = (filePath: string, frameType: string) => {
-    setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
-  };
-
-  const handleApplyOverrides = async () => {
-    const overrides = Object.entries(pendingOverrides).map(
-      ([filePath, frameType]) => ({
-        filePath,
-        properties: { frameType },
-      }),
-    );
-    if (overrides.length === 0) return;
-    setApplyError(null);
-    try {
-      const result = await reclassifyV2({ overrides });
-      setPendingOverrides({});
-      onReclassified?.(result);
-    } catch (err) {
-      setApplyError(errMessage(err));
-    }
-  };
-
-  // T027 selection helpers.
-  const unclassifiedFiles = classification?.unclassifiedFiles ?? [];
-
-  const handleToggleFile = (filePath: string) => {
-    setSelectedFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(filePath)) next.delete(filePath);
-      else next.add(filePath);
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedFiles.size === unclassifiedFiles.length)
-      setSelectedFiles(new Set());
-    else setSelectedFiles(new Set(unclassifiedFiles));
-  };
-
-  const handleBulkPropChange = (key: string, value: string) => {
-    setBulkPropValues((prev) => ({ ...prev, [key]: value }));
-  };
-
-  // #611: the currently-detected frame type for each selected file, keyed by
-  // path, sourced from the per-file metadata table (not the classification
-  // response — that only lists WHICH files are unclassified, not what each
-  // one's own already-detected type is). Used to warn before a bulk override
-  // silently overwrites a heterogeneous selection.
-  const selectedDetectedTypes = new Map<string, string | null>();
-  for (const fp of selectedFiles) {
-    const meta = fileMetadata?.find((f) => f.relativeFilePath === fp);
-    selectedDetectedTypes.set(fp, meta?.frameTypeEffective ?? null);
-  }
-  const distinctSelectedTypes = new Set(
-    Array.from(selectedDetectedTypes.values()).filter(
-      (t): t is string => t != null,
-    ),
-  );
-  const isHeterogeneousFrameTypeBulk =
-    bulkFrameType !== '' && distinctSelectedTypes.size > 1;
-  const heterogeneousSignature = isHeterogeneousFrameTypeBulk
-    ? `${bulkFrameType}::${Array.from(selectedFiles).sort().join(',')}`
-    : null;
-  const heterogeneousAcked =
-    !isHeterogeneousFrameTypeBulk ||
-    heterogeneousAckKey === heterogeneousSignature;
-
-  const handleBulkApply = async () => {
-    if (selectedFiles.size === 0) return;
-    if (isHeterogeneousFrameTypeBulk && !heterogeneousAcked) return;
-    const filePaths = Array.from(selectedFiles);
-    const bulk: Array<{
-      property: string;
-      value: unknown;
-      filePaths: string[];
-    }> = [];
-    if (bulkFrameType !== '') {
-      bulk.push({ property: 'frameType', value: bulkFrameType, filePaths });
-    }
-    for (const [key, raw] of Object.entries(bulkPropValues)) {
-      if (raw === '') continue;
-      const entry = propertyRegistry?.find((e) => e.key === key);
-      const isNumeric = entry?.kind === 'number' || entry?.kind === 'integer';
-      const value = isNumeric ? Number(raw) : raw;
-      if (isNumeric && Number.isNaN(value)) continue;
-      bulk.push({ property: key, value, filePaths });
-    }
-    if (bulk.length === 0) return;
-    setBulkError(null);
-    setUndoError(null);
-    // #611: snapshot each selected file's PRE-OVERRIDE detected frame type
-    // before applying, so a bad bulk override is recoverable. Only captured
-    // when this call actually changes frameType, and only for files that had
-    // a known prior type (nothing valid to restore an unclassified file to).
-    const undoOverrides =
-      bulkFrameType !== ''
-        ? filePaths
-            .map((fp) => {
-              const prev = selectedDetectedTypes.get(fp);
-              return prev
-                ? { filePath: fp, properties: { frameType: prev } }
-                : null;
-            })
-            .filter(
-              (
-                o,
-              ): o is { filePath: string; properties: { frameType: string } } =>
-                o != null,
-            )
-        : [];
-    try {
-      const result = await reclassifyV2({ bulk });
-      setSelectedFiles(new Set());
-      setBulkFrameType('');
-      setBulkPropValues({});
-      setHeterogeneousAckKey(null);
-      if (undoOverrides.length > 0) {
-        setLastFrameTypeUndo({
-          count: undoOverrides.length,
-          overrides: undoOverrides,
-        });
-      }
-      onReclassified?.(result);
-    } catch (err) {
-      setBulkError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const handleUndoBulkFrameType = async () => {
-    if (!lastFrameTypeUndo) return;
-    setUndoLoading(true);
-    setUndoError(null);
-    try {
-      const result = await reclassifyV2({
-        overrides: lastFrameTypeUndo.overrides,
-      });
-      setLastFrameTypeUndo(null);
-      onReclassified?.(result);
-    } catch (err) {
-      setUndoError(errMessage(err));
-    } finally {
-      setUndoLoading(false);
-    }
-  };
 
   const title = item.relativePath || m.inbox_list_root_label();
   const classType = classification?.type ?? 'pending';
