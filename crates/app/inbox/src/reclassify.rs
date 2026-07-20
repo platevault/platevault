@@ -1196,6 +1196,89 @@ mod tests {
         );
     }
 
+    /// The BULK override path must clear the confirm gate, not just the
+    /// per-file path (T051).
+    ///
+    /// The Inbox UI's "Apply manual overrides" sends `bulk` entries when the
+    /// user sets a frame type for the whole selection — which is what the L3
+    /// journey `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`
+    /// drives. `t052_...` above covers the per-file `overrides` path only, so
+    /// a bulk-specific regression can hide behind it.
+    ///
+    /// Asserts the property the UI actually gates on: after the bulk apply,
+    /// `get_inbox_item_metadata` for the resulting item reports NO missing
+    /// path attributes. Asserting on `frame_type` alone would not catch the
+    /// case where the item resolves but the durable override never reaches
+    /// the file metadata read that `canConfirm` consults.
+    #[tokio::test]
+    async fn t051_bulk_override_clears_missing_path_attributes() {
+        use contracts_core::inbox::{InboxReclassifyBulk, InboxReclassifyV2Request};
+
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("ambiguous_001.fits"), "M42", 0);
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-t051",
+                root_id: "root-t051",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+        crate::classify::classify_source_group(db.pool(), "sg-t051", root.path()).await.unwrap();
+
+        let bulk_of = |property: &str, value: serde_json::Value| InboxReclassifyBulk {
+            property: property.to_owned(),
+            value: value.into(),
+            // The UI's `handleBulkApply` always sends the SELECTED file paths,
+            // never the all-files form — so the scoped form is what the L3
+            // journey exercises and what this must cover.
+            file_paths: Some(vec!["ambiguous_001.fits".to_owned()]),
+        };
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-t051".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    bulk_of("frameType", serde_json::json!("light")),
+                    bulk_of("exposureS", serde_json::json!(300.0)),
+                    bulk_of("filter", serde_json::json!("Ha")),
+                    bulk_of("target", serde_json::json!("M42")),
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        let ids = inbox_repo::list_item_ids_for_source_group(db.pool(), "sg-t051").await.unwrap();
+        assert_eq!(ids.len(), 1, "one file of one type must yield exactly one item");
+
+        let files = crate::metadata::get_inbox_item_metadata(db.pool(), &ids[0]).await.unwrap();
+        assert_eq!(files.len(), 1, "the item must expose its one file");
+        assert_eq!(
+            files[0].frame_type_effective.as_deref(),
+            Some("light"),
+            "the bulk frameType override must reach the per-file metadata read"
+        );
+        assert!(
+            !files[0].missing_path_attributes.iter().any(|a| a == "image type"),
+            "a supplied frame type must clear the \"image type\" gate; still missing: {:?}",
+            files[0].missing_path_attributes
+        );
+    }
+
     /// The v1 `reclassify` path does not split, and that is by design.
     ///
     /// Originally written as a "T050 gap" test on the belief that resolving a

@@ -462,12 +462,24 @@ export function InboxPage() {
       listLoading,
     );
     if (decision.action === 'wait') return;
-    setPendingReclassifySelectionId(null);
     if (decision.action === 'navigate' && decision.id !== selected) {
+      // Hold the handoff OPEN across the navigate. `navigate` is async, so
+      // clearing the pending id here (as this did) drops
+      // `useStaleSelectionCleanup`'s guard one commit BEFORE `?selected=`
+      // carries the new id. In that commit the old id is already gone from
+      // the list, so `selectedItem` is undefined and the gate opens — the
+      // cleanup's `selected: undefined` then lands AFTER this navigate and
+      // clobbers it, leaving the page with no selection at all.
+      // (T051; measured on `..._bulk_reclassify_unblocks_confirm`, where the
+      // URL went old-id → undefined instead of old-id → new-id.)
+      // Re-running with `selected === decision.id` falls through to the
+      // clear below, so the guard is still bounded.
       void navigate({
         search: (prev) => ({ ...prev, selected: decision.id }),
       });
+      return;
     }
+    setPendingReclassifySelectionId(null);
   }, [
     pendingReclassifySelectionId,
     items,
