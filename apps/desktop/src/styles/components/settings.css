@@ -172,7 +172,7 @@ font-weight: var(--pv-weight-medium);
 .pv-seg__btn--danger.pv-seg__btn--active { background: var(--pv-danger); }
 
 /* Toggle switch */
-.pv-toggle { position: relative; width: 36px; height: 20px; cursor: pointer; flex-shrink: 0; display: inline-flex; }
+.pv-toggle { position: relative; width: 36px; height: var(--pv-icon-md); cursor: pointer; flex-shrink: 0; display: inline-flex; }
 .pv-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
 .pv-toggle__track {
   position: absolute; inset: 0;
@@ -181,7 +181,7 @@ font-weight: var(--pv-weight-medium);
 }
 .pv-toggle__thumb {
   position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px; border-radius: var(--pv-radius-full);
+  width: var(--pv-icon-sm); height: var(--pv-icon-sm); border-radius: var(--pv-radius-full);
   background: var(--pv-surface-raised); box-shadow: var(--pv-shadow-sm);
   transition: transform var(--pv-transition-base);
 }
@@ -196,7 +196,7 @@ font-weight: var(--pv-weight-medium);
   background: var(--pv-accent-bg); color: var(--pv-accent-text);
   border: var(--pv-border-w) solid var(--pv-info-border);
 }
-.pv-token-chip__x { cursor: pointer; opacity: 0.6; }
+.pv-token-chip__x { cursor: pointer; opacity: var(--pv-opacity-muted); }
 .pv-token-chip__x:hover { opacity: 1; }
 .pv-sep-chip {
   display: inline-flex; align-items: center;

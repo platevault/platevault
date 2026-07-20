@@ -855,7 +855,7 @@
 
 /* Select control height override for the Default Protection dropdown */
 .pv-cleanup__protection-select {
-  height: 28px;
+  height: var(--pv-control-h);
 }
 
 /* Per-type table: action column width */
@@ -925,7 +925,7 @@
 
 .pv-source-protect__select {
   width: auto;
-  height: 28px;
+  height: var(--pv-control-h);
 }
 
 .pv-source-protect__hint {
@@ -1003,7 +1003,7 @@
   gap: var(--pv-sp-2);
   padding: var(--pv-sp-1) var(--pv-sp-2);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 4px;
+  border-radius: var(--pv-radius-sm);
 }
 
 .pv-edit-project__source-name {
@@ -1024,7 +1024,7 @@
   flex-direction: column;
   gap: var(--pv-sp-2);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 6px;
+  border-radius: var(--pv-radius-md);
   padding: var(--pv-sp-3);
 }
 

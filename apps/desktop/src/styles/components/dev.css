@@ -162,7 +162,7 @@
 
 /* Replay button — disabled (write contract) state */
 .pv-dev-calls__replay-btn--unsafe {
-  opacity: 0.4;
+  opacity: var(--pv-opacity-disabled);
   cursor: not-allowed;
 }
 

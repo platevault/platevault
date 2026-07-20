@@ -265,14 +265,14 @@
  * app ships (WCAG 2.2's own minimum is 24x24 — we don't ship at that edge). */
 .pv-dock-placement-control .pv-seg__btn {
   width: 28px;
-  height: 28px;
+  height: var(--pv-control-h);
   padding: var(--pv-sp-none);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .pv-dock-placement-control.pv-seg {
-  height: 28px;
+  height: var(--pv-control-h);
 }
 .pv-listpage__detail-close {
   background: none;
@@ -307,7 +307,7 @@
 .pv-resize-handle:hover,
 .pv-resize-handle:active {
   background: var(--pv-accent);
-  opacity: 0.4;
+  opacity: var(--pv-opacity-disabled);
 }
 .pv-listpage__detail-body {
   flex: 1;

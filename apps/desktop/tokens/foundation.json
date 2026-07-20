@@ -123,13 +123,14 @@
     "$value": "250ms ease"
   },
   "radius-sm": {
-    "$value": "3px",
+    "$value": "4px",
     "$type": "dimension",
-    "$description": "Radius"
+    "$description": "Small radius: inputs, chips, badges, table rows. Moved 3px -> 4px to match what the stylesheet actually used — 7 sites had drifted to 4px, applied with the same small-element logic, so the scale was being worked around rather than followed."
   },
   "radius-md": {
-    "$value": "5px",
-    "$type": "dimension"
+    "$value": "6px",
+    "$type": "dimension",
+    "$description": "Container radius: panels, lists, previews, option cards. Moved 5px -> 6px for the same reason — 4 sites had drifted to 6px on containers specifically."
   },
   "radius-lg": {
     "$value": "8px",
@@ -139,6 +140,31 @@
     "$value": "50%",
     "$type": "dimension",
     "$description": "Circle/pill. Not a length: it tracks the box at any size, so it states the intent (round this completely) that a px radius cannot. Used for avatars, status dots and icon buttons."
+  },
+  "icon-sm": {
+    "$value": "16px",
+    "$type": "dimension",
+    "$description": "Small icon box: sidebar item icons, statusbar and table toggles, the Toggle thumb, wizard step connectors."
+  },
+  "icon-md": {
+    "$value": "20px",
+    "$type": "dimension",
+    "$description": "Default icon box: the Toggle track, target stars, wizard step badges, lifecycle connectors."
+  },
+  "dot": {
+    "$value": "6px",
+    "$type": "dimension",
+    "$description": "Status dot. Deliberately NOT applied to the scrollbar or the coverage/confidence track thicknesses, which are also 6px today but are a different decision — they would not follow if a dot changed size."
+  },
+  "opacity-disabled": {
+    "$value": "0.4",
+    "$type": "number",
+    "$description": "Disabled controls. Was split between 0.4 and 0.5 for the same state; consolidated on the stronger fade so disabled reads unambiguously as disabled."
+  },
+  "opacity-muted": {
+    "$value": "0.6",
+    "$type": "number",
+    "$description": "De-emphasised but still active content: muted rows, non-viable filter badges, empty-state text, fallback badges. Was split between 0.55 and 0.6. One site gave the confusion away — .pv-wizard__steps-card:disabled used the MUTED value for a DISABLED state."
   },
   "z-raised": {
     "$value": "1",

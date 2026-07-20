@@ -317,7 +317,7 @@
 .pv-wizard-name__input {
   padding: var(--pv-sp-2) var(--pv-sp-3);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 4px;
+  border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
   background: var(--pv-surface);
   color: var(--pv-text);
@@ -354,7 +354,7 @@
   gap: var(--pv-sp-3);
   padding: var(--pv-sp-3);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 6px;
+  border-radius: var(--pv-radius-md);
   cursor: pointer;
   background: transparent;
   transition: border-color var(--pv-transition-fast);
@@ -404,7 +404,7 @@
 .pv-source-picker__filter-input {
   padding: var(--pv-sp-1) var(--pv-sp-2);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 4px;
+  border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   background: var(--pv-surface);
   color: var(--pv-text);
@@ -434,7 +434,7 @@
   flex-direction: column;
   gap: var(--pv-sp-none);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 6px;
+  border-radius: var(--pv-radius-md);
   overflow: hidden;
 }
 
@@ -761,7 +761,7 @@
 .pv-wizard-layout__input {
   padding: var(--pv-sp-2) var(--pv-sp-3);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 4px;
+  border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
 
   background: var(--pv-surface);
@@ -792,7 +792,7 @@
   padding: var(--pv-sp-0) 6px;
   background: var(--pv-surface);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 4px;
+  border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
 
   color: var(--pv-text-muted);
@@ -804,7 +804,7 @@
   padding: var(--pv-sp-3) var(--pv-sp-4);
   background: var(--pv-surface);
   border: var(--pv-border-w) solid var(--pv-border);
-  border-radius: 6px;
+  border-radius: var(--pv-radius-md);
 
   font-size: var(--pv-text-xs);
   line-height: 1.8;
@@ -1647,8 +1647,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--pv-icon-md);
+  height: var(--pv-icon-md);
   border-radius: var(--pv-radius-full);
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
@@ -1667,7 +1667,7 @@
 
 /* Connector line between steps */
 .pv-wizard__step-connector {
-  width: 16px;
+  width: var(--pv-icon-sm);
   height: 1px;
   background: var(--pv-border-subtle);
   display: inline-block;
@@ -1762,7 +1762,7 @@ button.pv-wizard__steps-card:focus-visible {
 
 button.pv-wizard__steps-card:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: var(--pv-opacity-muted);
 }
 
 /* Pinned navigation footer */

@@ -32,8 +32,8 @@
 /* The status dot — a 6px circle colored by variant. */
 .pv-status-tag__dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: var(--pv-dot);
+  height: var(--pv-dot);
   border-radius: var(--pv-radius-full);
   flex-shrink: 0;
   /* Default (neutral/ghost): muted border-color dot */
@@ -449,7 +449,7 @@
   background: transparent;
   color: var(--pv-text-muted);
   border-color: var(--pv-rule);
-  opacity: 0.55;
+  opacity: var(--pv-opacity-muted);
 }
 .pv-filter-badge--viable {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pv-ok) 25%, transparent);
@@ -810,8 +810,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: var(--pv-icon-md);
+  height: var(--pv-icon-md);
   padding: var(--pv-sp-none);
   background: none;
   border: none;

@@ -121,7 +121,7 @@
   background: var(--pv-info-bg);
 }
 .pv-inbox-table__row--muted {
-  opacity: 0.6;
+  opacity: var(--pv-opacity-muted);
 }
 /* Group sub-header row. */
 .pv-inbox-table__group {
@@ -952,14 +952,14 @@
 
 /* Fixed-width column for the expand toggle. */
 .pv-session-frames__th-toggle {
-  width: 20px;
+  width: var(--pv-icon-md);
 }
 
 /* The expand toggle: a small chevron in its own cell. */
 .pv-session-frames__toggle {
   color: var(--pv-text-faint);
   font-size: var(--pv-text-xs);
-  width: 16px;
+  width: var(--pv-icon-sm);
   text-align: center;
   user-select: none;
 }

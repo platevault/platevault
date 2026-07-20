@@ -104,7 +104,7 @@ color: var(--pv-text-muted);
 }
 .pv-lifecycle__connector {
   display: flex; flex-direction: column; align-items: center;
-  width: 20px; flex-shrink: 0;
+  width: var(--pv-icon-md); flex-shrink: 0;
 }
 .pv-lifecycle__dot {
   width: 12px; height: 12px; border-radius: var(--pv-radius-full);
@@ -123,7 +123,7 @@ color: var(--pv-text-muted);
   background: var(--pv-danger); border-color: var(--pv-danger);
 }
 .pv-lifecycle__line {
-  width: 2px; height: 20px;
+  width: 2px; height: var(--pv-icon-md);
   background: var(--pv-rule2);
 }
 .pv-lifecycle__line--done {

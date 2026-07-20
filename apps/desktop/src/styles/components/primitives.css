@@ -108,7 +108,7 @@
   background: var(--pv-destructive-bg);
   color: var(--pv-destructive);
   border-color: var(--pv-destructive);
-  opacity: 0.4;
+  opacity: var(--pv-opacity-disabled);
   box-shadow: none;
 }
 /* Leading 13x13 alert glyph. The app has no icon library/sprite (grepped:

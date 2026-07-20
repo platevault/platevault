@@ -85,10 +85,15 @@
   --pv-transition-fast: 100ms ease; /** Transitions */
   --pv-transition-base: 150ms ease;
   --pv-transition-slow: 250ms ease;
-  --pv-radius-sm: 3px; /** Radius */
-  --pv-radius-md: 5px;
+  --pv-radius-sm: 4px; /** Small radius: inputs, chips, badges, table rows. Moved 3px -> 4px to match what the stylesheet actually used — 7 sites had drifted to 4px, applied with the same small-element logic, so the scale was being worked around rather than followed. */
+  --pv-radius-md: 6px; /** Container radius: panels, lists, previews, option cards. Moved 5px -> 6px for the same reason — 4 sites had drifted to 6px on containers specifically. */
   --pv-radius-lg: 8px;
   --pv-radius-full: 50%; /** Circle/pill. Not a length: it tracks the box at any size, so it states the intent (round this completely) that a px radius cannot. Used for avatars, status dots and icon buttons. */
+  --pv-icon-sm: 16px; /** Small icon box: sidebar item icons, statusbar and table toggles, the Toggle thumb, wizard step connectors. */
+  --pv-icon-md: 20px; /** Default icon box: the Toggle track, target stars, wizard step badges, lifecycle connectors. */
+  --pv-dot: 6px; /** Status dot. Deliberately NOT applied to the scrollbar or the coverage/confidence track thicknesses, which are also 6px today but are a different decision — they would not follow if a dot changed size. */
+  --pv-opacity-disabled: 0.4; /** Disabled controls. Was split between 0.4 and 0.5 for the same state; consolidated on the stronger fade so disabled reads unambiguously as disabled. */
+  --pv-opacity-muted: 0.6; /** De-emphasised but still active content: muted rows, non-viable filter badges, empty-state text, fallback badges. Was split between 0.55 and 0.6. One site gave the confusion away — .pv-wizard__steps-card:disabled used the MUTED value for a DISABLED state. */
   --pv-z-raised: 1; /** Sticky table headers, resize handles, lifecycle dots — lifted just off the base within their own scroller. */
   --pv-z-pinned: 2; /** Pinned table column cells, above sticky headers of the same table. */
   --pv-z-pinned-header: 3; /** The pinned-column header corner, which must sit above both. */
@@ -419,7 +424,7 @@
 @property --pv-skel-r {
   syntax: "<length-percentage>";
   inherits: false;
-  initial-value: 3px;
+  initial-value: 4px;
 }
 @property --pv-row-indent {
   syntax: "<length>";

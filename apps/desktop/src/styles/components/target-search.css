@@ -147,7 +147,7 @@
   color: var(--pv-text);
 }
 .pv-target-search__override:disabled {
-  opacity: 0.5;
+  opacity: var(--pv-opacity-disabled);
   cursor: default;
 }
 
