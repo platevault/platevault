@@ -1,7 +1,7 @@
 ---
 id: J04
 title: Review acquisition sessions as a derived, always-current inventory
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -109,7 +109,9 @@ the view carries no leftover review-state controls.
   pin overrides the automatic width-based placement when set. A detail
   panel opens showing the session's attribute set —
   target, filter, frame count, exposure, total integration time (when
-  derivable), night, camera, gain, binning, sensor temperature, and
+  derivable, rendered as "1h 30m" — the same h/m grammar Projects and the
+  setup wizard use, not a decimal-hours or seconds variant), night, camera,
+  gain, binning, sensor temperature, and
   confirmed-by — each carrying a source badge (FITS/User/Inferred/Default)
   only when a real value is present; a field that is applicable but has no
   value renders a distinct "unresolved" chip (never a bare em dash and never
@@ -267,3 +269,10 @@ the view carries no leftover review-state controls.
   restarts), a bottom dock when narrow.
   Evidence: spec-054-adaptive-detail-dock (FR-001, FR-004, FR-005) · by:
   journey-scribe (intent-gated)
+
+- **Δ6** 2026-07-20 · S4 · behavior-change
+  Total integration time now renders as "1h 30m" (h/m grammar), matching
+  Projects and the setup wizard — previously Sessions, Projects, and the
+  wizard each used a different format (decimal hours, h/m, or h/m/s) for
+  the same quantity.
+  Evidence: PR #1288 (refs #631) · by: journey-scribe (intent-gated)

@@ -85,6 +85,8 @@ pub mod guided_flow;
 /// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
 /// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
 pub mod inbox_plan;
+/// Resolves scan traversal options from persisted ingestion settings.
+pub mod inbox_scan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;

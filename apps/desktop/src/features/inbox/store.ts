@@ -222,7 +222,6 @@ export function useInboxScan(rootId: string, rootAbsolutePath: string) {
         await commands.inboxScanFolder({
           rootId,
           rootAbsolutePath,
-          followSymlinks: false,
         }),
       ),
     enabled: !!rootId && !!rootAbsolutePath,
@@ -598,7 +597,6 @@ export function useInboxRescan(
             await commands.inboxScanFolder({
               rootId: r.rootId,
               rootAbsolutePath: r.rootAbsolutePath,
-              followSymlinks: false,
             }),
           ),
         ),

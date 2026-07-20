@@ -36,7 +36,7 @@ Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 | 14 | SIMBAD target resolution | ✅ | ✅ | **HTTP-boundary mocked** (wiremock) |
 | 15 | Token pattern builder | ✅ | ✅ | parse/resolve tokens |
 | 16 | Source protection defaults | ✅ | — | protection asserted via L1 + plans |
-| 17 | Cleanup & archive review plans | ✅ | ✅ | plan generation/review |
+| 17 | Cleanup & archive review plans | ✅ | ✅ | plan generation/review; protected-item gate covered separately by `cleanup_protection_gate` — `cleanup_plan_review` sets protection `unprotected`, so it does not exercise a refusal |
 | 18 | Filesystem plan application | ✅ | ✅ | **mutation + audit record assert** |
 | 19 | Settings / configuration model | ✅ | ✅ | persist + reload |
 | 20 | Bottom log viewer | ✅ | ✅ | log stream render |
@@ -121,6 +121,7 @@ local gates (compile, clippy, fmt) are clean.
 | `lifecycle_integrity` | `journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
 | `cleanup_plan_review` (NEW, D22; apply extended 2026-07-05) | `journeys.rs` | #10/#11, #17 | `projects.create`, `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status` |
 | `archive_lifecycle_apply_trash_permanent_delete` (NEW, 2026-07-05) | `archive_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
+| `cleanup_protection_gate` (NEW, 2026-07-20) | `cleanup_protection_gate_journey.rs` | #10/#11, #17 | `projects.create`, `settings.update` (global `defaultProtection`), `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status`, `plans.get` |
 | `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
 
 **Spec 052 (SIMBAD cache / dual-lookup / cone-search) sync — 2026-07-14.**

@@ -16,7 +16,8 @@
 import { m } from '@/lib/i18n';
 import { CoverageBar, Pill, Section } from '@/ui';
 import type { DerivedChannel } from './projectDetailHelpers';
-import { fmtFrames, fmtIntegS, paletteName } from './projectDetailHelpers';
+import { fmtFrames, paletteName } from './projectDetailHelpers';
+import { formatIntegration } from '@/lib/format';
 
 export interface ProjectChannelsSectionProps {
   channels: DerivedChannel[];
@@ -64,7 +65,7 @@ export function ProjectChannelsSection({
               {fmtFrames(ch.totalFrames)}
             </span>
             <span className="pv-project-detail__ch-integ">
-              {ch.totalIntegS > 0 ? fmtIntegS(ch.totalIntegS) : '—'}
+              {formatIntegration(ch.totalIntegS)}
             </span>
             <div className="pv-project-detail__ch-status">
               <Pill variant={ch.inSync ? 'ghost' : 'warn'}>
