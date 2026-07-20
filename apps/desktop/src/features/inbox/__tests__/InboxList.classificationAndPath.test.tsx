@@ -44,6 +44,7 @@ function makeItem(
     groupInstrument: null,
     groupId: over.inboxItemId,
     groupKey: 'type=dark',
+    needsReview: false,
     ...over,
   } as InboxListItem;
 }
@@ -68,6 +69,52 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     );
     expect(screen.getByText('bias')).toBeInTheDocument();
     expect(screen.queryByText(/mixed/i)).not.toBeInTheDocument();
+  });
+
+  // Spec 058 T008/FR-028: needs-review is the backend's persisted verdict on
+  // its own field. The old two-signal guess (`groupKey === '__needs_review__'`
+  // OR a non-empty `missingMandatory`) is gone, so both directions must hold:
+  // the field alone drives the label, and a classification-identity groupKey
+  // does not suppress it.
+  it("(058) the needs-review label comes from `needsReview`, not from `groupKey`", () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'nr',
+        groupKey: 'type=light·filter=∅',
+        frameType: null,
+        needsReview: true,
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.getByText('needs review')).toBeInTheDocument();
+  });
+
+  it("(058) an item with a resolved identity and `needsReview: false` is not labelled needs review", () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'ok',
+        groupKey: 'type=light·filter=Ha',
+        frameType: 'light',
+        needsReview: false,
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.getByText('light')).toBeInTheDocument();
+    expect(screen.queryByText('needs review')).not.toBeInTheDocument();
   });
 
   it('(#556) column header reads "Path", not "Detection"', () => {

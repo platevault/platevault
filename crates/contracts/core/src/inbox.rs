@@ -416,6 +416,10 @@ pub struct InboxListItem {
     /// until classified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame_type: Option<String>,
+    /// Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+    /// its own field rather than a `group_key` value. `true` means the item
+    /// cannot be confirmed until the missing attributes are supplied.
+    pub needs_review: bool,
 }
 
 /// Response from `inbox.list`.

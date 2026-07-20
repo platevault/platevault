@@ -4997,6 +4997,12 @@ export type InboxListItem_Deserialize = {
 	 *  until classified.
 	 */
 	frameType: string | null,
+	/**
+	 *  Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+	 *  its own field rather than a `group_key` value. `true` means the item
+	 *  cannot be confirmed until the missing attributes are supplied.
+	 */
+	needsReview: boolean,
 };
 
 /**
@@ -5086,6 +5092,12 @@ export type InboxListItem_Serialize = {
 	 *  until classified.
 	 */
 	frameType?: string | null,
+	/**
+	 *  Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+	 *  its own field rather than a `group_key` value. `true` means the item
+	 *  cannot be confirmed until the missing attributes are supplied.
+	 */
+	needsReview: boolean,
 };
 
 /**  Response from `inbox.list`. */

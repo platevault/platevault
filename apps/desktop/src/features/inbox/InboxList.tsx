@@ -51,20 +51,16 @@ export const DEFAULT_INBOX_SORT: InboxSort = { col: 'detection', dir: 'asc' };
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * `true` for a materialized single-type sub-item that landed in the T070/
- * FR-047 needs-review sentinel bucket (spec 041 "single-type sub-items"):
- * one or more files are missing a mandatory attribute (or have no frame
- * type at all), so the group has no single dominant frame type — the
- * backend marks this with `groupKey === "__needs_review__"` and a non-empty
- * `missingMandatory` list (see `crates/app/inbox/src/classify.rs`'s
- * `SENTINEL_NEEDS_REVIEW`). Both signals are checked because legacy
- * pre-materialization rows may carry neither.
+ * `true` when the T070/FR-047 mandatory-attribute gate failed for this item:
+ * one or more files are missing a mandatory attribute, or have no frame type
+ * at all, so the item cannot be confirmed until the user supplies them.
+ *
+ * Spec 058 FR-028 (T008): this is the backend's persisted verdict
+ * (`inbox_items.needs_review`), not a guess derived from `groupKey`.
+ * `groupKey` now carries classification identity only.
  */
 function isNeedsReview(item: InboxListItem): boolean {
-  return (
-    item.groupKey === '__needs_review__' ||
-    (item.missingMandatory?.length ?? 0) > 0
-  );
+  return item.needsReview;
 }
 
 /**

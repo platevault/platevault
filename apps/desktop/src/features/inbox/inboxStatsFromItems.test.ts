@@ -24,6 +24,7 @@ function folder(
     inboxItemId: id,
     groupId: id,
     groupKey: '',
+    needsReview: false,
     rootId: 'r1',
     rootAbsolutePath: '/lib',
     relativePath: id,
