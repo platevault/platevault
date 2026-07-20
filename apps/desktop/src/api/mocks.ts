@@ -749,6 +749,21 @@ const MOCK_ATTRIBUTION_CANDIDATES: IngestionAttributionCandidateDto_Serialize[] 
     },
   ];
 
+/**
+ * Inbox items the mock has classified as LIGHT frames.
+ *
+ * Attribution is light-frame-only: `attribution::suggest_candidates` returns an
+ * empty list for anything else, gated on `confirm::evidence_is_light`. The mock
+ * must reproduce that gate, not just the happy path — returning candidates for
+ * every item made the picker intercept the confirm of a DARK item, so the
+ * reviewable-plan toast never fired (`inbox_ingest_confirm.spec.ts`).
+ *
+ * `inbox_classify` reports `dark` for every fixture item, so this stays empty
+ * until `inbox_reclassify` (which reports `frameType: 'light'`) puts an item in
+ * it — which is what makes the picker reachable in mock mode.
+ */
+const mockLightInboxItemIds = new Set<string>();
+
 /** Plan-required lifecycle edges (mirrors `lifecycle-actions.ts` `requiresPlan`). */
 const MOCK_PLAN_REQUIRED_EDGES = new Set<string>([
   'ready→prepared',
@@ -2011,19 +2026,29 @@ export const mockHandlers = {
       // spec 008 US7/FR-022 (#943): the candidate list also ships on the
       // confirm response. Kept in sync with the `inbox_attribution_suggest`
       // fixture below — a mock that omitted it hid the missing UI caller.
-      attributionCandidates: MOCK_ATTRIBUTION_CANDIDATES,
+      attributionCandidates: mockLightInboxItemIds.has(inboxItemId)
+        ? MOCK_ATTRIBUTION_CANDIDATES
+        : [],
       attributionApplied: null,
     } satisfies InboxConfirmResponse_Serialize;
   },
-  inbox_attribution_suggest: async () => {
-    // spec 008 US7/FR-019 (#943): ranked, suggest-only. Returned for every
-    // mock item; the real command returns [] for non-light items.
-    return MOCK_ATTRIBUTION_CANDIDATES;
+  inbox_attribution_suggest: async (_args) => {
+    // spec 008 US7/FR-019 (#943): ranked, suggest-only, light-frames-only —
+    // mirroring `attribution::suggest_candidates`, which returns [] for any
+    // item that fails `confirm::evidence_is_light`.
+    const args = _args as { req?: { inboxItemId?: string } } | undefined;
+    return mockLightInboxItemIds.has(args?.req?.inboxItemId ?? '')
+      ? MOCK_ATTRIBUTION_CANDIDATES
+      : [];
   },
   inbox_reclassify: async (_args) => {
     const args = _args as { req: { inboxItemId: string } } | undefined;
+    const reclassifiedId = args?.req?.inboxItemId ?? 'item-001';
+    // Reports `frameType: 'light'` below, so the item now passes the
+    // attribution light gate.
+    mockLightInboxItemIds.add(reclassifiedId);
     return {
-      inboxItemId: args?.req?.inboxItemId ?? 'item-001',
+      inboxItemId: reclassifiedId,
       updatedType: 'single_type',
       frameType: 'light',
       remainingUnclassified: 0,
