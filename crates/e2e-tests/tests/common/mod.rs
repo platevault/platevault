@@ -698,11 +698,17 @@ impl E2eApp {
         ret.convert::<bool>().context("failed to deserialise bridge_ready result")
     }
 
-    /// Page state captured when a bridge wait times out (#1204).
+    /// Page state captured when a wait times out (#1204, #1272).
     ///
     /// Returns a human-readable one-liner and never fails: this runs on an
     /// already-failing path, so a diagnostic that could itself error would
     /// replace the real failure with its own.
+    ///
+    /// The name predates its second caller — [`Self::wait_testid`] and
+    /// [`Self::wait_testid_enabled`] use it too, since "the element never
+    /// appeared" needs exactly the same questions answered: what route are we
+    /// on, did the page finish loading, is an error boundary showing, and did
+    /// anything render at all.
     async fn bridge_failure_context(&self) -> String {
         let url = match self.driver.current_url().await {
             Ok(u) => u.to_string(),
@@ -710,14 +716,25 @@ impl E2eApp {
         };
 
         // One script, so a dying session yields one error rather than four.
+        //
+        // `presentTestids` is the decisive datum for a testid wait (#1272):
+        // "project-row-<id> never appeared" is ambiguous on its own, but the
+        // list of testids that ARE present separates "wrong route", "route
+        // rendered but list empty" and "nothing rendered at all" immediately.
+        // Capped at 40 and truncated so a large DOM cannot bury the failure.
         let probe = r#"
             var boundary = document.querySelector('[data-testid="app-error-boundary-fallback"]');
+            var ids = Array.prototype.slice
+                .call(document.querySelectorAll('[data-testid]'), 0, 40)
+                .map(function (el) { return el.getAttribute('data-testid'); });
             return JSON.stringify({
                 readyState: document.readyState,
                 hasBridge:  !!window.__ALM_E2E__,
                 bridgeKeys: window.__ALM_E2E__ ? Object.keys(window.__ALM_E2E__) : [],
                 errorBoundary: boundary ? (boundary.innerText || '').slice(0, 300) : null,
-                bodyChars: document.body ? document.body.innerHTML.length : 0
+                bodyChars: document.body ? document.body.innerHTML.length : 0,
+                testidCount: document.querySelectorAll('[data-testid]').length,
+                presentTestids: ids
             });
         "#;
         let page = match self.driver.execute(probe, vec![]).await {
@@ -1148,20 +1165,42 @@ impl E2eApp {
     }
 
     /// Poll for an element with the given `data-testid` to appear, returning it.
+    ///
+    /// On timeout, attaches the page context (#1272). "never appeared" alone
+    /// cannot distinguish a wrong route from an empty list from a page that
+    /// rendered nothing, and a real CI failure
+    /// (`project-row-… never appeared within 15s`,
+    /// `inventory_journeys::reconcile_drops_externally_deleted_frame…`) was
+    /// undiagnosable for exactly that reason.
     pub async fn wait_testid(&self, testid: &str, timeout: Duration) -> Result<WebElement> {
         let deadline = Instant::now() + timeout;
+        // Retain the last lookup error instead of discarding it. `NoSuchElement`
+        // is the expected, boring case while polling, but a dead session or a
+        // malformed selector surfaces here too and used to be swallowed --
+        // the same shape as the `.unwrap_or(false)` removed from
+        // `wait_bridge_ready` in #1211.
+        let mut last_err: Option<String>;
         loop {
-            if let Ok(el) = self.find_testid(testid).await {
-                return Ok(el);
+            match self.find_testid(testid).await {
+                Ok(el) => return Ok(el),
+                Err(e) => last_err = Some(format!("{e:#}")),
             }
             if Instant::now() >= deadline {
-                return Err(anyhow!("data-testid={testid:?} never appeared within {timeout:?}"));
+                let probed = self.bridge_failure_context().await;
+                let cause = last_err.map_or_else(String::new, |e| format!("; last error: {e}"));
+                return Err(anyhow!(
+                    "data-testid={testid:?} never appeared within {timeout:?}{cause}; {probed}"
+                ));
             }
             tokio::time::sleep(Duration::from_millis(150)).await;
         }
     }
 
     /// Poll until the element with the given `data-testid` becomes enabled.
+    ///
+    /// Attaches the same page context as [`Self::wait_testid`] on timeout
+    /// (#1272) -- "never became enabled" is ambiguous between an element that
+    /// stayed disabled and one that never rendered at all.
     pub async fn wait_testid_enabled(&self, testid: &str, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
         loop {
@@ -1169,8 +1208,9 @@ impl E2eApp {
                 return Ok(());
             }
             if Instant::now() >= deadline {
+                let probed = self.bridge_failure_context().await;
                 return Err(anyhow!(
-                    "data-testid={testid:?} never became enabled within {timeout:?}"
+                    "data-testid={testid:?} never became enabled within {timeout:?}; {probed}"
                 ));
             }
             tokio::time::sleep(Duration::from_millis(150)).await;
