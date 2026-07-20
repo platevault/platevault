@@ -24,6 +24,7 @@
 // contextual scan-override panel is removed rather than kept as always-empty
 // dead code.
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
 import { formatDistanceToNow } from 'date-fns';
@@ -120,13 +121,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   // `loadRoots` is re-invoked on user actions (add/delete/toggle), not just on
   // mount, so a per-effect `cancelled` flag cannot reach it. A mounted ref is
   // the guard that covers every call site.
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
+  const mountedRef = useMountedRef();
 
   const loadRoots = useCallback(() => {
     setLoading(true);

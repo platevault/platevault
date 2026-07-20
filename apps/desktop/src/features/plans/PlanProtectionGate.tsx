@@ -10,7 +10,8 @@
 // is responsible for checking `allAcknowledged` and disabling the Apply button
 // until it is true.
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Pill, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
@@ -56,13 +57,7 @@ export function PlanProtectionGate({
 
   // `load` reruns whenever `planId`/`onAcknowledgedChange` change, so the guard
   // belongs in the callback rather than in a per-effect `cancelled` flag.
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
+  const mountedRef = useMountedRef();
 
   const load = useCallback(() => {
     setLoadState('loading');

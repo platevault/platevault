@@ -14,7 +14,8 @@
 // Used wherever a source UUID is available — currently only the DataSources
 // settings pane (one control per registered root, keyed by root.id).
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Pill, Btn } from '@/ui';
 import { sourceProtectionGet, sourceProtectionSet } from './settingsIpc';
 import type { ProtectionLevel } from './settingsIpc';
@@ -75,13 +76,7 @@ export function SourceProtectionOverride({
 
   // `load` runs on mount and on retry, so the guard lives in the callback
   // rather than in a per-effect `cancelled` flag.
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
+  const mountedRef = useMountedRef();
 
   const load = useCallback(() => {
     setLoadState('loading');

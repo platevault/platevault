@@ -23,7 +23,8 @@
  *    gets an actionable message instead of a raw database error; the backend
  *    constraint remains the source of truth for correctness.
  */
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
 import { Modal } from '@/components';
@@ -269,13 +270,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
 
   // All four loaders are re-invoked after create/update/delete, not just on
   // mount, so the guard lives in the callbacks rather than in the effect.
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
+  const mountedRef = useMountedRef();
 
   const loadCameras = useCallback(() => {
     setCamerasLoading(true);
