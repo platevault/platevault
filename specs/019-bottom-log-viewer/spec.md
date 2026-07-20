@@ -144,13 +144,18 @@ Promotion to a backend-canonical log stream is plan work, not spec work.
 
 > **Reconciliation note (2026-07-19, issue #764)**: both paths below moved —
 > `apps/desktop/src/app/LogPanel.tsx` (not `ui/`) and
-> `apps/desktop/src/data/logStore.ts` (not `store.ts`). The described
-> behavior, including the collapsed-state idle preview line, is intact at
-> the new paths.
+> `apps/desktop/src/data/logStore.ts` (not `store.ts`).
+>
+> **Reconciliation note (2026-07-20, issue #734)**: the collapsed-state idle
+> preview line is GONE, not merely moved. `Shell.tsx` mounts `LogPanel` only
+> while the panel is expanded, so the preview branch was unreachable in the
+> shipped app, and `StatusBar` already owns the collapsed-state affordance. No
+> FR required the preview — it was a mockup detail — so the dead branch was
+> deleted rather than rewired.
 
 - `apps/desktop/src/ui/LogPanel.tsx` - Bottom fold-out shell. Expand/collapse
-  state, level filter chips (`all`/`info`/`warn`/`error`/`debug`), per-entry
-  level coloring, and the closed-state idle preview line.
+  state, level filter chips (`all`/`info`/`warn`/`error`/`debug`), and
+  per-entry level coloring.
 - `apps/desktop/src/data/store.ts` - `useLog`, `appendLog`, `logPub`, and the
   seed log list. Maintains a 500-entry ring buffer via the publisher.
 - Log emission sites in `apps/desktop/src/data/store.ts` cover plan create,
