@@ -3,21 +3,16 @@
 
 /// <reference types="@testing-library/jest-dom" />
 /**
- * Cleanup settings pane — per-type action overrides (spec 051 US3, T025).
+ * Cleanup settings pane — cleanup policy control (issue #804).
  *
- * The per-type cleanup action table used to persist via `localStorage`
- * (`alm.cleanup.type_actions.v2`). It now persists through the same
- * database-backed `settings.get('cleanup')` / `save('cleanup', ...)` path as
- * the rest of this pane's fields, so overrides are audited (FR-007).
+ * The pane used to render a 15-row `CLEANUP_TYPES` fixture table writing a
+ * `cleanupTypeOverrides` settings blob that no scan path read. It now edits the
+ * real `cleanup.policy.get`/`cleanup.policy.update` model — the one
+ * `cleanup_scan`/`cleanup_plan_generate` consult — keyed
+ * `intermediate`/`master`/`final`.
  *
- * Covers:
- *   1. Loads a persisted `cleanupTypeOverrides` map on mount and reflects it
- *      in the per-type table (not the fixture default).
- *   2. Changing a row's action calls `save('cleanup', { cleanupTypeOverrides })`
- *      with the full row-id-keyed map, merging the change into the previously
- *      loaded overrides.
- *   3. A reload (re-mount with `getSettings` returning the saved map) shows
- *      the override, not the fixture default.
+ * Covers: load, per-type round-trip, auto-on-completion round-trip, the
+ * protected-category warning, restore-defaults, and the stale-fetch race.
  */
 import {
   render,
@@ -28,83 +23,166 @@ import {
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGetSettings } = vi.hoisted(() => ({
-  mockGetSettings: vi.fn().mockResolvedValue({ values: {} }),
+const { mockGetSettings, mockPolicyGet, mockPolicyUpdate } = vi.hoisted(() => ({
+  mockGetSettings: vi.fn(),
+  mockPolicyGet: vi.fn(),
+  mockPolicyUpdate: vi.fn(),
 }));
 vi.mock('./settingsIpc', () => ({
   getSettings: mockGetSettings,
+  cleanupPolicyGet: mockPolicyGet,
+  cleanupPolicyUpdate: mockPolicyUpdate,
 }));
 
 import { Cleanup } from './Cleanup';
 
-// Row id 2 = "Raw dark frames", fixture default action "Archive" (see
-// data/fixtures/settings.ts).
-const DARK_FRAMES_ROW = 'Raw dark frames';
+const ALL_KEEP = {
+  entries: [
+    { dataType: 'intermediate', action: 'keep' },
+    { dataType: 'master', action: 'keep' },
+    { dataType: 'final', action: 'keep' },
+  ],
+  autoOnCompletion: false,
+};
+
+/** The pane's row for one policy data type, located by its visible label. */
+function policyRow(label: string) {
+  return screen.getByText(label).closest('.pv-settings__row') as HTMLElement;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetSettings.mockResolvedValue({ values: {} });
+  mockPolicyGet.mockResolvedValue(ALL_KEEP);
+  mockPolicyUpdate.mockImplementation((req) => Promise.resolve(req));
 });
 
-describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
-  it('loads a persisted cleanupTypeOverrides map and reflects it in the table, not the fixture default', async () => {
-    mockGetSettings.mockResolvedValue({
-      values: { cleanupTypeOverrides: { '2': 'Keep' } },
+describe('Cleanup — cleanup policy control (issue #804)', () => {
+  it('reflects the persisted policy rather than an all-Keep assumption', async () => {
+    mockPolicyGet.mockResolvedValue({
+      entries: [
+        { dataType: 'intermediate', action: 'delete' },
+        { dataType: 'master', action: 'keep' },
+        { dataType: 'final', action: 'keep' },
+      ],
+      autoOnCompletion: true,
     });
     render(<Cleanup save={vi.fn()} />);
 
-    const row = await screen.findByRole('row', {
-      name: new RegExp(DARK_FRAMES_ROW),
-    });
     await waitFor(() => {
-      expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
-        'Keep',
-      );
+      expect(
+        policyRow('Intermediate files').querySelector('.pv-seg__btn--active'),
+      ).toHaveTextContent('Delete');
     });
+    expect(screen.getByRole('switch')).toBeChecked();
   });
 
-  it('defaults to the fixture action when no override is persisted', async () => {
+  it('defaults every data type to Keep when the backend has no stored policy', async () => {
     render(<Cleanup save={vi.fn()} />);
 
-    const row = await screen.findByRole('row', {
-      name: new RegExp(DARK_FRAMES_ROW),
-    });
+    for (const label of [
+      'Intermediate files',
+      'Calibration masters',
+      'Final images',
+    ]) {
+      await waitFor(() => {
+        expect(
+          policyRow(label).querySelector('.pv-seg__btn--active'),
+        ).toHaveTextContent('Keep');
+      });
+    }
+  });
+
+  it('changing a data type persists the whole policy via cleanup_policy_update', async () => {
+    render(<Cleanup save={vi.fn()} />);
+    await waitFor(() => expect(mockPolicyGet).toHaveBeenCalled());
+
+    const row = policyRow('Intermediate files');
+    fireEvent.click(within(row).getByRole('radio', { name: 'Archive' }));
+
     await waitFor(() => {
-      expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
-        'Archive',
+      expect(mockPolicyUpdate).toHaveBeenCalledWith({
+        entries: [
+          { dataType: 'intermediate', action: 'archive' },
+          { dataType: 'master', action: 'keep' },
+          { dataType: 'final', action: 'keep' },
+        ],
+        autoOnCompletion: false,
+      });
+    });
+    expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
+      'Archive',
+    );
+  });
+
+  it('toggling scan-on-completion persists it alongside the current actions', async () => {
+    render(<Cleanup save={vi.fn()} />);
+    await waitFor(() => expect(mockPolicyGet).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('switch'));
+
+    await waitFor(() => {
+      expect(mockPolicyUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ autoOnCompletion: true }),
       );
     });
   });
 
-  it("changing a row's action calls save('cleanup', { cleanupTypeOverrides }) with the full row-id-keyed map", async () => {
-    const save = vi.fn();
-    render(<Cleanup save={save} />);
+  it('warns when a protected data type is opted into a destructive action', async () => {
+    render(<Cleanup save={vi.fn()} />);
+    await waitFor(() => expect(mockPolicyGet).toHaveBeenCalled());
 
-    const row = await screen.findByRole('row', {
-      name: new RegExp(DARK_FRAMES_ROW),
-    });
-    const keepBtn = within(row).getByRole('radio', { name: 'Keep' });
+    expect(screen.queryByText(/Protected categories are set/)).toBeNull();
 
-    fireEvent.click(keepBtn);
+    fireEvent.click(
+      within(policyRow('Calibration masters')).getByRole('radio', {
+        name: 'Delete',
+      }),
+    );
 
     await waitFor(() => {
-      expect(save).toHaveBeenCalledWith(
-        'cleanup',
-        expect.objectContaining({
-          cleanupTypeOverrides: expect.objectContaining({ '2': 'Keep' }),
-        }),
-      );
+      expect(
+        screen.getByText(/Protected categories are set.*Calibration masters/),
+      ).toBeInTheDocument();
     });
   });
 
-  it('a user edit before the mount fetch resolves is not clobbered by the stale response', async () => {
-    // Mount-time `getSettings('cleanup')` is left unresolved until after the
-    // user has already edited a row — reproduces the real race (mock IPC's
-    // randomized latency letting the fetch resolve after a fast click).
-    let resolveGet:
-      | ((value: { values: Record<string, unknown> }) => void)
-      | undefined;
-    mockGetSettings.mockReturnValue(
+  it('restore defaults writes the all-Keep policy back and re-hydrates from the response', async () => {
+    mockPolicyGet.mockResolvedValue({
+      entries: [
+        { dataType: 'intermediate', action: 'delete' },
+        { dataType: 'master', action: 'keep' },
+        { dataType: 'final', action: 'keep' },
+      ],
+      autoOnCompletion: true,
+    });
+    mockPolicyUpdate.mockResolvedValue(ALL_KEEP);
+    render(<Cleanup save={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(
+        policyRow('Intermediate files').querySelector('.pv-seg__btn--active'),
+      ).toHaveTextContent('Delete');
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /cleanup policy defaults/ }),
+    );
+
+    await waitFor(() => {
+      expect(mockPolicyUpdate).toHaveBeenCalledWith(ALL_KEEP);
+    });
+    await waitFor(() => {
+      expect(
+        policyRow('Intermediate files').querySelector('.pv-seg__btn--active'),
+      ).toHaveTextContent('Keep');
+    });
+    expect(screen.getByRole('switch')).not.toBeChecked();
+  });
+
+  it('a policy edit before the mount fetch resolves is not clobbered by the stale response', async () => {
+    let resolveGet: ((value: typeof ALL_KEEP) => void) | undefined;
+    mockPolicyGet.mockReturnValue(
       new Promise((resolve) => {
         resolveGet = resolve;
       }),
@@ -112,23 +190,19 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
 
     render(<Cleanup save={vi.fn()} />);
 
-    const row = await screen.findByRole('row', {
-      name: new RegExp(DARK_FRAMES_ROW),
-    });
-    fireEvent.click(within(row).getByRole('radio', { name: 'Keep' }));
+    const row = policyRow('Final images');
+    fireEvent.click(within(row).getByRole('radio', { name: 'Archive' }));
     await waitFor(() => {
       expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
-        'Keep',
+        'Archive',
       );
     });
 
-    // The stale fetch now resolves with the (pre-edit) default — it must be
-    // ignored, not applied on top of the user's edit.
-    resolveGet?.({ values: {} });
-
-    // Give the resolved promise's `.then` a tick to run before asserting it
-    // did NOT revert the row.
+    resolveGet?.(ALL_KEEP);
     await new Promise((r) => setTimeout(r, 0));
-    expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent('Keep');
+
+    expect(row.querySelector('.pv-seg__btn--active')).toHaveTextContent(
+      'Archive',
+    );
   });
 });

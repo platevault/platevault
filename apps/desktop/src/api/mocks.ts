@@ -14,6 +14,8 @@ import type {
 } from '@/bindings/types';
 import type {
   CalibrationTolerances,
+  CleanupPolicy,
+  UpdateCleanupPolicy,
   InboxListResponse_Serialize,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
@@ -282,12 +284,18 @@ function observingValues(): Record<string, unknown> {
   return mockObservingValues;
 }
 
-// Mutable so `settings_update('cleanup', { cleanupTypeOverrides })` round-trips
-// through `settings_get('cleanup')` in mock mode (spec 051 US3) — the
-// per-type cleanup action table now persists via this database-backed
-// setting instead of `localStorage`, so its mock-mode round-trip must mirror
-// real persistence the same way `mockIngestionSettings` does below.
-let mockCleanupTypeOverrides: Record<string, string> = {};
+// Mutable so `cleanup_policy_update` round-trips through `cleanup_policy_get`
+// in mock mode (issue #804). Seeded at `default_cleanup_policy()` — all-Keep,
+// no auto-run — so mock mode reproduces the real fresh-install state, where a
+// scan legitimately finds nothing until the user opts a data type in.
+let mockCleanupPolicy: CleanupPolicy = {
+  entries: [
+    { dataType: 'intermediate', action: 'keep' },
+    { dataType: 'master', action: 'keep' },
+    { dataType: 'final', action: 'keep' },
+  ],
+  autoOnCompletion: false,
+};
 
 // Mutable so `settings_update('framing', …)` round-trips through
 // `settings_get('framing')` in mock mode (spec 008 Q27 F-Framing-11) —
@@ -1303,12 +1311,6 @@ export async function mockInvoke(
           values: observingValues(),
         } satisfies SettingsData;
       }
-      if (scope === 'cleanup') {
-        return {
-          scope: 'cleanup',
-          values: { cleanupTypeOverrides: mockCleanupTypeOverrides },
-        } satisfies SettingsData;
-      }
       if (scope === 'framing') {
         return {
           scope: 'framing',
@@ -1463,6 +1465,14 @@ export async function mockInvoke(
         (_args as { planId?: string } | undefined)?.planId ?? 'mock-plan';
       return { planId, itemsConfirmed: 1 };
     }
+    case 'cleanup_policy_get':
+      return mockCleanupPolicy;
+    case 'cleanup_policy_update': {
+      const req = (_args as { request?: UpdateCleanupPolicy } | undefined)
+        ?.request;
+      if (req) mockCleanupPolicy = { ...req };
+      return mockCleanupPolicy;
+    }
     case 'cleanup_scan': {
       // D11 step 1: pure read-only preview. Reason strings follow the backend
       // generator format (see cleanup_generator.rs::scan_with_policy).
@@ -1576,17 +1586,6 @@ export async function mockInvoke(
           _args as { values?: Record<string, unknown> } | undefined
         )?.values;
         if (values) mockObservingValues = { ...observingValues(), ...values };
-      }
-      if (scope === 'cleanup') {
-        const values = (
-          _args as { values?: Record<string, unknown> } | undefined
-        )?.values;
-        const overrides = values?.cleanupTypeOverrides;
-        if (overrides && typeof overrides === 'object') {
-          mockCleanupTypeOverrides = {
-            ...(overrides as Record<string, string>),
-          };
-        }
       }
       if (scope === 'framing') {
         const values = (
