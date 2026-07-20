@@ -1607,6 +1607,28 @@ impl E2eApp {
             .await
             .context("failed to persist setupCompleted preference")?;
 
+        // Clear the bridge marker on the PRE-refresh document before asking
+        // for the reload (#1385-followup — CI run 29779614765 and local
+        // repro under `--partition hash:4/4`, `test-threads = 2`): under
+        // load, `driver.refresh()` can return before WebKitGTK's navigation
+        // has actually started, so the OLD document (bridge already set from
+        // before this call) is still what `execute()` runs against for a
+        // stretch afterward. `wait_bridge_ready` below then reads that STALE
+        // true, `complete_first_run_gate` returns "ready", and the real
+        // reload — delayed, not skipped — lands moments later and tears down
+        // `window.__ALM_E2E__` right as the caller's very next `invoke()`
+        // fires (observed as "invoke error: __ALM_E2E__ bridge missing"
+        // immediately after this function returns, only under concurrent
+        // nextest execution — never standalone, never on Windows, which
+        // serialises this profile for an unrelated reason, see
+        // `.config/nextest.toml`). Deleting the marker here means a
+        // subsequent `true` reading can only come from the NEW document's
+        // own `main.tsx` re-assigning it — a real condition, not a race.
+        self.driver
+            .execute("delete window.__ALM_E2E__;", vec![])
+            .await
+            .context("failed to clear the pre-refresh __ALM_E2E__ marker")?;
+
         // KEEP the reload (#1113 reviewed): this is not a settle step. The
         // preferences module caches its localStorage read in module state, so
         // the write above is invisible without a fresh page load —
