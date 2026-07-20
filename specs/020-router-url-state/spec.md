@@ -222,26 +222,35 @@ and a single `Shell` root layout. Shipped routes:
 
 ### Search Param Keys (per ledger route)
 
-All `selected` ids are **numbers** (fixture ids). Filter keys are typed enums
-validated against allow-lists in `bindings`.
+> **Reconciliation note (2026-07-19, issue #764)**: this table (and its
+> "deferred" framing below) is stale — verified against
+> `apps/desktop/src/app/router.tsx`. All `selected` ids switched from
+> fixture numbers to real backend UUID **strings** as each spec's real
+> persistence landed (006/007/023/017); Sessions gained real server-side
+> `sourceFilter`/`frameFilter` params (spec 006) that were previously
+> "deferred" here.
 
-| Route          | Key        | Type                         | Purpose                         |
-|----------------|------------|------------------------------|---------------------------------|
-| `/sessions`    | `selected` | number?                      | Selected session id.            |
-| `/inbox`       | `selected` | number?                      | Selected inbox item id.         |
-| `/inbox`       | `type`     | `light\|dark\|flat\|bias`?    | Frame-type filter.              |
-| `/inbox`       | `group`    | `none\|type\|date`?           | Grouping.                       |
-| `/calibration` | `selected` | number?                      | Selected master id.             |
-| `/targets`     | `selected` | number?                      | Selected target id.             |
-| `/projects`    | `selected` | number?                      | Selected project id.            |
-| `/projects`    | `lifecycle`| `ProjectState`? (csv)         | Lifecycle filter (multi).       |
-| `/archive`     | `selected` | number?                      | Selected archived item id.      |
+All `selected` ids are **strings** (UUIDs from the real backend). Filter keys
+are typed enums validated against allow-lists in `bindings`/`route-contract.ts`.
+
+| Route          | Key           | Type                         | Purpose                         |
+|----------------|---------------|-------------------------------|---------------------------------|
+| `/sessions`    | `selected`    | string? (UUID)                | Selected session id.            |
+| `/sessions`    | `sourceFilter`| `'all'`?                      | Source filter (spec 006).       |
+| `/sessions`    | `frameFilter` | `InventoryFrameFilter`?       | Frame-type filter, server-side (spec 006). |
+| `/inbox`       | `selected`    | string? (UUID)                 | Selected inbox item id.         |
+| `/inbox`       | `type`        | `light\|dark\|flat\|bias`?    | Frame-type filter.              |
+| `/inbox`       | `group`       | `none\|type\|date`?           | Grouping.                       |
+| `/calibration` | `selected`    | string? (UUID)                 | Selected master id.             |
+| `/targets`     | `selected`    | string? (UUID)                 | Selected target id.             |
+| `/projects`    | `selected`    | string? (UUID)                 | Selected project id.            |
+| `/projects`    | `lifecycle`   | `ProjectState`? (csv)         | Lifecycle filter (multi).       |
+| `/archive`     | `selected`    | string? (UUID)                 | Selected archived item id.      |
 
 > Selection (`selected`) is wired on **all** ledger routes. URL **filters** are
-> wired where the page's list controls are already stateful (Inbox `type`/`group`,
-> Projects `lifecycle`). Sessions/Calibration list controls are not yet stateful
-> (hardcoded selects); their filter params are **deferred** until those controls
-> become interactive — selection still round-trips there today.
+> wired where the page's list controls are stateful (Sessions
+> `sourceFilter`/`frameFilter`, Inbox `type`/`group`, Projects `lifecycle`).
+> Calibration has no filter params yet.
 
 Each ledger page reads search state via `useSearch({ from })` and writes via
 `useNavigate({ from })` with merged `search`. Unknown keys are dropped by the

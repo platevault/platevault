@@ -34,38 +34,26 @@ import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
-import { revealInOs } from '@/shared/native/reveal';
-import { queryKeys } from '@/data/queryKeys';
-import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import {
   DetailPane,
   DetailPanel,
   MetricLine,
   TopActionBar,
-  renderValue,
 } from '@/components';
 import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
-import { Pill, Btn, Section, Banner, CoverageBar, Table } from '@/ui';
-import type { PillVariant } from '@/ui';
+import { Btn, Banner } from '@/ui';
+import { deriveChannels, fmtIntegS } from './projectDetailHelpers';
+import { ProjectChannelsSection } from './ProjectChannelsSection';
+import { ProjectSourcesSection } from './ProjectSourcesSection';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import { ProjectStatusTag } from './ProjectStatusTag';
-import {
-  useProjectDetail,
-  useSessionNames,
-  callDismissChannelDrift,
-  callReinferChannels,
-  callTransitionLifecycle,
-} from './store';
+import { useProjectDetail, useSessionNames } from './store';
 import type { ProjectLifecycleState } from './store';
+import { useProjectDetailActions } from './useProjectDetailActions';
 import { EditProjectPane } from './edit/EditProjectPane';
-import { addToast } from '@/shared/toast';
 import { BlockedBanner, deriveBlockedReason } from './BlockedBanner';
-import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
-import {
-  lifecycleFooterActions,
-  isPlanRequiredError,
-} from './lifecycle-actions';
-import { useGenerateArchivePlan } from '@/features/archive/store';
+import type { BlockedReason } from './BlockedBanner';
+import { lifecycleFooterActions } from './lifecycle-actions';
 import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 // spec 011: tool launch CTA
 import {
@@ -85,82 +73,6 @@ import type {
 // Secondary sections (Notes, Manifests, Calibration, Source views, Outputs,
 // Cleanup) have moved to ProjectBottomDetail (task #104 — bottom panel).
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function sourceTypeVariant(filter: string): PillVariant {
-  const lower = filter.toLowerCase();
-  if (lower === 'ha') return 'danger';
-  if (lower === 'oiii') return 'info';
-  if (lower === 'sii') return 'warn';
-  if (lower === 'l' || lower === 'lum') return 'neutral';
-  return 'ghost';
-}
-
-/** Convert raw seconds → "X.Xh" / "Xm" display string, or "—" for null/zero. */
-function fmtIntegS(s: number | null | undefined): string {
-  if (s == null || s === 0) return '—';
-  const h = s / 3600;
-  if (h >= 1) return `${h.toFixed(1)}h`;
-  return `${Math.round(s / 60)}m`;
-}
-
-/** Format a frame count; returns "—" for zero. */
-function fmtFrames(n: number): string {
-  return n > 0 ? String(n) : '—';
-}
-
-/**
- * Parse a source's `exposure` snapshot string (e.g. "300s", "1.5s") into
- * seconds. Mirrors the backend's `parse_exposure_seconds`
- * (crates/app/projects/src/project_setup.rs) — unparseable/empty values
- * degrade to 0 rather than throwing.
- */
-function parseExposureSeconds(exposure: string): number {
-  const trimmed = exposure.trim();
-  if (!trimmed) return 0;
-  const numeric = trimmed.endsWith('s') ? trimmed.slice(0, -1) : trimmed;
-  const v = Number.parseFloat(numeric);
-  return Number.isFinite(v) && v >= 0 ? v : 0;
-}
-
-// ── Channels palette ─────────────────────────────────────────────────────────
-
-/**
- * Presentation-ready channel row. `totalFrames`/`totalIntegS` come straight
- * from the server-aggregated `ProjectChannelDto` (P7); only `inSync` is
- * derived client-side (the API has no notion of "backed by a current
- * source" — it just returns the channel list + its totals).
- */
-interface DerivedChannel {
-  label: string;
-  filter: string;
-  totalFrames: number;
-  totalIntegS: number;
-  inSync: boolean;
-}
-
-function deriveChannels(
-  channels: ProjectChannelDto_Deserialize[],
-  sources: ProjectSourceDto_Deserialize[],
-): DerivedChannel[] {
-  const sourceFilters = new Set(
-    sources.filter((src) => src.filter).map((src) => src.filter.toUpperCase()),
-  );
-
-  return channels.map((ch) => ({
-    label: ch.label,
-    filter: ch.label,
-    totalFrames: ch.subFrames,
-    totalIntegS: ch.totalIntegrationS,
-    inSync: sourceFilters.has(ch.label.toUpperCase()),
-  }));
-}
-
-/** Build a short palette name like "HOS" from channel labels. */
-function paletteName(channels: DerivedChannel[]): string {
-  return channels.map((c) => c.label[0] ?? c.label).join('');
-}
-
 // ── Props ────────────────────────────────────────────────────────────────────
 
 export interface ProjectDetailContentProps {
@@ -177,21 +89,25 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // #663: resolve raw session UUIDs to the same human names Sessions shows.
   const sessionNames = useSessionNames();
   const [editOpen, setEditOpen] = useState(false);
-  const [channelWorking, setChannelWorking] = useState(false);
-  const [transitionWorking, setTransitionWorking] = useState(false);
-  // Archive plan generation (spec 017 US2/WP-B) — the completed→archived
-  // transition is plan-gated; this is the UI entry point that actually
-  // creates the reviewable plan the toast below points the user to.
-  const generateArchivePlan = useGenerateArchivePlan();
-  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
-    null,
-  );
-  // #603: diagnostic sentence for a 0-item archive plan, surfaced by
-  // `archive.plan.generate` alongside the plan id — the review overlay has
-  // no other way to explain WHY a plan came back empty.
-  const [archiveEmptyReason, setArchiveEmptyReason] = useState<string | null>(
-    null,
-  );
+
+  // Every mutating interaction this pane offers, plus the busy flags that
+  // gate their buttons. Called unconditionally (before the early returns
+  // below), so its handlers guard on `project` themselves.
+  const {
+    lifecycle,
+    channelWorking,
+    transitionWorking,
+    archiveReviewPlanId,
+    setArchiveReviewPlanId,
+    archiveEmptyReason,
+    setArchiveEmptyReason,
+    handleReinfer,
+    handleDismissDrift,
+    handleTransition,
+    handleArchivePlanApplied,
+    handleResolveBlocked,
+    handleReveal,
+  } = useProjectDetailActions(projectId, project);
 
   // spec 012 T008: attach the project's filesystem artifact watcher for as
   // long as this drawer is open; detaches on close/project switch.
@@ -234,152 +150,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
   const toolLabel =
     typeof project.tool === 'string' ? project.tool : m.projects_tool_unknown();
-  const lifecycle =
-    typeof project.lifecycle === 'string'
-      ? project.lifecycle
-      : 'setup_incomplete';
-
-  const handleReinfer = async () => {
-    if (channelWorking) return;
-    setChannelWorking(true);
-    try {
-      await callReinferChannels({ requestId: crypto.randomUUID(), projectId });
-    } catch {
-      addToast({
-        message: m.projects_toast_reinfer_failed(),
-        variant: 'error',
-      });
-    } finally {
-      setChannelWorking(false);
-    }
-  };
-
-  const handleDismissDrift = async () => {
-    if (channelWorking) return;
-    setChannelWorking(true);
-    try {
-      await callDismissChannelDrift({
-        requestId: crypto.randomUUID(),
-        projectId,
-      });
-    } catch {
-      addToast({
-        message: m.projects_toast_dismiss_failed(),
-        variant: 'error',
-      });
-    } finally {
-      setChannelWorking(false);
-    }
-  };
-
-  /**
-   * Handle a lifecycle transition. Surfaces plan.required as an info toast
-   * directing the user to the plan flow (US3-4 / US3-5). For the
-   * completed/blocked → archived edge specifically, a generator command
-   * (`archive.plan.generate`) exists, so a refusal here also generates the
-   * plan and opens the shared review/apply overlay — previously this edge
-   * dead-ended on the toast with no way to actually create the plan.
-   */
-  const handleTransition = async (
-    nextState: ProjectLifecycleState,
-    actionLabel?: string,
-  ) => {
-    if (transitionWorking) return;
-    setTransitionWorking(true);
-    try {
-      const resp = await callTransitionLifecycle(
-        projectId,
-        lifecycle as ProjectLifecycleState,
-        nextState,
-        actionLabel,
-      );
-      if (resp.status === 'success') {
-        addToast({
-          message: m.projects_toast_transitioned({
-            state: resp.newState ?? nextState,
-          }),
-          variant: 'success',
-        });
-      } else if (
-        resp.status === 'error' &&
-        isPlanRequiredError(resp.error?.code)
-      ) {
-        addToast({
-          message: m.projects_toast_plan_required(),
-          variant: 'info',
-        });
-        if (nextState === 'archived') {
-          void handleGenerateArchivePlan();
-        }
-      } else if (resp.status === 'error') {
-        addToast({
-          message: resp.error?.message ?? m.projects_toast_transition_refused(),
-          variant: 'error',
-        });
-      }
-    } catch {
-      addToast({
-        message: m.projects_toast_transition_failed(),
-        variant: 'error',
-      });
-    } finally {
-      setTransitionWorking(false);
-    }
-  };
-
-  /**
-   * Generate a reviewable whole-project archive plan (`archive.plan.generate`)
-   * and open the shared {@link PlanReviewOverlay} for review + apply. This is
-   * the ONLY UI entry point for the command — previously it had zero callers
-   * and the flow only worked driven over the dev bridge.
-   */
-  const handleGenerateArchivePlan = async () => {
-    try {
-      const res = await generateArchivePlan.mutateAsync(projectId);
-      addToast({
-        message: m.projects_archive_plan_created_toast({
-          count: res.itemCount,
-        }),
-        variant: 'info',
-      });
-      setArchiveEmptyReason(res.emptyReason ?? null);
-      setArchiveReviewPlanId(res.planId);
-    } catch {
-      addToast({
-        message: m.archive_generate_failed(),
-        variant: 'error',
-      });
-    }
-  };
-
-  /** After the archive plan applies, the project's lifecycle flips server-side
-   * (C5 — applying an origin=archive plan is the one legitimate path to
-   * `archived`); refresh the detail query so the UI reflects it. */
-  const handleArchivePlanApplied = () => {
-    void sharedQueryClient.invalidateQueries({
-      queryKey: queryKeys.projects.detail(projectId),
-    });
-  };
-
-  /** Handle blocked resolve — dispatches the recovery edge from BlockedBanner. */
-  const handleResolveBlocked = (edge: RecoveryEdge) => {
-    void handleTransition(edge, 'Resolved blocker');
-  };
-
-  /** Reveal the project folder in the OS file manager (spec 012 / native reveal). */
-  const handleReveal = async () => {
-    if (!project.path) return;
-    try {
-      await revealInOs(project.path, {
-        entityKind: 'project_manifest',
-        entityId: projectId,
-      });
-    } catch (err: unknown) {
-      const msg = typeof err === 'string' ? err : m.common_reveal_error();
-      addToast({ message: msg, variant: 'error' });
-    }
-  };
-
   // Derive contextual footer actions for the current lifecycle state.
   const footerActions = lifecycleFooterActions(
     lifecycle as ProjectLifecycleState,
@@ -399,77 +169,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     (project.channels ?? []) as ProjectChannelDto_Deserialize[],
     project.sources as ProjectSourceDto_Deserialize[],
   );
-  const paletteLabel = paletteName(derivedChannels);
-  const allInSync =
-    derivedChannels.length > 0 && derivedChannels.every((c) => c.inSync);
-  const maxFrames = Math.max(...derivedChannels.map((c) => c.totalFrames), 1);
-
-  // ── Sources table ────────────────────────────────────────────────────────
-
-  const sourceColumns = [
-    {
-      key: 'role',
-      label: m.projects_col_role(),
-      className: 'pv-project-detail__role-cell',
-    },
-    { key: 'source', label: m.projects_col_source() },
-    { key: 'filter', label: m.common_filter() },
-    {
-      key: 'subs',
-      label: m.projects_col_subs(),
-      className: 'pv-project-detail__num-cell',
-    },
-    {
-      key: 'integ',
-      label: m.projects_col_integ(),
-      className: 'pv-project-detail__integ-cell',
-    },
-  ];
-
-  const sourceRows = project.sources.map((src) => {
-    // #663: prefer the DTO name, then the Sessions-derived human name; raw
-    // UUID is the last resort (matches Sessions page fallback ordering).
-    const displayName =
-      src.name || sessionNames.get(src.inventoryId) || src.inventoryId;
-    const integS = src.frames * parseExposureSeconds(src.exposure);
-    return {
-      role: (
-        <span className="pv-project-detail__role-cell">
-          {renderValue(src.role ?? null, { applicability: 'applicable' })}
-        </span>
-      ),
-      source: (
-        // #720 FR-006/SC-002: click through to the source's Inventory
-        // (Sessions) entry instead of rendering inert text.
-        <a
-          className="pv-project-detail__source-name"
-          href={`#/sessions?selected=${encodeURIComponent(src.inventoryId)}`}
-          data-testid={`project-source-link-${src.inventoryId}`}
-        >
-          {displayName}
-        </a>
-      ),
-      // Project sources are light sessions (filter is applicable, data-model.md
-      // matrix) — a missing filter is unresolved, not the same blank marker a
-      // not-applicable field would use (spec-030 Q16 / FR-135).
-      filter: src.filter ? (
-        <Pill variant={sourceTypeVariant(src.filter)}>{src.filter}</Pill>
-      ) : (
-        renderValue(null, { applicability: 'applicable' })
-      ),
-      subs: (
-        <span className="pv-project-detail__num-cell">
-          {fmtFrames(src.frames)}
-        </span>
-      ),
-      integ: (
-        <span className="pv-project-detail__integ-cell">
-          {fmtIntegS(integS)}
-        </span>
-      ),
-    };
-  });
-
   return (
     <DetailPanel
       fill
@@ -664,74 +363,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       )}
 
       <div className="pv-project-detail__sections">
-        {/* ── Sources section ────────────────────────────────────────────── */}
-        <Section title={m.common_sources()} count={project.sources.length}>
-          {project.sources.length === 0 ? (
-            <div className="pv-project-detail__sources-empty">
-              {m.projects_sources_empty()}
-            </div>
-          ) : (
-            <Table columns={sourceColumns} rows={sourceRows} />
-          )}
-        </Section>
+        <ProjectSourcesSection
+          sources={project.sources as ProjectSourceDto_Deserialize[]}
+          sessionNames={sessionNames}
+        />
 
-        {/* ── Channels palette section (task #10) ──────────────────────────── */}
-        {/*
-         * subFrames/totalIntegS are server-aggregated (P7); derivedChannels
-         * is a 1:1 presentational mapping of project.channels (see
-         * deriveChannels() above).
-         */}
-        {derivedChannels.length > 0 && (
-          <Section
-            title={
-              paletteLabel
-                ? m.projects_channels_palette_title({
-                    channels: m.projects_edit_channels_label(),
-                    palette: paletteLabel,
-                  })
-                : m.projects_edit_channels_label()
-            }
-            right={
-              allInSync ? (
-                <Pill variant="ghost">{m.projects_channels_in_sync()}</Pill>
-              ) : undefined
-            }
-          >
-            <div className="pv-project-detail__channels-section">
-              {derivedChannels.map((ch) => (
-                <div key={ch.label} className="pv-project-detail__channel-row">
-                  <span className="pv-project-detail__ch-letter">
-                    {ch.label[0]}
-                  </span>
-                  <span className="pv-project-detail__ch-filter">
-                    {ch.filter}
-                  </span>
-                  <div className="pv-project-detail__ch-coverage">
-                    <CoverageBar
-                      label=""
-                      value={ch.totalFrames}
-                      max={maxFrames}
-                      unit=""
-                    />
-                  </div>
-                  <span className="pv-project-detail__ch-subs">
-                    {fmtFrames(ch.totalFrames)}
-                  </span>
-                  <span className="pv-project-detail__ch-integ">
-                    {ch.totalIntegS > 0 ? fmtIntegS(ch.totalIntegS) : '—'}
-                  </span>
-                  <div className="pv-project-detail__ch-status">
-                    <Pill variant={ch.inSync ? 'ghost' : 'warn'}>
-                      {ch.inSync
-                        ? m.projects_channels_in_sync()
-                        : m.common_pending()}
-                    </Pill>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
+        {/* Channels palette (task #10) — renders nothing when empty. */}
+        <ProjectChannelsSection channels={derivedChannels} />
 
         {/* Secondary sections (Notes · Manifests · Calibration · Source views ·
             Outputs · Cleanup) have moved to the bottom panel (ProjectBottomDetail,
