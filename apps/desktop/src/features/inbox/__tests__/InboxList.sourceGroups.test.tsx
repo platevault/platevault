@@ -201,6 +201,80 @@ describe('InboxList — source-group rows (spec 058 FR-016 / T013)', () => {
     expect(screen.getByText('AstroArchive')).toBeInTheDocument();
   });
 
+  /**
+   * Spec 058 FR-017 / Q-10 — the row's ONE action.
+   *
+   * FR-016 makes the row structurally non-confirmable; it does not make it
+   * actionless. Classification is user-triggered rather than fired on render:
+   * auto-firing would write `inbox_items` rows for folders nobody touched,
+   * raise a blocking `MetadataUnreadable` per FITS-less folder, and transform
+   * rows under the user — the churn FR-023 exists to prevent.
+   */
+  it('offers a Classify action that reports the group id', () => {
+    const onClassifySourceGroup = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <InboxList
+        items={[]}
+        sourceGroups={[makeGroup({ sourceGroupId: 'sg-1' })]}
+        onClassifySourceGroup={onClassifySourceGroup}
+        selectedId={null}
+        onSelect={onSelect}
+        filterType="all"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inbox-source-group-classify-sg-1'));
+
+    expect(onClassifySourceGroup).toHaveBeenCalledWith('sg-1');
+    // The action must not smuggle in a selection identity — FR-016's structural
+    // guarantee has to survive the row gaining a button.
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('stays read-only when no classify handler is supplied', () => {
+    render(
+      <InboxList
+        items={[]}
+        sourceGroups={[makeGroup({ sourceGroupId: 'sg-1' })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+
+    expect(screen.getByTestId('inbox-source-group-sg-1')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('inbox-source-group-classify-sg-1'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('disables the action for the group whose classification is in flight', () => {
+    render(
+      <InboxList
+        items={[]}
+        sourceGroups={[
+          makeGroup({ sourceGroupId: 'sg-1' }),
+          makeGroup({ sourceGroupId: 'sg-2' }),
+        ]}
+        onClassifySourceGroup={vi.fn()}
+        classifyingSourceGroupId="sg-1"
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+
+    expect(
+      screen.getByTestId('inbox-source-group-classify-sg-1'),
+    ).toBeDisabled();
+    // Only the in-flight group is blocked; its siblings stay actionable.
+    expect(
+      screen.getByTestId('inbox-source-group-classify-sg-2'),
+    ).not.toBeDisabled();
+    expect(screen.getByText('classifying…')).toBeInTheDocument();
+  });
+
   it('still renders source groups when grouping dimensions are active', () => {
     render(
       <InboxList

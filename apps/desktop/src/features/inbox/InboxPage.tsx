@@ -70,6 +70,7 @@ import {
   normalizeConfirmError,
   useApplySelectedInboxPlans,
   useInboxClassification,
+  useInboxClassifySourceGroup,
   useInboxConfirm,
   useInboxItemMetadata,
   useInboxList,
@@ -433,6 +434,26 @@ export function InboxPage() {
   const { data: classification } = useInboxClassification(
     selectedItem?.inboxItemId ?? '',
     selectedRootPath,
+  );
+
+  // Classify a scanned-but-unclassified folder on explicit request (FR-017,
+  // Q-10). The group carries its own root path, so no lookup against `allRoots`
+  // is needed; an id with no matching group is a no-op rather than a throw,
+  // because the list can refresh between render and click.
+  const { pendingSourceGroupId, classifySourceGroup } =
+    useInboxClassifySourceGroup();
+  const onClassifySourceGroup = useCallback(
+    (sourceGroupId: string) => {
+      const group = sourceGroups.find((g) => g.sourceGroupId === sourceGroupId);
+      if (!group) return;
+      void classifySourceGroup(sourceGroupId, group.rootAbsolutePath).catch(
+        () => {
+          // Surfaced via `pendingSourceGroupId`/`error` on the hook; the throw
+          // is already normalised there and must not escape to the render path.
+        },
+      );
+    },
+    [sourceGroups, classifySourceGroup],
   );
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
@@ -1219,6 +1240,8 @@ export function InboxPage() {
         <InboxList
           items={filteredItems}
           sourceGroups={filteredSourceGroups}
+          onClassifySourceGroup={onClassifySourceGroup}
+          classifyingSourceGroupId={pendingSourceGroupId}
           selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}

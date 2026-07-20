@@ -433,6 +433,74 @@ export function useInboxReclassify(inboxItemId: string) {
   return { ...state, reclassify };
 }
 
+export interface ClassifySourceGroupState {
+  /** Id of the group currently being classified, or null when idle. */
+  pendingSourceGroupId: string | null;
+  error: string | null;
+}
+
+/**
+ * Classify a scanned-but-unclassified folder, materialising its item rows.
+ *
+ * Spec 058 FR-017 / Q-4 (Option C): scan creates the source group only, so the
+ * folder shows up as a source-group row carrying no classification. This turns
+ * that row into the folder's N item rows.
+ *
+ * This is a MUTATION, not a fetch — `inbox.classify.sourceGroup` writes
+ * `inbox_items` rows (`materialize_sub_items`) and returns only
+ * `{ sourceGroupId, materializedSubItemCount }`. There is no classification
+ * payload to cache, which is why this is a callback rather than a `useQuery`
+ * mirroring `useInboxClassification`.
+ *
+ * It is deliberately NOT fired automatically on render. Doing so would write to
+ * the database for every folder the user never touched, raise one blocking
+ * `MetadataUnreadable` error per FITS-less folder, and transform rows underneath
+ * the user — the selection-churn coupling that FR-023 exists to prevent and that
+ * Q-4 rejected its Option A over. The trigger is an explicit per-row action
+ * (Q-10).
+ *
+ * Re-running is safe: `upsert_inbox_sub_item` is `ON CONFLICT(root_id,
+ * relative_path, group_key) DO UPDATE` and orphaned siblings are removed by
+ * `delete_sub_item_if_unlinked`, so a double-click converges rather than
+ * duplicating rows.
+ */
+export function useInboxClassifySourceGroup() {
+  const queryClient = useQueryClient();
+  const [state, setState] = useState<ClassifySourceGroupState>({
+    pendingSourceGroupId: null,
+    error: null,
+  });
+
+  const classifySourceGroup = useCallback(
+    async (sourceGroupId: string, rootAbsolutePath: string) => {
+      setState({ pendingSourceGroupId: sourceGroupId, error: null });
+      try {
+        const result = unwrap(
+          await commands.inboxClassifySourceGroup({
+            sourceGroupId,
+            rootAbsolutePath,
+          }),
+        );
+        setState({ pendingSourceGroupId: null, error: null });
+        // The group row is gone and N item rows exist in its place (FR-017) —
+        // only a list re-fetch reflects that. Same key the confirm mutation
+        // invalidates.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.list('all'),
+        });
+        return result;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setState({ pendingSourceGroupId: null, error: msg });
+        throw e;
+      }
+    },
+    [queryClient],
+  );
+
+  return { ...state, classifySourceGroup };
+}
+
 export interface InboxItemMetadataState {
   data: InboxFileMetadata[];
   loading: boolean;

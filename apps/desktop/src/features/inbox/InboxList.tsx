@@ -23,6 +23,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
+import { Btn } from '@/ui/Btn';
 import {
   Table,
   tableIndent,
@@ -313,6 +314,16 @@ export interface InboxListProps {
    * scanned folder has an item row, so `inbox.list` always returns this empty.
    */
   sourceGroups?: InboxSourceGroupListItem[];
+  /**
+   * Classify a scanned-but-unclassified folder (spec 058 FR-017, Q-10).
+   *
+   * The source-group row's ONLY action. Omit it and the row stays read-only —
+   * the row never gains a selection identity either way, so it can still never
+   * reach `inbox.confirm`.
+   */
+  onClassifySourceGroup?: (sourceGroupId: string) => void;
+  /** Source group whose classification is in flight — disables its action. */
+  classifyingSourceGroupId?: string | null;
   /** Issue #644: selection is by item identity, not list position — an index
    * silently points at whatever item now occupies that slot after search/lane/
    * kind filters change the array shape. */
@@ -417,6 +428,8 @@ export function flattenVisibleTree(
 export function InboxList({
   items,
   sourceGroups = [],
+  onClassifySourceGroup,
+  classifyingSourceGroupId = null,
   selectedId,
   onSelect,
   filterType,
@@ -616,9 +629,15 @@ export function InboxList({
         if (row.kind === 'sourceGroup') {
           const { group } = row;
           const label = sourceGroupDetectionLabel(group);
-          // No `_onClick`, no `_selected`, no item id: the row is inert by
-          // construction rather than by a guard (FR-016). Nothing here can
-          // reach `inbox.confirm`, because there is no id to give it.
+          const classifying = classifyingSourceGroupId === group.sourceGroupId;
+          // No `_onClick`, no `_selected`, no item id — the row carries no
+          // selection identity, so nothing here can reach `inbox.confirm`
+          // (FR-016). That invariant is structural and still holds; what the
+          // row is NOT is actionless. Its one action is Classify, which
+          // materialises the folder's item rows and replaces this row with
+          // them (FR-017). Classification is explicitly user-triggered rather
+          // than fired on render — see `useInboxClassifySourceGroup` and Q-10
+          // for why auto-firing was rejected.
           return {
             _testid: `inbox-source-group-${group.sourceGroupId}`,
             _rowClassName: 'pv-inbox-table__row pv-inbox-table__row--muted',
@@ -634,7 +653,24 @@ export function InboxList({
             ),
             type: (
               <span className="pv-inbox-row__classification pv-inbox-row__classification--pending">
-                {m.inbox_state_not_yet_classified()}
+                {classifying
+                  ? m.inbox_source_group_classifying()
+                  : m.inbox_state_not_yet_classified()}
+                {onClassifySourceGroup ? (
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid={`inbox-source-group-classify-${group.sourceGroupId}`}
+                    disabled={classifying}
+                    aria-label={m.inbox_source_group_classify_aria({
+                      path: label,
+                    })}
+                    onClick={() => onClassifySourceGroup(group.sourceGroupId)}
+                  >
+                    {m.inbox_source_group_classify()}
+                  </Btn>
+                ) : null}
               </span>
             ),
             count: m.inbox_list_file_count({ count: group.fileCount }),

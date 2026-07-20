@@ -1,9 +1,10 @@
 # Pending Review Questions — 058 Inbox Drop Parent Items
 
-Questions raised during specification. **All nine are now answered**
-(2026-07-19) — Q-1, Q-2, Q-4, Q-8 and then Q-5, Q-6, Q-7, Q-9 by the product
-owner, Q-3 by events. Answers are recorded here and promoted to decisions D-005
-through D-007 in [spec.md](spec.md#recorded-decisions).
+Questions raised during specification. **All ten are now answered** — Q-1, Q-2,
+Q-4, Q-8 and then Q-5, Q-6, Q-7, Q-9 by the product owner (2026-07-19), Q-3 by
+events, and **Q-10 by the product owner (2026-07-20)**. Answers are recorded
+here and promoted to decisions D-005 through D-007 in
+[spec.md](spec.md#recorded-decisions).
 
 Two of the later answers change this feature's shape rather than merely filling
 a blank, and are worth reading before the plan gate:
@@ -131,6 +132,60 @@ types** — unclassified source groups and classified items — and selection mu
 survive the "one source-group row becomes N item rows" transition. This is a
 real design task for the plan gate, not a solved problem. It is the same union
 that Q-8's grouping construct needs, so the two should be designed together.
+
+---
+
+## Q-10 — What triggers classification for a source-group row? — RESOLVED: explicit user action
+
+**Answer (product owner, 2026-07-20)**: **An explicit per-row action.** The
+source-group row gains a `Classify` control; classification runs only when the
+user asks for it.
+
+**Why this was a gap.** Q-4 resolved *what scan creates* (the group only) and
+FR-017 describes what happens *when classification completes* — but nothing
+named the trigger, and Q-4 itself flagged this area as "a real design task for
+the plan gate, not a solved problem". Meanwhile the implementation made the row
+inert by construction (`InboxList.tsx`, FR-016), so no user gesture existed to
+hang classification on. `classify_source_group` shipped with **zero UI callers**
+as a direct result.
+
+**What forced the decision**: `inbox.classify.sourceGroup` is a **mutation**, not
+a fetch. It walks the folder, parses every file header, and calls
+`materialize_sub_items` to write `inbox_items` rows; it returns only
+`{ sourceGroupId, materializedSubItemCount }`. There is no payload to cache, so
+the `useInboxClassification` "fire on selection, cache the result" idiom does not
+transfer.
+
+**Rejected alternatives**:
+
+- **Auto-classify on render.** Rejected on three counts. It makes *rendering a
+  list* write to the database for every folder the user never touched. It raises
+  one blocking `MetadataUnreadable` per FITS-less folder, unprompted, on load.
+  And it transforms rows underneath the user with no gesture — the selection-churn
+  coupling that caused the #1038 outage, which FR-023 exists to prevent and which
+  Q-4 already rejected its **Option A** over. It also collapses toward Q-4's
+  rejected **Option B**: if every group row classifies itself on sight, FR-016's
+  visible-unclassified state becomes a flicker rather than a real state.
+- **Classify during scan.** Rejected: contradicts Q-4/D-006 (scan creates the
+  group only) and would make FR-016's row nearly unreachable. Reopening a
+  resolved decision, not implementing one.
+
+**Consequence for FR-016.** The row is still **structurally non-confirmable** —
+it carries no `inboxItemId`, so nothing can hand one to `inbox.confirm`. That
+invariant is unchanged and still pinned by test. What changes is only the claim
+that the row is *inert*: it now has exactly one action, and that action cannot
+reach confirm. The `InboxList.tsx` comment was reworded to state the invariant it
+actually enforces rather than overstating it.
+
+**Idempotency, verified**: `upsert_inbox_sub_item` is
+`ON CONFLICT(root_id, relative_path, group_key) DO UPDATE` and orphaned siblings
+are removed by `delete_sub_item_if_unlinked`, so a double-click or retry
+converges instead of duplicating rows.
+
+**Still open, and deliberately not resolved here**: preserving selection across
+the "one source-group row becomes N item rows" transition (FR-023) remains
+**T029**'s job. The explicit trigger makes it tractable — the transition now has
+a user-gesture anchor — but does not implement it.
 
 ---
 
