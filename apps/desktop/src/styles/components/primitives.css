@@ -450,3 +450,60 @@
  * Referenced by ~40 call sites across features/*; was a no-op while the
  * blanket `* { font-family !important }` reset overrode it (reset.css). */
 .pv-mono { font-family: var(--pv-font-mono); }
+
+/* === TOOLTIP TRIGGER GLYPHS (InfoTip ⓘ, Lock 🔒) ============================
+ * Both render a focusable span (role="note" + tabIndex=0) whose tooltip states
+ * something shown nowhere else on screen, so both are keyboard destinations and
+ * both need a visible focus indicator (WCAG 2.4.7, 2.4.11).
+ *
+ * The indicator is the `--pv-focus-ring` box-shadow and NOTHING ELSE may use it
+ * here: hover is signalled by the accent recolour alone. Conveying focus with
+ * that same recolour — as `.pv-info-tip` did while it shared one declaration
+ * block with `:hover` — leaves keyboard focus visually identical to pointer
+ * hover, which is the defect this section exists to prevent. Keep the two
+ * states' declarations disjoint; `primitives.focus-vs-hover.test.ts` asserts it.
+ *
+ * The ring is a 2px perimeter drawn outside the border box, which is exactly
+ * 2.4.11's minimum indicator area, and `--pv-accent` clears 3:1 against every
+ * theme's backgrounds (worst case 3.63:1, warm-clay on `--pv-bg3`). */
+.pv-info-tip,
+.pv-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex: none;
+  position: relative;
+  cursor: help;
+  user-select: none;
+}
+
+.pv-info-tip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--pv-text-faint);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  font-style: normal;
+}
+
+/* The padlock is an emoji, so it paints in the colour font's own palette and
+   cannot carry the accent recolour the ⓘ uses; a radius is still needed so the
+   focus ring hugs the glyph instead of boxing it. */
+.pv-lock {
+  border-radius: var(--pv-radius-sm);
+  font-size: var(--pv-text-xs);
+}
+
+.pv-info-tip:hover {
+  border-color: var(--pv-accent);
+  color: var(--pv-accent);
+}
+
+.pv-info-tip:focus-visible,
+.pv-lock:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}
