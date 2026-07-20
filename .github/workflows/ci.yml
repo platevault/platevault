@@ -53,6 +53,7 @@ jobs:
     outputs:
       rust: ${{ steps.decide.outputs.rust }}
       frontend: ${{ steps.decide.outputs.frontend }}
+      frontend_full: ${{ steps.decide.outputs.frontend_full }}
       docs_only: ${{ steps.decide.outputs.docs_only }}
       scripts: ${{ steps.filter.outputs.scripts }}
       all_files: ${{ steps.filter.outputs.all_files }}
@@ -65,16 +66,38 @@ jobs:
           filters: |
             all:
               - '**'
-            # force_full: any of these means "run the whole suite" — the build
-            # graph, dependency set, or CI itself may have changed.
-            force_full:
-              - '.github/workflows/**'
-              - '**/Cargo.toml'
-              - 'Cargo.lock'
-              - '**/package.json'
-              - 'pnpm-lock.yaml'
+            # force_full, split per lane: a dependency-graph change forces only
+            # the lane whose graph moved. A Cargo.lock bump does not invalidate
+            # the frontend suite, and a pnpm-lock.yaml bump does not invalidate
+            # the Rust suite. Shared drivers still force BOTH, because they can
+            # change how either lane executes.
+            #
+            # Deliberately NOT '.github/workflows/**': editing e2e.yml or
+            # release-please.yml cannot change how ci.yml runs its lanes, and
+            # treating every workflow edit as a full-suite trigger is what made
+            # a Rust-only refactor (#1169) run the entire frontend suite.
+            force_full_shared:
               - 'justfile'
               - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            force_full_rust:
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+            force_full_frontend:
+              - '**/package.json'
+              - 'pnpm-lock.yaml'
+            # Frontend inputs the vitest module graph cannot see, so `vitest
+            # related` would silently skip tests that depend on them: runner
+            # config, the setup file, global styles/tokens, the i18n
+            # catalogues, and the shared packages consumed via bindings.
+            frontend_full:
+              - 'apps/desktop/vitest.config.ts'
+              - 'apps/desktop/vite.config.ts'
+              - 'apps/desktop/vitest.setup.ts'
+              - 'apps/desktop/tsconfig*.json'
+              - 'apps/desktop/src/styles/**'
+              - 'apps/desktop/messages/**'
+              - 'packages/**'
             rust:
               - 'crates/**'
               - 'apps/desktop/src-tauri/**'
@@ -102,13 +125,23 @@ jobs:
       - id: decide
         shell: bash
         run: |
+          shared="${{ steps.filter.outputs.force_full_shared }}"
           rust=false
           frontend=false
-          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
+          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_rust }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
             rust=true
           fi
-          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
             frontend=true
+          fi
+          # frontend_full: run every vitest spec rather than the `related`
+          # subset. Any shared driver or lockfile change, or a frontend input
+          # invisible to the module graph, disables scoping.
+          frontend_full=false
+          if [ "$shared" = "true" ] \
+            || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] \
+            || [ "${{ steps.filter.outputs.frontend_full }}" = "true" ]; then
+            frontend_full=true
           fi
           # docs_only: at least one doc changed and nothing drives Rust/frontend.
           docs_only=false
@@ -118,9 +151,10 @@ jobs:
           {
             echo "rust=$rust"
             echo "frontend=$frontend"
+            echo "frontend_full=$frontend_full"
             echo "docs_only=$docs_only"
           } >> "$GITHUB_OUTPUT"
-          echo "changes: rust=$rust frontend=$frontend docs_only=$docs_only scripts=${{ steps.filter.outputs.scripts }}"
+          echo "changes: rust=$rust frontend=$frontend frontend_full=$frontend_full docs_only=$docs_only scripts=${{ steps.filter.outputs.scripts }}"
 
   # Two lanes share this matrix (Rust and frontend), each with its own step-level
   # gate, so it is NOT split into two jobs: whenever either lane is active every
@@ -293,9 +327,74 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo test --workspace --doc
 
+      # Scope vitest to the specs that transitively import the changed modules.
+      # `vitest related` resolves the real import graph, which is strictly more
+      # accurate than a directory convention and needs no maintenance as files
+      # move. Inputs the graph cannot see (runner config, setup file, global
+      # styles, i18n catalogues, shared packages) set frontend_full and fall
+      # back to the whole suite — see the `frontend_full` filter above.
+      #
+      # CHANGED_FILES is passed via env, never interpolated into the script
+      # body, so a crafted filename cannot inject shell commands (same rule as
+      # the Rust scoping step).
       - name: Frontend unit tests
         if: needs.changes.outputs.frontend == 'true'
-        run: pnpm -r --if-present test
+        shell: bash
+        env:
+          CHANGED_FILES: ${{ needs.changes.outputs.all_files }}
+          FRONTEND_FULL: ${{ needs.changes.outputs.frontend_full }}
+        run: |
+          set -euo pipefail
+          # Non-desktop workspaces run plain node scripts; they are cheap and
+          # have no vitest graph, so they always run in full.
+          pnpm --filter '!./apps/desktop' -r --if-present test
+
+          cd apps/desktop
+          if [ "$FRONTEND_FULL" = "true" ]; then
+            echo "frontend_full=true -> running the complete vitest suite."
+            pnpm exec vitest run
+            exit 0
+          fi
+
+          # Changed files under this package, rebased to package-relative paths
+          # and filtered to ones that exist (a deleted file has no dependents to
+          # resolve and makes `vitest related` error).
+          mapfile -t files < <(
+            printf '%s' "$CHANGED_FILES" | tr ',' '\n' \
+              | sed -n 's#^apps/desktop/##p' \
+              | grep -E '^src/.*\.(ts|tsx)$' || true
+          )
+          existing=()
+          for f in "${files[@]}"; do
+            [ -f "$f" ] && existing+=("$f")
+          done
+
+          if [ ${#existing[@]} -eq 0 ]; then
+            echo "No existing apps/desktop/src TS files changed -> full suite (conservative)."
+            pnpm exec vitest run
+            exit 0
+          fi
+
+          echo "Running specs related to ${#existing[@]} changed file(s):"
+          printf '  %s\n' "${existing[@]}"
+
+          # `vitest related` prints "No test files found, exiting with code 0"
+          # when a changed module has no dependent spec — a green result having
+          # run nothing, which makes "the suite passed" and "the suite never
+          # ran" indistinguishable. Treat that as unscopable and fall back to
+          # the full suite rather than reporting a vacuous pass.
+          set +e
+          out=$(pnpm exec vitest related --run "${existing[@]}" 2>&1)
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+
+          if printf '%s' "$out" | grep -q 'No test files found'; then
+            echo "::notice::vitest related selected no specs; running the full suite instead."
+            pnpm exec vitest run
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
 
       - name: TypeScript typecheck
         if: needs.changes.outputs.frontend == 'true'
