@@ -157,9 +157,15 @@ const banner =
 
 const output = `${banner}${readFileSync(PRELUDE, 'utf8')}\n${blocks.join('\n')}`;
 
+// Compare content, not line endings. `.gitattributes` pins these files to LF,
+// but a checkout predating that rule — or any autocrlf setting — otherwise makes
+// this gate fail on Windows ONLY, reporting a file as "out of date" and telling
+// you to rebuild something already byte-correct. A gate that lies gets ignored.
+const sameContent = (a, b) => a.split('\r\n').join('\n') === b.split('\r\n').join('\n');
+
 if (process.argv.includes('--check')) {
   const current = readFileSync(OUT, 'utf8');
-  if (current !== output) {
+  if (!sameContent(current, output)) {
     console.error(
       `ERROR: ${OUT} is out of date with apps/desktop/tokens/.\n` +
         'Run `pnpm tokens:build` and commit the result.',
