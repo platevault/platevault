@@ -222,6 +222,19 @@ pub async fn classify(
                 (None, EvidenceSource::None, None, true, false, None)
             };
 
+        // #549: a detected calibration master is extracted into its own
+        // `inbox_items` row at scan time (`persist_master_item`), but the
+        // file is never moved off disk, so a folder-PLACEHOLDER classify run
+        // still walks it here. Without this guard the master was tallied a
+        // second time into the placeholder's evidence/breakdown/file_count —
+        // the placeholder must represent only the un-extracted remainder.
+        // Only skip when classifying the placeholder itself: a master's own
+        // classify call (`item.is_master_item != 0`) has exactly this one
+        // file and must still record it.
+        if is_master && item.is_master_item == 0 {
+            continue;
+        }
+
         // Persist evidence
         let ev_id = Uuid::new_v4().to_string();
         let ev = InsertEvidence {
@@ -454,12 +467,16 @@ pub async fn classify(
     };
     repo::upsert_classification(pool, &classification).await.ok();
 
-    // 9. Update item state and signature
+    // 9. Update item state and signature.
+    // #549: `file_records.len()` (not `file_paths.len()`) — extracted-master
+    // files were filtered out of `file_records` above, so this is the
+    // un-extracted remainder the placeholder is meant to represent, matching
+    // the count `persist_folder_placeholder` (inbox.rs) writes at scan time.
     repo::update_inbox_item_scan(
         pool,
         &req.inbox_item_id,
         &content_signature,
-        i64::try_from(file_paths.len()).unwrap_or(i64::MAX),
+        i64::try_from(file_records.len()).unwrap_or(i64::MAX),
     )
     .await
     .ok();
@@ -1101,6 +1118,12 @@ async fn seed_sub_item_cache(
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
+///
+/// Skips symlinks and Windows junctions. `folder` is user-supplied, and
+/// `is_file()` resolves links, so without this gate a link planted in an
+/// inbox folder would pull an out-of-root file into classification — the
+/// do-not-follow-links rule the scanner already enforces (issue #1233,
+/// constitution product constraints).
 fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let Ok(read_dir) = std::fs::read_dir(folder) else {
@@ -1108,6 +1131,9 @@ fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     };
     for entry in read_dir.flatten() {
         let path = entry.path();
+        if fs_pathsafe::is_link_or_junction(&path) {
+            continue;
+        }
         if !path.is_file() {
             continue;
         }
@@ -1403,6 +1429,64 @@ mod tests {
         assert_eq!(resp.classification_type, "mixed");
         assert!(resp.frame_type.is_none());
         assert_eq!(resp.breakdown.len(), 2);
+    }
+
+    /// Regression (#549): a detected calibration master is extracted into its
+    /// own `inbox_items` row at scan time, but the file itself is never moved
+    /// off disk. Classifying the folder PLACEHOLDER (this item, is_master_item
+    /// = 0) must not re-tally that master into the breakdown or file_count —
+    /// the placeholder represents only the un-extracted remainder. Before the
+    /// fix `classify` walked every FITS/XISF file still in the folder, so a
+    /// folder of 2 un-extracted lights + 1 already-extracted master dark
+    /// reported "mixed"/3 files instead of "single_type light"/2 files.
+    #[tokio::test]
+    async fn classify_excludes_already_extracted_master_from_placeholder_tally() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "light_002.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "master_dark.fits", "Master Dark");
+
+        let db = test_db().await;
+        let item_id = "item-classify-placeholder-with-master";
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let req = ClassifyRequest {
+            inbox_item_id: item_id.to_owned(),
+            root_absolute_path: tmp.path().to_owned(),
+            force_rescan: false,
+        };
+
+        let resp = classify(db.pool(), req).await.unwrap();
+
+        assert_eq!(
+            resp.classification_type, "single_type",
+            "the master must not turn this into a mixed folder: {:?}",
+            resp.breakdown
+        );
+        assert_eq!(resp.breakdown.len(), 1);
+        assert_eq!(resp.breakdown[0].kind, "light");
+        assert_eq!(
+            resp.breakdown[0].count, 2,
+            "breakdown must not double-count the already-extracted master (#549)"
+        );
+
+        let item = repo::get_inbox_item(db.pool(), item_id).await.unwrap();
+        assert_eq!(
+            item.file_count, 2,
+            "placeholder file_count must be the un-extracted remainder (#549), not the full folder"
+        );
     }
 
     #[tokio::test]
@@ -3153,5 +3237,63 @@ mod tests {
             std::collections::HashSet::from(["light", "dark"]),
             "re-derived sub-items must cover both frame types present in the folder"
         );
+    }
+
+    /// Baseline for the two link tests below: a real FITS file in the folder
+    /// IS enumerated, so a later assertion of "not enumerated" is evidence of
+    /// the link gate rather than of a broken walker.
+    #[test]
+    fn real_fits_file_is_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "real.fits", "LIGHT");
+
+        let found = enumerate_fits_files(tmp.path());
+        assert_eq!(found.len(), 1, "a real FITS file in the folder must be enumerated");
+    }
+
+    /// Issue #1233: a symlink to a FITS file outside the inbox folder must not
+    /// be pulled into classification. `is_file()` resolves the link, so the
+    /// explicit link gate is what refuses it.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_fits_file_is_not_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        write_fits_with_imagetyp(&outside, "elsewhere.fits", "LIGHT");
+
+        let folder = tmp.path().join("inbox_folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::os::unix::fs::symlink(outside.join("elsewhere.fits"), folder.join("linked.fits"))
+            .unwrap();
+
+        let found = enumerate_fits_files(&folder);
+        assert!(found.is_empty(), "a symlinked FITS file must not be enumerated: {found:?}");
+    }
+
+    /// Windows counterpart: files reached through a junction must not be
+    /// enumerated either. Junctions are directory-only, so the link sits on
+    /// the folder the walker would descend into.
+    #[cfg(windows)]
+    #[test]
+    fn fits_file_behind_junction_is_not_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        write_fits_with_imagetyp(&outside, "elsewhere.fits", "LIGHT");
+
+        let folder = tmp.path().join("inbox_folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        let junction = folder.join("junction_to_outside");
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J", junction.to_str().unwrap(), outside.to_str().unwrap()])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+
+        // The walker is non-recursive, so the junction itself is the entry it
+        // must refuse; enumerating it as a directory would be a regression.
+        let found = enumerate_fits_files(&folder);
+        assert!(found.is_empty(), "nothing behind a junction may be enumerated: {found:?}");
     }
 }

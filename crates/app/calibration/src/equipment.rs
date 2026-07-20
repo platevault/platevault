@@ -22,6 +22,8 @@ use persistence_db::repositories::equipment as repo;
 use persistence_db::repositories::q_calibration;
 use sqlx::SqlitePool;
 
+use crate::audit_ids::audit_entity_id;
+
 // ── Error mapping ──────────────────────────────────────────────────────────
 
 fn db_to_contract(e: persistence_db::DbError) -> ContractError {
@@ -43,19 +45,8 @@ fn error_code_str(code: ErrorCode) -> String {
         .map_or_else(|_| "internal.error".to_owned(), |s| s.trim_matches('"').to_owned())
 }
 
-/// Deterministic `entity_id` for an equipment audit row: parses `id` as a
-/// real UUID when possible (every persisted camera/telescope/train/filter id
-/// is one), falling back to a stable UUIDv5 derivation for attempted-but-not-
-/// yet-created items (e.g. a failed `create` has no id) so repeated attempts
-/// with the same name still correlate under one `entity_id`.
 fn equipment_entity_id(id: &str) -> EntityId {
-    uuid::Uuid::parse_str(id).map_or_else(
-        |_| {
-            let ns = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, b"astro-plan.audit.equipment");
-            EntityId::from_uuid(uuid::Uuid::new_v5(&ns, id.as_bytes()))
-        },
-        EntityId::from_uuid,
-    )
+    audit_entity_id("equipment", id)
 }
 
 /// Write a durable audit row for an equipment CRUD attempt (T124,

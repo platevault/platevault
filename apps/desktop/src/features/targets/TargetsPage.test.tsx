@@ -550,18 +550,19 @@ describe('TargetsPage', () => {
 // on setTimeout macrotask boundaries so the browser can paint between chunks.
 // The table footer ("{count} targets") reflects exactly the revealed count, so
 // these tests drive the reveal timers with fake timers and assert on it.
-describe('TargetsPage — progressive reveal (#573)', () => {
-  // Valid Planner (NGC) rows so filterByCatalogues keeps them and the cap
-  // actually engages (a 2-row fixture never exceeds REVEAL_CHUNK).
-  function ngcItems(n: number) {
-    return Array.from({ length: n }, (_, i) => ({
-      id: `ngc-${i}`,
-      effectiveLabel: `NGC ${7000 + i}`,
-      primaryDesignation: `NGC ${7000 + i}`,
-      objectType: 'emission_nebula',
-    }));
-  }
+// Valid Planner (NGC) rows so filterByCatalogues keeps them and the cap
+// actually engages (a 2-row fixture never exceeds REVEAL_CHUNK). Module-scoped
+// so the stale-selection suite can reuse it.
+function ngcItems(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `ngc-${i}`,
+    effectiveLabel: `NGC ${7000 + i}`,
+    primaryDesignation: `NGC ${7000 + i}`,
+    objectType: 'emission_nebula',
+  }));
+}
 
+describe('TargetsPage — progressive reveal (#573)', () => {
   // Flush the listTargets promise chain (microtasks only) WITHOUT firing the
   // reveal setTimeout, so the first-paint cap is observable before any growth.
   async function flushLoad() {
@@ -644,5 +645,51 @@ describe('TargetsPage — progressive reveal (#573)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ── Stale-selection cleanup (#735 item 2) ─────────────────────────────────────
+
+/**
+ * Targets was the one ledger page never wired for stale-id cleanup — tasks.md
+ * T030 claimed all six were. Both directions are pinned: a valid id must
+ * survive the in-flight list load (the #735 item 1 cold-reload race), and a
+ * genuinely absent id must still be cleared once the list settles.
+ */
+describe('TargetsPage stale-selection cleanup (#735)', () => {
+  it('keeps a valid ?selected= while targetList is still in flight', () => {
+    mockListTargets.mockReturnValue(new Promise(() => {}));
+    mockSelectedId.current = TARGET_ID;
+
+    render(<TargetsPage />);
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a selection that is present but not yet progressively revealed', async () => {
+    // The page caps what reaches TargetsTable and grows it on a timer; an
+    // unrevealed target is present, not stale, so the gate matches against the
+    // FULL query data rather than the revealed slice.
+    mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+    mockSelectedId.current = 'ngc-349';
+
+    render(<TargetsPage />);
+
+    await waitFor(() => expect(mockListTargets).toHaveBeenCalled());
+    expect(mockNavigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ replace: true }),
+    );
+  });
+
+  it('clears a stale ?selected= once the list has settled without it', async () => {
+    mockSelectedId.current = '550e8400-e29b-41d4-a716-4466554409ff';
+
+    render(<TargetsPage />);
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ replace: true }),
+      ),
+    );
   });
 });
