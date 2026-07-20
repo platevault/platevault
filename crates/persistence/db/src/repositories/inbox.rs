@@ -2041,9 +2041,6 @@ pub async fn grouping_keys_for_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::repositories::q_desktop::{
-        insert_inbox_folder_placeholder, insert_inbox_master_item,
-    };
     use crate::Database;
 
     async fn test_db() -> Database {
