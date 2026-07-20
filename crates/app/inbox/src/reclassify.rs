@@ -2848,4 +2848,319 @@ mod tests {
             offenders.len()
         );
     }
+
+    // ── US4: re-derivation without lifecycle coupling (spec 058) ──────────────
+
+    /// Write a minimal FITS file carrying `cards` verbatim.
+    fn write_fits(path: &std::path::Path, cards: &[&str]) {
+        let mut data = vec![b' '; 2880];
+        for (i, c) in cards.iter().enumerate() {
+            data[i * 80..i * 80 + 80].copy_from_slice(format!("{c:<80}").as_bytes());
+        }
+        data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+        std::fs::write(path, &data).unwrap();
+    }
+
+    /// A folder holding one bias and one flat: two files whose headers already
+    /// determine two *different* frame types, so classify materialises exactly
+    /// two sibling items with no needs-review between them. Returns the root.
+    ///
+    /// Both frame types are chosen so their mandatory-attribute sets
+    /// (`mandatory_set_for`: bias → gain, flat → filter) are satisfied from the
+    /// header alone — US4's premise is that nothing here is re-asked.
+    async fn seed_two_sibling_folder(
+        db: &Database,
+        sg_id: &str,
+        item_id: &str,
+        root_id: &str,
+    ) -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        write_fits(
+            &root.path().join("bias_001.fits"),
+            &["IMAGETYP= 'Bias Frame'", "GAIN    = 100", "EXPTIME = 0.0"],
+        );
+        write_fits(
+            &root.path().join("flat_001.fits"),
+            &["IMAGETYP= 'Flat Field'", "FILTER  = 'Ha'", "EXPTIME = 3.0"],
+        );
+        seed_and_classify(db.pool(), root.path(), sg_id, item_id, root_id).await;
+        root
+    }
+
+    /// `group_key → inbox_items.id` for a source group's materialised siblings.
+    ///
+    /// The row id is the identity FR-018/SC-008 talk about: it is what
+    /// `inbox_plan_links`, evidence, metadata and the UI's selection all key
+    /// on, so a new id for the same group means every one of those is orphaned.
+    async fn sibling_identity(
+        pool: &sqlx::SqlitePool,
+        sg_id: &str,
+    ) -> std::collections::BTreeMap<String, String> {
+        inbox_repo::list_inbox_sub_items(pool, sg_id)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| (r.group_key, r.id))
+            .collect()
+    }
+
+    /// T039/T041 (FR-018, SC-008): re-scanning an unchanged folder must not
+    /// change the identity of its existing items.
+    ///
+    /// "Identity" asserted here is `inbox_items.id` — the primary key every
+    /// plan link, evidence row and metadata row references. The natural key
+    /// `(root_id, relative_path, group_key)` is what makes it stable:
+    /// `upsert_inbox_sub_item` targets that triple in `ON CONFLICT` and returns
+    /// the PRE-EXISTING row's id, discarding the freshly generated one. This
+    /// test verifies that rather than assuming it, and uses
+    /// `force_rescan: true` so the classification cache cannot make the second
+    /// pass a no-op.
+    #[tokio::test]
+    async fn rescan_of_unchanged_folder_preserves_sub_item_identity() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-churn", "item-churn", "root-churn").await;
+
+        let before = sibling_identity(db.pool(), "sg-churn").await;
+        assert_eq!(
+            before.len(),
+            2,
+            "fixture must materialise two siblings before the rescan, got {before:?}"
+        );
+
+        // A genuine re-scan of a folder nothing has touched.
+        crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: "item-churn".to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let after = sibling_identity(db.pool(), "sg-churn").await;
+        assert_eq!(
+            before, after,
+            "re-scanning an unchanged folder churned item identity: the same \
+             group_keys came back under different inbox_items.id values, \
+             orphaning every plan link, evidence and metadata row keyed to them"
+        );
+    }
+
+    /// T038 (FR-014): re-derivation must not propagate state between siblings.
+    ///
+    /// Re-typing the *flat*'s file must move only the flat sibling. The bias
+    /// sibling shares nothing but a source group, so its id, frame type, file
+    /// count and content signature must all come back untouched.
+    #[tokio::test]
+    async fn resplit_does_not_propagate_state_between_siblings() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-prop", "item-prop", "root-prop").await;
+
+        let rows_before = inbox_repo::list_inbox_sub_items(db.pool(), "sg-prop").await.unwrap();
+        let bias_before = rows_before
+            .iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .clone();
+
+        // Re-type ONLY the flat's file. `file_paths` names it explicitly, so
+        // nothing about this request concerns the bias sibling.
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-prop".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("dark").into(),
+                        file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                    },
+                    InboxReclassifyBulk {
+                        property: "gain".to_owned(),
+                        value: serde_json::json!("100").into(),
+                        file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows_after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-prop").await.unwrap();
+
+        // The flat sibling moved — otherwise the assertions below are vacuous.
+        assert!(
+            rows_after.iter().any(|r| r.frame_type.as_deref() == Some("dark")),
+            "re-derivation did not apply the flat's new frame type; the \
+             isolation assertions below would prove nothing"
+        );
+
+        let bias_after = rows_after
+            .iter()
+            .find(|r| r.id == bias_before.id)
+            .expect("the bias sibling was destroyed by a re-derivation that never named it");
+        assert_eq!(
+            (
+                bias_after.frame_type.as_deref(),
+                bias_after.file_count,
+                bias_after.content_signature.as_deref(),
+                bias_after.needs_review,
+                bias_after.state.as_str(),
+            ),
+            (
+                bias_before.frame_type.as_deref(),
+                bias_before.file_count,
+                bias_before.content_signature.as_deref(),
+                bias_before.needs_review,
+                bias_before.state.as_str(),
+            ),
+            "re-deriving one sibling propagated state to the other: the bias \
+             sibling changed although none of its files were named"
+        );
+    }
+
+    /// Companion to T038, covering the case its tuple cannot reach: a sibling
+    /// whose lifecycle has already moved PAST `classified`.
+    ///
+    /// Both siblings are `classified` in the T038 fixture, so the `state` entry
+    /// in its tuple is satisfied by any implementation and proves nothing on
+    /// its own. The clobber only becomes observable once a sibling is
+    /// `resolved`, which is reachable in production WITHOUT an open plan: on
+    /// `plan.applying.completed` with `terminal_state == "applied"`,
+    /// `handle_plan_completed` picks `new_state = "resolved"` and
+    /// `transition_via_plan_id` then deletes the plan link
+    /// (plan_listener.rs:390-397). The item is therefore `resolved` with no
+    /// link row, so the group-wide open-plan interlock above — which scans
+    /// `get_plan_link` per sibling — does not refuse the re-derivation.
+    ///
+    /// `upsert_inbox_sub_item` writes `state = 'classified'` unconditionally on
+    /// its conflict branch (persistence/db/src/repositories/inbox.rs:545), so
+    /// re-deriving the flat resurrects the already-organized bias sibling in
+    /// the Inbox.
+    ///
+    /// Ignored because the fix belongs to that conflict clause, which is
+    /// outside this file's ownership boundary in the concurrent spec 058 split.
+    /// Observe it with
+    /// `cargo nextest run -p app_core_inbox --run-ignored all resurrect`.
+    #[tokio::test]
+    #[ignore = "reproduces a latent state clobber; the fix belongs in \
+                persistence_db upsert_inbox_sub_item, not in this crate"]
+    async fn resplit_does_not_resurrect_a_resolved_sibling() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-res", "item-res", "root-res").await;
+
+        let bias_id = inbox_repo::list_inbox_sub_items(db.pool(), "sg-res")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .id;
+
+        // The post-apply resting state: resolved, and with no plan link, so the
+        // open-plan interlock cannot be what protects this sibling.
+        inbox_repo::update_inbox_item_state(db.pool(), &bias_id, "resolved").await.unwrap();
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), &bias_id).await.unwrap().is_none(),
+            "fixture must leave the resolved sibling without a plan link, or the \
+             interlock — not the upsert — is what this test measures"
+        );
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-res".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "frameType".to_owned(),
+                    value: serde_json::json!("dark").into(),
+                    file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        let bias_after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-res")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == bias_id)
+            .expect("the resolved sibling was destroyed by a re-derivation that never named it");
+
+        assert_eq!(
+            bias_after.state, "resolved",
+            "re-deriving the flat sibling reset the resolved bias sibling's \
+             state, resurrecting an already-organized item in the Inbox"
+        );
+    }
+
+    /// T040 (FR-019): folder-level re-derivation is anchored to the source
+    /// group, not to whichever item the caller happened to name.
+    ///
+    /// There is no folder-representative item to anchor on after spec 058, so
+    /// `reclassify_v2` called with one sibling's `inbox_item_id` must widen to
+    /// the whole group: a bulk with `file_paths: None` means "every file in the
+    /// group", including the files of siblings the caller never mentioned.
+    #[tokio::test]
+    async fn resplit_by_sibling_item_id_is_anchored_to_the_whole_group() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-anchor", "item-anchor", "root-anchor").await;
+
+        let bias_id = inbox_repo::list_inbox_sub_items(db.pool(), "sg-anchor")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .id;
+
+        let resp = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                // Named by ONE sibling, not by the group.
+                source_group_id: None,
+                inbox_item_id: Some(bias_id.clone()),
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "temperatureC".to_owned(),
+                    value: serde_json::json!(-10.0).into(),
+                    file_paths: None,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.source_group_id, "sg-anchor", "the item id must resolve to its group");
+
+        let touched: std::collections::BTreeSet<String> =
+            inbox_repo::list_file_overrides_for_group(db.pool(), "sg-anchor")
+                .await
+                .unwrap()
+                .into_iter()
+                .filter(|o| o.property_key == "temperatureC")
+                .map(|o| o.relative_file_path)
+                .collect();
+        assert_eq!(
+            touched,
+            ["bias_001.fits".to_owned(), "flat_001.fits".to_owned()].into_iter().collect(),
+            "a group-wide bulk reached only the named item's files — \
+             re-derivation is still anchored to a single item, so the sibling \
+             the caller did not name was left out of its own folder's re-derivation"
+        );
+    }
 }
