@@ -227,6 +227,29 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
+      # Vite's dependency-optimizer output. Restored AFTER `pnpm install`
+      # because it lives inside `node_modules/`, which the install recreates.
+      #
+      # Without it every run pays a cold optimize+transform for all ~200 test
+      # files at once. That storm is not merely slow: vitest's `testTimeout`
+      # clock starts when a test is scheduled, not when it gets a worker, so
+      # a cold run charges queue time against unrelated tests and fails them
+      # on timeout (observed locally: 21s transform vs the 15s timeout, two
+      # suites red; both pass in isolation and pass warm).
+      #
+      # Vite validates this cache against its own hash of the lockfile and
+      # config and re-optimizes on mismatch, so a stale restore degrades to
+      # today's cold behaviour rather than serving wrong modules. The key
+      # mirrors those same inputs so the common case is a clean hit.
+      - name: Cache Vite transform/deps output
+        if: needs.changes.outputs.frontend == 'true'
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/vite.config.ts', 'apps/desktop/vitest.config.ts') }}
+          restore-keys: |
+            vite-${{ runner.os }}-
+
       # --- Fast checks first (FR-012) ---
       # Frontend lint gate: Biome (format check + syntactic rules) first, then
       # the slimmed ESLint layer Biome cannot replicate — the spec-046
