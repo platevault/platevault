@@ -154,10 +154,10 @@ are unchanged in state, classification and plan binding.
 **Independent test**: split a mixed folder; no sibling prompts for a frame type
 the headers already determined.
 
-- [ ] T038 [US4] Ensure re-classification re-derives items from the files on disk without propagating state, plans or confirmations between siblings (FR-014)
-- [ ] T039 [P] [US4] Ensure re-scanning an unchanged folder produces no item identity churn (FR-018, SC-008)
-- [ ] T040 [US4] Anchor folder-level re-scan comparison to the source group rather than any single item (FR-019)
-- [ ] T041 [US4] Layer-1 test for SC-008 asserting stable item identity across an unchanged re-scan
+- [X] T038 [US4] Ensure re-classification re-derives items from the files on disk without propagating state, plans or confirmations between siblings (FR-014)
+- [X] T039 [P] [US4] Ensure re-scanning an unchanged folder produces no item identity churn (FR-018, SC-008)
+- [X] T040 [US4] Anchor folder-level re-scan comparison to the source group rather than any single item (FR-019)
+- [X] T041 [US4] Layer-1 test for SC-008 asserting stable item identity across an unchanged re-scan
 
 ---
 
