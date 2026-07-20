@@ -59,8 +59,20 @@ dead-callers:
 #   cargo-shear  - same job as machete; one dependency checker is enough,
 #                  three reporting overlapping findings guarantees all three
 #                  get ignored
-#   warnalyzer   - dead. Last release 2021-05-20, ~3.5k downloads, and it
-#                  depends on rustc save-analysis which no longer exists.
+#   warnalyzer   - NOT dead (an earlier note here said so, wrongly: crates.io
+#                  shows a 2021 release, but the repo was pushed 2024-09 and
+#                  has a SCIP backend that works on stable). Not wired up only
+#                  because the SCIP route is covered below.
+#
+# WORTH EVALUATING, not yet wired: cargo-workspace-unused-pub does exactly what
+# scripts/check-dead-callers.sh approximates, but semantically -- it builds a
+# SCIP index via rust-analyzer instead of grepping, so re-exports, out-of-line
+# test modules and comments cannot fool it (all four bugs found in that script
+# on 2026-07-20 were grep artifacts). Caveats: 0.1.0, ~1.3k downloads, methods
+# only, no false-positive suppression yet, and index generation is slow enough
+# that it is a periodic sweep rather than a gate. warnalyzer and clippy issue
+# 5828 both confirm SCIP + rust-analyzer is the only workable approach --
+# rustc's dead_code is per-crate by construction and cannot see a workspace.
 
 # Unused dependencies declared in Cargo.toml but never used.
 hygiene-deps:
