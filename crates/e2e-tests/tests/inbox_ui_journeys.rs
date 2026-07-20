@@ -132,9 +132,87 @@ async fn seed_initial_scan(app: &E2eApp, root_id: &str, root_dir: &Path) -> anyh
 /// Click Rescan (aria-label "Rescan all roots" — `m.inbox_rescan_all_roots_aria()`,
 /// `apps/desktop/messages/en.json`) and wait for the list to settle by polling
 /// for at least one real `inbox-item-*` row.
+///
+/// Spec 058 T014: correct ONLY where a scan produces item rows directly — i.e.
+/// detected calibration masters, which keep their own rows under the FR-015
+/// carve-out. An ordinary folder no longer yields any item row at scan time
+/// (FR-015/T012); it yields a source-group row, and this helper would poll
+/// until `UI_TIMEOUT` and fail. Use [`rescan_and_wait_for_source_group`].
+#[allow(dead_code)]
 async fn rescan_and_wait_for_item(app: &E2eApp) -> anyhow::Result<()> {
     app.click_by_aria_label("Rescan all roots").await?;
     app.wait_testid_prefix_present("inbox-item-", UI_TIMEOUT).await
+}
+
+/// Rescan and wait for the scanned folder's SOURCE-GROUP row, returning its
+/// `sourceGroupId` (spec 058 T014, FR-015/FR-016).
+///
+/// This is what an ordinary folder looks like immediately after a scan now: one
+/// `inbox-source-group-*` row and no inbox item. It becomes items only once
+/// classification runs — see [`classify_source_group_and_wait_for_items`].
+/// The id is derived from the Classify CONTROL, not from the row. The row's
+/// testid `inbox-source-group-<id>` is a strict prefix of the button's
+/// `inbox-source-group-classify-<id>`, and `testid_suffix` returns the first
+/// prefix match — so searching on the row prefix is ambiguous and could yield
+/// `classify-<id>` as the "suffix". The button prefix has no such collision.
+async fn rescan_and_wait_for_source_group(app: &E2eApp) -> anyhow::Result<String> {
+    app.click_by_aria_label("Rescan all roots").await?;
+    app.wait_testid_prefix_present("inbox-source-group-classify-", UI_TIMEOUT).await?;
+    app.testid_suffix("inbox-source-group-classify-").await
+}
+
+/// Assert a source-group row is structurally non-confirmable (spec 058 T015,
+/// FR-016).
+///
+/// The counterpart to [`select_only_item`]: selecting an ITEM row must mount
+/// Confirm; a source-group row must never provide one. The row carries no
+/// `inboxItemId`, so there is no id to hand `inbox.confirm`. This asserts the
+/// ABSENCE rather than clicking and hoping — a Confirm that merely refuses at
+/// runtime is a promise a refactor can quietly break, while an absent control
+/// cannot be.
+async fn assert_source_group_not_confirmable(
+    app: &E2eApp,
+    source_group_id: &str,
+) -> anyhow::Result<()> {
+    app.wait_testid(&format!("inbox-source-group-{source_group_id}"), UI_TIMEOUT).await?;
+    anyhow::ensure!(
+        !app.testid_exists("inbox-confirm-btn").await?,
+        "a source-group row must not offer Confirm: FR-016 makes it structurally \
+         non-confirmable, and a mounted Confirm means an item id reached the detail pane"
+    );
+    Ok(())
+}
+
+/// Classify a source-group row and wait for the folder's item rows to appear
+/// (spec 058 T014/T017, FR-017).
+///
+/// Waits on the ITEM rows rather than on the group row disappearing:
+/// materialization and the list refetch settle independently, and the arrival
+/// of real rows is the signal the journeys actually depend on.
+async fn classify_source_group_and_wait_for_items(
+    app: &E2eApp,
+    source_group_id: &str,
+) -> anyhow::Result<()> {
+    app.click_testid(&format!("inbox-source-group-classify-{source_group_id}")).await?;
+    app.wait_testid_prefix_present("inbox-item-", UI_TIMEOUT).await
+}
+
+/// Rescan an ordinary folder all the way to a selected, confirmable item row.
+///
+/// Spec 058 T016: the path every ordinary-folder journey now takes. Before T012
+/// a scan produced a confirmable placeholder row directly, so
+/// `rescan_and_wait_for_item` + `select_only_item` was the whole story. There is
+/// now a real intermediate state — scanned but not yet classified — and the
+/// journeys must pass through it exactly as a user does.
+///
+/// Asserts the intermediate state's non-confirmability on the way through, so
+/// every folder-ingesting journey pins FR-016 rather than leaving it to the one
+/// journey that tests it explicitly.
+async fn rescan_classify_and_select_item(app: &E2eApp) -> anyhow::Result<String> {
+    let source_group_id = rescan_and_wait_for_source_group(app).await?;
+    assert_source_group_not_confirmable(app, &source_group_id).await?;
+    classify_source_group_and_wait_for_items(app, &source_group_id).await?;
+    select_only_item(app).await
 }
 
 /// Select the (only) inbox item row and return its real `inboxItemId`, waiting
@@ -221,23 +299,24 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    rescan_and_wait_for_item(&app).await?;
+    // Spec 058 T012/T016: scanning no longer produces a folder-level item, so
+    // there is no placeholder row to select and no "selecting the row triggers
+    // classify" side effect. The folder is a source-group row until the user
+    // classifies it, and Classify is the action that materializes the
+    // single-type rows this journey checks for (FR-015/FR-017).
+    let source_group_id = rescan_and_wait_for_source_group(&app).await?;
+    assert_source_group_not_confirmable(&app, &source_group_id).await?;
+    classify_source_group_and_wait_for_items(&app, &source_group_id).await?;
 
-    // The split happens when the folder is CLASSIFIED (spec 041 T066:
-    // `materialize_sub_items` runs inside `inbox.classify`). The superseded
-    // parent row is NOT purged — it is hidden from the list by the read-side
-    // `exclude_split_placeholder!` predicate and still exists in
-    // `inbox_items` (spec 058 T025; the row itself stops being created at
-    // T020). Scanning alone lists ONE folder-level item.
-    // Selecting the row is the real user action that triggers that classify.
-    select_only_item(&app).await?;
-
-    // Wait for the classify round-trip to COMPLETE before re-reading the
-    // list: the mixed advisory banner is only rendered from a loaded
-    // classification (`InboxDetail.tsx`, `classType === "mixed"`), so its
-    // appearance proves the split was materialized server-side. Reloading
-    // earlier would abort the in-flight classify and restart it every cycle.
-    app.wait_testid("inbox-mixed-alert", UI_TIMEOUT).await?;
+    // Sync signal: the split ROWS themselves (tasks.md sequencing constraint 4).
+    //
+    // This step used to wait on `inbox-mixed-alert`, rendered from the
+    // placeholder's loaded `classType === "mixed"` classification. With no
+    // placeholder there is no mixed item to classify — the folder splits
+    // straight into single-type items — so that banner can never appear and
+    // waiting on it would hang until `UI_TIMEOUT`. The row-count poll below is
+    // now both the sync point and the assertion, which is strictly closer to
+    // what the journey is actually about.
 
     // The list itself isn't invalidated by classify; force the refetch until
     // the split rows land. The list refetches and re-renders several times,
@@ -390,8 +469,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    rescan_and_wait_for_item(&app).await?;
-    select_only_item(&app).await?;
+    rescan_classify_and_select_item(&app).await?;
 
     // Real blocking banner + real disabled Confirm.
     app.wait_testid("inbox-unclassified-alert", UI_TIMEOUT).await?;
@@ -591,13 +669,13 @@ async fn inbox_ui_unsplit_unclassified_folder_badge_is_not_classified() -> anyho
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    rescan_and_wait_for_item(&app).await?;
-
-    // Only the placeholder exists before classify, so this selects it — and
-    // selecting is the real user action that triggers its first classify. The
-    // banner renders only from a LOADED classification, so its appearance is
-    // the proof that classify finished server-side.
-    select_only_item(&app).await?;
+    // Spec 058 T012/T016: there is no placeholder to select any more. The
+    // folder is a source-group row; Classify is what materializes its item
+    // (needs-review here, since the fixture's frame type is unreadable), and
+    // selecting THAT item is what loads the classification the banner renders
+    // from. The banner still only renders from a LOADED classification, so its
+    // appearance remains the proof that classify finished server-side.
+    rescan_classify_and_select_item(&app).await?;
     app.wait_testid("inbox-unclassified-alert", UI_TIMEOUT).await?;
 
     // classify does not invalidate the list query, so force the refetch until
@@ -684,8 +762,7 @@ async fn inbox_ui_missing_path_attribute_banner_blocks_confirm() -> anyhow::Resu
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    rescan_and_wait_for_item(&app).await?;
-    select_only_item(&app).await?;
+    rescan_classify_and_select_item(&app).await?;
 
     // The FR-032 banner is metadata-driven: the detail pane's
     // `inbox.item.metadata` query and the SAME selection's `inbox.classify`
@@ -745,8 +822,7 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    rescan_and_wait_for_item(&app).await?;
-    let item_id = select_only_item(&app).await?;
+    let item_id = rescan_classify_and_select_item(&app).await?;
 
     app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await?;
     app.click_testid("inbox-confirm-btn").await?;
@@ -821,8 +897,7 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    rescan_and_wait_for_item(&app).await?;
-    let item_id = select_only_item(&app).await?;
+    let item_id = rescan_classify_and_select_item(&app).await?;
 
     app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await?;
     app.click_testid("inbox-confirm-btn").await?;
