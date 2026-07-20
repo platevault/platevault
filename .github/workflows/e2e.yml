@@ -126,6 +126,21 @@ concurrency:
 
 env:
   CARGO_INCREMENTAL: 0
+  # Debuginfo is 53% of every compiled artifact and the runners have been
+  # exhausting disk on it: `target/debug` reaches 1.1 GB, the 11 e2e journey
+  # binaries total 356 MB (~32 MB each, 15.3 MB after `strip --strip-debug`),
+  # and that archive is then downloaded by six shard jobs. PR #1216's ubuntu
+  # leg died with `rustc-LLVM ERROR: IO failure on output stream: No space left
+  # on device`, which reads as a code failure and costs real triage time.
+  #
+  # `line-tables-only` keeps file/line information in panic backtraces -- the
+  # part that actually matters when a test or journey fails -- while dropping
+  # the type and variable debuginfo that dominates the size. A full strip would
+  # be smaller still but loses backtrace line numbers, a bad trade for a test
+  # suite. Set here rather than as a `[profile.*]` in Cargo.toml so local
+  # developer builds keep full debuginfo. See issue #1250.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
   # Fresh, disposable file-backed SQLite DB per run (FR-006). Relative to the
   # checkout root (the nextest working directory in this workflow). The app
   # binary itself creates the file + runs migrations on connect
@@ -311,7 +326,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.APP_BIN }}
-          key: e2e-app-ubuntu-latest-${{ steps.appkey.outputs.key }}
+          key: e2e-app-v2-ubuntu-latest-${{ steps.appkey.outputs.key }}
 
       # The archive DOES depend on test sources, so it keeps the broad key.
       - name: Restore nextest archive by content key
@@ -319,7 +334,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: e2e-archive.tar.zst
-          key: e2e-archive-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
+          key: e2e-archive-v2-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
 
       # A reported cache-hit is not proof the binary is actually there: run
       # 29591042499 hit a corrupted/partial e2e-app-ubuntu-latest cache entry
@@ -443,7 +458,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.APP_BIN }}
-          key: e2e-app-windows-latest-${{ steps.appkey.outputs.key }}
+          key: e2e-app-v2-windows-latest-${{ steps.appkey.outputs.key }}
 
       # The archive DOES depend on test sources, so it keeps the broad key.
       - name: Restore nextest archive by content key
@@ -451,7 +466,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: e2e-archive.tar.zst
-          key: e2e-archive-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
+          key: e2e-archive-v2-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
 
       # See the ubuntu chain's "Verify cached binary is usable" comment for
       # why a reported cache-hit alone is not trusted.
@@ -550,7 +565,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.APP_BIN }}
-          key: e2e-app-macos-latest-${{ steps.appkey.outputs.key }}
+          key: e2e-app-v2-macos-latest-${{ steps.appkey.outputs.key }}
 
       # The archive DOES depend on test sources, so it keeps the broad key.
       - name: Restore nextest archive by content key
@@ -558,7 +573,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: e2e-archive.tar.zst
-          key: e2e-archive-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
+          key: e2e-archive-v2-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
 
       # See the ubuntu chain's "Verify cached binary is usable" comment for
       # why a reported cache-hit alone is not trusted.
