@@ -27,6 +27,13 @@ trace:
   - e2e-agentic-test/041-inbox-plan-surface/plan-overlay-apply-audit/scenario.md
   - e2e-agentic-test/025-filesystem-plan-application/plan-overlap-guard/scenario.md
   - e2e-agentic-test/journeys/grand-inbox-journey/scenario.md
+  - spec-058-inbox-drop-parent-items (D-001, D-006, D-007, FR-001–FR-009,
+    FR-015–FR-017, FR-023, FR-025, SC-001–SC-004, SC-010 — a scanned folder
+    produces no placeholder inbox item; source-group row before classification,
+    N item rows after, no aggregate row ever)
+  - specs/058-inbox-drop-parent-items/sc-009-boundary.md (SC-009 is knowingly
+    NOT delivered by spec 058; the supersession mechanism lands in
+    specs/tiny/reclassify-split-per-item-and-rederivation.md, PR #1097)
   - spec-054-adaptive-detail-dock (FR-001, FR-003, FR-005 — shared adaptive
     dock: Inbox uses the same side-≥1400px/bottom-below placement, per-page
     Auto/Bottom/Right override, and drag-resizable side width as every other
@@ -53,36 +60,42 @@ explicit, reviewed plan, and the action is visible in the audit history.
 
 ### S1 — Rescan the inbox and see items split by type {#S1}
 - **Do:** Trigger a rescan of the inbox.
-- **Expect:** New folders under the inbox appear as queue items. A folder
-  whose files mix frame types (e.g. lights and darks together) never
-  materializes as one ambiguous "mixed" item — it appears as several
-  single-type items (e.g. `light · Ha · 300s`, `light · Ha · 120s`,
-  `dark · 300s`), each still visibly grouped back to its shared source
-  folder. Grouping the list by target or frame type nests these items
-  correctly, and the status-bar breakdown count matches the queue's real
-  contents using one normalized name per frame type. The inbox badge counts
-  a split folder once per resulting single-type item — the superseded source
-  folder is hidden from the queue and must not be counted, so the badge and
-  the visible rows always agree. A folder whose files resolve to NO frame
-  type at all (e.g. an unrecognized `IMAGETYP`) does not split, so its folder
-  row stays in the queue alongside the needs-review item its files landed in;
-  that folder row's Type column reads "unclassified", matching what the
-  detail panel says about the same item.
-- **Expect (negative):** No queue item is shown as an undifferentiated
-  "mixed" type when its files can be split by detected frame type. The badge
-  never reads higher than the number of visible queue rows — a split folder
-  must not be counted as its items *plus* its own hidden source folder. A
-  queue row never reports "classified" in the Type column while its own
-  detail panel reports the item unclassified — the two surfaces never
-  disagree about the same item.
+- **Expect:** A newly scanned folder appears in the queue immediately, as a
+  single **source-group row** — the folder itself, not an inbox item. That row
+  is structurally non-confirmable: it has no frame type, no classification, no
+  confirm affordance, and states nothing about its files beyond what scanning
+  alone established. Once classification runs on that folder, its source-group
+  row is replaced by exactly N **item rows**, one per detected frame-type
+  group: one row for a uniform folder, N rows for a folder whose files mix
+  frame types (e.g. `light · Ha · 300s`, `light · Ha · 120s`, `dark · 300s`).
+  Every row states only facts about its own files. Siblings from one folder
+  remain identifiable as a set, and grouping the list by folder shows them
+  together under one header; grouping by target or frame type nests them
+  correctly. The inbox badge, the status-bar breakdown, and the number of
+  visible rows agree by construction, because there is no additional row to
+  reconcile away.
+- **Expect (negative):** Scanning never creates an inbox item representing a
+  folder as a whole — no placeholder, not even transiently, and no aggregate
+  row survives classification alongside the item rows it produced. No queue
+  item is shown as an undifferentiated "mixed" type. No sibling in a split set
+  is primary or distinguished; none carries the others' lifecycle. The badge
+  never disagrees with the number of visible queue rows.
   Opening the Inbox page and leaving it open never spins the page in a runaway
   re-render loop (previously the page re-rendered continuously the entire
   time it was open, driven by an unstable page-status node identity and a
   freshly-allocated empty-items array while the item-list query was
   unresolved).
+- **Expect (negative):** Replacing a source-group row with its item rows never
+  silently drops the user's selection.
 - **Trace (stability):** `apps/desktop/src/features/inbox/InboxPage.tsx`
   (`useSetPageStatus` call site, `listData?.items ?? []`); PR #938 fixes
   #557.
+- **Trace (058):** spec-058 FR-001/FR-004 (no frame-type-less item ever
+  created or exposed), FR-002/FR-003 (1 row for uniform, N for N groups),
+  FR-005/FR-006 (sibling set, no primary), FR-015/FR-016/FR-017 (scan creates
+  the source group; classification replaces its row), FR-023 (selection
+  continuity), FR-025 (group-by-folder), D-001/D-006/D-007. **Not yet
+  implemented as of `38227ca3`** — see G2.
 
 ### S2 — Inspect an item's per-file detail {#S2}
 - **Do:** Select a queue item and open its detail.
@@ -106,12 +119,13 @@ explicit, reviewed plan, and the action is visible in the audit history.
   or a not-applicable value (blank/"—", no chip) — never a bare `0`/blank
   standing in for a missing value
   (`apps/desktop/src/components/RenderValue.tsx`, `InboxDetail.tsx` field
-  wiring). On the residual "mixed" parent-folder row still visible after
-  its files are auto-split into single-type sub-items (S1's known `#549`
-  case), the advisory banner reads "This folder is automatically split
-  into separate single-type items — find and confirm each one individually
-  in the list," not the retired claim that Confirm on the parent row
-  itself produces a split. The detail continues to track the item the user
+  wiring). There is no residual "mixed" parent-folder row to inspect: after
+  classification a folder is present only as its N item rows, so the advisory
+  banner explaining an already-performed split has nothing left to attach to
+  and is gone along with the row. Selecting a source-group row (a folder
+  scanned but not yet classified) opens a detail that describes the folder —
+  its path and file count — and offers classification, not confirmation. The
+  detail continues to track the item the user
   selected even if the user changes the search text or an active filter
   afterward.
 - **Expect (negative):** Changing search or filter text never silently
@@ -130,7 +144,8 @@ explicit, reviewed plan, and the action is visible in the audit history.
 - **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
   `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring,
   `.pv-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
-  mixed-folder banner copy per PR #939 fixes #552, #569);
+  the mixed-folder banner copy fixed by PR #939 (#552, #569) is retired by
+  spec-058 along with the parent row that carried it);
   `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
   Sessions-only — no `nativeReveal` call anywhere under
   `features/inbox/`); `apps/desktop/src/ui/useAdaptiveDock.ts`,
@@ -284,9 +299,10 @@ explicit, reviewed plan, and the action is visible in the audit history.
 
 ## Success criteria
 
-- SC1: After S1, a source folder mixing frame types produces N single-type
-  queue items (N = distinct detected type/setting combinations in that
-  folder), not 1 mixed item.
+- SC1: After S1, a classified source folder mixing frame types produces
+  exactly N single-type queue items (N = distinct detected type/setting
+  combinations in that folder) and zero aggregate rows — not 1 mixed item,
+  and not N items plus a folder row.
 - SC2: An item missing a mandatory attribute cannot be confirmed through
   either the UI (Confirm disabled) or a direct confirm request (typed
   `inbox.missing_path_attributes` rejection) — S3.
@@ -299,10 +315,33 @@ explicit, reviewed plan, and the action is visible in the audit history.
   collision in S7 has a matching row in the audit history (S8).
 - SC5: A plan whose source file changed after confirm is refused at apply
   time, never silently applied (S7).
+- SC6: A folder scanned but not yet classified is visible in the queue as
+  exactly one row, and that row cannot be confirmed (S1).
+- SC7: Confirming one sibling of an N-way split leaves the other N−1 unchanged
+  in state, classification, and plan binding (S5).
 
 ## Known gaps
 
 - G1: (dissolved 2026-07-15) — tracked as issue #880; registry editor UI exposes only common fields.
+- G2: The spec-058 behaviour described in S1, S2, SC1, SC6 and SC7 is the
+  SPECIFIED end state and is **not yet implemented** as of `38227ca3`
+  (2026-07-20); phases 2–4 are in flight in a parallel lane. What still holds
+  on that commit: scanning creates a folder placeholder inbox item
+  (`apps/desktop/src-tauri/src/commands/inbox.rs::persist_folder_placeholder`),
+  the placeholder is hidden from the queue by a read-side suppression
+  predicate (`crates/persistence/db/src/repositories/inbox.rs::exclude_split_placeholder!`,
+  which spec-058 SC-007 deletes), and no source-group row is rendered — the
+  Inbox list has no source-group row type
+  (`apps/desktop/src/features/inbox/InboxPage.tsx` uses `sourceGroupId` only
+  as a detail key/prop). Validate S1/S2 against this gap, not against the
+  journey body, until spec 058 lands.
+- G3: SC-009 of spec 058 (a superseded sibling's open plan is blocked and the
+  user gets an explicit superseded signal) is **knowingly not delivered by
+  spec 058** and is therefore deliberately absent from this journey. It lands
+  with `specs/tiny/reclassify-split-per-item-and-rederivation.md` (PR #1097).
+  See `specs/058-inbox-drop-parent-items/sc-009-boundary.md`. Until then, a
+  folder-wide reclassify refusal survives when any sibling has an open plan —
+  that refusal is intended, not a defect.
 
 ## Delta log
 
@@ -328,13 +367,16 @@ explicit, reviewed plan, and the action is visible in the audit history.
   Evidence: PR #938 (fixes #557), PR #939 (fixes #552, #553, #554, #569) ·
   by: journey-scribe (intent-gated)
 
-- **Δ4** 2026-07-19 · S1 · behavior-change
-  A folder row whose files resolve to no frame type no longer reports
-  "classified" in the Type column. It now reads "unclassified", agreeing
-  with what the detail panel already said about that same item — the list
-  badge is read from the item's own cached classification instead of from
-  its scan state, which is set to "classified" for every scanned folder
-  regardless of the result.
-  Evidence: commit 4a96389b (fix(inbox): list badge no longer reports
-  Classified for an unsplit folder), issue #711 Instance A · by:
-  journey-scribe (intent-gated)
+- **Δ4** 2026-07-20 · S1, S2, SC1, +SC6, +SC7, +G2, +G3 · behavior-change
+  A scanned folder no longer produces a placeholder inbox row. Before
+  classification the folder appears as a source-group row that is structurally
+  non-confirmable; after classification it becomes exactly N item rows, one
+  per frame-type group, with no aggregate row alongside them and no hidden row
+  to suppress. Every row states only facts about its own files, so the badge,
+  the status-bar breakdown and the visible rows agree by construction. The
+  residual "mixed" parent row and its advisory banner are gone. SC-009's
+  supersession signal is explicitly NOT part of this change (G3).
+  Evidence: spec-058-inbox-drop-parent-items (D-001/D-006/D-007,
+  FR-001–FR-009, FR-015–FR-017, FR-023, FR-025) ·
+  by: journey-scribe (intent-gated) · NOT YET IMPLEMENTED as of `38227ca3` —
+  see G2

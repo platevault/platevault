@@ -206,11 +206,11 @@ stop and iterate properly.
 ## Phase 7: Polish & cross-cutting
 
 - [ ] T042 [P] Verify SC-002b — a scanned but unclassified folder appears as exactly one row that is not an inbox item
-- [ ] T043 [P] Verify SC-009's boundary honestly. D-005 remains a recorded decision but **its mechanism is descoped** to `specs/tiny/reclassify-split-per-item-and-rederivation.md`. State plainly in the verification report that SC-009 is not satisfied by this feature, rather than marking it done
+- [X] T043 [P] Verify SC-009's boundary honestly. D-005 remains a recorded decision but **its mechanism is descoped** to `specs/tiny/reclassify-split-per-item-and-rederivation.md`. State plainly in the verification report that SC-009 is not satisfied by this feature, rather than marking it done → `specs/058-inbox-drop-parent-items/sc-009-boundary.md`: **SC-009 NOT met, do not tick; the exit bar is the other eleven criteria**
 - [ ] T044 [P] Confirm both PG-3 interlocks are still present and documented — `crates/app/inbox/src/reclassify.rs:346-362` and `classify.rs:433`. Neither is removed by this feature; removing only one would leave the follow-on's requirement unmet while appearing done
 - [ ] T045 [P] Fix the in-tree migration citations: `crates/app/inbox/src/classify.rs:390` and `confirm.rs:211` both cite migration `0048` for the `result` CHECK collapse. It is `0049`
-- [ ] T046 [P] Update `docs/journeys/J02-ingest-review-reclassify-confirm-move/journey.md` with a behaviour delta and version bump, and refresh `docs/journeys/INDEX.md` via `journeys.py index .`
-- [ ] T047 [P] Update the Layer-2 coverage matrix in `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`
+- [X] T046 [P] Update `docs/journeys/J02-ingest-review-reclassify-confirm-move/journey.md` with a behaviour delta and version bump, and refresh `docs/journeys/INDEX.md` via `journeys.py index .` → v3→v4, Δ4 (S1, S2, SC1, +SC6, +SC7, +G2, +G3); `journeys.py lint .` = 18 journeys, 0 errors
+- [X] T047 [P] Update the Layer-2 coverage matrix in `specs/037-e2e-integration-testing/contracts/coverage-matrix.md` → area #3 note + dated "Spec 058" section (obligation/state table, the three SC-005 journeys, the SC-009 exclusion)
 - [ ] T048 Run the full gate set: workspace `cargo nextest`, `cargo clippy --workspace --all-targets -D warnings`, `cargo fmt --check`, `just typecheck`, `just lint`, desktop `vitest`, and the Layer-2 Inbox journeys
 - [ ] T049 Signal the lane holding #968/#994/#995/#997 that the landing window is known, so the inbox file splits can be sequenced
 
