@@ -44,7 +44,8 @@ import {
 } from '@/components';
 import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
 import { Btn, Banner } from '@/ui';
-import { deriveChannels, fmtIntegS } from './projectDetailHelpers';
+import { deriveChannels } from './projectDetailHelpers';
+import { formatIntegration } from '@/lib/format';
 import { ProjectChannelsSection } from './ProjectChannelsSection';
 import { ProjectSourcesSection } from './ProjectSourcesSection';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
@@ -308,12 +309,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       <MetricLine
         metrics={[
           {
-            value:
-              derivedChannels.reduce((s, c) => s + c.totalIntegS, 0) > 0
-                ? fmtIntegS(
-                    derivedChannels.reduce((s, c) => s + c.totalIntegS, 0),
-                  )
-                : '—',
+            value: formatIntegration(
+              derivedChannels.reduce((s, c) => s + c.totalIntegS, 0),
+            ),
             label: m.projects_metric_integration(),
           },
           {
