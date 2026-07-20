@@ -370,6 +370,66 @@ export function useInboxConfirm() {
   return { ...state, confirm };
 }
 
+export interface ClassifySourceGroupState {
+  /** `sourceGroupId` currently in flight, or null when idle. */
+  classifyingGroupId: string | null;
+  error: string | null;
+}
+
+/**
+ * Group-scoped classification for a scanned-but-unclassified folder
+ * (spec 058 FR-017).
+ *
+ * Deliberately NOT a `useQuery`, unlike {@link useInboxClassification}.
+ * `inbox.classify` is idempotent and safe to cache; this operation
+ * *materialises item rows* as a side effect, so firing it from a cache miss on
+ * remount would silently create rows the user never asked for. It follows the
+ * hand-rolled mutation pattern this file uses everywhere else (see
+ * {@link useInboxConfirm}).
+ *
+ * Busy state is keyed by `sourceGroupId` rather than a bare boolean because a
+ * successful call *erases the row that triggered it*: the group leaves
+ * `sourceGroups` and reappears as item rows on the next `inbox.list`. A bare
+ * boolean would keep a spinner alive on a row that no longer exists.
+ */
+export function useInboxClassifySourceGroup() {
+  const queryClient = useQueryClient();
+  const [state, setState] = useState<ClassifySourceGroupState>({
+    classifyingGroupId: null,
+    error: null,
+  });
+
+  const classifySourceGroup = useCallback(
+    async (args: { sourceGroupId: string; rootAbsolutePath: string }) => {
+      setState({ classifyingGroupId: args.sourceGroupId, error: null });
+      try {
+        const result = unwrap(
+          await commands.inboxClassifySourceGroup({
+            sourceGroupId: args.sourceGroupId,
+            rootAbsolutePath: args.rootAbsolutePath,
+          }),
+        );
+        setState({ classifyingGroupId: null, error: null });
+        // Required for the row to turn over: without this the group row stays
+        // on screen and the freshly materialised items never appear.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.list('all'),
+        });
+        return result;
+      } catch (e) {
+        setState({
+          classifyingGroupId: null,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        throw e;
+      }
+    },
+    [queryClient],
+  );
+
+  return { ...state, classifySourceGroup };
+}
+
 export interface ReclassifyState {
   loading: boolean;
   result: InboxReclassifyResponse | null;

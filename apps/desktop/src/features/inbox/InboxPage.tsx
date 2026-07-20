@@ -70,6 +70,7 @@ import {
   normalizeConfirmError,
   useApplySelectedInboxPlans,
   useInboxClassification,
+  useInboxClassifySourceGroup,
   useInboxConfirm,
   useInboxItemMetadata,
   useInboxList,
@@ -433,6 +434,32 @@ export function InboxPage() {
   const { data: classification } = useInboxClassification(
     selectedItem?.inboxItemId ?? '',
     selectedRootPath,
+  );
+
+  // Group-scoped classification for scanned-but-unclassified folders
+  // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
+  // selection — a source-group row is not selectable — so it is driven by an
+  // explicit button in the row.
+  const { classifyingGroupId, classifySourceGroup } =
+    useInboxClassifySourceGroup();
+
+  const handleClassifySourceGroup = useCallback(
+    (group: InboxSourceGroupListItem) => {
+      void classifySourceGroup({
+        sourceGroupId: group.sourceGroupId,
+        rootAbsolutePath: group.rootAbsolutePath,
+      }).catch((e: unknown) => {
+        // The row erases itself on success, so a silent failure would look
+        // like nothing happened at all. Surface it.
+        addToast({
+          variant: 'error',
+          message: m.inbox_toast_classify_group_failed({
+            message: e instanceof Error ? e.message : String(e),
+          }),
+        });
+      });
+    },
+    [classifySourceGroup],
   );
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
@@ -1219,6 +1246,8 @@ export function InboxPage() {
         <InboxList
           items={filteredItems}
           sourceGroups={filteredSourceGroups}
+          onClassifySourceGroup={handleClassifySourceGroup}
+          classifyingGroupId={classifyingGroupId}
           selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}
