@@ -113,9 +113,14 @@ export function ProjectsPage() {
   // no longer exist. (Supersedes redesign's index-based selectedIdx.)
   const project: ProjectSummaryDto | undefined =
     selected != null ? projects.find((p) => p.id === selected) : undefined;
+  // #735: `loading` must gate the cleanup — on a cold reload the list cache is
+  // empty, so an unguarded `project === undefined` misreads a perfectly valid
+  // `?selected=` as stale and wipes it before the list IPC resolves (breaks
+  // spec 020 SC-002 "app reloads → same project selected"). Bounded: `loading`
+  // settles, at which point a genuinely absent id is still cleared.
   useStaleSelectionCleanup(
     selected,
-    project !== undefined || selected == null,
+    loading || project !== undefined || selected == null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),

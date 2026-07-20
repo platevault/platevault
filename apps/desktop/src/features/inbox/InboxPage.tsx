@@ -312,9 +312,17 @@ export function InboxPage() {
   const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
     useState<string | null>(null);
 
+  // #735: `listLoading` joins the gate because on a cold reload the list cache
+  // is empty and an unguarded `selectedItem === undefined` wipes a valid
+  // `?selected=` before the list IPC resolves. This does NOT reopen the
+  // unbounded-gate hazard the reclassify handoff guards against: `listLoading`
+  // settles on its own, whereas `pendingReclassifySelectionId` needed
+  // `resolveReclassifyHandoff`'s explicit give-up path.
   useStaleSelectionCleanup(
     selected,
-    selectedItem !== undefined || pendingReclassifySelectionId !== null,
+    listLoading ||
+      selectedItem !== undefined ||
+      pendingReclassifySelectionId !== null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),

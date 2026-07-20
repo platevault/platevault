@@ -52,6 +52,7 @@ import type { FilterOption } from '@/components';
 import { m } from '@/lib/i18n';
 import { Btn, EmptyState } from '@/ui';
 import { useGrouping } from '@/lib/use-grouping';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
 import { useTargets } from './store';
@@ -343,6 +344,18 @@ export function TargetsPage() {
         replace: true,
       }),
     [navigate],
+  );
+
+  // #735: Targets was the one ledger page never wired for stale-id cleanup
+  // (tasks.md T030 claimed all six), so a `?selected=<uuid>` for a deleted
+  // target persisted forever. Matched against the FULL query data rather than
+  // the progressively-revealed slice — an unrevealed target is present, not
+  // stale. `status === 'loading'` gates the cold-reload race (#735 item 1).
+  useStaleSelectionCleanup(
+    selected,
+    listState.status !== 'loaded' ||
+      listState.items.some((t) => t.id === selected),
+    clearSelection,
   );
 
   const handleAdded = useCallback(
