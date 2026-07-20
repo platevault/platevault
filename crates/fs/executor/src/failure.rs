@@ -179,6 +179,12 @@ fn classify_io_error(err: &io::Error) -> (FailureCode, bool) {
         io::ErrorKind::NotFound => (FailureCode::SourceMissing, false),
         io::ErrorKind::WouldBlock => (FailureCode::SourceLocked, true),
         io::ErrorKind::StorageFull => (FailureCode::DiskFull, true),
+        // A path the OS refuses to name: ENAMETOOLONG on Unix, and on Windows
+        // both ERROR_INVALID_NAME and the filename-exceeds-range error raised
+        // past MAX_PATH. Retry cannot help — the path itself must change — so this
+        // is not recoverable, and it must not degrade to `Unknown`, which would
+        // tell the user nothing about their too-long path (constitution §II).
+        io::ErrorKind::InvalidFilename => (FailureCode::PathInvalid, false),
         _ => {
             // Inspect raw OS error for volume / cross-device clues.
             #[cfg(unix)]
@@ -189,6 +195,13 @@ fn classify_io_error(err: &io::Error) -> (FailureCode, bool) {
                     return (FailureCode::VolumeUnavailable, true);
                 }
             }
+            // Surface classification gaps in production instead of swallowing
+            // them: every `Unknown` a user sees is a kind we could have named.
+            tracing::warn!(
+                io_error_kind = ?err.kind(),
+                raw_os_error = ?err.raw_os_error(),
+                "fs_executor: unclassified io error mapped to FailureCode::Unknown"
+            );
             (FailureCode::Unknown, false)
         }
     }

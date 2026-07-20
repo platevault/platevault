@@ -1118,6 +1118,12 @@ async fn seed_sub_item_cache(
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
+///
+/// Skips symlinks and Windows junctions. `folder` is user-supplied, and
+/// `is_file()` resolves links, so without this gate a link planted in an
+/// inbox folder would pull an out-of-root file into classification — the
+/// do-not-follow-links rule the scanner already enforces (issue #1233,
+/// constitution product constraints).
 fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let Ok(read_dir) = std::fs::read_dir(folder) else {
@@ -1125,6 +1131,9 @@ fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     };
     for entry in read_dir.flatten() {
         let path = entry.path();
+        if fs_pathsafe::is_link_or_junction(&path) {
+            continue;
+        }
         if !path.is_file() {
             continue;
         }
@@ -3228,5 +3237,63 @@ mod tests {
             std::collections::HashSet::from(["light", "dark"]),
             "re-derived sub-items must cover both frame types present in the folder"
         );
+    }
+
+    /// Baseline for the two link tests below: a real FITS file in the folder
+    /// IS enumerated, so a later assertion of "not enumerated" is evidence of
+    /// the link gate rather than of a broken walker.
+    #[test]
+    fn real_fits_file_is_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "real.fits", "LIGHT");
+
+        let found = enumerate_fits_files(tmp.path());
+        assert_eq!(found.len(), 1, "a real FITS file in the folder must be enumerated");
+    }
+
+    /// Issue #1233: a symlink to a FITS file outside the inbox folder must not
+    /// be pulled into classification. `is_file()` resolves the link, so the
+    /// explicit link gate is what refuses it.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_fits_file_is_not_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        write_fits_with_imagetyp(&outside, "elsewhere.fits", "LIGHT");
+
+        let folder = tmp.path().join("inbox_folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::os::unix::fs::symlink(outside.join("elsewhere.fits"), folder.join("linked.fits"))
+            .unwrap();
+
+        let found = enumerate_fits_files(&folder);
+        assert!(found.is_empty(), "a symlinked FITS file must not be enumerated: {found:?}");
+    }
+
+    /// Windows counterpart: files reached through a junction must not be
+    /// enumerated either. Junctions are directory-only, so the link sits on
+    /// the folder the walker would descend into.
+    #[cfg(windows)]
+    #[test]
+    fn fits_file_behind_junction_is_not_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        write_fits_with_imagetyp(&outside, "elsewhere.fits", "LIGHT");
+
+        let folder = tmp.path().join("inbox_folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        let junction = folder.join("junction_to_outside");
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J", junction.to_str().unwrap(), outside.to_str().unwrap()])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+
+        // The walker is non-recursive, so the junction itself is the entry it
+        // must refuse; enumerating it as a directory would be a regression.
+        let found = enumerate_fits_files(&folder);
+        assert!(found.is_empty(), "nothing behind a junction may be enumerated: {found:?}");
     }
 }
