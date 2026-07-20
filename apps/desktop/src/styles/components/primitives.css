@@ -99,6 +99,9 @@
 }
 .pv-btn--destructive:active {
   background: var(--pv-destructive-bg-hover);
+  /* stylelint-disable-next-line function-disallowed-list -- no inset-shadow
+     token exists; --pv-shadow-sm is a different value. Tokenising this is
+     tracked separately, and #1303 currently owns this file. */
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.22);
 }
 .pv-btn--destructive:disabled {

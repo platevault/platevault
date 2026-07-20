@@ -1,6 +1,7 @@
-// Stylelint is adopted for exactly ONE invariant: every `var(--pv-*)` must
-// resolve to a token that actually exists. Deliberately no style preset — the
-// repo is biome-first and this is not a second opinion on formatting.
+// Stylelint is adopted for exactly TWO invariants: every `var(--pv-*)` must
+// resolve to a token that actually exists, and hand-written CSS must state
+// colour through a token rather than as a literal. Deliberately no style preset
+// — the repo is biome-first and this is not a second opinion on formatting.
 //
 // Why a CSS parser rather than a grep: 3,000+ `var()` references live in CSS,
 // and the rule has to understand same-file scoping (component-local custom
@@ -18,6 +19,23 @@ export default {
   referenceFiles: ['src/styles/tokens.css', '../../packages/tokens/tokens-docs.css'],
   rules: {
     'no-unknown-custom-properties': true,
+    // The pipeline only pays off if literals cannot creep back in. Holding the
+    // line at zero costs nothing now; re-running a sweep later does. Scoped by
+    // the override below.
+    'color-no-hex': true,
+    'function-disallowed-list': ['rgb', 'rgba', 'hsl', 'hsla'],
   },
+  overrides: [
+    {
+      // tokens.css IS the palette: generated from the DTCG sources, where raw
+      // literals are correct by construction (210 of them, one per theme
+      // value). This exemption is structural, not a grandfathered backlog.
+      files: ['src/styles/tokens.css'],
+      rules: {
+        'color-no-hex': null,
+        'function-disallowed-list': null,
+      },
+    },
+  ],
   ignoreFiles: ['dist/**', 'node_modules/**', '.ds-css/**'],
 };
