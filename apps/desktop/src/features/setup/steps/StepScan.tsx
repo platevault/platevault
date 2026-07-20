@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
 import { m } from '@/lib/i18n';
+import { masterLabel } from '@/lib/master-label';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { InboxItemSummary } from '@/bindings/index';
@@ -82,26 +83,6 @@ function getRootId(flushResult: FlushResult, path: string): string {
   const row = flushResult.results.find((r) => r.path === path);
   // Successful rows carry the assigned rootId; fall back to the path if absent.
   return row?.rootId ?? path;
-}
-
-/** Capitalize the first letter (e.g. "dark" → "Dark"). */
-function titleCase(s: string): string {
-  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
-/**
- * Human label for a detected calibration master item (spec 040 FR-006).
- * e.g. "Master Dark", "Master Flat · Ha · 120s".  Falls back to a generic
- * "Master" when the base frame type couldn't be inferred.
- */
-function masterLabel(item: InboxItemSummary): string {
-  const ft: string = item.masterFrameType
-    ? m.setup_scan_master_kind({ kind: titleCase(item.masterFrameType) })
-    : m.setup_scan_master();
-  const parts: string[] = [ft];
-  if (item.masterFilter) parts.push(item.masterFilter);
-  if (item.masterExposureS != null) parts.push(`${item.masterExposureS}s`);
-  return parts.join(' · ');
 }
 
 // ── Per-source detection summary ──────────────────────────────────────────────

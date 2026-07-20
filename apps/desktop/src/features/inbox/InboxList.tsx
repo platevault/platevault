@@ -35,6 +35,7 @@ import { SortHeader, ariaSortFor } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';
 import { m } from '@/lib/i18n';
+import { masterLabel } from '@/lib/master-label';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -156,17 +157,14 @@ function formatTag(item: InboxListItem): string {
 
 /**
  * The exact label rendered in the Format column cell (issue #649): a master
- * row displays `"{type} master"`, not its raw `formatTag`. The sort
- * comparator MUST compare this same displayed string — comparing the
- * internal format tag instead (as before) let master rows interleave
- * arbitrarily with FITS rows because "FITS" never equals "bias master" etc.
+ * row displays its spec 040 FR-006 "type · filter · exposure" label, not its
+ * raw `formatTag`. The sort comparator MUST compare this same displayed
+ * string — comparing the internal format tag instead (as before) let master
+ * rows interleave arbitrarily with FITS rows because "FITS" never equals
+ * "Master Bias" etc.
  */
 function formatDisplayLabel(item: InboxListItem): string {
-  return item.isMaster
-    ? m.inbox_master_row_label({
-        type: item.masterFrameType ?? m.inbox_state_master_fallback(),
-      })
-    : formatTag(item);
+  return item.isMaster ? masterLabel(item) : formatTag(item);
 }
 
 /**
