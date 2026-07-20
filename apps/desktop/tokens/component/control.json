@@ -1,0 +1,11 @@
+{
+  "control-h": {
+    "$value": "26px",
+    "$type": "dimension",
+    "$description": "Control height (#616) \u2014 single source of truth for toolbar-adjacent controls (buttons, text inputs, selects, SegControl) so they line up in the same row instead of drifting per-component (measured: input 27px, select 25px, button 24px, Settings select 28px, all in one chrome)."
+  },
+  "control-h-sm": {
+    "$value": "24px",
+    "$type": "dimension"
+  }
+}

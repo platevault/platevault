@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // build-tokens.mjs — generate tokens.css from the DTCG sources in tokens/.
 //
-// Architecture (the standard three-tier model, minus tier 3):
+// Architecture (the standard three-tier model):
 //   tier 1  tokens/themes/<id>.json  raw palette, one file per theme, each
 //                                    emitted as its own [data-theme] block
 //   tier 2  tokens/semantic.json     aliases + theme-invariant metrics, :root
-//   tier 3  (none yet)               component tokens are deliberately absent;
-//                                    nothing varies per-component per-theme yet
+//   tier 3  tokens/component/*.json  per-component geometry, also :root. These
+//                                    are literals, not aliases: a semantic token
+//                                    resolves against the active theme, whereas
+//                                    a component's px metrics do not vary by
+//                                    theme at all. No component COLOUR tokens
+//                                    exist -- nothing varies per-component
+//                                    per-theme, so there is none to express.
 //
 // Theme-invariant type/space/radius live in packages/tokens/foundation.css,
 // which is shared with the docs repo and is NOT generated here — tokens.css
@@ -43,8 +48,16 @@ const themeIds = readdirSync(join(TOKENS_DIR, 'themes'))
   .map((f) => basename(f, '.json'))
   .sort();
 
-/** Which source file a token came from — used to split the tiers apart. */
-const fromFile = (suffix) => (token) => (token.filePath ?? '').endsWith(suffix);
+/**
+ * Which source file a token came from — used to split the tiers apart.
+ * Paths are normalised to forward slashes first: on Windows `filePath` is
+ * `...\density\compact.json`, so matching a literal `density/compact.json`
+ * selects NOTHING and the block emits empty — valid CSS, silently missing
+ * every density and theme token.
+ */
+const posix = (p) => (p ?? '').split('\\').join('/');
+const fromFile = (suffix) => (token) => posix(token.filePath).endsWith(suffix);
+const inDir = (dir) => (token) => posix(token.filePath).includes(`/${dir}/`);
 
 // Uses SD's built-in `css/variables` format rather than a hand-written one.
 // A custom format that reads `token.$value` directly bypasses outputReferences
@@ -70,7 +83,21 @@ async function buildBlock({ sources, selector, include }) {
     log: { verbosity: 'silent', warnings: 'disabled' },
   });
   const built = await sd.formatPlatform('css');
-  return built[0].output;
+  const output = built[0].output;
+
+  // An empty block is syntactically valid CSS, so a filter that selects nothing
+  // produces a file that looks fine and silently drops a whole tier or theme.
+  // That is exactly how the Windows path-separator bug got through review: the
+  // filters matched nothing there, every theme block emitted empty, and only
+  // the byte-level drift gate on a Windows runner noticed.
+  if (!/--pv-[a-z0-9-]+\s*:/.test(output)) {
+    console.error(
+      `ERROR: block "${selector}" emitted no declarations — its source filter ` +
+        `matched none of:\n  ${sources.join('\n  ')}`,
+    );
+    process.exit(1);
+  }
+  return output;
 }
 
 // The semantic tier references raw palette tokens, so each build must also
@@ -81,11 +108,17 @@ const themeSrc = (id) => join(TOKENS_DIR, 'themes', `${id}.json`);
 
 const blocks = [];
 
+// Tier 2 + tier 3 both land in :root — they differ in ownership, not scope.
+const componentSrcs = readdirSync(join(TOKENS_DIR, 'component'))
+  .filter((f) => f.endsWith('.json'))
+  .sort()
+  .map((f) => join(TOKENS_DIR, 'component', f));
+
 blocks.push(
   await buildBlock({
-    sources: [semanticSrc, themeSrc(DEFAULT_THEME)],
+    sources: [semanticSrc, ...componentSrcs, themeSrc(DEFAULT_THEME)],
     selector: ':root',
-    include: fromFile('semantic.json'),
+    include: (token) => fromFile('semantic.json')(token) || inDir('component')(token),
   }),
 );
 
