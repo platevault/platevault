@@ -68,6 +68,40 @@ export function parseFocalLength(text: string): number | null {
   return Number.isFinite(n) ? Math.round(n) : null;
 }
 
+// ── Camera sensor geometry (migration 0079) ─────────────────────────────────
+
+/**
+ * A parsed sensor-geometry input.
+ *
+ * Distinct from [`parseFocalLength`], which folds unparseable text into
+ * `null`. Geometry must tell "not provided" apart from "provided but
+ * meaningless": the first persists as absent and yields no field of view, the
+ * second has to be rejected, so a zero or negative value can never reach the
+ * FOV computation and render as a real, degenerate field.
+ */
+export type GeometryInput =
+  | { kind: 'absent' }
+  | { kind: 'valid'; value: number }
+  | { kind: 'invalid' };
+
+/**
+ * Parses one geometry field. Blank is absent; anything non-finite or `<= 0`
+ * is invalid. `integer` rounds pixel counts, which are whole pixels.
+ */
+export function parseGeometry(text: string, integer: boolean): GeometryInput {
+  const trimmed = text.trim();
+  if (trimmed === '') return { kind: 'absent' };
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return { kind: 'invalid' };
+  return { kind: 'valid', value: integer ? Math.round(n) : n };
+}
+
+/** Table-cell summary of a train's derived FOV; absent → "Not known". */
+export function fovSummary(fovDiagonalDeg: number | null | undefined): string {
+  if (fovDiagonalDeg == null) return m.settings_equipment_fov_unknown();
+  return m.settings_equipment_fov_value({ degrees: fovDiagonalDeg.toFixed(2) });
+}
+
 // ── Camera sensor type (spec 044 iteration 2026-07-15, FR-035/T045) ──────────
 
 /** The OSC passband presets exposed in the form; stored as a band array. */
