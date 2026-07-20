@@ -29,7 +29,11 @@ per-page opt-in code — the default `detailPlacement` prop value is
   scope, `adaptiveThreshold` prop to override the 1400px default per page (not
   currently used by any adopting page).
 - **`apps/desktop/src/components/DetailPanel.tsx`** is the shared detail
-  container (3-zone facts/content/aux grid, single scroll region). Adopted by
+  container: a single content region which owns the panel's scrolling.
+  The 3-zone facts/content/aux grid originally described here is
+  **WITHDRAWN (#1107)** — no page ever passed a rail slot, and because the
+  grid also gated the scroll region, the panel had *no* scroll region in
+  production. See the T004 note in `tasks.md`. Adopted by
   all six pages (Sessions via `SessionDetail`, Calibration via
   `MasterDetail`, Inbox via `InboxDetail`, Archive via `ArchiveDetail`,
   Targets via `TargetDetailV2`, Projects via `ProjectDetail`) — the last

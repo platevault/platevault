@@ -942,20 +942,16 @@ export function TargetDetailV2({
       {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
       {newProjectOpen && null}
 
-      {/* #816: DetailPane fill-mode contract (primitives.css .pv-detail--fill)
-          requires ONE descendant establishing overflow-y:auto. DetailPanel is
-          deliberately used in "content-only" mode here (no facts/aux slots) —
-          that mode renders `children` as a direct sibling of DetailHeader
-          inside `.pv-detail--fill` (see DetailPanel.tsx), identical to the
-          pre-migration structure this comment originally documented. facts/
-          aux were NOT used for the identity columns below: that would nest
-          this region under `.pv-detailpanel__cols` > `.pv-detailpanel__content`
-          instead of as a direct child of `.pv-detail--fill`, breaking the
-          `.pv-detail--fill > .pv-planner__scroll` CSS rule (redesign-detail.css)
-          this fix depends on — everything below (identity/tonight, coverage,
-          links, display label, aliases, projects, notes, back button) lives
-          in this single scrollable region so it isn't silently clipped by
-          the pane's own overflow:hidden. */}
+      {/* #816 → #1107: this div used to be the pane's own scroll region,
+          because DetailPanel rendered `children` as a bare sibling of the
+          header with nothing establishing overflow — so everything below
+          (identity/tonight, coverage, links, display label, aliases, projects,
+          notes, back button) was silently clipped by the pane's
+          overflow:hidden.
+          DetailPanel now always wraps children in `.pv-detailpanel__content`,
+          which owns the scrolling for every page, so this is a plain layout
+          div. Do NOT give it `overflow-y` again — that nests a second scroller
+          inside the shared one and produces double scrollbars. */}
       <div className="pv-planner__scroll">
         {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
         <div className="pv-planner__cols">

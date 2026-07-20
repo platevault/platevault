@@ -51,14 +51,39 @@ pending verification).
   `localStorage`, untested by a dedicated unit-test file as of this
   reconciliation.
 - [x] T004 Component test: containment for a plain overflowing block, no
-  special internal scroll structure. **DELIVERED, PR #1076.** Landed as tests
-  19–20 in `DetailPanel.test.tsx:327-346` ("content-only children stay direct
-  children of `.alm-detail--fill`" / "the facts slot does NOT satisfy that
-  selector"), which pin the #816 fix mechanism (a direct-child CSS selector
-  in `redesign-detail.css`, from #1035). An earlier draft of this file
-  existed as an untracked, uncommitted stray in this worktree before #1076
-  merged it under the `DetailPanel.test.tsx` name instead of its own file —
-  that history is superseded by the committed version now on `main`.
+  special internal scroll structure. **DELIVERED, PR #1076; REVISED, #1107.**
+  Originally landed as tests 19–20 in `DetailPanel.test.tsx` ("content-only
+  children stay direct children of `.alm-detail--fill`" / "the facts slot does
+  NOT satisfy that selector"), pinning the #816 fix mechanism — a direct-child
+  CSS selector in `redesign-detail.css`, from #1035. An earlier draft of this
+  file existed as an untracked, uncommitted stray in this worktree before
+  #1076 merged it under the `DetailPanel.test.tsx` name instead of its own
+  file — that history is superseded by the committed version now on `main`.
+
+  **#1107 moved the contract these pin.** The reason #816 needed a per-feature
+  scroll wrapper at all is that `DetailPanel` rendered `children` as a bare
+  sibling of the header with no scroll region — the region was gated on the
+  facts/aux rails, which no page ever passed. Three features each worked
+  around it locally (#553 Inbox, #816 Targets, #1107 Calibration) while
+  Sessions and Projects stayed silently broken. The content region is now
+  unconditional and owns scrolling for every page, so the per-feature rules
+  were retired. Tests 19–20 now pin the relocated invariant: the shared region
+  wraps the content, and there is exactly one of them (a second would mean
+  nested scrollbars). The "facts slot does not satisfy the selector" pin goes
+  away with the slots.
+
+  Measured live in mock mode at a 390px side dock, 1280×860, before → after:
+  Projects 1216px → 0, Sessions 522px → 0, Calibration 191px → 0 of
+  unreachable content; Inbox and Targets unchanged at 0 (no regression).
+
+- [ ] T004a **WITHDRAWN (#1107)** — `DetailPanel` facts/aux rail slots and the
+  3-zone grid. Designed in spec 043 §4 and described in `plan.md`, but never
+  adopted: the props were passed only by `DetailPanel`'s own tests, which gave
+  false confidence in a code path the app never took. Withdrawn rather than
+  left latent because the grid *gated the panel's only scroll region*, so
+  keeping it dormant kept the clipping bug alive. Do not reintroduce a
+  conditional content wrapper; if per-page rails are wanted later, they must
+  not sit between the panel root and the scroll region.
 - [x] T005 Component test `ListPageLayout` placement mount. **DELIVERED
   (partial), #1003** — `ListPageLayout.test.tsx` covers the `'side-and-bottom'`
   variant; general adaptive-placement mounting is exercised indirectly by
