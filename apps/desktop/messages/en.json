@@ -1959,6 +1959,8 @@
   "inbox_no_file_metadata_caveat": "Required-attribute status is checked when you confirm.",
   "inbox_col_detection": "Path",
   "inbox_no_detections": "No detections.",
+  "inbox_hotkey_hint": "J / K to move through detections, C to confirm the selected one.",
+  "inbox_row_selected_aria": "Selected: {label}",
   "inbox_review_plans_title": "Review plans",
   "inbox_plan_col_plan": "Plan",
   "inbox_plan_col_composition": "Composition",
