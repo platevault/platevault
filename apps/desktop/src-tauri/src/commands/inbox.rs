@@ -170,7 +170,10 @@ pub async fn inbox_confirm(
 /// `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 ///
 /// # Errors
-/// Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
+/// Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, `"file.not_found"`,
+/// or `"internal.database"` — the re-aggregation's writes (classification,
+/// needs-review sentinel, breakdown rows) surface a persistence failure rather
+/// than returning a response that describes state which was never saved.
 #[tauri::command]
 #[specta::specta]
 pub async fn inbox_reclassify(
