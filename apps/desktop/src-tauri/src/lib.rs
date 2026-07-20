@@ -8,6 +8,7 @@
 //! are emitted at test time by `tests/bindings.rs` via tauri-specta.
 
 pub mod commands;
+pub mod data_dir;
 pub mod resolve_cache;
 pub mod watcher;
 
@@ -215,8 +216,49 @@ pub fn build_app() -> tauri::App {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(instance_context())
         .expect("error while building tauri application")
+}
+
+/// The compiled-in Tauri context, with each config-declared window pointed at
+/// a per-instance webview user-data folder when `ALM_DATA_DIR` is set.
+///
+/// Issue #1204: concurrent instances on Windows otherwise share one `WebView2`
+/// user-data folder, and the loser fails to create its webview at all
+/// (`WindowsError(0x80070057)`) — see [`crate::data_dir`] for the full chain
+/// and for why this has to go through the *config* (as a relative path)
+/// rather than [`tauri::webview::WebviewWindowBuilder::data_directory`]:
+/// windows declared in `tauri.conf.json` are built by Tauri itself, during
+/// `.build()`, so there is no builder for us to reach.
+///
+/// Unset (real users, non-E2E builds) leaves every window's `data_directory`
+/// as `None` — byte-for-byte the previous behaviour.
+///
+/// **Windows only, deliberately.** Linux and macOS already get real webview
+/// isolation from the harness's `XDG_*`/`HOME` overrides, which those
+/// platforms actually honour; there is no collision to fix. Setting
+/// `data_directory` there would instead *move* WebKitGTK/WKWebView storage
+/// out from under the isolated root it currently lives in — a regression
+/// bought for nothing.
+///
+/// That gate is a runtime `cfg!`, not a `#[cfg]` attribute, so this body is
+/// type-checked on every platform. A `#[cfg(target_os = "windows")]` block
+/// here would be invisible to the Linux and macOS CI legs and could only
+/// break on the one platform whose failures this is meant to stop.
+fn instance_context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+
+    if let (true, Some(subdir)) = (cfg!(target_os = "windows"), crate::data_dir::webview_subdir()) {
+        for window in &mut context.config_mut().app.windows {
+            window.data_directory = Some(subdir.clone());
+        }
+        tracing::info!(
+            webview_data_directory = %subdir.display(),
+            "per-instance webview user-data folder in effect (ALM_DATA_DIR is set)"
+        );
+    }
+
+    context
 }
 
 // Sequential startup/subscriber-wiring assembly, not complex logic — same
