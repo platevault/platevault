@@ -24,7 +24,7 @@ mod common;
 use std::time::Duration;
 
 use anyhow::Context;
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 use thirtyfour::{By, WebElement};
 
@@ -144,7 +144,12 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
     // Session grouping is event-driven — poll the real backend read until it
     // resolves before the wizard needs it.
     let _: serde_json::Value = app
-        .invoke_until("sessions_list", json!({}), UI_TIMEOUT, |v: &serde_json::Value| {
+        // `targetIds` is populated only by the 30 s-interval ingest-resolution
+        // drain, so this needs DRAIN_BACKED_TIMEOUT rather than the 30 s
+        // UI_TIMEOUT — a 30 s wait on a 30 s-period task is a coin flip
+        // (#1205). Same latent race as `ingestion_sessions_search`; it had not
+        // been observed failing here yet, but the mechanism is identical.
+        .invoke_until("sessions_list", json!({}), DRAIN_BACKED_TIMEOUT, |v: &serde_json::Value| {
             v.as_array().is_some_and(|arr| {
                 arr.iter().any(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
             })

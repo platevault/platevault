@@ -37,7 +37,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -405,11 +405,18 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
     let _: serde_json::Value =
         app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
 
-    // Session grouping is event-driven (the plan-listener reacts to the
-    // plan-applied event asynchronously) — poll `sessions.list` for the real,
-    // grouped-and-resolved session instead of a blind sleep.
+    // Poll `sessions.list` for the real, grouped-and-resolved session instead
+    // of a blind sleep.
+    //
+    // NOTE: the previous comment here claimed this is event-driven — "the
+    // plan-listener reacts to the plan-applied event asynchronously". That is
+    // true of session GROUPING, but NOT of the `targetIds` this predicate
+    // waits on. `backfill_session_targets` has exactly one caller in the app,
+    // the 30 s-interval ingest-resolution drain, so this wait is bounded by
+    // that drain's cadence and needs [`DRAIN_BACKED_TIMEOUT`], not the plain
+    // 30 s one. Waiting 30 s on a 30 s-period task is what flaked (#1205).
     let sessions: serde_json::Value = app
-        .invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
+        .invoke_until("sessions_list", json!({}), DRAIN_BACKED_TIMEOUT, |v: &serde_json::Value| {
             v.as_array().is_some_and(|arr| {
                 arr.iter().any(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
             })

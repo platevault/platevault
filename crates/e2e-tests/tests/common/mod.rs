@@ -181,6 +181,35 @@ pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(240);
 /// cold CI runner without masking a genuinely-absent element for long.
 pub const DEFAULT_FIND_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Budget for waits that depend on the ingest-resolution drain
+/// (`apps/desktop/src-tauri/src/bootstrap/background.rs`,
+/// `spawn_ingest_resolution_drain`).
+///
+/// That task is the ONLY caller of `backfill_session_targets` in the app —
+/// there is no event-driven plan-applied listener for it — and its loop is
+/// `sleep(30s)` FIRST, then resolve, then back-fill. A session's `targetIds`
+/// therefore cannot populate until a drain tick lands, and ticks come every
+/// 30 s starting 30 s after launch.
+///
+/// Waiting on that with a 30 s budget is a coin flip: the poll window and the
+/// drain period are the SAME length, so whether a tick falls inside the window
+/// depends on where setup happens to finish relative to the drain's phase.
+/// That is what made `ingestion_sessions_search` flake (#1205) — it failed at
+/// 155 s and passed on retry at 38 s, on the same commit.
+///
+/// 90 s guarantees at least two ticks inside the window regardless of phase.
+///
+/// Use this ONLY for predicates that gate on `targetIds` being populated.
+/// Waits on `sessionKey`/`frameCount` observe session GROUPING, which is
+/// event-driven and genuinely prompt — those must keep the shorter budget so
+/// a real grouping regression still fails fast.
+///
+/// This is a test-side fix for a test-side race. It deliberately does NOT
+/// change the 30 s drain interval, because that interval also sets the real
+/// user-visible latency for target resolution after an ingest, and changing it
+/// is a product decision (see #1205).
+pub const DRAIN_BACKED_TIMEOUT: Duration = Duration::from_secs(90);
+
 /// Deadline for a single `execute_async` script, set explicitly on the session
 /// (#1205). Before this existed the suite silently inherited the driver's own
 /// default — the W3C default is 30 s, which a legitimate IPC invoke can exceed
