@@ -376,6 +376,16 @@ jobs:
         if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
         run: just db-boundary
 
+      # Dead-caller ratchet: fails if a module-level `pub fn` in crates/ has no
+      # production caller. rustc's dead_code lint does not fire on `pub` items
+      # in a lib crate, which is how #712, #879 and #943 shipped fully tested
+      # but never invoked. Pure grep, no compile — same Linux-only gating as the
+      # DB boundary ratchet above. The script self-tests its own detector before
+      # reporting success, so a green result cannot be vacuous.
+      - name: Dead-caller ratchet
+        if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
+        run: just dead-callers
+
       # Compilation warnings/lints are OS-agnostic; running clippy on all 3 legs
       # is pure redundancy — the nextest step below builds the workspace anyway.
       - name: Clippy (workspace, all targets, deny warnings)
