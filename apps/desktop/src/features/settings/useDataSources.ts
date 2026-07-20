@@ -3,6 +3,7 @@
 
 /** All stateful logic for the Data Sources pane: roots CRUD + rescan/reconcile/remap/disable/delete. */
 import { useCallback, useEffect, useState } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import {
   listRoots,
   registerRoot,
@@ -54,14 +55,25 @@ export function useDataSources() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // `loadRoots` is re-invoked on user actions (add/delete/toggle), not just on
+  // mount, so a per-effect `cancelled` flag cannot reach every call site. A
+  // mounted ref covers all of them.
+  const mountedRef = useMountedRef();
+
   const loadRoots = useCallback(() => {
     setLoading(true);
     setLoadError(null);
     listRoots()
-      .then((data) => setRoots(data))
-      .catch((err: unknown) => setLoadError(errMessage(err)))
-      .finally(() => setLoading(false));
-  }, []);
+      .then((data) => {
+        if (mountedRef.current) setRoots(data);
+      })
+      .catch((err: unknown) => {
+        if (mountedRef.current) setLoadError(errMessage(err));
+      })
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
+  }, [mountedRef]);
 
   useEffect(() => {
     loadRoots();

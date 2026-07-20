@@ -30,7 +30,11 @@ import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { useGrouping } from '@/lib/use-grouping';
 import { MasterDetail } from './MasterDetail';
-import { MastersTable, DEFAULT_MASTER_SORT } from './MastersTable';
+import {
+  MastersTable,
+  DEFAULT_MASTER_SORT,
+  isShownMasterKind,
+} from './MastersTable';
 import type { MasterSort, MasterSortCol } from './MastersTable';
 import {
   useCalibrationMasters,
@@ -86,7 +90,13 @@ export function CalibrationPage() {
       }),
     [navigate],
   );
-  useStaleSelectionCleanup(selected, master !== null, clearSelection);
+  // #735: gated on `loading` so a cold reload's empty cache isn't mistaken for
+  // a stale id — see ProjectsPage for the full rationale.
+  useStaleSelectionCleanup(
+    selected,
+    loading || master !== null,
+    clearSelection,
+  );
 
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
@@ -123,6 +133,22 @@ export function CalibrationPage() {
   const visibleMasters = kindFilter
     ? searchedMasters.filter((m) => m.kind.toLowerCase() === kindFilter)
     : searchedMasters;
+
+  // #669: the table only receives the FILTERED list, so it cannot tell an empty
+  // library from a filter that hid everything. Naming the filter here — and only
+  // while showable masters actually exist — keeps the onboarding copy ("run a
+  // scan") off a search miss.
+  const activeFilterLabel = [q ? `“${search.trim()}”` : '', kindFilter]
+    .filter(Boolean)
+    .join(' · ');
+  const filterLabel =
+    activeFilterLabel && masters.some((mm) => isShownMasterKind(mm.kind))
+      ? activeFilterLabel
+      : undefined;
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setKindFilter('');
+  }, []);
 
   const topBar = (
     <PageTopBar
@@ -184,6 +210,8 @@ export function CalibrationPage() {
         onSort={handleSort}
         agingThresholdDays={agingThresholdDays}
         dims={dims}
+        filterLabel={filterLabel}
+        onClearFilters={clearFilters}
       />
     </ListPageLayout>
   );

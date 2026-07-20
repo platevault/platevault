@@ -13,6 +13,7 @@ import type { PillVariant } from '@/ui/Pill';
 import { Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
 import { m } from '@/lib/i18n';
+import { masterLabel } from '@/lib/master-label';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { InboxItemSummary } from '@/bindings/index';
@@ -84,26 +85,6 @@ function getRootId(flushResult: FlushResult, path: string): string {
   const row = flushResult.results.find((r) => r.path === path);
   // Successful rows carry the assigned rootId; fall back to the path if absent.
   return row?.rootId ?? path;
-}
-
-/** Capitalize the first letter (e.g. "dark" → "Dark"). */
-function titleCase(s: string): string {
-  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
-/**
- * Human label for a detected calibration master item (spec 040 FR-006).
- * e.g. "Master Dark", "Master Flat · Ha · 120s".  Falls back to a generic
- * "Master" when the base frame type couldn't be inferred.
- */
-function masterLabel(item: InboxItemSummary): string {
-  const ft: string = item.masterFrameType
-    ? m.setup_scan_master_kind({ kind: titleCase(item.masterFrameType) })
-    : m.setup_scan_master();
-  const parts: string[] = [ft];
-  if (item.masterFilter) parts.push(item.masterFilter);
-  if (item.masterExposureS != null) parts.push(`${item.masterExposureS}s`);
-  return parts.join(' · ');
 }
 
 // ── Per-source detection summary ──────────────────────────────────────────────
@@ -362,6 +343,13 @@ export function StepScan({
     if (scanStartedRef.current) return;
     scanStartedRef.current = true;
 
+    // The scan fans out into one independent async branch per source, each
+    // outliving the others. Any of them can still be awaiting IPC when the
+    // wizard unmounts, so every `setState` below is gated on this flag —
+    // otherwise a late update lands on a torn-down root (and, under vitest,
+    // after jsdom has removed `window`, failing the whole run).
+    let cancelled = false;
+
     void (async () => {
       // Issue #916: a wizard retry after a partial batch-registration
       // failure resubmits *every* source, not just the ones that failed. A
@@ -453,6 +441,7 @@ export function StepScan({
         });
       }
 
+      if (cancelled) return;
       setSourceStates(initialStates);
       setResolved(true);
 
@@ -464,6 +453,7 @@ export function StepScan({
         if (entry.phase === 'error') continue;
 
         void (async () => {
+          if (cancelled) return;
           // Mark as scanning
           setSourceStates((prev) => {
             const next = [...prev];
@@ -500,6 +490,7 @@ export function StepScan({
               }),
             );
 
+            if (cancelled) return;
             setSourceStates((prev) => {
               const next = [...prev];
               next[idx] = {
@@ -511,6 +502,7 @@ export function StepScan({
               return next;
             });
           } catch (err: unknown) {
+            if (cancelled) return;
             setSourceStates((prev) => {
               const next = [...prev];
               next[idx] = {
@@ -524,6 +516,9 @@ export function StepScan({
         })();
       }
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty: run once on mount
 

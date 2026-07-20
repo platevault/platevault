@@ -98,10 +98,14 @@ As a user with a generated filesystem plan (from project creation, cleanup, arch
 
 **Independent Test**: Can be tested by generating mock plans of varying destructiveness and verifying the table/diff views render correctly, approval gates match plan contents, and permanent delete requires the explicit checkbox.
 
+> **Retired 2026-07-20** (issue #748): the Diff view named in this story and its
+> independent test is withdrawn. Plan review ships the Table view only. See the
+> FR-045 and FR-047 notes.
+
 **Acceptance Scenarios**:
 
 1. **Given** a plan in ready_for_review state, **When** user opens plan review, **Then** the Table view shows per-row: action pill, source, destination, status, dry-run result, provenance origin.
-2. **Given** the plan review page, **When** user clicks "Diff", **Then** a side-by-side before/after filesystem view shows with glyphs (− removed, + added, → archived, ✕ deleted, 🔒 protected).
+2. ~~**Given** the plan review page, **When** user clicks "Diff", **Then** a side-by-side before/after filesystem view shows with glyphs (− removed, + added, → archived, ✕ deleted, 🔒 protected).~~ **Retired 2026-07-20** (issue #748) with FR-045/FR-047.
 3. **Given** a plan with trash operations, **When** user clicks "Approve", **Then** a confirmation dialog appears before applying.
 4. **Given** a plan with permanent delete, **Then** a separate "I understand and accept" checkbox appears below the table, and the Approve button stays disabled until checked.
 5. **Given** a plan where any dry-run precondition failed (✕), **Then** the Approve button is disabled with an explanation.
@@ -277,8 +281,26 @@ As a user tracking what happened in my library, I open the Audit log to see an i
 **Plan Review**
 
 - **FR-045**: Plan review MUST provide Table and Diff views toggleable via header pill segments.
+
+  > **Retired 2026-07-20** (issue #748): the Diff view and its toggle are
+  > withdrawn; the Table view is the sole plan-review presentation. The
+  > single-view table in `PlanReviewOverlay.tsx` satisfies the intent — see the
+  > FR-047 note below for why the table carries strictly more information than
+  > the specified diff.
+
 - **FR-046**: Table view MUST show per row: action pill, source, destination, status pill (pending/protected/applied/failed/skipped), dry-run result (✓/✕), provenance origin.
 - **FR-047**: Diff view MUST show two-column before/after filesystem with glyphs: − removed (red), + added (green), → archived (yellow), ✕ deleted (red), 🔒 protected (grey).
+
+  > **Retired 2026-07-20** (issue #748): withdrawn together with FR-045. Every
+  > `PlanItemAction` variant — `move`, `archive`, `delete`, `link`, `write`
+  > (`apps/desktop/src/bindings/index.ts:7111`) — carries both `from` and `to`
+  > on `PlanItemDetail_Serialize`, and `PlanReviewOverlay.tsx:369-379` renders
+  > Item · Action · From · To · Protection · Link kind · Result · Reason ·
+  > Linked. The From/To pair is the per-item before/after; the Action pill and
+  > Protection pill carry what the glyph legend encoded. The destination column
+  > landed in PR #492. The specified glyph set has no symbol for `link` or
+  > `write`, so the retired Diff view would represent fewer actions than the
+  > table it was meant to complement.
 - **FR-048**: Summary bar MUST show: item count, reclaim bytes, trash count, archive count, permanent delete count, protected (skipped) count.
 - **FR-049**: Approval MUST implement 3 tiers: (1) simple Approve for non-destructive plans, (2) Approve + confirmation dialog for trash/archive, (3) Approve + separate "I understand and accept" checkbox for permanent delete. Approve disabled until checkbox checked.
 - **FR-050**: If any plan item dry-run fails, Approve button MUST be disabled with explanation.

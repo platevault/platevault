@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+# Dead-caller guard — fails when a module-level `pub fn` in crates/ has no
+# production caller, i.e. the only code that reaches it is its own tests.
+#
+# The defect class: a function is implemented, unit-tested, reviewed, and
+# merged, but nothing in the shipped call graph ever invokes it. Every test
+# passes, so CI is green and the feature is dead from the user's perspective.
+# Issues #712 (write_session_snapshot / should_snapshot), #879
+# (find_or_create_{camera,telescope}_by_alias) and the Rust half of #943
+# (rank_candidates) are all this shape, and all reached main.
+#
+# Why a script and not a rustc/clippy lint: `dead_code` does not fire on a `pub`
+# item in a lib crate, and `unreachable_pub` fires on the opposite condition —
+# it flags items that CANNOT be reached from outside the crate and suggests
+# narrowing them to `pub(crate)`. A `pub fn` in a `pub mod` with zero callers is
+# externally reachable in principle, so rustc considers it live and stays
+# silent. Verified: with `#![warn(unreachable_pub, dead_code, unused)]` all
+# active, rustc emits nothing for the #712 shape. `--self-test` re-proves this
+# script's own detection on every run so a green result is never vacuous.
+#
+# Detection is name-based, so it is deliberately narrow:
+#   - Definitions come only from `crates/**/src/**/*.rs`, and only from
+#     functions at column 0. Anything indented is inside an `impl` block, and
+#     impl methods are legitimately reached through traits or receivers that a
+#     name grep cannot see. Restricting to column 0 excludes them all.
+#   - References come from production Rust: `crates/**` plus
+#     `apps/desktop/src-tauri/src/**`, minus any `tests/` path segment, minus
+#     each `#[cfg(test)]` item's own brace scope. Only that scope is exempt —
+#     production code following an inline test module still counts, the same
+#     rule check-db-boundary.sh applies. Comment lines are stripped, so a doc
+#     comment naming a function does not disguise it as live.
+#
+# The baseline (dead-callers-baseline.txt) lists names already dead when the
+# guard landed. It is a shrink-only ratchet: names may be removed as the debt is
+# wired up or deleted, but a name that is not in the baseline fails the build.
+#
+# Usage:
+#   scripts/check-dead-callers.sh             # enforce (CI mode)
+#   scripts/check-dead-callers.sh --list      # print current dead names
+#   scripts/check-dead-callers.sh --generate  # rewrite the baseline
+#   scripts/check-dead-callers.sh --self-test # prove the detector still detects
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BASELINE="$SCRIPT_DIR/dead-callers-baseline.txt"
+
+# Emit the sorted list of module-level `pub fn` names in $1 (a crates/ root)
+# that no production line outside their own definition mentions.
+collect_dead() {
+    local crates_root="$1" tauri_root="$2"
+
+    local defs corpus
+    defs="$(mktemp)"
+    corpus="$(mktemp)"
+    # shellcheck disable=SC2064  # expand paths now, not at trap time
+    trap "rm -f '$defs' '$corpus'" RETURN
+
+    # Definitions exclude the e2e-tests crate (test code, not shipped) and the
+    # persistence query-builder reference module, which exists to be read rather
+    # than called — check-db-boundary.sh exempts it for the same reason.
+    find "$crates_root" -type f -name '*.rs' \
+        -not -path '*/tests/*' \
+        -not -path '*/e2e-tests/*' \
+        -not -name 'query_builder_example.rs' -print0 \
+        | xargs -0 grep -hE '^pub (async )?fn [a-z_0-9]+' \
+        | sed -E 's/^pub (async )?fn ([a-z_0-9]+).*/\2/' \
+        | sort -u > "$defs"
+
+    # Production corpus: comment lines dropped, then each `#[cfg(test)]` item
+    # skipped for exactly its own brace scope. Truncating the whole file at the
+    # first `#[cfg(test)]` instead would discard the production code that
+    # follows an inline test module, which is common here and silently turns
+    # live functions (pid_is_alive, discover_all) into false positives.
+    local -a roots=("$crates_root")
+    [ -d "$tauri_root" ] && roots+=("$tauri_root")
+    # shellcheck disable=SC2016  # the awk program is literal, not shell-expanded
+    find "${roots[@]}" -type f -name '*.rs' -not -path '*/tests/*' -print0 \
+        | xargs -0 awk '
+            FNR == 1 { skip = 0; depth = 0; opened = 0 }
+            /^[[:space:]]*\/\// { next }
+            skip {
+                o = gsub(/\{/, "{"); c = gsub(/\}/, "}")
+                depth += o - c
+                if (o > 0) opened = 1
+                # An attribute on a brace-less item (`#[cfg(test)] use x;`)
+                # scopes to that one line only.
+                if (!opened && /;[[:space:]]*$/) { skip = 0; next }
+                if (opened && depth <= 0) { skip = 0; opened = 0; depth = 0 }
+                next
+            }
+            /#\[cfg\(test\)\]/ { skip = 1; depth = 0; opened = 0; next }
+            { print }
+        ' > "$corpus"
+
+    awk -v defs="$defs" '
+        BEGIN {
+            while ((getline name < defs) > 0) if (name != "") want[name] = 0
+        }
+        {
+            line = $0
+            # A definition line is not a call site. Suppress just that name.
+            def = ""
+            if (match(line, /^pub (async )?fn [a-z_0-9]+/)) {
+                def = substr(line, RSTART, RLENGTH)
+                sub(/^pub (async )?fn /, "", def)
+            }
+            gsub(/[^A-Za-z0-9_]/, " ", line)
+            n = split(line, tok, " ")
+            for (i = 1; i <= n; i++) {
+                t = tok[i]
+                if (t in want && t != def) want[t]++
+            }
+        }
+        END { for (name in want) if (want[name] == 0) print name }
+    ' "$corpus" | sort
+}
+
+# Prove the detector detects. The probe tree contains one function called from
+# production, one called only from a #[cfg(test)] module, one named only by a
+# doc comment, and one called only AFTER an inline test module — the last guards
+# the brace-scope handling, since skipping to end-of-file instead would report
+# it dead. A detector that reports nothing, or that reports everything — the
+# vacuous-green failure this guard exists to prevent — fails here.
+self_test() {
+    local tmp
+    tmp="$(mktemp -d)"
+    # shellcheck disable=SC2064  # expand $tmp now, not at trap time
+    trap "rm -rf '$tmp'" RETURN
+    mkdir -p "$tmp/crates/probe/src"
+
+    cat > "$tmp/crates/probe/src/lib.rs" <<'PROBE'
+pub fn live_fn() -> bool { true }
+
+//! doc_only_fn is named here and nowhere else.
+pub fn doc_only_fn() -> bool { true }
+
+pub fn test_only_fn() -> bool { true }
+
+pub fn caller() -> bool { live_fn() }
+
+pub fn live_after_tests() -> bool { true }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn t() { assert!(test_only_fn()); }
+}
+
+pub fn late_caller() -> bool { live_after_tests() }
+PROBE
+
+    local got expected
+    got="$(collect_dead "$tmp/crates" "$tmp/none" | tr '\n' ' ')"
+    expected="caller doc_only_fn late_caller test_only_fn "
+
+    if [ "$got" != "$expected" ]; then
+        echo "FAIL: self-test detector mismatch." >&2
+        echo "  expected: $expected" >&2
+        echo "  actual:   $got" >&2
+        return 1
+    fi
+    echo "OK: self-test passed — detector flags test-only and doc-only functions, not called ones."
+}
+
+main() {
+    case "${1:-}" in
+        --self-test)
+            self_test
+            return
+            ;;
+    esac
+
+    local dead
+    dead="$(collect_dead "$ROOT/crates" "$ROOT/apps/desktop/src-tauri/src")"
+
+    case "${1:-}" in
+        --list)
+            printf '%s\n' "$dead"
+            return
+            ;;
+        --generate)
+            {
+                cat <<'HDR'
+# Module-level `pub fn`s in crates/ that no production code calls — only their
+# own tests reach them. Generated by scripts/check-dead-callers.sh --generate.
+#
+# Shrink-only. Removing a name (by wiring the function into its call path or
+# deleting it) is always fine. Adding one requires a comment explaining why the
+# function is legitimately unreferenced.
+HDR
+                printf '%s\n' "$dead"
+            } > "$BASELINE"
+            echo "Wrote $(printf '%s\n' "$dead" | grep -c . || true) names to $BASELINE"
+            return
+            ;;
+    esac
+
+    self_test >/dev/null || {
+        echo "FAIL: dead-caller detector self-test failed; results are not trustworthy." >&2
+        exit 1
+    }
+
+    local baselined
+    baselined="$(grep -vE '^\s*(#|$)' "$BASELINE" | sort)"
+
+    local new
+    new="$(comm -23 <(printf '%s\n' "$dead") <(printf '%s\n' "$baselined"))"
+
+    if [ -n "$new" ]; then
+        echo "FAIL: these pub fns have no production caller — only tests reach them:" >&2
+        printf '%s\n' "$new" | sed 's/^/  /' >&2
+        cat >&2 <<'EOF'
+
+Each named function is implemented and tested but never called by shipped code,
+so it is dead from the user's perspective while CI stays green.
+
+Fix by wiring the function into its production call path. If it is genuinely
+not needed, delete it. If it is intentionally unreferenced (a trait-object-only
+entry point, a re-exported public API), add it to
+scripts/dead-callers-baseline.txt with a comment saying why.
+EOF
+        exit 1
+    fi
+
+    local stale
+    stale="$(comm -13 <(printf '%s\n' "$dead") <(printf '%s\n' "$baselined") || true)"
+    if [ -n "$stale" ]; then
+        echo "NOTE: baseline entries now have callers (or were deleted); drop them from $BASELINE:" >&2
+        printf '%s\n' "$stale" | sed 's/^/  /' >&2
+    fi
+
+    echo "OK: no new dead pub fns ($(printf '%s\n' "$dead" | grep -c . || true) baselined)."
+}
+
+main "$@"

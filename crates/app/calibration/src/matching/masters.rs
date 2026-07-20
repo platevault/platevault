@@ -6,15 +6,33 @@
 use std::sync::Arc;
 
 use calibration_core::{suggest as domain_suggest, SessionInfo};
+use contracts_core::equipment::Camera;
 use persistence_db::repositories::calibration_assignment as assign_repo;
+use persistence_db::repositories::equipment as equipment_repo;
 use persistence_db::repositories::q_calibration;
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::caches;
+use crate::equipment::resolve_camera_display_name;
 
 use super::loaders::{load_config, load_master_by_id};
+
+/// Render a master fingerprint's raw camera/optic-train header string as the
+/// registered camera name when one claims it (#879), falling back to the raw
+/// string so an unregistered camera still renders what the header said.
+fn display_camera(cameras: &[Camera], raw: Option<String>) -> Option<String> {
+    raw.map(|raw| resolve_camera_display_name(cameras, &raw).unwrap_or(raw))
+}
+
+/// The registered cameras used to resolve fingerprint display names.
+///
+/// Equipment being unreadable degrades to raw header strings rather than
+/// failing the masters read, mirroring the planner's FR-038 fallback.
+async fn display_cameras(pool: &SqlitePool) -> Vec<Camera> {
+    equipment_repo::list_cameras(pool).await.unwrap_or_default()
+}
 
 /// `calibration.masters.list` — return all calibration masters, reading
 /// through the process-global `caches::calibration_masters` snapshot
@@ -41,6 +59,7 @@ async fn masters_list_from_db(
 ) -> Result<Vec<contracts_core::calibration::CalibrationMaster>, String> {
     let rows = q_calibration::list_calibration_masters(pool).await.map_err(|e| e.to_string())?;
 
+    let cameras = display_cameras(pool).await;
     let now = OffsetDateTime::now_utc();
     let masters = rows
         .into_iter()
@@ -51,10 +70,10 @@ async fn masters_list_from_db(
                 id: r.id.clone(),
                 kind: cal_kind,
                 fingerprint: contracts_core::calibration::CalibrationFingerprint {
-                    // Q16 / FR-136: no absence-synthesizing fallbacks — pass
-                    // the row's Option straight through so unresolved
-                    // metadata renders as unresolved, not a sentinel.
-                    camera: r.fp_optic_train,
+                    // Q16 / FR-136: no absence-synthesizing fallbacks — an
+                    // absent row field stays absent; a present one renders as
+                    // the registered camera name when one claims it (#879).
+                    camera: display_camera(&cameras, r.fp_optic_train),
                     sensor_mode: None,
                     exposure_s: r.fp_exposure_s,
                     temp_c: r.fp_temp_c,
@@ -113,9 +132,10 @@ pub async fn masters_get(
         id: r.id.clone(),
         kind: cal_kind,
         fingerprint: contracts_core::calibration::CalibrationFingerprint {
-            // Q16 / FR-136: no absence-synthesizing fallbacks — pass the
-            // row's Option straight through.
-            camera: r.fp_optic_train,
+            // Q16 / FR-136: no absence-synthesizing fallbacks — an absent row
+            // field stays absent; a present one renders as the registered
+            // camera name when one claims it (#879).
+            camera: display_camera(&display_cameras(pool).await, r.fp_optic_train),
             sensor_mode: None,
             exposure_s: r.fp_exposure_s,
             temp_c: r.fp_temp_c,
