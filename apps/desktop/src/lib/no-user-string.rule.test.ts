@@ -560,6 +560,13 @@ describe('alm/no-user-string', () => {
   // gate treat the string as a machine token, so a brand string containing
   // "/" slips past every prose-gated check in this rule (Property,
   // VariableDeclarator, setState, and this returnLiteral check alike).
+  //
+  // Deliberately NOT tightened. A 2026-07-20 sweep of src/ for slash-bearing
+  // literals in user-facing positions found nothing hiding in this gap — the
+  // one real case, 'PixInsight/WBPP', is now a catalog key. Narrowing the rule
+  // would cost far more than it catches: iana-timezones.ts alone holds ~40
+  // legitimate machine strings of exactly this shape ('Europe/Amsterdam'),
+  // plus mock fixture paths. Re-run that sweep before revisiting.
   it('does NOT flag a slash-containing string even from a *Label-named function (looksMachine limitation)', () => {
     const out = lint(`
       function profileLabelFor(profile) {
