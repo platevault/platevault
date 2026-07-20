@@ -312,9 +312,46 @@
 .pv-listpage__detail-body {
   flex: 1;
   min-height: 0;
-  /* Do NOT add overflow-y:auto here — the .pv-detailpanel__content column
-   * is the sole scroll region. Double overflow-y causes nested scrollbars. */
+  /* Do NOT add overflow-y:auto here — .pv-detailpanel__content is the sole
+   * scroll region. Double overflow-y causes nested scrollbars. */
   overflow: hidden;
+}
+
+/* #1107: give the panel a real flex chain inside the dock, so the header pins
+ * and .pv-detailpanel__content gets a BOUNDED height to scroll within. Without
+ * it the panel sizes to its content, overflows this `overflow:hidden` body, and
+ * the excess is unreachable (measured at a 390px side dock: Calibration 191px,
+ * Sessions 522px, Projects 1216px). Scoped to the dock — .pv-detail is also
+ * used outside a docked panel, where sizing to content is correct.
+ * .pv-detail--fill declares the same chain itself (primitives.css). */
+.pv-listpage__detail-body > .pv-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.pv-listpage__detail-body .pv-detail__header {
+  flex-shrink: 0;
+}
+
+/* #1107: some pages dock a STACK rather than a single panel — Projects docks
+ * ProjectDetailContent (which owns the DetailPanel) above ProjectBottomDetail,
+ * so the panel's own scroll region covers only the first component and the
+ * sibling below it overflows unreachably (measured 1216px). Keyed on the
+ * composition SHAPE — "the dock's child is not a panel" — rather than on any
+ * one feature, so any future stacked detail is covered too. In that shape the
+ * body owns the scrolling, and the panel's inner region must stand down to
+ * avoid a second, nested scrollbar. */
+.pv-listpage__detail-body:not(:has(> .pv-detail)) {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.pv-listpage__detail-body:not(:has(> .pv-detail)) .pv-detail--fill {
+  height: auto;
+}
+.pv-listpage__detail-body:not(:has(> .pv-detail)) .pv-detailpanel__content {
+  flex: 0 0 auto;
+  overflow-y: visible;
 }
 /* The bottom panel has ample horizontal room, so its dashboard grid keeps its
  * natural multi-column rail layout (the old single-column collapse the narrow
