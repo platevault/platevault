@@ -19,10 +19,18 @@
 // clobbers them, the same pattern CalibrationMatching.tsx uses for its
 // backend-unsupported fields.
 //
-// CONSUMER STATUS (P12): no scan/watch/ingest pipeline reads these values yet
-// — this pane makes them durable, not yet enforced. Toggling e.g. "Follow NTFS
-// junctions" does not change scan behaviour until a scan-pipeline consumer is
-// wired to read it.
+// CONSUMERS (issue #878):
+//   - followSymlinks IS enforced: `inbox.scan.folder` resolves it through
+//     `app_core::inbox_scan::resolve_scan_options`, so it decides whether the
+//     Inbox scan traverses links. Covered by
+//     crates/app/core/tests/ingestion_scan_settings_integration.rs.
+//   - followJunctions, scanOnStartup and hashingMode have no consumer, so they
+//     render disabled rather than as working controls. The scanner classes
+//     junctions with symlinks under one flag
+//     (`fs_pathsafe::is_link_or_junction`), no startup-scan path exists, and
+//     folder signatures always use a partial hash. Giving each an independent
+//     effect is a feature, not wiring; they stay persisted so enabling them
+//     later needs no migration.
 import { useState, useEffect, useRef } from 'react';
 import { Toggle } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -117,6 +125,7 @@ export function Ingestion(_props: IngestionProps) {
           <Toggle
             aria-label={m.settings_ingestion_scan_startup()}
             checked={settings.scanOnStartup}
+            disabled
             onChange={(v) => persist({ scanOnStartup: v })}
           />
         </SettingsRow>
@@ -139,6 +148,7 @@ export function Ingestion(_props: IngestionProps) {
           <Toggle
             aria-label={m.settings_ingestion_follow_junctions()}
             checked={settings.followJunctions}
+            disabled
             onChange={(v) => persist({ followJunctions: v })}
           />
         </SettingsRow>
@@ -152,6 +162,7 @@ export function Ingestion(_props: IngestionProps) {
           <select
             className="pv-select"
             aria-label={m.settings_ingestion_hashing_mode()}
+            disabled
             value={settings.hashingMode}
             onChange={(e) => {
               const v = e.target.value as HashingMode;

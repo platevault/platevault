@@ -11,8 +11,12 @@ test:
     node scripts/check-eslint-baseline.test.mjs
     node scripts/check-mock-baseline.test.mjs
 
-# Lint and format. The extra `rustfmt` call covers bootstrap/specta.rs, which
-# `cargo fmt` cannot reach because it is `include!`d, not `mod`-declared.
+# Lint and format. This recipe is the single local definition of the lint set;
+# the root package.json `lint` script delegates here so the two cannot drift.
+# The extra `rustfmt` call covers bootstrap/specta.rs, which `cargo fmt` cannot
+# reach because it is `include!`d, not `mod`-declared. `lint:tests` is listed
+# separately because `tests/` sits outside the pnpm workspace globs
+# (`apps/*`, `packages/*`), so `pnpm -r lint` never reaches it.
 lint:
     cargo fmt --all --check
     rustfmt --edition 2021 --check apps/desktop/src-tauri/src/bootstrap/specta.rs
@@ -22,6 +26,7 @@ lint:
     # binaries still omit the feature; this only lints the daily dev build.
     cargo clippy -p desktop_shell --features dev-tools --all-targets -- -D warnings
     pnpm -r --if-present lint
+    pnpm run lint:tests
     pre-commit run --all-files
 
 # Build the Rust workspace and package workspaces when present.
@@ -46,6 +51,60 @@ db-boundary:
 #   bash scripts/check-dead-callers.sh --generate
 dead-callers:
     bash scripts/check-dead-callers.sh
+
+# Periodic hygiene sweeps. NOT CI gates and deliberately so: these surface debt
+# to triage, not per-PR correctness, and a noisy blocking gate gets suppressed.
+# Run them when you want a health read, not on every push.
+#
+# Tools install on demand:
+#   cargo install cargo-machete cargo-public-api
+#
+# Deliberately NOT included, so nobody re-adds them:
+#   cargo-udeps  - same job as machete, and needs a nightly toolchain
+#   cargo-shear  - same job as machete; one dependency checker is enough,
+#                  three reporting overlapping findings guarantees all three
+#                  get ignored
+#   warnalyzer   - NOT dead (an earlier note here said so, wrongly: crates.io
+#                  shows a 2021 release, but the repo was pushed 2024-09 and
+#                  has a SCIP backend that works on stable). Not wired up only
+#                  because the SCIP route is covered below.
+#
+# WORTH EVALUATING, not yet wired: cargo-workspace-unused-pub does exactly what
+# scripts/check-dead-callers.sh approximates, but semantically -- it builds a
+# SCIP index via rust-analyzer instead of grepping, so re-exports, out-of-line
+# test modules and comments cannot fool it (all four bugs found in that script
+# on 2026-07-20 were grep artifacts). Caveats: 0.1.0, ~1.3k downloads, methods
+# only, no false-positive suppression yet, and index generation is slow enough
+# that it is a periodic sweep rather than a gate. warnalyzer and clippy issue
+# 5828 both confirm SCIP + rust-analyzer is the only workable approach --
+# rustc's dead_code is per-crate by construction and cannot see a workspace.
+
+# Unused dependencies declared in Cargo.toml but never used.
+hygiene-deps:
+    @command -v cargo-machete >/dev/null 2>&1 || { echo "cargo-machete not installed: cargo install cargo-machete"; exit 1; }
+    cargo machete
+
+# `pub` items that are not actually reachable from outside their crate, i.e.
+# should be pub(crate). Narrowing them lets rustc's own dead_code lint fire on
+# the unused ones for free -- which is the compiler-native half of what
+# scripts/check-dead-callers.sh approximates textually. Measured 0 on
+# persistence_db on 2026-07-20; other crates are unmeasured.
+#
+# `pub` items that should be pub(crate), across the workspace.
+hygiene-pub:
+    cargo clippy --workspace --all-targets --message-format=short -- -A warnings -W unreachable_pub
+
+# Public API surface per crate. Not a pass/fail check -- a read of what each
+# crate exposes. Large surface that the workspace never consumes is the same
+# debt the dead-caller ratchet tracks, seen from the other side.
+#
+# Public API surface of one crate (read, not pass/fail).
+hygiene-api CRATE:
+    @command -v cargo-public-api >/dev/null 2>&1 || { echo "cargo-public-api not installed: cargo install cargo-public-api"; exit 1; }
+    cargo public-api -p {{CRATE}}
+
+# All non-interactive hygiene sweeps.
+hygiene: hygiene-deps hygiene-pub
 
 # Regenerate the sqlx offline query cache (.sqlx/) for compile-time verification.
 # Requires a DATABASE_URL pointing at a migrated SQLite db, or run after the
