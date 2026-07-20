@@ -511,26 +511,25 @@ test.describe('Journey 10 · Appearance Restore defaults (#802)', () => {
   });
 });
 
-// ── Scenario 8 — Advanced > Guided Tour restart confirm gate (#827) ─────────
-
-test.describe('Journey 10 · Advanced Guided Tour restart gate (#827)', () => {
-  test("'Restart guided flow' requires confirmation and shows success feedback, matching 'Restart first-run setup'", async ({
-    page,
-  }) => {
-    seedSetupComplete(page);
-    await page.goto('/#/settings/advanced');
-
-    const restartBtn = page.getByTestId('guided-restart-btn');
-    await expect(restartBtn).toBeVisible();
-
-    // Clicking must not fire the restart directly — a confirm step gates it,
-    // symmetric with the "Restart first-run setup" control below it.
-    await restartBtn.click();
-    const confirmBtn = page.getByTestId('guided-restart-confirm-btn');
-    await expect(confirmBtn).toBeVisible();
-    await expect(page.getByTestId('guided-restart-done')).toHaveCount(0);
-
-    await confirmBtn.click();
-    await expect(page.getByTestId('guided-restart-done')).toBeVisible();
-  });
-});
+// ── Scenario 8 — REMOVED: Advanced > Guided Tour restart gate (#827) ────────
+//
+// The spec-010 guided flow is deleted by spec 056, taking `guided-restart-btn`
+// and its confirm gate with it. The user-facing capability — re-run orientation
+// from Settings → Advanced — survives on `onboarding-replay-btn` (FR-005/T015),
+// so Journey 10 keeps this coverage; it just lives with the rest of the
+// onboarding suite now:
+//
+//   tests/e2e/onboarding_orientation.spec.ts
+//     "replays from Settings → Advanced, ignoring the done flag"
+//   tests/e2e/onboarding_removal.spec.ts
+//     "Settings → Advanced renders the restore control ... (T030)"
+//
+// It is NOT re-homed here: this file's `beforeEach` calls `disableOnboarding`,
+// so no onboarding surface renders for any test in it. A replay assertion added
+// here could only ever pass vacuously.
+//
+// #827's confirm gate is deliberately not carried forward. It existed for
+// symmetry with "Restart first-run setup", but the two differ in consequence:
+// restarting first-run setup discards setup state, whereas replaying the walk
+// is non-destructive and dismissible at any stop. If replay ever gains a
+// destructive side effect, the gate should come back with it.
