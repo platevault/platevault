@@ -388,12 +388,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         >
           <span className="pv-project-detail__tool-hint">
             {m.projects_tool_not_configured()}{' '}
-            <a
-              href="#/settings?pane=tools"
+            <Link
+              to="/settings/$pane"
+              params={{ pane: 'tools' }}
               className="pv-project-detail__tool-link"
             >
               {m.projects_tool_configure_link()}
-            </a>
+            </Link>
           </span>
         </div>
       )}

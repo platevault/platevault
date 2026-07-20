@@ -1040,48 +1040,14 @@
   color: var(--pv-text-secondary);
 }
 
-/* Scrollable table wrapper */
+/* Bounds the shared `Table`'s own scroll container (`.pv-table__scroll`), which
+   supplies the overflow and the sticky header. All table chrome — borders, cell
+   padding, header type — now comes from `.pv-table`; issue #752 deleted the
+   clone of it that used to live here. */
 .pv-setup-scan__table-wrap {
   max-height: 280px;
-  overflow-y: auto;
   border: 1px solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-sm);
-}
-
-/* Detection table */
-.pv-setup-scan__table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--pv-text-xs);
-  color: var(--pv-text-secondary);
-}
-
-.pv-setup-scan__thead-row {
-  position: sticky;
-  top: 0;
-  background: var(--pv-surface-raised);
-  color: var(--pv-text);
-}
-
-.pv-setup-scan__cell {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
-  text-align: left;
-}
-
-.pv-setup-scan__cell--path {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
-  text-align: left;
-  word-break: break-all;
-}
-
-.pv-setup-scan__tbody-row {
-  border-top: 1px solid var(--pv-border-subtle);
-}
-
-.pv-setup-scan__path-cell-inner {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pv-sp-2);
 }
 
 /* === SETUP STEP CONFIRM === */

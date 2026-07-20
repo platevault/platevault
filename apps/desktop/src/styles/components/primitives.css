@@ -322,6 +322,20 @@
   padding-left: var(--pv-row-indent, 0);
 }
 
+/* Cell content that is a Pill (or several) sitting next to its label: without a
+   flex gap the pill butts straight against the text, since adjacent JSX nodes
+   emit no whitespace. Wrap the cell's children in this to space them. Replaces
+   the per-feature clones of the same three declarations (calibration masters,
+   setup scan). `flex-wrap` matters where a row carries two pills plus a label.
+   Note `.pv-table td` clips with an ellipsis; an inline-flex box is atomic and
+   clips rather than ellipsizing, which is the long-standing behaviour here. */
+.pv-table__cell-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  flex-wrap: wrap;
+}
+
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
    header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
 .pv-table__scroll {

@@ -1,0 +1,84 @@
+# Tauri commands with NO mock in apps/desktop/src/api/mocks.ts.
+# These throw "Unknown mock command" in mock mode — loud, not silent, so
+# they are safe; this file exists so a NEWLY generated command surfaces
+# here as a deliberate decision instead of silently joining the list.
+#
+# scripts/check-mock-baseline.mjs fails CI on any unmocked command NOT
+# listed here. Drain entries by adding a mock (tsc then checks its shape
+# against the generated binding); regenerate with:
+#   node scripts/check-mock-baseline.mjs --generate
+archive_plan_generate_restore
+artifact_classify
+artifact_list
+artifact_mark_resolved
+calibration_masters_archive_plan_generate
+calibration_masters_archive_plan_generate_restore
+calibration_match_assign
+calibration_match_unassign
+cleanup_raw_frames_generate
+cleanup_raw_frames_scan
+dev_calls_push
+guided_activate
+guided_dismiss
+guided_restart
+guided_state_get
+guided_step_complete
+inbox_scan
+inbox_target_recommendations
+inventory_frame_list
+inventory_frame_relink
+inventory_reconcile_run
+inventory_root_config_get
+inventory_root_config_set
+inventory_session_notes_update
+lifecycle_ledger_list
+lifecycle_transition_preview
+manifest_get
+native_directory_pick
+native_file_pick
+native_reveal
+pattern_preview
+pattern_resolve
+pattern_validate
+plans_apply_direct
+plans_apply_status
+plans_cancel
+plans_item_retry
+plans_item_skip
+plans_resume
+plans_retry
+projects_framing_list
+projects_framing_merge
+projects_framing_reassign
+projects_framing_split
+provenance_read
+settings_overridable_keys
+settings_restore_defaults
+settings_source_override_set
+source_protection_get
+source_protection_set
+sources_set_organization_state
+sourceview_destination_get
+sourceview_destination_set
+sourceview_generate
+status_summary
+target_adopt
+target_alias_add
+target_alias_remove
+target_astro_format_batch
+target_cache_clear
+target_cone_search_confirm
+target_cone_search_suggest
+target_display_alias_clear
+target_display_alias_set
+target_note_get
+target_note_update
+target_projects_list
+target_resolution_settings
+target_resolution_settings_update
+target_resolve_explicit
+target_sessions_list
+tools_discover
+tools_launch
+tools_list
+tools_update
