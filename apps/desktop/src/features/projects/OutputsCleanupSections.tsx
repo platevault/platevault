@@ -34,6 +34,7 @@ import {
 import type { PillVariant } from '@/ui';
 import { m } from '@/lib/i18n';
 import { formatBytes } from '@/lib/format';
+import { isProtectedLevel, protectionLabel } from '@/lib/protection-label';
 import { addToast } from '@/shared/toast';
 import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 import { useCleanupScan, useGenerateCleanupPlan } from './cleanupStore';
@@ -159,7 +160,7 @@ function candidateColumns() {
  */
 function candidateRow(candidate: CleanupCandidate, index: number) {
   const parsed = parseCandidateReason(candidate.reason);
-  const isProtected = parsed?.protection === 'protected';
+  const isProtected = isProtectedLevel(parsed?.protection);
   return {
     _testid: `cleanup-candidate-${index}`,
     _rowClassName: isProtected ? 'pv-cleanup-scan__row--protected' : undefined,
@@ -180,10 +181,10 @@ function candidateRow(candidate: CleanupCandidate, index: number) {
             protected row, and is stated once above the table. Giving each row
             its own tab stop would repeat that same announcement N times. */}
         <Lock decorative />
-        <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
+        <Pill variant="warn">{protectionLabel('protected')}</Pill>
       </span>
     ) : parsed ? (
-      <Pill variant="ghost">{parsed.protection}</Pill>
+      <Pill variant="ghost">{protectionLabel(parsed.protection)}</Pill>
     ) : null,
   };
 }

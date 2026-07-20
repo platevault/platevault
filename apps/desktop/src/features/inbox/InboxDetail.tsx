@@ -304,6 +304,9 @@ export function InboxDetail({
           onClick={onConfirm}
           disabled={confirmDisabled || confirmBusy}
           aria-label={confirmLabel}
+          // Issue #747: lets assistive tech announce the C binding on the
+          // control it activates, not only in the list's visual hint.
+          aria-keyshortcuts="C"
           data-testid="inbox-confirm-btn"
           data-guide-anchor="inbox.confirm-row"
         >

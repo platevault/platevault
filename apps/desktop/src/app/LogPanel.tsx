@@ -42,6 +42,7 @@ import type { LevelFilter } from './LogPanelContext';
 import { errMessage } from '@/lib/errors';
 import { formatTimeOfDay } from '@/lib/datetime';
 import { useHotkeys } from '@/lib/useHotkeys';
+import { EmptyState } from '@/ui/EmptyState';
 
 // ── Virtualizer scroll-offset observer ──────────────────────────────────────────
 
@@ -178,6 +179,28 @@ const ALL_LOG_SOURCES: LogEntrySource[] = [
   'tool',
 ];
 
+/**
+ * Names the filters currently narrowing the list, or `null` when none of the
+ * user-selectable filters is active.
+ *
+ * #669 / Journey 13: a filtered-to-empty log must never render the same copy
+ * as a log that recorded nothing, so the empty state names what is excluding
+ * the rows. Returns `null` when only the non-user-selectable diagnostics gate
+ * is doing the excluding — there is no filter name to show the user then.
+ */
+function activeFilterLabel(
+  levelFilter: LevelFilter,
+  sourceFilter: LogEntrySource[],
+): string | null {
+  const parts: string[] = [];
+  if (levelFilter !== 'all') {
+    const chip = LEVEL_CHIPS.find((c) => c.value === levelFilter);
+    if (chip) parts.push(chip.label());
+  }
+  parts.push(...sourceFilter);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
 // ── Entity navigation helpers ─────────────────────────────────────────────────
 
 type EntityNavigateFn = (entityType: string, entityId: string) => void;
@@ -254,8 +277,7 @@ export function LogPanel() {
     return true;
   });
 
-  // Idle preview: show the most-recent visible entry message.
-  const previewEntry = visibleEntries[0];
+  const filterLabel = activeFilterLabel(levelFilter, sourceFilter);
 
   // Virtualize the (potentially long) log list. The `<ul>` is the scroll
   // element; entries are newest-first so index 0 (offset 0) is the newest.
@@ -397,16 +419,6 @@ export function LogPanel() {
       <div className="pv-logpanel__header">
         <span className="pv-logpanel__title">{m.logpanel_title()}</span>
 
-        {/* Idle preview line (collapsed state) */}
-        {!expanded && previewEntry && (
-          <span
-            className={`pv-logpanel__preview pv-logpanel__event-level--${previewEntry.level}`}
-            aria-label={m.logpanel_preview_aria()}
-          >
-            {formatTimeOfDay(previewEntry.time)} {previewEntry.message}
-          </span>
-        )}
-
         {/* Level filter chips (expanded state) */}
         {expanded && (
           <div
@@ -454,7 +466,7 @@ export function LogPanel() {
         {/* Category/source filter chips (#666) */}
         {expanded && (
           <div
-            className="pv-logpanel__filters"
+            className="pv-logpanel__filters pv-logpanel__filters--sources"
             role="group"
             aria-label={m.logpanel_source_filter_aria()}
           >
@@ -497,60 +509,64 @@ export function LogPanel() {
           </div>
         )}
 
-        {/* Follow toggle */}
-        {expanded && (
-          <button
-            type="button"
-            className={`pv-btn pv-btn--ghost pv-btn--xs${followLogs ? ' pv-logpanel__chip--active' : ''}`}
-            onClick={() => {
-              const next = !followLogs;
-              setFollowLogs(next);
-              // #832: re-enabling Follow must resume at the newest row even
-              // if a manual scroll-up left `scrollPaused` set — otherwise the
-              // follow-tail effect's guard (`!followLogs || scrollPaused`)
-              // silently no-ops and the toggle looks broken.
-              if (next) setScrollPaused(false);
-            }}
-            aria-pressed={followLogs}
+        {/* Actions — pinned to the header's trailing edge so they keep a
+            stable position as the filter chips wrap onto more rows. */}
+        <div className="pv-logpanel__actions">
+          {/* Follow toggle */}
+          {expanded && (
+            <button
+              type="button"
+              className={`pv-btn pv-btn--ghost pv-btn--xs${followLogs ? ' pv-logpanel__chip--active' : ''}`}
+              onClick={() => {
+                const next = !followLogs;
+                setFollowLogs(next);
+                // #832: re-enabling Follow must resume at the newest row even
+                // if a manual scroll-up left `scrollPaused` set — otherwise
+                // the follow-tail effect's guard (`!followLogs ||
+                // scrollPaused`) silently no-ops and the toggle looks broken.
+                if (next) setScrollPaused(false);
+              }}
+              aria-pressed={followLogs}
+              aria-label={
+                followLogs
+                  ? m.log_follow_tail_on_aria()
+                  : m.log_follow_tail_off_aria()
+              }
+              title={
+                scrollPaused && followLogs
+                  ? m.log_follow_tail_paused_title()
+                  : undefined
+              }
+            >
+              {followLogs
+                ? scrollPaused
+                  ? m.logpanel_follow_paused()
+                  : m.logpanel_follow_active()
+                : m.logpanel_follow_off()}
+            </button>
+          )}
+
+          {/* Export button */}
+          {expanded && (
+            <button
+              type="button"
+              className="pv-btn pv-btn--ghost pv-btn--xs"
+              onClick={() => void handleExport()}
+              aria-label={m.logpanel_export_aria()}
+            >
+              {m.logpanel_export()}
+            </button>
+          )}
+
+          <Collapsible.Trigger
+            className="pv-btn pv-btn--ghost pv-btn--sm"
             aria-label={
-              followLogs
-                ? m.log_follow_tail_on_aria()
-                : m.log_follow_tail_off_aria()
-            }
-            title={
-              scrollPaused && followLogs
-                ? m.log_follow_tail_paused_title()
-                : undefined
+              expanded ? m.log_collapse_panel_aria() : m.log_expand_panel_aria()
             }
           >
-            {followLogs
-              ? scrollPaused
-                ? m.logpanel_follow_paused()
-                : m.logpanel_follow_active()
-              : m.logpanel_follow_off()}
-          </button>
-        )}
-
-        {/* Export button */}
-        {expanded && (
-          <button
-            type="button"
-            className="pv-btn pv-btn--ghost pv-btn--xs"
-            onClick={() => void handleExport()}
-            aria-label={m.logpanel_export_aria()}
-          >
-            {m.logpanel_export()}
-          </button>
-        )}
-
-        <Collapsible.Trigger
-          className="pv-btn pv-btn--ghost pv-btn--sm"
-          aria-label={
-            expanded ? m.log_collapse_panel_aria() : m.log_expand_panel_aria()
-          }
-        >
-          {expanded ? '▾' : '▸'}
-        </Collapsible.Trigger>
+            {expanded ? '▾' : '▸'}
+          </Collapsible.Trigger>
+        </div>
       </div>
 
       {exportError && (
@@ -579,10 +595,16 @@ export function LogPanel() {
             <li className="pv-logpanel__empty">
               {/* #669: a filtered-to-empty view must not read as "nothing
                   was ever recorded" when entries exist but the active
-                  filter excludes all of them. */}
-              {entries.length === 0
-                ? m.logpanel_empty()
-                : m.logpanel_empty_filtered()}
+                  filter excludes all of them — so name the filter. */}
+              <EmptyState
+                title={
+                  entries.length === 0
+                    ? m.logpanel_empty()
+                    : filterLabel != null
+                      ? m.logpanel_empty_filtered_named({ filter: filterLabel })
+                      : m.logpanel_empty_filtered()
+                }
+              />
             </li>
           ) : (
             <div

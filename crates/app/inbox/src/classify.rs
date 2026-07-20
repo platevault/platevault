@@ -11,11 +11,29 @@
 //! This module is pure orchestration: DB reads/writes via
 //! `persistence_db::repositories::inbox`; metadata reads via
 //! `metadata_fits::FitsExtractor` / `metadata_xisf::XisfExtractor`.
+//!
+//! # Write-failure policy (issue #1101)
+//!
+//! Writes here split into two classes and are handled differently:
+//!
+//! - **Load-bearing** — the classification result itself (the stale-row wipe
+//!   that the fresh rows assume, the evidence rows, the classification cache
+//!   row, the item's scan columns and its `state = 'classified'`). A failure
+//!   propagates: returning `Ok` would report a classification the database
+//!   does not hold, and the `state` write in particular would leave a false
+//!   statement in the DB (#711 badge disagreement).
+//! - **Best-effort** — rows that are re-derivable from the next classify run
+//!   (per-file metadata seeded for materialized sub-items, override
+//!   restoration and staleness flags, breakdown cache rows, orphan sub-item
+//!   cleanup, denormalized child counts). These keep going, but every failure
+//!   is logged with the item id and path so a partial classify is diagnosable
+//!   after the fact instead of surfacing as a data bug months later.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use app_core_errors::db_internal_ctx;
 use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput};
 use camino::Utf8Path;
@@ -147,11 +165,17 @@ pub async fn classify(
         snapshot_overrides(pool, &req.inbox_item_id, &file_paths, &req.root_absolute_path).await;
 
     // Delete stale evidence
-    repo::delete_evidence_for_item(pool, &req.inbox_item_id).await.ok();
-    repo::delete_breakdown_for_item(pool, &req.inbox_item_id).await.ok();
+    repo::delete_evidence_for_item(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: delete stale evidence"))?;
+    repo::delete_breakdown_for_item(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: delete stale breakdown"))?;
     // spec 041 US2/T016: clear stale per-file metadata so removed files do not
     // leave orphaned rows behind after a re-scan.
-    repo::delete_file_metadata_for_item(pool, &req.inbox_item_id).await.ok();
+    repo::delete_file_metadata_for_item(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: delete stale file metadata"))?;
 
     let mut frame_type_files: HashMap<String, Vec<String>> = HashMap::new();
     let mut unclassified_files: Vec<String> = Vec::new();
@@ -222,6 +246,19 @@ pub async fn classify(
                 (None, EvidenceSource::None, None, true, false, None)
             };
 
+        // #549: a detected calibration master is extracted into its own
+        // `inbox_items` row at scan time (`persist_master_item`), but the
+        // file is never moved off disk, so a folder-PLACEHOLDER classify run
+        // still walks it here. Without this guard the master was tallied a
+        // second time into the placeholder's evidence/breakdown/file_count —
+        // the placeholder must represent only the un-extracted remainder.
+        // Only skip when classifying the placeholder itself: a master's own
+        // classify call (`item.is_master_item != 0`) has exactly this one
+        // file and must still record it.
+        if is_master && item.is_master_item == 0 {
+            continue;
+        }
+
         // Persist evidence
         let ev_id = Uuid::new_v4().to_string();
         let ev = InsertEvidence {
@@ -236,12 +273,16 @@ pub async fn classify(
             is_master,
             master_detector,
         };
-        repo::insert_evidence(pool, &ev).await.ok();
+        repo::insert_evidence(pool, &ev)
+            .await
+            .map_err(|e| db_internal_ctx(e, "classify: insert classification evidence"))?;
 
         // spec 041 US2/T016: persist per-file extracted header metadata. The
         // raw extractor returns string fields; we parse the numeric ones here
         // (gain stays a string — some cameras report scaled/non-integer gain).
-        persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref()).await;
+        persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref())
+            .await
+            .map_err(|e| db_internal_ctx(e, "classify: persist per-file metadata"))?;
 
         // T066: collect for sub-item grouping and the folder tallies — both
         // computed AFTER the loop, once user overrides are layered on top of
@@ -252,7 +293,7 @@ pub async fn classify(
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
     // evidence rows, then mark stale the subset whose file identity changed.
     for entry in &override_snapshot {
-        repo::set_overrides(
+        if let Err(e) = repo::set_overrides(
             pool,
             &req.inbox_item_id,
             &entry.relative_file_path,
@@ -262,11 +303,23 @@ pub async fn classify(
             entry.override_binning.as_deref(),
         )
         .await
-        .ok();
+        {
+            tracing::warn!(
+                item = %req.inbox_item_id,
+                file = %entry.relative_file_path,
+                "classify: restoring overrides failed, file reverts to its raw header state: {e}"
+            );
+        }
         if entry.stale {
             repo::mark_override_stale(pool, &req.inbox_item_id, &entry.relative_file_path)
                 .await
-                .ok();
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        item = %req.inbox_item_id,
+                        file = %entry.relative_file_path,
+                        "classify: marking override stale failed, file shows as fresh: {e}"
+                    );
+                });
         }
     }
 
@@ -367,7 +420,15 @@ pub async fn classify(
                     .ok()
                     .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
                 if cur_size != Some(stored_size) || cur_mtime.as_deref() != Some(stored_mtime) {
-                    repo::mark_file_override_stale(pool, sg_id, &ov.relative_file_path).await.ok();
+                    repo::mark_file_override_stale(pool, sg_id, &ov.relative_file_path)
+                        .await
+                        .unwrap_or_else(|e| {
+                            tracing::warn!(
+                                source_group = %sg_id,
+                                file = %ov.relative_file_path,
+                                "classify: marking file override stale failed, changed file shows as fresh: {e}"
+                            );
+                        });
                 }
             }
         }
@@ -452,19 +513,27 @@ pub async fn classify(
         content_signature: &content_signature,
         unclassified_file_count: unclassified_count,
     };
-    repo::upsert_classification(pool, &classification).await.ok();
+    repo::upsert_classification(pool, &classification)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: upsert classification"))?;
 
-    // 9. Update item state and signature
+    // 9. Update item state and signature.
+    // #549: `file_records.len()` (not `file_paths.len()`) — extracted-master
+    // files were filtered out of `file_records` above, so this is the
+    // un-extracted remainder the placeholder is meant to represent, matching
+    // the count `persist_folder_placeholder` (inbox.rs) writes at scan time.
     repo::update_inbox_item_scan(
         pool,
         &req.inbox_item_id,
         &content_signature,
-        i64::try_from(file_paths.len()).unwrap_or(i64::MAX),
+        i64::try_from(file_records.len()).unwrap_or(i64::MAX),
     )
     .await
-    .ok();
+    .map_err(|e| db_internal_ctx(e, "classify: update item scan columns"))?;
 
-    repo::update_inbox_item_state(pool, &req.inbox_item_id, "classified").await.ok();
+    repo::update_inbox_item_state(pool, &req.inbox_item_id, "classified")
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: mark item classified"))?;
 
     // 10. Build + persist breakdown with destination previews
     let breakdown =
@@ -506,7 +575,7 @@ async fn persist_file_metadata(
     rel: &str,
     abs_path: &Path,
     raw_meta: Option<&metadata_core::RawFileMetadata>,
-) {
+) -> persistence_db::DbResult<()> {
     // Parse a trimmed numeric string (e.g. "120.0", "2") to a target number.
     fn parse_f64(s: Option<&String>) -> Option<f64> {
         s.and_then(|v| v.trim().parse::<f64>().ok())
@@ -589,7 +658,7 @@ async fn persist_file_metadata(
         }
     };
 
-    repo::upsert_inbox_file_metadata(pool, &m).await.ok();
+    repo::upsert_inbox_file_metadata(pool, &m).await
 }
 
 /// Collect relative file paths that need to be marked as stale after the
@@ -1009,12 +1078,26 @@ pub(crate) async fn materialize_sub_items(
     if let Ok(existing) = repo::list_inbox_sub_items(pool, source_group_id).await {
         for row in existing {
             if !current_keys.contains(row.group_key.as_str()) {
-                repo::delete_sub_item_if_unlinked(pool, &row.id).await.ok();
+                repo::delete_sub_item_if_unlinked(pool, &row.id).await.unwrap_or_else(|e| {
+                    tracing::warn!(
+                        source_group = %source_group_id,
+                        sub_item = %row.id,
+                        "classify: deleting orphaned sub-item failed, stale group remains: {e}"
+                    );
+                });
             }
         }
     }
 
-    repo::update_source_group_child_count(pool, source_group_id, child_count).await.ok();
+    repo::update_source_group_child_count(pool, source_group_id, child_count).await.unwrap_or_else(
+        |e| {
+            tracing::warn!(
+                source_group = %source_group_id,
+                child_count,
+                "classify: updating source-group child count failed, badge count is stale: {e}"
+            );
+        },
+    );
 }
 
 /// Seed one materialized sub-item's evidence, per-file metadata, breakdown,
@@ -1034,9 +1117,25 @@ async fn seed_sub_item_cache(
 ) {
     let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
 
-    repo::delete_evidence_for_item(pool, sub_id).await.ok();
-    repo::delete_breakdown_for_item(pool, sub_id).await.ok();
-    repo::delete_file_metadata_for_item(pool, sub_id).await.ok();
+    // Every write below seeds a cache the next classify re-derives, so a
+    // failure degrades rather than corrupts: log and continue (#1101).
+    let warn_seed = |op: &'static str, e: persistence_db::DbError| {
+        tracing::warn!(
+            sub_item = %sub_id,
+            group_key,
+            "classify: seeding sub-item cache failed at {op}, cache is partial: {e}"
+        );
+    };
+
+    repo::delete_evidence_for_item(pool, sub_id)
+        .await
+        .unwrap_or_else(|e| warn_seed("delete evidence", e));
+    repo::delete_breakdown_for_item(pool, sub_id)
+        .await
+        .unwrap_or_else(|e| warn_seed("delete breakdown", e));
+    repo::delete_file_metadata_for_item(pool, sub_id)
+        .await
+        .unwrap_or_else(|e| warn_seed("delete file metadata", e));
 
     let mut sample_files: Vec<String> = Vec::new();
     for (rel, abs_opt, raw_meta_opt) in files {
@@ -1053,7 +1152,7 @@ async fn seed_sub_item_cache(
             is_master: false,
             master_detector: None,
         };
-        repo::insert_evidence(pool, &ev).await.ok();
+        repo::insert_evidence(pool, &ev).await.unwrap_or_else(|e| warn_seed("insert evidence", e));
 
         // Real abs path when available (initial classify's own re-split) for
         // accurate file_size_bytes/file_mtime; falls back to an unreadable
@@ -1061,7 +1160,9 @@ async fn seed_sub_item_cache(
         // already treats a failed stat as None/None, same as its documented
         // "no abs path available" behaviour elsewhere in this module.
         let abs_for_stat = abs_opt.as_deref().unwrap_or_else(|| Path::new(""));
-        persist_file_metadata(pool, sub_id, rel, abs_for_stat, raw_meta_opt.as_ref()).await;
+        persist_file_metadata(pool, sub_id, rel, abs_for_stat, raw_meta_opt.as_ref())
+            .await
+            .unwrap_or_else(|e| warn_seed("persist file metadata", e));
 
         if sample_files.len() < 10 {
             sample_files.push(rel.clone());
@@ -1081,7 +1182,7 @@ async fn seed_sub_item_cache(
             &sample_json,
         )
         .await
-        .ok();
+        .unwrap_or_else(|e| warn_seed("upsert breakdown", e));
     }
 
     let (db_result, unclassified_count) = if is_needs_review {
@@ -1097,10 +1198,18 @@ async fn seed_sub_item_cache(
         content_signature,
         unclassified_file_count: unclassified_count,
     };
-    repo::upsert_classification(pool, &classification).await.ok();
+    repo::upsert_classification(pool, &classification)
+        .await
+        .unwrap_or_else(|e| warn_seed("upsert classification", e));
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
+///
+/// Skips symlinks and Windows junctions. `folder` is user-supplied, and
+/// `is_file()` resolves links, so without this gate a link planted in an
+/// inbox folder would pull an out-of-root file into classification — the
+/// do-not-follow-links rule the scanner already enforces (issue #1233,
+/// constitution product constraints).
 fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let Ok(read_dir) = std::fs::read_dir(folder) else {
@@ -1108,6 +1217,9 @@ fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     };
     for entry in read_dir.flatten() {
         let path = entry.path();
+        if fs_pathsafe::is_link_or_junction(&path) {
+            continue;
+        }
         if !path.is_file() {
             continue;
         }
@@ -1166,7 +1278,15 @@ async fn build_breakdown(
             &sample_json,
         )
         .await
-        .ok();
+        .unwrap_or_else(|e| {
+            // The returned `entries` are built in memory regardless, so the
+            // response stays correct; only the persisted cache row is lost.
+            tracing::warn!(
+                item = %inbox_item_id,
+                kind,
+                "classify: persisting breakdown row failed, cached breakdown is partial: {e}"
+            );
+        });
 
         entries.push(BreakdownEntry {
             kind: kind.clone(),
@@ -1325,6 +1445,103 @@ mod tests {
         assert!(!resp.content_signature.is_empty());
     }
 
+    /// Build the standard one-light-frame fixture used by the #1101 regression
+    /// tests: a temp dir holding one classifiable FITS file plus its inbox row.
+    async fn single_light_fixture(db: &Database, item_id: &str) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        tmp
+    }
+
+    /// Regression (#1101, headline site): when the `state = 'classified'` write
+    /// fails, classify MUST NOT return `Ok`. Previously the result was dropped
+    /// with `.await.ok()`, so the caller was told the item was classified while
+    /// the row still said otherwise — a false statement in the DB and the root
+    /// of the #711 badge disagreement.
+    ///
+    /// The failure is injected with a trigger scoped to exactly that write, so
+    /// every earlier write in the run still succeeds and only the state
+    /// transition breaks.
+    #[tokio::test]
+    async fn classify_surfaces_failed_item_state_write() {
+        let db = test_db().await;
+        let item_id = "item-1101-state";
+        let tmp = single_light_fixture(&db, item_id).await;
+
+        sqlx::query(
+            "CREATE TRIGGER block_classified BEFORE UPDATE ON inbox_items \
+             WHEN NEW.state = 'classified' \
+             BEGIN SELECT RAISE(ABORT, 'injected: state write failed'); END",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let err = classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .expect_err("classify must not report success when the state write fails");
+
+        assert_eq!(err.code, ErrorCode::InternalDatabase);
+        assert!(
+            err.message.contains("mark item classified"),
+            "error must name the failed operation, got: {}",
+            err.message
+        );
+
+        // The DB must not claim the item is classified either.
+        let state: String = sqlx::query_scalar("SELECT state FROM inbox_items WHERE id = ?")
+            .bind(item_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_ne!(state, "classified");
+    }
+
+    /// Regression (#1101): evidence rows ARE the classification result, so a
+    /// failed evidence write must surface rather than yielding a response
+    /// describing rows that were never persisted.
+    #[tokio::test]
+    async fn classify_surfaces_failed_evidence_write() {
+        let db = test_db().await;
+        let item_id = "item-1101-evidence";
+        let tmp = single_light_fixture(&db, item_id).await;
+
+        sqlx::query("DROP TABLE inbox_classification_evidence").execute(db.pool()).await.unwrap();
+
+        let err = classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .expect_err("classify must not report success when the evidence write fails");
+
+        assert_eq!(err.code, ErrorCode::InternalDatabase);
+    }
+
     /// Regression (PR #457 Layer-2 Inbox journeys): a SECOND classify of an
     /// unchanged item hits `build_response_from_cache`, which must translate
     /// the persisted DB vocabulary ('classified', migration 0048) back to the
@@ -1403,6 +1620,64 @@ mod tests {
         assert_eq!(resp.classification_type, "mixed");
         assert!(resp.frame_type.is_none());
         assert_eq!(resp.breakdown.len(), 2);
+    }
+
+    /// Regression (#549): a detected calibration master is extracted into its
+    /// own `inbox_items` row at scan time, but the file itself is never moved
+    /// off disk. Classifying the folder PLACEHOLDER (this item, is_master_item
+    /// = 0) must not re-tally that master into the breakdown or file_count —
+    /// the placeholder represents only the un-extracted remainder. Before the
+    /// fix `classify` walked every FITS/XISF file still in the folder, so a
+    /// folder of 2 un-extracted lights + 1 already-extracted master dark
+    /// reported "mixed"/3 files instead of "single_type light"/2 files.
+    #[tokio::test]
+    async fn classify_excludes_already_extracted_master_from_placeholder_tally() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "light_002.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "master_dark.fits", "Master Dark");
+
+        let db = test_db().await;
+        let item_id = "item-classify-placeholder-with-master";
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let req = ClassifyRequest {
+            inbox_item_id: item_id.to_owned(),
+            root_absolute_path: tmp.path().to_owned(),
+            force_rescan: false,
+        };
+
+        let resp = classify(db.pool(), req).await.unwrap();
+
+        assert_eq!(
+            resp.classification_type, "single_type",
+            "the master must not turn this into a mixed folder: {:?}",
+            resp.breakdown
+        );
+        assert_eq!(resp.breakdown.len(), 1);
+        assert_eq!(resp.breakdown[0].kind, "light");
+        assert_eq!(
+            resp.breakdown[0].count, 2,
+            "breakdown must not double-count the already-extracted master (#549)"
+        );
+
+        let item = repo::get_inbox_item(db.pool(), item_id).await.unwrap();
+        assert_eq!(
+            item.file_count, 2,
+            "placeholder file_count must be the un-extracted remainder (#549), not the full folder"
+        );
     }
 
     #[tokio::test]
@@ -3153,5 +3428,63 @@ mod tests {
             std::collections::HashSet::from(["light", "dark"]),
             "re-derived sub-items must cover both frame types present in the folder"
         );
+    }
+
+    /// Baseline for the two link tests below: a real FITS file in the folder
+    /// IS enumerated, so a later assertion of "not enumerated" is evidence of
+    /// the link gate rather than of a broken walker.
+    #[test]
+    fn real_fits_file_is_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "real.fits", "LIGHT");
+
+        let found = enumerate_fits_files(tmp.path());
+        assert_eq!(found.len(), 1, "a real FITS file in the folder must be enumerated");
+    }
+
+    /// Issue #1233: a symlink to a FITS file outside the inbox folder must not
+    /// be pulled into classification. `is_file()` resolves the link, so the
+    /// explicit link gate is what refuses it.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_fits_file_is_not_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        write_fits_with_imagetyp(&outside, "elsewhere.fits", "LIGHT");
+
+        let folder = tmp.path().join("inbox_folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::os::unix::fs::symlink(outside.join("elsewhere.fits"), folder.join("linked.fits"))
+            .unwrap();
+
+        let found = enumerate_fits_files(&folder);
+        assert!(found.is_empty(), "a symlinked FITS file must not be enumerated: {found:?}");
+    }
+
+    /// Windows counterpart: files reached through a junction must not be
+    /// enumerated either. Junctions are directory-only, so the link sits on
+    /// the folder the walker would descend into.
+    #[cfg(windows)]
+    #[test]
+    fn fits_file_behind_junction_is_not_enumerated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        write_fits_with_imagetyp(&outside, "elsewhere.fits", "LIGHT");
+
+        let folder = tmp.path().join("inbox_folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        let junction = folder.join("junction_to_outside");
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J", junction.to_str().unwrap(), outside.to_str().unwrap()])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+
+        // The walker is non-recursive, so the junction itself is the entry it
+        // must refuse; enumerating it as a directory would be a regression.
+        let found = enumerate_fits_files(&folder);
+        assert!(found.is_empty(), "nothing behind a junction may be enumerated: {found:?}");
     }
 }
