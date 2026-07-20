@@ -193,16 +193,25 @@ describe('SourceProtectionOverride', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save override/i }));
 
+    // Gate on the select disappearing — i.e. the editor actually CLOSING, which
+    // happens only in handleSave's .then once sourceProtectionSet RESOLVES
+    // (SourceProtectionOverride.tsx:107-113). Two nearby queries are vacuous
+    // here and prove nothing (#1083, same shape as #1109): getByText(
+    // 'Unprotected') also matches the <option> that is present from first
+    // render, and the Save button's own name flips to "Saving…" the instant it
+    // is clicked, so it goes null while the editor is still open.
     await waitFor(() => {
-      expect(screen.getByText('Unprotected')).toBeTruthy();
+      expect(
+        screen.queryByRole('combobox', { name: /Protection level override/i }),
+      ).toBeNull();
     });
+    // Unambiguous now the <option> is gone: only the pill carries this label.
+    expect(screen.getByText('Unprotected')).toBeTruthy();
     expect(mockSet).toHaveBeenCalledWith({
       sourceId: 'src-1',
       level: 'unprotected',
     });
     expect(onSaved).toHaveBeenCalledWith('unprotected');
-    // Closed after save — editor no longer rendered.
-    expect(screen.queryByRole('button', { name: /Save override/i })).toBeNull();
   });
 
   it('shows error on load failure', async () => {
