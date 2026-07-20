@@ -306,6 +306,17 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The default workspace clippy above never enables `dev-tools`, so the
+      # developer-mode surface (apps/desktop/src-tauri/src/commands/dev.rs)
+      # was linted by nobody and four lints rotted unseen (#1165). Release
+      # binaries still omit `dev-tools` (see .claude/rules/21-astro-monorepo.md)
+      # — this step only adds lint coverage for the daily developer build, it
+      # does not touch the release build path. Same OS-agnostic reasoning as
+      # the step above, so Linux-only here too.
+      - name: Clippy (desktop_shell, dev-tools feature, deny warnings)
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
+        run: cargo clippy -p desktop_shell --features dev-tools --all-targets -- -D warnings
+
       # --- L1 (isolated units) + L2 (real-backend integration) ---
       # No standalone `cargo build --workspace` step: clippy --all-targets
       # (above, Linux) and nextest (below, every OS) each already build every
