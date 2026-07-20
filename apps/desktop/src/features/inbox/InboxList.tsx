@@ -36,6 +36,7 @@ import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';
 import { m } from '@/lib/i18n';
 import { masterLabel } from '@/lib/master-label';
+import { useHotkeys } from '@/lib/useHotkeys';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -378,6 +379,67 @@ export function InboxList({
     }));
   }, [grouped, tree, collapsed, originalIndexById, filtered]);
 
+  // ── J/K triage navigation (spec 027 FR-022, issue #747) ─────────────────────
+  // Bound here rather than on the page because this component owns the visual
+  // order: grouping, collapse state, sort and filters all reshape it, and J/K
+  // must step through what the user actually sees.
+  const navigableIds = useMemo(
+    () =>
+      visualRows
+        .filter((r): r is ItemVisualRow => r.kind === 'item')
+        .map((r) => r.item.inboxItemId),
+    [visualRows],
+  );
+
+  const step = useCallback(
+    (delta: number) => {
+      if (navigableIds.length === 0) return;
+      const cur = selectedId ? navigableIds.indexOf(selectedId) : -1;
+      // Clamped, not wrapped: triage is a top-to-bottom sweep, and silently
+      // jumping back to the top reads as "nothing happened" at the last row.
+      // With nothing selected, J enters at the top and K at the bottom.
+      const next =
+        cur === -1
+          ? delta > 0
+            ? 0
+            : navigableIds.length - 1
+          : Math.min(navigableIds.length - 1, Math.max(0, cur + delta));
+      const id = navigableIds[next];
+      if (id && id !== selectedId) onSelect(id);
+    },
+    [navigableIds, selectedId, onSelect],
+  );
+
+  // Single-key bindings, matching the scheme the retired Inbox ActionSidebar
+  // used. useHotkeys suppresses these while a text field has focus.
+  useHotkeys(
+    {
+      KeyJ: (e) => {
+        e.preventDefault();
+        step(1);
+      },
+      KeyK: (e) => {
+        e.preventDefault();
+        step(-1);
+      },
+    },
+    [step],
+  );
+
+  // Selection moves without moving DOM focus (the target row may not even be
+  // rendered under virtualization), so nothing would reach a screen reader
+  // without an explicit announcement.
+  const selectedItem = useMemo(
+    () =>
+      selectedId
+        ? visualRows.find(
+            (r): r is ItemVisualRow =>
+              r.kind === 'item' && r.item.inboxItemId === selectedId,
+          )?.item
+        : undefined,
+    [visualRows, selectedId],
+  );
+
   // ── Sortable column headers (SessionsTable convention) ──────────────────────
   const makeSortHeader = (
     col: InboxSortCol,
@@ -555,6 +617,21 @@ export function InboxList({
           {groupingHint}
         </div>
       )}
+      {/* Discoverability for the otherwise invisible J/K/C bindings (#747). */}
+      <div className="pv-listtable__foot" data-testid="inbox-hotkey-hint">
+        {m.inbox_hotkey_hint()}
+      </div>
+      {/* Keyboard selection moves no DOM focus, so announce it explicitly. */}
+      <div
+        className="pv-visually-hidden"
+        role="status"
+        aria-live="polite"
+        data-testid="inbox-selection-announcer"
+      >
+        {selectedItem
+          ? m.inbox_row_selected_aria({ label: detectionLabel(selectedItem) })
+          : ''}
+      </div>
     </div>
   );
 }

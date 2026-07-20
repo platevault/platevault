@@ -38,6 +38,8 @@ export function protectionLabel(protection: string): string {
 }
 
 /** True when `protection` resolves to the protected level. */
-export function isProtectedLevel(protection: string | null | undefined): boolean {
+export function isProtectedLevel(
+  protection: string | null | undefined,
+): boolean {
   return protection === 'protected';
 }
