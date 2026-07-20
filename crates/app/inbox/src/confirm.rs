@@ -168,10 +168,10 @@ pub async fn confirm(
         ));
     }
 
-    // 3. T070 / FR-049 / SC-015: reject any item that is still in the
-    // needs-review sentinel bucket (missing mandatory attributes).  Splitting /
+    // 3. T070 / FR-049 / SC-015: reject any item still flagged `needs_review`
+    // (missing mandatory attributes; spec 058 FR-028).  Splitting /
     // recalculation happens at classify/reclassify (before confirm), never here.
-    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+    if item.needs_review != 0 {
         return Err(ContractError::new(
             ErrorCode::InboxMissingPathAttributes,
             "This item is in the needs-review bucket: one or more files are missing mandatory \
@@ -2254,9 +2254,9 @@ mod tests {
         let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
 
-        // Insert the inbox item with group_key = SENTINEL_NEEDS_REVIEW directly.
-        // The sentinel gate checks item.group_key, so we bypass setup_classified_item
-        // and set group_key explicitly via raw SQL.
+        // Insert the inbox item flagged needs_review directly. The gate reads
+        // `item.needs_review` (spec 058 FR-028), so we bypass
+        // setup_classified_item and set the column explicitly via raw SQL.
         let item_id = "item-t070-sentinel";
         let sig = "sig-t070-sentinel";
         inbox_repo::insert_inbox_item(
@@ -2272,9 +2272,7 @@ mod tests {
         )
         .await
         .unwrap();
-        // Set group_key to SENTINEL_NEEDS_REVIEW.
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(crate::classify::SENTINEL_NEEDS_REVIEW)
+        sqlx::query("UPDATE inbox_items SET needs_review = 1 WHERE id = ?")
             .bind(item_id)
             .execute(db.pool())
             .await
@@ -2350,8 +2348,8 @@ mod tests {
         )
         .await;
 
-        // A fully-resolved item (group_key defaults to '' in the helper, which is
-        // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
+        // A fully-resolved item (needs_review defaults to 0 in the helper) must
+        // pass the needs-review gate.
         // Same registered-source / classified-item shape as
         // `non_inbox_source_moves_in_place`, which deterministically succeeds —
         // a fully-resolved item must confirm cleanly, not merely "not fail on

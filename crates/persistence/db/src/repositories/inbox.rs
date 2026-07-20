@@ -36,6 +36,10 @@ pub struct InboxItemRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// Spec 058 FR-028: the authoritative needs-review verdict of the
+    /// mandatory-attribute gate. Distinct from `group_key`, which carries
+    /// classification identity only.
+    pub needs_review: i64,
     /// File format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
     pub format: Option<String>,
     /// Non-zero when this row represents a single detected calibration master file.
@@ -573,38 +577,6 @@ pub async fn update_source_group_child_count(
         .bind(source_group_id)
         .execute(pool)
         .await?;
-    Ok(())
-}
-
-/// Clear the `__needs_review__` sentinel on an item's `group_key` in place,
-/// promoting it to a resolved single-type group (issue #724).
-///
-/// `reclassify` (v1) determines the item is fully resolved (single frame type,
-/// no remaining missing-mandatory files) but — unlike `reclassify_v2` /
-/// `materialize_sub_items` — never re-splits into fresh sub-item rows. Without
-/// this, `inbox_items.group_key` stays `__needs_review__` forever and
-/// `inbox_confirm`'s sentinel gate rejects the item permanently even after
-/// every file has been corrected. The new key embeds the item id to guarantee
-/// it cannot collide with the `(root_id, relative_path, group_key)` UNIQUE
-/// constraint against a sibling group already materialised for this folder.
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn clear_needs_review_sentinel(
-    pool: &SqlitePool,
-    inbox_item_id: &str,
-    frame_type: &str,
-) -> DbResult<()> {
-    let resolved_key = format!("type={frame_type}·resolved={inbox_item_id}");
-    sqlx::query(
-        "UPDATE inbox_items SET group_key = ?, frame_type = ?, state = 'classified'
-         WHERE id = ? AND group_key = '__needs_review__'",
-    )
-    .bind(&resolved_key)
-    .bind(frame_type)
-    .bind(inbox_item_id)
-    .execute(pool)
-    .await?;
     Ok(())
 }
 
@@ -1723,6 +1695,9 @@ pub struct InboxListRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// Spec 058 FR-028 (T008): authoritative needs-review verdict, so the list
+    /// never has to guess it from `group_key`.
+    pub needs_review: i64,
     /// Real file format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
     pub format: Option<String>,
     /// Non-zero when this row represents a single detected calibration master file.
@@ -1780,6 +1755,7 @@ pub async fn list_unacknowledged_across_roots(
              i.content_signature,
              i.state,
              i.lane,
+             i.needs_review,
              i.format,
              COALESCE(i.is_master_item, 0) AS is_master,
              i.master_frame_type,

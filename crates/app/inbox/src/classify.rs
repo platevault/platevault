@@ -410,8 +410,8 @@ pub async fn classify(
     //
     // For each file we build a FrameMetadata from extracted raw_meta, then call
     // group_file with the per-type GroupingConfig::default_for to get its
-    // deterministic group_key. Files are partitioned by group_key; unclassifiable
-    // files go into the sentinel __needs_review__ bucket (gate logic is T070).
+    // deterministic group_key. Files are partitioned by group_key; the T070 gate
+    // sets `needs_review` on the resulting item without touching its identity.
     // For each group we upsert one inbox_items row with identity
     // (root_id, relative_path, group_key) and a per-sub-group content_signature.
     //
@@ -694,9 +694,14 @@ async fn snapshot_overrides(
     snapshots
 }
 
-/// Sentinel group key used for files that are unclassifiable or missing
-/// grouping-mandatory attributes (T066 / R-14 / T070).
-pub const SENTINEL_NEEDS_REVIEW: &str = "__needs_review__";
+/// Classification identity for a file whose frame type could not be determined
+/// at all (spec 058 FR-028, T007).
+///
+/// This is an identity *value* ("type undetermined"), not a needs-review flag:
+/// the review verdict lives in `inbox_items.needs_review`. No code branches on
+/// this string. `FrameType::as_str` never yields `"unknown"`, so it cannot
+/// collide with a real classification key.
+pub const GROUP_KEY_TYPE_UNKNOWN: &str = "type=unknown";
 
 // ── Mandatory-attribute gate (T070 / FR-047 / R-14) ──────────────────────────
 
@@ -855,9 +860,9 @@ pub(crate) fn build_frame_metadata(
 /// 1. Build a [`FrameMetadata`] for each file from its extracted raw metadata.
 /// 2. Call [`group_file`] with [`GroupingConfig::default_for`] the file's frame
 ///    type to get a deterministic `(group_key, group_label)`.
-/// 3. Unclassifiable files (no frame type) **or** files missing a mandatory
-///    attribute (T070 / FR-047/FR-048) go into the sentinel
-///    [`SENTINEL_NEEDS_REVIEW`] bucket.
+/// 3. Files missing a mandatory attribute (T070 / FR-047/FR-048) keep their
+///    classification identity and are flagged `needs_review`; files with no
+///    frame type at all key on [`GROUP_KEY_TYPE_UNKNOWN`] (spec 058 FR-028).
 /// 4. Per group: compute a per-sub-group `content_signature` =
 ///    `folder_signature(sorted per-file sigs of files in that group)`, then
 ///    upsert an `inbox_items` row with identity `(root_id, relative_path,
@@ -884,48 +889,50 @@ pub(crate) async fn materialize_sub_items(
     #[allow(clippy::type_complexity)]
     let mut groups: std::collections::HashMap<
         String,
-        (String, Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)>),
+        (String, bool, Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)>),
     > = std::collections::HashMap::new();
 
     for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
         let abs_path = file_paths.get(i).cloned();
 
-        let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
-            // T070 / FR-047: check mandatory attributes before grouping.
-            // target_resolved=false: coordinate resolution (FR-052) is not yet
-            // integrated at classify time; the user's OBJECT header value is
-            // used as the proxy. Lights with no OBJECT go to needs-review.
-            let missing = check_mandatory_missing(ft, raw_meta_opt.as_ref(), false);
-            if missing.is_empty() {
-                // Build effective FrameMetadata for the grouping engine.
-                let meta = raw_meta_opt.as_ref().map_or_else(
-                    || FrameMetadata { frame_type: ft, ..Default::default() },
-                    |r| build_frame_metadata(ft, r),
-                );
+        // Spec 058 FR-028 (T007): `group_key` carries classification identity
+        // ONLY; the needs-review verdict travels alongside it as its own bool
+        // and is persisted to `inbox_items.needs_review`. A file missing a
+        // mandatory attribute still has an identity — `group_file` renders the
+        // absent dimension as `SENTINEL_MISSING`, which is what keeps its key
+        // distinct from a fully-resolved sibling of the same frame type.
+        let (group_key, group_label, needs_review) = if let Some(ft) = *frame_type_opt {
+            // Build effective FrameMetadata for the grouping engine.
+            let meta = raw_meta_opt.as_ref().map_or_else(
+                || FrameMetadata { frame_type: ft, ..Default::default() },
+                |r| build_frame_metadata(ft, r),
+            );
+            let config = GroupingConfig::default_for(ft);
+            let result = group_file(&meta, &config);
 
-                let config = GroupingConfig::default_for(ft);
-                let result = group_file(&meta, &config);
-                (result.key.0, result.label.0)
-            } else {
-                // Missing mandatory attributes — sentinel bucket (FR-048).
-                (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
-            }
+            // T070 / FR-047: target_resolved=false — coordinate resolution
+            // (FR-052) is not yet integrated at classify time; the user's
+            // OBJECT header value is used as the proxy, so lights with no
+            // OBJECT need review.
+            let missing = check_mandatory_missing(ft, raw_meta_opt.as_ref(), false);
+            (result.key.0, result.label.0, !missing.is_empty())
         } else {
-            // Unclassifiable (no frame type) — sentinel bucket (FR-048).
-            (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
+            (GROUP_KEY_TYPE_UNKNOWN.to_owned(), "(root) · needs review".to_owned(), true)
         };
 
         // Files without a resolvable abs path (e.g. reclassify_v2's re-split,
         // which has no root path to join) still need to land in their group so
         // the sub-item is upserted with the correct file_count and evidence.
-        let entry = groups.entry(group_key).or_insert_with(|| (group_label, Vec::new()));
-        entry.1.push((rel.clone(), abs_path, raw_meta_opt.clone()));
+        let entry =
+            groups.entry(group_key).or_insert_with(|| (group_label, needs_review, Vec::new()));
+        entry.2.push((rel.clone(), abs_path, raw_meta_opt.clone()));
     }
 
     // Step 4 + 5: upsert one sub-item per group and update child_count.
     let child_count = i64::try_from(groups.len()).unwrap_or(i64::MAX);
 
-    for (group_key, (group_label, files)) in &groups {
+    for (group_key, (group_label, is_needs_review, files)) in &groups {
+        let is_needs_review = *is_needs_review;
         // Per-sub-group content_signature (R-11).
         let file_sigs: Vec<[u8; 32]> = files
             .iter()
@@ -933,15 +940,6 @@ pub(crate) async fn materialize_sub_items(
             .filter_map(super::signature::file_signature)
             .collect();
         let sub_sig = folder_signature(file_sigs);
-
-        // Spec 058 FR-028: needs-review is its own field, not a group_key
-        // value. It is still DERIVED from the sentinel here because T007 has
-        // not yet narrowed `group_key` to classification identity; once it
-        // has, this reads the grouping result directly and the sentinel is
-        // gone. Writing the column now means the read side can migrate onto
-        // it (T008) before the sentinel is removed, rather than both flipping
-        // in one landing.
-        let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
 
         // Determine frame_type from the group_key prefix (type=<value>).
         let frame_type_str: Option<&str> = if is_needs_review {
@@ -993,7 +991,8 @@ pub(crate) async fn materialize_sub_items(
         // source group, never copied to a freshly materialized sub-item id
         // otherwise), re-classifying it back to unclassified and leaving
         // Confirm permanently disabled (issue #755 CI fix, R-14).
-        seed_sub_item_cache(pool, &persisted_id, group_key, frame_type_str, &sub_sig, files).await;
+        seed_sub_item_cache(pool, &persisted_id, is_needs_review, frame_type_str, &sub_sig, files)
+            .await;
     }
 
     // Purge sub-item rows for groups that no longer exist: when a file's metadata
@@ -1023,13 +1022,11 @@ pub(crate) async fn materialize_sub_items(
 async fn seed_sub_item_cache(
     pool: &SqlitePool,
     sub_id: &str,
-    group_key: &str,
+    is_needs_review: bool,
     frame_type_str: Option<&str>,
     content_signature: &str,
     files: &[(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)],
 ) {
-    let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
-
     repo::delete_evidence_for_item(pool, sub_id).await.ok();
     repo::delete_breakdown_for_item(pool, sub_id).await.ok();
     repo::delete_file_metadata_for_item(pool, sub_id).await.ok();
@@ -2086,7 +2083,7 @@ mod tests {
 
     #[tokio::test]
     async fn t066_unclassifiable_file_goes_to_sentinel_bucket() {
-        // A file with no IMAGETYP → sentinel __needs_review__ sub-item.
+        // A file with no IMAGETYP → one needs-review sub-item (spec 058 FR-028).
         let tmp = tempfile::tempdir().unwrap();
         // No IMAGETYP card.
         let path = tmp.path().join("mystery.fits");
@@ -2117,13 +2114,18 @@ mod tests {
 
         let sub_items =
             inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-sentinel").await.unwrap();
-        assert_eq!(sub_items.len(), 1, "unclassifiable file must produce one sentinel sub-item");
-        let si = &sub_items[0];
         assert_eq!(
-            si.group_key, SENTINEL_NEEDS_REVIEW,
-            "unclassifiable file must go to __needs_review__ sentinel bucket"
+            sub_items.len(),
+            1,
+            "unclassifiable file must produce one needs-review sub-item"
         );
-        assert!(si.frame_type.is_none(), "sentinel sub-item must have no frame_type");
+        let si = &sub_items[0];
+        assert_eq!(si.needs_review, 1, "unclassifiable file must be flagged needs_review");
+        assert_eq!(
+            si.group_key, GROUP_KEY_TYPE_UNKNOWN,
+            "a file with no determinable frame type keys on the undetermined-type identity"
+        );
+        assert!(si.frame_type.is_none(), "needs-review sub-item must have no frame_type");
     }
 
     // ── T067: composite identity + signature stability (FR-042) ──────────────
@@ -2617,7 +2619,7 @@ mod tests {
     }
 
     /// T070/FR-047/FR-048: a light frame missing `target` (no OBJECT header)
-    /// must route to the __needs_review__ sentinel sub-item.
+    /// must be flagged needs_review.
     #[tokio::test]
     async fn t070_light_missing_target_goes_to_sentinel() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2655,16 +2657,25 @@ mod tests {
 
         let sub_items =
             inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-light-no-target").await.unwrap();
-        assert_eq!(sub_items.len(), 1, "light missing target must produce one sentinel sub-item");
         assert_eq!(
-            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
-            "light missing target must go to __needs_review__ sentinel"
+            sub_items.len(),
+            1,
+            "light missing target must produce one needs-review sub-item"
         );
-        assert!(sub_items[0].frame_type.is_none(), "sentinel sub-item must have no frame_type");
+        assert_eq!(
+            sub_items[0].needs_review, 1,
+            "light missing target must be flagged needs_review"
+        );
+        assert!(
+            sub_items[0].group_key.starts_with("type=light"),
+            "needs-review does not erase classification identity: {}",
+            sub_items[0].group_key
+        );
+        assert!(sub_items[0].frame_type.is_none(), "needs-review sub-item must have no frame_type");
     }
 
     /// T070/FR-047/FR-048: a dark frame missing `exposureS` must route to the
-    /// __needs_review__ sentinel sub-item.
+    /// needs-review sub-item.
     #[tokio::test]
     async fn t070_dark_missing_exposure_goes_to_sentinel() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2702,10 +2713,14 @@ mod tests {
 
         let sub_items =
             inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-dark-no-exp").await.unwrap();
-        assert_eq!(sub_items.len(), 1, "dark missing exposure must produce one sentinel sub-item");
         assert_eq!(
-            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
-            "dark missing exposure must go to __needs_review__ sentinel"
+            sub_items.len(),
+            1,
+            "dark missing exposure must produce one needs-review sub-item"
+        );
+        assert_eq!(
+            sub_items[0].needs_review, 1,
+            "dark missing exposure must be flagged needs_review"
         );
     }
 
@@ -2870,7 +2885,7 @@ mod tests {
             sub_items.iter().map(|s| s.group_key.as_str()).collect();
         assert_eq!(keys.len(), 2, "group_key must differ between the two SET-TEMP groups");
         for si in &sub_items {
-            assert_ne!(si.group_key, SENTINEL_NEEDS_REVIEW, "darks must classify, not sentinel");
+            assert_eq!(si.needs_review, 0, "darks must classify, not need review");
             assert!(
                 si.group_key.contains("set_temp="),
                 "group_key must embed the set_temp dimension: {}",
@@ -2922,7 +2937,7 @@ mod tests {
             sub_items.iter().map(|s| s.group_key.as_str()).collect();
         assert_eq!(keys.len(), 2, "group_key must differ between the two pointing groups");
         for si in &sub_items {
-            assert_ne!(si.group_key, SENTINEL_NEEDS_REVIEW, "lights must classify, not sentinel");
+            assert_eq!(si.needs_review, 0, "lights must classify, not need review");
             assert!(
                 si.group_key.contains("pointing="),
                 "group_key must embed the pointing dimension: {}",

@@ -185,7 +185,7 @@ pub async fn reclassify(
     // Scoped to items that already carry the sentinel — a non-sentinel
     // item's reclassify aggregation is unaffected (issue #724 precedent).
     let mut sentinel_resolved_ft: Option<metadata_core::FrameType> = None;
-    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+    if item.needs_review != 0 {
         match single_frame_type.as_deref().and_then(metadata_core::FrameType::from_str_ci) {
             Some(ft)
                 if mandatory_attrs_present(pool, &req.inbox_item_id, ft, &updated_evidence)
@@ -215,16 +215,39 @@ pub async fn reclassify(
     .await
     .ok();
 
-    // 6b. Clear the __needs_review__ sentinel now that the check above
-    // (issue #724) confirmed the item is fully resolved.
+    // 6b. Resolve the item out of needs-review now that the check above
+    // (issue #724) confirmed every mandatory attribute is supplied.
+    //
+    // Spec 058 T006: this goes through the same materialisation upsert every
+    // other write path uses, so `frame_type`, `needs_review` and
+    // `state = 'classified'` land in ONE statement (FR-029 — no observable
+    // moment where the row reports classified without a frame type). The
+    // synthetic `type=<ft>·resolved=<id>` key that the old in-place UPDATE
+    // wrote is gone rather than replaced: the item keeps its classification
+    // identity, and `ON CONFLICT(root_id, relative_path, group_key)` converges
+    // it onto any sibling already holding that identity, because two rows
+    // sharing a classification identity in one folder ARE the same item.
     if let Some(ft) = sentinel_resolved_ft {
-        persistence_db::repositories::inbox::clear_needs_review_sentinel(
-            pool,
-            &req.inbox_item_id,
-            &ft.to_string(),
-        )
-        .await
-        .ok();
+        if let Some(source_group_id) = item.source_group_id.as_deref() {
+            inbox_repo::upsert_inbox_sub_item(
+                pool,
+                &persistence_db::repositories::inbox::UpsertInboxSubItem {
+                    id: &item.id,
+                    root_id: &item.root_id,
+                    relative_path: &item.relative_path,
+                    source_group_id,
+                    group_key: &item.group_key,
+                    group_label: item.group_label.as_deref().unwrap_or_default(),
+                    frame_type: Some(ft.as_str()),
+                    content_signature: item.content_signature.as_deref().unwrap_or_default(),
+                    file_count: item.file_count,
+                    lane: &item.lane,
+                    needs_review: false,
+                },
+            )
+            .await
+            .ok();
+        }
     }
 
     // 7. Rebuild breakdown rows so the next classify cache hit returns fresh
@@ -849,7 +872,7 @@ pub async fn reclassify_v2(
     let mut sub_items: Vec<InboxSubItemSummary> = Vec::new();
 
     for row in &sub_item_rows {
-        let is_needs_review = row.group_key == super::classify::SENTINEL_NEEDS_REVIEW;
+        let is_needs_review = row.needs_review != 0;
         if is_needs_review {
             needs_review_count = needs_review_count
                 .saturating_add(u32::try_from(row.file_count).unwrap_or(u32::MAX));
@@ -928,6 +951,40 @@ mod tests {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
+    }
+
+    /// Attach `item_id` to a real source group and flag it needs-review.
+    ///
+    /// Spec 058 FR-028: needs-review is `inbox_items.needs_review`, not a
+    /// `group_key` value — `group_key` keeps the item's classification
+    /// identity throughout. A source group is required because the resolve
+    /// path writes through `upsert_inbox_sub_item` (T006).
+    async fn flag_needs_review(db: &Database, item_id: &str, group_key: &str) {
+        let sg_id = format!("sg-{item_id}");
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &persistence_db::repositories::inbox::UpsertSourceGroup {
+                id: &sg_id,
+                root_id: "root-1",
+                relative_path: "inbox_folder",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE inbox_items
+                SET needs_review = 1, source_group_id = ?, group_key = ?
+              WHERE id = ?",
+        )
+        .bind(&sg_id)
+        .bind(group_key)
+        .bind(item_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
     }
 
     async fn setup_unclassified_item(db: &Database, item_id: &str) {
@@ -1027,21 +1084,20 @@ mod tests {
         assert_eq!(resp.applied_count, 2);
     }
 
-    /// Issue #724: reclassifying every file of a needs-review item with all
-    /// mandatory attributes for the resolved frame type must clear the
-    /// `__needs_review__` sentinel on `inbox_items.group_key` in place, so
-    /// `inbox_confirm`'s sentinel gate (`crate::confirm::t070_...`) no longer
-    /// rejects the item forever.
+    /// Issue #724 + spec 058 T011 (FR-029, SC-003): reclassifying every file
+    /// of a needs-review item with all mandatory attributes for the resolved
+    /// frame type must resolve it, so `inbox_confirm`'s gate no longer rejects
+    /// the item forever.
+    ///
+    /// The resolve records the frame type, the classification identity, the
+    /// `classified` state and `needs_review = 0` in one statement — there is no
+    /// observable intermediate where the row reports `classified` with a NULL
+    /// `frame_type`.
     #[tokio::test]
-    async fn reclassify_fully_resolved_clears_needs_review_sentinel() {
+    async fn reclassify_fully_resolved_clears_needs_review() {
         let db = test_db().await;
         setup_unclassified_item(&db, "item-recl-724").await;
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(super::super::classify::SENTINEL_NEEDS_REVIEW)
-            .bind("item-recl-724")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        flag_needs_review(&db, "item-recl-724", "type=flat").await;
 
         let resp = reclassify(
             db.pool(),
@@ -1069,17 +1125,39 @@ mod tests {
         assert_eq!(resp.updated_type, "single_type");
         assert_eq!(resp.frame_type, Some("flat".to_owned()));
 
-        let group_key: String =
-            sqlx::query_scalar("SELECT group_key FROM inbox_items WHERE id = ?")
-                .bind("item-recl-724")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        assert_ne!(
-            group_key,
-            super::super::classify::SENTINEL_NEEDS_REVIEW,
-            "sentinel must be cleared once every mandatory attribute is supplied"
+        let (needs_review, frame_type, state, group_key): (i64, Option<String>, String, String) =
+            sqlx::query_as(
+                "SELECT needs_review, frame_type, state, group_key FROM inbox_items WHERE id = ?",
+            )
+            .bind("item-recl-724")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            needs_review, 0,
+            "needs_review must clear once every mandatory attribute is supplied"
         );
+        assert_eq!(
+            frame_type.as_deref(),
+            Some("flat"),
+            "resolving must record the frame type in the same statement"
+        );
+        assert_eq!(state, "classified", "resolving must record the classified state");
+        assert_eq!(
+            group_key, "type=flat",
+            "group_key carries classification identity only — no synthetic resolved= token"
+        );
+
+        // SC-003 restated as an invariant over the whole table: no row may
+        // report `classified` without a frame type.
+        let violations: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM inbox_items
+              WHERE state = 'classified' AND frame_type IS NULL AND needs_review = 0",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(violations, 0, "SC-003: no resolved item may be classified with no frame type");
     }
 
     /// Issue #711 Instance B: overriding every file's frame_type to a single
@@ -1091,16 +1169,18 @@ mod tests {
     /// wrongly enabling the detail panel's Confirm), while `group_key` stayed
     /// `__needs_review__` (matching the list row) — the exact list/detail
     /// disagreement #711 reports.
+    ///
+    /// Spec 058 T009 changed this test's MECHANISM only: needs-review is read
+    /// from `inbox_items.needs_review` (FR-028) instead of the retired
+    /// `__needs_review__` `group_key` sentinel. The invariant is unchanged and
+    /// not weakened — frame-type agreement alone must still not report the item
+    /// classified, and the API response, the item row and the cached
+    /// classification must still agree (SC-011).
     #[tokio::test]
     async fn reclassify_type_agreement_without_mandatory_attrs_stays_needs_review() {
         let db = test_db().await;
         setup_unclassified_item(&db, "item-recl-711b").await;
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(super::super::classify::SENTINEL_NEEDS_REVIEW)
-            .bind("item-recl-711b")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        flag_needs_review(&db, "item-recl-711b", "type=dark").await;
 
         let resp = reclassify(
             db.pool(),
@@ -1130,17 +1210,17 @@ mod tests {
         );
         assert_eq!(resp.frame_type, None);
 
-        let group_key: String =
-            sqlx::query_scalar("SELECT group_key FROM inbox_items WHERE id = ?")
+        let (needs_review, frame_type): (i64, Option<String>) =
+            sqlx::query_as("SELECT needs_review, frame_type FROM inbox_items WHERE id = ?")
                 .bind("item-recl-711b")
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
         assert_eq!(
-            group_key,
-            super::super::classify::SENTINEL_NEEDS_REVIEW,
-            "sentinel must stay set — the item is not actually fully resolved"
+            needs_review, 1,
+            "needs_review must stay set — the item is not actually fully resolved"
         );
+        assert_eq!(frame_type, None, "an unresolved item must carry no frame type");
 
         // The cached classification must agree with the DB result above: a
         // subsequent inbox.classify cache-hit reads this row.
