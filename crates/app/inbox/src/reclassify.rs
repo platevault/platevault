@@ -927,6 +927,22 @@ async fn mandatory_attrs_present(
     ft: metadata_core::FrameType,
     evidence: &[persistence_db::repositories::inbox::InboxEvidenceRow],
 ) -> bool {
+    // R-17/FR-052: a light's `target` is satisfiable by coordinate
+    // auto-resolution, not only by an OBJECT header. Resolved once per
+    // sub-group (its files share one pointing) rather than per file, and only
+    // for lights — `target` is mandatory for no other frame type. A resolution
+    // error degrades to the OBJECT proxy rather than blocking the gate.
+    let target_resolved = ft == metadata_core::FrameType::Light
+        && crate::target_recommendations::auto_resolve_target(
+            pool,
+            inbox_item_id,
+            crate::target_recommendations::DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|r| r.satisfies_mandatory_target());
+
     let metadata_rows =
         inbox_repo::list_inbox_file_metadata(pool, inbox_item_id).await.unwrap_or_default();
     let meta_map: HashMap<&str, &persistence_db::repositories::inbox::InboxFileMetadataRow> =
@@ -944,7 +960,7 @@ async fn mandatory_attrs_present(
             object: meta.and_then(|m| m.object.clone()),
             ..Default::default()
         };
-        super::classify::check_mandatory_missing(ft, Some(&raw), false).is_empty()
+        super::classify::check_mandatory_missing(ft, Some(&raw), target_resolved).is_empty()
     })
 }
 
