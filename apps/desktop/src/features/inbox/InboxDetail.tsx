@@ -25,7 +25,7 @@
  */
 
 import { Popover } from '@base-ui-components/react/popover';
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import type {
@@ -38,7 +38,12 @@ import { unwrap } from '@/api/ipc';
 import { ipcArgs } from '@/lib/ipc-args';
 import { queryKeys } from '@/data/queryKeys';
 import type { PropertyDef } from '@/components';
-import { DetailPanel, PropertyTable, renderValue } from '@/components';
+import {
+  DetailPanel,
+  PropertyTable,
+  TwoColDetailLayout,
+  renderValue,
+} from '@/components';
 import { errMessage } from '@/lib/errors';
 import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
@@ -1078,124 +1083,129 @@ export function InboxDetail({
           </div>
         )}
 
-        {/* Left-packed .pv-session-detail2 row */}
-        <div className="pv-session-detail2">
-          {/* Col A: detection facts (first half) */}
-          <div className="pv-session-detail2__col">
-            <PropertyTable mode="view" showSource properties={detColA} />
-          </div>
-
-          {/* Col B: detection facts (second half) — only when there are enough */}
-          {detColB.length > 0 && (
-            <div className="pv-session-detail2__col">
+        {/* Left-packed .pv-session-detail2 row, via the shared component
+            (#813) instead of a hand-copied div structure. Files and Needs-
+            review ride in `extraCols`, NOT `linked`: both are table-shaped
+            and need `__col` sizing (flex 0 1 400px / min-width 340px) —
+            `__linked` is flex 0 0 auto / min-width 160px and would squeeze
+            them. */}
+        <TwoColDetailLayout
+          colA={<PropertyTable mode="view" showSource properties={detColA} />}
+          colB={
+            // Only when the fact list was long enough to spread across two.
+            detColB.length > 0 ? (
               <PropertyTable mode="view" showSource properties={detColB} />
-            </div>
-          )}
+            ) : null
+          }
+          extraCols={[
+            /* Files — mixed-composition summary + the metadata popover */
+            <Fragment key="files">
+              <div className="pv-session-detail2__head">
+                {m.inbox_col_files()}
+              </div>
 
-          {/* Col C: Files — mixed-composition summary + the metadata popover */}
-          <div className="pv-session-detail2__col">
-            <div className="pv-session-detail2__head">
-              {m.inbox_col_files()}
-            </div>
-
-            {/* FR-011: compact mixed-composition summary */}
-            {mixedSummary && (
-              <section
-                aria-label={m.inbox_mixed_composition_summary_aria()}
-                className="pv-inbox-detail__mixed-summary"
-              >
-                {mixedSummary}
-              </section>
-            )}
-
-            {/* Files popover — trigger + portaled popup with metadata table + inspector */}
-            {hasMetadata ? (
-              <Popover.Root
-                onOpenChange={() => {
-                  // Reset inspector selection whenever the popover is closed.
-                  setInspectedIdx(null);
-                }}
-              >
-                <Popover.Trigger
-                  className="pv-inbox-detail__files-trigger"
-                  aria-label={m.inbox_file_metadata_count({
-                    count: metadataRows.length,
-                  })}
-                  data-testid="inbox-files-popover-trigger"
+              {/* FR-011: compact mixed-composition summary */}
+              {mixedSummary && (
+                <section
+                  aria-label={m.inbox_mixed_composition_summary_aria()}
+                  className="pv-inbox-detail__mixed-summary"
                 >
-                  {m.inbox_file_metadata_count({ count: metadataRows.length })}{' '}
-                  ▾
-                </Popover.Trigger>
-                <Popover.Portal>
-                  <Popover.Positioner
-                    side="bottom"
-                    align="start"
-                    sideOffset={4}
+                  {mixedSummary}
+                </section>
+              )}
+
+              {/* Files popover — trigger + portaled popup with metadata table + inspector */}
+              {hasMetadata ? (
+                <Popover.Root
+                  onOpenChange={() => {
+                    // Reset inspector selection whenever the popover is closed.
+                    setInspectedIdx(null);
+                  }}
+                >
+                  <Popover.Trigger
+                    className="pv-inbox-detail__files-trigger"
+                    aria-label={m.inbox_file_metadata_count({
+                      count: metadataRows.length,
+                    })}
+                    data-testid="inbox-files-popover-trigger"
                   >
-                    <Popover.Popup
-                      className="pv-inbox-detail__files-popup"
-                      data-testid="inbox-files-popup"
-                      aria-label={m.inbox_file_metadata_aria()}
+                    {m.inbox_file_metadata_count({
+                      count: metadataRows.length,
+                    })}{' '}
+                    ▾
+                  </Popover.Trigger>
+                  <Popover.Portal>
+                    <Popover.Positioner
+                      side="bottom"
+                      align="start"
+                      sideOffset={4}
                     >
-                      {/* Scrollable metadata table */}
-                      <div className="pv-inbox-detail__files-popup-table">
-                        <Table columns={metadataColumns} rows={metadataRows} />
-                      </div>
-                      {/* Inspector — updates on row click */}
-                      {inspectedIdx != null && (
-                        <div className="pv-inbox-detail__files-popup-inspector">
-                          <FileInspector
-                            file={fileMetadata?.[inspectedIdx] ?? null}
+                      <Popover.Popup
+                        className="pv-inbox-detail__files-popup"
+                        data-testid="inbox-files-popup"
+                        aria-label={m.inbox_file_metadata_aria()}
+                      >
+                        {/* Scrollable metadata table */}
+                        <div className="pv-inbox-detail__files-popup-table">
+                          <Table
+                            columns={metadataColumns}
+                            rows={metadataRows}
                           />
                         </div>
-                      )}
-                    </Popover.Popup>
-                  </Popover.Positioner>
-                </Popover.Portal>
-              </Popover.Root>
-            ) : (
-              !mixedSummary && (
-                <span className="pv-session-detail2__muted">
-                  {m.inbox_no_file_metadata()}
-                  {/* #551: no per-file metadata means the required-destination-
+                        {/* Inspector — updates on row click */}
+                        {inspectedIdx != null && (
+                          <div className="pv-inbox-detail__files-popup-inspector">
+                            <FileInspector
+                              file={fileMetadata?.[inspectedIdx] ?? null}
+                            />
+                          </div>
+                        )}
+                      </Popover.Popup>
+                    </Popover.Positioner>
+                  </Popover.Portal>
+                </Popover.Root>
+              ) : (
+                !mixedSummary && (
+                  <span className="pv-session-detail2__muted">
+                    {m.inbox_no_file_metadata()}
+                    {/* #551: no per-file metadata means the required-destination-
                     attribute gate has no data to evaluate here — say so
                     explicitly instead of silently reading as "nothing to
                     worry about" (confirm can still be rejected server-side
                     for these files; see inbox.missing_path_attributes). */}
-                  {' — '}
-                  {m.inbox_no_file_metadata_caveat()}
-                </span>
-              )
-            )}
+                    {' — '}
+                    {m.inbox_no_file_metadata_caveat()}
+                  </span>
+                )
+              )}
 
-            {/* FR-032 (US9) / #554: missing-required-attribute warning lives
+              {/* FR-032 (US9) / #554: missing-required-attribute warning lives
               INLINE in the Files column (the field it explains) rather than
               as its own full-width alert column competing with the property
               tables (#554 — "stands out horribly"). */}
-            {filesMissingAttrs.length > 0 && (
-              <Banner
-                variant="danger"
-                className="pv-inbox-detail__banner-mt2 pv-inbox-alert"
-                data-testid="inbox-missing-attr-banner"
-              >
-                <div className="pv-inbox-alert__msg">
-                  <span className="pv-inbox-alert__title">
-                    {m.inbox_required_metadata_missing_title()}
-                  </span>
-                  <span className="pv-inbox-alert__body">
-                    {m.inbox_required_metadata_body({
-                      count: filesMissingAttrs.length,
-                    })}
-                  </span>
-                </div>
-              </Banner>
-            )}
-          </div>
-
-          {/* Needs review — rendered when unclassified files exist */}
-          {unclassifiedRows.length > 0 && (
-            <div className="pv-session-detail2__col">
+              {filesMissingAttrs.length > 0 && (
+                <Banner
+                  variant="danger"
+                  className="pv-inbox-detail__banner-mt2 pv-inbox-alert"
+                  data-testid="inbox-missing-attr-banner"
+                >
+                  <div className="pv-inbox-alert__msg">
+                    <span className="pv-inbox-alert__title">
+                      {m.inbox_required_metadata_missing_title()}
+                    </span>
+                    <span className="pv-inbox-alert__body">
+                      {m.inbox_required_metadata_body({
+                        count: filesMissingAttrs.length,
+                      })}
+                    </span>
+                  </div>
+                </Banner>
+              )}
+            </Fragment>,
+            /* Needs review — rendered when unclassified files exist */
+            unclassifiedRows.length > 0 ? (
               <Section
+                key="needs-review"
                 title={m.inbox_needs_review_title({
                   count: unclassifiedRows.length,
                 })}
@@ -1448,9 +1458,9 @@ export function InboxDetail({
                   </Banner>
                 )}
               </Section>
-            </div>
-          )}
-        </div>
+            ) : null,
+          ]}
+        />
 
         {/* Cone-search target suggestion (spec 052 P3) — light framesets only. */}
         {itemFrameType === 'light' && (
