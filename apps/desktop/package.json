@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:real": "bash scripts/run-e2e-real.sh",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.e2e.json --noEmit",
     "lint": "biome check . && node ../../scripts/check-eslint-baseline.mjs && bash ../../scripts/check-tokens.sh && node ../../scripts/check-i18n-catalog.mjs",
     "lint:biome": "biome check .",
     "lint:eslint": "node ../../scripts/check-eslint-baseline.mjs",
