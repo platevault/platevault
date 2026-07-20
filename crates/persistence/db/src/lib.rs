@@ -12,8 +12,8 @@
 //! Migration 0061 added `target_favourite` (spec 051 US2).
 //! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
 //! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
-//! Migration 0075 added `onboarding_state`/`onboarding_flags` (spec 056).
-//! Migration 0076 dropped the legacy spec-010 `guided_flow_state` table
+//! Migration 0076 added `onboarding_state`/`onboarding_flags` (spec 056).
+//! Migration 0077 dropped the legacy spec-010 `guided_flow_state` table
 //! (spec 056 deletion lane, T010).
 
 use std::str::FromStr;
