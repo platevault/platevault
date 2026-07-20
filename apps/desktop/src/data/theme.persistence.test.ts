@@ -14,6 +14,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { waitForCall } from './__testutils__/waitForCall';
+
 type IpcOutcome =
   | { status: 'ok'; data: unknown }
   | { status: 'error'; error: unknown };
@@ -40,12 +42,6 @@ vi.mock('@/bindings/index', () => ({
 }));
 
 /** Poll briefly for an async mock to have been called (mirrors theme.test.ts). */
-async function waitForCall(fn: ReturnType<typeof vi.fn>): Promise<void> {
-  for (let i = 0; i < 50; i++) {
-    if (fn.mock.calls.length > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
 
 describe('setThemeChoice — write-through to the settings DB', () => {
   beforeEach(() => {

@@ -15,6 +15,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { waitForCall } from './__testutils__/waitForCall';
+
 const isTauriMock = vi.fn<() => boolean>();
 const setThemeMock = vi.fn<(mode: 'light' | 'dark') => Promise<void>>();
 
@@ -32,18 +34,6 @@ function setStoredChoice(choice: string): void {
   localStorage.setItem('alm.theme', choice);
 }
 
-/**
- * syncNativeWindowTheme is fire-and-forget and does two dynamic `import()`s
- * before calling `setTheme` — each dynamic import adds its own extra
- * microtask turn beyond a plain `await`, so poll briefly instead of assuming
- * a fixed number of `Promise.resolve()` flushes settle it.
- */
-async function waitForCall(fn: ReturnType<typeof vi.fn>): Promise<void> {
-  for (let i = 0; i < 50; i++) {
-    if (fn.mock.calls.length > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
 
 describe('applyTheme — native window theme sync (spec 051 US6)', () => {
   beforeEach(() => {
