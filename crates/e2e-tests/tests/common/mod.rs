@@ -507,8 +507,22 @@ impl E2eApp {
             if inner_w == tw && inner_h == th {
                 return Ok(last);
             }
-            outer_w += tw - inner_w;
-            outer_h += th - inner_h;
+
+            // A non-positive reading means the webview reported no viewport at
+            // all (not laid out yet, or `innerWidth` came back 0/-1) — not that
+            // the window is too small. Correcting by `target - 0` would then ADD
+            // the full target every pass (1400 -> 2800 -> 4200 -> 5600), blowing
+            // the window far past the screen and leaving content so wide that
+            // overflow-dependent journeys can never trip. Observed on Ubuntu CI:
+            // a 5380px client width and a reported 0x0 viewport. Stop and report
+            // what we last saw rather than diverging.
+            if inner_w <= 0 || inner_h <= 0 {
+                return Ok(last);
+            }
+
+            // Never ask for more than the screen can show, for the same reason.
+            outer_w = (outer_w + tw - inner_w).min(if screen_w > 0 { screen_w } else { i64::MAX });
+            outer_h = (outer_h + th - inner_h).min(if screen_h > 0 { screen_h } else { i64::MAX });
         }
         Ok(last)
     }

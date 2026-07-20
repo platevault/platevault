@@ -763,7 +763,7 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
 
     app.goto_route("/targets").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    add_target_via_ui(&app, "M 1").await?;
+    let target_id = add_target_via_ui(&app, "M 1").await?;
 
     // Pin the side dock through the app's REAL persisted preference, then
     // let the reload apply it. The reload is what makes this work at all:
@@ -771,7 +771,14 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // read, so seeding localStorage into a booted page would be inert.
     app.seed_preference("detailDock", r#"{"targets":{"placement":"side","width":420}}"#).await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
-    app.goto_route("/targets").await?;
+
+    // Return to the SELECTED target, not bare `/targets`. The side dock only
+    // takes width when there is a detail to show — `ListPageLayout` mounts the
+    // panel solely when its `detail` prop is non-null. Navigating to the bare
+    // route drops the `?selected=` that `add_target_via_ui` landed on, which
+    // leaves the pinned preference correctly loaded but with nothing to
+    // render, so the table keeps full width and barely overflows at all.
+    app.goto_route(&format!("/targets?selected={target_id}")).await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
 
     let before = measure_pinned_columns(&app).await?;
@@ -780,12 +787,16 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
         overflow >= MIN_SCROLL,
         "the table must really overflow horizontally for this journey to mean \
          anything, but scrollWidth-clientWidth is only {overflow}px (need \
-         >= {MIN_SCROLL}) at a {viewport_w}x{viewport_h} viewport. Either the \
-         pinned side dock did not apply (the seeded `detailDock` preference \
-         needs a reload to beat the module-level preference cache), or the \
-         table's 1000px min-width floor changed. Note a WIDER viewport yields \
-         LESS overflow, so a large screen is not the safe direction here: \
-         {before}"
+         >= {MIN_SCROLL}) at a {viewport_w}x{viewport_h} viewport. Likely \
+         causes, in the order they have actually bitten: (1) the side dock \
+         mounted nothing because no target is selected — the panel needs a \
+         non-null `detail`, so the route must keep `?selected=<id>`; (2) the \
+         seeded `detailDock` preference did not survive the reload past the \
+         module-level cache in `data/preferences.ts`; (3) the table's 1000px \
+         min-width floor changed. A reported 0x0 viewport with a huge \
+         clientWidth means `set_viewport` failed to converge. Note a WIDER \
+         viewport yields LESS overflow, so a large screen is not the safe \
+         direction here: {before}"
     );
 
     // Scroll to the far right — the worst case for identity loss.
