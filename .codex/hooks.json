@@ -89,6 +89,17 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/beads/scripts/beads-gh-issue-guard.sh",
+            "statusMessage": "Checking gh issue command against beads policy...",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -183,6 +194,17 @@
             "type": "command",
             "command": ".codex/hooks/code-intelligence/scripts/subagent-context-inject.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/beads/scripts/beads-subagent-reminder.sh",
+            "statusMessage": "Injecting beads work contract...",
+            "timeout": 10
           }
         ]
       }
