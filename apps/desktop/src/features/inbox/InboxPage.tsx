@@ -440,7 +440,7 @@ export function InboxPage() {
   // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
   // selection — a source-group row is not selectable — so it is driven by an
   // explicit button in the row.
-  const { classifyingGroupId, classifySourceGroup } =
+  const { pendingSourceGroupId, classifySourceGroup } =
     useInboxClassifySourceGroup();
 
   const handleClassifySourceGroup = useCallback(
@@ -1247,7 +1247,7 @@ export function InboxPage() {
           items={filteredItems}
           sourceGroups={filteredSourceGroups}
           onClassifySourceGroup={handleClassifySourceGroup}
-          classifyingGroupId={classifyingGroupId}
+          classifyingSourceGroupId={pendingSourceGroupId}
           selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}

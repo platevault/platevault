@@ -49,7 +49,7 @@ describe('InboxList — classifying a source group (spec 058 FR-017)', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('inbox-classify-group-sg-1'));
+    fireEvent.click(screen.getByTestId('inbox-source-group-classify-sg-1'));
 
     expect(onClassify).toHaveBeenCalledTimes(1);
     // Both fields the IPC request needs must come off the row itself; there is
@@ -80,7 +80,7 @@ describe('InboxList — classifying a source group (spec 058 FR-017)', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('inbox-classify-group-sg-1'));
+    fireEvent.click(screen.getByTestId('inbox-source-group-classify-sg-1'));
 
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -94,16 +94,16 @@ describe('InboxList — classifying a source group (spec 058 FR-017)', () => {
           makeGroup({ sourceGroupId: 'sg-idle' }),
         ]}
         onClassifySourceGroup={vi.fn()}
-        classifyingGroupId="sg-busy"
+        classifyingSourceGroupId="sg-busy"
         selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,
     );
 
-    expect(screen.getByTestId('inbox-classify-group-sg-busy')).toBeDisabled();
+    expect(screen.getByTestId('inbox-source-group-classify-sg-busy')).toBeDisabled();
     expect(
-      screen.getByTestId('inbox-classify-group-sg-idle'),
+      screen.getByTestId('inbox-source-group-classify-sg-idle'),
     ).not.toBeDisabled();
   });
 
@@ -124,7 +124,7 @@ describe('InboxList — classifying a source group (spec 058 FR-017)', () => {
     );
 
     expect(
-      screen.queryByTestId('inbox-classify-group-sg-1'),
+      screen.queryByTestId('inbox-source-group-classify-sg-1'),
     ).not.toBeInTheDocument();
     expect(screen.getByText('not yet classified')).toBeInTheDocument();
   });

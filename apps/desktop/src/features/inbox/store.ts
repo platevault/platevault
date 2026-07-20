@@ -371,8 +371,8 @@ export function useInboxConfirm() {
 }
 
 export interface ClassifySourceGroupState {
-  /** `sourceGroupId` currently in flight, or null when idle. */
-  classifyingGroupId: string | null;
+  /** Id of the group currently being classified, or null when idle. */
+  pendingSourceGroupId: string | null;
   error: string | null;
 }
 
@@ -391,17 +391,29 @@ export interface ClassifySourceGroupState {
  * successful call *erases the row that triggered it*: the group leaves
  * `sourceGroups` and reappears as item rows on the next `inbox.list`. A bare
  * boolean would keep a spinner alive on a row that no longer exists.
+ *
+ * It is deliberately NOT fired on render (Q-10). Auto-firing would write
+ * `inbox_items` rows for every folder the user never touched, raise one
+ * blocking `MetadataUnreadable` per FITS-less folder on load, and transform
+ * rows underneath the user — the selection churn FR-023 exists to prevent and
+ * which Q-4 already rejected its Option A over. The trigger is an explicit
+ * per-row action.
+ *
+ * Re-running is safe: `upsert_inbox_sub_item` is `ON CONFLICT(root_id,
+ * relative_path, group_key) DO UPDATE` and orphaned siblings are removed by
+ * `delete_sub_item_if_unlinked`, so a double-click converges rather than
+ * duplicating rows.
  */
 export function useInboxClassifySourceGroup() {
   const queryClient = useQueryClient();
   const [state, setState] = useState<ClassifySourceGroupState>({
-    classifyingGroupId: null,
+    pendingSourceGroupId: null,
     error: null,
   });
 
   const classifySourceGroup = useCallback(
     async (args: { sourceGroupId: string; rootAbsolutePath: string }) => {
-      setState({ classifyingGroupId: args.sourceGroupId, error: null });
+      setState({ pendingSourceGroupId: args.sourceGroupId, error: null });
       try {
         const result = unwrap(
           await commands.inboxClassifySourceGroup({
@@ -409,7 +421,7 @@ export function useInboxClassifySourceGroup() {
             rootAbsolutePath: args.rootAbsolutePath,
           }),
         );
-        setState({ classifyingGroupId: null, error: null });
+        setState({ pendingSourceGroupId: null, error: null });
         // Required for the row to turn over: without this the group row stays
         // on screen and the freshly materialised items never appear.
         void queryClient.invalidateQueries({
@@ -418,7 +430,7 @@ export function useInboxClassifySourceGroup() {
         return result;
       } catch (e) {
         setState({
-          classifyingGroupId: null,
+          pendingSourceGroupId: null,
           error: e instanceof Error ? e.message : String(e),
         });
         throw e;

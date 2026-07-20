@@ -24,6 +24,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
 import {
+  Btn,
   Table,
   tableIndent,
   Skeleton,
@@ -326,8 +327,8 @@ export interface InboxListProps {
    * existing callers and fixtures keep their current behaviour.
    */
   onClassifySourceGroup?: (group: InboxSourceGroupListItem) => void;
-  /** `sourceGroupId` whose classification is in flight, for the busy label. */
-  classifyingGroupId?: string | null;
+  /** Source group whose classification is in flight — disables its action. */
+  classifyingSourceGroupId?: string | null;
   /** Issue #644: selection is by item identity, not list position — an index
    * silently points at whatever item now occupies that slot after search/lane/
    * kind filters change the array shape. */
@@ -433,7 +434,7 @@ export function InboxList({
   items,
   sourceGroups = [],
   onClassifySourceGroup,
-  classifyingGroupId = null,
+  classifyingSourceGroupId = null,
   selectedId,
   onSelect,
   filterType,
@@ -633,21 +634,22 @@ export function InboxList({
         if (row.kind === 'sourceGroup') {
           const { group } = row;
           const label = sourceGroupDetectionLabel(group);
-          const busy = classifyingGroupId === group.sourceGroupId;
-          // No `_onClick`, no `_selected`, no item id: the row is inert by
-          // construction rather than by a guard (FR-016). Nothing here can
-          // reach `inbox.confirm`, because there is no id to give it.
+          const classifying = classifyingSourceGroupId === group.sourceGroupId;
+          // No `_onClick`, no `_selected`, no item id — the row carries no
+          // selection identity, so nothing here can reach `inbox.confirm`
+          // (FR-016). That guarantee is structural and still holds. What the
+          // row is NOT is actionless: its one action is Classify, which
+          // materialises the folder's item rows and replaces this row with them
+          // (FR-017).
           //
-          // Classification is offered as an explicit button rather than by
-          // making the row selectable (spec 058 FR-017). Two reasons, both
-          // load-bearing:
-          //   1. Selection is the `?selected=<inboxItemId>` URL param, and a
-          //      `sourceGroupId` put there resolves to no item — the stale
-          //      selection cleanup would immediately clear it again.
-          //   2. This operation *materialises rows*. That deserves a deliberate
-          //      action, not a side effect of moving the cursor.
-          // The button lives inside the row without making the row clickable,
-          // so the inertness above is preserved rather than weakened.
+          // Classification is user-triggered, never fired on render, and never
+          // routed through selection. Selection is the `?selected=<inboxItemId>`
+          // URL param, so a `sourceGroupId` placed there resolves to no item and
+          // the stale-selection cleanup clears it on the same commit. Auto-firing
+          // on render would be worse still: it would write `inbox_items` rows for
+          // folders nobody touched, raise one blocking `MetadataUnreadable` per
+          // FITS-less folder, and transform rows under the user — the churn
+          // FR-023 exists to prevent. See Q-10.
           return {
             _testid: `inbox-source-group-${group.sourceGroupId}`,
             _rowClassName: 'pv-inbox-table__row pv-inbox-table__row--muted',
@@ -661,22 +663,26 @@ export function InboxList({
                 </span>
               </span>
             ),
-            type: onClassifySourceGroup ? (
-              <button
-                type="button"
-                className="pv-btn pv-btn--sm"
-                data-testid={`inbox-classify-group-${group.sourceGroupId}`}
-                aria-label={m.inbox_source_group_classify_aria({ path: label })}
-                disabled={busy}
-                onClick={() => onClassifySourceGroup(group)}
-              >
-                {busy
-                  ? m.inbox_source_group_classifying()
-                  : m.inbox_source_group_classify()}
-              </button>
-            ) : (
+            type: (
               <span className="pv-inbox-row__classification pv-inbox-row__classification--pending">
-                {m.inbox_state_not_yet_classified()}
+                {classifying
+                  ? m.inbox_source_group_classifying()
+                  : m.inbox_state_not_yet_classified()}
+                {onClassifySourceGroup ? (
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid={`inbox-source-group-classify-${group.sourceGroupId}`}
+                    disabled={classifying}
+                    aria-label={m.inbox_source_group_classify_aria({
+                      path: label,
+                    })}
+                    onClick={() => onClassifySourceGroup(group)}
+                  >
+                    {m.inbox_source_group_classify()}
+                  </Btn>
+                ) : null}
               </span>
             ),
             count: m.inbox_list_file_count({ count: group.fileCount }),

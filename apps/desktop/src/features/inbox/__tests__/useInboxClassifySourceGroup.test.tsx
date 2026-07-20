@@ -95,7 +95,7 @@ describe('useInboxClassifySourceGroup', () => {
       wrapper: wrapper(client),
     });
 
-    expect(result.current.classifyingGroupId).toBeNull();
+    expect(result.current.pendingSourceGroupId).toBeNull();
 
     let pending: Promise<unknown>;
     act(() => {
@@ -107,7 +107,7 @@ describe('useInboxClassifySourceGroup', () => {
 
     // The id — not `true` — is what the list needs to disable exactly one row.
     await waitFor(() =>
-      expect(result.current.classifyingGroupId).toBe('sg-busy'),
+      expect(result.current.pendingSourceGroupId).toBe('sg-busy'),
     );
 
     await act(async () => {
@@ -118,7 +118,7 @@ describe('useInboxClassifySourceGroup', () => {
       await pending;
     });
 
-    expect(result.current.classifyingGroupId).toBeNull();
+    expect(result.current.pendingSourceGroupId).toBeNull();
   });
 
   it('surfaces the error and does not invalidate on failure', async () => {
@@ -145,7 +145,7 @@ describe('useInboxClassifySourceGroup', () => {
       ).rejects.toBeDefined();
     });
 
-    expect(result.current.classifyingGroupId).toBeNull();
+    expect(result.current.pendingSourceGroupId).toBeNull();
     expect(result.current.error).not.toBeNull();
     expect(spy).not.toHaveBeenCalled();
   });
