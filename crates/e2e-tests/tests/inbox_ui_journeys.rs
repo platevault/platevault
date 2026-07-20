@@ -175,7 +175,22 @@ async fn rescan_and_wait_for_item(app: &E2eApp) -> anyhow::Result<()> {
 /// `classify-<id>` as the "suffix". The button prefix has no such collision.
 async fn rescan_and_wait_for_source_group(app: &E2eApp) -> anyhow::Result<String> {
     app.click_by_aria_label("Rescan all roots").await?;
-    app.wait_testid_prefix_present("inbox-source-group-classify-", UI_TIMEOUT).await?;
+    if app.wait_testid_prefix_present("inbox-source-group-classify-", UI_TIMEOUT).await.is_err() {
+        // Report the BACKEND's view alongside the DOM's, so a future failure
+        // here says immediately whether the data never arrived or arrived and
+        // was dropped by the list. That distinction cost several runs to
+        // establish the first time.
+        let live: serde_json::Value = app
+            .invoke("inbox_list", json!({ "req": { "limit": 500 } }))
+            .await
+            .unwrap_or(serde_json::Value::Null);
+        eprintln!("inbox.list at failure: {live}");
+        let all = app.testid_prefix_texts("inbox-").await.unwrap_or_default();
+        eprintln!("testids present after rescan ({}): {:?}", all.len(), all);
+        let diag = app.dump_testid_diagnostics("inbox-").await;
+        eprintln!("testid diagnostics: {diag}");
+        anyhow::bail!("source-group classify control never appeared");
+    }
     app.testid_suffix("inbox-source-group-classify-").await
 }
 
