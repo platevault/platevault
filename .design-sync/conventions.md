@@ -61,6 +61,31 @@ props are in its `<Name>.d.ts` and usage in `<Name>.prompt.md` — read those be
 composing. Data-driven ones (Table, RadioGroup, SegControl, WizardShell) take arrays
 (`columns`/`rows`, `options`, `segments`, `steps`) — always pass real data.
 
+## Tooltip affordances — Tooltip, Lock, InfoTip
+
+Three components, one shared implementation. **Do not merge Lock and InfoTip** —
+they carry different accessibility contracts, and the merge is rejected in
+`docs/adr/0002-lock-and-infotip-stay-separate.md`.
+
+| Component | Use for | Glyph | CSS |
+| --- | --- | --- | --- |
+| `Tooltip` | The shared wrapper. Reach for it only when neither below fits. | caller's | `.pv-tooltip` (popup) |
+| `Lock` | Marking a row or category **protected**. | 🔒 | none |
+| `InfoTip` | Help text for a form or settings row. | ⓘ | `.pv-info-tip` |
+
+Rules when composing with them:
+
+- `Tooltip` renders its trigger as a bare `<span>` with no role and no
+  `tabIndex`. A trigger reachable by hover alone is a defect — pass `role`,
+  `tabIndex={0}`, and `aria-label` as `Lock` and `InfoTip` do.
+- The accessible name must repeat the tip text. The popup is portalled and
+  mounts only while open, so a closed trigger exposes nothing else.
+- `InfoTip` takes a **string** tip, not a node. Rich content cannot reach the
+  accessible name; use visible text instead.
+- `Lock` alone has a decorative mode (`aria-hidden`, no tab stop). It is correct
+  only where the reason is already in nearby text *and* identical on every
+  instance. `InfoTip` has no decorative mode and must not gain one.
+
 ## Where the truth lives
 
 `styles.css` → `_ds_bundle.css` (all `--pv-*` tokens + `.pv-*` classes) is the styling

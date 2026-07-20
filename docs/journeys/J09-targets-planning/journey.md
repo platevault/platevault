@@ -1,7 +1,7 @@
 ---
 id: J09
 title: Find, add, and plan around an astrophotography target
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -147,7 +147,10 @@ configured) real per-site astronomy for tonight.
   adaptive-dock default — Targets passes no page-specific threshold), and
   to the BOTTOM below that width; the chosen side-dock width persists across
   restarts, and a per-page pin (Auto/Side/Bottom) overrides the automatic
-  width-based choice when set. Every section — the altitude graph, alias
+  width-based choice when set. A linked project in the detail's Projects
+  list shows its lifecycle state (e.g. "Archived") with the same
+  StatusTag styling every other project surface uses, not raw unstyled
+  text. Every section — the altitude graph, alias
   list/add control, display-label editor, notes, Coverage/links sections,
   and the panel's own back button — is reachable by scrolling within the
   panel in either placement; nothing below the altitude graph is clipped or
@@ -200,8 +203,9 @@ configured) real per-site astronomy for tonight.
   transit-at-midnight date with unchanged sort.
 - **Expect (negative):** Without a configured observing site, these columns
   disclose that they need a site rather than rendering a plausible-looking
-  number. The Sessions column always renders as a dash — session-linkage is
-  not implemented yet (see G1).
+  number. The Sessions column shows the target's real, backend-populated
+  session count, sortable by that count; a target with zero or unresolved
+  sessions still shows the muted dash rather than a bare "0".
 - **Trace:** deltas/2026-07-14-jval-docdrift.md;
   `apps/desktop/src/features/targets/planner-derive.ts`,
   `AltitudeSparkline.tsx` — PR #896 fixes #579 (visibility rating no longer
@@ -294,6 +298,13 @@ configured) real per-site astronomy for tonight.
   change.
   Evidence: spec-054-adaptive-detail-dock (FR-001, FR-003, FR-005) · by:
   journey-scribe (intent-gated)
+
+- **Δ7** 2026-07-20 · S3, S4 · behavior-change
+  The Sessions column now shows the target's real, backend-populated
+  session count instead of a hardcoded dash with a no-op sort; a linked
+  project in the detail panel now shows its lifecycle state (e.g.
+  "Archived") with the shared StatusTag styling instead of raw text.
+  Evidence: PR #1293 (refs #622, #739) · by: journey-scribe (intent-gated)
 
 Note (not a Δ entry — provenance for why two deltas were not folded into the
 body above): `deltas/2026-07-14-q16-t132.md` and `2026-07-14-q16-t133.md`
