@@ -298,6 +298,12 @@ pending verification).
   #1068) was not built, so there was nothing to migrate them to. Confirmed
   the new spec's own docstring explicitly calls out non-interference with
   `calibration_masters_matching.spec.ts:157` and `inbox_ingest_confirm.spec.ts`.
+  Doubly moot since: the design-system rename retired the `alm-` namespace
+  entirely, so the pins this task names no longer exist under that name — the
+  E2E suites now select `.pv-listpage__detail`. That rename is not cosmetic
+  trivia here; a helper missed by it silently broke an Inbox journey on `main`
+  (fixed in #1206), so any future task naming a CSS class should be read as
+  possibly pre-rename.
 - [x] T031 Journey deltas in `docs/journeys/` (J02/J03/J04/J05/J07/J08/J09/
   J16). **DELIVERED, but see [Known drift](./spec.md#known-drift-journey-deltas-overstate-delivery),
   PR #966 (`8f464e87`).** All eight journey files exist and are committed.
@@ -326,10 +332,16 @@ pending verification).
   plan.md's Constitution Check table; PASS, no new violation from the
   plan/shipped gap.
 - [ ] T034 Full local gates (`pnpm typecheck`, `pnpm build`, `pnpm vitest
-  run`, `pnpm format:check`, `just check-generated`). **Not run as part of
-  this reconciliation** — this task is documentation-only per its brief; the
-  shipped PRs (#1003, #1035, #1060) presumably passed CI gates at merge time,
-  but that was not independently re-verified here.
+  run`, `pnpm format:check`, `just check-generated`). **Partially run, #1107 /
+  #1158 pass.** The earlier note stands for the original PRs (#1003, #1035,
+  #1060), which were never independently re-verified. What WAS run locally for
+  the work merged since: `tsc --noEmit` clean, `vitest run` green (199 files /
+  1825 tests), `biome check` clean, `just check-generated` clean with no
+  binding drift, `cargo test -p contracts_core` (71) and `clippy` clean, and
+  `scripts/check-tokens.sh` clean including WCAG AA contrast across 6 themes.
+  Stays open because that is not the same claim as the task: these gates cover
+  the changes merged in this pass, not a re-verification of the whole feature's
+  prior work.
 - [x] T035 `speckit-verify` / `speckit-verify-tasks` against real
   implementation evidence. **This document is that verification pass**,
   performed manually against `main` source rather than via the
