@@ -356,3 +356,36 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+// ── Cold-reload selection survival (#735 item 1) ──────────────────────────────
+
+/**
+ * Page-level wiring, not hook logic: `use-stale-selection.test.tsx` passes
+ * `found` as an explicit boolean and so structurally cannot catch a page that
+ * derives `found` from a still-empty query result. These two cases pin the
+ * gate from BOTH directions — held closed while loading, released once the
+ * list has settled — so the fix can't regress into a permanently-open gate.
+ */
+describe('ArchivePage stale-selection gating (#735)', () => {
+  it('keeps a valid ?selected= while the list query is still loading', () => {
+    archiveListState.loading = true;
+    archiveListState.data = [];
+    mockSelectedId.current = 'proj-1';
+
+    render(<ArchivePage />);
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('still clears a genuinely absent id once the list has settled', () => {
+    archiveListState.loading = false;
+    archiveListState.data = [makeEntry({ id: 'proj-other' })];
+    mockSelectedId.current = 'proj-gone';
+
+    render(<ArchivePage />);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({ replace: true }),
+    );
+  });
+});
