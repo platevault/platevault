@@ -1,4 +1,4 @@
--- Migration 0069: onboarding redesign persistence (spec 056, T001).
+-- Migration 0075: onboarding redesign persistence (spec 056, T001).
 --
 -- Replaces the legacy spec-010 guided-coach state machine (single-row
 -- current_step_id/completed_step_ids/dismissed) with a per-item projection:

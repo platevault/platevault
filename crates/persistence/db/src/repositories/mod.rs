@@ -16,9 +16,9 @@
 //! Spec 051 US2 target favourites queries live in `target_favourites`.
 //!
 //! Spec 056 onboarding redesign lives in `onboarding` (per-item state +
-//! section flags, migration 0069). The legacy spec-010 coach and its
+//! section flags, migration 0075). The legacy spec-010 coach and its
 //! `guided_flow_state` table were removed by the spec 056 deletion lane
-//! (T010); migration 0070 drops the table.
+//! (T010); migration 0076 drops the table.
 
 pub mod artifacts;
 pub mod audit;
