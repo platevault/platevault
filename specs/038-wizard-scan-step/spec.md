@@ -166,9 +166,11 @@ either hide that control behind the collapse or reorder it below the detail
 table. Both are user-visible behaviour changes to a documented control, so they
 are out of scope for a reuse refactor and would need their own iterate cycle.
 
-Eleven `pv-setup-scan__*` classes therefore remain, all scoped to the accordion
-card and its chips (`__card`, `__header`, `__chevron`, `__path`, `__kind`,
-`__count`, `__msg*`, `__detail`, `__chips`, `__chip`).
+Eighteen `pv-setup-scan__*` classes therefore remain, down from twenty-four.
+Seventeen cover the accordion card, its phase messages, and its chips
+(`__card`, `__header`, `__header--expandable`, `__chevron`, `__path`, `__kind`,
+`__count`, `__msg` plus its three variants, `__detail`, `__chips`, `__chip`,
+`__summary`, `__scroll`, `__empty-msg`); the eighteenth is `__table-wrap`.
 
 ### Status
 
