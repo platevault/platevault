@@ -152,6 +152,47 @@ export function resolveReclassifyHandoff(
   return visible ? { action: 'navigate', id: pendingId } : { action: 'giveUp' };
 }
 
+/** Outcome of {@link resolveClassifiedGroupSelection}. */
+export type ClassifiedGroupSelection =
+  | { action: 'wait' }
+  | { action: 'select'; id: string }
+  | { action: 'none' };
+
+/**
+ * CHK011 (spec 058 T017/FR-023): where selection goes when a source-group row
+ * is replaced by the items classification materialized from it.
+ *
+ * The rule is deliberately asymmetric:
+ *
+ *  - **N = 1** — select that item. The folder resolved to exactly one thing, so
+ *    putting the user on it is unambiguous and saves a click.
+ *  - **N > 1** — select NOTHING here. The rule says the folder group header,
+ *    never a sibling, because picking one sibling would silently designate a
+ *    primary — the thing D-002 forbids and which #1102 deleted `ids.next()` to
+ *    avoid. The header is part of T034's grouping UI and does not exist yet, so
+ *    selecting nothing is the correct conservative behaviour until it does.
+ *    Selecting a sibling now would be actively wrong, not merely early.
+ *  - **N = 0** — nothing to select. A source-group row was never selectable
+ *    (FR-016), so unlike the reclassify handoff there is no prior selection to
+ *    restore or lose.
+ *
+ * Bounded the same way {@link resolveReclassifyHandoff} is: it only decides
+ * once the list has settled, so an in-flight refetch is never mistaken for
+ * "the items never arrived".
+ */
+export function resolveClassifiedGroupSelection(
+  sourceGroupId: string,
+  items: Array<{ inboxItemId: string; sourceGroupId?: string | null }>,
+  listLoading: boolean,
+): ClassifiedGroupSelection {
+  if (listLoading) return { action: 'wait' };
+  const siblings = items.filter((it) => it.sourceGroupId === sourceGroupId);
+  if (siblings.length === 1) {
+    return { action: 'select', id: siblings[0].inboxItemId };
+  }
+  return { action: 'none' };
+}
+
 /** Type-guard for the destination-root-required details payload. */
 function asRootRequiredDetails(
   d: unknown,
@@ -443,24 +484,52 @@ export function InboxPage() {
   const { pendingSourceGroupId, classifySourceGroup } =
     useInboxClassifySourceGroup();
 
+  // CHK011 handoff: set once a classify succeeds, cleared when the refetched
+  // list settles and `resolveClassifiedGroupSelection` decides.
+  const [pendingClassifiedGroupId, setPendingClassifiedGroupId] = useState<
+    string | null
+  >(null);
+
   const handleClassifySourceGroup = useCallback(
     (group: InboxSourceGroupListItem) => {
       void classifySourceGroup({
         sourceGroupId: group.sourceGroupId,
         rootAbsolutePath: group.rootAbsolutePath,
-      }).catch((e: unknown) => {
-        // The row erases itself on success, so a silent failure would look
-        // like nothing happened at all. Surface it.
-        addToast({
-          variant: 'error',
-          message: m.inbox_toast_classify_group_failed({
-            message: e instanceof Error ? e.message : String(e),
-          }),
+      })
+        .then(() => {
+          setPendingClassifiedGroupId(group.sourceGroupId);
+        })
+        .catch((e: unknown) => {
+          // The row erases itself on success, so a silent failure would look
+          // like nothing happened at all. Surface it.
+          addToast({
+            variant: 'error',
+            message: m.inbox_toast_classify_group_failed({
+              message: e instanceof Error ? e.message : String(e),
+            }),
+          });
         });
-      });
     },
     [classifySourceGroup],
   );
+
+  // Completes the CHK011 handoff once the invalidated list has settled. Mirrors
+  // the reclassify handoff above, including its bounded give-up: a decision is
+  // only taken on a settled list, and the pending id is always cleared so it
+  // cannot gate `useStaleSelectionCleanup` open indefinitely.
+  useEffect(() => {
+    if (!pendingClassifiedGroupId) return;
+    const decision = resolveClassifiedGroupSelection(
+      pendingClassifiedGroupId,
+      items,
+      listLoading,
+    );
+    if (decision.action === 'wait') return;
+    setPendingClassifiedGroupId(null);
+    if (decision.action === 'select' && decision.id !== selected) {
+      void navigate({ search: (prev) => ({ ...prev, selected: decision.id }) });
+    }
+  }, [pendingClassifiedGroupId, items, listLoading, selected, navigate]);
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
   // Issue #643: `loading`/`error` used to be discarded here, so a metadata
