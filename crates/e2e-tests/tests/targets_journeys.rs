@@ -669,3 +669,138 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
 
     app.shutdown().await
 }
+
+/// Measure, relative to the scroll container's own left edge, where the
+/// pinned cells and a non-pinned control cell actually render.
+///
+/// Positions are taken from `getBoundingClientRect` — real post-layout
+/// geometry — because that is the only thing that can observe `position:
+/// sticky`. This measurement is the entire reason T026 must be a Layer-2
+/// journey: jsdom has no layout engine, so a Layer-1 test reports 0 for
+/// every one of these and would pass against a completely unpinned table.
+async fn measure_pinned_columns(app: &E2eApp) -> anyhow::Result<serde_json::Value> {
+    let script = r#"
+        var sc = document.querySelector('.pv-targets-table__scroll');
+        if (!sc) { return { error: 'no .pv-targets-table__scroll in the DOM' }; }
+        var row = sc.querySelector('.pv-targets-table__row');
+        if (!row) { return { error: 'no .pv-targets-table__row rendered' }; }
+        var headRow = sc.querySelector('thead tr');
+        var scLeft = sc.getBoundingClientRect().left;
+        function offset(el) {
+            return el ? Math.round(el.getBoundingClientRect().left - scLeft) : null;
+        }
+        var cells = row.children;
+        return {
+            scrollWidth: Math.round(sc.scrollWidth),
+            clientWidth: Math.round(sc.clientWidth),
+            scrollLeft: Math.round(sc.scrollLeft),
+            cellCount: cells.length,
+            star: offset(cells[0]),
+            designation: offset(cells[1]),
+            designationHeader: offset(headRow ? headRow.children[1] : null),
+            control: offset(cells[cells.length - 1])
+        };
+    "#;
+    let v: serde_json::Value = app
+        .driver
+        .execute(script, vec![])
+        .await
+        .context("failed to measure the pinned columns")?
+        .convert()
+        .context("pinned-column measurement was not JSON")?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        anyhow::bail!("cannot measure pinned columns: {err}");
+    }
+    Ok(v)
+}
+
+fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
+    m.get(key)
+        .and_then(serde_json::Value::as_i64)
+        .ok_or_else(|| anyhow::anyhow!("measurement {key:?} missing or not a number in {m}"))
+}
+
+/// T026 (spec 054, #1257) — the star and designation columns stay put while
+/// the rest of the Targets table scrolls sideways, so a row's identity is
+/// never lost (FR-006/FR-007, shipped in #1253).
+///
+/// Sized to 1400x900 on purpose: that is the DEFAULT docked configuration,
+/// not an edge case. At 1400 the sidebar takes 220px and the side dock 420px,
+/// leaving the table ~760px against its own 1000px min-width floor — so it
+/// overflows by ~240px and, under `table-layout: fixed`, the designation
+/// column is exactly what would scroll away unpinned.
+///
+/// Asserts a non-pinned CONTROL column moves by the scroll distance. Without
+/// it this journey would pass in the one case it most needs to catch: if the
+/// table never actually scrolled, every "drift == 0" assertion below would
+/// hold trivially against a static table and the test would be vacuous.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
+    const MIN_SCROLL: i64 = 200;
+
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+
+    // Size the viewport BEFORE navigating: `useAdaptiveDock` reads
+    // `window.innerWidth` on mount, so engaging the dock after the page is
+    // already laid out would depend on its resize listener rather than on
+    // the configuration this journey means to assert.
+    app.set_viewport(1400, 900).await?;
+
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    add_target_via_ui(&app, "M 1").await?;
+
+    let before = measure_pinned_columns(&app).await?;
+    let overflow = px(&before, "scrollWidth")? - px(&before, "clientWidth")?;
+    anyhow::ensure!(
+        overflow >= MIN_SCROLL,
+        "the table must really overflow horizontally for this journey to mean \
+         anything, but scrollWidth-clientWidth is only {overflow}px \
+         (need >= {MIN_SCROLL}). Either the side dock did not engage at 1400px \
+         or the table's min-width floor changed: {before}"
+    );
+
+    // Scroll to the far right — the worst case for identity loss.
+    app.driver
+        .execute(
+            "var sc = document.querySelector('.pv-targets-table__scroll');\
+             sc.scrollLeft = sc.scrollWidth; return sc.scrollLeft;",
+            vec![],
+        )
+        .await
+        .context("failed to scroll the targets table horizontally")?;
+
+    let after = measure_pinned_columns(&app).await?;
+    let scrolled = px(&after, "scrollLeft")?;
+    anyhow::ensure!(
+        scrolled >= MIN_SCROLL,
+        "expected the table to really scroll by >= {MIN_SCROLL}px, got {scrolled}px: {after}"
+    );
+
+    // The control proves the scroll actually moved content.
+    let control_drift = px(&after, "control")? - px(&before, "control")?;
+    anyhow::ensure!(
+        control_drift <= -MIN_SCROLL,
+        "the non-pinned control column should have moved left by ~{scrolled}px, but it \
+         shifted {control_drift}px — the table did not really scroll, so the pinned \
+         assertions below would be vacuous.\nbefore: {before}\nafter:  {after}"
+    );
+
+    // The point of the feature: identity does not move, at all.
+    for key in ["star", "designation", "designationHeader"] {
+        let drift = px(&after, key)? - px(&before, key)?;
+        anyhow::ensure!(
+            drift == 0,
+            "{key} must stay pinned while the table scrolls {scrolled}px, but it drifted \
+             {drift}px. A non-zero drift here is exactly the regression this journey \
+             exists to catch (an approximate sticky offset, or a percentage offset \
+             resolving against the scroll container instead of the table).\n\
+             before: {before}\nafter:  {after}"
+        );
+    }
+
+    app.shutdown().await
+}

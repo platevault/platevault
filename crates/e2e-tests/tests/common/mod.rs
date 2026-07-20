@@ -456,6 +456,89 @@ impl E2eApp {
         Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
     }
 
+    /// Resize the real OS window until the WEBVIEW reports exactly
+    /// `target_w` x `target_h`, and fail loudly if it cannot.
+    ///
+    /// Needed because layout-dependent behaviour cannot be asserted at the
+    /// default window size: `tauri.conf.json` opens at 1280x820, while the
+    /// side dock only engages at `window.innerWidth >= 1400`
+    /// (`useAdaptiveDock.ts`'s `threshold`). A journey that wants the docked
+    /// layout has to ask for it.
+    ///
+    /// **This is deliberately not a one-line `set_window_rect`.** That call
+    /// sizes the OUTER window (frame included), but every threshold in the
+    /// app keys off `window.innerWidth`. The two differ by the window
+    /// chrome, which is not a constant we can hardcode: it is ~0 under
+    /// `xvfb-run` (no window manager, so no decorations) but real on a
+    /// Windows runner. Passing 1400 blind therefore yields an innerWidth of
+    /// 1400 on Linux and something smaller on Windows — the dock silently
+    /// does not engage, the table never overflows, and the journey passes
+    /// while asserting nothing. So: set, MEASURE, correct by the observed
+    /// delta, and verify.
+    ///
+    /// Convergence is capped rather than looped-until-stable because a
+    /// too-small X screen clamps the resize and would otherwise spin
+    /// forever; the error names the screen size, since that is the fix.
+    pub async fn set_viewport(&self, target_w: u32, target_h: u32) -> Result<()> {
+        const ATTEMPTS: usize = 4;
+        let (mut outer_w, mut outer_h) = (i64::from(target_w), i64::from(target_h));
+        let (tw, th) = (i64::from(target_w), i64::from(target_h));
+        let mut seen = Vec::new();
+
+        for _ in 0..ATTEMPTS {
+            self.driver
+                .set_window_rect(0, 0, outer_w.max(1) as u32, outer_h.max(1) as u32)
+                .await
+                .with_context(|| format!("set_window_rect to {outer_w}x{outer_h} failed"))?;
+
+            let (inner_w, inner_h) = self.inner_size().await?;
+            seen.push(format!("{outer_w}x{outer_h} outer -> {inner_w}x{inner_h} inner"));
+            if inner_w == tw && inner_h == th {
+                return Ok(());
+            }
+            // Correct by the observed chrome delta rather than guessing it.
+            outer_w += tw - inner_w;
+            outer_h += th - inner_h;
+        }
+
+        let (screen_w, screen_h) = self.screen_size().await.unwrap_or((-1, -1));
+        Err(anyhow!(
+            "could not reach a {target_w}x{target_h} viewport in {ATTEMPTS} attempts \
+             (screen is {screen_w}x{screen_h}). If the requested size exceeds the \
+             screen, the display is too small and the resize is being clamped — on \
+             the Ubuntu shards widen it via `xvfb-run -s \"-screen 0 WxHx24\"` in \
+             e2e.yml. Attempts: {}",
+            seen.join("; ")
+        ))
+    }
+
+    /// `window.innerWidth`/`innerHeight` — the viewport the app's own
+    /// breakpoints see, as opposed to the OS window `set_window_rect` sets.
+    async fn inner_size(&self) -> Result<(i64, i64)> {
+        let v: Value = self
+            .driver
+            .execute("return [window.innerWidth, window.innerHeight];", vec![])
+            .await
+            .context("failed to read window.innerWidth/innerHeight")?
+            .convert()
+            .context("innerWidth/innerHeight were not a JSON array")?;
+        let get = |i: usize| v.get(i).and_then(Value::as_i64).unwrap_or(-1);
+        Ok((get(0), get(1)))
+    }
+
+    /// Physical screen size, used only to explain a failed resize.
+    async fn screen_size(&self) -> Result<(i64, i64)> {
+        let v: Value = self
+            .driver
+            .execute("return [screen.width, screen.height];", vec![])
+            .await
+            .context("failed to read screen.width/height")?
+            .convert()
+            .context("screen.width/height were not a JSON array")?;
+        let get = |i: usize| v.get(i).and_then(Value::as_i64).unwrap_or(-1);
+        Ok((get(0), get(1)))
+    }
+
     /// Issue a Tauri command through the `window.__ALM_E2E__` bridge.
     ///
     /// The bridge is exposed by the desktop app when it is built with
