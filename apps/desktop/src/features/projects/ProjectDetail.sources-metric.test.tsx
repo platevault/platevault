@@ -92,7 +92,7 @@ describe('ProjectDetail — sources Integ cell (#622)', () => {
     vi.clearAllMocks();
   });
 
-  it('computes Integ from frames * parsed exposure seconds (54 * 120s = 1.8h)', () => {
+  it('computes Integ from frames * parsed exposure seconds (54 * 120s = 1h 48m)', () => {
     setupStore({
       sources: [
         {
@@ -108,7 +108,8 @@ describe('ProjectDetail — sources Integ cell (#622)', () => {
       ],
     });
     render(<ProjectDetailContent projectId="proj-m31" />);
-    expect(screen.getByText('1.8h')).toBeInTheDocument();
+    // #631: was '1.8h' — Projects now shares the Sessions h/m grammar.
+    expect(screen.getByText('1h 48m')).toBeInTheDocument();
   });
 
   it('degrades to 0 (—) for an unparseable exposure snapshot rather than throwing', () => {

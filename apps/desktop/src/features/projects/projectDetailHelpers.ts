@@ -23,14 +23,6 @@ export function sourceTypeVariant(filter: string): PillVariant {
   return 'ghost';
 }
 
-/** Convert raw seconds → "X.Xh" / "Xm" display string, or "—" for null/zero. */
-export function fmtIntegS(s: number | null | undefined): string {
-  if (s == null || s === 0) return '—';
-  const h = s / 3600;
-  if (h >= 1) return `${h.toFixed(1)}h`;
-  return `${Math.round(s / 60)}m`;
-}
-
 /** Format a frame count; returns "—" for zero. */
 export function fmtFrames(n: number): string {
   return n > 0 ? String(n) : '—';
