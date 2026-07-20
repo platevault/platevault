@@ -138,10 +138,20 @@ databases do not need their inbox state preserved.
 and confirmed-but-unapplied inbox items would be stranded** — the rows the plans
 and confirmations bind to are the very rows being removed.
 
-**Why that risk is acceptable right now**: there are no current installs
-(product owner, resolving Q-1). The stranding cannot reach a user because no
-user holds a library database. No migration UX, first-launch reset notice, or
+**Why that risk is acceptable right now**: there are no current installs of the
+app (product owner, resolving Q-1; **re-confirmed 2026-07-20** after the
+condition below was tested). The stranding cannot reach a user because no user
+holds a library database. No migration UX, first-launch reset notice, or
 legacy-row detection is designed.
+
+*Evidence gathered 2026-07-20, because releases now exist and the literal
+phrase "no current installs" needed re-testing rather than re-assertion: five
+public releases (v0.1.0–v0.5.0) carry roughly **four installer downloads in
+total** across all of them — 1 `.exe` on v0.2.0, 3 `.dmg` on v0.5.0, every other
+artifact at zero. The large `latest.json` counts are auto-updater polling, not
+installs. The repository has 0 stars and one fork (`TFGSUMIT/alm`, created
+2026-07-14, no commits pushed to it) — a source-level fork is not an install and
+does not carry a library database. Owner confirmed: no current installs.*
 
 **This licence is conditional on that fact.** If any part of this work lands
 after the product has real users, the question reopens — see
