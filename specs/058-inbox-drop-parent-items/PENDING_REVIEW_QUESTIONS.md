@@ -2,9 +2,9 @@
 
 Questions raised during specification. **All ten are now answered** — Q-1, Q-2,
 Q-4, Q-8 and then Q-5, Q-6, Q-7, Q-9 by the product owner (2026-07-19), Q-3 by
-events, and **Q-10 by the product owner (2026-07-20)**. Answers are recorded
-here and promoted to decisions D-005 through D-007 in
-[spec.md](spec.md#recorded-decisions).
+events, and **Q-10 by the product owner (2026-07-20)**, during implementation
+rather than specification. Answers are recorded here and promoted to decisions
+D-005 through D-007 in [spec.md](spec.md#recorded-decisions).
 
 Two of the later answers change this feature's shape rather than merely filling
 a blank, and are worth reading before the plan gate:
@@ -135,26 +135,37 @@ that Q-8's grouping construct needs, so the two should be designed together.
 
 ---
 
-## Q-10 — What triggers classification for a source-group row? — RESOLVED: explicit user action
+## Q-10 — What triggers classification for a source-group row? — RESOLVED: explicit user action — **AND SHIPPED**
 
 **Answer (product owner, 2026-07-20)**: **An explicit per-row action.** The
-source-group row gains a `Classify` control; classification runs only when the
+source-group row carries a `Classify` control; classification runs only when the
 user asks for it.
 
-**Why this was a gap.** Q-4 resolved *what scan creates* (the group only) and
-FR-017 describes what happens *when classification completes* — but nothing
-named the trigger, and Q-4 itself flagged this area as "a real design task for
-the plan gate, not a solved problem". Meanwhile the implementation made the row
-inert by construction (`InboxList.tsx`, FR-016), so no user gesture existed to
-hang classification on. `classify_source_group` shipped with **zero UI callers**
-as a direct result.
+**Why this needed answering at all.** Unlike Q-1 to Q-9, this gap surfaced during
+implementation, not specification. Q-4 resolved *what scan creates* (the source
+group only) and FR-017 describes what happens *when classification completes* —
+but nothing named the **trigger**, and Q-4 itself flagged the surrounding area as
+"a real design task for the plan gate, not a solved problem". Meanwhile the row
+was built inert by construction to satisfy FR-016, so no user gesture existed to
+hang classification on. The consequence was concrete: `classify_source_group`
+shipped with a backend, a Tauri command, both specta registrations and a
+generated binding, and **zero UI callers**. The operation was reachable only from
+a test.
 
-**What forced the decision**: `inbox.classify.sourceGroup` is a **mutation**, not
-a fetch. It walks the folder, parses every file header, and calls
-`materialize_sub_items` to write `inbox_items` rows; it returns only
-`{ sourceGroupId, materializedSubItemCount }`. There is no payload to cache, so
-the `useInboxClassification` "fire on selection, cache the result" idiom does not
-transfer.
+**Two existing invariants dictated the shape** — it was not a free choice:
+
+1. **Selection cannot carry it.** Selection is the `?selected=<inboxItemId>` URL
+   param, resolved via `filteredItems.find(...)`. A `sourceGroupId` placed there
+   matches no item, so `useStaleSelectionCleanup` clears it on the same commit —
+   the row would appear to do nothing. Routing through `onSelect` would also
+   destroy FR-016's guarantee that a source-group row selects nothing, which its
+   tests assert directly.
+2. **It is a mutation, not a fetch.** `classify_source_group` walks the folder,
+   parses every file header and writes `inbox_items` rows via
+   `materialize_sub_items`, returning only
+   `{ sourceGroupId, materializedSubItemCount }`. There is no payload to cache,
+   so the `useInboxClassification` fire-on-selection-and-cache idiom does not
+   transfer.
 
 **Rejected alternatives**:
 
@@ -167,25 +178,31 @@ transfer.
   rejected **Option B**: if every group row classifies itself on sight, FR-016's
   visible-unclassified state becomes a flicker rather than a real state.
 - **Classify during scan.** Rejected: contradicts Q-4/D-006 (scan creates the
-  group only) and would make FR-016's row nearly unreachable. Reopening a
-  resolved decision, not implementing one.
+  group only) and would make FR-016's row nearly unreachable — reopening a
+  resolved decision rather than implementing one.
 
-**Consequence for FR-016.** The row is still **structurally non-confirmable** —
-it carries no `inboxItemId`, so nothing can hand one to `inbox.confirm`. That
-invariant is unchanged and still pinned by test. What changes is only the claim
-that the row is *inert*: it now has exactly one action, and that action cannot
-reach confirm. The `InboxList.tsx` comment was reworded to state the invariant it
-actually enforces rather than overstating it.
+**FR-016 is unchanged.** The row still carries no `_onClick`, no `_selected` and
+no item id, so nothing can hand one to `inbox.confirm`. The action carries the
+`sourceGroupId` directly and leaves `onSelect` untouched. All seven pre-existing
+FR-016 tests pass **unmodified**, which is the evidence the invariant survived
+rather than being quietly relaxed.
 
-**Idempotency, verified**: `upsert_inbox_sub_item` is
+**Shipped 2026-07-20** in `bce27a49`, both halves, with the resulting contract
+recorded in [contracts/operations.md](contracts/operations.md) — which marks
+`inbox.classify.sourceGroup` `[shipped]` and carries the caller obligations
+(invalidate `inbox.list`, key busy state by `sourceGroupId` rather than a bare
+boolean). This entry records *why the trigger is explicit*; that file records
+*what the contract now requires*.
+
+**Idempotency**: `upsert_inbox_sub_item` is
 `ON CONFLICT(root_id, relative_path, group_key) DO UPDATE` and orphaned siblings
-are removed by `delete_sub_item_if_unlinked`, so a double-click or retry
-converges instead of duplicating rows.
+are pruned by `delete_sub_item_if_unlinked`, so a repeated action converges
+rather than duplicating rows.
 
-**Still open, and deliberately not resolved here**: preserving selection across
-the "one source-group row becomes N item rows" transition (FR-023) remains
-**T029**'s job. The explicit trigger makes it tractable — the transition now has
-a user-gesture anchor — but does not implement it.
+**Still open, deliberately**: preserving selection across the "one source-group
+row becomes N item rows" transition (FR-023) remains **T029**. The explicit
+trigger makes it tractable by giving the transition a user-gesture anchor; it
+does not implement it.
 
 ---
 
