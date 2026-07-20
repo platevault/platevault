@@ -20,7 +20,17 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     await importOriginal<typeof import('@tanstack/react-router')>();
   return {
     ...actual,
+    // ProjectLifecycleStepper's History section (#833) falls back to this
+    // route search param when its (optional) projectId prop isn't wired;
+    // unrelated to this file's assertions, so a static empty selection is
+    // enough.
     useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+    // The tool-launch toast's "Configure path" action navigates through the
+    // router and the tool-not-configured hint is a real `Link` — neither
+    // works against the spread-in real implementations without a router
+    // context (same reasoning as the other ProjectDetail suites).
+    useNavigate: () => vi.fn(),
+    Link: (await import('@/test/router-link-stub')).LinkStub,
   };
 });
 
