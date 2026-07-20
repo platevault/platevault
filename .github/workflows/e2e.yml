@@ -92,6 +92,12 @@ name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
 on:
   pull_request:
+  # Runs the shards on every main push, not just PRs (issue #1203: before
+  # this, main reported green from mock-mode Playwright alone while the
+  # real-UI suite never executed post-merge, so a merge-induced regression
+  # had no signal until the next unlucky PR hit it). Verified live: run
+  # 29740436232 (commit 44dbb69f, a normal main push) scheduled and ran the
+  # ubuntu + windows shards for real, not skipped.
   push:
     branches: [main]
   workflow_dispatch:
@@ -805,6 +811,24 @@ jobs:
   # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
   # no xvfb (native display), longer timeout for the 120s-per-attempt
   # launch-failure loop.
+  #
+  # This job's `needs: build-app-macos` is itself gated on run_macos=='true'
+  # (see that job's `if:`), and GitHub adds an implicit success() to a job's
+  # `if:` whenever it doesn't already reference always()/cancelled()/
+  # failure() — so this job inherits build-app-macos's skip on every normal
+  # run without needing its own run_macos check. Consequence worth knowing:
+  # GitHub can only substitute `${{ matrix.shard }}` in a job's `name:` once
+  # that job's matrix is actually scheduled. Skipped-before-scheduling (the
+  # normal case here) leaves the raw `${{ matrix.shard }}/2` template
+  # visible in the check name instead of an expanded `1/2`/`2/2` — a
+  # generic GitHub Actions display quirk for any matrix job skipped before
+  # expansion, reproduced identically by the ubuntu/windows shard jobs above
+  # whenever `changes.outputs.run` is false. It is cosmetic (the "skipped"
+  # conclusion is still accurate) and, unlike ubuntu/windows, permanently
+  # visible here because this leg only ever runs via explicit
+  # `workflow_dispatch(run_macos: true)` — where the matrix DOES expand
+  # correctly, so renaming this job to dodge the unexpanded string in the
+  # common (skipped) case would only make the dispatched case worse.
   real-ui-e2e-macos:
     name: Real-UI journeys (L3) shard — macos-latest ${{ matrix.shard }}/2
     needs: [changes, build-frontend, build-app-macos]
