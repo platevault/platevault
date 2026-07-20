@@ -383,6 +383,13 @@ export function StepScan({
     if (scanStartedRef.current) return;
     scanStartedRef.current = true;
 
+    // The scan fans out into one independent async branch per source, each
+    // outliving the others. Any of them can still be awaiting IPC when the
+    // wizard unmounts, so every `setState` below is gated on this flag —
+    // otherwise a late update lands on a torn-down root (and, under vitest,
+    // after jsdom has removed `window`, failing the whole run).
+    let cancelled = false;
+
     void (async () => {
       // Issue #916: a wizard retry after a partial batch-registration
       // failure resubmits *every* source, not just the ones that failed. A
@@ -474,6 +481,7 @@ export function StepScan({
         });
       }
 
+      if (cancelled) return;
       setSourceStates(initialStates);
       setResolved(true);
 
@@ -485,6 +493,7 @@ export function StepScan({
         if (entry.phase === 'error') continue;
 
         void (async () => {
+          if (cancelled) return;
           // Mark as scanning
           setSourceStates((prev) => {
             const next = [...prev];
@@ -521,6 +530,7 @@ export function StepScan({
               }),
             );
 
+            if (cancelled) return;
             setSourceStates((prev) => {
               const next = [...prev];
               next[idx] = {
@@ -532,6 +542,7 @@ export function StepScan({
               return next;
             });
           } catch (err: unknown) {
+            if (cancelled) return;
             setSourceStates((prev) => {
               const next = [...prev];
               next[idx] = {
@@ -545,6 +556,9 @@ export function StepScan({
         })();
       }
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty: run once on mount
 

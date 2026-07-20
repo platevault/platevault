@@ -661,8 +661,10 @@ function PerTypeDestinationPatterns() {
 
   // ── Load saved overrides on mount ────────────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
     getSettings({ scope: 'naming' })
       .then((data) => {
+        if (cancelled) return;
         const vals = data.values as Record<string, unknown>;
         const raw = vals.patternsByType;
         if (raw && typeof raw === 'object') {
@@ -679,7 +681,12 @@ function PerTypeDestinationPatterns() {
       .catch(() => {
         // Use defaults on load failure (e.g. in test/mock environment).
       })
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Per-class live preview (package P11) ─────────────────────────────────
@@ -934,14 +941,21 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
   // ── Load saved pattern on mount (spec 018 keys: pattern, autoApplyPattern) ─
   useEffect(() => {
+    let cancelled = false;
     getSettings({ scope: 'naming' })
       .then((data) => {
+        if (cancelled) return;
         applyValues(data.values as Record<string, unknown>);
       })
       .catch(() => {
         // Use defaults on load failure (e.g. in test/mock environment).
       })
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

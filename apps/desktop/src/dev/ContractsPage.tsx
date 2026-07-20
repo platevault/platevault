@@ -12,7 +12,7 @@
  * - The Cmd+K palette entry is only added when devMode is on (CommandPalette.tsx).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { commands } from '@/bindings/index';
 import { unwrap, invoke } from '@/api/ipc';
 import type { ContractMeta, ContractCall } from '@/bindings/index';
@@ -77,13 +77,27 @@ export function ContractsPage() {
     };
   }, []);
 
+  // `loadContracts` is also bound to the manual refresh control, so the guard
+  // lives in the callback rather than in a per-effect `cancelled` flag.
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
   // Load contracts when devMode is confirmed on.
   const loadContracts = useCallback(() => {
     commands
       .devContractsList({ requestId: null })
       .then(unwrap)
-      .then((resp) => setContracts(resp.contracts))
-      .catch((e: unknown) => setError(String(e)));
+      .then((resp) => {
+        if (mountedRef.current) setContracts(resp.contracts);
+      })
+      .catch((e: unknown) => {
+        if (mountedRef.current) setError(String(e));
+      });
   }, []);
 
   // Recent calls are read live from the JS-side recording proxy buffer

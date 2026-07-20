@@ -117,13 +117,30 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // `loadRoots` is re-invoked on user actions (add/delete/toggle), not just on
+  // mount, so a per-effect `cancelled` flag cannot reach it. A mounted ref is
+  // the guard that covers every call site.
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
   const loadRoots = useCallback(() => {
     setLoading(true);
     setLoadError(null);
     listRoots()
-      .then((data) => setRoots(data))
-      .catch((err: unknown) => setLoadError(errMessage(err)))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (mountedRef.current) setRoots(data);
+      })
+      .catch((err: unknown) => {
+        if (mountedRef.current) setLoadError(errMessage(err));
+      })
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {

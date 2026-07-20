@@ -23,7 +23,7 @@
  *    gets an actionable message instead of a raw database error; the backend
  *    constraint remains the source of truth for correctness.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
 import { Modal } from '@/components';
@@ -267,56 +267,86 @@ export function Equipment({ save: _save }: EquipmentProps) {
 
   // ── Loaders ──────────────────────────────────────────────────────────────────
 
+  // All four loaders are re-invoked after create/update/delete, not just on
+  // mount, so the guard lives in the callbacks rather than in the effect.
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
   const loadCameras = useCallback(() => {
     setCamerasLoading(true);
     setCamerasError(null);
     equipmentCamerasList()
-      .then(setCameras)
-      .catch((err: unknown) =>
+      .then((rows) => {
+        if (mountedRef.current) setCameras(rows);
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setCamerasError(
           m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setCamerasLoading(false));
+        );
+      })
+      .finally(() => {
+        if (mountedRef.current) setCamerasLoading(false);
+      });
   }, []);
 
   const loadTelescopes = useCallback(() => {
     setTelescopesLoading(true);
     setTelescopesError(null);
     equipmentTelescopesList()
-      .then(setTelescopes)
-      .catch((err: unknown) =>
+      .then((rows) => {
+        if (mountedRef.current) setTelescopes(rows);
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setTelescopesError(
           m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setTelescopesLoading(false));
+        );
+      })
+      .finally(() => {
+        if (mountedRef.current) setTelescopesLoading(false);
+      });
   }, []);
 
   const loadTrains = useCallback(() => {
     setTrainsLoading(true);
     setTrainsError(null);
     equipmentTrainsList()
-      .then(setTrains)
-      .catch((err: unknown) =>
+      .then((rows) => {
+        if (mountedRef.current) setTrains(rows);
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setTrainsError(
           m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setTrainsLoading(false));
+        );
+      })
+      .finally(() => {
+        if (mountedRef.current) setTrainsLoading(false);
+      });
   }, []);
 
   const loadFilters = useCallback(() => {
     setFiltersLoading(true);
     setFiltersError(null);
     equipmentFiltersList()
-      .then(setFilters)
-      .catch((err: unknown) =>
+      .then((rows) => {
+        if (mountedRef.current) setFilters(rows);
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setFiltersError(
           m.settings_equipment_load_error({ error: errMessage(err) }),
-        ),
-      )
-      .finally(() => setFiltersLoading(false));
+        );
+      })
+      .finally(() => {
+        if (mountedRef.current) setFiltersLoading(false);
+      });
   }, []);
 
   useEffect(() => {
