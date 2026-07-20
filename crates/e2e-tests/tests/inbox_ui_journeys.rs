@@ -175,6 +175,14 @@ async fn rescan_and_wait_for_item(app: &E2eApp) -> anyhow::Result<()> {
 /// `classify-<id>` as the "suffix". The button prefix has no such collision.
 async fn rescan_and_wait_for_source_group(app: &E2eApp) -> anyhow::Result<String> {
     app.click_by_aria_label("Rescan all roots").await?;
+    // The seed scan ran through the bridge while this app was already live, so
+    // the list query can be younger than its 30s `staleTime` and serve its
+    // PRE-SEED (empty) cache on mount — the page then shows "no detections."
+    // while `inbox.list` itself returns the source group. Other journeys
+    // already invalidate for exactly this reason; this helper must too, because
+    // after T012 the source-group row is the ONLY row a fresh scan produces, so
+    // there is no item row whose arrival would otherwise force a refetch.
+    app.invalidate_query(r#"["inbox","all"]"#).await?;
     if app.wait_testid_prefix_present("inbox-source-group-classify-", UI_TIMEOUT).await.is_err() {
         // Report the BACKEND's view alongside the DOM's, so a future failure
         // here says immediately whether the data never arrived or arrived and
