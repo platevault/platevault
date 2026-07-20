@@ -1,13 +1,13 @@
 ---
 id: J01
 title: Register data source folders and keep them current
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [setup, data-sources]
 interfaces: [desktop-ui]
-trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911, PR #925]
+trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911, PR #925, PR #1176, PR #1185]
 ---
 
 ## Goal
@@ -118,14 +118,25 @@ produces both a visible answer-back and a durable audit record.
   skip.
 - **Expect:** The step accepts skip or default with no error; leaving the
   protection level untouched keeps it at "protected". The Theme control is
-  live and bound to the same theme runtime Settings → Appearance uses
-  (`system` plus all four named themes): picking one applies it immediately
-  to the wizard itself. The Density control's choice previews live during
-  setup — the wizard applies its own `density-*` class since it renders
-  outside the main app shell.
-- **Expect (negative):** none scoped for this step (theme/density choices
-  made here are the same durable preference used everywhere else in the
-  app, not a setup-only draft).
+  live and bound to the same theme runtime Settings → Appearance uses:
+  picking one applies it immediately to the wizard itself. Choosing System
+  (the default) now resolves a dark OS preference to Observatory Cool
+  instead of Observatory (light resolution, Warm Slate, is unchanged). The
+  Density control's choice previews live during setup — the wizard applies
+  its own `density-*` class since it renders outside the main app shell.
+- **Expect (negative — correction, 2026-07-20):** The wizard's Theme
+  control is a plain `<select>` listing all 6 registry themes unfiltered
+  (`system` + Warm Clay, Warm Slate, Observatory, Espresso, Observatory
+  Cool · Light, Observatory Cool), not grouped and not limited to the 4
+  canonical themes — unlike Settings → Appearance (J10/S2), which now
+  offers only the 4 canonical themes grouped by family since PR #1176.
+  This is a real, currently-accurate inconsistency: `StepCatalogs.tsx`
+  maps over the full `THEMES` array rather than the same `enabled`-filtered
+  list `General.tsx` uses, so Warm Clay and Espresso remain pickable here
+  even though they are hidden from Settings.
+- **Expect (negative):** none otherwise scoped for this step (theme/density
+  choices made here are the same durable preference used everywhere else
+  in the app, not a setup-only draft).
 - **Trace:** `apps/desktop/src/features/setup/steps/StepCatalogs.tsx`
   `DefaultProtectionControl`, `ThemeControl`, `DensityControl`;
   `apps/desktop/src/features/setup/SetupPage.tsx`. PR #872 fixes #504 (theme
@@ -376,3 +387,16 @@ produces both a visible answer-back and a durable audit record.
   step silently (no items, no error); it is now correctly rescanned.
   Evidence: PR #925 (fixes #916, carried nJ01a review nit deferred out of
   PR #911's Rust-only file boundary) · by: journey-scribe (intent-gated)
+
+- **Δ7** 2026-07-20 · S4 · behavior-change
+  Choosing System (the wizard's default) now resolves a dark OS preference
+  to Observatory Cool instead of Observatory. Also documents a real,
+  pre-existing inconsistency the design-refresh wave exposed: the wizard's
+  Theme select still lists all 6 registry themes unfiltered, while Settings
+  → Appearance (J10/S2) now shows only the 4 canonical themes grouped by
+  family — the picker-filtering change in PR #1176 was not applied to the
+  wizard's control.
+  Evidence: PR #1185 (merged, default dark theme), PR #1176 (closes #1139,
+  Settings picker filtering not mirrored in
+  apps/desktop/src/features/setup/steps/StepCatalogs.tsx) · by:
+  journey-scribe (intent-gated)

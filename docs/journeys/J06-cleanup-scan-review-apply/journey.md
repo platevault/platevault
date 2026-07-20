@@ -1,7 +1,7 @@
 ---
 id: J06
 title: Reclaim disk space from processing outputs and raw sub-frames without losing anything protected
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -20,6 +20,8 @@ trace:
   - PR #413 (merged 2026-07-04 — scan/review/generate cleanup UI)
   - issue #741, issue #807, issue #766, issue #780, issue #806 (all open)
   - PR #894 (fixes #563)
+  - PR #1190 (design-refresh handoff 06 — destructive-red token +
+    Approve & apply variant scoped to delete-only plans)
 ---
 
 ## Goal
@@ -73,7 +75,12 @@ protected ever touched without an acknowledged, reviewed step.
   if any protected item is included, its protection must be explicitly
   acknowledged (per item) before "Approve & apply" becomes clickable;
   "Approve & apply" is also disabled whenever the plan holds zero items;
-  choosing "Discard" leaves disk untouched and returns cleanly.
+  choosing "Discard" leaves disk untouched and returns cleanly. "Approve &
+  apply" renders in the app's red destructive style only when the plan
+  contains at least one delete (a System trash destination); an
+  Archive-destination plan — a move, not a delete — renders it in the
+  neutral primary style instead, matching the constitution's framing that
+  a move/archive-only plan isn't destructive.
 - **Expect (negative):** "Approve & apply" stays disabled while any protected
   item's acknowledgement is outstanding, or while the plan holds zero items —
   in both cases the overlay shows no explanatory text, only the disabled
@@ -85,7 +92,8 @@ protected ever touched without an acknowledged, reviewed step.
   S5–S6 path; the server-side rejection is defense-in-depth only.
 - **Trace:** `apps/desktop/src/features/plans/PlanReviewOverlay.tsx:293`
   (Approve & apply `disabled={... || plan.itemsTotal === 0}`, no message
-  rendered for that case), `crates/app/core/src/plans.rs:341-349` (server
+  rendered for that case; `variant={hasDestructiveItems ? 'destructive' :
+  'primary'}` at line 471), `crates/app/core/src/plans.rs:341-349` (server
   rejects approving a zero-item plan with `PlanItemsEmpty`, not reachable via
   the shipped UI), `apps/desktop/src/features/plans/PlanProtectionGate.tsx`
 
@@ -171,3 +179,11 @@ protected ever touched without an acknowledged, reviewed step.
   the override was cosmetic there (resolution was keyed under the session
   id, found no override row, and silently inherited the global default).
   Evidence: PR #894 (fixes #563) · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-20 · S3 · behavior-change
+  "Approve & apply" now renders in the red destructive button style only
+  when the plan contains a delete (System trash destination); an
+  Archive-destination plan renders it in the neutral primary style —
+  previously the button was unconditionally styled destructive regardless
+  of destination.
+  Evidence: PR #1190 · by: journey-scribe (intent-gated)
