@@ -21,6 +21,20 @@ the reveal action can be implemented independently. The pre-existing wiring is a
 no contract DTO, no audit logging, and no last-path memory. Everything
 else is new.
 
+> **Reconciliation note (2026-07-19, issue #764)**: the feature itself
+> shipped (native pickers + Reveal-in-OS are real and wired), but the
+> `[x]` marks on T009, T010, T016, T017, T024, and T030 point at test/doc
+> files that do not exist in the tree (`picker.test.ts`,
+> `tests/integration/first_run_picker.spec.ts`,
+> `tests/integration/master_file_picker.spec.ts`,
+> `tests/integration/reveal_in_os.spec.ts`,
+> `docs/architecture/native-filesystem.md`). The underlying behavior these
+> tasks describe may be covered elsewhere (e.g. `crates/app/core/src/
+> native.rs` and `crates/contracts/core/src/native.rs` do carry real inline
+> `#[test]` coverage for the same operations — see T023/T029), but the
+> specific artifacts named in T009/T010/T016/T017/T024/T030 were never
+> created. Do not treat these six checkboxes as proof of the file they name.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)

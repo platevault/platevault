@@ -28,6 +28,10 @@ and code are deleted outright (no data migration, no backwards-compatibility shi
 
 - Q: Should per-target notes survive? → A: No. Notes are a project concept only
   (spec 024). Per-target notes are dropped; a future per-target notes feature is deferred.
+  *(Reconciliation note, 2026-07-19, issue #764: superseded — spec 023's US4
+  shipped per-target observing notes on gen-3, `target.note.get/update`
+  backed by migration `0048_target_notes` (`canonical_target.notes`). This
+  2026-06-19 answer no longer holds; per-target notes exist.)*
 - Q: Should users be able to freely rename a target's primary designation? → A: No. A
   target always links to SIMBAD and its primary designation stays canonical. Users may
   instead set an optional **display alias** that changes only the displayed label.
@@ -177,6 +181,10 @@ canonical designation is unchanged; clear it; confirm the UI reverts to canonica
   tables or removed commands, and MUST pass on a fresh database.
 - **FR-015**: Per-target notes MUST NOT exist after this change (no notes field on the
   canonical target model and no per-target note command); project notes are unaffected.
+  *(Reconciliation note, 2026-07-19, issue #764: superseded by spec 023 US4
+  — `canonical_target.notes` (migration 0048) and `target.note.get/update`
+  now exist. See the Session 2026-06-19 Q&A note above for the same
+  contradiction.)*
 
 ### Key Entities *(include if feature involves data)*
 

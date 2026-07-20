@@ -15,6 +15,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// This file's dynamic imports (./recorder, @/bindings, @/app/router) are the
+// first touch of those module graphs in an isolated worker, and cold
+// transform of that graph alone measures ~4s locally — right at vitest's 5s
+// default testTimeout. Under CI's concurrent worker load that tips over into
+// a false failure (issue #737; same timeout-flake class as #1082's Windows-CI
+// fix). Raise it file-wide rather than per-test so no sibling is left behind.
+vi.setConfig({ testTimeout: 15_000 });
+
 describe('T072: release build dev surface gate', () => {
   let originalEnv: string;
 

@@ -22,7 +22,7 @@
 
 **Updated**: 2026-06-23
 
-**Status**: Implemented — resolver + seed + cache + ingest grouping shipped (PRs #250–252, #307/#309). Validated end-to-end 2026-06-23: resolver unit 55/55, `simbad_resolution_integration` 4/4, `target_search_seeded` 8/8, `ingest_sessions_integration` 2/2.
+**Status**: Implemented — resolver + seed + cache + ingest grouping shipped (PRs #250–252, #307/#309). Validated end-to-end 2026-06-23: resolver unit 55/55, `simbad_resolution_integration` 4/4, `target_search_seeded` 8/8, `ingest_sessions_integration` 2/2. *(Reconciliation note, 2026-07-19, issue #764: `simbad_resolution_integration.rs` now carries 6 tests, not 4 — the 052 P2 pass added 2 more. The 4/4 count reflects the file's state as of the original validation date, not current.)*
 
 **Input**: User description: "Resolve target identities on demand against the SIMBAD astronomical
 database, backed by a bundled seed index of popular catalogues and a growing local cache; supersede
