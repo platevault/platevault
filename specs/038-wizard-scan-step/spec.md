@@ -116,3 +116,64 @@ detection summary reusing Inbox components; clean handoff to the Inbox on Finish
   for the Inbox triage components.
 - Detections persist (DB) so they are visible in the Inbox after navigation.
 - Greenfield: replacing the static Confirm step's "scan after setup" copy is acceptable.
+
+## Accepted Deviation — FR-003 (recorded 2026-07-20, issue #752)
+
+FR-003 requires the summary to "reuse the existing Inbox triage components (no
+parallel UI)". The shipped implementation reuses the Inbox *data types*
+(`InboxItemSummary`, `InboxClassifyResponse`) and, since #752, the shared
+`Table` primitive — but **not** `InboxList`, `InboxDetail`, or
+`InboxStatsSummary`. That deviation is accepted and scoped as follows.
+
+### What now complies
+
+The step's detection list renders through the shared `Table` primitive
+(`apps/desktop/src/ui/Table.tsx`) — the same construct `InboxList` itself
+renders through. The seven bespoke `pv-setup-scan__*` table classes that
+re-implemented `.pv-table` were deleted; only `__table-wrap` remains, bounding
+the scroll height of `Table`'s own `.pv-table__scroll` container.
+
+### What deviates, and why
+
+**`InboxList` cannot render the wizard's data.** It is typed on
+`InboxListItem`, which extends `InboxItemSummary` with roughly fifteen
+enrichment fields the wizard's scan never returns. `InboxList` reads exactly
+those missing fields for its two headline columns: the primary detection column
+reads `rootAbsolutePath`, and the Type column reads `frameType` /
+`groupFrameType`. Feeding it wizard data would mean fabricating those fields and
+still rendering both headline columns blank.
+
+The mismatch is semantic, not cosmetic. `InboxList` models **single-type,
+post-materialization** items — one authoritative `frameType` per row. The wizard
+runs **before** materialization, over folders that are legitimately multi-type,
+and presents a per-kind count breakdown ("16 light, 2 dark") sourced from a
+separate `classifications` map rather than from item fields. `InboxList` has no
+column that can express a breakdown. It also mandates `selectedId`/`onSelect`;
+the wizard summary is read-only.
+
+**`InboxStatsSummary`** is a flat stats strip, not a per-source container, so it
+cannot host the wizard's grouped-by-source presentation. **`InboxDetail`** is
+the triage editor for a selected item — the wizard performs no triage (FR-004,
+FR-008), so it has no selected item to detail.
+
+**The per-source accordion stays bespoke.** A shared collapsible primitive does
+exist (`apps/desktop/src/ui/Section.tsx`, used by `InboxDetail` among others)
+and was evaluated rather than assumed absent. It renders `{open && children}`
+with no slot for always-visible body content. The wizard card must keep the
+spec-048 US4 `RootDetectionConfig` control and the phase messages
+(scanning/error/empty) visible *while collapsed*; adopting `Section` would
+either hide that control behind the collapse or reorder it below the detail
+table. Both are user-visible behaviour changes to a documented control, so they
+are out of scope for a reuse refactor and would need their own iterate cycle.
+
+Eleven `pv-setup-scan__*` classes therefore remain, all scoped to the accordion
+card and its chips (`__card`, `__header`, `__chevron`, `__path`, `__kind`,
+`__count`, `__msg*`, `__detail`, `__chips`, `__chip`).
+
+### Status
+
+Accepted. FR-003's intent — no cloned table markup or CSS — is met. The residual
+deviation is the component-level reuse of `InboxList`/`InboxDetail`/
+`InboxStatsSummary`, which is blocked by a genuine data-model difference rather
+than by convenience. If the wizard ever runs post-materialization scans, this
+decision should be revisited.
