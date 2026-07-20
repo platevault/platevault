@@ -1,0 +1,52 @@
+/* Shared non-color foundation (spacing, type scale, tracking, weights,
+   leading, radius, motion, font stacks) — handoff 04. Single source of
+   truth, also vendored by the docs repo; edit there, not here. */
+@import "../../../../packages/tokens/foundation.css";
+
+/* Inter, hinted woff2, bundled locally (spec 055 — see
+   apps/desktop/src/assets/fonts/FONTS.md for provenance/licensing). Replaces
+   the prior Google Fonts CDN @import so the UI renders identically offline
+   and gets Windows-hinted small-text rendering instead of the CDN's
+   unhinted/variable delivery. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/Inter-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/Inter-Italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/Inter-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/Inter-MediumItalic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/Inter-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/Inter-SemiBoldItalic.woff2') format('woff2');
+}
