@@ -213,15 +213,28 @@ pending verification).
 
 ## Phase 6: User Story 5 — Targets table readable beside the side dock
 
-- [ ] T024 Pin favorite-star + designation columns; permanent importance
-  column order. **SUPERSEDED** — no evidence of pinned-column or
-  column-reorder work found in `TargetsTable.tsx`/`TargetsPage.tsx`. No
-  tracked follow-up issue.
-- [ ] T025 Conditional horizontal scroll of non-pinned columns only when
-  space is insufficient. **SUPERSEDED** — same, no evidence found, no
-  tracked issue.
+- [x] T024 Pin favorite-star + designation columns; permanent importance
+  column order. **DELIVERED (pinning only), #1158.** The previous pass recorded
+  this as SUPERSEDED — correct at the time (zero `position: sticky` column code
+  existed), but it was tracked from #1158 and has now been built. The star and
+  designation columns are sticky-left in `merges-2.css`, so a row's identity
+  survives horizontal scrolling.
+  The **"permanent importance column order" half did NOT ship**: column order is
+  unchanged. Treated as a deliberate outcome, not a gap — the shipped order
+  already leads with identity, and reordering the rest is a separate design
+  question with no reported complaint behind it.
+- [x] T025 Conditional horizontal scroll of non-pinned columns only when
+  space is insufficient. **DELIVERED, pre-existing.** Not new work for #1158:
+  `.pv-targets-table__scroll` already carried `overflow-x: auto` against the
+  table's 1000px `min-width` floor, so non-pinned columns scroll only when the
+  space is actually insufficient. T024 is what made that scrolling non-lossy.
 - [ ] T026 E2E: keep the existing full-width unclipped pin passing; add a
-  pinned-column + h-scroll assertion. **SUPERSEDED** — moot without T024/T025.
+  pinned-column + h-scroll assertion. **Open** — no longer moot now T024/T025
+  are delivered, but not authored. Verified manually instead (drift measured at
+  0px for star, designation and the designation header, against 240px of real
+  h-scroll, at 1400×900 with a 420px side dock). A Layer-1 assertion cannot
+  replace it: jsdom has no layout engine, so it cannot observe sticky offsets —
+  this needs a real-browser check.
 
 ---
 
