@@ -601,4 +601,90 @@ describe('alm/no-user-string', () => {
       0,
     );
   });
+
+  // The sinks below were added while draining the baseline: each one had let a
+  // real hardcoded string reach the screen before it was covered.
+
+  it('flags string concatenation in a JSX child', () => {
+    const out = lint(`const C = () => <div>{'Found ' + n + ' items'}</div>;`);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits.map((m) => m.messageId)).toEqual(['jsxText', 'jsxText']);
+  });
+
+  it('flags string concatenation in a user-facing attribute', () => {
+    const out = lint(`const C = () => <input aria-label={'Delete ' + name} />;`);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('attr');
+  });
+
+  it('does NOT flag concatenation that builds a machine token', () => {
+    const out = lint(`const C = () => <div data-x={'a-' + id} />;`);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
+  });
+
+  it.each([
+    ['emptyText', `<Row emptyText="No sessions recorded" />`],
+    ['dialogTitle', `<Row dialogTitle="Confirm deletion" />`],
+    ['errorMessage', `<Row errorMessage="Something went wrong" />`],
+    ['searchPlaceholder', `<Row searchPlaceholder="Filter by name" />`],
+    ['helpDesc', `<Row helpDesc="Choose a calibration master" />`],
+  ])('flags the display-copy prop suffix in `%s`', (_name, jsx) => {
+    const out = lint(`const C = () => ${jsx};`);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('attr');
+  });
+
+  // Regression: Skeleton defaulted `label` to 'Loading', so assistive tech
+  // announced English on every loading state regardless of locale.
+  it('flags a prose default value for a destructured display-label param', () => {
+    const out = lint(`function F({ label = 'Loading' }) { return label; }`);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('attr');
+  });
+
+  it('flags a prose default value for a positional display-label param', () => {
+    const out = lint(`function F(label = 'Please wait') { return label; }`);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('attr');
+  });
+
+  it('does NOT flag a machine-token default value (prose gate)', () => {
+    const out = lint(`function F({ variant = 'primary' }) { return variant; }`);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
+  });
+
+  it('does NOT flag a prose default on a param that is not a display label', () => {
+    const out = lint(`function F(query = 'Has term') { return query; }`);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
+  });
+
+  it.each(['confirm', 'prompt'])(
+    'flags a string passed to window.%s',
+    (api) => {
+      const out = lint(`window.${api}('Delete these files permanently?');`);
+      const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+      expect(hits).toHaveLength(1);
+      expect(hits[0].messageId).toBe('toast');
+    },
+  );
+
+  // Unlike every other sink, the dialog APIs do NOT apply the machine-string
+  // gate: a confirm()/prompt() argument is shown verbatim to the user, so any
+  // letter-bearing string there is user copy even when it looks machine-ish.
+  it('flags a machine-looking string passed to window.confirm', () => {
+    const out = lint(`window.confirm('utf-8');`);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      1,
+    );
+  });
 });
