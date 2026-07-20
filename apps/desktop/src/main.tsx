@@ -77,7 +77,10 @@ if (import.meta.env.VITE_E2E) {
   });
 }
 
-const root = document.getElementById('root')!;
+const root = document.getElementById('root');
+if (!root) {
+  throw new Error('Root element #root is missing from index.html');
+}
 
 createRoot(root).render(
   <StrictMode>

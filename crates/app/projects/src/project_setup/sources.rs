@@ -22,8 +22,8 @@ use app_core_errors::bus_err;
 
 use super::{
     channel_dto_from_domain, channel_totals_by_filter, db_err, infer_from_sources,
-    maybe_auto_ready, maybe_regress_to_incomplete, persist_channels, source_to_dto,
-    write_source_change_manifest,
+    maybe_auto_ready, maybe_regress_to_incomplete, persist_channels, source_snapshot,
+    source_to_dto, write_source_change_manifest,
 };
 
 // ── project.source.add ────────────────────────────────────────────────────────
@@ -87,14 +87,15 @@ pub async fn add_source(
     let now = Timestamp::now_iso();
     let src_id = new_id();
 
+    let snap = source_snapshot(pool, &req.inventory_session_id).await?;
     let src_data = repo::InsertProjectSource {
         id: &src_id,
         project_id: &req.project_id,
         inventory_session_id: &req.inventory_session_id,
-        name_snapshot: "",
-        frames_snapshot: 0,
-        filter_snapshot: "",
-        exposure_snapshot: "",
+        name_snapshot: &snap.name,
+        frames_snapshot: snap.frames,
+        filter_snapshot: &snap.filter,
+        exposure_snapshot: &snap.exposure,
         linked_at: &now,
     };
     repo::insert_project_source(pool, &src_data).await.map_err(db_err)?;
@@ -142,10 +143,10 @@ pub async fn add_source(
         id: src_id,
         project_id: req.project_id.clone(),
         inventory_session_id: req.inventory_session_id.clone(),
-        name_snapshot: String::new(),
-        frames_snapshot: 0,
-        filter_snapshot: String::new(),
-        exposure_snapshot: String::new(),
+        name_snapshot: snap.name,
+        frames_snapshot: snap.frames,
+        filter_snapshot: snap.filter,
+        exposure_snapshot: snap.exposure,
         linked_at: now.clone(),
     };
 

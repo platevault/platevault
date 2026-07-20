@@ -29,7 +29,11 @@ import type { RootCategory } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { RemapRootDialog } from './RemapRootDialog';
-import { ConfirmOverlay } from '@/components';
+// #1190 retired ConfirmOverlay into Modal; the confirms below are Modals with
+// explicit footers. SOURCES_KEYS (narrowed by #623) now lives in
+// `datasources-model`, and the per-root chrome/reveal/detection imports moved
+// with the markup into `RootCard`.
+import { Modal } from '@/components';
 import { categoryLabel, SOURCES_KEYS } from './datasources-model';
 import { RootCard } from './RootCard';
 import { useDataSources } from './useDataSources';
@@ -84,6 +88,20 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     requestDelete,
     handleConfirmDelete,
   } = useDataSources();
+
+  // Dismissal is refused while the corresponding request is in flight, so a
+  // half-applied disable/delete can't be hidden behind a closed dialog (#1190).
+  const closeDisableConfirm = () => {
+    if (togglingActiveId) return;
+    setDisableTarget(null);
+    setToggleActiveError(null);
+  };
+
+  const closeDeleteConfirm = () => {
+    if (deletingId) return;
+    setDeleteTarget(null);
+    setDeleteError(null);
+  };
 
   return (
     <>
@@ -218,50 +236,67 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         onApplied={loadRoots}
       />
 
-      {/* Disable confirm (P6b) — re-enable applies immediately, no confirm needed. */}
-      <ConfirmOverlay
+      {/* Disable confirm (P6b) — re-enable applies immediately, no confirm needed.
+          Disabling is reversible (re-enable is one click, no data is removed),
+          so this stays on `danger`, not `destructive` (handoff 06). */}
+      <Modal
         open={disableTarget != null}
-        onClose={() => {
-          if (togglingActiveId) return;
-          setDisableTarget(null);
-          setToggleActiveError(null);
-        }}
-        onConfirm={() => void handleConfirmDisable()}
+        onClose={closeDisableConfirm}
         title={m.settings_datasources_disable_confirm_title()}
-        description={m.settings_datasources_disable_confirm_desc()}
-        confirmLabel={
-          togglingActiveId
-            ? m.common_disabling()
-            : m.settings_datasources_disable()
+        size="sm"
+        hideClose
+        footer={
+          <>
+            <Btn variant="ghost" onClick={closeDisableConfirm}>
+              {m.common_cancel()}
+            </Btn>
+            <Btn variant="danger" onClick={() => void handleConfirmDisable()}>
+              {togglingActiveId
+                ? m.common_disabling()
+                : m.settings_datasources_disable()}
+            </Btn>
+          </>
         }
-        confirmVariant="danger"
       >
+        <p className="pv-modal__message">
+          {m.settings_datasources_disable_confirm_desc()}
+        </p>
         {toggleActiveError && (
           <span className="pv-field-error">{toggleActiveError}</span>
         )}
-      </ConfirmOverlay>
+      </Modal>
 
       {/* Delete confirm (P6b, decision D8) — surfaces the block reason inline
         (e.g. root.has_dependents) instead of closing the dialog on failure. */}
-      <ConfirmOverlay
+      <Modal
         open={deleteTarget != null}
-        onClose={() => {
-          if (deletingId) return;
-          setDeleteTarget(null);
-          setDeleteError(null);
-        }}
-        onConfirm={() => void handleConfirmDelete()}
+        onClose={closeDeleteConfirm}
         title={m.settings_datasources_delete_confirm_title()}
-        description={m.settings_datasources_delete_confirm_desc({
-          path: deleteTarget?.path ?? '',
-        })}
-        confirmLabel={
-          deletingId ? m.common_deleting() : m.settings_datasources_delete()
+        size="sm"
+        hideClose
+        footer={
+          <>
+            <Btn variant="ghost" onClick={closeDeleteConfirm}>
+              {m.common_cancel()}
+            </Btn>
+            <Btn
+              variant="destructive"
+              onClick={() => void handleConfirmDelete()}
+            >
+              {deletingId
+                ? m.common_deleting()
+                : m.settings_datasources_delete()}
+            </Btn>
+          </>
         }
-        confirmVariant="danger"
       >
+        <p className="pv-modal__message">
+          {m.settings_datasources_delete_confirm_desc({
+            path: deleteTarget?.path ?? '',
+          })}
+        </p>
         {deleteError && <span className="pv-field-error">{deleteError}</span>}
-      </ConfirmOverlay>
+      </Modal>
     </>
   );
 }

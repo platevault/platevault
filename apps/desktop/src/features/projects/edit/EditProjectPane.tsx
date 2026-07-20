@@ -360,7 +360,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                       <Btn
                         type="button"
                         size="sm"
-                        variant="danger"
+                        variant="destructive"
                         onClick={() =>
                           handleRemoveSource(src.inventoryId, true)
                         }

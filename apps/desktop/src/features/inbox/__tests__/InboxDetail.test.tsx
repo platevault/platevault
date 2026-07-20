@@ -874,3 +874,118 @@ describe('InboxDetail — #789 exposure formatting', () => {
     );
   });
 });
+
+// ── #1114: partially-resolved needs-review item ──────────────────────────────
+//
+// A file whose frame type the user has just supplied but which is still
+// blocked on a mandatory attribute. The backend downgrades the classification
+// to "unclassified" (reclassify.rs, the #1086/#711-Instance-B gate), so the
+// detail pane sees classType === 'unclassified' in BOTH the "no frame type"
+// and the "frame type supplied, attribute missing" cases — the bug was that it
+// rendered identical copy for the two, and unmounted the editing affordance in
+// the second.
+
+describe('InboxDetail — #1114: partially-resolved needs-review', () => {
+  /** No frame type at all: the original, still-correct case. */
+  const noFrameType: InboxClassifyResponse = {
+    ...singleTypeClassification,
+    type: 'unclassified',
+    frameType: null,
+    unclassifiedFiles: ['mystery_001.fits'],
+  };
+
+  /**
+   * Frame type supplied (so the file has dropped out of `unclassifiedFiles`),
+   * but exposure + gain are still absent for a dark frame.
+   */
+  const frameTypeSuppliedOnly: InboxClassifyResponse = {
+    ...singleTypeClassification,
+    type: 'unclassified',
+    frameType: null,
+    unclassifiedFiles: [],
+  };
+
+  const partiallyResolvedMetadata: InboxFileMetadata[] = [
+    {
+      ...fileMetadataFixture[0],
+      relativeFilePath: 'mystery_001.fits',
+      frameTypeEffective: 'dark',
+      exposureS: null,
+      gain: null,
+      missingPathAttributes: [],
+      missingMandatory: ['exposureS', 'gain'],
+    },
+  ];
+
+  it('names the frame type when nothing has been supplied yet', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={noFrameType}
+        fileMetadata={[
+          {
+            ...fileMetadataFixture[0],
+            relativeFilePath: 'mystery_001.fits',
+            frameTypeEffective: null,
+            missingPathAttributes: [],
+            missingMandatory: ['frameType'],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('inbox-unclassified-alert')).toHaveTextContent(
+      m.inbox_frame_types_required_title(),
+    );
+  });
+
+  it('names the missing attribute, not the frame type, once the type is supplied', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={frameTypeSuppliedOnly}
+        fileMetadata={partiallyResolvedMetadata}
+      />,
+    );
+    const banner = screen.getByTestId('inbox-unclassified-alert');
+    expect(banner).toHaveTextContent('Exposure s');
+    expect(banner).toHaveTextContent('Gain');
+    expect(banner).not.toHaveTextContent(m.inbox_frame_types_required_title());
+  });
+
+  it('keeps the needs-review editor mounted while an attribute is still missing', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={frameTypeSuppliedOnly}
+        fileMetadata={partiallyResolvedMetadata}
+      />,
+    );
+    // The section survives the file leaving `unclassifiedFiles` — this is the
+    // affordance the user needs in order to supply the exposure.
+    expect(screen.getByTestId('reclassify-select-all')).toBeInTheDocument();
+    expect(screen.getByTitle('mystery_001.fits')).toBeInTheDocument();
+  });
+
+  it('unmounts the needs-review editor once nothing is missing', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={[
+          {
+            ...fileMetadataFixture[0],
+            missingPathAttributes: [],
+            missingMandatory: [],
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.queryByTestId('reclassify-select-all'),
+    ).not.toBeInTheDocument();
+  });
+});

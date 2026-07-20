@@ -21,7 +21,7 @@ use app_core_errors::bus_err;
 
 use super::{
     channel_dto_from_domain, channel_totals_by_filter, db_err, infer_from_sources,
-    maybe_auto_ready, str_to_error_code,
+    maybe_auto_ready, source_snapshot, str_to_error_code, SourceSnapshot,
 };
 
 // ── Path anchoring (Constitution I) ───────────────────────────────────────────
@@ -275,26 +275,32 @@ pub async fn create(
         is_mosaic: req.is_mosaic,
     };
 
-    // Link initial sources (best-effort: if a source is not found in a future
-    // Inventory table we just skip it for now — spec 003 integration is
-    // pending). For now, initial_sources lists inventory_session_ids that we
-    // trust. Ids are pre-generated so `source_rows` (used for channel
-    // inference and the response DTOs) and `source_data` (borrowed into the
-    // composite insert) can share them without re-querying the DB.
+    // Link initial sources (best-effort: an id with no acquisition session is
+    // linked with an empty snapshot rather than failing the create). Ids are
+    // pre-generated so `source_rows` (used for channel inference and the
+    // response DTOs) and `source_data` (borrowed into the composite insert)
+    // can share them without re-querying the DB.
+    //
+    // Snapshots are resolved HERE, before `create_project_tx`, because that
+    // call must stay one atomic unit (see the comment above `insert`).
     let source_ids: Vec<String> = req.initial_sources.iter().map(|_| new_id()).collect();
+    let mut snapshots: Vec<SourceSnapshot> = Vec::with_capacity(req.initial_sources.len());
+    for inv_id in &req.initial_sources {
+        snapshots.push(source_snapshot(pool, inv_id).await?);
+    }
     let source_rows: Vec<repo::ProjectSourceRow> = req
         .initial_sources
         .iter()
         .zip(source_ids.iter())
-        .map(|(inv_id, src_id)| repo::ProjectSourceRow {
+        .zip(snapshots.iter())
+        .map(|((inv_id, src_id), snap)| repo::ProjectSourceRow {
             id: src_id.clone(),
             project_id: project_id.clone(),
             inventory_session_id: inv_id.clone(),
-            // Snapshot fields will be empty until spec 003 Inventory is wired.
-            name_snapshot: String::new(),
-            frames_snapshot: 0,
-            filter_snapshot: String::new(),
-            exposure_snapshot: String::new(),
+            name_snapshot: snap.name.clone(),
+            frames_snapshot: snap.frames,
+            filter_snapshot: snap.filter.clone(),
+            exposure_snapshot: snap.exposure.clone(),
             linked_at: now.clone(),
         })
         .collect();
@@ -302,14 +308,15 @@ pub async fn create(
         .initial_sources
         .iter()
         .zip(source_ids.iter())
-        .map(|(inv_id, src_id)| repo::InsertProjectSource {
+        .zip(snapshots.iter())
+        .map(|((inv_id, src_id), snap)| repo::InsertProjectSource {
             id: src_id,
             project_id: &project_id,
             inventory_session_id: inv_id,
-            name_snapshot: "",
-            frames_snapshot: 0,
-            filter_snapshot: "",
-            exposure_snapshot: "",
+            name_snapshot: &snap.name,
+            frames_snapshot: snap.frames,
+            filter_snapshot: &snap.filter,
+            exposure_snapshot: &snap.exposure,
             linked_at: &now,
         })
         .collect();

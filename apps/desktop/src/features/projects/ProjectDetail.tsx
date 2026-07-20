@@ -38,6 +38,7 @@ import {
   DetailPane,
   DetailPanel,
   MetricLine,
+  StatusTag,
   TopActionBar,
 } from '@/components';
 import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
@@ -46,7 +47,6 @@ import { deriveChannels, fmtIntegS } from './projectDetailHelpers';
 import { ProjectChannelsSection } from './ProjectChannelsSection';
 import { ProjectSourcesSection } from './ProjectSourcesSection';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
-import { ProjectStatusTag } from './ProjectStatusTag';
 import { useProjectDetail, useSessionNames } from './store';
 import type { ProjectLifecycleState } from './store';
 import { useProjectDetailActions } from './useProjectDetailActions';
@@ -174,9 +174,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       fill
       title={project.name}
       titleExtra={
-        <ProjectStatusTag variant={projectStateVariant(lifecycle)}>
+        <StatusTag variant={projectStateVariant(lifecycle)}>
           {projectStateLabel(lifecycle)}
-        </ProjectStatusTag>
+        </StatusTag>
       }
       subtitle={undefined}
       actions={

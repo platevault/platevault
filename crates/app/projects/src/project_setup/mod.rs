@@ -42,6 +42,7 @@ use contracts_core::projects_v2::ProjectChannelDto;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::project::channels::{infer_channels, Channel};
 use persistence_db::repositories::projects as repo;
+use persistence_db::repositories::q_core;
 use sqlx::SqlitePool;
 
 use crate::project_health;
@@ -84,6 +85,67 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         }
         other => app_core_errors::db_err(other),
     }
+}
+
+/// A project source's snapshot of its inventory session, taken at link time
+/// (#1218). Empty strings / `0` mean "the session does not carry this value",
+/// which is what every field was hardcoded to before this was wired.
+#[derive(Debug, Default)]
+pub(super) struct SourceSnapshot {
+    pub name: String,
+    pub frames: i64,
+    pub filter: String,
+    pub exposure: String,
+}
+
+/// Read the snapshot fields for one inventory (acquisition) session.
+///
+/// - `filter` comes from the session key, whose format `crates/sessions`
+///   owns (`sessions::parse_session_key`); it is the same value the Sessions
+///   surfaces show.
+/// - `frames` is the ACTIVE (non-`missing`) frame count, matching
+///   `app_core::sessions`' honest counts rather than the raw `frame_ids` length.
+/// - `exposure` is a PER-SUB token (`"300s"`), never total integration time —
+///   `parse_exposure_seconds` and the source-view `{exposure}` path token both
+///   read it that way. Exposure is not part of the session key, so a session
+///   may hold several distinct per-sub exposures; only a session with exactly
+///   ONE distinct value gets a token. With zero (no metadata) or several, no
+///   scalar is truthful, so the field stays empty and the pattern registry's
+///   documented `unknown-exposure` fallback applies rather than inventing a
+///   directory name that reads like a real exposure.
+///
+/// An unknown session id yields an all-empty snapshot: source linking is
+/// best-effort and must never fail project creation.
+pub(super) async fn source_snapshot(
+    pool: &SqlitePool,
+    inventory_session_id: &str,
+) -> Result<SourceSnapshot, ContractError> {
+    let Some(row) = q_core::get_session_joined(pool, inventory_session_id).await.map_err(db_err)?
+    else {
+        return Ok(SourceSnapshot::default());
+    };
+
+    let key = sessions::parse_session_key(&row.session_key);
+    let target = row.canonical_target_name.filter(|n| !n.is_empty()).or(key.target);
+    let filter = key.filter.unwrap_or_default();
+
+    let frame_ids: Vec<String> = serde_json::from_str(&row.frame_ids).unwrap_or_default();
+    let (frames, _bytes) = q_core::active_frame_summary(pool, &frame_ids).await.map_err(db_err)?;
+    let exposures = q_core::active_frame_exposures(pool, &frame_ids).await.map_err(db_err)?;
+    let exposure = match exposures.as_slice() {
+        [only] => persistence_db::repositories::inbox::format_exposure_label(*only),
+        _ => String::new(),
+    };
+
+    // Mirrors `app_core::inventory::derive_session_name`, so a linked source
+    // shows the same label the Sessions/Inventory surfaces show.
+    let name = target.map_or_else(String::new, |t| {
+        let filter_part = if filter.is_empty() { "?" } else { filter.as_str() };
+        let night = key.night.unwrap_or_default();
+        format!("{t} · {filter_part} — {night}")
+    });
+
+    Ok(SourceSnapshot { name, frames, filter, exposure })
 }
 
 /// Parse an `exposure_snapshot` string (e.g. `"300s"`, `"1.5s"`) into whole

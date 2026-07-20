@@ -25,7 +25,7 @@
  */
 
 import { Popover } from '@base-ui-components/react/popover';
-import { Fragment, useCallback, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import type {
@@ -493,7 +493,25 @@ export function InboxDetail({
   };
 
   // T027 selection helpers.
-  const unclassifiedFiles = classification?.unclassifiedFiles ?? [];
+  //
+  // #1114: the needs-review set is every file that still blocks promotion, NOT
+  // just the ones with no frame type. `classification.unclassifiedFiles` drops
+  // a file the instant a frame-type override is written (classify.rs: the
+  // `unclassified != 0 && manual_override.is_none()` filter), which used to
+  // unmount this whole section — including the generic property editor — while
+  // the file was still blocked on a mandatory attribute like exposureS. The
+  // per-file `missingMandatory` set (metadata.rs `compute_missing_mandatory`,
+  // override-applied and re-fetched after every reclassify) is the truthful
+  // gate. Unioned rather than swapped because per-file metadata can be absent
+  // or still loading, and losing the frame-type affordance then would be the
+  // same class of bug in the other direction.
+  const filesNeedingReview = useMemo(() => {
+    const paths = new Set(classification?.unclassifiedFiles ?? []);
+    for (const f of fileMetadata ?? []) {
+      if ((f.missingMandatory?.length ?? 0) > 0) paths.add(f.relativeFilePath);
+    }
+    return Array.from(paths);
+  }, [classification?.unclassifiedFiles, fileMetadata]);
 
   const handleToggleFile = (filePath: string) => {
     setSelectedFiles((prev) => {
@@ -505,9 +523,9 @@ export function InboxDetail({
   };
 
   const handleSelectAll = () => {
-    if (selectedFiles.size === unclassifiedFiles.length)
+    if (selectedFiles.size === filesNeedingReview.length)
       setSelectedFiles(new Set());
-    else setSelectedFiles(new Set(unclassifiedFiles));
+    else setSelectedFiles(new Set(filesNeedingReview));
   };
 
   const handleBulkPropChange = (key: string, value: string) => {
@@ -619,6 +637,24 @@ export function InboxDetail({
   const title = item.relativePath || m.inbox_list_root_label();
   const classType = classification?.type ?? 'pending';
 
+  // #1114: the mandatory attributes still blocking promotion, frame type
+  // excluded. `frameType` is dropped because it has its own dedicated banner
+  // copy and its own dropdown affordance — once the user has supplied it, the
+  // remaining keys are what the banner must name. Empty (either nothing is
+  // missing, or only the frame type is) falls back to the frame-type banner.
+  const blockingAttrsExcludingFrameType = useMemo(() => {
+    const keys = new Set<string>();
+    for (const f of fileMetadata ?? []) {
+      for (const k of f.missingMandatory ?? []) {
+        if (k !== 'frameType') keys.add(k);
+      }
+    }
+    return Array.from(keys);
+  }, [fileMetadata]);
+  const blockingAttrsLabel = blockingAttrsExcludingFrameType
+    .map(humanizeKey)
+    .join(', ');
+
   // Reveal this item's location in the OS file browser (#715, spec 004
   // FR-005/SC-002). No connectivity gate like Sessions (#889): the Inbox
   // root is the currently-scanned root, always reachable while this pane is
@@ -718,8 +754,8 @@ export function InboxDetail({
   // ── Unclassified ("Needs review") table ───────────────────────────────────
 
   const allSelected =
-    unclassifiedFiles.length > 0 &&
-    selectedFiles.size === unclassifiedFiles.length;
+    filesNeedingReview.length > 0 &&
+    selectedFiles.size === filesNeedingReview.length;
   const someSelected = selectedFiles.size > 0 && !allSelected;
 
   const unclassifiedColumns = [
@@ -728,7 +764,7 @@ export function InboxDetail({
     { key: 'override', label: m.inbox_col_assign_frame_type() },
   ];
 
-  const unclassifiedRows = unclassifiedFiles.map((filePath, idx) => ({
+  const unclassifiedRows = filesNeedingReview.map((filePath, idx) => ({
     select: (
       <input
         type="checkbox"
@@ -1059,7 +1095,9 @@ export function InboxDetail({
           </Banner>
         )}
 
-        {/* Unclassified: blocking banner */}
+        {/* Unclassified: blocking banner. #1114 — when the frame type is
+            already supplied and only OTHER mandatory attributes are absent,
+            name those instead of asking again for the frame type. */}
         {classType === 'unclassified' && (
           <Banner
             variant="danger"
@@ -1068,10 +1106,18 @@ export function InboxDetail({
           >
             <div className="pv-inbox-alert__msg">
               <span className="pv-inbox-alert__title">
-                {m.inbox_frame_types_required_title()}
+                {blockingAttrsExcludingFrameType.length > 0
+                  ? m.inbox_mandatory_attrs_required_title({
+                      attrs: blockingAttrsLabel,
+                    })
+                  : m.inbox_frame_types_required_title()}
               </span>
               <span className="pv-inbox-alert__body">
-                {m.inbox_frame_types_required_body()}
+                {blockingAttrsExcludingFrameType.length > 0
+                  ? m.inbox_mandatory_attrs_required_body({
+                      attrs: blockingAttrsLabel,
+                    })
+                  : m.inbox_frame_types_required_body()}
               </span>
             </div>
           </Banner>
