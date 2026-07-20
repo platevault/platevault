@@ -17,10 +17,23 @@
  *
  * Suppression flag (FR-030, research R8): a deterministic, per-test runtime
  * input rather than a build-time `VITE_E2E` gate — onboarding's OWN e2e specs
- * need onboarding to run. The E2E/mock harness sets
- * {@link ONBOARDING_SUPPRESSED_STORE_ID} in `localStorage` (mirroring
- * `seedSetupComplete`'s `alm-preferences` channel). When set, all onboarding
- * surfaces (walk, accordion auto-expand, spotlights) suppress themselves.
+ * need onboarding to run. Two equivalent channels, either one suppresses:
+ *
+ * - `?e2eOnboarding=off` in the URL query ({@link ONBOARDING_SUPPRESSED_QUERY}).
+ *   Per-WINDOW by construction. Required by the Layer-2 tauri-driver harness
+ *   (`crates/e2e-tests/tests/common/mod.rs`): nextest runs journeys
+ *   concurrently and on Windows WebView2 ignores the redirected LOCALAPPDATA,
+ *   so all concurrent journeys share ONE localStorage origin — a sibling
+ *   journey's suppression write would leak into (or be cleared by) the
+ *   onboarding journey mid-run (#1133). Routes live in the hash (`#/inbox`),
+ *   so the query slot is free.
+ * - {@link ONBOARDING_SUPPRESSED_STORE_ID} in `localStorage` (mirroring
+ *   `seedSetupComplete`'s `alm-preferences` channel). Used by the mock-mode
+ *   Playwright harness, which gets one browser context per test and so is not
+ *   exposed to the race above.
+ *
+ * When suppressed, all onboarding surfaces (walk, accordion auto-expand,
+ * spotlights) suppress themselves.
  *
  * INTER-NODE CONTRACT: the e2e harness's `disableOnboarding` helper
  * (tests/e2e/support/harness.ts) MUST set exactly this localStorage key to
@@ -41,6 +54,9 @@ import { unwrap } from '@/api/ipc';
 /** localStorage key the harness sets to `'true'` to suppress all onboarding. */
 export const ONBOARDING_SUPPRESSED_STORE_ID = 'alm-onboarding-suppressed';
 
+/** URL query param the Layer-2 harness sets to `off` to suppress onboarding. */
+export const ONBOARDING_SUPPRESSED_QUERY = 'e2eOnboarding';
+
 /** Tauri notification name the backend emits after any persisted tick. */
 const EVENT_STATE_CHANGED = 'onboarding:state-changed';
 
@@ -50,10 +66,23 @@ function isMockMode(): boolean {
 
 /**
  * Whether onboarding is suppressed for this session (FR-030). Deterministic —
- * reads only {@link ONBOARDING_SUPPRESSED_STORE_ID}. Callers that gate a
- * surface (walk launch, accordion, spotlight) MUST honour this.
+ * reads only the two harness channels documented in the module header:
+ * `?e2eOnboarding=off` (per window) or {@link ONBOARDING_SUPPRESSED_STORE_ID}
+ * (per origin). Callers that gate a surface (walk launch, accordion,
+ * spotlight) MUST honour this.
  */
 export function isOnboardingSuppressed(): boolean {
+  try {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).get(ONBOARDING_SUPPRESSED_QUERY) ===
+        'off'
+    ) {
+      return true;
+    }
+  } catch {
+    // fall through to the localStorage channel
+  }
   try {
     return (
       typeof localStorage !== 'undefined' &&
