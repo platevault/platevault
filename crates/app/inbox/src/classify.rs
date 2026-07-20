@@ -809,6 +809,26 @@ pub fn mandatory_set_for(ft: FrameType) -> Vec<&'static str> {
     out
 }
 
+/// Whether the `target` hard-mandatory key (R-14) counts as absent.
+///
+/// Single shared formula for the `target` arm of both mandatory-attribute
+/// gates — [`check_mandatory_missing`] here and
+/// [`crate::metadata::compute_missing_mandatory`] — so the two consumers
+/// agree on "target missing" **by construction**, not because every caller
+/// happens to pass the same `target_resolved` constant (issue #1132).
+///
+/// Satisfied by an explicit target resolution (`target_resolved`: coordinate
+/// auto-resolution or a user pick, R-17) **or** a non-empty (trimmed) `OBJECT`
+/// header/override. Every current call site pins `target_resolved` to
+/// `false` — R-17's coordinate resolver (`target_recommendations`,
+/// `cone_search`) is implemented and reachable from the UI, but nothing yet
+/// threads a resolved-target signal back into this gate; that wiring is the
+/// open product decision tracked in #1132.
+#[must_use]
+pub fn target_missing(object: Option<&str>, target_resolved: bool) -> bool {
+    !target_resolved && object.map_or("", str::trim).is_empty()
+}
+
 /// Check which mandatory attributes are absent for a classified file.
 ///
 /// `raw_meta` is `None` when FITS extraction failed entirely (→ all mandatory
@@ -828,11 +848,7 @@ pub fn check_mandatory_missing(
 
     for key in mandatory {
         let absent = match key {
-            "target" => {
-                // light-only: satisfied by coordinate resolution or user pick.
-                !target_resolved
-                    && raw_meta.and_then(|m| m.object.as_deref()).map_or("", str::trim).is_empty()
-            }
+            "target" => target_missing(raw_meta.and_then(|m| m.object.as_deref()), target_resolved),
             "filter" => raw_meta.and_then(|m| m.filter.as_deref()).map_or("", str::trim).is_empty(),
             "exposureS" => !raw_meta
                 .and_then(|m| m.exposure.as_deref())
@@ -3074,6 +3090,29 @@ mod tests {
         let set = mandatory_set_for(FrameType::Flat);
         assert!(set.contains(&"filter"), "flat must require filter");
         assert!(!set.contains(&"gain"), "flat must NOT require gain by default");
+    }
+
+    /// Issue #1132: `target_missing` is the single formula both mandatory
+    /// gates share for the `target` key (R-14/R-17). Pins the semantics:
+    /// resolution (coordinate or user pick) OR a non-empty, trimmed OBJECT
+    /// satisfies the requirement; neither does not.
+    #[test]
+    fn target_missing_r17_semantics() {
+        assert!(target_missing(None, false), "unresolved + no OBJECT is missing");
+        assert!(target_missing(Some(""), false), "unresolved + empty OBJECT is missing");
+        assert!(
+            target_missing(Some("   "), false),
+            "unresolved + whitespace-only OBJECT is missing"
+        );
+        assert!(
+            !target_missing(Some("M 42"), false),
+            "unresolved + non-empty OBJECT is not missing"
+        );
+        // R-17: coordinate/user resolution alone satisfies the requirement, even
+        // with no OBJECT header at all — the case #1131's equivalence test
+        // cannot exercise and #1132 flags as currently unreachable in production.
+        assert!(!target_missing(None, true), "resolved + no OBJECT is not missing");
+        assert!(!target_missing(Some(""), true), "resolved + empty OBJECT is not missing");
     }
 
     /// T070: check_mandatory_missing correctly flags absent attributes.
