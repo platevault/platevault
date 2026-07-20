@@ -203,14 +203,6 @@ export function SetupWizard() {
     setState((prev) => ({ ...prev, tools }));
   }, []);
 
-  const handleSiteChange = useCallback((site: SiteStepState) => {
-    setState((prev) => ({ ...prev, site }));
-    // Editing the step withdraws a previous "skip anyway" acknowledgement, so
-    // clearing the fields again re-arms the warning rather than silently
-    // inheriting the earlier consent.
-    setSiteSkipAcked(false);
-  }, []);
-
   // Skipping the (optional) Observing Site step is acknowledged, not blocked:
   // the first Continue on an empty step surfaces the consequence, the second
   // proceeds. Spec 044 T016 keeps the step optional on purpose — a user may
@@ -218,6 +210,14 @@ export function SetupWizard() {
   // planner unable to compute visibility, which is invisible until they reach
   // that page (#1050).
   const [siteSkipAcked, setSiteSkipAcked] = useState(false);
+
+  const handleSiteChange = useCallback((site: SiteStepState) => {
+    setState((prev) => ({ ...prev, site }));
+    // Editing the step withdraws a previous "skip anyway" acknowledgement, so
+    // clearing the fields again re-arms the warning rather than silently
+    // inheriting the earlier consent.
+    setSiteSkipAcked(false);
+  }, []);
 
   const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
 
