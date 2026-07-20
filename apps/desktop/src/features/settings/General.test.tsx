@@ -47,7 +47,7 @@ describe('General — density', () => {
     const select = screen.getByDisplayValue('Comfortable (32px row)');
     fireEvent.change(select, { target: { value: 'compact' } });
 
-    expect(document.documentElement.style.getPropertyValue('--pv-sp-2')).toBe(
+    expect(document.documentElement.style.getPropertyValue('--pv-sp-md')).toBe(
       '6.00px',
     );
     expect(document.documentElement.classList.contains('density-compact')).toBe(

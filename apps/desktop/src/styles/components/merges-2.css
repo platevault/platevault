@@ -30,7 +30,7 @@
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--pv-sp-2) var(--pv-sp-3);
+  gap: var(--pv-sp-md) var(--pv-sp-lg);
   min-width: 0;
 }
 .pv-inbox-summary__count {
@@ -44,7 +44,7 @@
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   padding: var(--pv-sp-none);
   border: none;
   background: none;
@@ -54,9 +54,9 @@
 .pv-inbox-stats__per-type {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   white-space: nowrap;
-  padding: 1px var(--pv-sp-2);
+  padding: 1px var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-sm);
   background: var(--pv-surface-raised);
@@ -100,7 +100,7 @@
 .pv-inbox-cell__path-wrap {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   min-width: 0;
 }
 .pv-inbox-cell__path-wrap .pv-inbox-cell__path {
@@ -138,7 +138,7 @@
 .pv-inbox-table__group-cell {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   width: 100%;
   background: none;
   border: none;
@@ -184,9 +184,9 @@
   display: grid;
   /* Facts compact (fixed-ish), matches take the rest. */
   grid-template-columns: var(--pv-rail-width) minmax(0, 1fr);
-  gap: var(--pv-sp-5);
+  gap: var(--pv-sp-2xl);
   align-items: start;
-  margin-top: var(--pv-sp-3);
+  margin-top: var(--pv-sp-lg);
 }
 
 /* Facts column: sizes to content, never scrolls on its own. */
@@ -233,13 +233,13 @@
 .pv-calib-kvgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--pv-sp-5);
+  column-gap: var(--pv-sp-2xl);
   row-gap: var(--pv-sp-none);
   align-items: start;
 }
 .pv-calib-kvgrid .pv-kv {
   min-width: 0;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 .pv-calib-kvgrid .pv-kv__label {
   width: auto;
@@ -451,7 +451,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--pv-sp-1) var(--pv-sp-2);
+  gap: var(--pv-sp-xs) var(--pv-sp-md);
   min-width: 0;
 }
 .pv-plan-panel__summary-type {
@@ -504,7 +504,7 @@
 .pv-listpage__detail--side .pv-project-detail__sections {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   min-width: 0;
 }
 
@@ -547,8 +547,8 @@
 
 /* Compact the lifecycle stepper so it doesn't dominate the top of the column. */
 .pv-listpage__detail--side .pv-stepper {
-  padding-top: var(--pv-sp-1);
-  padding-bottom: var(--pv-sp-1);
+  padding-top: var(--pv-sp-xs);
+  padding-bottom: var(--pv-sp-xs);
 }
 
 /* Sections read as tidy bordered cards with clear headers and no dead space. */
@@ -556,18 +556,18 @@
   border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface);
-  padding: var(--pv-sp-2);
+  padding: var(--pv-sp-md);
 }
 
 /* Reduce the gap the metric line leaves above the stepper in the column. */
 .pv-listpage__detail--side .pv-metricline {
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 /* Keep the action-bar cluster wrapping cleanly inside the narrow column. */
 .pv-listpage__detail--side .pv-project-detail__bar-actions {
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* The path breadcrumb must wrap, not push the panel wider. */
@@ -608,7 +608,7 @@
 .pv-inbox-detail__cols--split {
   flex-direction: row;
   align-items: flex-start;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
 }
 
 /* LEFT column: primary detail. Takes the remaining width and owns the long
@@ -652,7 +652,7 @@
  * from three columns to two so the labels/values stay readable. */
 .pv-inbox-detail__cols--split .pv-inbox-inspector__grid {
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--pv-sp-0) var(--pv-sp-3);
+  gap: var(--pv-sp-2xs) var(--pv-sp-lg);
 }
 
 /* === merged from .cssblocks/detail-panel.css (spec-043 parallel coder) === */
@@ -691,8 +691,8 @@
 .pv-detail-panel__header {
   display: flex;
   align-items: flex-start;
-  gap: var(--pv-sp-3);
-  padding: var(--pv-sp-3) var(--pv-sp-4);
+  gap: var(--pv-sp-lg);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   flex-wrap: wrap;
 }
@@ -703,13 +703,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-0);
+  gap: var(--pv-sp-2xs);
 }
 
 .pv-detail-panel__title {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   font-size: var(--pv-text-md);
   font-weight: var(--pv-weight-semibold);
   line-height: var(--pv-leading-tight);
@@ -721,9 +721,9 @@
 .pv-detail-panel__title-extra {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-wrap: wrap;
-  margin-top: var(--pv-sp-0);
+  margin-top: var(--pv-sp-2xs);
 }
 
 /* Subtitle: prose acquisition summary; NOT mono/break-all like a file path. */
@@ -733,14 +733,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: var(--pv-sp-0);
+  margin-top: var(--pv-sp-2xs);
 }
 
 /* Per-item action buttons — live in the header, right-aligned. */
 .pv-detail-panel__actions {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -750,20 +750,20 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--pv-sp-3) var(--pv-sp-4);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl);
 }
 
 /* === #99 Sessions detail density — tighter header in the bottom panel === */
 
 /* Override the default .pv-detail padding: the bottom panel is already short,
- * so the default var(--pv-sp-4) top/bottom padding wastes vertical room. */
+ * so the default var(--pv-sp-xl) top/bottom padding wastes vertical room. */
 .pv-detail-panel--sessions .pv-detail-panel__header {
-  padding-top: var(--pv-sp-2);
-  padding-bottom: var(--pv-sp-2);
+  padding-top: var(--pv-sp-md);
+  padding-bottom: var(--pv-sp-md);
 }
 
 .pv-detail-panel--sessions .pv-detail-panel__body {
-  padding-top: var(--pv-sp-2);
+  padding-top: var(--pv-sp-md);
 }
 
 /* === Canonical DetailPanel body (spec 043 §4, redesign-ui-platevault) ========
@@ -799,7 +799,7 @@
   font-weight: var(--pv-weight-medium);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-0);
+  gap: var(--pv-sp-2xs);
 }
 .pv-detailpanel__kv-prov {
   font-size: var(--pv-text-xs);
@@ -852,9 +852,9 @@
   display: grid;
   /* Compact facts column + flexible state/linked column. */
   grid-template-columns: var(--pv-rail-width) minmax(0, 1fr);
-  gap: var(--pv-sp-5);
+  gap: var(--pv-sp-2xl);
   align-items: start;
-  padding: var(--pv-sp-3) var(--pv-sp-4);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl);
 }
 
 /* Facts column: rail panel with 2-column KV grid for density. */
@@ -871,13 +871,13 @@
 .pv-session-detail__kvgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--pv-sp-4);
+  column-gap: var(--pv-sp-xl);
   row-gap: var(--pv-sp-none);
   align-items: start;
 }
 .pv-session-detail__kvgrid .pv-kv {
   min-width: 0;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 .pv-session-detail__kvgrid .pv-kv__label {
   width: auto;
@@ -929,14 +929,14 @@
 .pv-session-frames__table th {
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   color: var(--pv-text-muted);
   text-align: left;
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   white-space: nowrap;
 }
 .pv-session-frames__table td {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   vertical-align: top;
 }
 
@@ -966,7 +966,7 @@
 
 /* Expanded detail row — full-width td spanning all columns. */
 .pv-session-frames__expanded-row td {
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
   background: var(--pv-surface);
   border-top: var(--pv-border-w) solid var(--pv-border-subtle);
 }
@@ -974,7 +974,7 @@
 .pv-session-frames__expanded-body {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Mono path placeholder when individual frame paths are not yet loaded. */
@@ -988,13 +988,13 @@
 /* Additional KV pairs inside the expanded detail row. */
 .pv-session-frames__expanded-kvrow {
   display: flex;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
   flex-wrap: wrap;
 }
 
 .pv-session-frames__expanded-kv {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
 }
 

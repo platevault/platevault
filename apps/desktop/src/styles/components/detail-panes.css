@@ -10,7 +10,7 @@
 .pv-target-detail__identity-grid {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: var(--pv-sp-1) var(--pv-sp-3);
+  gap: var(--pv-sp-xs) var(--pv-sp-lg);
   font-size: var(--pv-text-sm);
 }
 .pv-target-detail__identity-label {
@@ -20,7 +20,7 @@
 /* Display-alias section — edit mode row */
 .pv-target-detail__display-alias-edit {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 
@@ -28,7 +28,7 @@
 .pv-target-detail__display-alias-view {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 .pv-target-detail__display-alias-value {
   font-size: var(--pv-text-sm);
@@ -40,7 +40,7 @@
 /* Inline text inputs (display-alias and add-alias) */
 .pv-target-detail__text-input {
   flex: 1;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   background: var(--pv-surface-raised);
   color: var(--pv-text);
@@ -52,7 +52,7 @@
 
 /* Small action buttons used in edit row and add-alias row */
 .pv-target-detail__action-btn {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   background: var(--pv-surface-raised); color: var(--pv-text-secondary);
   border: var(--pv-border-w) solid var(--pv-border); border-radius: var(--pv-radius-sm);
   cursor: pointer; font-size: var(--pv-text-xs);
@@ -69,7 +69,7 @@
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   cursor: pointer;
-  padding: var(--pv-sp-0) var(--pv-sp-2);
+  padding: var(--pv-sp-2xs) var(--pv-sp-md);
   font-size: var(--pv-text-xs);
 }
 .pv-target-detail__edit-btn:hover { background: var(--pv-hover-bg); color: var(--pv-text); }
@@ -78,18 +78,18 @@
 .pv-target-detail__alias-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 .pv-target-detail__alias-kind {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-right: var(--pv-sp-1);
+  margin-right: var(--pv-sp-xs);
 }
 .pv-target-detail__alias-remove {
   background: none;
   border: none;
   cursor: pointer;
-  margin-left: var(--pv-sp-1);
+  margin-left: var(--pv-sp-xs);
   padding: var(--pv-sp-none);
   color: var(--pv-text-muted);
   display: inline-flex;
@@ -103,19 +103,19 @@
 /* Add-alias form row */
 .pv-target-detail__alias-add-row {
   display: flex;
-  gap: var(--pv-sp-2);
-  margin-top: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
+  margin-top: var(--pv-sp-md);
 }
 
 /* Error/action banners below alias forms */
 .pv-target-detail__banner {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* Back navigation button */
 .pv-target-detail__back-btn {
-  margin: var(--pv-sp-3) 0;
-  padding: var(--pv-sp-1) var(--pv-sp-3);
+  margin: var(--pv-sp-lg) 0;
+  padding: var(--pv-sp-xs) var(--pv-sp-lg);
   font-size: var(--pv-text-sm);
   cursor: pointer;
 }
@@ -126,7 +126,7 @@
 .pv-naming__chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   align-items: center;
   min-height: 32px;
 }
@@ -146,7 +146,7 @@
   background: var(--pv-surface-raised);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-1);
+  padding: var(--pv-sp-xs);
   box-shadow: var(--pv-shadow-sm);
 }
 
@@ -157,7 +157,7 @@
 .pv-naming__dropdown--literal {
   min-width: 160px;
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Menu item buttons inside dropdowns */
@@ -165,7 +165,7 @@
   display: block;
   width: 100%;
   text-align: left;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   background: var(--pv-surface-raised);
   color: var(--pv-text);
   border: none;
@@ -186,7 +186,7 @@
 
   font-size: var(--pv-text-xs);
   width: 100px;
-  padding: var(--pv-sp-0) 6px;
+  padding: var(--pv-sp-2xs) 6px;
   background: var(--pv-surface-raised);
   color: var(--pv-text);
   border: var(--pv-border-w) solid var(--pv-border);
@@ -202,7 +202,7 @@
 
 /* "Add" confirm button inside the literal popover */
 .pv-naming__literal-add-btn {
-  padding: var(--pv-sp-0) var(--pv-sp-2);
+  padding: var(--pv-sp-2xs) var(--pv-sp-md);
   background: var(--pv-accent);
   color: var(--pv-on-accent);
   border: none;
@@ -228,28 +228,28 @@
 
 /* Validation error feedback below chip row */
 .pv-naming__error {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   color: var(--pv-danger);
 }
 
 /* Validation warning feedback below chip row */
 .pv-naming__warning {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
 
 /* Per-type section description (marginBottom only) */
 .pv-naming__pertype-desc {
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* Per-type row inner: chip editor + reset button side by side */
 .pv-naming__pertype-row-inner {
   display: flex;
   align-items: flex-start;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* The flex-1 wrapper around the PerTypePatternChipsEditor */
@@ -259,14 +259,14 @@
 
 /* Checkbox label margin */
 .pv-naming__checkbox {
-  margin-right: var(--pv-sp-1);
+  margin-right: var(--pv-sp-xs);
 }
 
 /* Live Preview section */
 .pv-naming__preview-sample {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 .pv-naming__preview-empty {
@@ -282,7 +282,7 @@
 
 .pv-naming__preview-path-row {
   display: flex;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
   align-items: baseline;
 }
 
@@ -300,22 +300,22 @@
 
 /* Loading placeholder */
 .pv-project-detail__loading {
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   color: var(--pv-text-muted);
 }
 
 /* Channel-drift banner: button row below the drift message */
 .pv-project-detail__drift-actions {
   display: flex;
-  gap: var(--pv-sp-2);
-  margin-top: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
+  margin-top: var(--pv-sp-md);
 }
 
 /* Rail: canonical target info block */
 .pv-project-detail__target-info {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-0);
+  gap: var(--pv-sp-2xs);
 }
 .pv-project-detail__target-name {
   font-weight: var(--pv-weight-semibold);
@@ -329,10 +329,10 @@
 .pv-project-detail__channels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 .pv-project-detail__channel-chip {
-  padding: var(--pv-sp-0) 6px;
+  padding: var(--pv-sp-2xs) 6px;
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
 }
@@ -344,14 +344,14 @@
 }
 /* "Auto" label appended to inferred channel chips */
 .pv-project-detail__channel-auto {
-  margin-left: var(--pv-sp-1);
+  margin-left: var(--pv-sp-xs);
   opacity: var(--pv-opacity-muted);
   font-size: 0.75em;
 }
 
 /* Sources section: empty state */
 .pv-project-detail__sources-empty {
-  padding: var(--pv-sp-2);
+  padding: var(--pv-sp-md);
   color: var(--pv-text-muted);
 }
 
@@ -359,8 +359,8 @@
 .pv-project-detail__source-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) 0;
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-xs) 0;
   border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 .pv-project-detail__source-name {
@@ -374,8 +374,8 @@
 /* Shared footer bar: lifecycle actions and tool-launch CTA */
 .pv-project-detail__footer {
   display: flex;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-3) var(--pv-sp-4);
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl);
   border-top: var(--pv-border-w) solid var(--pv-border);
 }
 /* Tool-launch footer also centers items vertically */
@@ -408,16 +408,16 @@
   background: var(--pv-surface);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-lg);
-  padding: var(--pv-sp-6);
+  padding: var(--pv-sp-3xl);
   max-width: 360px;
   width: 100%;
 }
 .pv-project-detail__modal-body {
-  margin-bottom: var(--pv-sp-4);
+  margin-bottom: var(--pv-sp-xl);
 }
 .pv-project-detail__modal-actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   justify-content: flex-end;
 }
 
@@ -439,7 +439,7 @@
 .pv-inbox-detail__dest-root {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 .pv-inbox-detail__dest-root-label {
   font-size: var(--pv-text-xs);
@@ -448,14 +448,14 @@
 
 /* EmptyClassification placeholder block */
 .pv-inbox-detail__empty {
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-sm);
 }
 
 /* Mixed-composition summary line (FR-011) */
 .pv-inbox-detail__mixed-summary {
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text-secondary);
 }
@@ -482,8 +482,8 @@
 /* Per-file missing-attribute inline badge */
 .pv-inbox-detail__missing-attr-badge {
   display: inline-block;
-  margin-left: var(--pv-sp-1);
-  padding: 0 var(--pv-sp-1);
+  margin-left: var(--pv-sp-xs);
+  padding: 0 var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-warn);
@@ -493,12 +493,12 @@
 }
 
 /* Top margin for Banner components in this pane */
-.pv-inbox-detail__banner-mt3 { margin-top: var(--pv-sp-3); }
-.pv-inbox-detail__banner-mt2 { margin-top: var(--pv-sp-2); }
+.pv-inbox-detail__banner-mt3 { margin-top: var(--pv-sp-lg); }
+.pv-inbox-detail__banner-mt2 { margin-top: var(--pv-sp-md); }
 
 /* Select-all affordance row above the unclassified table */
 .pv-inbox-detail__select-all-row {
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -512,13 +512,13 @@
 
 /* Bulk override controls panel (visible when ≥1 file selected) */
 .pv-inbox-detail__bulk-controls {
-  margin-top: var(--pv-sp-3);
-  padding: var(--pv-sp-3);
+  margin-top: var(--pv-sp-lg);
+  padding: var(--pv-sp-lg);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   align-items: flex-end;
 }
 
@@ -526,7 +526,7 @@
 .pv-inbox-detail__bulk-field {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Label text inside each bulk field */
@@ -540,9 +540,9 @@
 
 /* Single-file apply-overrides button row */
 .pv-inbox-detail__apply-row {
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Metadata table horizontal scroll wrapper */

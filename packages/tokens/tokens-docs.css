@@ -26,15 +26,16 @@
   --pv-leading-normal: 1.5;
   --pv-leading-relaxed: 1.6;
   --pv-leading-none: 1; /** Line-height 1 — deliberate for icon and single-glyph alignment, where any leading misaligns the box. Named so it is visibly a choice rather than a magic literal. */
-  --pv-sp-none: 0; /** Explicit zero spacing. Not a lever — nobody re-points this at a non-zero value. It exists so the spacing properties can be linted absolutely: every padding/margin/gap states a token, so a bare literal is always a violation with no carve-out to slip through. NOTE: sp-0 below is 2px, not zero. */
-  --pv-sp-0: 2px; /** Spacing — geometric base-4 */
-  --pv-sp-1: 4px;
-  --pv-sp-2: 8px;
-  --pv-sp-3: 12px;
-  --pv-sp-4: 16px;
-  --pv-sp-5: 24px;
-  --pv-sp-6: 32px;
-  --pv-sp-7: 48px;
+  --pv-sp-none: 0; /** Explicit zero spacing. Not a lever — nobody re-points this at a non-zero value. It exists so the spacing properties can be linted absolutely: every padding/margin/gap states a token, so a bare literal is always a violation with no carve-out to slip through. NOTE: sp-2xs below is 2px, not zero. */
+  --pv-sp-2xs: 2px; /** Spacing scale, t-shirt sized. Renamed from the numeric sp-2xs..sp-4xl: sp-2xs was 2px, not zero, which read as a trap next to sp-none. */
+  --pv-sp-xs: 4px;
+  --pv-sp-sm: 6px; /** The rung the old numeric scale was missing. It jumped 4px -> 8px, and 5/6/7px kept appearing to fill the gap — a scale people work around is a scale with a hole, so the hole is closed rather than the usages snapped. */
+  --pv-sp-md: 8px;
+  --pv-sp-lg: 12px;
+  --pv-sp-xl: 16px;
+  --pv-sp-2xl: 24px;
+  --pv-sp-3xl: 32px;
+  --pv-sp-4xl: 48px;
   --pv-transition-fast: 100ms ease; /** Transitions */
   --pv-transition-base: 150ms ease;
   --pv-transition-slow: 250ms ease;

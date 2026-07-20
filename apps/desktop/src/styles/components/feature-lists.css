@@ -5,20 +5,20 @@
 .pv-inbox-list__controls {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
 }
 
 .pv-inbox-list__group-row {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-wrap: wrap;
   align-items: center;
 }
 
 .pv-inbox-list__sort-row {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-wrap: wrap;
 }
 
@@ -34,11 +34,11 @@
 .pv-inbox-list__meta {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0 var(--pv-sp-2);
+  gap: 0 var(--pv-sp-md);
   align-items: baseline;
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-top: var(--pv-sp-0);
+  margin-top: var(--pv-sp-2xs);
 }
 
 .pv-inbox-list__meta-state {
@@ -74,7 +74,7 @@
   border: none;
   text-align: left;
   cursor: pointer;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font: inherit;
   color: var(--pv-text-secondary);
   font-size: var(--pv-text-xs);
@@ -148,7 +148,7 @@
 .pv-session-inspector__projects-empty {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  padding: var(--pv-sp-1) 0;
+  padding: var(--pv-sp-xs) 0;
 }
 
 /* Projects — linked project id label */
@@ -177,7 +177,7 @@
 
 /* Coverage warning Banner top margin */
 .pv-target-detail-legacy__coverage-warn {
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
 }
 
 /* "No coverage data" faint label */
@@ -190,7 +190,7 @@
 .pv-target-detail-legacy__obs-plans {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   font-size: var(--pv-text-xs);
 }
 
@@ -220,7 +220,7 @@
 
 /* Criteria table: inherit pv-table base; pin column widths to match mock */
 .pv-calmatch__table {
-  margin-block: var(--pv-sp-3) var(--pv-sp-2);
+  margin-block: var(--pv-sp-lg) var(--pv-sp-md);
 }
 
 .pv-calmatch__col-required {
@@ -235,7 +235,7 @@
 .pv-calmatch__tol-input-row {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Fixed-width number input for tolerance fields */
@@ -253,14 +253,14 @@
 .pv-calmatch__help {
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
-  margin-block-start: var(--pv-sp-2);
+  margin-block-start: var(--pv-sp-md);
 }
 
 /* Legacy aliases — kept so old .pv-calib-matching__* refs compile if any remain */
 .pv-calib-matching__input-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 .pv-calib-matching__num-input {
@@ -278,7 +278,7 @@
 .pv-calib-match-panel__loading {
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
-  padding: var(--pv-sp-1);
+  padding: var(--pv-sp-xs);
 }
 
 /* Error state */
@@ -291,15 +291,15 @@
 .pv-calib-match-panel__list {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Per-session card */
 .pv-calib-match-panel__session {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
-  padding: var(--pv-sp-2);
+  gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-md);
   background: var(--pv-bg3);
   border-radius: var(--pv-radius-md);
 }
@@ -314,7 +314,7 @@
 /* Row of calibration-type pills */
 .pv-calib-match-panel__type-row {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-wrap: wrap;
 }
 
@@ -322,7 +322,7 @@
 .pv-calib-match-panel__type-item {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Confidence percentage */
@@ -333,7 +333,7 @@
 
 /* Footer hint */
 .pv-calib-match-panel__hint {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-faint);
 }
@@ -344,7 +344,7 @@
 .pv-project-notes__root {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Notes body (pre-wrap text block) */
@@ -371,7 +371,7 @@
 .pv-project-notes__textarea {
   height: auto;
   min-height: 80px;
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
   resize: vertical;
 }
 
@@ -386,7 +386,7 @@
 /* Button group (Cancel / Save) */
 .pv-project-notes__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Byte counter — normal state */
@@ -408,22 +408,22 @@
 
 /* Loading state placeholder */
 .pv-projects-list__loading {
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   color: var(--pv-text-muted);
 }
 
 /* Empty state placeholder (no results) */
 .pv-projects-list__empty {
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   color: var(--pv-text-muted);
 }
 
 /* Controls bar wrapping sort-select and lifecycle filter */
 .pv-projects-list__controls {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-wrap: wrap;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
 }
 
 /* Lifecycle filter trigger — inherits pv-select base; adds pointer + min-width */
@@ -443,7 +443,7 @@
 /* Blocked-state icon inline with project name */
 .pv-projects-list__blocked-icon {
   color: var(--pv-danger);
-  margin-right: var(--pv-sp-1);
+  margin-right: var(--pv-sp-xs);
   display: inline;
   vertical-align: middle;
 }
@@ -451,10 +451,10 @@
 /* Channel-drift inline badge */
 .pv-projects-list__drift-badge {
   color: var(--pv-warn);
-  margin-left: var(--pv-sp-1);
+  margin-left: var(--pv-sp-xs);
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-0);
+  gap: var(--pv-sp-2xs);
 }
 
 /* === CALIBRATION MASTER RAIL (consistency) === */
@@ -498,7 +498,7 @@
 
 /* Step heading */
 .pv-setup-wizard__heading {
-  margin: var(--pv-sp-1) 0 0;
+  margin: var(--pv-sp-xs) 0 0;
   font-size: var(--pv-text-2xl);
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-text);
@@ -506,7 +506,7 @@
 
 /* Step description paragraph */
 .pv-setup-wizard__description {
-  margin: var(--pv-sp-2) 0 var(--pv-sp-5);
+  margin: var(--pv-sp-md) 0 var(--pv-sp-2xl);
   font-size: var(--pv-text-base);
   line-height: var(--pv-leading-normal);
   color: var(--pv-text-secondary);
@@ -518,14 +518,14 @@
 .pv-step-catalogs {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-5);
+  gap: var(--pv-sp-2xl);
 }
 
 /* A single labelled config row (stacks header + description) */
 .pv-setup-catalogs__option {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Title + control on one line */
@@ -533,7 +533,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
 }
 
 /* Row label text */
@@ -547,11 +547,11 @@
 /* Fixed viewport anchor — bottom-right, above all other layers */
 .pv-toast__container {
   position: fixed;
-  bottom: var(--pv-sp-4);
-  right: var(--pv-sp-4);
+  bottom: var(--pv-sp-xl);
+  right: var(--pv-sp-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   z-index: var(--pv-z-toast);
   pointer-events: none;
   max-width: 400px;
@@ -559,7 +559,7 @@
 
 /* Individual toast item */
 .pv-toast__item {
-  padding: var(--pv-sp-3) var(--pv-sp-4);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl);
   border-radius: var(--pv-radius-sm);
   border: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
@@ -569,7 +569,7 @@
   pointer-events: auto;
   display: flex;
   align-items: flex-start;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
   /* Left accent stripe is an inset shadow, not a border, so it stays clear of
      the banned side-tab border pattern while looking identical to a 3px rule.
      The variant classes below only swap the accent color via the custom prop. */
@@ -604,7 +604,7 @@
 .pv-toast__controls {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-shrink: 0;
 }
 
@@ -615,7 +615,7 @@
   border-radius: var(--pv-radius-sm);
   color: var(--pv-text);
   font-size: var(--pv-text-xs);
-  padding: var(--pv-sp-0) var(--pv-sp-2);
+  padding: var(--pv-sp-2xs) var(--pv-sp-md);
   cursor: pointer;
   white-space: nowrap;
   transition: background var(--pv-transition-fast);
@@ -640,7 +640,7 @@
 .pv-resolver-settings__compact-wrap {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Compact mode: label + toggle row */
@@ -648,7 +648,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
 }
 
 /* Compact mode: label text */
@@ -670,8 +670,8 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
-  gap: var(--pv-sp-4);
-  padding: var(--pv-sp-6);
+  gap: var(--pv-sp-xl);
+  padding: var(--pv-sp-3xl);
 
   color: var(--pv-text);
   background: var(--pv-bg);
@@ -698,14 +698,14 @@
   background: var(--pv-surface);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
-  padding: var(--pv-sp-3);
+  padding: var(--pv-sp-lg);
   max-width: 480px;
   overflow: auto;
   margin: var(--pv-sp-none);
 }
 
 .pv-error-boundary__reset-btn {
-  padding: var(--pv-sp-2) var(--pv-sp-4);
+  padding: var(--pv-sp-md) var(--pv-sp-xl);
   background: var(--pv-accent);
   color: var(--pv-on-accent);
   border: var(--pv-border-w) solid transparent;
@@ -730,7 +730,7 @@
 /* Pill row inside the Linked projects rail card */
 .pv-session-detail__linked-pills {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 
@@ -747,7 +747,7 @@
    Review state rail card is read-only (Pill only), matching the pattern
    used by Calibration (MasterDetail) and Projects (ProjectDetail). */
 .pv-session-detail__lock-notice {
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
@@ -758,7 +758,7 @@
 .pv-source-views__list {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
   list-style: none;
   margin: var(--pv-sp-none);
   padding: var(--pv-sp-none);
@@ -779,17 +779,17 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-3);
+  padding: var(--pv-sp-lg);
 }
 
 /* Row header line: id + state pill + kind/count meta */
 .pv-source-views__row-head {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 
@@ -806,7 +806,7 @@
 /* Trailing action buttons (remove / regenerate) */
 .pv-source-views__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-shrink: 0;
 }
 
@@ -815,20 +815,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
 }
 
 /* Generate dialog: copy opt-in checkbox label */
 .pv-source-views__copy-label {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   font-size: var(--pv-text-sm);
 }
 
 /* Expandable inventory-refs disclosure widget */
 .pv-source-views__refs-details {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* Disclosure summary — pointer cursor, no text selection on click */
@@ -839,8 +839,8 @@
 
 /* Inventory-ref path list inside the disclosure */
 .pv-source-views__refs-list {
-  margin-top: var(--pv-sp-1);
-  padding-left: var(--pv-sp-3);
+  margin-top: var(--pv-sp-xs);
+  padding-left: var(--pv-sp-lg);
   list-style: disc;
 
 }
@@ -867,12 +867,12 @@
 .pv-cleanup__type-cell {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Per-type table: process-stage group subheader row */
 .pv-cleanup__group-row td {
-  padding-top: var(--pv-sp-3);
+  padding-top: var(--pv-sp-lg);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
@@ -882,7 +882,7 @@
 
 /* Impact warning banner above the per-type table */
 .pv-cleanup__warning {
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
 }
 
 /* === SOURCE PROTECTION OVERRIDE (spec 016 — per-root protection control) === */
@@ -907,15 +907,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 .pv-source-protect__edit-col {
   flex-basis: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
-  margin-top: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
+  margin-top: var(--pv-sp-md);
 }
 
 .pv-source-protect__label {
@@ -941,7 +941,7 @@
 
 .pv-source-protect__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* === EDIT PROJECT PANE === */
@@ -949,24 +949,24 @@
 /* Banner action row — drift banner button group */
 .pv-edit-project__drift-actions {
   display: flex;
-  gap: var(--pv-sp-2);
-  margin-top: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
+  margin-top: var(--pv-sp-md);
 }
 
 /* Form — main layout column */
 .pv-edit-project__form {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-4);
-  padding: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
+  padding: var(--pv-sp-xl);
 }
 
 /* Channels pill row */
 .pv-edit-project__channels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
-  margin-top: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* Sources panel — sits between the read-only banner and the <form> below;
@@ -975,22 +975,22 @@
 .pv-edit-project__sources-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
-  padding: var(--pv-sp-4) var(--pv-sp-4) 0;
+  gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-xl) var(--pv-sp-xl) 0;
 }
 
 /* Sources — linked-source list + add-sources flow (WP-008-C) */
 .pv-edit-project__sources {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
-  margin-top: var(--pv-sp-1);
+  gap: var(--pv-sp-md);
+  margin-top: var(--pv-sp-xs);
 }
 
 .pv-edit-project__sources-list {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   list-style: none;
   margin: var(--pv-sp-none);
   padding: var(--pv-sp-none);
@@ -1000,8 +1000,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
 }
@@ -1016,28 +1016,28 @@
 .pv-edit-project__source-confirm {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 .pv-edit-project__add-sources {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-3);
+  padding: var(--pv-sp-lg);
 }
 
 .pv-edit-project__add-sources-actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   justify-content: flex-end;
 }
 
 /* Actions row — right-aligned Save / Cancel */
 .pv-edit-project__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   justify-content: flex-end;
 }
 
@@ -1057,14 +1057,14 @@
 .pv-create-project__body {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
 }
 
 /* Selected-target pill row: horizontal flex */
 .pv-create-project__target-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* === ADD TARGET DIALOG === */
@@ -1078,14 +1078,14 @@
 .pv-add-target__body {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
 }
 
 /* Selected-target row: pill + hint + change button inline */
 .pv-add-target__selected-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* === SESSIONS CALENDAR SCROLL === */
@@ -1116,7 +1116,7 @@
   right: 0;
   display: flex;
   align-items: center;
-  padding: 0 var(--pv-sp-3);
+  padding: 0 var(--pv-sp-lg);
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-text-muted);
@@ -1132,8 +1132,8 @@
   right: 0;
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  padding: 0 var(--pv-sp-3);
+  gap: var(--pv-sp-md);
+  padding: 0 var(--pv-sp-lg);
   cursor: pointer;
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   transition: background var(--pv-transition-fast);
@@ -1159,7 +1159,7 @@
 .pv-calendar-scroll__badges {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex: 1;
   min-width: 0;
 }
@@ -1176,12 +1176,12 @@
 .pv-blocked-banner__body {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 .pv-blocked-banner__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* === STATIC LEFTOVERS === */
@@ -1206,7 +1206,7 @@
 
 /* 5. MastersList.tsx — loading status div */
 .pv-masters-list__status {
-  padding: var(--pv-sp-2);
+  padding: var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
 }
@@ -1217,16 +1217,16 @@
   font-size: var(--pv-text-xs);
   flex: 1;
   min-width: 0;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   background: transparent;
   color: inherit;
 }
 
-/* 6b. DirPicker.tsx — error div (leaks fixed: --pv-space-1 → --pv-sp-1; raw hex fallback removed) */
+/* 6b. DirPicker.tsx — error div (leaks fixed: --pv-space-1 → --pv-sp-xs; raw hex fallback removed) */
 .pv-dir-picker__error {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   color: var(--pv-danger);
   line-height: 1.4;

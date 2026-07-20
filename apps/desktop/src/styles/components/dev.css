@@ -21,7 +21,7 @@
 
 /* Header cells */
 .pv-dev-calls__th {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
 }
 
 /* Body rows */
@@ -31,12 +31,12 @@
 
 /* Cell — shared padding (version, duration, outcome) */
 .pv-dev-calls__td {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
 }
 
 /* Cell — id column: monospace, muted, slightly smaller */
 .pv-dev-calls__td--id {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-family: var(--pv-font-mono);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-xs);
@@ -44,26 +44,26 @@
 
 /* Cell — contract name: monospace */
 .pv-dev-calls__td--contract {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-family: var(--pv-font-mono);
 }
 
 /* Cell — started: muted timestamp */
 .pv-dev-calls__td--started {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   color: var(--pv-text-muted);
 }
 
 /* Cell — actions: flex row */
 .pv-dev-calls__td--actions {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Truncation warning badge */
 .pv-dev-calls__truncated {
-  margin-left: var(--pv-sp-1);
+  margin-left: var(--pv-sp-xs);
   color: var(--pv-warn);
 }
 
@@ -97,7 +97,7 @@
 }
 
 .pv-dev-contracts-list__th {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
 }
 
 .pv-dev-contracts-list__row {
@@ -106,30 +106,30 @@
 
 /* Generic cell — padding only */
 .pv-dev-contracts-list__td {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
 }
 
 /* Name cell — monospace font */
 .pv-dev-contracts-list__td-name {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-family: var(--pv-font-mono);
 }
 
 /* Direction cell — muted text */
 .pv-dev-contracts-list__td-muted {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   color: var(--pv-text-muted);
 }
 
 /* Replay cell — centered */
 .pv-dev-contracts-list__td-center {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   text-align: center;
 }
 
 /* Schema path cell — truncated monospace muted */
 .pv-dev-contracts-list__td-schema {
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-family: var(--pv-font-mono);
   max-width: 280px;
   overflow: hidden;
@@ -141,7 +141,7 @@
 /* Mismatch warning icon */
 .pv-dev-contracts-list__mismatch-icon {
   color: var(--pv-warn);
-  margin-right: var(--pv-sp-1);
+  margin-right: var(--pv-sp-xs);
 }
 
 /* Replay-safe checkmark */
@@ -189,8 +189,8 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  padding: var(--pv-sp-4);
-  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-xl);
+  gap: var(--pv-sp-lg);
 }
 
 /* Header row */
@@ -209,14 +209,14 @@
 /* Contract version badge */
 .pv-dev-schema__version {
   color: var(--pv-text-muted);
-  margin-left: var(--pv-sp-2);
+  margin-left: var(--pv-sp-md);
   font-size: var(--pv-text-xs);
 }
 
 /* Action button group */
 .pv-dev-schema__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Scrollable body */
@@ -229,13 +229,13 @@
 /* Missing-schema alert */
 .pv-dev-schema__missing {
   color: var(--pv-danger);
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   font-size: var(--pv-text-sm);
 }
 
 /* Path paragraph inside missing alert */
 .pv-dev-schema__missing-path {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* Inline code path */
@@ -247,13 +247,13 @@
 /* Loading state */
 .pv-dev-schema__loading {
   color: var(--pv-text-muted);
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
 }
 
 /* Schema content pre block */
 .pv-dev-schema__pre {
   margin: var(--pv-sp-none);
-  padding: var(--pv-sp-2);
+  padding: var(--pv-sp-md);
 
   font-size: var(--pv-text-xs);
   line-height: var(--pv-leading-normal);
@@ -268,14 +268,14 @@
 /* ── Disabled / loading stub ─────────────────────────────────── */
 
 .pv-dev-contracts-page__stub-body {
-  padding: var(--pv-sp-7);
+  padding: var(--pv-sp-4xl);
   text-align: center;
   color: var(--pv-text-muted);
 }
 
 .pv-dev-contracts-page__stub-heading {
   font-size: var(--pv-text-lg);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 .pv-dev-contracts-page__stub-text {
@@ -283,17 +283,17 @@
 }
 
 .pv-dev-contracts-page__loading {
-  padding: var(--pv-sp-7);
+  padding: var(--pv-sp-4xl);
   color: var(--pv-text-muted);
 }
 
 /* ── Main scroll container ───────────────────────────────────── */
 
 .pv-dev-contracts-page__body {
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-4);
+  gap: var(--pv-sp-xl);
 }
 
 /* ── Page header bar ─────────────────────────────────────────── */
@@ -303,7 +303,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: var(--pv-border-w) solid var(--pv-border);
-  padding-bottom: var(--pv-sp-3);
+  padding-bottom: var(--pv-sp-lg);
 }
 
 .pv-dev-contracts-page__title {
@@ -313,7 +313,7 @@
 
 .pv-dev-contracts-page__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* ── Inline feedback banners ─────────────────────────────────── */
@@ -333,7 +333,7 @@
 .pv-dev-contracts-page__section-heading {
   font-size: var(--pv-text-md);
   font-weight: var(--pv-weight-semibold);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* === INFO TIP (settings ⓘ — replaces always-on help prose) === */
@@ -364,6 +364,6 @@
 
 /* === ADVANCED settings-row control col (flex column for desc + action button) — */
 /* shared by the guided-tour restart and first-run setup restart controls. */
-.pv-adv-settings__control-col { display: flex; flex-direction: column; gap: var(--pv-sp-2); align-items: flex-start; }
+.pv-adv-settings__control-col { display: flex; flex-direction: column; gap: var(--pv-sp-md); align-items: flex-start; }
 /* Row variant — side-by-side confirm/cancel action pair. */
-.pv-adv-settings__control-row { display: flex; flex-direction: row; gap: var(--pv-sp-2); align-items: center; }
+.pv-adv-settings__control-row { display: flex; flex-direction: row; gap: var(--pv-sp-md); align-items: center; }

@@ -5,14 +5,14 @@
 .pv-plan-panel__progress {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-secondary);
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* ── Root picker ────────────────────────────────────────────── */
 
 .pv-plan-panel__root-picker {
-  margin-bottom: var(--pv-sp-3);
-  padding: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
+  padding: var(--pv-sp-lg);
   border: var(--pv-border-w) solid var(--pv-warn);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface-raised);
@@ -21,19 +21,19 @@
 .pv-plan-panel__root-picker-title {
   font-size: var(--pv-text-sm);
   font-weight: var(--pv-weight-semibold);
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 .pv-plan-panel__root-picker-desc {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 .pv-plan-panel__root-picker-options {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* The Btn inside the root picker needs left-aligned text */
@@ -62,7 +62,7 @@
 .pv-plan-panel__select-all {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   cursor: pointer;
 }
 
@@ -78,7 +78,7 @@
 
 .pv-plan-panel__bar-actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   align-items: center;
 }
 
@@ -87,7 +87,7 @@
 /* ── Plan group ─────────────────────────────────────────────── */
 
 .pv-plan-panel__group {
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
 }
 
 /* Aligned plan grid: the list head and every group header share ONE column
@@ -113,12 +113,12 @@
   display: grid;
   grid-template-columns: var(--pv-plan-cols);
   align-items: center;
-  column-gap: var(--pv-sp-3);
+  column-gap: var(--pv-sp-lg);
 }
 
 /* ── Expanded per-file rows (aligned under the parent plan columns) ── */
 .pv-plan-panel__file-rows {
-  padding: var(--pv-sp-1) 0 var(--pv-sp-2);
+  padding: var(--pv-sp-xs) 0 var(--pv-sp-md);
 }
 .pv-plan-panel__file-row {
   padding: 1px 0;
@@ -134,13 +134,13 @@
 .pv-plan-panel__file-action {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   color: var(--pv-text-muted);
 }
 .pv-plan-panel__file-dest {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--pv-sp-0);
+  gap: var(--pv-sp-2xs);
   min-width: 0;
 }
 .pv-plan-panel__inplace {
@@ -154,12 +154,12 @@
   color: var(--pv-danger);
   border: var(--pv-border-w) solid currentColor;
   border-radius: var(--pv-radius-sm);
-  padding: 0 var(--pv-sp-1);
+  padding: 0 var(--pv-sp-xs);
 }
 
 .pv-plan-panel__list-head {
-  padding: 0 0 var(--pv-sp-1);
-  margin-bottom: var(--pv-sp-1);
+  padding: 0 0 var(--pv-sp-xs);
+  margin-bottom: var(--pv-sp-xs);
   border-bottom: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs);
   text-transform: uppercase;
@@ -168,14 +168,14 @@
 }
 
 .pv-plan-panel__group-header {
-  padding-bottom: var(--pv-sp-1);
+  padding-bottom: var(--pv-sp-xs);
   border-bottom: var(--pv-border-w) solid var(--pv-border);
 }
 
 .pv-plan-panel__group-lead {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 .pv-plan-panel__group-name {
@@ -198,7 +198,7 @@
 .pv-plan-panel__group-dest {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   min-width: 0;
 }
 
@@ -212,7 +212,7 @@
 .pv-plan-panel__group-actions {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   justify-self: end;
 }
 
@@ -220,8 +220,8 @@
 
 .pv-plan-panel__expand {
   flex-shrink: 0;
-  padding-left: var(--pv-sp-1);
-  padding-right: var(--pv-sp-1);
+  padding-left: var(--pv-sp-xs);
+  padding-right: var(--pv-sp-xs);
 }
 
 .pv-plan-panel__chevron {
@@ -239,17 +239,17 @@
 
 .pv-plan-panel__summary {
   list-style: none;
-  margin: var(--pv-sp-1) 0 0;
-  padding: 0 0 0 var(--pv-sp-4);
+  margin: var(--pv-sp-xs) 0 0;
+  padding: 0 0 0 var(--pv-sp-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 .pv-plan-panel__summary-line {
   display: flex;
   align-items: baseline;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   font-size: var(--pv-text-xs);
   min-width: 0;
 }
@@ -279,11 +279,11 @@
   color: var(--pv-danger);
   border: var(--pv-border-w) solid currentColor;
   border-radius: var(--pv-radius-md);
-  padding: 0 var(--pv-sp-1);
+  padding: 0 var(--pv-sp-xs);
 }
 
 .pv-plan-panel__stale-banner {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* ── Action rows ────────────────────────────────────────────── */
@@ -291,8 +291,8 @@
 .pv-plan-panel__row {
   display: grid;
   grid-template-columns: auto 1fr 1fr;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) 0;
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-xs) 0;
   border-bottom: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs);
   align-items: baseline;
@@ -323,8 +323,8 @@
 /* ── Destructive destination control ────────────────────────── */
 
 .pv-plan-panel__destructive {
-  margin-top: var(--pv-sp-3);
-  padding: var(--pv-sp-3);
+  margin-top: var(--pv-sp-lg);
+  padding: var(--pv-sp-lg);
   background: var(--pv-surface-raised);
   border-radius: var(--pv-radius-md);
 }
@@ -332,20 +332,20 @@
 .pv-plan-panel__destructive-title {
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
   color: var(--pv-text-secondary);
 }
 
 .pv-plan-panel__dest-options {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 .pv-plan-panel__dest-label {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   cursor: pointer;
 }
 

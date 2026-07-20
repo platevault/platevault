@@ -12,7 +12,7 @@
 .pv-skeleton-group {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   width: 100%;
 }
 

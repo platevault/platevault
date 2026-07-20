@@ -3,12 +3,12 @@
 .pv-settings__nav {
   width: 180px; flex-shrink: 0;
   border-right: var(--pv-border-w) solid var(--pv-border);
-  padding: var(--pv-sp-3) 0;
+  padding: var(--pv-sp-lg) 0;
   overflow-y: auto;
 }
 .pv-settings__nav-item {
   display: block; width: 100%;
-  padding: 7px var(--pv-sp-4);
+  padding: 7px var(--pv-sp-xl);
   font-size: var(--pv-text-sm); color: var(--pv-text-secondary);
   cursor: pointer; border: none; background: none; text-align: left;
 font-weight: var(--pv-weight-medium);
@@ -20,43 +20,43 @@ font-weight: var(--pv-weight-medium);
   color: var(--pv-accent-text); background: var(--pv-selected-bg);
   font-weight: var(--pv-weight-semibold);
   border-left: var(--pv-border-w-thick) solid var(--pv-accent);
-  padding-left: calc(var(--pv-sp-4) - var(--pv-sp-0));
+  padding-left: calc(var(--pv-sp-xl) - var(--pv-sp-2xs));
 }
-.pv-settings__nav-group { margin-bottom: var(--pv-sp-2); }
+.pv-settings__nav-group { margin-bottom: var(--pv-sp-md); }
 .pv-settings__nav-group-label {
   font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold);
   letter-spacing: var(--pv-tracking-wide); text-transform: uppercase; color: var(--pv-text-faint);
-  padding: var(--pv-sp-3) var(--pv-sp-4) var(--pv-sp-1);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl) var(--pv-sp-xs);
 }
 .pv-settings__content {
   /* Scroll independently within the two-pane detail column */
   flex: 1; min-width: 0; overflow-y: auto;
-  padding: var(--pv-sp-5) var(--pv-sp-6) var(--pv-sp-7);
+  padding: var(--pv-sp-2xl) var(--pv-sp-3xl) var(--pv-sp-4xl);
   max-width: 680px;
 }
 .pv-settings__title {
   font-size: var(--pv-text-xl); font-weight: var(--pv-weight-semibold);
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 .pv-settings__desc {
   font-size: var(--pv-text-sm); color: var(--pv-text-muted);
-  margin: 0 0 var(--pv-sp-5);
+  margin: 0 0 var(--pv-sp-2xl);
   line-height: var(--pv-leading-relaxed);
 }
-.pv-settings__group { margin-bottom: var(--pv-sp-6); }
+.pv-settings__group { margin-bottom: var(--pv-sp-3xl); }
 .pv-settings__group:last-child { margin-bottom: var(--pv-sp-none); }
 .pv-settings__group-title {
   font-size: var(--pv-text-sm); font-weight: var(--pv-weight-semibold);
   color: var(--pv-text);
-  margin-bottom: var(--pv-sp-3);
-  padding-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-lg);
+  padding-bottom: var(--pv-sp-md);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
   text-transform: uppercase; letter-spacing: var(--pv-tracking-normal);
 }
 .pv-settings__group-note {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin: 0 0 var(--pv-sp-3) 0;
+  margin: 0 0 var(--pv-sp-lg) 0;
   line-height: var(--pv-leading-relaxed);
 }
 .pv-attribution__list {
@@ -65,10 +65,10 @@ font-weight: var(--pv-weight-medium);
   padding: var(--pv-sp-none);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
 }
 .pv-attribution__item {
-  padding: var(--pv-sp-3);
+  padding: var(--pv-sp-lg);
   border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface);
@@ -76,7 +76,7 @@ font-weight: var(--pv-weight-medium);
 .pv-attribution__head {
   display: flex;
   align-items: baseline;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 .pv-attribution__org {
@@ -84,7 +84,7 @@ font-weight: var(--pv-weight-medium);
   color: var(--pv-text-muted);
 }
 .pv-attribution__desc {
-  margin: var(--pv-sp-1) 0;
+  margin: var(--pv-sp-xs) 0;
   font-size: var(--pv-text-sm);
   color: var(--pv-text-secondary);
 }
@@ -98,15 +98,15 @@ font-weight: var(--pv-weight-medium);
 .pv-settings__row {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
-  column-gap: var(--pv-sp-4); row-gap: var(--pv-sp-1);
+  column-gap: var(--pv-sp-xl); row-gap: var(--pv-sp-xs);
   align-items: start;
-  padding: var(--pv-sp-3) 0;
+  padding: var(--pv-sp-lg) 0;
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 .pv-settings__row:last-child { border-bottom: none; }
 .pv-settings__row-label {
   grid-column: 1; grid-row: 1;
-  display: flex; align-items: center; gap: var(--pv-sp-1);
+  display: flex; align-items: center; gap: var(--pv-sp-xs);
   font-size: var(--pv-text-sm); font-weight: var(--pv-weight-medium);
   color: var(--pv-text-secondary);
   padding-top: 5px; /* align with control vertical centre */
@@ -120,30 +120,30 @@ font-weight: var(--pv-weight-medium);
 /* Flex header row inside a group: title on left, action button on right */
 .pv-settings__group-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
 }
 .pv-settings__group-header .pv-settings__group-title { margin-bottom: var(--pv-sp-none); border-bottom: none; padding-bottom: var(--pv-sp-none); }
 /* Ruled header: keeps the hairline under the whole title+action row (mock .sec__t + .sec__r). */
 .pv-settings__group-header--ruled {
-  padding-bottom: var(--pv-sp-2);
+  padding-bottom: var(--pv-sp-md);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 /* Inline error message for settings save failures */
 .pv-settings__error {
   font-size: var(--pv-text-xs);
   color: var(--pv-danger);
-  margin-top: var(--pv-sp-2);
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  margin-top: var(--pv-sp-md);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
   background: var(--pv-danger-bg);
   border-radius: var(--pv-radius-sm);
   border: var(--pv-border-w) solid var(--pv-danger-border);
 }
 
 /* Radio group */
-.pv-radio-group { display: flex; gap: var(--pv-sp-2); flex-wrap: wrap; }
+.pv-radio-group { display: flex; gap: var(--pv-sp-md); flex-wrap: wrap; }
 .pv-radio {
-  display: flex; align-items: center; gap: var(--pv-sp-1);
-  padding: var(--pv-sp-1) var(--pv-sp-3);
+  display: flex; align-items: center; gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-xs) var(--pv-sp-lg);
   border: var(--pv-border-w) solid var(--pv-border); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs); cursor: pointer;
   transition: all var(--pv-transition-fast);
@@ -160,7 +160,7 @@ font-weight: var(--pv-weight-medium);
 /* Segmented control */
 .pv-seg { display: inline-flex; height: var(--pv-control-h-sm); border: var(--pv-border-w) solid var(--pv-border); border-radius: var(--pv-radius-sm); overflow: hidden; }
 .pv-seg__btn {
-  height: 100%; padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs);
+  height: 100%; padding: 0 var(--pv-sp-md); font-size: var(--pv-text-xs);
   border: none; background: var(--pv-bg); color: var(--pv-text-muted);
   cursor: pointer;font-weight: var(--pv-weight-medium);
   border-right: var(--pv-border-w) solid var(--pv-border);
@@ -190,8 +190,8 @@ font-weight: var(--pv-weight-medium);
 
 /* Token chip (naming builder) */
 .pv-token-chip {
-  display: inline-flex; align-items: center; gap: var(--pv-sp-1);
-  padding: var(--pv-sp-0) var(--pv-sp-2); border-radius: var(--pv-radius-sm);
+  display: inline-flex; align-items: center; gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-2xs) var(--pv-sp-md); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   background: var(--pv-accent-bg); color: var(--pv-accent-text);
   border: var(--pv-border-w) solid var(--pv-info-border);
@@ -200,15 +200,15 @@ font-weight: var(--pv-weight-medium);
 .pv-token-chip__x:hover { opacity: 1; }
 .pv-sep-chip {
   display: inline-flex; align-items: center;
-  padding: var(--pv-sp-0) var(--pv-sp-2); border-radius: var(--pv-radius-sm);
+  padding: var(--pv-sp-2xs) var(--pv-sp-md); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   background: var(--pv-chip); color: var(--pv-text-secondary);
   border: var(--pv-border-w) solid var(--pv-border);
 }
 /* Literal path-segment chip (per-type destination pattern editor) */
 .pv-literal-chip {
-  display: inline-flex; align-items: center; gap: var(--pv-sp-1);
-  padding: var(--pv-sp-0) var(--pv-sp-2); border-radius: var(--pv-radius-sm);
+  display: inline-flex; align-items: center; gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-2xs) var(--pv-sp-md); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   background: var(--pv-surface-raised); color: var(--pv-text);
   border: var(--pv-border-w) solid var(--pv-border);
@@ -217,6 +217,6 @@ font-weight: var(--pv-weight-medium);
 /* DataSources SettingsSection action row (was an inline style). */
 .pv-datasources__action-row {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   align-items: center;
 }

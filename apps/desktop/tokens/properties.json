@@ -7,9 +7,9 @@
     "$extensions": { "pv.property": { "syntax": "<length-percentage>", "inherits": false } }
   },
   "skel-h": {
-    "$value": "{sp-3}",
+    "$value": "{sp-lg}",
     "$type": "dimension",
-    "$description": "Skeleton height. Defaults to the sp-3 step; variants override.",
+    "$description": "Skeleton height. Defaults to the sp-lg step; variants override.",
     "$extensions": { "pv.property": { "syntax": "<length-percentage>", "inherits": false } }
   },
   "skel-r": {

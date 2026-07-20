@@ -6,19 +6,19 @@
 .pv-sessions-list__controls {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 .pv-sessions-list__filter-row {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-wrap: wrap;
 }
 
 /* ── Source group spacing ─────────────────────────────────────────────────── */
 
 .pv-sessions-list__group {
-  margin-bottom: var(--pv-sp-0);
+  margin-bottom: var(--pv-sp-2xs);
 }
 
 /* ── Session list row (shared pv-list-item pattern) ──────────────────────── */
@@ -63,9 +63,9 @@
 .pv-topbar {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
   flex-wrap: wrap;
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
   border-bottom: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
   /* Reserve scrollbar space so a page-level scrollbar appearing or disappearing
@@ -76,7 +76,7 @@
 .pv-topbar__lead {
   display: flex;
   align-items: baseline;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-shrink: 0;
 }
 .pv-topbar__title { display: flex; align-items: baseline; }
@@ -96,7 +96,7 @@
 }
 .pv-topbar__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   align-items: center;
   flex-shrink: 0;
 }
@@ -105,14 +105,14 @@
 .pv-filterbar {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 .pv-filterbar__search {
   flex: 1 1 200px;
   min-width: 160px;
   max-width: 320px;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   background: var(--pv-surface-raised);
@@ -126,14 +126,14 @@
 .pv-filterbar__field {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
 .pv-filterbar__field-label { white-space: nowrap; }
 .pv-filterbar__select {
   height: var(--pv-control-h);
-  padding: 0 var(--pv-sp-2);
+  padding: 0 var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   background: var(--pv-surface-raised);
@@ -144,17 +144,17 @@
 .pv-filterbar__group {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 .pv-filterbar__sort {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 .pv-filterbar__sort-dir { line-height: var(--pv-leading-none); }
 .pv-filterbar__actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   align-items: center;
 }
 
@@ -167,8 +167,8 @@
 .pv-filterbar__multi-summary {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-1);
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   background: var(--pv-surface-raised);
@@ -191,13 +191,13 @@
 .pv-filterbar__multi-menu {
   position: absolute;
   z-index: var(--pv-z-menu);
-  top: calc(100% + var(--pv-sp-1));
+  top: calc(100% + var(--pv-sp-xs));
   left: 0;
   min-width: 11rem;
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
-  padding: var(--pv-sp-2);
+  gap: var(--pv-sp-xs);
+  padding: var(--pv-sp-md);
   background: var(--pv-surface-raised);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
@@ -206,7 +206,7 @@
 .pv-filterbar__multi-option {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
   cursor: pointer;
@@ -255,9 +255,9 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   justify-content: flex-end;
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 /* Icon-only Auto/Bottom/Right control (#1068): 3 text buttons ran ~175px,
@@ -281,7 +281,7 @@
   color: var(--pv-text-muted);
   font-size: var(--pv-text-sm);
   line-height: var(--pv-leading-none);
-  padding: var(--pv-sp-1);
+  padding: var(--pv-sp-xs);
   border-radius: var(--pv-radius-sm);
 }
 .pv-listpage__detail-close:hover { color: var(--pv-text); }
@@ -378,7 +378,7 @@
 .pv-densetable th,
 .pv-sessions-table td,
 .pv-sessions-table th {
-  padding: var(--pv-sp-1) var(--pv-sp-3);
+  padding: var(--pv-sp-xs) var(--pv-sp-lg);
 }
 
 /* Sortable column header (button-in-th) — the SINGLE shared control used by
@@ -388,7 +388,7 @@
 .pv-sorth {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   background: none;
   border: none;
   padding: var(--pv-sp-none);
@@ -419,12 +419,12 @@
   letter-spacing: var(--pv-tracking-normal);
   color: var(--pv-text-muted);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
 }
 .pv-listgroup__cell {
   display: inline-flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   width: 100%;
   background: none;
   border: none;
@@ -447,7 +447,7 @@
   white-space: nowrap;
 }
 .pv-listgroup__count {
-  margin-left: var(--pv-sp-2);
+  margin-left: var(--pv-sp-md);
   font-weight: var(--pv-weight-normal);
   text-transform: none;
   letter-spacing: normal;
@@ -483,13 +483,13 @@
 .pv-sessions-cell__projects {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Needs-review marker before a target/state. */
 .pv-sessions-cell__warn-icon {
   color: var(--pv-text-muted);
-  margin-right: var(--pv-sp-1);
+  margin-right: var(--pv-sp-xs);
   vertical-align: middle;
 }
 
@@ -514,13 +514,13 @@
 /* Grouping-state hint footer — NOT a duplicate count. */
 .pv-listtable__foot {
   flex-shrink: 0;
-  padding: var(--pv-sp-1) var(--pv-sp-3);
+  padding: var(--pv-sp-xs) var(--pv-sp-lg);
   border-top: var(--pv-border-w) solid var(--pv-border);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
 .pv-listtable__empty {
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-sm);
 }

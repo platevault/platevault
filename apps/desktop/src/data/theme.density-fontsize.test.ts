@@ -40,7 +40,6 @@ vi.mock('@/bindings/index', () => ({
   },
 }));
 
-
 beforeEach(() => {
   vi.resetModules();
   isTauriMock.mockReset();
@@ -62,13 +61,13 @@ describe('applyDensity — spacing tokens (app-wide, not just row height)', () =
     const style = document.documentElement.style;
 
     applyDensity('compact');
-    expect(style.getPropertyValue('--pv-sp-2')).toBe('6.00px'); // 8 * 0.75
+    expect(style.getPropertyValue('--pv-sp-md')).toBe('6.00px'); // 8 * 0.75
     expect(document.documentElement.classList.contains('density-compact')).toBe(
       true,
     );
 
     applyDensity('spacious');
-    expect(style.getPropertyValue('--pv-sp-2')).toBe('10.00px'); // 8 * 1.25
+    expect(style.getPropertyValue('--pv-sp-md')).toBe('10.00px'); // 8 * 1.25
     expect(
       document.documentElement.classList.contains('density-spacious'),
     ).toBe(true);
@@ -82,10 +81,10 @@ describe('applyDensity — spacing tokens (app-wide, not just row height)', () =
     const style = document.documentElement.style;
 
     applyDensity('compact');
-    expect(style.getPropertyValue('--pv-sp-2')).not.toBe('');
+    expect(style.getPropertyValue('--pv-sp-md')).not.toBe('');
 
     applyDensity('comfortable');
-    expect(style.getPropertyValue('--pv-sp-2')).toBe('');
+    expect(style.getPropertyValue('--pv-sp-md')).toBe('');
   });
 });
 
@@ -224,13 +223,13 @@ describe('density preference writes — central rescale via initAppearance()', (
     setPreference('density', 'compact');
 
     const style = document.documentElement.style;
-    expect(style.getPropertyValue('--pv-sp-2')).toBe('6.00px'); // 8 * 0.75
+    expect(style.getPropertyValue('--pv-sp-md')).toBe('6.00px'); // 8 * 0.75
     expect(document.documentElement.classList.contains('density-compact')).toBe(
       true,
     );
 
     setPreference('density', 'comfortable');
-    expect(style.getPropertyValue('--pv-sp-2')).toBe('');
+    expect(style.getPropertyValue('--pv-sp-md')).toBe('');
     expect(document.documentElement.classList.contains('density-compact')).toBe(
       false,
     );

@@ -34,7 +34,6 @@ function setStoredChoice(choice: string): void {
   localStorage.setItem('alm.theme', choice);
 }
 
-
 describe('applyTheme — native window theme sync (spec 051 US6)', () => {
   beforeEach(() => {
     isTauriMock.mockReset();

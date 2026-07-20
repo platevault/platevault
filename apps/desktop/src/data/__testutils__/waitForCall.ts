@@ -26,7 +26,10 @@
  */
 export async function waitForCall(
   fn: { mock: { calls: unknown[][] } },
-  { timeoutMs = 2000, label = 'mock' }: { timeoutMs?: number; label?: string } = {},
+  {
+    timeoutMs = 2000,
+    label = 'mock',
+  }: { timeoutMs?: number; label?: string } = {},
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

@@ -1,13 +1,13 @@
 /* === WIZARD === */
 .pv-wizard { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .pv-wizard__steps {
-  display: flex; gap: var(--pv-sp-none); padding: var(--pv-sp-4) var(--pv-sp-7);
+  display: flex; gap: var(--pv-sp-none); padding: var(--pv-sp-xl) var(--pv-sp-4xl);
   border-bottom: var(--pv-border-w) solid var(--pv-border);
   background: var(--pv-surface);
   flex-shrink: 0;
 }
 .pv-wizard__step {
-  flex: 1; padding: var(--pv-sp-2) var(--pv-sp-3);
+  flex: 1; padding: var(--pv-sp-md) var(--pv-sp-lg);
   text-align: center; font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-medium);
   color: var(--pv-text-muted);
@@ -25,13 +25,13 @@
   /* Flex column so child steps can use flex:1 + min-height:0 to scroll internally */
   display: flex; flex-direction: column;
   flex: 1; min-height: 0;
-  padding: var(--pv-sp-5) var(--pv-sp-7);
+  padding: var(--pv-sp-2xl) var(--pv-sp-4xl);
   max-width: 720px; margin: 0 auto; width: 100%;
   /* Horizontal overflow guard for min-window-size */
   overflow-x: hidden;
 }
 .pv-wizard__footer {
-  padding: var(--pv-sp-3) var(--pv-sp-7);
+  padding: var(--pv-sp-lg) var(--pv-sp-4xl);
   border-top: var(--pv-border-w) solid var(--pv-border);
   display: flex; justify-content: space-between;
   flex-shrink: 0; background: var(--pv-surface);
@@ -41,20 +41,20 @@
 .pv-logpanel { border-top: var(--pv-border-w) solid var(--pv-border); background: var(--pv-surface); }
 .pv-logpanel__header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--pv-sp-1) var(--pv-sp-3);
+  padding: var(--pv-sp-xs) var(--pv-sp-lg);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 .pv-logpanel__title { font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold); }
 .pv-logpanel__body { max-height: 200px; overflow-y: auto; }
 .pv-logpanel__op {
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
 .pv-logpanel__op-label {
   font-size: var(--pv-text-xs); color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-1); display: block;
+  margin-bottom: var(--pv-sp-xs); display: block;
 }
-.pv-logpanel__progress-root { display: flex; flex-direction: column; gap: var(--pv-sp-1); }
+.pv-logpanel__progress-root { display: flex; flex-direction: column; gap: var(--pv-sp-xs); }
 .pv-logpanel__progress {
   height: 4px; background: var(--pv-rule2); border-radius: 2px; overflow: hidden;
 }
@@ -64,8 +64,8 @@
 }
 .pv-logpanel__events { list-style: none; padding: var(--pv-sp-none); margin: var(--pv-sp-none); }
 .pv-logpanel__event {
-  display: flex; align-items: center; gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) var(--pv-sp-3);
+  display: flex; align-items: center; gap: var(--pv-sp-md);
+  padding: var(--pv-sp-xs) var(--pv-sp-lg);
   font-size: var(--pv-text-xs);
   border-bottom: var(--pv-border-w) solid var(--pv-border-subtle);
 }
@@ -86,7 +86,7 @@ color: var(--pv-text-muted);
 
 /* === SELECT === */
 .pv-select {
-  height: var(--pv-control-h); padding: 0 var(--pv-sp-2);
+  height: var(--pv-control-h); padding: 0 var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
   background: var(--pv-bg); color: var(--pv-text);
@@ -99,7 +99,7 @@ color: var(--pv-text-muted);
   display: flex; flex-direction: column; gap: var(--pv-sp-none);
 }
 .pv-lifecycle__step {
-  display: flex; align-items: center; gap: var(--pv-sp-2);
+  display: flex; align-items: center; gap: var(--pv-sp-md);
   position: relative;
 }
 .pv-lifecycle__connector {
@@ -133,7 +133,7 @@ color: var(--pv-text-muted);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
   text-transform: capitalize;
-  padding: var(--pv-sp-1) 0;
+  padding: var(--pv-sp-xs) 0;
 }
 .pv-lifecycle__label--active {
   color: var(--pv-accent-text);

@@ -3,9 +3,9 @@
 /* Filter row */
 .pv-audit-log__filters {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
 }
 
 /* Search input (stretches to fill available space) */
@@ -18,7 +18,7 @@
 .pv-audit-log__date-label {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
 }
@@ -74,7 +74,7 @@
   text-align: center;
   color: var(--pv-text-muted);
   font-size: var(--pv-text-sm);
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
 }
 
 /* Pagination bar */
@@ -82,7 +82,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: var(--pv-sp-3);
+  margin-top: var(--pv-sp-lg);
 }
 
 /* Pagination count label */
@@ -94,7 +94,7 @@
 /* Pagination button group */
 .pv-audit-log__page-btns {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* === SETTINGS SOURCE PROTECTION === */
@@ -109,7 +109,7 @@
 .pv-source-protect__root {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* Hint text under view/edit row */
@@ -123,14 +123,14 @@
 .pv-source-protect__edit-col {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Edit-mode selector row */
 .pv-source-protect__edit-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 
@@ -165,23 +165,23 @@
 /* Save / Cancel action row */
 .pv-source-protect__actions {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 /* === SETTINGS DATA SOURCES === */
 
 /* Add-source form wrapper */
 .pv-data-sources__add-form {
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Category + action button row */
 .pv-data-sources__add-controls {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -208,14 +208,14 @@
 .pv-data-sources__roots-list {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
 }
 
 /* Individual root card */
 .pv-data-sources__root-card {
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-3);
+  padding: var(--pv-sp-lg);
 }
 
 /* Offline root — dimmed surface */
@@ -227,7 +227,7 @@
 .pv-data-sources__root-header {
   display: flex;
   align-items: flex-start;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 
@@ -241,13 +241,13 @@
 /* Pills group */
 .pv-data-sources__root-pills {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   flex-shrink: 0;
 }
 
 /* Last-scan timestamp line */
 .pv-data-sources__root-scan {
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
@@ -256,7 +256,7 @@
 
 /* Category group wrapper — spacing between groups */
 .pv-data-sources__group {
-  margin-bottom: var(--pv-sp-4);
+  margin-bottom: var(--pv-sp-xl);
 }
 
 /* Uppercase group label (Raw / Calibration / Project / Inbox) */
@@ -266,7 +266,7 @@
   letter-spacing: var(--pv-tracking-normal);
   text-transform: uppercase;
   color: var(--pv-text-muted);
-  margin: 0 0 var(--pv-sp-2) 0;
+  margin: 0 0 var(--pv-sp-md) 0;
 }
 
 /* Root card — two-column grid: info (1fr) | kebab menu (auto). `align-items:
@@ -276,13 +276,13 @@
 .pv-data-sources__root-card {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   align-items: start;
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-3) var(--pv-sp-4);
+  padding: var(--pv-sp-lg) var(--pv-sp-xl);
   background: var(--pv-surface-raised);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* Offline root — muted surface to signal unavailability */
@@ -306,7 +306,7 @@
 .pv-data-sources__root-path-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
 }
 
@@ -330,7 +330,7 @@
 
 /* Meta line: file count · last scan · recursive */
 .pv-data-sources__root-meta {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
 }
@@ -345,7 +345,7 @@
 .pv-data-sources__kebab-btn {
   font-size: var(--pv-text-md);
   line-height: var(--pv-leading-none);
-  padding-inline: var(--pv-sp-2);
+  padding-inline: var(--pv-sp-md);
 }
 
 .pv-data-sources__kebab-menu {
@@ -353,11 +353,11 @@
   top: 100%;
   right: 0;
   z-index: var(--pv-z-dropdown);
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   min-width: 180px;
   display: flex;
   flex-direction: column;
-  padding: var(--pv-sp-1);
+  padding: var(--pv-sp-xs);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface-raised);
@@ -368,7 +368,7 @@
   display: block;
   width: 100%;
   text-align: left;
-  padding: var(--pv-sp-2);
+  padding: var(--pv-sp-md);
   border: none;
   border-radius: var(--pv-radius-sm);
   background: transparent;
@@ -397,8 +397,8 @@
 .pv-remap-dialog__field {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  margin-bottom: var(--pv-sp-3);
+  gap: var(--pv-sp-md);
+  margin-bottom: var(--pv-sp-lg);
   font-size: var(--pv-text-xs);
 }
 
@@ -409,25 +409,25 @@
 
 /* Verification status / error banner spacing */
 .pv-remap-dialog__banner {
-  margin-top: var(--pv-sp-3);
+  margin-top: var(--pv-sp-lg);
 }
 
 /* Sample-path verification list */
 .pv-remap-dialog__samples {
   list-style: none;
-  margin: var(--pv-sp-2) 0 0 0;
+  margin: var(--pv-sp-md) 0 0 0;
   padding: var(--pv-sp-none);
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 .pv-remap-dialog__sample-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) var(--pv-sp-2);
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-xs) var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border-subtle);
   border-radius: var(--pv-radius-sm);
 }
@@ -441,7 +441,7 @@
 
 /* Auto-detect button injected into the group title row */
 .pv-proc-tools__auto-detect-btn {
-  margin-left: var(--pv-sp-4);
+  margin-left: var(--pv-sp-xl);
   font-size: var(--pv-text-xs);
 }
 
@@ -453,15 +453,15 @@
 
 /* Wrapper for a single tool row */
 .pv-proc-tools__tool-row {
-  margin-bottom: var(--pv-sp-4);
+  margin-bottom: var(--pv-sp-xl);
 }
 
 /* Name + pill header line */
 .pv-proc-tools__tool-header {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  margin-bottom: var(--pv-sp-1);
+  gap: var(--pv-sp-md);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 /* Status pill labels (auto-detected / available / missing) */
@@ -473,7 +473,7 @@
 .pv-proc-tools__tool-controls {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Executable path text input — expands to fill available space */
@@ -507,17 +507,17 @@
 .pv-equipment__empty {
   color: var(--pv-text-muted);
   font-size: var(--pv-text-sm);
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
 }
 
 .pv-equipment__badges {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
 }
 
 .pv-equipment__row-actions {
   display: flex;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-xs);
   justify-content: flex-end;
   /* #838: observing-site rows can carry up to 4 actions (Set active/default,
      Edit, Remove) — wrap instead of overflowing the 1100px pinned layout. */
@@ -527,15 +527,15 @@
 .pv-equipment__load-error {
   color: var(--pv-danger);
   font-size: var(--pv-text-sm);
-  margin-top: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
 }
 
 .pv-equipment__form {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-3);
-  padding: var(--pv-sp-3);
-  margin-top: var(--pv-sp-2);
+  gap: var(--pv-sp-lg);
+  padding: var(--pv-sp-lg);
+  margin-top: var(--pv-sp-md);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-surface);
@@ -544,7 +544,7 @@
 .pv-equipment__form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
 }
 
 /* Form fields use the global `.pv-stack-1` utility (primitives.css) —
@@ -552,7 +552,7 @@
 
 .pv-equipment__form-actions {
   display: flex;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   justify-content: flex-end;
 }
 
@@ -565,7 +565,7 @@
 
 /* Export / action button wrapper below the DB rows */
 .pv-adv-settings__db-actions {
-  margin-top: var(--pv-sp-3);
+  margin-top: var(--pv-sp-lg);
 }
 
 /* Log-level select — fixed height to match other controls */
@@ -578,7 +578,7 @@
 .pv-adv-settings__control-desc {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
   margin-top: var(--pv-sp-none);
 }
 
@@ -586,12 +586,12 @@
 .pv-adv-settings__danger-box {
   border: var(--pv-border-w) solid var(--pv-danger);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-4);
+  padding: var(--pv-sp-xl);
 }
 
 /* Danger-zone heading row */
 .pv-adv-settings__danger-heading {
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* Danger-zone heading text */
@@ -603,7 +603,7 @@
 .pv-adv-settings__danger-desc {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
 }
 
 /* === PLAN PROTECTION GATE === */
@@ -618,15 +618,15 @@
 .pv-plan-gate__root {
   display: flex;
   flex-direction: column;
-  gap: var(--pv-sp-3);
+  gap: var(--pv-sp-lg);
 }
 
 /* Summary bar (above the item list) */
 .pv-plan-gate__summary-bar {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-md) var(--pv-sp-lg);
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
   background: var(--pv-bg3);
@@ -647,7 +647,7 @@
 .pv-plan-gate__item {
   border: var(--pv-border-w) solid var(--pv-border);
   border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-3);
+  padding: var(--pv-sp-lg);
 }
 
 /* Item card — acknowledged (done) state */
@@ -660,9 +660,9 @@
 .pv-plan-gate__item-header {
   display: flex;
   align-items: flex-start;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
   flex-wrap: wrap;
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* Monospace item-id code inside the header */
@@ -675,21 +675,21 @@
 /* "Action: <label>" line */
 .pv-plan-gate__item-action {
   font-size: var(--pv-text-sm);
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 /* Protected-categories line */
 .pv-plan-gate__item-categories {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 /* Reason text */
 .pv-plan-gate__item-reason {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* #807: honest always-shown notice — protection is permanent, this item will
@@ -697,14 +697,14 @@
 .pv-plan-gate__item-note {
   font-size: var(--pv-text-xs);
   color: var(--pv-warn);
-  margin-bottom: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* Per-item acknowledge error */
 .pv-plan-gate__item-error {
   font-size: var(--pv-text-xs);
   color: var(--pv-danger);
-  margin-bottom: var(--pv-sp-1);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 /* Non-blocking footer summary (FR-008) */
@@ -734,14 +734,14 @@
 /* ── Artifact group ──────────────────────────────────────────────────────── */
 
 .pv-tool-launches__group {
-  margin-bottom: var(--pv-sp-3);
+  margin-bottom: var(--pv-sp-lg);
 }
 
 .pv-tool-launches__group-header {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  margin-bottom: var(--pv-sp-1);
+  gap: var(--pv-sp-md);
+  margin-bottom: var(--pv-sp-xs);
 }
 
 .pv-tool-launches__group-label {
@@ -761,8 +761,8 @@
 .pv-tool-launches__artifact-row {
   display: flex;
   align-items: center;
-  gap: var(--pv-sp-2);
-  padding: var(--pv-sp-1) 0;
+  gap: var(--pv-sp-md);
+  padding: var(--pv-sp-xs) 0;
 }
 
 .pv-tool-launches__kind-badge {
@@ -821,8 +821,8 @@
 /* Individual manifest item row wrapper */
 .pv-manifests__item {
   border-bottom: var(--pv-border-w) solid var(--pv-border);
-  padding-bottom: var(--pv-sp-2);
-  margin-bottom: var(--pv-sp-2);
+  padding-bottom: var(--pv-sp-md);
+  margin-bottom: var(--pv-sp-md);
 }
 
 /* Row header: label + reveal button side-by-side. #1068: nowrap (the flex
@@ -832,7 +832,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--pv-sp-2);
+  gap: var(--pv-sp-md);
 }
 
 /* Toggle button — resets browser button chrome, acts as a row trigger.
@@ -846,7 +846,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: var(--pv-sp-1) 0;
+  padding: var(--pv-sp-xs) 0;
   font-size: var(--pv-text-sm);
   color: var(--pv-text);
 }
@@ -863,15 +863,15 @@
 
 /* Timestamp annotation beside the reason label */
 .pv-manifests__timestamp {
-  margin-left: var(--pv-sp-2);
+  margin-left: var(--pv-sp-md);
   color: var(--pv-text-muted);
   font-size: var(--pv-text-xs);
 }
 
 /* Expanded body panel */
 .pv-manifests__body-panel {
-  margin-top: var(--pv-sp-2);
-  padding: var(--pv-sp-2);
+  margin-top: var(--pv-sp-md);
+  padding: var(--pv-sp-md);
   background: var(--pv-bg3);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
@@ -879,18 +879,18 @@
 
 /* Notes snapshot block within the body panel */
 .pv-manifests__notes-block {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
 }
 
 /* Pre-formatted notes content */
 .pv-manifests__notes-content {
   white-space: pre-wrap;
-  margin-top: var(--pv-sp-0);
+  margin-top: var(--pv-sp-2xs);
 }
 
 /* Manifest file path displayed in monospace */
 .pv-manifests__path {
-  margin-top: var(--pv-sp-1);
+  margin-top: var(--pv-sp-xs);
   color: var(--pv-text-muted);
   font-family: var(--pv-font-mono);
 }

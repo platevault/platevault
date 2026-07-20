@@ -77,38 +77,43 @@
   "sp-none": {
     "$value": "0",
     "$type": "dimension",
-    "$description": "Explicit zero spacing. Not a lever — nobody re-points this at a non-zero value. It exists so the spacing properties can be linted absolutely: every padding/margin/gap states a token, so a bare literal is always a violation with no carve-out to slip through. NOTE: sp-0 below is 2px, not zero."
+    "$description": "Explicit zero spacing. Not a lever — nobody re-points this at a non-zero value. It exists so the spacing properties can be linted absolutely: every padding/margin/gap states a token, so a bare literal is always a violation with no carve-out to slip through. NOTE: sp-2xs below is 2px, not zero."
   },
-  "sp-0": {
+  "sp-2xs": {
     "$value": "2px",
     "$type": "dimension",
-    "$description": "Spacing — geometric base-4"
+    "$description": "Spacing scale, t-shirt sized. Renamed from the numeric sp-2xs..sp-4xl: sp-2xs was 2px, not zero, which read as a trap next to sp-none."
   },
-  "sp-1": {
+  "sp-xs": {
     "$value": "4px",
     "$type": "dimension"
   },
-  "sp-2": {
+  "sp-sm": {
+    "$value": "6px",
+    "$type": "dimension",
+    "$description": "The rung the old numeric scale was missing. It jumped 4px -> 8px, and 5/6/7px kept appearing to fill the gap — a scale people work around is a scale with a hole, so the hole is closed rather than the usages snapped."
+  },
+  "sp-md": {
     "$value": "8px",
     "$type": "dimension"
   },
-  "sp-3": {
+  "sp-lg": {
     "$value": "12px",
     "$type": "dimension"
   },
-  "sp-4": {
+  "sp-xl": {
     "$value": "16px",
     "$type": "dimension"
   },
-  "sp-5": {
+  "sp-2xl": {
     "$value": "24px",
     "$type": "dimension"
   },
-  "sp-6": {
+  "sp-3xl": {
     "$value": "32px",
     "$type": "dimension"
   },
-  "sp-7": {
+  "sp-4xl": {
     "$value": "48px",
     "$type": "dimension"
   },

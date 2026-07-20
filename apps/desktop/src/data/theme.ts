@@ -154,14 +154,15 @@ function isThemeChoice(v: unknown): v is ThemeChoice {
  * asserts these tables match the parsed tokens.css `:root` values.
  */
 export const SPACING_BASE_PX: Record<string, number> = {
-  '--pv-sp-0': 2,
-  '--pv-sp-1': 4,
-  '--pv-sp-2': 8,
-  '--pv-sp-3': 12,
-  '--pv-sp-4': 16,
-  '--pv-sp-5': 24,
-  '--pv-sp-6': 32,
-  '--pv-sp-7': 48,
+  '--pv-sp-2xs': 2,
+  '--pv-sp-xs': 4,
+  '--pv-sp-sm': 6,
+  '--pv-sp-md': 8,
+  '--pv-sp-lg': 12,
+  '--pv-sp-xl': 16,
+  '--pv-sp-2xl': 24,
+  '--pv-sp-3xl': 32,
+  '--pv-sp-4xl': 48,
 };
 
 /**
