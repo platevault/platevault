@@ -713,11 +713,15 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
 /// `apply_plan` requires a caller-supplied `approval_token` (spec 025 A1) and
 /// is normally reached through the webview's `tauri::ipc::Channel`-carrying
 /// `plans.apply` command so live per-item progress can stream back. Two kinds
-/// of caller have neither a token in hand nor a `Channel` to construct:
+/// of caller have no token in hand and no reason to build a `Channel`:
 ///
 /// - The spec 037 Layer-2 WebDriver test harness, which drives the real
-///   backend via `window.__ALM_E2E__.invoke(...)` and structurally cannot
-///   create a `tauri::ipc::Channel` from a test script.
+///   backend via `window.__ALM_E2E__.invoke(...)`. It *could* build a
+///   `Channel` — one is just `__CHANNEL__:${id}` from
+///   `__TAURI_INTERNALS__.transformCallback`, and the harness already runs
+///   arbitrary JS in the real webview — but doing so would mean reaching into
+///   Tauri-internal plumbing from a test, so the harness deliberately does
+///   not. This variant is the supported route instead.
 /// - Any archive/cleanup UI surface that only needs a fire-and-poll apply
 ///   (poll [`get_apply_status`] for the durable terminal counts) rather than
 ///   a live progress stream.

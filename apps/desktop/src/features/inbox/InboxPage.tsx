@@ -48,6 +48,7 @@ import { m } from '@/lib/i18n';
 import type { FrameType } from '@/lib/route-contract';
 import { useGrouping } from '@/lib/use-grouping';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { useHotkeys } from '@/lib/useHotkeys';
 import { addToast } from '@/shared/toast';
 import { Btn } from '@/ui';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from './InboxControls';
@@ -312,9 +313,17 @@ export function InboxPage() {
   const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
     useState<string | null>(null);
 
+  // #735: `listLoading` joins the gate because on a cold reload the list cache
+  // is empty and an unguarded `selectedItem === undefined` wipes a valid
+  // `?selected=` before the list IPC resolves. This does NOT reopen the
+  // unbounded-gate hazard the reclassify handoff guards against: `listLoading`
+  // settles on its own, whereas `pendingReclassifySelectionId` needed
+  // `resolveReclassifyHandoff`'s explicit give-up path.
   useStaleSelectionCleanup(
     selected,
-    selectedItem !== undefined || pendingReclassifySelectionId !== null,
+    listLoading ||
+      selectedItem !== undefined ||
+      pendingReclassifySelectionId !== null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),
@@ -832,6 +841,22 @@ export function InboxPage() {
     !fileMetadataError &&
     !hasMissingRequiredMeta &&
     !hasOpenPlan;
+
+  // Spec 027 FR-022 (issue #747): confirm the selected detection from the
+  // keyboard, so a triage sweep never leaves the home row. Gated on the same
+  // `canConfirm` as the button — the shortcut must not reach a state the
+  // visible affordance refuses. J/K navigation lives in InboxList, which owns
+  // the visual row order.
+  useHotkeys(
+    {
+      KeyC: (e) => {
+        if (!canConfirm || confirmLoading) return;
+        e.preventDefault();
+        void handleConfirm();
+      },
+    },
+    [canConfirm, confirmLoading, handleConfirm],
+  );
 
   const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
 
