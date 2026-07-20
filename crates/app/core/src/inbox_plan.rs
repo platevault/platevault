@@ -405,9 +405,11 @@ pub async fn cancel_inbox_plan(
     // the inbox item state transition, but we also do it eagerly below).
     crate::plans::discard_plan(pool, bus, &plan_id).await?;
 
-    // Eagerly reset inbox item to `classified` and remove the link so the list
-    // shows the item as unconfirmed immediately (the listener catches up async).
-    inbox_repo::update_inbox_item_state(pool, inbox_item_id, "classified")
+    // Eagerly reset the inbox item and remove the link so the list shows it as
+    // unconfirmed immediately (the listener catches up async). The target state
+    // is derived from the row's own frame type, not asserted — see
+    // `reset_inbox_item_to_unconfirmed` (spec 058 SC-003).
+    inbox_repo::reset_inbox_item_to_unconfirmed(pool, inbox_item_id)
         .await
         .map_err(db_err_internal)?;
     inbox_repo::delete_plan_link(pool, inbox_item_id).await.map_err(db_err_internal)?;
@@ -493,13 +495,15 @@ mod tests {
         .await
         .unwrap();
 
-        // Insert inbox item in `classified` state.
+        // Insert inbox item in `classified` state. `frame_type` is set because
+        // spec 058 SC-003 only lets a row carrying one report `classified`; a
+        // fixture without it was silently modelling an illegal row.
         sqlx::query(
             "INSERT INTO inbox_items
              (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-              content_signature, state, lane)
+              content_signature, state, lane, frame_type)
              VALUES (?, ?, 'lights', 1, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z',
-                     'sig-abc', 'classified', 'fits')",
+                     'sig-abc', 'classified', 'fits', 'light')",
         )
         .bind(item_id)
         .bind(root_id)
@@ -648,6 +652,35 @@ mod tests {
         // Plan link must be gone.
         let link = inbox_repo::get_plan_link(db.pool(), &item_id).await.unwrap();
         assert!(link.is_none(), "plan link must be removed after cancel");
+    }
+
+    /// spec 058 SC-003 on the plan-lifecycle writers.
+    ///
+    /// `confirm` gates on `needs_review` and the cached classification result,
+    /// never on the item's own `state`/`frame_type`, so a row with no frame
+    /// type is confirmable. Cancelling its plan must not be the thing that
+    /// stamps `classified` onto it — that is the #711 badge defect arriving by
+    /// the back door, on a path no classify-side test covers.
+    #[tokio::test]
+    async fn cancel_does_not_report_classified_without_a_frame_type_sc003() {
+        let db = test_db().await;
+        let bus = make_bus(db.pool());
+        let (item_id, root_path) = setup_classified_item(&db).await;
+
+        sqlx::query("UPDATE inbox_items SET frame_type = NULL WHERE id = ?")
+            .bind(&item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        do_confirm(&db, &item_id, &root_path).await;
+        cancel_inbox_plan(db.pool(), &bus, &item_id).await.unwrap();
+
+        let item = inbox_repo::get_inbox_item(db.pool(), &item_id).await.unwrap();
+        assert_eq!(
+            item.state, "pending_classification",
+            "an item with no frame type must not report `classified` after its plan is cancelled"
+        );
     }
 
     // ── T015d: get_inbox_plan not_found for item without plan ───────────────

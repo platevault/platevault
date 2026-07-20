@@ -76,13 +76,16 @@ async fn insert_root(pool: &sqlx::SqlitePool, root_id: &str) {
 ///   Columns: id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
 ///            content_signature, state, lane
 async fn insert_inbox_item(pool: &sqlx::SqlitePool, root_id: &str, item_id: &str, plan_id: &str) {
-    // Insert the inbox item in `classified` state.
+    // Insert the inbox item in `classified` state. `frame_type` is set because
+    // spec 058 SC-003 only lets a row carrying one report `classified`; without
+    // it this fixture modelled an illegal row that the listener now correctly
+    // returns to `pending_classification`.
     sqlx::query(
         "INSERT INTO inbox_items \
          (id, root_id, relative_path, file_count, discovered_at, last_scanned_at, \
-          content_signature, state, lane) \
+          content_signature, state, lane, frame_type) \
          VALUES (?, ?, 'test-folder', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', \
-                 'sig-r3', 'classified', 'fits')",
+                 'sig-r3', 'classified', 'fits', 'light')",
     )
     .bind(item_id)
     .bind(root_id)

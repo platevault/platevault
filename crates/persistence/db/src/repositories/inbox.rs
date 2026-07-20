@@ -452,6 +452,37 @@ pub async fn update_inbox_item_state(pool: &SqlitePool, id: &str, state: &str) -
     Ok(())
 }
 
+/// Return an item to its pre-plan unconfirmed state (spec 058 FR-007/SC-003).
+///
+/// The state is derived in SQL from the row's own `frame_type` rather than
+/// passed in, because every caller that hard-coded `'classified'` here was
+/// asserting a frame type the row may not have: an item with a NULL
+/// `frame_type` returns to `pending_classification`. Deriving it in the same
+/// statement also rules out a read-then-write race with a concurrent classify.
+///
+/// # Errors
+/// Returns [`DbError::NotFound`] if no row was updated, or [`DbError::Database`].
+pub async fn reset_inbox_item_to_unconfirmed(pool: &SqlitePool, id: &str) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    let rows = sqlx::query(
+        "UPDATE inbox_items
+            SET state = CASE WHEN frame_type IS NULL THEN 'pending_classification'
+                             ELSE 'classified' END,
+                last_scanned_at = ?
+          WHERE id = ?",
+    )
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if rows == 0 {
+        return Err(DbError::NotFound(format!("InboxItem not found: {id}")));
+    }
+    Ok(())
+}
+
 /// Update `content_signature` and `file_count` (and `last_scanned_at`).
 ///
 /// # Errors
