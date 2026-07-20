@@ -44,9 +44,9 @@ describe('FilterBadges — per-band viability pills (spec 047 T016)', () => {
       <FilterBadges viability={viability} recommendation="broadband-ok" />,
     );
     const broadband = within(container).getByLabelText('L: viable tonight');
-    expect(broadband.className).toContain('alm-filter-badge--broadband');
+    expect(broadband.className).toContain('pv-filter-badge--broadband');
     const narrowband = within(container).getByLabelText('Ha: viable tonight');
-    expect(narrowband.className).toContain('alm-filter-badge--narrowband');
+    expect(narrowband.className).toContain('pv-filter-badge--narrowband');
   });
 
   it('recommendationLabel covers all four categories', () => {

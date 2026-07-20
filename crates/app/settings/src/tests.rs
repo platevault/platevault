@@ -106,12 +106,6 @@ async fn setup() -> (Database, EventBus) {
     // silently serve another test's data. Mirrors the same caveat/fix in
     // `app_core_cache`'s `protection_defaults_*` test (crates/app/cache/src/lib.rs).
     caches::invalidate_settings_bag();
-    // Same hazard for the #668 last-published-snapshot cache: without
-    // this, a `emit_snapshot`-must-publish assertion here could
-    // false-negative if a sibling test already stored an
-    // identical-looking noisy-keys bag (fresh in-memory DBs share the
-    // same in-code defaults).
-    caches::invalidate_last_snapshot_values();
     let db = Database::in_memory().await.expect("in-memory DB");
     db.migrate().await.expect("migrations");
     let bus = EventBus::with_pool(db.pool().clone());
@@ -997,10 +991,11 @@ async fn update_patterns_by_type_rejects_non_object() {
 #[tokio::test]
 async fn emit_snapshot_fires_and_publishes_event() {
     let (db, bus) = setup().await;
+    let dedupe = SnapshotDedupe::new();
     let mut rx = bus.subscribe();
 
     // Call emit_snapshot — must not error.
-    emit_snapshot(db.pool(), &bus, "test_trigger").await.unwrap();
+    emit_snapshot(db.pool(), &bus, "test_trigger", &dedupe).await.unwrap();
 
     // There must be at least one event published on the bus.
     // Use try_recv to avoid blocking — the publish is synchronous inside the call.
@@ -1015,12 +1010,13 @@ async fn emit_snapshot_fires_and_publishes_event() {
 #[tokio::test]
 async fn emit_snapshot_suppresses_unchanged_repeat() {
     let (db, bus) = setup().await;
+    let dedupe = SnapshotDedupe::new();
 
-    emit_snapshot(db.pool(), &bus, "first").await.unwrap();
+    emit_snapshot(db.pool(), &bus, "first", &dedupe).await.unwrap();
     let mut rx = bus.subscribe();
 
     // Second call, nothing changed — must be a no-op (no publish).
-    emit_snapshot(db.pool(), &bus, "second").await.unwrap();
+    emit_snapshot(db.pool(), &bus, "second", &dedupe).await.unwrap();
     assert!(
         rx.try_recv().is_err(),
         "an unchanged repeat snapshot must not publish a second settings.snapshot event"
@@ -1032,8 +1028,9 @@ async fn emit_snapshot_suppresses_unchanged_repeat() {
 #[tokio::test]
 async fn emit_snapshot_publishes_again_after_a_real_change() {
     let (db, bus) = setup().await;
+    let dedupe = SnapshotDedupe::new();
 
-    emit_snapshot(db.pool(), &bus, "first").await.unwrap();
+    emit_snapshot(db.pool(), &bus, "first", &dedupe).await.unwrap();
 
     // `pattern` is a noisy key (descriptors::DESCRIPTORS) — change it.
     let req = SettingsUpdateRequest {
@@ -1043,7 +1040,7 @@ async fn emit_snapshot_publishes_again_after_a_real_change() {
     update_setting(db.pool(), &bus, &req).await.unwrap();
 
     let mut rx = bus.subscribe();
-    emit_snapshot(db.pool(), &bus, "second").await.unwrap();
+    emit_snapshot(db.pool(), &bus, "second", &dedupe).await.unwrap();
     assert!(rx.try_recv().is_ok(), "a snapshot after a real noisy-key change must still publish");
 }
 

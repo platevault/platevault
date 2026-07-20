@@ -2,60 +2,60 @@
 
 /* ── Controls bar ─────────────────────────────────────────────────────────── */
 
-.alm-inbox-list__controls {
+.pv-inbox-list__controls {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
-  padding: var(--alm-sp-1) var(--alm-sp-2);
+  gap: var(--pv-sp-1);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
 }
 
-.alm-inbox-list__group-row {
+.pv-inbox-list__group-row {
   display: flex;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex-wrap: wrap;
   align-items: center;
 }
 
-.alm-inbox-list__sort-row {
+.pv-inbox-list__sort-row {
   display: flex;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex-wrap: wrap;
 }
 
 /* ── Virtual sizer (position + width only; height stays inline) ───────────── */
 
-.alm-inbox-list__sizer {
+.pv-inbox-list__sizer {
   position: relative;
   width: 100%;
 }
 
 /* ── Inbox row meta grid ──────────────────────────────────────────────────── */
 
-.alm-inbox-list__meta {
+.pv-inbox-list__meta {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0 var(--alm-sp-2);
+  gap: 0 var(--pv-sp-2);
   align-items: baseline;
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  margin-top: var(--alm-sp-0);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  margin-top: var(--pv-sp-0);
 }
 
-.alm-inbox-list__meta-state {
+.pv-inbox-list__meta-state {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--alm-text-secondary);
+  color: var(--pv-text-secondary);
 }
 
-.alm-inbox-list__meta-count {
+.pv-inbox-list__meta-count {
   white-space: nowrap;
 }
 
-.alm-inbox-list__meta-format {
+.pv-inbox-list__meta-format {
   white-space: nowrap;
 
-  letter-spacing: var(--alm-tracking-tight);
+  letter-spacing: var(--pv-tracking-tight);
 }
 
 /* ── Group header button ──────────────────────────────────────────────────── */
@@ -65,7 +65,7 @@
  * All other button-reset and typographic styles are captured here.
  */
 
-.alm-inbox-list__group-header {
+.pv-inbox-list__group-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -74,70 +74,70 @@
   border: none;
   text-align: left;
   cursor: pointer;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
   font: inherit;
-  color: var(--alm-text-secondary);
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-semibold);
+  color: var(--pv-text-secondary);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
 }
 
-.alm-inbox-list__group-header:hover {
-  background: var(--alm-hover-bg);
+.pv-inbox-list__group-header:hover {
+  background: var(--pv-hover-bg);
 }
 
-.alm-inbox-list__group-caret {
+.pv-inbox-list__group-caret {
   width: 0.7em;
   display: inline-block;
   flex-shrink: 0;
 }
 
-.alm-inbox-list__group-label {
+.pv-inbox-list__group-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alm-inbox-list__group-count {
-  color: var(--alm-text-muted);
-  font-weight: var(--alm-weight-normal);
+.pv-inbox-list__group-count {
+  color: var(--pv-text-muted);
+  font-weight: var(--pv-weight-normal);
   margin-left: auto;
 }
 
 /* === SESSION INSPECTOR === */
 
 /* Target link card — name line */
-.alm-session-inspector__target-name {
-  font-weight: var(--alm-weight-semibold);
+.pv-session-inspector__target-name {
+  font-weight: var(--pv-weight-semibold);
 }
 
 /* Target link card — subtitle (linked count) */
-.alm-session-inspector__target-subtitle {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-session-inspector__target-subtitle {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* Calibration match card — header row (kind + score) */
-.alm-session-inspector__cal-header {
+.pv-session-inspector__cal-header {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 /* Calibration match card — kind label */
-.alm-session-inspector__cal-kind {
+.pv-session-inspector__cal-kind {
   flex: 1;
-  font-weight: var(--alm-weight-medium);
-  font-size: var(--alm-text-sm);
+  font-weight: var(--pv-weight-medium);
+  font-size: var(--pv-text-sm);
 }
 
 /* Calibration match card — score badge */
-.alm-session-inspector__cal-score {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
+.pv-session-inspector__cal-score {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
 }
 
 /* Calibration match card — decision row */
-.alm-session-inspector__cal-decision {
+.pv-session-inspector__cal-decision {
   margin-top: 3px;
   display: flex;
   align-items: center;
@@ -145,325 +145,325 @@
 }
 
 /* Projects — empty state note */
-.alm-session-inspector__projects-empty {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  padding: var(--alm-sp-1) 0;
+.pv-session-inspector__projects-empty {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  padding: var(--pv-sp-1) 0;
 }
 
 /* Projects — linked project id label */
-.alm-session-inspector__project-label {
-  font-weight: var(--alm-weight-medium);
+.pv-session-inspector__project-label {
+  font-weight: var(--pv-weight-medium);
 }
 
 /* Immutable note — heading */
-.alm-session-inspector__immutable-heading {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text-secondary);
+.pv-session-inspector__immutable-heading {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-secondary);
 }
 
 /* Immutable note — body */
-.alm-session-inspector__immutable-body {
+.pv-session-inspector__immutable-body {
   margin-top: 3px;
 }
 
 /* === TARGET DETAIL (legacy) === */
 
 /* Common-name span in DetailHeader title */
-.alm-target-detail-legacy__common-name {
-  color: var(--alm-text-muted);
-  font-weight: var(--alm-weight-normal);
+.pv-target-detail-legacy__common-name {
+  color: var(--pv-text-muted);
+  font-weight: var(--pv-weight-normal);
 }
 
 /* Coverage warning Banner top margin */
-.alm-target-detail-legacy__coverage-warn {
-  margin-top: var(--alm-sp-2);
+.pv-target-detail-legacy__coverage-warn {
+  margin-top: var(--pv-sp-2);
 }
 
 /* "No coverage data" faint label */
-.alm-target-detail-legacy__no-coverage {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-faint);
+.pv-target-detail-legacy__no-coverage {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
 }
 
 /* Observing plans list container */
-.alm-target-detail-legacy__obs-plans {
+.pv-target-detail-legacy__obs-plans {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
-  font-size: var(--alm-text-xs);
+  gap: var(--pv-sp-2);
+  font-size: var(--pv-text-xs);
 }
 
 /* Observing plan metadata line (software · date) */
-.alm-target-detail-legacy__obs-plan-meta {
-  color: var(--alm-text-muted);
+.pv-target-detail-legacy__obs-plan-meta {
+  color: var(--pv-text-muted);
 }
 
 /* Em-dash placeholder when a session has no linked projects */
-.alm-target-detail-legacy__no-projects-dash {
-  color: var(--alm-text-faint);
+.pv-target-detail-legacy__no-projects-dash {
+  color: var(--pv-text-faint);
 }
 
 /* Sessions summary text (simplified, non-detail view) */
-.alm-target-detail-legacy__sessions-summary {
-  color: var(--alm-text-faint);
-  font-size: var(--alm-text-sm);
+.pv-target-detail-legacy__sessions-summary {
+  color: var(--pv-text-faint);
+  font-size: var(--pv-text-sm);
 }
 
 /* Projects empty state text */
-.alm-target-detail-legacy__projects-empty {
-  color: var(--alm-text-faint);
-  font-size: var(--alm-text-sm);
+.pv-target-detail-legacy__projects-empty {
+  color: var(--pv-text-faint);
+  font-size: var(--pv-text-sm);
 }
 
 /* === SETTINGS CALIBRATION MATCHING (criteria table) === */
 
-/* Criteria table: inherit alm-table base; pin column widths to match mock */
-.alm-calmatch__table {
-  margin-block: var(--alm-sp-3) var(--alm-sp-2);
+/* Criteria table: inherit pv-table base; pin column widths to match mock */
+.pv-calmatch__table {
+  margin-block: var(--pv-sp-3) var(--pv-sp-2);
 }
 
-.alm-calmatch__col-required {
+.pv-calmatch__col-required {
   width: 140px;
 }
 
-.alm-calmatch__col-tolerance {
+.pv-calmatch__col-tolerance {
   width: 160px;
 }
 
 /* Inline flex span that wraps a number input + unit label inside a td */
-.alm-calmatch__tol-input-row {
+.pv-calmatch__tol-input-row {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Fixed-width number input for tolerance fields */
-.alm-calmatch__num-input {
+.pv-calmatch__num-input {
   width: 72px;
 }
 
 /* Unit label ("°C", "d") that follows a tolerance input */
-.alm-calmatch__unit {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-calmatch__unit {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
 }
 
 /* Footer help line below the criteria table */
-.alm-calmatch__help {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
-  margin-block-start: var(--alm-sp-2);
+.pv-calmatch__help {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+  margin-block-start: var(--pv-sp-2);
 }
 
-/* Legacy aliases — kept so old .alm-calib-matching__* refs compile if any remain */
-.alm-calib-matching__input-row {
+/* Legacy aliases — kept so old .pv-calib-matching__* refs compile if any remain */
+.pv-calib-matching__input-row {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-calib-matching__num-input {
+.pv-calib-matching__num-input {
   width: 80px;
 }
 
-.alm-calib-matching__unit-label {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-calib-matching__unit-label {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
 }
 
 /* === PROJECT CALIBRATION MATCH PANEL === */
 
 /* Loading state */
-.alm-calib-match-panel__loading {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
-  padding: var(--alm-sp-1);
+.pv-calib-match-panel__loading {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+  padding: var(--pv-sp-1);
 }
 
 /* Error state */
-.alm-calib-match-panel__error {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-calib-match-panel__error {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* Outer column — one entry per session */
-.alm-calib-match-panel__list {
+.pv-calib-match-panel__list {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Per-session card */
-.alm-calib-match-panel__session {
+.pv-calib-match-panel__session {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
-  padding: var(--alm-sp-2);
-  background: var(--alm-bg3);
-  border-radius: var(--alm-radius-md);
+  gap: var(--pv-sp-1);
+  padding: var(--pv-sp-2);
+  background: var(--pv-bg3);
+  border-radius: var(--pv-radius-md);
 }
 
 /* Short session-id label */
-.alm-calib-match-panel__session-id {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-faint);
+.pv-calib-match-panel__session-id {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
 
 }
 
 /* Row of calibration-type pills */
-.alm-calib-match-panel__type-row {
+.pv-calib-match-panel__type-row {
   display: flex;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex-wrap: wrap;
 }
 
 /* Individual type+status+confidence cluster */
-.alm-calib-match-panel__type-item {
+.pv-calib-match-panel__type-item {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
 /* Confidence percentage */
-.alm-calib-match-panel__confidence {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
+.pv-calib-match-panel__confidence {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
 }
 
 /* Footer hint */
-.alm-calib-match-panel__hint {
-  margin-top: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-faint);
+.pv-calib-match-panel__hint {
+  margin-top: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
 }
 
 /* === PROJECT NOTES SECTION === */
 
 /* Root layout — shared between view and edit modes */
-.alm-project-notes__root {
+.pv-project-notes__root {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Notes body (pre-wrap text block) */
-.alm-project-notes__body {
+.pv-project-notes__body {
   white-space: pre-wrap;
-  font-size: var(--alm-text-sm);
+  font-size: var(--pv-text-sm);
 }
 
 /* Empty-state placeholder */
-.alm-project-notes__empty {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+.pv-project-notes__empty {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }
 
 /* "Saved" indicator */
-.alm-project-notes__saved {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-project-notes__saved {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
-/* Textarea — resize handle only; theming via existing .alm-input. Overrides
-   .alm-input's fixed single-line control height (#616) back to a multi-line
+/* Textarea — resize handle only; theming via existing .pv-input. Overrides
+   .pv-input's fixed single-line control height (#616) back to a multi-line
    minimum so notes stay a real textarea, not a clipped one-liner. */
-.alm-project-notes__textarea {
+.pv-project-notes__textarea {
   height: auto;
   min-height: 80px;
-  padding: var(--alm-sp-2) var(--alm-sp-3);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
   resize: vertical;
 }
 
 /* Toolbar row: byte counter + action buttons */
-.alm-project-notes__toolbar {
+.pv-project-notes__toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: var(--alm-text-xs);
+  font-size: var(--pv-text-xs);
 }
 
 /* Button group (Cancel / Save) */
-.alm-project-notes__actions {
+.pv-project-notes__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Byte counter — normal state */
-.alm-project-notes__byte-counter {
-  color: var(--alm-text-muted);
+.pv-project-notes__byte-counter {
+  color: var(--pv-text-muted);
 }
 
 /* Byte counter — approaching limit */
-.alm-project-notes__byte-counter--near {
-  color: var(--alm-warn);
+.pv-project-notes__byte-counter--near {
+  color: var(--pv-warn);
 }
 
 /* Byte counter — over limit */
-.alm-project-notes__byte-counter--over {
-  color: var(--alm-danger);
+.pv-project-notes__byte-counter--over {
+  color: var(--pv-danger);
 }
 
 /* === PROJECTS LIST === */
 
 /* Loading state placeholder */
-.alm-projects-list__loading {
-  padding: var(--alm-sp-4);
-  color: var(--alm-text-muted);
+.pv-projects-list__loading {
+  padding: var(--pv-sp-4);
+  color: var(--pv-text-muted);
 }
 
 /* Empty state placeholder (no results) */
-.alm-projects-list__empty {
-  padding: var(--alm-sp-4);
-  color: var(--alm-text-muted);
+.pv-projects-list__empty {
+  padding: var(--pv-sp-4);
+  color: var(--pv-text-muted);
 }
 
 /* Controls bar wrapping sort-select and lifecycle filter */
-.alm-projects-list__controls {
+.pv-projects-list__controls {
   display: flex;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex-wrap: wrap;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
 }
 
-/* Lifecycle filter trigger — inherits alm-select base; adds pointer + min-width */
-.alm-projects-list__filter-trigger {
+/* Lifecycle filter trigger — inherits pv-select base; adds pointer + min-width */
+.pv-projects-list__filter-trigger {
   cursor: pointer;
   min-width: 110px;
   text-align: left;
 }
 
 /* Footer row — count on the left, actions on the right */
-.alm-projects-list__footer {
+.pv-projects-list__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 /* Blocked-state icon inline with project name */
-.alm-projects-list__blocked-icon {
-  color: var(--alm-danger);
-  margin-right: var(--alm-sp-1);
+.pv-projects-list__blocked-icon {
+  color: var(--pv-danger);
+  margin-right: var(--pv-sp-1);
   display: inline;
   vertical-align: middle;
 }
 
 /* Channel-drift inline badge */
-.alm-projects-list__drift-badge {
-  color: var(--alm-warn);
-  margin-left: var(--alm-sp-1);
+.pv-projects-list__drift-badge {
+  color: var(--pv-warn);
+  margin-left: var(--pv-sp-1);
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
 }
 
 /* === CALIBRATION MASTER RAIL (consistency) === */
-/* Rail uses shared .alm-kv / .alm-rail__card-h primitives — no bespoke classes needed. */
+/* Rail uses shared .pv-kv / .pv-rail__card-h primitives — no bespoke classes needed. */
 
 /* === SETUP WIZARD === */
 
 /* Outer page wrapper — fills the main content area without overflow */
-.alm-setup-wizard {
+.pv-setup-wizard {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -471,273 +471,273 @@
 }
 
 /* WizardShell root — must flex-fill the page content area */
-.alm-setup-wizard__shell {
+.pv-setup-wizard__shell {
   flex: 1;
   min-height: 0;
 }
 
 /* Footer spacer — pushes action buttons to the right */
-.alm-setup-wizard__footer-spacer {
+.pv-setup-wizard__footer-spacer {
   flex: 1;
 }
 
 /* Folder-count summary shown in the footer on the Source Folders step */
-.alm-setup-wizard__folder-count {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-setup-wizard__folder-count {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* Step eyebrow label — "Setup · Step N of M" */
-.alm-setup-wizard__step-label {
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-semibold);
+.pv-setup-wizard__step-label {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-wide);
-  color: var(--alm-text-muted);
+  letter-spacing: var(--pv-tracking-wide);
+  color: var(--pv-text-muted);
 }
 
 /* Step heading */
-.alm-setup-wizard__heading {
-  margin: var(--alm-sp-1) 0 0;
-  font-size: var(--alm-text-2xl);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+.pv-setup-wizard__heading {
+  margin: var(--pv-sp-1) 0 0;
+  font-size: var(--pv-text-2xl);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
 }
 
 /* Step description paragraph */
-.alm-setup-wizard__description {
-  margin: var(--alm-sp-2) 0 var(--alm-sp-5);
-  font-size: var(--alm-text-base);
-  line-height: var(--alm-leading-normal);
-  color: var(--alm-text-secondary);
+.pv-setup-wizard__description {
+  margin: var(--pv-sp-2) 0 var(--pv-sp-5);
+  font-size: var(--pv-text-base);
+  line-height: var(--pv-leading-normal);
+  color: var(--pv-text-secondary);
 }
 
 /* === SETUP STEP CATALOGS === */
 
 /* Root container for the Configuration step */
-.alm-step-catalogs {
+.pv-step-catalogs {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-5);
+  gap: var(--pv-sp-5);
 }
 
 /* A single labelled config row (stacks header + description) */
-.alm-setup-catalogs__option {
+.pv-setup-catalogs__option {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Title + control on one line */
-.alm-setup-catalogs__option-header {
+.pv-setup-catalogs__option-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
 }
 
 /* Row label text */
-.alm-setup-catalogs__option-title {
-  font-weight: var(--alm-weight-semibold);
+.pv-setup-catalogs__option-title {
+  font-weight: var(--pv-weight-semibold);
   white-space: nowrap;
 }
 
 /* === TOAST CONTAINER === */
 
 /* Fixed viewport anchor — bottom-right, above all other layers */
-.alm-toast__container {
+.pv-toast__container {
   position: fixed;
-  bottom: var(--alm-sp-4);
-  right: var(--alm-sp-4);
+  bottom: var(--pv-sp-4);
+  right: var(--pv-sp-4);
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   z-index: 9999;
   pointer-events: none;
   max-width: 400px;
 }
 
 /* Individual toast item */
-.alm-toast__item {
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  border-radius: var(--alm-radius-sm);
-  border: 1px solid var(--alm-border);
-  background: var(--alm-surface);
-  color: var(--alm-text);
-  font-size: var(--alm-text-sm);
-  line-height: var(--alm-leading-normal);
+.pv-toast__item {
+  padding: var(--pv-sp-3) var(--pv-sp-4);
+  border-radius: var(--pv-radius-sm);
+  border: 1px solid var(--pv-border);
+  background: var(--pv-surface);
+  color: var(--pv-text);
+  font-size: var(--pv-text-sm);
+  line-height: var(--pv-leading-normal);
   pointer-events: auto;
   display: flex;
   align-items: flex-start;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
   /* Left accent stripe is an inset shadow, not a border, so it stays clear of
      the banned side-tab border pattern while looking identical to a 3px rule.
      The variant classes below only swap the accent color via the custom prop. */
   box-shadow:
-    inset 3px 0 0 var(--alm-toast-accent, transparent),
-    0 4px 12px color-mix(in srgb, var(--alm-ink) 30%, transparent);
+    inset 3px 0 0 var(--pv-toast-accent, transparent),
+    0 4px 12px color-mix(in srgb, var(--pv-ink) 30%, transparent);
 }
 
 /* Variant accent (drives the inset stripe above) */
-.alm-toast__item--info {
-  --alm-toast-accent: var(--alm-info);
+.pv-toast__item--info {
+  --pv-toast-accent: var(--pv-info);
 }
 
-.alm-toast__item--error {
-  --alm-toast-accent: var(--alm-danger);
+.pv-toast__item--error {
+  --pv-toast-accent: var(--pv-danger);
 }
 
-.alm-toast__item--success {
-  --alm-toast-accent: var(--alm-ok);
+.pv-toast__item--success {
+  --pv-toast-accent: var(--pv-ok);
 }
 
-.alm-toast__item--warn {
-  --alm-toast-accent: var(--alm-warn);
+.pv-toast__item--warn {
+  --pv-toast-accent: var(--pv-warn);
 }
 
 /* Message text fills remaining space */
-.alm-toast__message {
+.pv-toast__message {
   flex: 1;
 }
 
 /* Right-side controls row (action button + dismiss) */
-.alm-toast__controls {
+.pv-toast__controls {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-shrink: 0;
 }
 
 /* Optional action button */
-.alm-toast__action-btn {
+.pv-toast__action-btn {
   background: transparent;
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
-  color: var(--alm-text);
-  font-size: var(--alm-text-xs);
-  padding: var(--alm-sp-0) var(--alm-sp-2);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  color: var(--pv-text);
+  font-size: var(--pv-text-xs);
+  padding: var(--pv-sp-0) var(--pv-sp-2);
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--alm-transition-fast);
+  transition: background var(--pv-transition-fast);
 }
 
 /* Dismiss (×) button */
-.alm-toast__dismiss-btn {
+.pv-toast__dismiss-btn {
   background: transparent;
   border: none;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-base);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-base);
   cursor: pointer;
   line-height: 1;
   padding: 0;
   display: inline-flex;
-  transition: color var(--alm-transition-fast);
+  transition: color var(--pv-transition-fast);
 }
 
 /* === SETTINGS RESOLVER === */
 
 /* Compact mode: outer column stack */
-.alm-resolver-settings__compact-wrap {
+.pv-resolver-settings__compact-wrap {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Compact mode: label + toggle row */
-.alm-resolver-settings__compact-row {
+.pv-resolver-settings__compact-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
 }
 
 /* Compact mode: label text */
-.alm-resolver-settings__compact-label {
-  font-weight: var(--alm-weight-semibold);
+.pv-resolver-settings__compact-label {
+  font-weight: var(--pv-weight-semibold);
   white-space: nowrap;
 }
 
 /* Narrow number inputs (debounce ms, timeout s) */
-.alm-resolver-settings__narrow-input {
+.pv-resolver-settings__narrow-input {
   max-width: 120px;
 }
 
 /* === APP ERROR BOUNDARY === */
 
-.alm-error-boundary__overlay {
+.pv-error-boundary__overlay {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100vh;
-  gap: var(--alm-sp-4);
-  padding: var(--alm-sp-6);
+  gap: var(--pv-sp-4);
+  padding: var(--pv-sp-6);
 
-  color: var(--alm-text);
-  background: var(--alm-bg);
+  color: var(--pv-text);
+  background: var(--pv-bg);
 }
 
-.alm-error-boundary__heading {
-  font-size: var(--alm-text-xl);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-danger);
+.pv-error-boundary__heading {
+  font-size: var(--pv-text-xl);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-danger);
   margin: 0;
 }
 
-.alm-error-boundary__body {
-  font-size: var(--alm-text-base);
-  color: var(--alm-text-secondary);
+.pv-error-boundary__body {
+  font-size: var(--pv-text-base);
+  color: var(--pv-text-secondary);
   margin: 0;
   max-width: 480px;
   text-align: center;
 }
 
-.alm-error-boundary__detail {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  background: var(--alm-surface);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
-  padding: var(--alm-sp-3);
+.pv-error-boundary__detail {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  background: var(--pv-surface);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  padding: var(--pv-sp-3);
   max-width: 480px;
   overflow: auto;
   margin: 0;
 }
 
-.alm-error-boundary__reset-btn {
-  padding: var(--alm-sp-2) var(--alm-sp-4);
-  background: var(--alm-accent);
-  color: var(--alm-on-accent);
+.pv-error-boundary__reset-btn {
+  padding: var(--pv-sp-2) var(--pv-sp-4);
+  background: var(--pv-accent);
+  color: var(--pv-on-accent);
   border: 1px solid transparent;
-  border-radius: var(--alm-radius-sm);
+  border-radius: var(--pv-radius-sm);
   cursor: pointer;
-  font-size: var(--alm-text-base);
-  font-weight: var(--alm-weight-medium);
-  transition: background var(--alm-transition-fast);
+  font-size: var(--pv-text-base);
+  font-weight: var(--pv-weight-medium);
+  transition: background var(--pv-transition-fast);
 }
 
-.alm-error-boundary__reset-btn:hover {
-  background: var(--alm-accent-hover);
+.pv-error-boundary__reset-btn:hover {
+  background: var(--pv-accent-hover);
 }
 
-.alm-error-boundary__reset-btn:focus-visible {
+.pv-error-boundary__reset-btn:focus-visible {
   outline: none;
-  box-shadow: var(--alm-focus-ring);
+  box-shadow: var(--pv-focus-ring);
 }
 
 /* === SESSION DETAIL === */
 
 /* Pill row inside the Linked projects rail card */
-.alm-session-detail__linked-pills {
+.pv-session-detail__linked-pills {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-wrap: wrap;
 }
 
 /* "None" placeholder when no linked projects exist */
-.alm-session-detail__no-linked {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-faint);
+.pv-session-detail__no-linked {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
 }
 
 /* === SESSIONS REVIEW STATE (consistency) === */
@@ -746,107 +746,107 @@
    Reject) live exclusively in the TopActionBar on SessionsPage; the
    Review state rail card is read-only (Pill only), matching the pattern
    used by Calibration (MasterDetail) and Projects (ProjectDetail). */
-.alm-session-detail__lock-notice {
-  margin-top: var(--alm-sp-2);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-session-detail__lock-notice {
+  margin-top: var(--pv-sp-2);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* === PROJECT SOURCE VIEWS SECTION === */
 
 /* Vertical list of generated source-view rows */
-.alm-source-views__list {
+.pv-source-views__list {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 /* One source-view row: main info left, actions right. `flex-wrap` (spec 055
-   T012): `.alm-rail`'s `min-width: 0` lets the main-info column shrink
+   T012): `.pv-rail`'s `min-width: 0` lets the main-info column shrink
    without bound when the row is narrow (this panel is ~340px wide) and
-   `.alm-source-views__actions` is `flex-shrink: 0` — before T012 retired the
-   `--alm-text-2xs` floor, `.alm-btn--sm` (Verify/Remove/Regenerate) rendered
+   `.pv-source-views__actions` is `flex-shrink: 0` — before T012 retired the
+   `--pv-text-2xs` floor, `.pv-btn--sm` (Verify/Remove/Regenerate) rendered
    at 10px and the main-info column still had ~18px to work with; at the 11px
    floor those buttons are ~16px wider combined, squeezing it to ~2px and
    breaking the History disclosure's click target (word-wrapped to
    one-character lines). Wrapping lets actions drop to their own line instead
    of destroying the main-info column's usable width. */
-.alm-source-views__row {
+.pv-source-views__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--alm-sp-4);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
-  padding: var(--alm-sp-3);
+  gap: var(--pv-sp-4);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  padding: var(--pv-sp-3);
 }
 
 /* Row header line: id + state pill + kind/count meta */
-.alm-source-views__row-head {
+.pv-source-views__row-head {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-wrap: wrap;
 }
 
 /* Truncated monospace view id */
-.alm-source-views__id {
-  font-family: var(--alm-font-mono);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-source-views__id {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* Trailing action buttons (remove / regenerate) */
-.alm-source-views__actions {
+.pv-source-views__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-shrink: 0;
 }
 
 /* Generate dialog: space-between profile label row */
-.alm-source-views__profile-row {
+.pv-source-views__profile-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
 }
 
 /* Generate dialog: copy opt-in checkbox label */
-.alm-source-views__copy-label {
+.pv-source-views__copy-label {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
+  gap: var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
 }
 
 /* Expandable inventory-refs disclosure widget */
-.alm-source-views__refs-details {
-  margin-top: var(--alm-sp-1);
+.pv-source-views__refs-details {
+  margin-top: var(--pv-sp-1);
 }
 
 /* Disclosure summary — pointer cursor, no text selection on click */
-.alm-source-views__refs-summary {
+.pv-source-views__refs-summary {
   cursor: pointer;
   user-select: none;
 }
 
 /* Inventory-ref path list inside the disclosure */
-.alm-source-views__refs-list {
-  margin-top: var(--alm-sp-1);
-  padding-left: var(--alm-sp-3);
+.pv-source-views__refs-list {
+  margin-top: var(--pv-sp-1);
+  padding-left: var(--pv-sp-3);
   list-style: disc;
 
 }
 
 /* Individual inventory-ref path item */
-.alm-source-views__refs-item {
+.pv-source-views__refs-item {
   padding: 1px 0;
   word-break: break-all;
 }
@@ -854,380 +854,380 @@
 /* === SETTINGS CLEANUP === */
 
 /* Select control height override for the Default Protection dropdown */
-.alm-cleanup__protection-select {
+.pv-cleanup__protection-select {
   height: 28px;
 }
 
 /* Per-type table: action column width */
-.alm-cleanup__action-col {
+.pv-cleanup__action-col {
   width: 220px;
 }
 
 /* Per-type table cell: type name + Pill badge row */
-.alm-cleanup__type-cell {
+.pv-cleanup__type-cell {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* Per-type table: process-stage group subheader row */
-.alm-cleanup__group-row td {
-  padding-top: var(--alm-sp-3);
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
+.pv-cleanup__group-row td {
+  padding-top: var(--pv-sp-3);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: var(--alm-tracking-normal);
+  letter-spacing: var(--pv-tracking-normal);
 }
 
 /* Impact warning banner above the per-type table */
-.alm-cleanup__warning {
-  margin-bottom: var(--alm-sp-3);
+.pv-cleanup__warning {
+  margin-bottom: var(--pv-sp-3);
 }
 
 /* === SOURCE PROTECTION OVERRIDE (spec 016 — per-root protection control) === */
 
 /* Issue #562: the pill + (when open) the edit form are rendered inline
-   inside the card's path row (`.alm-data-sources__root-path-row`, a wrapping
+   inside the card's path row (`.pv-data-sources__root-path-row`, a wrapping
    flex row) instead of as a standalone block below the path. `display:
    contents` drops this wrapper's own box so the pill and the edit-col below
    become direct flex items of that outer row — combined with
-   `.alm-source-protect__edit-col`'s `flex-basis: 100%`, the edit form always
+   `.pv-source-protect__edit-col`'s `flex-basis: 100%`, the edit form always
    starts its own wrapped line under the path/pill/pills line. */
-.alm-source-protect__root {
+.pv-source-protect__root {
   display: contents;
 }
 
-.alm-source-protect__status {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
+.pv-source-protect__status {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
 }
 
-.alm-source-protect__edit-row {
+.pv-source-protect__edit-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-source-protect__edit-col {
+.pv-source-protect__edit-col {
   flex-basis: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
-  margin-top: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
+  margin-top: var(--pv-sp-2);
 }
 
-.alm-source-protect__label {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
+.pv-source-protect__label {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
 }
 
-.alm-source-protect__select {
+.pv-source-protect__select {
   width: auto;
   height: 28px;
 }
 
-.alm-source-protect__hint {
+.pv-source-protect__hint {
   flex-basis: 100%;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
 }
 
-.alm-source-protect__error {
-  color: var(--alm-danger);
-  font-size: var(--alm-text-xs);
+.pv-source-protect__error {
+  color: var(--pv-danger);
+  font-size: var(--pv-text-xs);
 }
 
-.alm-source-protect__actions {
+.pv-source-protect__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* === EDIT PROJECT PANE === */
 
 /* Banner action row — drift banner button group */
-.alm-edit-project__drift-actions {
+.pv-edit-project__drift-actions {
   display: flex;
-  gap: var(--alm-sp-2);
-  margin-top: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
+  margin-top: var(--pv-sp-2);
 }
 
 /* Form — main layout column */
-.alm-edit-project__form {
+.pv-edit-project__form {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-4);
-  padding: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
+  padding: var(--pv-sp-4);
 }
 
 /* Channels pill row */
-.alm-edit-project__channels {
+.pv-edit-project__channels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--alm-sp-1);
-  margin-top: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
+  margin-top: var(--pv-sp-1);
 }
 
 /* Sources panel — sits between the read-only banner and the <form> below;
- * mirrors .alm-edit-project__form's horizontal/top padding since it lives
+ * mirrors .pv-edit-project__form's horizontal/top padding since it lives
  * outside that flex column (WP-008-C). */
-.alm-edit-project__sources-panel {
+.pv-edit-project__sources-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
-  padding: var(--alm-sp-4) var(--alm-sp-4) 0;
+  gap: var(--pv-sp-1);
+  padding: var(--pv-sp-4) var(--pv-sp-4) 0;
 }
 
 /* Sources — linked-source list + add-sources flow (WP-008-C) */
-.alm-edit-project__sources {
+.pv-edit-project__sources {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
-  margin-top: var(--alm-sp-1);
+  gap: var(--pv-sp-2);
+  margin-top: var(--pv-sp-1);
 }
 
-.alm-edit-project__sources-list {
+.pv-edit-project__sources-list {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.alm-edit-project__source-row {
+.pv-edit-project__source-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border: 1px solid var(--alm-border);
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border: 1px solid var(--pv-border);
   border-radius: 4px;
 }
 
-.alm-edit-project__source-name {
-  font-size: var(--alm-text-xs);
+.pv-edit-project__source-name {
+  font-size: var(--pv-text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alm-edit-project__source-confirm {
+.pv-edit-project__source-confirm {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-edit-project__add-sources {
+.pv-edit-project__add-sources {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
-  border: 1px solid var(--alm-border);
+  gap: var(--pv-sp-2);
+  border: 1px solid var(--pv-border);
   border-radius: 6px;
-  padding: var(--alm-sp-3);
+  padding: var(--pv-sp-3);
 }
 
-.alm-edit-project__add-sources-actions {
+.pv-edit-project__add-sources-actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   justify-content: flex-end;
 }
 
 /* Actions row — right-aligned Save / Cancel */
-.alm-edit-project__actions {
+.pv-edit-project__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   justify-content: flex-end;
 }
 
 /* === CREATE PROJECT DIALOG === */
 
 /*
- * Scoped to the create-project dialog. All values use --alm-* design tokens.
+ * Scoped to the create-project dialog. All values use --pv-* design tokens.
  * No raw colors, no raw ms durations.
  */
 
 /* Dialog popup width cap */
-.alm-create-project__popup {
+.pv-create-project__popup {
   max-width: 520px;
 }
 
 /* Body stack: vertical flex with standard field gap */
-.alm-create-project__body {
+.pv-create-project__body {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
 }
 
 /* Selected-target pill row: horizontal flex */
-.alm-create-project__target-row {
+.pv-create-project__target-row {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* === ADD TARGET DIALOG === */
 
 /* Constrain dialog popup width */
-.alm-add-target__popup {
+.pv-add-target__popup {
   max-width: 480px;
 }
 
 /* Body: vertical stack with standard gap */
-.alm-add-target__body {
+.pv-add-target__body {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
 }
 
 /* Selected-target row: pill + hint + change button inline */
-.alm-add-target__selected-row {
+.pv-add-target__selected-row {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* === SESSIONS CALENDAR SCROLL === */
 
 /*
  * Scoped to the CalendarScroll virtualised timeline.
- * All values use --alm-* design tokens.
+ * All values use --pv-* design tokens.
  * No raw colors, no raw ms durations.
  * Dynamic values (virtualizer height/transform) remain inline in the component.
  */
 
 /* Outer scroll container — fills its parent and enables overflow scroll */
-.alm-calendar-scroll {
+.pv-calendar-scroll {
   overflow-y: auto;
   height: 100%;
 }
 
 /* Inner positioning canvas — height is set inline (virtualizer.getTotalSize()) */
-.alm-calendar-scroll__inner {
+.pv-calendar-scroll__inner {
   position: relative;
 }
 
 /* Sticky month header row — absolute inside the virtualizer canvas */
-.alm-calendar-scroll__month-header {
+.pv-calendar-scroll__month-header {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   display: flex;
   align-items: center;
-  padding: 0 var(--alm-sp-3);
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text-muted);
-  background: var(--alm-surface);
-  border-bottom: 1px solid var(--alm-border-subtle);
+  padding: 0 var(--pv-sp-3);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
+  background: var(--pv-surface);
+  border-bottom: 1px solid var(--pv-border-subtle);
 }
 
 /* Night row — absolute inside the virtualizer canvas */
-.alm-calendar-scroll__night {
+.pv-calendar-scroll__night {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  padding: 0 var(--alm-sp-3);
+  gap: var(--pv-sp-2);
+  padding: 0 var(--pv-sp-3);
   cursor: pointer;
-  border-bottom: 1px solid var(--alm-border-subtle);
-  transition: background var(--alm-transition-fast);
+  border-bottom: 1px solid var(--pv-border-subtle);
+  transition: background var(--pv-transition-fast);
 }
 
-.alm-calendar-scroll__night:hover {
-  background: var(--alm-hover-bg);
+.pv-calendar-scroll__night:hover {
+  background: var(--pv-hover-bg);
 }
 
-.alm-calendar-scroll__night:focus-visible {
+.pv-calendar-scroll__night:focus-visible {
   outline: none;
-  box-shadow: var(--alm-focus-ring);
+  box-shadow: var(--pv-focus-ring);
 }
 
 /* Date label — monospace, fixed-width column */
-.alm-calendar-scroll__date {
+.pv-calendar-scroll__date {
   flex-shrink: 0;
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
 }
 
 /* Session badge row — grows to fill remaining space */
-.alm-calendar-scroll__badges {
+.pv-calendar-scroll__badges {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex: 1;
   min-width: 0;
 }
 
 /* Frame count — monospace, right-aligned */
-.alm-calendar-scroll__frame-count {
+.pv-calendar-scroll__frame-count {
   flex-shrink: 0;
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* === BLOCKED BANNER === */
 
-.alm-blocked-banner__body {
+.pv-blocked-banner__body {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-blocked-banner__actions {
+.pv-blocked-banner__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
 /* === STATIC LEFTOVERS === */
 
 /* 1. Lifecycle.tsx — blocked label */
-.alm-lifecycle__label--danger {
-  color: var(--alm-danger);
+.pv-lifecycle__label--danger {
+  color: var(--pv-danger);
 }
 
 /* 2. SettingsPage.tsx — auto-save indicator */
-.alm-settings__saved-indicator {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-ok);
+.pv-settings__saved-indicator {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-ok);
 }
 
 /* 3. SetupPage.tsx — loading state */
-.alm-setup-page__loading {
+.pv-setup-page__loading {
   justify-content: center;
   align-items: center;
-  color: var(--alm-text-muted);
+  color: var(--pv-text-muted);
 }
 
 /* 5. MastersList.tsx — loading status div */
-.alm-masters-list__status {
-  padding: var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-masters-list__status {
+  padding: var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
 }
 
 /* 6a. DirPicker.tsx — manual path entry input (#662, replaces the former
    read-only mono path span now that a path can be typed/pasted) */
-.alm-dir-picker__input {
-  font-size: var(--alm-text-xs);
+.pv-dir-picker__input {
+  font-size: var(--pv-text-xs);
   flex: 1;
   min-width: 0;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
-  background: var(--alm-bg-input, transparent);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-bg-input, transparent);
   color: inherit;
 }
 
-/* 6b. DirPicker.tsx — error div (leaks fixed: --alm-space-1 → --alm-sp-1; raw hex fallback removed) */
-.alm-dir-picker__error {
-  margin-top: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-danger);
+/* 6b. DirPicker.tsx — error div (leaks fixed: --pv-space-1 → --pv-sp-1; raw hex fallback removed) */
+.pv-dir-picker__error {
+  margin-top: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-danger);
   line-height: 1.4;
 }

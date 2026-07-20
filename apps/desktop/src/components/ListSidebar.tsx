@@ -34,8 +34,8 @@ export function ListSidebar({
   virtualized = false,
 }: ListSidebarProps) {
   return (
-    <div className="alm-list-sidebar">
-      <div className="alm-list-sidebar__search">
+    <div className="pv-list-sidebar">
+      <div className="pv-list-sidebar__search">
         <input
           type="text"
           placeholder={placeholder || m.common_search_placeholder()}
@@ -47,15 +47,15 @@ export function ListSidebar({
           aria-label={placeholder || m.common_search_aria()}
         />
       </div>
-      {controls && <div className="alm-list-sidebar__controls">{controls}</div>}
+      {controls && <div className="pv-list-sidebar__controls">{controls}</div>}
       <div
-        className={`alm-list-sidebar__list${virtualized ? ' alm-virtual-scroll' : ''}`}
+        className={`pv-list-sidebar__list${virtualized ? ' pv-virtual-scroll' : ''}`}
         ref={scrollRef}
         data-virtual-scroll={virtualized ? 'true' : undefined}
       >
         {children}
       </div>
-      {footer && <div className="alm-list-sidebar__footer">{footer}</div>}
+      {footer && <div className="pv-list-sidebar__footer">{footer}</div>}
     </div>
   );
 }

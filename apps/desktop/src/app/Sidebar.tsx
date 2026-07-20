@@ -128,24 +128,24 @@ export function Sidebar() {
         key={item.id}
         to={item.path}
         className={clsx(
-          'alm-sidebar__item',
-          active && 'alm-sidebar__item--active',
+          'pv-sidebar__item',
+          active && 'pv-sidebar__item--active',
         )}
         aria-label={item.label()}
         aria-current={active ? 'page' : undefined}
         title={collapsed ? item.label() : undefined}
       >
-        <span className="alm-sidebar__item-icon">
+        <span className="pv-sidebar__item-icon">
           <Icon size={18} />
         </span>
         {!collapsed && (
-          <span className="alm-sidebar__item-label">{item.label()}</span>
+          <span className="pv-sidebar__item-label">{item.label()}</span>
         )}
         {!collapsed && count > 0 && (
           <span
             className={clsx(
-              'alm-sidebar__item-badge',
-              item.id === 'inbox' && 'alm-sidebar__item-badge--alert',
+              'pv-sidebar__item-badge',
+              item.id === 'inbox' && 'pv-sidebar__item-badge--alert',
             )}
           >
             {count}
@@ -157,24 +157,22 @@ export function Sidebar() {
 
   return (
     <nav
-      className={clsx('alm-sidebar', collapsed && 'alm-sidebar--collapsed')}
+      className={clsx('pv-sidebar', collapsed && 'pv-sidebar--collapsed')}
       aria-label={m.nav_aria_label()}
     >
       {/* Header: brand mark + collapse, single line */}
-      <div className="alm-sidebar__header">
+      <div className="pv-sidebar__header">
         {/* eslint-disable-next-line alm/no-user-string -- decorative brand glyph, not translatable content */}
-        {!collapsed && <div className="alm-sidebar__mark">P</div>}
+        {!collapsed && <div className="pv-sidebar__mark">P</div>}
         {!collapsed && (
-          <span className="alm-sidebar__brand-name">
-            {m.shell_brand_name()}
-          </span>
+          <span className="pv-sidebar__brand-name">{m.shell_brand_name()}</span>
         )}
         {!collapsed && (
-          <span className="alm-sidebar__version">{m.shell_version()}</span>
+          <span className="pv-sidebar__version">{m.shell_version()}</span>
         )}
         <button
           type="button"
-          className="alm-sidebar__collapse"
+          className="pv-sidebar__collapse"
           onClick={() => setCollapsed(!collapsed)}
           aria-label={
             collapsed
@@ -187,11 +185,11 @@ export function Sidebar() {
       </div>
 
       {/* Grouped nav */}
-      <div className="alm-sidebar__nav">
+      <div className="pv-sidebar__nav">
         {NAV_GROUPS.map((group) => (
-          <div key={group.label()} className="alm-sidebar__group">
+          <div key={group.label()} className="pv-sidebar__group">
             {!collapsed && (
-              <div className="alm-sidebar__group-label">{group.label()}</div>
+              <div className="pv-sidebar__group-label">{group.label()}</div>
             )}
             {group.items.map(renderItem)}
           </div>
@@ -199,22 +197,22 @@ export function Sidebar() {
       </div>
 
       {/* Settings pinned at the bottom, separated from the workflow nav */}
-      <div className="alm-sidebar__settings">{renderItem(SETTINGS_ITEM)}</div>
+      <div className="pv-sidebar__settings">{renderItem(SETTINGS_ITEM)}</div>
 
       {/* Footer: root health (hidden when collapsed) */}
       {!collapsed && (
-        <div className="alm-sidebar__footer">
+        <div className="pv-sidebar__footer">
           <Link
             to="/settings/$pane"
             params={{ pane: 'data-sources' }}
-            className="alm-sidebar__roots"
+            className="pv-sidebar__roots"
           >
             <span
               className={clsx(
-                'alm-sidebar__root-dot',
+                'pv-sidebar__root-dot',
                 offlineRoots.length > 0
-                  ? 'alm-sidebar__root-dot--warn'
-                  : 'alm-sidebar__root-dot--ok',
+                  ? 'pv-sidebar__root-dot--warn'
+                  : 'pv-sidebar__root-dot--ok',
               )}
             />
             {m.nav_roots_summary({
@@ -223,7 +221,7 @@ export function Sidebar() {
             })}
           </Link>
           {offlineRoots.length > 0 && (
-            <div className="alm-sidebar__offline-warn">
+            <div className="pv-sidebar__offline-warn">
               {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')}{' '}
               {m.nav_roots_offline_suffix()}
             </div>

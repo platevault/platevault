@@ -18,6 +18,7 @@
 use app_core::archive_generator::{
     generate as generate_archive_plan, generate_restore as generate_restore_plan, list_archived,
 };
+use app_core::plan_free_space::estimate_free_space;
 use app_core::plans::{
     approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
     send_archive_to_trash,
@@ -27,7 +28,8 @@ use contracts_core::archive::{
 };
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
-    PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
+    PlanDiscardResponse, PlanFreeSpaceEstimate, PlanListRequest, PlanListResponse,
+    PlanRetryResponse, RetryItemsFilter,
 };
 use tauri::State;
 
@@ -68,6 +70,24 @@ pub async fn plans_get(
     id: String,
 ) -> Result<PlanDetail, ContractError> {
     get_plan(state.repo.pool(), &id).await
+}
+
+// ── plans.free_space_estimate ─────────────────────────────────────────────────
+
+/// `plans.free_space_estimate` — advisory destination free-space estimate for
+/// a plan under review, before approval (issue #876). Never blocks approval;
+/// see `app_core::plans::estimate_free_space`.
+///
+/// # Errors
+///
+/// Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+#[tauri::command]
+#[specta::specta]
+pub async fn plans_free_space_estimate(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<PlanFreeSpaceEstimate, ContractError> {
+    estimate_free_space(state.repo.pool(), &id).await
 }
 
 // ── plans.approve ─────────────────────────────────────────────────────────────

@@ -69,7 +69,7 @@ export function GuidanceCell({
   return (
     <Popover.Root>
       <Popover.Trigger
-        className="alm-guidance-cell__trigger"
+        className="pv-guidance-cell__trigger"
         openOnHover
         nativeButton
         onClick={(e) => e.stopPropagation()}
@@ -83,31 +83,31 @@ export function GuidanceCell({
       <Popover.Portal>
         <Popover.Positioner side="top" align="start" sideOffset={4}>
           <Popover.Popup
-            className="alm-guidance-popup"
+            className="pv-guidance-popup"
             data-testid="guidance-explain-popup"
           >
-            <div className="alm-guidance-popup__title">
+            <div className="pv-guidance-popup__title">
               {m.targets_guidance_explain_title()}
             </div>
             {bandViability === null || !night ? (
-              <div className="alm-guidance-popup__unknown">
+              <div className="pv-guidance-popup__unknown">
                 {m.targets_guidance_explain_unknown()}
               </div>
             ) : (
               <>
-                <div className="alm-guidance-popup__line">
+                <div className="pv-guidance-popup__line">
                   {m.targets_guidance_explain_moon({
                     phase: phaseLabel(night.phaseName),
                     pct: Math.round(night.illuminationFrac * 100),
                     age: night.moonAgeFromFullDays.toFixed(1),
                   })}
                 </div>
-                <div className="alm-guidance-popup__line">
+                <div className="pv-guidance-popup__line">
                   {m.targets_guidance_explain_separation({
                     deg: Math.round(lunarSeparationDeg ?? 0),
                   })}
                 </div>
-                <ul className="alm-guidance-popup__bands">
+                <ul className="pv-guidance-popup__bands">
                   {BANDS.map((band) => {
                     const minDeg = minSeparationDeg(
                       band,
@@ -116,8 +116,8 @@ export function GuidanceCell({
                     );
                     const viable = bandViability[band];
                     return (
-                      <li key={band} className="alm-guidance-popup__band-row">
-                        <span className="alm-guidance-popup__band-name">
+                      <li key={band} className="pv-guidance-popup__band-row">
+                        <span className="pv-guidance-popup__band-name">
                           {m.targets_guidance_explain_band_row({
                             band,
                             deg: Math.round(minDeg),
@@ -125,10 +125,10 @@ export function GuidanceCell({
                         </span>
                         <span
                           className={
-                            'alm-guidance-popup__band-state' +
+                            'pv-guidance-popup__band-state' +
                             (viable
-                              ? ' alm-guidance-popup__band-state--viable'
-                              : ' alm-guidance-popup__band-state--not-viable')
+                              ? ' pv-guidance-popup__band-state--viable'
+                              : ' pv-guidance-popup__band-state--not-viable')
                           }
                         >
                           {viable
@@ -138,7 +138,7 @@ export function GuidanceCell({
                         {/* spec 044 Track B, US5/T029: real per-band moon-free
                             imaging hours for the planned night. */}
                         {moonFreeMinutesByBand != null && (
-                          <span className="alm-guidance-popup__band-moonfree">
+                          <span className="pv-guidance-popup__band-moonfree">
                             {m.targets_guidance_moon_free_band({
                               hours: (moonFreeMinutesByBand[band] / 60).toFixed(
                                 1,

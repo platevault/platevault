@@ -55,7 +55,7 @@ export interface UseAdaptiveDockResult {
   resizing: boolean;
 }
 
-const STORAGE_PREFIX = 'alm-dock';
+const STORAGE_PREFIX = 'pv-dock';
 
 function readStoredPlacement(dockId: string): DockPlacement | null {
   const raw = window.localStorage.getItem(

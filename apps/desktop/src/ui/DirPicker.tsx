@@ -31,12 +31,12 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
       }
     };
 
-    const rootCls = ['alm-kv-row', className].filter(Boolean).join(' ');
+    const rootCls = ['pv-kv-row', className].filter(Boolean).join(' ');
 
     return (
       <div ref={ref} className={rootCls} {...rest}>
-        {label && <span className="alm-kv-row__label">{label}</span>}
-        <span className="alm-kv-row__value">
+        {label && <span className="pv-kv-row__label">{label}</span>}
+        <span className="pv-kv-row__value">
           <Folder size={14} />
           {/*
             Manual entry (#662): the native picker guarantees an existing
@@ -49,7 +49,7 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
           */}
           <input
             type="text"
-            className="alm-dir-picker__input alm-mono"
+            className="pv-dir-picker__input pv-mono"
             value={value ?? ''}
             onChange={(e) => onChange(e.target.value)}
             placeholder={m.ui_dir_picker_no_folder()}
@@ -60,7 +60,7 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
           </Btn>
         </span>
         {error && (
-          <div className="alm-dir-picker__error" title={error.message}>
+          <div className="pv-dir-picker__error" title={error.message}>
             {m.ui_dir_picker_error()}
           </div>
         )}

@@ -4,7 +4,7 @@
 /**
  * theme.density-fontsize.test.ts — #587 (density/font-size have no visible
  * effect). Covers: `applyDensity`/`applyFontSize` scaling the shared
- * `--alm-sp-*` / `--alm-text-*` tokens on <html> (the app-wide effect,
+ * `--pv-sp-*` / `--pv-text-*` tokens on <html> (the app-wide effect,
  * verified without depending on any component stylesheet), font-size
  * persistence (localStorage cache + settings-DB write-through, mirroring
  * theme.persistence.test.ts), and `hydrateThemeFromSettings` reconciling
@@ -61,18 +61,18 @@ afterEach(() => {
 });
 
 describe('applyDensity — spacing tokens (app-wide, not just row height)', () => {
-  it('scales --alm-sp-* down for compact and up for spacious', async () => {
+  it('scales --pv-sp-* down for compact and up for spacious', async () => {
     const { applyDensity } = await import('./theme');
     const style = document.documentElement.style;
 
     applyDensity('compact');
-    expect(style.getPropertyValue('--alm-sp-2')).toBe('6.00px'); // 8 * 0.75
+    expect(style.getPropertyValue('--pv-sp-2')).toBe('6.00px'); // 8 * 0.75
     expect(document.documentElement.classList.contains('density-compact')).toBe(
       true,
     );
 
     applyDensity('spacious');
-    expect(style.getPropertyValue('--alm-sp-2')).toBe('10.00px'); // 8 * 1.25
+    expect(style.getPropertyValue('--pv-sp-2')).toBe('10.00px'); // 8 * 1.25
     expect(
       document.documentElement.classList.contains('density-spacious'),
     ).toBe(true);
@@ -86,10 +86,10 @@ describe('applyDensity — spacing tokens (app-wide, not just row height)', () =
     const style = document.documentElement.style;
 
     applyDensity('compact');
-    expect(style.getPropertyValue('--alm-sp-2')).not.toBe('');
+    expect(style.getPropertyValue('--pv-sp-2')).not.toBe('');
 
     applyDensity('comfortable');
-    expect(style.getPropertyValue('--alm-sp-2')).toBe('');
+    expect(style.getPropertyValue('--pv-sp-2')).toBe('');
   });
 });
 
@@ -105,27 +105,27 @@ describe('applyFontSize — root font-size + per-token rounding guard (spec 055 
     expect(style.getPropertyValue('font-size')).toBe('16px');
   });
 
-  it('rounds --alm-text-* tokens to integer px per stop (no fractional px, floor may drop below 11 only at small)', async () => {
+  it('rounds --pv-text-* tokens to integer px per stop (no fractional px, floor may drop below 11 only at small)', async () => {
     const { applyFontSize } = await import('./theme');
     const style = document.documentElement.style;
 
     applyFontSize('small');
-    expect(style.getPropertyValue('--alm-text-xs')).toBe('9px'); // floor exception at small
-    expect(style.getPropertyValue('--alm-text-sm')).toBe('10px');
-    expect(style.getPropertyValue('--alm-text-base')).toBe('12px');
-    expect(style.getPropertyValue('--alm-text-md')).toBe('14px');
-    expect(style.getPropertyValue('--alm-text-lg')).toBe('15px');
-    expect(style.getPropertyValue('--alm-text-xl')).toBe('17px');
-    expect(style.getPropertyValue('--alm-text-2xl')).toBe('21px');
+    expect(style.getPropertyValue('--pv-text-xs')).toBe('9px'); // floor exception at small
+    expect(style.getPropertyValue('--pv-text-sm')).toBe('10px');
+    expect(style.getPropertyValue('--pv-text-base')).toBe('12px');
+    expect(style.getPropertyValue('--pv-text-md')).toBe('14px');
+    expect(style.getPropertyValue('--pv-text-lg')).toBe('15px');
+    expect(style.getPropertyValue('--pv-text-xl')).toBe('17px');
+    expect(style.getPropertyValue('--pv-text-2xl')).toBe('21px');
 
     applyFontSize('large');
-    expect(style.getPropertyValue('--alm-text-xs')).toBe('13px');
-    expect(style.getPropertyValue('--alm-text-sm')).toBe('14px');
-    expect(style.getPropertyValue('--alm-text-base')).toBe('16px');
-    expect(style.getPropertyValue('--alm-text-md')).toBe('18px');
-    expect(style.getPropertyValue('--alm-text-lg')).toBe('21px');
-    expect(style.getPropertyValue('--alm-text-xl')).toBe('23px');
-    expect(style.getPropertyValue('--alm-text-2xl')).toBe('27px');
+    expect(style.getPropertyValue('--pv-text-xs')).toBe('13px');
+    expect(style.getPropertyValue('--pv-text-sm')).toBe('14px');
+    expect(style.getPropertyValue('--pv-text-base')).toBe('16px');
+    expect(style.getPropertyValue('--pv-text-md')).toBe('18px');
+    expect(style.getPropertyValue('--pv-text-lg')).toBe('21px');
+    expect(style.getPropertyValue('--pv-text-xl')).toBe('23px');
+    expect(style.getPropertyValue('--pv-text-2xl')).toBe('27px');
   });
 
   it('writes explicit integer px at default too (rem tokens alone are not exact — see roundedTextScalePx docstring)', async () => {
@@ -134,9 +134,9 @@ describe('applyFontSize — root font-size + per-token rounding guard (spec 055 
 
     applyFontSize('default');
     expect(style.getPropertyValue('font-size')).toBe('14px');
-    expect(style.getPropertyValue('--alm-text-xs')).toBe('11px');
-    expect(style.getPropertyValue('--alm-text-base')).toBe('14px');
-    expect(style.getPropertyValue('--alm-text-2xl')).toBe('24px');
+    expect(style.getPropertyValue('--pv-text-xs')).toBe('11px');
+    expect(style.getPropertyValue('--pv-text-base')).toBe('14px');
+    expect(style.getPropertyValue('--pv-text-2xl')).toBe('24px');
   });
 });
 
@@ -196,7 +196,7 @@ describe('hydrateThemeFromSettings — reconciles font size alongside theme', ()
 
     expect(getFontSizeChoice()).toBe('large');
     expect(
-      document.documentElement.style.getPropertyValue('--alm-text-base'),
+      document.documentElement.style.getPropertyValue('--pv-text-base'),
     ).toBe('16px');
   });
 
@@ -228,13 +228,13 @@ describe('density preference writes — central rescale via initAppearance()', (
     setPreference('density', 'compact');
 
     const style = document.documentElement.style;
-    expect(style.getPropertyValue('--alm-sp-2')).toBe('6.00px'); // 8 * 0.75
+    expect(style.getPropertyValue('--pv-sp-2')).toBe('6.00px'); // 8 * 0.75
     expect(document.documentElement.classList.contains('density-compact')).toBe(
       true,
     );
 
     setPreference('density', 'comfortable');
-    expect(style.getPropertyValue('--alm-sp-2')).toBe('');
+    expect(style.getPropertyValue('--pv-sp-2')).toBe('');
     expect(document.documentElement.classList.contains('density-compact')).toBe(
       false,
     );

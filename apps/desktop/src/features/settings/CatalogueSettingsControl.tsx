@@ -8,7 +8,7 @@
 // `'catalogues'` scope (see features/targets/catalogue-settings.ts). The Planner
 // initializes its catalogue filter from this setting on load.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toggle } from '@/ui';
 import {
   PLANNER_CATALOGS,
@@ -28,11 +28,21 @@ export function CatalogueSettingsControl() {
   );
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Set once the user toggles a catalogue, so the mount read below can never
+  // overwrite a deliberate choice. `cancelled` only covers unmount, not the
+  // case where the component is still mounted and the user has already acted.
+  const toggledRef = useRef(false);
+
+  // Load the persisted defaults on mount. This resolves asynchronously, so on a
+  // slow backend it can land AFTER the user has toggled a catalogue — and by
+  // then `persist` has already written their choice to the settings DB, so
+  // applying the read would leave the UI showing a value the backend no longer
+  // holds. The toggle is the more recent intent and must win.
   useEffect(() => {
     let cancelled = false;
     loadDefaultCatalogues()
       .then((ids) => {
-        if (!cancelled) setEnabled(new Set(ids));
+        if (!cancelled && !toggledRef.current) setEnabled(new Set(ids));
       })
       .catch(() => {
         // Backend unavailable — keep in-code defaults.
@@ -55,6 +65,9 @@ export function CatalogueSettingsControl() {
   }, []);
 
   const toggle = (id: CatalogueId, on: boolean): void => {
+    // Claim the setting before the mount read can answer (see the effect
+    // above) — from here on the user owns it for this session.
+    toggledRef.current = true;
     const next = new Set(enabled);
     if (on) next.add(id);
     else next.delete(id);
@@ -80,7 +93,7 @@ export function CatalogueSettingsControl() {
       ))}
 
       {saveError && (
-        <div className="alm-settings__error" role="alert">
+        <div className="pv-settings__error" role="alert">
           {m.settings_catalogue_save_error({ error: saveError })}
         </div>
       )}

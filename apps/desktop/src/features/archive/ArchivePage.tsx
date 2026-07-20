@@ -327,7 +327,7 @@ export function ArchivePage() {
           </p>
           <input
             ref={confirmInputRef}
-            className="alm-input"
+            className="pv-input"
             type="text"
             value={confirmInput}
             onChange={(e) => setConfirmInput(e.target.value)}

@@ -91,8 +91,8 @@ configured) real per-site astronomy for tonight.
   now tracks the active density setting instead of a fixed height, so
   scrolling stays visually aligned when density changes. Column order/
   scroll-as-one-unit behavior per `TargetsTable.tsx` (`<colgroup>` order),
-  `merges-3.css` (`.alm-targets-table` `min-width: 1000px`,
-  `table-layout: fixed`), `merges-2.css` (`.alm-targets-table__scroll`
+  `merges-3.css` (`.pv-targets-table` `min-width: 1000px`,
+  `table-layout: fixed`), `merges-2.css` (`.pv-targets-table__scroll`
   `overflow-x: auto`) — no `position: sticky` column rule and no
   column-hiding logic exist anywhere in this file. spec-054/FR-006–FR-008
   (a pinned-column, priority-scroll, no-auto-hide design) were never
@@ -164,7 +164,7 @@ configured) real per-site astronomy for tonight.
 - **Trace:** issue #658 (open, live-link gap, unaffected by spec-054);
   issue #816 (dissolved — fixed by spec-054 adaptive dock, see Δ6);
   journey-run-2026-07-14.md Journey 9 section; `TargetDetailV2.tsx` (wraps
-  `DetailPanel fill`, own `.alm-planner__scroll` region); spec-054/FR-001
+  `DetailPanel fill`, own `.pv-planner__scroll` region); spec-054/FR-001
   (adaptive side/bottom placement), FR-003 (per-page pin), FR-005
   (resizable/persistent side width). FR-002 (a Targets-specific 1500px
   threshold) was never delivered — superseded, no tracked issue.

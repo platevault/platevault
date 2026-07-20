@@ -92,6 +92,7 @@ pub use read::get_settings;
 pub use validation::{settings_value_eq, validate_value};
 pub use writes::{
     emit_snapshot, resolve_setting, restore_defaults, set_source_override, update_setting,
+    SnapshotDedupe,
 };
 
 use keys::{

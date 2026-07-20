@@ -29,7 +29,7 @@ const themeTokens = new Map(); // theme id -> Set<token name>
 for (const [, selector, body] of css.matchAll(blockRe)) {
   const themeNames = [...selector.matchAll(/\[data-theme="([a-z0-9-]+)"\]/g)].map((m) => m[1]);
   if (themeNames.length === 0) continue;
-  const tokens = [...body.matchAll(/(--alm-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
+  const tokens = [...body.matchAll(/(--pv-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
   for (const theme of themeNames) {
     const set = themeTokens.get(theme) ?? new Set();
     for (const t of tokens) set.add(t);

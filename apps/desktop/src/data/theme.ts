@@ -7,8 +7,8 @@
 // one scope per theme. `system` follows the OS via prefers-color-scheme.
 // Density mirrors the existing AppPreferences.density and is applied as a
 // class on <html>. Density and font size both scale the shared
-// spacing/type-scale CSS custom properties (tokens.css `--alm-sp-*` /
-// `--alm-text-*`) in place via inline overrides on <html> — those tokens are
+// spacing/type-scale CSS custom properties (tokens.css `--pv-sp-*` /
+// `--pv-text-*`) in place via inline overrides on <html> — those tokens are
 // consumed by hundreds of component stylesheets already, so this gives an
 // app-wide effect through the existing token layer rather than adding
 // per-component density/font-size branches (#587).
@@ -52,13 +52,24 @@ export type ThemeId =
   | 'warm-clay'
   | 'warm-slate'
   | 'observatory-dark'
-  | 'espresso-dark';
+  | 'espresso-dark'
+  | 'observatory-cool-light'
+  | 'observatory-cool';
 export type ThemeChoice = ThemeId | 'system';
 
 export interface ThemeMeta {
   id: ThemeId;
   label: string;
   mode: 'light' | 'dark';
+  /** Picker grouping (handoff 03) — Warm Slate/Observatory Dark form the warm
+   *  family, the two Observatory Cool themes form the cool family. */
+  family: 'warm' | 'cool';
+  /** Canonical (picker-visible) vs. variant (registry-only, handoff 03): a
+   *  disabled theme is still a fully valid ThemeChoice — it stays in
+   *  VALID_CHOICES below and keeps resolving/applying/persisting exactly as
+   *  before for anyone with it already selected. Only the picker filters on
+   *  this flag. */
+  enabled: boolean;
   /** [bg, surface, accent] for swatch previews */
   swatch: [string, string, string];
 }
@@ -68,25 +79,49 @@ export const THEMES: ThemeMeta[] = [
     id: 'warm-clay',
     label: 'Warm Clay',
     mode: 'light',
+    family: 'warm',
+    enabled: false,
     swatch: ['#f6f4ef', '#efeae1', '#b25a35'],
   },
   {
     id: 'warm-slate',
     label: 'Warm Slate',
     mode: 'light',
+    family: 'warm',
+    enabled: true,
     swatch: ['#f5f4f1', '#ecebe6', '#3f6b7a'],
   },
   {
     id: 'observatory-dark',
     label: 'Observatory',
     mode: 'dark',
+    family: 'warm',
+    enabled: true,
     swatch: ['#1b1916', '#232019', '#d98a3d'],
   },
   {
     id: 'espresso-dark',
     label: 'Espresso',
     mode: 'dark',
+    family: 'warm',
+    enabled: false,
     swatch: ['#161412', '#1e1b18', '#cf9d63'],
+  },
+  {
+    id: 'observatory-cool-light',
+    label: 'Observatory Cool · Light',
+    mode: 'light',
+    family: 'cool',
+    enabled: true,
+    swatch: ['#f2f4f8', '#e8ecf2', '#276f7c'],
+  },
+  {
+    id: 'observatory-cool',
+    label: 'Observatory Cool',
+    mode: 'dark',
+    family: 'cool',
+    enabled: true,
+    swatch: ['#12151b', '#191d25', '#3fb2c2'],
   },
 ];
 
@@ -115,18 +150,18 @@ function isThemeChoice(v: unknown): v is ThemeChoice {
  * jsdom (vitest) doesn't reliably resolve stylesheet-declared custom
  * properties through computed style, which would make scaling non-
  * deterministic under test. Keep these in sync with tokens.css if its base
- * `--alm-sp-*` / `--alm-text-*` values ever change — `theme.tokens-drift.test.ts`
+ * `--pv-sp-*` / `--pv-text-*` values ever change — `theme.tokens-drift.test.ts`
  * asserts these tables match the parsed tokens.css `:root` values.
  */
 export const SPACING_BASE_PX: Record<string, number> = {
-  '--alm-sp-0': 2,
-  '--alm-sp-1': 4,
-  '--alm-sp-2': 8,
-  '--alm-sp-3': 12,
-  '--alm-sp-4': 16,
-  '--alm-sp-5': 24,
-  '--alm-sp-6': 32,
-  '--alm-sp-7': 48,
+  '--pv-sp-0': 2,
+  '--pv-sp-1': 4,
+  '--pv-sp-2': 8,
+  '--pv-sp-3': 12,
+  '--pv-sp-4': 16,
+  '--pv-sp-5': 24,
+  '--pv-sp-6': 32,
+  '--pv-sp-7': 48,
 };
 
 /**
@@ -136,13 +171,13 @@ export const SPACING_BASE_PX: Record<string, number> = {
  * has an integer starting point to scale from.
  */
 export const TEXT_SCALE_BASE_PX: Record<string, number> = {
-  '--alm-text-xs': 11,
-  '--alm-text-sm': 12,
-  '--alm-text-base': 14,
-  '--alm-text-md': 16,
-  '--alm-text-lg': 18,
-  '--alm-text-xl': 20,
-  '--alm-text-2xl': 24,
+  '--pv-text-xs': 11,
+  '--pv-text-sm': 12,
+  '--pv-text-base': 14,
+  '--pv-text-md': 16,
+  '--pv-text-lg': 18,
+  '--pv-text-xl': 20,
+  '--pv-text-2xl': 24,
 };
 
 /** Rescales the spacing token table onto <html> inline styles; `scale === 1` clears the override (back to tokens.css defaults). */
@@ -302,7 +337,7 @@ const DENSITY_SPACING_SCALE: Record<string, number> = {
 };
 
 /**
- * `--alm-row-height` px per density choice (tokens.css `:root` base + the
+ * `--pv-row-height` px per density choice (tokens.css `:root` base + the
  * `.density-compact`/`.density-spacious` overrides) — duplicated here for the
  * same reason as SPACING_BASE_PX/TEXT_SCALE_BASE_PX (jsdom can't reliably
  * resolve stylesheet custom properties). Row-driven virtualizers (e.g.
@@ -345,9 +380,9 @@ const FONT_SIZE_ROOT_PX: Record<FontSizeChoice, number> = {
 
 /**
  * Per-token rounding guard (spec 055 T011, plan.md "mandatory, not
- * optional"): tokens.css expresses `--alm-text-*` as rem against the 14px
+ * optional"): tokens.css expresses `--pv-text-*` as rem against the 14px
  * root, so at the 12px/16px stops every token computes fractional
- * (`× 12/14` / `× 16/14`) — e.g. `--alm-text-md` at 16px root is
+ * (`× 12/14` / `× 16/14`) — e.g. `--pv-text-md` at 16px root is
  * `18.2857...px`. Browsers don't reliably sub-pixel-snap fractional
  * `font-size` the same way across platforms, and spec 055's whole premise is
  * eliminating fractional/sub-floor text, so each token is independently
@@ -362,7 +397,7 @@ const FONT_SIZE_ROOT_PX: Record<FontSizeChoice, number> = {
  * 14px root) take over.
  *
  * The 11px floor (FR-003/SC-003) is guaranteed at `default` only, per the
- * spec's own note: at `small`, the floor token (`--alm-text-xs`) rounds to
+ * spec's own note: at `small`, the floor token (`--pv-text-xs`) rounds to
  * 9px — a documented, accepted exception, not a bug. Computed values per
  * stop (verified in theme.tokens-drift.test.ts / typography_dial.spec.ts):
  *   small (12px root):   xs=9  sm=10 base=12 md=14 lg=15 xl=17 2xl=21

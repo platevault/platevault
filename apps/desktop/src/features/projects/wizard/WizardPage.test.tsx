@@ -221,11 +221,11 @@ describe('T078c: WizardPage renders inside main window with correct layout', () 
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('has the layout fix: outer div carries the alm-wizard-page class (min-height:0 via CSS)', () => {
+  it('has the layout fix: outer div carries the pv-wizard-page class (min-height:0 via CSS)', () => {
     const { container } = renderWizard();
     const outer = container.firstChild as HTMLElement;
-    // The outer div must carry alm-wizard-page which sets min-height:0 to prevent flex overflow
-    expect(outer.classList.contains('alm-wizard-page')).toBe(true);
+    // The outer div must carry pv-wizard-page which sets min-height:0 to prevent flex overflow
+    expect(outer.classList.contains('pv-wizard-page')).toBe(true);
   });
 });
 

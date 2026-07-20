@@ -68,6 +68,30 @@ function isNeedsReview(item: InboxListItem): boolean {
 }
 
 /**
+ * `true` when the item's own cached classification (`classificationResult`
+ * — the SAME `inbox_classifications` row `inbox.classify`/the detail panel
+ * read) has not resolved to a single type, and no dominant frame type is
+ * otherwise known.
+ *
+ * Issue #711 Instance A (unsplit-folder variant): `classify()`
+ * unconditionally sets `inbox_items.state = "classified"` once a folder has
+ * been scanned, regardless of whether it actually resolved to one type —
+ * for an empty/mixed/needs-review unsplit folder (no `frameType`/
+ * `groupFrameType`, not the `__needs_review__` sentinel), `state` alone
+ * would misleadingly render as "classified" while the detail panel/
+ * `inbox.classify` correctly show "unclassified". `classificationResult` is
+ * the only remaining signal that still agrees with them in that case.
+ * Scoped to pre-confirm states only — a `plan_open`/`resolved` item is never
+ * relabeled by this.
+ */
+function isUnresolvedClassification(item: InboxListItem): boolean {
+  return (
+    item.classificationResult === 'unclassified' &&
+    (item.state === 'pending_classification' || item.state === 'classified')
+  );
+}
+
+/**
  * Classification label shown in the Type column. For classified / plan-open
  * items we show the dominant frame type when available so the column is
  * frame-type-forward rather than state-forward. A needs-review sub-item has
@@ -89,6 +113,7 @@ function classificationLabel(item: InboxListItem): string {
   if (item.frameType) return item.frameType;
   if (item.groupFrameType) return item.groupFrameType;
   if (isNeedsReview(item)) return m.inbox_state_needs_review();
+  if (isUnresolvedClassification(item)) return m.inbox_state_unclassified();
   switch (item.state) {
     case 'pending_classification':
       return m.inbox_state_pending();
@@ -106,6 +131,7 @@ function classificationLabel(item: InboxListItem): string {
 /** CSS colour modifier for the Type cell. */
 function classificationMod(item: InboxListItem): string {
   if (isNeedsReview(item)) return 'needs_review';
+  if (isUnresolvedClassification(item)) return 'pending';
   switch (item.state) {
     case 'pending_classification':
       return 'pending';
@@ -412,7 +438,7 @@ export function InboxList({
         m.inbox_sort_format_aria(),
       ),
       ariaSort: thSort('format'),
-      className: 'alm-inbox-cell--right',
+      className: 'pv-inbox-cell--right',
       style: { width: '7rem' },
     },
   ];
@@ -424,7 +450,7 @@ export function InboxList({
         if (row.kind === 'header') {
           const { node, depth, path, collapsed: isCollapsed } = row;
           return {
-            _rowClassName: 'alm-inbox-table__group',
+            _rowClassName: 'pv-inbox-table__group',
             _indent: tableIndent(depth),
             // The collapse control is a real <button> (keyboard-accessible,
             // announces expanded state) inside the group cell — not a clickable
@@ -432,23 +458,16 @@ export function InboxList({
             detection: (
               <button
                 type="button"
-                className="alm-inbox-table__group-cell"
+                className="pv-inbox-table__group-cell"
                 data-testid={`inbox-group-${node.dimension}-${node.key}`}
                 aria-expanded={!isCollapsed}
                 onClick={() => toggle(path)}
               >
-                <span
-                  className="alm-inbox-list__group-caret"
-                  aria-hidden="true"
-                >
+                <span className="pv-inbox-list__group-caret" aria-hidden="true">
                   {isCollapsed ? '▸' : '▾'}
                 </span>
-                <span className="alm-inbox-list__group-label">
-                  {node.label}
-                </span>
-                <span className="alm-inbox-list__group-count">
-                  {node.count}
-                </span>
+                <span className="pv-inbox-list__group-label">{node.label}</span>
+                <span className="pv-inbox-list__group-count">{node.count}</span>
               </button>
             ),
             type: '',
@@ -462,9 +481,9 @@ export function InboxList({
         return {
           _testid: `inbox-item-${item.inboxItemId}`,
           _rowClassName: [
-            'alm-inbox-table__row',
-            selected ? 'alm-inbox-table__row--selected' : '',
-            item.state === 'plan_open' ? 'alm-inbox-table__row--muted' : '',
+            'pv-inbox-table__row',
+            selected ? 'pv-inbox-table__row--selected' : '',
+            item.state === 'plan_open' ? 'pv-inbox-table__row--muted' : '',
           ]
             .filter(Boolean)
             .join(' '),
@@ -472,9 +491,9 @@ export function InboxList({
           _selected: selected,
           _indent: indent || undefined,
           detection: (
-            <span className="alm-inbox-cell__path-wrap">
+            <span className="pv-inbox-cell__path-wrap">
               <span
-                className="alm-inbox-cell__path"
+                className="pv-inbox-cell__path"
                 title={detectionLabel(item)}
               >
                 {detectionLabel(item)}
@@ -498,7 +517,7 @@ export function InboxList({
           ),
           type: (
             <span
-              className={`alm-inbox-row__classification alm-inbox-row__classification--${mod}`}
+              className={`pv-inbox-row__classification pv-inbox-row__classification--${mod}`}
             >
               {classificationLabel(item)}
             </span>
@@ -515,26 +534,26 @@ export function InboxList({
     : null;
 
   return (
-    <div className="alm-listtable" data-testid="inbox-list">
+    <div className="pv-listtable" data-testid="inbox-list">
       {visualRows.length === 0 && loading ? (
-        <div className="alm-listtable__empty">
+        <div className="pv-listtable__empty">
           <Skeleton variant="block" count={8} label={m.common_loading()} />
         </div>
       ) : visualRows.length === 0 ? (
-        <div className="alm-listtable__empty">{m.inbox_no_detections()}</div>
+        <div className="pv-listtable__empty">{m.inbox_no_detections()}</div>
       ) : (
         <Table
-          className="alm-inbox-table"
+          className="pv-inbox-table"
           columns={COLUMNS}
           rows={rows}
           virtualized
           estimateRowHeight={40}
-          scrollClassName="alm-listtable__scroll"
+          scrollClassName="pv-listtable__scroll"
           scrollTestId="inbox-virtual-sizer"
         />
       )}
       {groupingHint && (
-        <div className="alm-listtable__foot" data-testid="inbox-grouping-hint">
+        <div className="pv-listtable__foot" data-testid="inbox-grouping-hint">
           {groupingHint}
         </div>
       )}

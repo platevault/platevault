@@ -8,7 +8,7 @@
  * sortable table — the same surface pattern as SessionsTable (shared `Table`
  * from `@/ui`). Like every list page, the table is FLAT by default (a single
  * sorted list); grouping is opt-in via the top-bar Group-by control (Kind,
- * Camera, Filter, …), sharing the `groupByDimensions` engine + `.alm-listgroup`
+ * Camera, Filter, …), sharing the `groupByDimensions` engine + `.pv-listgroup`
  * header rows. `dark_flat` and `bad_pixel_map` are never shown in v1 (FR-001),
  * regardless of grouping.
  *
@@ -268,44 +268,44 @@ const COLUMNS: Array<{
     key: 'camera',
     label: () => m.settings_calmatch_camera(),
     sort: 'camera',
-    className: 'alm-calib-cell--muted',
+    className: 'pv-calib-cell--muted',
   },
   { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
   {
     key: 'gain',
     label: () => m.settings_calmatch_gain(),
     sort: 'gain',
-    className: 'alm-calib-cell--num',
+    className: 'pv-calib-cell--num',
   },
   {
     key: 'exposure',
     label: () => m.calibration_fp_exposure(),
     sort: 'exposure',
-    className: 'alm-calib-cell--mono',
+    className: 'pv-calib-cell--mono',
   },
   {
     key: 'temp',
     label: () => m.calibration_col_temp(),
     sort: 'temp',
-    className: 'alm-calib-cell--mono',
+    className: 'pv-calib-cell--mono',
   },
   {
     key: 'binning',
     label: () => m.settings_calmatch_binning(),
     sort: 'binning',
-    className: 'alm-calib-cell--mono',
+    className: 'pv-calib-cell--mono',
   },
   {
     key: 'usage',
     label: () => m.calibration_col_usage(),
     sort: 'usage',
-    className: 'alm-calib-cell--muted',
+    className: 'pv-calib-cell--muted',
   },
   {
     key: 'created',
     label: () => m.archive_prop_date(),
     sort: 'created',
-    className: 'alm-calib-cell--mono',
+    className: 'pv-calib-cell--mono',
   },
 ];
 
@@ -370,7 +370,7 @@ export function MastersTable({
 
   if (loading) {
     return (
-      <div className="alm-calib-table__status">
+      <div className="pv-calib-table__status">
         <Skeleton
           variant="block"
           count={6}
@@ -383,7 +383,7 @@ export function MastersTable({
 
   if (error) {
     return (
-      <div className="alm-calib-table__status">
+      <div className="pv-calib-table__status">
         <EmptyState
           title={m.calibration_load_error_title()}
           desc={error}
@@ -395,7 +395,7 @@ export function MastersTable({
 
   if (shown.length === 0) {
     return (
-      <div className="alm-calib-table__status">
+      <div className="pv-calib-table__status">
         <EmptyState
           title={m.calibration_empty_title()}
           desc={m.calibration_empty_desc()}
@@ -438,15 +438,15 @@ export function MastersTable({
     return {
       _testid: `master-row-${master.id}`,
       _rowClassName:
-        'alm-calib-table__row' +
-        (selected === master.id ? ' alm-calib-table__row--selected' : ''),
+        'pv-calib-table__row' +
+        (selected === master.id ? ' pv-calib-table__row--selected' : ''),
       _onClick: () => onSelect(master.id),
       _selected: selected === master.id,
       _indent: indentPx || undefined,
       master: (
-        <span className="alm-calib-cell__master">
+        <span className="pv-calib-cell__master">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-          <span className="alm-calib-cell__master-label">
+          <span className="pv-calib-cell__master-label">
             {masterLabel(master)}
           </span>
           {isAging && (
@@ -479,21 +479,21 @@ export function MastersTable({
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
-          _rowClassName: 'alm-listgroup',
+          _rowClassName: 'pv-listgroup',
           _indent: tableIndent(depth),
           master: (
             <button
               type="button"
-              className="alm-listgroup__cell"
+              className="pv-listgroup__cell"
               data-testid={`calibration-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
             >
-              <span className="alm-listgroup__caret" aria-hidden="true">
+              <span className="pv-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
               </span>
-              <span className="alm-listgroup__label">{node.label}</span>
-              <span className="alm-listgroup__count">{node.count}</span>
+              <span className="pv-listgroup__label">{node.label}</span>
+              <span className="pv-listgroup__count">{node.count}</span>
             </button>
           ),
           ...EMPTY_MASTER_CELLS,
@@ -509,5 +509,5 @@ export function MastersTable({
     }
   }
 
-  return <Table className="alm-calib-table" columns={columns} rows={rows} />;
+  return <Table className="pv-calib-table" columns={columns} rows={rows} />;
 }

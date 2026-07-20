@@ -995,8 +995,8 @@ export function InboxPage() {
   // ("Maximum update depth exceeded") for as long as the Inbox was open.
   const pageStatusNode = useMemo(
     () => (
-      <span className="alm-inbox-summary" data-testid="statusbar-inbox-summary">
-        <span className="alm-inbox-summary__count">{summary}</span>
+      <span className="pv-inbox-summary" data-testid="statusbar-inbox-summary">
+        <span className="pv-inbox-summary__count">{summary}</span>
         {!listLoading && <InboxStatsSummary stats={derivedStats} />}
       </span>
     ),

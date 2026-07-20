@@ -119,11 +119,11 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
   }, [data.name, data.workflowProfile, reset]);
 
   return (
-    <div className="alm-wizard-name">
+    <div className="pv-wizard-name">
       {/* Project name */}
-      <div className="alm-wizard-name__field-group">
+      <div className="pv-wizard-name__field-group">
         {}
-        <label htmlFor="project-name" className="alm-wizard-name__label">
+        <label htmlFor="project-name" className="pv-wizard-name__label">
           {m.projects_name_label()}
         </label>
         <input
@@ -137,13 +137,13 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
               : undefined
           }
           {...register('name')}
-          className="alm-wizard-name__input"
+          className="pv-wizard-name__input"
         />
         {errors.name ? (
           <span
             id="project-name-error"
             role="alert"
-            className="alm-wizard-name__error"
+            className="pv-wizard-name__error"
           >
             {errors.name.message}
           </span>
@@ -151,7 +151,7 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
           <span
             id="project-name-error"
             role="alert"
-            className="alm-wizard-name__error"
+            className="pv-wizard-name__error"
           >
             {serverError.message}
           </span>
@@ -161,16 +161,16 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
       {/* Target (optional) — folded in from the retired CreateProjectDialog
           (spec 035 US1 / #887/#719/#612): lets the wizard carry a real
           `canonicalTargetId` instead of guessing one from the typed name. */}
-      <div className="alm-wizard-name__field-group">
+      <div className="pv-wizard-name__field-group">
         {target ? (
           <>
-            <span className="alm-wizard-name__label">
+            <span className="pv-wizard-name__label">
               {m.projects_create_target_label()}
             </span>
-            <div className="alm-create-project__target-row">
+            <div className="pv-create-project__target-row">
               <Pill variant="accent">{target.primaryDesignation}</Pill>
               {target.commonName && (
-                <span className="alm-field-hint">{target.commonName}</span>
+                <span className="pv-field-hint">{target.commonName}</span>
               )}
               <Btn
                 type="button"
@@ -200,8 +200,8 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
       </div>
 
       {/* Workflow profile */}
-      <div className="alm-wizard-name__profile-group">
-        <span className="alm-wizard-name__label">
+      <div className="pv-wizard-name__profile-group">
+        <span className="pv-wizard-name__label">
           {m.projects_wizard_workflow_label()}
         </span>
         <Controller
@@ -212,27 +212,27 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
               value={field.value}
               onValueChange={(value) => field.onChange(value)}
               aria-label={m.projects_wizard_workflow_label()}
-              className="alm-wizard-name__radio-group"
+              className="pv-wizard-name__radio-group"
             >
               {PROFILES.map((profile) => (
                 // eslint-disable-next-line jsx-a11y/label-has-associated-control -- wraps a Base UI <Radio.Root> (not a native input the rule recognises); the label text + nested radio form the accessible option
                 <label
                   key={profile.id}
-                  className="alm-wizard-name__profile-option"
+                  className="pv-wizard-name__profile-option"
                   data-selected={field.value === profile.id ? 'true' : 'false'}
                 >
                   <Radio.Root
                     value={profile.id}
-                    className="alm-radio"
+                    className="pv-radio"
                     aria-label={profile.label()}
                   >
-                    <Radio.Indicator className="alm-radio__indicator" />
+                    <Radio.Indicator className="pv-radio__indicator" />
                   </Radio.Root>
                   <div>
-                    <div className="alm-wizard-name__profile-label">
+                    <div className="pv-wizard-name__profile-label">
                       {profile.label()}
                     </div>
-                    <div className="alm-wizard-name__profile-description">
+                    <div className="pv-wizard-name__profile-description">
                       {profile.description()}
                     </div>
                   </div>
@@ -242,7 +242,7 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
           )}
         />
         {serverError?.field === 'tool' && (
-          <span role="alert" className="alm-wizard-name__error">
+          <span role="alert" className="pv-wizard-name__error">
             {serverError.message}
           </span>
         )}

@@ -86,7 +86,8 @@ use crate::commands::plan_apply::{
 };
 use crate::commands::plans::{
     archive_list, archive_permanently_delete, archive_plan_generate, archive_plan_generate_restore,
-    archive_send_to_trash, plans_approve, plans_discard, plans_get, plans_list, plans_retry,
+    archive_send_to_trash, plans_approve, plans_discard, plans_free_space_estimate, plans_get,
+    plans_list, plans_retry,
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::prepared_views::{
@@ -263,6 +264,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // plans (spec 017)
         plans_list,
         plans_get,
+        plans_free_space_estimate,
         plans_approve,
         plans_discard,
         plans_retry,
@@ -513,6 +515,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // plans (spec 017)
         plans_list,
         plans_get,
+        plans_free_space_estimate,
         plans_approve,
         plans_discard,
         plans_retry,
@@ -1104,9 +1107,13 @@ pub fn run_app(
         let snap_pool = pool.clone();
         let snap_bus = bus.clone();
         tokio::spawn(async move {
+            // #668 suppression state, scoped to this loop — the only emitter
+            // of settings.snapshot.
+            let dedupe = app_core::settings::SnapshotDedupe::new();
             // Session-start snapshot.
             if let Err(e) =
-                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start").await
+                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start", &dedupe)
+                    .await
             {
                 tracing::warn!("settings.snapshot (session_start) failed: {e:?}");
             }
@@ -1114,8 +1121,13 @@ pub fn run_app(
             let interval = std::time::Duration::from_mins(5);
             loop {
                 tokio::time::sleep(interval).await;
-                if let Err(e) =
-                    app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "debounce_5min").await
+                if let Err(e) = app_core::settings::emit_snapshot(
+                    &snap_pool,
+                    &snap_bus,
+                    "debounce_5min",
+                    &dedupe,
+                )
+                .await
                 {
                     tracing::warn!("settings.snapshot (debounce_5min) failed: {e:?}");
                 }

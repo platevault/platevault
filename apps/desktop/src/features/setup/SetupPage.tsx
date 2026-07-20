@@ -39,17 +39,15 @@ export function SetupPage() {
 
   if (setupCompleted || checking) {
     return (
-      <div className="alm-page alm-setup-page__loading">
-        {m.common_loading()}
-      </div>
+      <div className="pv-page pv-setup-page__loading">{m.common_loading()}</div>
     );
   }
 
   return (
-    // density-* mirrors Shell.tsx's `.alm-frame` class: the wizard renders
+    // density-* mirrors Shell.tsx's `.pv-frame` class: the wizard renders
     // outside the Shell, so it needs its own carrier for a live density
     // preview during setup (#505).
-    <div className={`alm-page density-${density}`}>
+    <div className={`pv-page density-${density}`}>
       <SetupWizard />
     </div>
   );

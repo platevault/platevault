@@ -505,17 +505,28 @@ pub async fn resolve_setting(
 
 // ── emit_snapshot ──────────────────────────────────────────────────────────
 
+/// Dedupe state for [`emit_snapshot`]: the noisy-key values (as a JSON object)
+/// from the most recently PUBLISHED `settings.snapshot` event (issue #668).
+///
+/// Owned by the snapshot loop that drives `emit_snapshot`, so suppression is
+/// scoped to that loop rather than to the whole process. Not invalidated by
+/// `update_setting`/`restore_defaults`/`set_source_override`: those already
+/// emit their own real `settings.changed`/`protection.default.changed`
+/// events, so a later snapshot correctly finds "no further noisy-key change"
+/// and stays quiet until a *noisy* key changes.
+pub type SnapshotDedupe = app_core_cache::SnapshotCache<Value>;
+
 /// Emit a `settings.snapshot` audit event (T020).
 ///
 /// Called at session start and after the 5-minute inactivity debounce
 /// (the debounce timer is owned by the caller/command layer).
 ///
 /// Issue #668: a periodic snapshot whose noisy-key values are byte-identical
-/// to the last one PUBLISHED is a no-op heartbeat — it is skipped rather than
-/// published, mirroring `target.resolve_batch.completed`'s suppression on
-/// `considered == 0` (both stop a periodic internal event from flooding the
-/// activity log when there is nothing new to report). The first snapshot in a
-/// process (no prior published value) always publishes.
+/// to the last one PUBLISHED via `dedupe` is a no-op heartbeat — it is skipped
+/// rather than published, mirroring `target.resolve_batch.completed`'s
+/// suppression on `considered == 0` (both stop a periodic internal event from
+/// flooding the activity log when there is nothing new to report). The first
+/// snapshot against a fresh `dedupe` always publishes.
 ///
 /// # Errors
 ///
@@ -524,6 +535,7 @@ pub async fn emit_snapshot(
     pool: &SqlitePool,
     bus: &EventBus,
     trigger: &str,
+    dedupe: &SnapshotDedupe,
 ) -> Result<(), ContractError> {
     // Collect current values of noisy keys.
     let mut noisy_values = serde_json::Map::new();
@@ -538,7 +550,7 @@ pub async fn emit_snapshot(
 
     // Skip the publish when nothing changed since the last one we actually
     // published (#668).
-    if caches::last_snapshot_values().load().as_deref() == Some(&noisy_keys) {
+    if dedupe.load().as_deref() == Some(&noisy_keys) {
         return Ok(());
     }
 
@@ -550,7 +562,7 @@ pub async fn emit_snapshot(
     )
     .await
     .map_err(bus_err)?;
-    caches::store_last_snapshot_values(std::sync::Arc::new(noisy_keys));
+    dedupe.store(std::sync::Arc::new(noisy_keys));
 
     Ok(())
 }

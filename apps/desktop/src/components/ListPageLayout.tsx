@@ -44,7 +44,7 @@
  * full-height RIGHT side panel (fixed ~420px width, own scroll, keeps the
  * close ✕) BESIDE the full-width primary content — suited to detail that
  * reads as a tall narrow column (Projects). The side variant simply switches
- * `.alm-listpage__body` from a column to a row and pins the detail width; the
+ * `.pv-listpage__body` from a column to a row and pins the detail width; the
  * primary content stays full-width to the left of it.
  *
  * `'side-and-bottom'` (task #104) — dual variant: renders BOTH a right side
@@ -55,7 +55,7 @@
  *
  * Pass the top bar either as a ready `topBar` node (e.g. `<PageTopBar .../>`)
  * or via the convenience `topBarProps` slots, which this component forwards to
- * an internal `PageTopBar`. ListPageLayout is itself the `.alm-page` root, so
+ * an internal `PageTopBar`. ListPageLayout is itself the `.pv-page` root, so
  * it must be the page's outermost element (do not nest it inside PageShell).
  */
 
@@ -196,37 +196,37 @@ export function ListPageLayout({
   // ── Dual side-and-bottom layout (task #104) ──────────────────────────────
   //
   // Structure: the bottom strip sits ONLY under the main content column, NOT
-  // under the side panel. A wrapper column (.alm-listpage__main-col) groups
+  // under the side panel. A wrapper column (.pv-listpage__main-col) groups
   // main + bottom so the side panel is flush to full height on the right.
   //
-  //   .alm-listpage__body--dual (row)
-  //     .alm-listpage__main-col (column, flex:1)
-  //       .alm-listpage__main   (flex:1, scrolls)
-  //       .alm-listpage__bottom (fit-content, max-height cap)
-  //     .alm-listpage__side     (fixed 420px, own scroll)
+  //   .pv-listpage__body--dual (row)
+  //     .pv-listpage__main-col (column, flex:1)
+  //       .pv-listpage__main   (flex:1, scrolls)
+  //       .pv-listpage__bottom (fit-content, max-height cap)
+  //     .pv-listpage__side     (fixed 420px, own scroll)
   //
   if (detailPlacement === 'side-and-bottom') {
     return (
-      <div className="alm-page">
+      <div className="pv-page">
         {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
-        <div className="alm-listpage__body alm-listpage__body--dual">
+        <div className="pv-listpage__body pv-listpage__body--dual">
           {/* Left column: main table + bottom strip stacked */}
-          <div className="alm-listpage__main-col">
-            <div className="alm-listpage__main">{children}</div>
+          <div className="pv-listpage__main-col">
+            <div className="pv-listpage__main">{children}</div>
 
             {/* Bottom strip constrained to the content column */}
             {hasBottom && (
               <section
-                className="alm-listpage__bottom"
+                className="pv-listpage__bottom"
                 role="complementary"
                 aria-label={bottomDetailLabel}
               >
                 {onCloseBottomDetail && (
-                  <div className="alm-listpage__panel-bar">
+                  <div className="pv-listpage__panel-bar">
                     <button
                       type="button"
-                      className="alm-listpage__panel-close"
+                      className="pv-listpage__panel-close"
                       onClick={onCloseBottomDetail}
                       aria-label={m.cmp_listpage_close_session_details_aria()}
                     >
@@ -234,7 +234,7 @@ export function ListPageLayout({
                     </button>
                   </div>
                 )}
-                <div className="alm-listpage__panel-body">{bottomDetail}</div>
+                <div className="pv-listpage__panel-body">{bottomDetail}</div>
               </section>
             )}
           </div>
@@ -242,15 +242,15 @@ export function ListPageLayout({
           {/* Right: side detail panel, full height of the body */}
           {hasDetail && (
             <section
-              className="alm-listpage__side"
+              className="pv-listpage__side"
               role="complementary"
               aria-label={detailLabel}
             >
               {onCloseDetail && (
-                <div className="alm-listpage__panel-bar">
+                <div className="pv-listpage__panel-bar">
                   <button
                     type="button"
-                    className="alm-listpage__panel-close"
+                    className="pv-listpage__panel-close"
                     onClick={onCloseDetail}
                     aria-label={m.inbox_close_details_aria()}
                   >
@@ -258,7 +258,7 @@ export function ListPageLayout({
                   </button>
                 </div>
               )}
-              <div className="alm-listpage__panel-body">{detail}</div>
+              <div className="pv-listpage__panel-body">{detail}</div>
             </section>
           )}
         </div>
@@ -270,24 +270,24 @@ export function ListPageLayout({
   const isAdaptive = detailPlacement === 'adaptive';
   const isSide = resolvedPlacement === 'side';
   const bodyClass = isSide
-    ? 'alm-listpage__body alm-listpage__body--side'
-    : 'alm-listpage__body';
+    ? 'pv-listpage__body pv-listpage__body--side'
+    : 'pv-listpage__body';
   const detailClass = isSide
-    ? 'alm-listpage__detail alm-listpage__detail--side'
-    : 'alm-listpage__detail';
+    ? 'pv-listpage__detail pv-listpage__detail--side'
+    : 'pv-listpage__detail';
   // Adaptive side width is drag-resized (useAdaptiveDock); static 'side'
-  // keeps the fixed --alm-side-detail-w CSS default (undefined = no override).
+  // keeps the fixed --pv-side-detail-w CSS default (undefined = no override).
   const detailStyle =
     isAdaptive && isSide
-      ? ({ '--alm-side-detail-w': `${adaptiveDock.width}px` } as CSSProperties)
+      ? ({ '--pv-side-detail-w': `${adaptiveDock.width}px` } as CSSProperties)
       : undefined;
 
   return (
-    <div className="alm-page">
+    <div className="pv-page">
       {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
       <div className={bodyClass}>
-        <div className="alm-listpage__main">{children}</div>
+        <div className="pv-listpage__main">{children}</div>
 
         {hasDetail && (
           <section
@@ -304,7 +304,7 @@ export function ListPageLayout({
               />
             )}
             {(onCloseDetail || isAdaptive) && (
-              <div className="alm-listpage__detail-bar">
+              <div className="pv-listpage__detail-bar">
                 {isAdaptive && (
                   // #1066: a three-state Auto/Bottom/Right control, not the
                   // old two-state pin button — `override === null` ("Auto") is
@@ -318,7 +318,7 @@ export function ListPageLayout({
                 {onCloseDetail && (
                   <button
                     type="button"
-                    className="alm-listpage__detail-close"
+                    className="pv-listpage__detail-close"
                     onClick={onCloseDetail}
                     aria-label={m.inbox_close_details_aria()}
                   >
@@ -327,7 +327,7 @@ export function ListPageLayout({
                 )}
               </div>
             )}
-            <div className="alm-listpage__detail-body">{detail}</div>
+            <div className="pv-listpage__detail-body">{detail}</div>
           </section>
         )}
       </div>

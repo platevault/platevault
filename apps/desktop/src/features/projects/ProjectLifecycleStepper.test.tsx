@@ -106,10 +106,10 @@ describe('ProjectLifecycleStepper', () => {
       <ProjectLifecycleStepper state="prepared" {...TS} />,
       { wrapper },
     );
-    const active = container.querySelector('.alm-stepper__chip--active');
+    const active = container.querySelector('.pv-stepper__chip--active');
     expect(active).toHaveTextContent('prepared');
     // setup + ready precede prepared → both done.
-    expect(container.querySelectorAll('.alm-stepper__chip--done')).toHaveLength(
+    expect(container.querySelectorAll('.pv-stepper__chip--done')).toHaveLength(
       2,
     );
   });
@@ -126,10 +126,10 @@ describe('ProjectLifecycleStepper', () => {
       <ProjectLifecycleStepper state="blocked" {...TS} />,
       { wrapper },
     );
-    const blocked = container.querySelector('.alm-stepper__chip--blocked');
+    const blocked = container.querySelector('.pv-stepper__chip--blocked');
     expect(blocked).toHaveTextContent('blocked');
     // No active chip when off-track.
-    expect(container.querySelector('.alm-stepper__chip--active')).toBeNull();
+    expect(container.querySelector('.pv-stepper__chip--active')).toBeNull();
   });
 
   it('keeps History collapsed by default and expands on click', () => {

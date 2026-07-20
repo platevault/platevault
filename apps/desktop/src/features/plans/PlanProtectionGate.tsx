@@ -107,13 +107,13 @@ export function PlanProtectionGate({
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <div className="alm-plan-gate__status">{m.plans_gate_checking()}</div>
+      <div className="pv-plan-gate__status">{m.plans_gate_checking()}</div>
     );
   }
 
   if (loadState === 'error') {
     return (
-      <div className="alm-plan-gate__status">{m.plans_gate_load_error()}</div>
+      <div className="pv-plan-gate__status">{m.plans_gate_load_error()}</div>
     );
   }
 
@@ -124,7 +124,7 @@ export function PlanProtectionGate({
         unprotectedCount: 0,
       };
     return (
-      <div className="alm-plan-gate__status">
+      <div className="pv-plan-gate__status">
         {m.plans_gate_no_protected()}
         {normalCount > 0 &&
           m.plans_gate_normal_items_sentence({ count: normalCount })}
@@ -139,11 +139,11 @@ export function PlanProtectionGate({
   const allDone = doneCount >= total;
 
   return (
-    <div className="alm-plan-gate__root">
+    <div className="pv-plan-gate__root">
       <div
         className={
-          'alm-plan-gate__summary-bar' +
-          (allDone ? ' alm-plan-gate__summary-bar--done' : '')
+          'pv-plan-gate__summary-bar' +
+          (allDone ? ' pv-plan-gate__summary-bar--done' : '')
         }
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
@@ -151,7 +151,7 @@ export function PlanProtectionGate({
             ? m.plans_all_acknowledged()
             : m.plans_gate_require_ack({ done: total - doneCount, total })}
         </Pill>
-        <span className="alm-plan-gate__summary-label">
+        <span className="pv-plan-gate__summary-label">
           {allDone ? m.plans_may_proceed() : m.plans_review_acknowledge()}
         </span>
       </div>
@@ -162,13 +162,12 @@ export function PlanProtectionGate({
           <div
             key={item.itemId}
             className={
-              'alm-plan-gate__item' +
-              (isDone ? ' alm-plan-gate__item--done' : '')
+              'pv-plan-gate__item' + (isDone ? ' pv-plan-gate__item--done' : '')
             }
           >
-            <div className="alm-plan-gate__item-header">
+            <div className="pv-plan-gate__item-header">
               <Pill variant="ok">{item.level}</Pill>
-              <code className="alm-mono alm-plan-gate__item-id">
+              <code className="pv-mono pv-plan-gate__item-id">
                 {item.itemId}
               </code>
               {isDone && (
@@ -176,28 +175,28 @@ export function PlanProtectionGate({
               )}
             </div>
 
-            <div className="alm-plan-gate__item-action">
+            <div className="pv-plan-gate__item-action">
               {m.plans_gate_action_label()} <strong>{actionLabel(item)}</strong>
             </div>
 
             {/* #807: state the truth plainly — protection is permanent, so
                 this item will never be archived/moved/deleted regardless of
                 the action shown above or of acknowledging below. */}
-            <div className="alm-plan-gate__item-note">
+            <div className="pv-plan-gate__item-note">
               {m.plans_protected_item_note()}
             </div>
 
             {item.matchedCategories.length > 0 && (
-              <div className="alm-plan-gate__item-categories">
+              <div className="pv-plan-gate__item-categories">
                 {m.plans_gate_categories_label()}{' '}
                 {item.matchedCategories.join(', ')}
               </div>
             )}
 
-            <div className="alm-plan-gate__item-reason">{item.reason}</div>
+            <div className="pv-plan-gate__item-reason">{item.reason}</div>
 
             {ackErrors[item.itemId] && (
-              <div className="alm-plan-gate__item-error">
+              <div className="pv-plan-gate__item-error">
                 {ackErrors[item.itemId]}
               </div>
             )}
@@ -214,7 +213,7 @@ export function PlanProtectionGate({
       {/* Non-blocking summary counts (FR-008) */}
       {(checkResult.nonBlockingSummary.normalCount > 0 ||
         checkResult.nonBlockingSummary.unprotectedCount > 0) && (
-        <div className="alm-plan-gate__footer-summary">
+        <div className="pv-plan-gate__footer-summary">
           {m.plans_gate_also_in_plan()}{' '}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
             m.plans_gate_normal_items({

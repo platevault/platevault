@@ -24,7 +24,7 @@
  * `?selected=<uuid>` and the detail pane loads the full gen-3 detail from
  * SQLite.
  *
- * #103a: The page root carries `.alm-targets-page` so the layout fix scoped
+ * #103a: The page root carries `.pv-targets-page` so the layout fix scoped
  * to it ensures the virtualizer scroll container always gets a definite measured
  * height in Tauri/Windows WebView.
  *
@@ -530,11 +530,11 @@ export function TargetsPage() {
   );
 
   return (
-    // .alm-targets-page scopes the layout fix from targets-fixes.css (#103a):
+    // .pv-targets-page scopes the layout fix from targets-fixes.css (#103a):
     // the virtualizer scroll container gets a definite measured height in the
-    // Tauri/Windows WebView by overriding .alm-listpage__main to overflow:hidden
-    // and positioning .alm-targets-table__wrap absolutely within it.
-    <div className="alm-targets-page">
+    // Tauri/Windows WebView by overriding .pv-listpage__main to overflow:hidden
+    // and positioning .pv-targets-table__wrap absolutely within it.
+    <div className="pv-targets-page">
       <AddTargetDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}

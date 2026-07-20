@@ -185,7 +185,7 @@ export function SettingsPage() {
             right={
               saved && (
                 <span
-                  className="alm-settings__saved-indicator"
+                  className="pv-settings__saved-indicator"
                   aria-live="polite"
                 >
                   {m.settings_page_saved()}
@@ -196,12 +196,12 @@ export function SettingsPage() {
         }
         list={
           <nav
-            className="alm-settings__nav"
+            className="pv-settings__nav"
             aria-label={m.settings_page_nav_aria()}
           >
             {NAV_GROUPS.map((group) => (
-              <div key={group.label()} className="alm-settings__nav-group">
-                <div className="alm-settings__nav-group-label">
+              <div key={group.label()} className="pv-settings__nav-group">
+                <div className="pv-settings__nav-group-label">
                   {group.label()}
                 </div>
                 {group.panes.map((paneId) => {
@@ -211,7 +211,7 @@ export function SettingsPage() {
                     <button
                       key={pane.id}
                       type="button"
-                      className={`alm-settings__nav-item${activePane === pane.id ? ' alm-settings__nav-item--active' : ''}`}
+                      className={`pv-settings__nav-item${activePane === pane.id ? ' pv-settings__nav-item--active' : ''}`}
                       onClick={() => selectPane(pane.id)}
                       aria-current={activePane === pane.id ? 'page' : undefined}
                     >
@@ -224,7 +224,7 @@ export function SettingsPage() {
           </nav>
         }
         detail={
-          <div className="alm-settings__content" data-testid="SettingsPage">
+          <div className="pv-settings__content" data-testid="SettingsPage">
             {renderPane(activePane, save)}
           </div>
         }
