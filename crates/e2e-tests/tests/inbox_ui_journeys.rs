@@ -849,13 +849,24 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
         )
         .await?;
 
-    let original_path = write_minimal_fits(
+    // Spec 058: a light frame's mandatory attributes are OBJECT, FILTER and
+    // EXPTIME (T070/FR-047). This journey is about the move/in-place branch,
+    // not about the attribute gate, so its fixture must be fully specified —
+    // it confirms directly, with no bulk-reclassify step.
+    //
+    // Before T012 this fixture omitted EXPTIME and still confirmed, because the
+    // folder PLACEHOLDER was not subject to the mandatory-attribute gate. The
+    // materialised sub-item that replaces it is. That is 058 closing a hole,
+    // not a regression — so the fixture is corrected rather than the gate
+    // loosened.
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_move_me.fits",
         "Light Frame",
         Some("M42"),
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
+        Some(300.0),
     )?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
@@ -923,13 +934,24 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
     let (root_dir, root_id) = register_light_root(&app).await?;
     let _project_dir = register_project_root(&app).await?;
 
-    let original_path = write_minimal_fits(
+    // Spec 058: a light frame's mandatory attributes are OBJECT, FILTER and
+    // EXPTIME (T070/FR-047). This journey is about the move/in-place branch,
+    // not about the attribute gate, so its fixture must be fully specified —
+    // it confirms directly, with no bulk-reclassify step.
+    //
+    // Before T012 this fixture omitted EXPTIME and still confirmed, because the
+    // folder PLACEHOLDER was not subject to the mandatory-attribute gate. The
+    // materialised sub-item that replaces it is. That is 058 closing a hole,
+    // not a regression — so the fixture is corrected rather than the gate
+    // loosened.
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_in_place.fits",
         "Light Frame",
         Some("M42"),
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
+        Some(300.0),
     )?;
     let original_bytes = std::fs::read(&original_path)?;
 
