@@ -478,7 +478,7 @@ jobs:
   # for the shard COUNT (2, not 4) and OS-specific steps.
   # ---------------------------------------------------------------------------
   real-ui-e2e-ubuntu:
-    name: Real-UI E2E shard — ubuntu-latest ${{ matrix.shard }}/4
+    name: Real-UI journeys (L3) shard — ubuntu-latest ${{ matrix.shard }}/4
     needs: [changes, build-frontend, build-app-ubuntu]
     if: needs.changes.outputs.run == 'true'
     strategy:
@@ -572,7 +572,7 @@ jobs:
 
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
   real-ui-e2e-windows:
-    name: Real-UI E2E shard — windows-latest ${{ matrix.shard }}/2
+    name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/2
     needs: [changes, build-frontend, build-app-windows]
     if: needs.changes.outputs.run == 'true'
     strategy:
@@ -628,7 +628,7 @@ jobs:
   # no xvfb (native display), longer timeout for the 120s-per-attempt
   # launch-failure loop.
   real-ui-e2e-macos:
-    name: Real-UI E2E shard — macos-latest ${{ matrix.shard }}/2
+    name: Real-UI journeys (L3) shard — macos-latest ${{ matrix.shard }}/2
     needs: [changes, build-frontend, build-app-macos]
     if: needs.changes.outputs.run == 'true'
     strategy:
@@ -696,7 +696,7 @@ jobs:
   # ever claiming the suite passed.
   # ---------------------------------------------------------------------------
   e2e-gate-ubuntu:
-    name: Real-UI E2E — ubuntu-latest
+    name: Real-UI journeys (L3) — ubuntu-latest
     needs: [changes, real-ui-e2e-ubuntu]
     if: always() && needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
@@ -710,7 +710,7 @@ jobs:
           [ "$RESULT" = "success" ] || exit 1
 
   e2e-gate-windows:
-    name: Real-UI E2E — windows-latest
+    name: Real-UI journeys (L3) — windows-latest
     needs: [changes, real-ui-e2e-windows]
     if: always() && needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
@@ -725,7 +725,7 @@ jobs:
 
   # Skipped entirely unless the dispatch-only macOS chain was requested.
   e2e-gate-macos:
-    name: Real-UI E2E — macos-latest
+    name: Real-UI journeys (L3) — macos-latest
     needs: [changes, real-ui-e2e-macos]
     if: always() && needs.changes.outputs.run == 'true' && needs.changes.outputs.run_macos == 'true'
     runs-on: ubuntu-latest

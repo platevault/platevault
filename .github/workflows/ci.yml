@@ -130,7 +130,7 @@ jobs:
   # therefore fires only when BOTH lanes are idle, which is exactly the case
   # where the job had nothing to do and must not report `success`.
   integration:
-    name: Integration (Layer 1) — ${{ matrix.os }}
+    name: Unit + integration (L1+L2) — ${{ matrix.os }}
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
     strategy:
@@ -244,7 +244,7 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # --- Layer 1: real-backend integration + unit tests ---
+      # --- L1 (isolated units) + L2 (real-backend integration) ---
       # No standalone `cargo build --workspace` step: clippy --all-targets
       # (above, Linux) and nextest (below, every OS) each already build every
       # target they need, so a dedicated build step only duplicated work.
@@ -263,7 +263,7 @@ jobs:
       # force_full trigger (Cargo.lock, workflows, …) or a rust-relevant file
       # outside every member yields the full-workspace fallback. Build/clippy
       # stay workspace-wide — conservative: when in doubt, run more.
-      - name: Rust tests (Layer 1 — real SQLite, real migrations)
+      - name: Rust tests (L1+L2 — real SQLite, real migrations)
         if: needs.changes.outputs.rust == 'true'
         shell: bash
         # CHANGED_FILES is passed via env (never interpolated into the script
@@ -316,7 +316,7 @@ jobs:
   # the frontend lane and a change that cannot affect the frontend skips it
   # outright rather than reporting a green check for an empty run.
   ui-e2e:
-    name: UI E2E (mock-mode Playwright)
+    name: UI mock-mode (Playwright)
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
