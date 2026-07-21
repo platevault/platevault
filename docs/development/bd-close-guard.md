@@ -8,43 +8,92 @@ their linked PR still open at close time.
 
 ## The rule
 
-Close a bead only once its fix commit is on `origin/main`, not once its PR
-shows `MERGED`. **"MERGED" is not "on main"; ancestry is the only
-authoritative test.** GitHub reports a PR as `MERGED` as soon as it merges
-into ITS base branch. This repo uses stacked PRs, so that base branch is
-routinely a feature branch, not `main`.
+Close a bead only once its fix is on `origin/main`, not once its PR shows
+`MERGED`. **"MERGED" is not "on main".** GitHub reports a PR as `MERGED` as
+soon as it merges into ITS base branch. This repo uses stacked PRs, so that
+base branch is routinely a feature branch, not `main`.
 
 astro-plan-pjg was closed on the strength of PR #1310 reading `state:
-MERGED`. #1310 merged into `061-selectable-app-language`; its merge commit
-was never an ancestor of `origin/main`. The bead was reopened once
-`git merge-base --is-ancestor <mergeCommit> origin/main` returned false.
+MERGED`. #1310 merged into `061-selectable-app-language`; its merge commit is
+not an ancestor of `origin/main`.
+
+## Ancestry is necessary, not sufficient
+
+This repo squash-merges. A squash rewrites a branch's commits into one new
+commit on `main`, so a merged branch tip is never an ancestor of `main` even
+when its content is fully landed. For a stacked PR, the merge commit sits on
+the stack branch and the stack root's squash carries that content onto `main`
+under a different oid. `git merge-base --is-ancestor <mergeCommit>
+origin/main` then answers "no" for work that is on `main`.
+
+A non-empty `git merge-tree` does not prove the inverse either: a squashed
+branch keeps its diverged merge-from-main history, so it still conflicts.
+
+Landed-ness is proven by content: byte-identical blobs or trees, or the
+change's presence inside the squash commit.
 
 ## The check
 
 `scripts/bd-close-guard.sh <bead-id> [<bead-id> ...]` resolves the PR linked
-to each bead, then checks whether that PR's merge commit is an ancestor of
-`origin/main` — not just whether the PR's `state` field reads `MERGED`.
-Read-only: it never calls `bd close`, `bd update`, or any mutating
-`gh`/GitHub call, and never modifies the working tree beyond fetching the
-`origin/main` remote-tracking ref.
+to each bead and reports one of three landed states. Read-only: it never calls
+`bd close`, `bd update`, or any mutating `gh`/GitHub call, and never modifies
+the working tree beyond fetching the `origin/main` remote-tracking ref.
+
+1. **Ancestry, the fast path.** The PR's merge commit is an ancestor of
+   `origin/main` → `ON-MAIN`.
+2. **Content, the fallback.** Ancestry says no → compare the blob the PR
+   produced for each of its paths against `origin/main`. The PR's own tree
+   comes from its merge commit, or from `refs/pull/<n>/head` when that commit
+   has been pruned.
+
+| Path evidence | Test | Meaning |
+|---|---|---|
+| identical | Blob oid at the PR's tree equals the oid at `origin/main` | This PR's exact content for that path is on `main` |
+| never | `git log origin/main -- <path>` is empty | Path never existed on `main` at any point |
+| inconclusive | Blobs differ, or path is absent with a non-empty log | Landed then edited further, deleted, renamed — or never landed |
+
+One `never` path resolves the PR to `NOT-ON-MAIN`. A squash that landed the
+PR's content would have put every path it touched into `main`'s history, so an
+empty log is proof the change never arrived. Every visible path must be
+`identical` to resolve to `CONTENT-ON-MAIN-VIA-SQUASH`. Any `inconclusive`
+path reports `ERROR` because a matching ancillary file cannot prove that the
+PR's deliverable landed.
+
+Byte-identity is the positive test, not path existence. A stacked PR that only
+modifies pre-existing files would pass an existence test on the strength of
+files that were already on `main`, whether or not its own changes landed.
 
 ```
-$ scripts/bd-close-guard.sh astro-plan-hew astro-plan-tlw astro-plan-pjg astro-plan-r8n
-PASS     astro-plan-hew   PR #1364 merged into main, commit d4876d81528951e40901bb83f6799c3c54c0a94b is on origin/main (platevault/platevault)
+$ scripts/bd-close-guard.sh astro-plan-3ra astro-plan-698 astro-plan-sm7 astro-plan-tlw
+ON-MAIN  astro-plan-3ra   PR #1319 merged into main, commit 38b788943a95c239d5ce65fd6fb2c8aa45a03f31 is on origin/main (platevault/platevault)
+ERROR    astro-plan-698   PR #1296 — mixed evidence — 2 of 11 paths are not byte-identical on origin/main, so the PR's complete content cannot be proven landed
+FAIL     astro-plan-sm7   NOT-ON-MAIN: PR #1304 merged into feat/sd-foundation-outputs, and paths it touches are absent from origin/main and from main's entire history — do not close (platevault/platevault)
 FAIL     astro-plan-tlw   PR #1048 is OPEN, not merged (platevault/platevault) — do not close
-FAIL     astro-plan-pjg   PR #1310 merged into 061-selectable-app-language, not on origin/main — do not close (platevault/platevault)
-UNKNOWN  astro-plan-r8n   FIX-PR: UNDETERMINED — checked=bead's own notes (cites PR #1310 and #1321), gh pr list --search r8n, git log origin/main --grep=r8n | Two distinct stacked PRs cited, neither merged into origin/main (#1310 base=061-selectable-app-language, #1321 base=061-p1-locale-runtime); root-cause bead astro-plan-vi1w names this exact bead as the flagship ambiguous case (8 loosely-related numbers). Cannot pick one without guessing.
 ```
 
-Exit status is 0 only if every given bead's fix commit is on `origin/main`.
+Exit status is 0 only if every given bead's fix is on `origin/main`, by
+ancestry or by content.
 
 | Result | Meaning |
 |---|---|
-| `PASS` | Linked PR's merge commit is an ancestor of `origin/main`. Safe to close. |
-| `FAIL` (stacked base) | PR `state` is `MERGED`, but its merge commit merged into a non-main base and is not on `origin/main`. Do not close. |
-| `FAIL` (open/closed) | Linked PR is `OPEN` or `CLOSED` without merging. Do not close. |
+| `ON-MAIN` | The linked PR's merge commit is an ancestor of `origin/main`. Safe to close. |
+| `SQUASHED` | Ancestry says no, and every visible path the PR produced is byte-identical on `origin/main`. It reached `main` through the stack root's squash. Safe to close. |
+| `FAIL` (`NOT-ON-MAIN`) | Ancestry says no, and at least one path the PR touched has no history on `origin/main`. Do not close. |
+| `FAIL` (open/closed) | The linked PR is `OPEN` or `CLOSED` without merging. Do not close. |
 | `UNKNOWN` | No PR reference could be resolved. Do not close on the strength of this check; verify by hand. |
-| `ERROR` | `bd show`/`gh` lookup failed, or the PR reads `MERGED` with no merge commit reported (some squash/rebase merges) so ancestry cannot be verified. Do not close on the strength of this check. |
+| `ERROR` | `bd show`/`gh` lookup failed, the PR reads `MERGED` with no merge commit reported (some squash/rebase merges), the PR's own tree is unreachable, any path is inconclusive, no path matched by content, or the file list was truncated. Do not close on the strength of this check. |
+
+### Limits of the content check
+
+Every gap resolves to `ERROR` or `NOT-ON-MAIN`, never to a green-light.
+
+A PR with any file edited further on `main` after landing reports `ERROR`.
+Confirm it by hand against the squash commit.
+
+`gh pr view --json files` returns at most 100 files: PR #1162 reports
+`changedFiles: 236` and 100 entries. A hidden path could be the unlanded one,
+so a truncated list reports `ERROR` instead of `SQUASHED`. A `never` path
+found among the visible 100 still resolves to `NOT-ON-MAIN`.
 
 PR resolution order:
 
@@ -80,10 +129,11 @@ deliberate judgement that no single PR can be picked.
 
 The `on-main=` field is a claim recorded at `verified=<date>`, not a fact:
 `origin/main` moves after the note is written. The check always re-verifies
-by ancestry and never trusts the field. When the recorded claim and the live
-ancestry check disagree, the check reports both explicitly (for example, the
-note claims `on-main=yes` but ancestry now says no) — a stale claim is worse
-than no claim.
+and never trusts the field. When the recorded claim and the check's own
+determination disagree, both are reported (for example, the note claims
+`on-main=no` while the content check says `on-main=yes`) — a stale claim is
+worse than no claim. The comparison uses the final determination, so a
+`CONTENT-ON-MAIN-VIA-SQUASH` result agrees with an `on-main=yes` note.
 
 A `#<n>` with no `FIX-PR:` prefix, anywhere else in the line or in prose, is
 not a `FIX-PR:` line and does not match this rule; it falls through to the
@@ -103,5 +153,5 @@ that governs how `bd close` gets invoked, not in this repo's `scripts/`.
 main` before checking ancestry, so a stale local `origin/main` does not
 produce a false pass; a failed fetch degrades to a warning plus a check
 against whatever `origin/main` is already present locally.
-`scripts/bd-close-guard.sh --self-test` exercises the PR-resolution and
-ancestry-classification logic without network access.
+`scripts/bd-close-guard.sh --self-test` exercises the PR-resolution, ancestry
+and content classification logic without network access.
