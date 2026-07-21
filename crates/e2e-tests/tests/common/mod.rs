@@ -107,6 +107,29 @@ impl InstanceEnv {
             vec![
                 ("APPDATA", root.path().join("appdata").display().to_string()),
                 ("LOCALAPPDATA", root.path().join("localappdata").display().to_string()),
+                // The other half of #1204, and the fatal half: concurrent
+                // instances shared ONE WebView2 user-data folder, so the loser
+                // could not create its webview at all
+                // (`WindowsError(0x80070057)`), never opened a window, and
+                // never brought up its WebDriver port — surfacing four layers
+                // downstream as `bridge never became ready`.
+                //
+                // `WEBVIEW2_USER_DATA_FOLDER` is WebView2's own documented
+                // loader override: when set, it REPLACES the `userDataFolder`
+                // argument the app passes to
+                // `CreateCoreWebView2EnvironmentWithOptions`. Microsoft
+                // documents it as the intended lever for testing/deployment
+                // overrides, which is exactly this.
+                //
+                // It is read by the WebView2 loader inside the app process, so
+                // unlike APPDATA/LOCALAPPDATA it cannot be quietly bypassed by
+                // a Known Folder lookup — and unlike a config-declared
+                // window's `data_directory` (which must be RELATIVE, and
+                // resolves under `dirs::data_local_dir()`), it takes an
+                // absolute path, so the folder genuinely lives under this
+                // instance's temp root instead of merely having a unique name
+                // in a shared one.
+                ("WEBVIEW2_USER_DATA_FOLDER", root.path().join("webview2").display().to_string()),
             ]
         } else if cfg!(target_os = "macos") {
             // app_config_dir resolves under $HOME on macOS (see
@@ -354,11 +377,20 @@ impl E2eApp {
     /// `settings_journeys.rs`'s theme persistence test) must call this
     /// instead of `launch()` for its second call: calling `launch()` again
     /// wipes the very localStorage state the journey is trying to prove
-    /// persisted, which is a harness bug, not a product one (windows-only
-    /// symptom: only WebView2's `EBWebView` wipe path in
-    /// `reset_webview_storage()` actually deletes real localStorage files —
-    /// the Linux `localstorage`/`storage` paths don't match WebKitGTK's real
-    /// storage location, so the same call was already a no-op there).
+    /// persisted, which is a harness bug, not a product one.
+    ///
+    /// That was a Windows-only symptom, and since #1204 it is Windows-only
+    /// for a different reason. The old note here said the `EBWebView` path
+    /// was the one that "actually deletes real localStorage files" — it was
+    /// not: it pointed under the isolated `LOCALAPPDATA`, which no Known
+    /// Folder lookup honours, so it deleted nothing either. Windows storage
+    /// is now genuinely wiped, via the absolute `WEBVIEW2_USER_DATA_FOLDER`
+    /// this harness sets.
+    ///
+    /// The Linux `localstorage`/`storage` paths still do not match
+    /// WebKitGTK's real storage location, so that branch remains a no-op —
+    /// pre-existing, and left alone here deliberately rather than fixed
+    /// blind alongside a Windows change.
     ///
     /// Still resets the database and window-state store (same as `launch()`)
     /// — those are unrelated to the webview storage this exists to preserve,
@@ -2239,27 +2271,18 @@ fn reset_database(db_path: &Path) -> Result<()> {
 fn reset_webview_storage(vars: &[(&'static str, String)]) {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if cfg!(target_os = "windows") {
-        // Since #1204 the app points each window at a per-instance WebView2
-        // user-data folder (`desktop_shell::data_dir::webview_subdir`), and
-        // Tauri resolves that relative name to
-        // `dirs::data_local_dir()/<window label>/<name>`
-        // (`tauri-2.11.5/src/webview/mod.rs:411-413`).
-        //
-        // `dirs::data_local_dir()` is the real Known Folder — NOT the
-        // `LOCALAPPDATA` this instance sets, which is exactly the bug #1204
-        // was. This harness process has its own env unmodified, so its own
-        // `LOCALAPPDATA` is that same real folder, which is why we read it
-        // here rather than from `vars`.
+        // Since #1204 this instance's WebView2 user-data folder is wherever
+        // we told the loader to put it (`WEBVIEW2_USER_DATA_FOLDER`, set in
+        // `InstanceEnv::new`), so the reset targets a path this harness
+        // itself chose — nothing is derived, mirrored, or guessed.
         //
         // The previous target — `<isolated LOCALAPPDATA>/<identifier>/
-        // EBWebView` — never existed: the app had been writing to the real
-        // profile all along, so every "reset" silently deleted nothing and
-        // journeys shared one localStorage.
-        if let (Some(name), Ok(real_local)) = (webview_subdir(vars), std::env::var("LOCALAPPDATA"))
-        {
-            for label in ["main", "splash"] {
-                candidates.push(PathBuf::from(&real_local).join(label).join(&name));
-            }
+        // EBWebView` — never existed. `LOCALAPPDATA` does not move a Known
+        // Folder, so the app had been writing to the REAL profile all along:
+        // every "reset" silently deleted nothing, and Windows journeys shared
+        // one localStorage no matter how carefully each one reset.
+        if let Some(dir) = lookup(vars, "WEBVIEW2_USER_DATA_FOLDER") {
+            candidates.push(PathBuf::from(dir));
         }
     } else if cfg!(target_os = "macos") {
         // WKWebView website data (incl. localStorage) lives under
@@ -2352,36 +2375,6 @@ fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
     lookup(vars, "ALM_DATA_DIR").map(PathBuf::from)
 }
 
-/// This instance's WebView2 user-data folder *name* (Windows; see
-/// [`reset_webview_storage`] for where it is rooted).
-///
-/// Reimplements `desktop_shell::data_dir::webview_subdir`, because this crate
-/// deliberately does not depend on the Tauri app crate (see `Cargo.toml`'s
-/// header — the whole point is that the heavy Tauri/thirtyfour stacks stay
-/// out of the shipping build). [`webview_subdir_matches_the_app`] pins the
-/// two copies to the same literal so drift is a test failure, not a silent
-/// "reset deleted nothing" — the failure mode this replaced.
-fn webview_subdir(vars: &[(&'static str, String)]) -> Option<String> {
-    let root = lookup(vars, "ALM_DATA_DIR")?;
-    if root.is_empty() {
-        return None;
-    }
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let hash = root.as_bytes().iter().fold(OFFSET, |h, &b| (h ^ u64::from(b)).wrapping_mul(PRIME));
-    Some(format!("pv-{hash:016x}"))
-}
-
-/// The other half of the pinned contract asserted by
-/// `apps/desktop/src-tauri/src/data_dir.rs::webview_dir_derivation_is_pinned`.
-/// Both must agree on this literal, or the harness resets a folder the app
-/// does not use.
-#[test]
-fn webview_subdir_matches_the_app() {
-    let vars = vec![("ALM_DATA_DIR", "/tmp/pv-instance-a".to_string())];
-    assert_eq!(webview_subdir(&vars).as_deref(), Some("pv-b51d4cf056f3eb58"));
-}
-
 // ---------------------------------------------------------------------------
 // FITS fixture writer
 // ---------------------------------------------------------------------------
@@ -2458,4 +2451,79 @@ pub fn write_minimal_fits_with_exposure(
     block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
     std::fs::write(&path, &block).with_context(|| format!("write fixture FITS {path:?}"))?;
     Ok(path)
+}
+
+/// Scan a root through IPC and return the id of the inbox item it yields.
+///
+/// Spec 058 T012/FR-015 changed the shape every scan-seeded journey depended
+/// on: `inbox.scan.folder` no longer writes a placeholder `inbox_items` row,
+/// so an ordinary folder now comes back as `items: []` plus a source-group
+/// row. Reading `scan["items"][0]` therefore fails with an empty-items error
+/// that reads like "the scan found nothing" when the scan in fact worked.
+///
+/// Classification is what materializes the real single-type item rows, so
+/// this seeds the way the product now does: scan, then classify the group the
+/// scan recorded, then take the item.
+///
+/// Master-only folders still come back with items directly (a detected master
+/// is its own item row with no source group), so the direct hit is preferred
+/// when present rather than treated as an error.
+pub async fn scan_and_classify_one_item(
+    app: &E2eApp,
+    root_id: &str,
+    root_absolute_path: &str,
+) -> Result<String> {
+    let scan: Value = app
+        .invoke(
+            "inbox_scan_folder",
+            serde_json::json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_absolute_path,
+                }
+            }),
+        )
+        .await?;
+
+    if let Some(id) = scan["items"][0]["inboxItemId"].as_str() {
+        return Ok(id.to_owned());
+    }
+
+    let list: Value =
+        app.invoke("inbox_list", serde_json::json!({ "req": { "limit": 500 } })).await?;
+    let group_id = list["sourceGroups"]
+        .as_array()
+        .and_then(|groups| {
+            groups.iter().find(|g| g["rootId"].as_str() == Some(root_id)).or_else(|| groups.first())
+        })
+        .and_then(|g| g["sourceGroupId"].as_str())
+        .ok_or_else(|| {
+            anyhow::anyhow!("scan recorded no source group to classify: scan={scan} list={list}")
+        })?
+        .to_owned();
+
+    let _: Value = app
+        .invoke(
+            "inbox_classify_source_group",
+            serde_json::json!({
+                "req": {
+                    "sourceGroupId": group_id,
+                    "rootAbsolutePath": root_absolute_path,
+                }
+            }),
+        )
+        .await?;
+
+    let after: Value =
+        app.invoke("inbox_list", serde_json::json!({ "req": { "limit": 500 } })).await?;
+    after["items"]
+        .as_array()
+        .and_then(|items| {
+            items.iter().find(|i| i["rootId"].as_str() == Some(root_id)).or_else(|| items.first())
+        })
+        .and_then(|i| i["inboxItemId"].as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            anyhow::anyhow!("classifying source group {group_id} materialized no item: {after}")
+        })
 }

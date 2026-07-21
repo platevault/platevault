@@ -153,7 +153,11 @@ export function useTargetsTableRows({
   const useMultiGroup = dims != null && dims.length > 0;
 
   const flatRows = useMemo(() => {
-    if (useMultiGroup) {
+    // `dims` re-checked here (not just via useMultiGroup) so TS narrows it to
+    // `string[]` for the rest of this branch — narrowing a destructured param
+    // doesn't cross the useMemo closure boundary even though useMultiGroup is
+    // derived from the same null check.
+    if (useMultiGroup && dims) {
       // Pre-compute altitude + moon planning for all items (needed for sort +
       // display), reusing the per-id cache (#573) — see getCachedRow's doc.
       const withAlt = targets.map((t) => {
@@ -190,7 +194,7 @@ export function useTargetsTableRows({
       // avoids re-deriving moon planning already computed above.
       const tree = groupByDimensions(
         sorted,
-        dims!,
+        dims,
         buildTargetAccessors(
           night,
           guidanceParams,

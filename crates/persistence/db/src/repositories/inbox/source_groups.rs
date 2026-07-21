@@ -41,6 +41,9 @@ pub struct UpsertSourceGroup<'a> {
     pub format: Option<&'a str>,
     /// Move-vs-catalogue lane: `"move"` (unorganized) or `"catalogue"` (organized).
     pub lane: Option<&'a str>,
+    /// Files the scan found in the folder, excluding detected calibration
+    /// masters (which get their own item rows). Refreshed on every rescan.
+    pub file_count: i64,
 }
 
 /// Upsert one `inbox_source_groups` row (spec 041 T065, R-10/R-12).
@@ -58,13 +61,14 @@ pub async fn upsert_inbox_source_group(
     sqlx::query(
         "INSERT INTO inbox_source_groups
             (id, root_id, relative_path, discovered_at, last_scanned_at,
-             content_signature, format, lane, child_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+             content_signature, format, lane, child_count, file_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
          ON CONFLICT(root_id, relative_path) DO UPDATE SET
              last_scanned_at   = excluded.last_scanned_at,
              content_signature = excluded.content_signature,
              format            = excluded.format,
-             lane              = excluded.lane",
+             lane              = excluded.lane,
+             file_count        = excluded.file_count",
     )
     .bind(group.id)
     .bind(group.root_id)
@@ -74,6 +78,7 @@ pub async fn upsert_inbox_source_group(
     .bind(group.content_signature)
     .bind(group.format)
     .bind(group.lane)
+    .bind(group.file_count)
     .execute(pool)
     .await?;
     Ok(())
@@ -144,4 +149,77 @@ pub async fn update_source_group_child_count(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// One scanned-but-unclassified folder for the Inbox list (spec 058 FR-016).
+///
+/// Deliberately carries no item id: a source-group row is non-confirmable
+/// *structurally*, because there is nothing to pass to `inbox.confirm` — not
+/// because a guard refuses one.
+///
+/// `lane` is the source group's `move`/`catalogue` value, NOT the `fits`/`video`
+/// item lane. The two columns share a name and do not share a meaning.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct InboxSourceGroupListRow {
+    pub id: String,
+    pub root_id: String,
+    pub root_path: String,
+    pub relative_path: String,
+    pub file_count: i64,
+    pub format: Option<String>,
+    pub lane: Option<String>,
+    pub content_signature: Option<String>,
+    pub discovered_at: String,
+}
+
+/// List source groups that have produced **no** `inbox_items` rows yet — the
+/// folders scan has discovered but classification has not yet split (FR-016).
+///
+/// FR-017 ("the source-group row is replaced by the folder's item rows") falls
+/// out of this predicate rather than being a separate step: the moment
+/// `materialize_sub_items` writes item rows the group stops matching here and
+/// its items appear in the item list instead.
+///
+/// `file_count > 0` carries the FR-015 master carve-out. A folder of detected
+/// calibration masters has nothing left for classification to split, and its
+/// masters are `inbox_items` rows with a NULL `source_group_id`
+/// (`q_desktop.rs::insert_inbox_master_item`; a master row takes the same
+/// `group_key = ''` default as the folder placeholder, and stays unlinked only
+/// because its `relative_path` is the master FILE's path — `scan.rs` `rel_path`
+/// — which never equals the folder path [`link_placeholder_to_source_group`]
+/// matches on), so the `NOT EXISTS` clause alone
+/// would surface such a folder as an unclassified row *in addition to* the
+/// master rows already representing it. Scan writes `file_count` excluding
+/// masters, so that folder scores 0 here.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_unclassified_source_groups(
+    pool: &SqlitePool,
+    limit: i64,
+) -> DbResult<Vec<InboxSourceGroupListRow>> {
+    let rows = sqlx::query_as::<_, InboxSourceGroupListRow>(
+        "SELECT
+             g.id,
+             g.root_id,
+             r.path AS root_path,
+             g.relative_path,
+             g.file_count,
+             g.format,
+             g.lane,
+             g.content_signature,
+             g.discovered_at
+         FROM inbox_source_groups g
+         JOIN registered_sources r ON r.id = g.root_id
+         WHERE g.file_count > 0
+           AND NOT EXISTS (
+             SELECT 1 FROM inbox_items i WHERE i.source_group_id = g.id
+         )
+         ORDER BY r.path, g.relative_path
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }

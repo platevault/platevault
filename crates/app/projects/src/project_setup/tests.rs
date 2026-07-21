@@ -142,6 +142,11 @@ async fn create_project_duplicate_name_rejected() {
     let req2 = ProjectCreateRequest { path: "projects/other".to_owned(), ..req };
     let err = create(&pool, &bus, &empty_cache(), &req2).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::NameDuplicate);
+    // bd astro-plan-qnj0: field_errors must name the offending request field,
+    // not stay permanently empty.
+    assert_eq!(err.field_errors.len(), 1);
+    assert_eq!(err.field_errors[0].field, "name");
+    assert_eq!(err.field_errors[0].code, "name.duplicate");
 }
 
 #[tokio::test]
@@ -152,6 +157,9 @@ async fn create_project_duplicate_path_rejected() {
     let req2 = ProjectCreateRequest { name: "Other Name".to_owned(), ..req };
     let err = create(&pool, &bus, &empty_cache(), &req2).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::PathCollision);
+    assert_eq!(err.field_errors.len(), 1);
+    assert_eq!(err.field_errors[0].field, "path");
+    assert_eq!(err.field_errors[0].code, "path.collision");
 }
 
 // ── Constitution I: path anchoring tests ──────────────────────────────────
@@ -236,6 +244,9 @@ async fn create_parent_dir_components_rejected() {
     };
     let err = create(&pool, &bus, &empty_cache(), &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::PathInvalid);
+    assert_eq!(err.field_errors.len(), 1);
+    assert_eq!(err.field_errors[0].field, "path");
+    assert_eq!(err.field_errors[0].code, "path.invalid");
 }
 
 #[tokio::test]
@@ -244,6 +255,9 @@ async fn create_project_empty_name_rejected() {
     let req = make_create_req("", ProjectTool::PixInsight);
     let err = create(&pool, &bus, &empty_cache(), &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::NameEmpty);
+    assert_eq!(err.field_errors.len(), 1);
+    assert_eq!(err.field_errors[0].field, "name");
+    assert_eq!(err.field_errors[0].code, "name.empty");
 }
 
 #[tokio::test]

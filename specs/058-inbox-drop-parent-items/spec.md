@@ -1,6 +1,6 @@
 # Feature Specification: Inbox — Drop Parent Items
 
-**Feature Branch**: `spec/057-inbox-drop-parent-items`
+**Feature Branch**: `spec/058-inbox-drop-parent-items`
 
 **Created**: 2026-07-19
 
@@ -27,10 +27,41 @@ The scope claim is deliberately narrow, because ground is already held:
   PR #1086 (`22f94a9e`); see
   [Relationship to #711 Instance B](#relationship-to-711-instance-b).
 
+- **Instance A's visible badge is fixed on `main`.** PR #1099 (`ef90b074`)
+  landed after this specification was written, making the list badge read the
+  item's own classification result rather than falling back to `state`.
+
+  📎 **#1099 alone was not sufficient — #1206 finished it.** Two accounts of
+  this looked contradictory and are in fact both correct, about different
+  commits. The #1208 bisect found
+  `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` failing on
+  `ef90b074` — the very commit credited with the fix — **and** on `6fa1bf55`,
+  across the ubuntu 2/4 and windows 2/2 shards. Both refs **predate #1206**,
+  which repaired the journey's stale selector (following the gap #1202
+  identified). #1099 fixed the badge *expression*; the journey went on failing
+  on a selector until #1206.
+
+  Confirmed green on this branch 2026-07-20: the full Real-UI E2E suite passed
+  on head `33f78450`, **all six shards, including the ubuntu 2/4 and windows
+  2/2 that the bisect saw fail**. Note that pre-#1268 `main` could not have
+  settled this either way — its E2E runs were cancelled by a concurrency-group
+  bug before reporting, so green-on-`main` in that window meant silence, not a
+  pass. The scope claim below is stated against SC-003 regardless, which is
+  measurable independently of this journey.
+
 What remains — and what this feature is actually for — is the folder that
-produces exactly one item. #1081's narrowing knowingly returned Instance A for
-that case, because there is no sibling whose existence could suppress the
-placeholder. This feature removes the placeholder itself.
+produces exactly one item, and specifically **the false row underneath it**.
+#1081's narrowing knowingly returned Instance A for that case, because there is
+no sibling whose existence could suppress the placeholder; #1099 then stopped
+the badge repeating the row's claim. Neither removed the row. This feature
+removes the placeholder itself.
+
+**Read the scope claim as SC-003, not as the badge.** After #1099 the
+user-visible disagreement is gone, so a reader checking this feature against a
+screenshot will find nothing wrong. The defect that remains is in the database:
+a row with `state = 'classified'` and no frame type, which confirm can still
+bind a filesystem plan to. That is what SC-003 measures and what this feature
+exists to remove.
 
 **The visible unsplit-case symptom was subsequently patched a third time by
 PR #1099** (merged 2026-07-20, after this scope claim was written): the list now
@@ -132,10 +163,20 @@ databases do not need their inbox state preserved.
 and confirmed-but-unapplied inbox items would be stranded** — the rows the plans
 and confirmations bind to are the very rows being removed.
 
-**Why that risk is acceptable right now**: there are no current installs
-(product owner, resolving Q-1). The stranding cannot reach a user because no
-user holds a library database. No migration UX, first-launch reset notice, or
+**Why that risk is acceptable right now**: there are no current installs of the
+app (product owner, resolving Q-1; **re-confirmed 2026-07-20** after the
+condition below was tested). The stranding cannot reach a user because no user
+holds a library database. No migration UX, first-launch reset notice, or
 legacy-row detection is designed.
+
+*Evidence gathered 2026-07-20, because releases now exist and the literal
+phrase "no current installs" needed re-testing rather than re-assertion: five
+public releases (v0.1.0–v0.5.0) carry roughly **four installer downloads in
+total** across all of them — 1 `.exe` on v0.2.0, 3 `.dmg` on v0.5.0, every other
+artifact at zero. The large `latest.json` counts are auto-updater polling, not
+installs. The repository has 0 stars and one fork (`TFGSUMIT/alm`, created
+2026-07-14, no commits pushed to it) — a source-level fork is not an install and
+does not carry a library database. Owner confirmed: no current installs.*
 
 **This licence is conditional on that fact.** If any part of this work lands
 after the product has real users, the question reopens — see
@@ -473,7 +514,14 @@ resulting sibling carries a frame type without any user input.
 **Model**
 
 - **FR-001**: The system MUST NOT create any inbox item that lacks a
-  classification identity, at any point in the folder's lifecycle.
+  classification identity, at any point in the folder's lifecycle. *Read with
+  the FR-015 scoping note: a detected calibration master carries its own frame
+  type, filter and exposure read from the file, so it has a classification
+  identity and is not an exception to this requirement. Its empty stored
+  `group_key` is a storage artifact, not an absence of identity — see
+  [#1157](https://github.com/platevault/platevault/issues/1157), which requires
+  placeholder-scoped predicates to stop treating that empty value as a
+  discriminator.*
 - **FR-002**: A classified folder whose files all belong to one group MUST
   produce exactly one inbox item.
 - **FR-003**: A classified folder whose files belong to N distinct groups MUST
@@ -515,9 +563,12 @@ resulting sibling carries a frame type without any user input.
   conflicting user-supplied frame types — that route was recorded originally
   and refuted at Layer 2, because the re-materialization rebuild clears
   `manual_override` from the evidence rows. Since this feature removes
-  placeholder rows, **this feature is itself what makes `mixed` unreachable**;
-  the plan gate MUST decide whether the affordance is then retired or
-  re-scoped.
+  placeholder rows, **this feature is itself what makes `mixed` unreachable**.
+  *The plan gate has decided: PG-1 retires `mixed` rather than re-scoping it,
+  because the affordance attaches to the placeholder this feature deletes, so
+  retiring it is dead-code removal. Implemented by T035, which MUST also replace
+  the `inbox-mixed-alert` sync signal in the same change — see `tasks.md`
+  sequencing constraint 4.*
 
 **Lifecycle**
 
@@ -629,10 +680,15 @@ another there.
 - **SC-007**: Every read-side predicate that exists solely to suppress an
   aggregate row is deleted, and no replacement suppression logic is introduced.
 - **SC-008**: Re-scanning an unchanged folder produces no item identity churn.
-- **SC-009**: When re-derivation removes an item that had an open plan, that
-  item is marked superseded, its plan is blocked from application pending the
-  user's decision, and the user receives an explicit superseded signal — zero
-  cases of a silently discarded or silently retained plan (D-005).
+- **SC-009** *(**NOT met by this feature — do not tick.** D-005 remains a
+  recorded decision, but its mechanism is descoped to
+  `specs/tiny/reclassify-split-per-item-and-rederivation.md` together with the
+  retired FR-020/021/022. T043 records this. **The real exit bar for 058 is the
+  other eleven criteria.**)*: When re-derivation removes an item that had an
+  open plan, that item is marked superseded, its plan is blocked from
+  application pending the user's decision, and the user receives an explicit
+  superseded signal — zero cases of a silently discarded or silently retained
+  plan (D-005).
 - **SC-010**: A user can group the Inbox by folder and see each folder's
   siblings together under one header (D-007).
 - **SC-011**: #711 Instance B stays fixed — reclassify does not report

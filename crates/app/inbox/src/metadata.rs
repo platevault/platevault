@@ -640,6 +640,9 @@ mod tests {
                 content_signature: None,
                 format: Some("fits"),
                 lane: Some("move"),
+                // Spec 058 T013 added this field. The group is only an FK
+                // anchor for the override row here, so it is never asserted.
+                file_count: 1,
             },
         )
         .await

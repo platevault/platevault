@@ -117,17 +117,6 @@ export function buildRootLabels(
 }
 
 /**
- * Build a plain-language composition summary for a mixed classification.
- * Example: "12 light · 4 dark · 1 bias"
- */
-export function buildMixedSummary(
-  breakdown: InboxClassifyResponse['breakdown'],
-): string {
-  if (!breakdown || breakdown.length === 0) return '';
-  return breakdown.map((e) => `${e.count} ${e.kind}`).join(' · ');
-}
-
-/**
  * Format an exposure length in seconds for display (issue #789): raw FITS
  * EXPTIME floats carry IEEE-754 noise (e.g. `6.92447668013071`) that reads as
  * fabricated/slop rather than a real capture value. Whole-second exposures

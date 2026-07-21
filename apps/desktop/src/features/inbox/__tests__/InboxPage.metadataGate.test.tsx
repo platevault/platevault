@@ -67,6 +67,7 @@ const item = {
   inboxItemId: 'item-001',
   groupId: 'item-001',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-001',
   rootAbsolutePath: '/astro/inbox',
   relativePath: 'lights/NGC7000',

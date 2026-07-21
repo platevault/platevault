@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { StrictMode } from 'react';
 import { render } from '@testing-library/react';
 import { useMountedRef } from './useMountedRef';
+import { assertDefined } from '@/test/assertDefined';
 
 describe('useMountedRef', () => {
   function Probe({ seen }: { seen: { value: boolean | null } }) {
@@ -38,8 +39,17 @@ describe('useMountedRef', () => {
       return null;
     }
     const { unmount } = render(<Capture />);
+    // Explicit type argument: `captured` is reassigned inside `Capture`, a
+    // nested closure TS's control-flow analysis can't see through, so it
+    // still treats the read as the initializer type (`null`) even though
+    // `render` always invokes `Capture` synchronously — inference off that
+    // stale flow type would infer T as `null` instead of the real shape.
+    const ref = assertDefined<{ current: boolean }>(
+      captured,
+      'Capture did not run useMountedRef',
+    );
     unmount();
-    expect(captured!.current).toBe(false);
+    expect(ref.current).toBe(false);
     expect(seen.value).toBeNull();
   });
 });

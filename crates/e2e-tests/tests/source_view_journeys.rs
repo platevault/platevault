@@ -32,13 +32,18 @@
 //! fallback buckets. Both fields are now snapshotted from the session, so
 //! this journey asserts the frame's real filter below.
 //!
-//! Exposure still resolves to `unknown-exposure` HERE, and that is correct
-//! rather than a leftover: `write_minimal_fits` deliberately writes no
-//! `EXPTIME` card (see its docs), so this fixture's frame genuinely carries
-//! no per-sub exposure. `crates/app/core/tests/project_source_snapshots.rs`
-//! pins exactly this combination at Layer 1
-//! (`missing_exposure_metadata_keeps_the_real_filter`) alongside the real
-//! `Ha`/`300s` case.
+//! Exposure resolves to the frame's real `300s`. It used to be
+//! `unknown-exposure` here, because the fixture wrote no `EXPTIME` card — but
+//! spec 058 made that combination unreachable end to end: an ordinary folder
+//! now yields real item rows only through classification, and a light frame
+//! without `EXPTIME` fails the mandatory-attribute gate before any plan
+//! exists. The fixture therefore supplies `EXPTIME`, and the assertion below
+//! expects the token that produces.
+//!
+//! No coverage is lost: `crates/app/core/tests/project_source_snapshots.rs`
+//! still pins the missing-exposure combination at Layer 1
+//! (`missing_exposure_metadata_keeps_the_real_filter`), which is the right
+//! layer for it now that Layer 3 cannot construct it.
 //!
 //! KNOWN GAP (documented, not faked — mirrors `cleanup_plan_review` in
 //! `journeys.rs`): materializing the real symlink/junction on disk requires
@@ -69,7 +74,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -121,13 +126,14 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     // ── 1. Real ingest precondition: one real, catalogued-in-place light frame ──
     let root_dir = tempfile::tempdir()?;
     let file_name = "light_m33_001.fits";
-    let light_path = write_minimal_fits(
+    let light_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         file_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(light_path.exists(), "fixture FITS file was not written");
 
@@ -146,22 +152,15 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
         .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
         .to_owned();
 
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -427,9 +426,9 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     //
     // The WBPP/PixInsight default profile groups lights 3 levels deep
     // (night / filter / exposure) under `<project>/source-views/<plan_id>/`.
-    // Filter is the fixture frame's real "Ha" (#1218). Exposure is the
-    // registry's "unknown-exposure" fallback because this fixture writes no
-    // EXPTIME card at all — see the module docs.
+    // Filter is the fixture frame's real "Ha" (#1218); exposure is the frame's
+    // real "300s" — see the module docs for why this is no longer the
+    // "unknown-exposure" fallback.
     let detail: serde_json::Value = app.invoke("plans_get", json!({ "id": plan_id })).await?;
     let link_item = detail["items"]
         .as_array()
@@ -460,10 +459,10 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
          `nofilter` here means the project source snapshot went empty again): {layout_tail}"
     );
     anyhow::ensure!(
-        layout_segments[2] == "unknown-exposure",
-        "this fixture writes no EXPTIME, so exposure must stay the registry fallback; a real \
-         token here means the fixture changed and the module docs need re-verifying: \
-         {layout_tail}"
+        layout_segments[2] == "300s",
+        "the fixture's real EXPTIME must reach the layout; `unknown-exposure` here means the \
+         exposure stopped being snapshotted from the session, the same class of regression \
+         #1218 fixed for filter: {layout_tail}"
     );
 
     // Document which materialization path this run actually exercised

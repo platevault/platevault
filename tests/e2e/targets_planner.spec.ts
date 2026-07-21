@@ -51,6 +51,7 @@ import {
   expect,
   seedSetupComplete,
   disableOnboarding,
+  assertDefined,
 } from './support/harness';
 import type { Page } from '@playwright/test';
 
@@ -607,7 +608,10 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     );
     await expect(bestDateTrigger).toBeVisible();
     // aria-label = "<detail date> · in N ... — <explanation>" (InfoTip mirror).
-    const label = (await bestDateTrigger.getAttribute('aria-label'))!;
+    const label = assertDefined(
+      await bestDateTrigger.getAttribute('aria-label'),
+      'bestDateTrigger aria-label',
+    );
 
     if (/falls near full Moon/.test(label)) {
       // Diverged: list ≠ detail, and the skipped opposition the tooltip

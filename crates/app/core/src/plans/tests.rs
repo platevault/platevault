@@ -678,9 +678,14 @@ fn predicate_rejects_write_manifest_only_plan() {
 
 /// Insert a `ready_for_review` plan with the given item actions and
 /// per-item destination paths.
+///
+/// `write_manifest` items are linked to a fixed test project id, mirroring
+/// `project_setup::create` (astro-plan-l3y0: the executor refuses a
+/// `write_manifest` item with no linked project).
 async fn insert_review_plan(db: &Database, id: &str, actions: &[(&str, &str)]) {
     insert_draft(db, id).await;
     for (idx, (action, dest)) in actions.iter().enumerate() {
+        let linked_entity = (*action == "write_manifest").then_some("test-project");
         repo::insert_plan_item(
             db.pool(),
             &repo::InsertPlanItem {
@@ -695,7 +700,7 @@ async fn insert_review_plan(db: &Database, id: &str, actions: &[(&str, &str)]) {
                 to_relative_path: dest,
                 reason: "test",
                 protection: "normal",
-                linked_entity: None,
+                linked_entity,
                 provenance_json: None,
                 archive_path: None,
                 source_id: None,
@@ -748,6 +753,9 @@ async fn auto_apply_creates_directories_for_mkdir_only_plan() {
     assert_eq!(terminal, "applied");
     assert!(std::path::Path::new(&format!("{base}/proj/lights")).is_dir());
     assert!(std::path::Path::new(&format!("{base}/proj/darks")).is_dir());
+    // astro-plan-l3y0: the write_manifest item must actually write the
+    // marker file, not just report success.
+    assert!(std::path::Path::new(&format!("{base}/proj/.marker.json")).is_file());
 }
 
 /// A plan containing a user-file action is left untouched in

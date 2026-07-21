@@ -24,7 +24,7 @@ mod common;
 use std::time::Duration;
 
 use anyhow::Context;
-use common::{write_minimal_fits, E2eApp, DRAIN_BACKED_TIMEOUT};
+use common::{write_minimal_fits_with_exposure, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 use thirtyfour::{By, WebElement};
 
@@ -68,13 +68,14 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
     // confirmed session with a known target, so the wizard's Sources step
     // has something real to select.
     let root_dir = tempfile::tempdir()?;
-    write_minimal_fits(
+    write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_wizard_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-13T21:30:00"),
+        Some(300.0),
     )?;
     let register: serde_json::Value = app
         .invoke(
@@ -92,22 +93,15 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
             json!({ "sourceId": root_id, "organizationState": "unorganized" }),
         )
         .await?;
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
     let classify: serde_json::Value = app
         .invoke(
             "inbox_classify",

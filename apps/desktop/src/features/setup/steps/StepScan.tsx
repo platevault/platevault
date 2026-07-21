@@ -7,7 +7,7 @@
 // inbox_classify per source, showing per-source progress and a detection
 // summary.  Approval stays in the Inbox — no inbox_confirm called here.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
 import { Table } from '@/ui';
@@ -365,13 +365,18 @@ export function StepScan({
   // isn't mistaken for "nothing to scan".
   const [resolved, setResolved] = useState(false);
 
-  // Guard: track whether scanning has already been initiated to prevent
-  // re-entry double-scans when the user navigates Back and then Next again.
-  const scanStartedRef = useRef(false);
-
   useEffect(() => {
-    if (scanStartedRef.current) return;
-    scanStartedRef.current = true;
+    // No re-entry ref-guard here (there was one; removed — see git history):
+    // combined with the per-invocation `cancelled` flag below, it defeated
+    // React StrictMode's mount→cleanup→remount cycle. The guard let the
+    // first invocation's async scan keep running while marking it
+    // `cancelled` on the synthetic cleanup, then the remounted second
+    // invocation no-opped (guard already tripped) instead of starting a
+    // fresh, uncancelled scan — so no invocation ever delivered a result and
+    // every source stayed stuck on "scanning" forever. `[]` deps already
+    // guarantee this effect runs once per real mount; the `cancelled` flag
+    // below is the standard, StrictMode-safe way to discard a stale
+    // in-flight scan from a genuine unmount without needing a ref guard.
 
     // The scan fans out into one independent async branch per source, each
     // outliving the others. Any of them can still be awaiting IPC when the

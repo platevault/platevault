@@ -219,31 +219,20 @@ pub fn build_app() -> tauri::App {
         .expect("error while building tauri application")
 }
 
-/// The compiled-in Tauri context, with each config-declared window pointed at
-/// a per-instance webview user-data folder when `ALM_DATA_DIR` is set.
+/// Builds the compiled-in Tauri context and defers the main window's
+/// creation (see [`defer_main_window`]).
 ///
-/// Issue #1204: concurrent instances on Windows otherwise share one `WebView2`
-/// user-data folder, and the loser fails to create its webview at all
-/// (`WindowsError(0x80070057)`) — see [`crate::data_dir`] for the full chain
-/// and for why this has to go through the *config* (as a relative path)
-/// rather than [`tauri::webview::WebviewWindowBuilder::data_directory`]:
-/// windows declared in `tauri.conf.json` are built by Tauri itself, during
-/// `.build()`, so there is no builder for us to reach.
-///
-/// Unset (real users, non-E2E builds) leaves every window's `data_directory`
-/// as `None` — byte-for-byte the previous behaviour.
-///
-/// **Windows only, deliberately.** Linux and macOS already get real webview
-/// isolation from the harness's `XDG_*`/`HOME` overrides, which those
-/// platforms actually honour; there is no collision to fix. Setting
-/// `data_directory` there would instead *move* WebKitGTK/WKWebView storage
-/// out from under the isolated root it currently lives in — a regression
-/// bought for nothing.
-///
-/// That gate is a runtime `cfg!`, not a `#[cfg]` attribute, so this body is
-/// type-checked on every platform. A `#[cfg(target_os = "windows")]` block
-/// here would be invisible to the Linux and macOS CI legs and could only
-/// break on the one platform whose failures this is meant to stop.
+/// Per-instance webview isolation for the E2E harness (#1204) does **not**
+/// go through this context any more: it used to point each config-declared
+/// window at a per-instance `data_directory`, but that must be relative —
+/// `WebviewBuilder::from_config` joins it onto `dirs::data_local_dir()`, the
+/// very Known Folder that ignores `LOCALAPPDATA` overrides on Windows — so
+/// it could isolate by *name* but never by *location*, and CI evidence
+/// (`WindowsError(0x80070057)` surviving to TRY-1) showed it did not
+/// reliably work. The harness now sets `WEBVIEW2_USER_DATA_FOLDER` instead
+/// (`crates/e2e-tests/tests/common/mod.rs`) — `WebView2`'s own documented
+/// loader override, read inside the app process — so this function needs no
+/// Windows-specific branch at all.
 /// Clear `create` on the [`MAIN_WINDOW_LABEL`] entry so Tauri's own `setup()`
 /// — which runs on `RunEvent::Ready`, i.e. *inside* `app.run()`, not during
 /// `.build()` (`tauri-2.11.5/src/app.rs:1424` + `:2524`) — creates the splash
@@ -276,29 +265,17 @@ fn instance_context() -> tauri::Context {
          run_app has nothing to create after migration"
     );
 
-    let subdir = crate::data_dir::webview_subdir();
-
-    if let (true, Some(subdir)) = (cfg!(target_os = "windows"), subdir.as_ref()) {
-        for window in &mut context.config_mut().app.windows {
-            window.data_directory = Some(subdir.clone());
-        }
-    }
-
-    // `eprintln!`, deliberately, not `tracing`: `build_app()` runs BEFORE
-    // `main.rs` installs the tracing subscriber, so anything logged from here
-    // is dropped on the floor. A first attempt at this used `tracing::info!`
-    // and produced no line in CI — which said nothing about whether the code
-    // had run, and cost a full Windows round-trip to find out. stderr is
-    // captured by the E2E harness's `ProcLog`, so this always shows up.
-    if let Some(dir) = &subdir {
-        eprintln!(
-            "ALM_DATA_DIR is set; webview data_directory = {} (applied: {})",
-            dir.display(),
-            cfg!(target_os = "windows")
-        );
-    } else {
-        eprintln!("ALM_DATA_DIR is unset; webview data_directory left at Tauri's default");
-    }
+    // The webview's per-instance isolation (#1204) no longer goes through
+    // config: a config-declared window's `data_directory` must be relative,
+    // and Tauri joins it onto `dirs::data_local_dir()` — the very Known
+    // Folder that ignores `LOCALAPPDATA` overrides on Windows, so that route
+    // could isolate by *name* but never by *location*, and CI evidence (TRY-1
+    // `WindowsError(0x80070057)`) showed it did not reliably work at all. The
+    // E2E harness now sets `WEBVIEW2_USER_DATA_FOLDER` instead — WebView2's
+    // own documented loader override, read inside the app process and immune
+    // to the Known Folder lookup — so no product-side window config is
+    // needed here any more (`crates/e2e-tests/tests/common/mod.rs`, refs
+    // #1204).
 
     context
 }
@@ -480,6 +457,21 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
                 Err(e) => {
                     tracing::warn!("artifact re-attribution fix-up failed: {e:?}");
                 }
+            }
+        });
+    }
+
+    // spec 018 T018/T019: hydrate defaults for missing settings rows and repair
+    // invalid stored values (delete the bad row, fall back to the in-code
+    // default, emit a settings.repair audit event), then prime the settings-bag
+    // read cache. Runs once per app start, before the snapshot pass below reads
+    // noisy-key values and before any settings.get call.
+    {
+        let repair_pool = pool.clone();
+        let repair_bus = bus.clone();
+        tokio::spawn(async move {
+            if let Err(e) = app_core::settings::get_settings(&repair_pool, &repair_bus).await {
+                tracing::warn!("settings repair pass failed: {e:?}");
             }
         });
     }

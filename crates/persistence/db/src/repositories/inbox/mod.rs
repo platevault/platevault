@@ -30,11 +30,10 @@ pub use classification::{
     InboxClassificationRow, InboxEvidenceRow, InsertEvidence, UpsertClassification,
 };
 pub use items::{
-    clear_needs_review_sentinel, delete_sub_item_if_unlinked, get_inbox_item,
-    get_source_group_id_for_item, insert_inbox_item, link_placeholder_to_source_group,
-    list_inbox_sub_items, list_item_ids_for_source_group, update_inbox_item_scan,
-    update_inbox_item_state, upsert_inbox_sub_item, InboxItemRow, InsertInboxItem,
-    UpsertInboxSubItem,
+    delete_sub_item_if_unlinked, get_inbox_item, get_source_group_id_for_item, insert_inbox_item,
+    link_placeholder_to_source_group, list_inbox_sub_items, list_item_ids_for_source_group,
+    reset_inbox_item_to_unconfirmed, update_inbox_item_scan, update_inbox_item_state,
+    upsert_inbox_sub_item, InboxItemRow, InsertInboxItem, UpsertInboxSubItem,
 };
 pub use metadata::{
     delete_breakdown_for_item, delete_file_metadata_for_item, get_file_metadata, list_breakdown,
@@ -51,8 +50,7 @@ pub use projections::{
     list_unacknowledged_across_roots, InboxItemGroupingKeys, InboxListRow, InboxStatsRow,
 };
 pub use source_groups::{
-    get_inbox_source_group_by_path, last_scanned_by_root, update_source_group_child_count,
-    upsert_inbox_source_group, InboxSourceGroupRow, UpsertSourceGroup,
+    get_inbox_source_group_by_path, last_scanned_by_root, list_unclassified_source_groups,
+    update_source_group_child_count, upsert_inbox_source_group, InboxSourceGroupListRow,
+    InboxSourceGroupRow, UpsertSourceGroup,
 };
-
-pub(crate) use projections::exclude_split_placeholder;

@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The `first_run_state` singleton row: get/complete/restart/update-step.
+//! The `first_run_state` singleton row: get/complete/restart.
 
 use domain_core::first_run::{
     FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse,
@@ -110,26 +110,4 @@ pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartRes
     let sources = list_sources(pool).await?;
 
     Ok(FirstRunRestartResponse { restarted_at: now.clone(), prefilled_sources: sources })
-}
-
-/// Update the last_step in the first_run_state singleton.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on query failure.
-pub async fn update_first_run_step(pool: &SqlitePool, step: &str) -> DbResult<()> {
-    let now = Timestamp::now_iso();
-
-    sqlx::query(
-        "INSERT INTO first_run_state (singleton_id, last_step, updated_at) \
-         VALUES ('first_run', ?, ?) \
-         ON CONFLICT(singleton_id) DO UPDATE SET last_step = excluded.last_step, \
-         updated_at = excluded.updated_at",
-    )
-    .bind(step)
-    .bind(&now)
-    .execute(pool)
-    .await?;
-
-    Ok(())
 }

@@ -63,13 +63,18 @@ import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanApprovalOverlay } from './PlanApprovalOverlay';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
-import type { InboxBreakdownTarget, InboxListItem } from './store';
+import type {
+  InboxBreakdownTarget,
+  InboxListItem,
+  InboxSourceGroupListItem,
+} from './store';
 import {
   inboxClassifyQueryKey,
   mergeRescanRoots,
   normalizeConfirmError,
   useApplySelectedInboxPlans,
   useInboxClassification,
+  useInboxClassifySourceGroup,
   useInboxConfirm,
   useInboxItemMetadata,
   useInboxList,
@@ -151,6 +156,47 @@ export function resolveReclassifyHandoff(
   return visible ? { action: 'navigate', id: pendingId } : { action: 'giveUp' };
 }
 
+/** Outcome of {@link resolveClassifiedGroupSelection}. */
+export type ClassifiedGroupSelection =
+  | { action: 'wait' }
+  | { action: 'select'; id: string }
+  | { action: 'none' };
+
+/**
+ * CHK011 (spec 058 T017/FR-023): where selection goes when a source-group row
+ * is replaced by the items classification materialized from it.
+ *
+ * The rule is deliberately asymmetric:
+ *
+ *  - **N = 1** — select that item. The folder resolved to exactly one thing, so
+ *    putting the user on it is unambiguous and saves a click.
+ *  - **N > 1** — select NOTHING here. The rule says the folder group header,
+ *    never a sibling, because picking one sibling would silently designate a
+ *    primary — the thing D-002 forbids and which #1102 deleted `ids.next()` to
+ *    avoid. The header is part of T034's grouping UI and does not exist yet, so
+ *    selecting nothing is the correct conservative behaviour until it does.
+ *    Selecting a sibling now would be actively wrong, not merely early.
+ *  - **N = 0** — nothing to select. A source-group row was never selectable
+ *    (FR-016), so unlike the reclassify handoff there is no prior selection to
+ *    restore or lose.
+ *
+ * Bounded the same way {@link resolveReclassifyHandoff} is: it only decides
+ * once the list has settled, so an in-flight refetch is never mistaken for
+ * "the items never arrived".
+ */
+export function resolveClassifiedGroupSelection(
+  sourceGroupId: string,
+  items: Array<{ inboxItemId: string; sourceGroupId?: string | null }>,
+  listLoading: boolean,
+): ClassifiedGroupSelection {
+  if (listLoading) return { action: 'wait' };
+  const siblings = items.filter((it) => it.sourceGroupId === sourceGroupId);
+  if (siblings.length === 1) {
+    return { action: 'select', id: siblings[0].inboxItemId };
+  }
+  return { action: 'none' };
+}
+
 /** Type-guard for the destination-root-required details payload. */
 function asRootRequiredDetails(
   d: unknown,
@@ -173,6 +219,13 @@ function asRootRequiredDetails(
 // value into `useSetPageStatus` and re-triggering its effect indefinitely.
 const EMPTY_ITEMS: InboxListItem[] = [];
 
+/**
+ * Stable empty source-group array — same rationale as {@link EMPTY_ITEMS}: a
+ * fresh `[]` literal per render is a new identity every time, which would make
+ * every `useMemo` downstream of it recompute forever.
+ */
+const EMPTY_SOURCE_GROUPS: InboxSourceGroupListItem[] = [];
+
 export function InboxPage() {
   const { selected, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
@@ -185,6 +238,9 @@ export function InboxPage() {
     refresh: refreshList,
   } = useInboxList();
   const items = listData?.items ?? EMPTY_ITEMS;
+  // Spec 058 FR-016 / T013: scanned folders that have produced no item rows.
+  // Empty until T020 removes the scan-time placeholder.
+  const sourceGroups = listData?.sourceGroups ?? EMPTY_SOURCE_GROUPS;
 
   // Search + grouping / sort / frame-type controls now live in the top bar
   // (spec 043 #73/#31). `useGrouping` owns the persisted ordered grouping
@@ -297,6 +353,16 @@ export function InboxPage() {
     return result;
   }, [items, search]);
 
+  // Source groups run through the SAME page-level filter as `filteredItems`
+  // (search only — the lane and kind filters are applied inside `InboxList`),
+  // so the two arrays are always filtered to the same degree. A source group
+  // has no `groupTarget` to match on; its relative path is all there is.
+  const filteredSourceGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sourceGroups;
+    return sourceGroups.filter((g) => g.relativePath.toLowerCase().includes(q));
+  }, [sourceGroups, search]);
+
   // URL-backed selection is by item id (issue #644), not list position — an
   // index silently points at whatever item now occupies that slot once
   // search/lane/kind filters reshape the array. Sessions and Calibration
@@ -399,12 +465,24 @@ export function InboxPage() {
       listLoading,
     );
     if (decision.action === 'wait') return;
-    setPendingReclassifySelectionId(null);
     if (decision.action === 'navigate' && decision.id !== selected) {
+      // Hold the handoff OPEN across the navigate. `navigate` is async, so
+      // clearing the pending id here (as this did) drops
+      // `useStaleSelectionCleanup`'s guard one commit BEFORE `?selected=`
+      // carries the new id. In that commit the old id is already gone from
+      // the list, so `selectedItem` is undefined and the gate opens — the
+      // cleanup's `selected: undefined` then lands AFTER this navigate and
+      // clobbers it, leaving the page with no selection at all.
+      // (T051; measured on `..._bulk_reclassify_unblocks_confirm`, where the
+      // URL went old-id → undefined instead of old-id → new-id.)
+      // Re-running with `selected === decision.id` falls through to the
+      // clear below, so the guard is still bounded.
       void navigate({
         search: (prev) => ({ ...prev, selected: decision.id }),
       });
+      return;
     }
+    setPendingReclassifySelectionId(null);
   }, [
     pendingReclassifySelectionId,
     items,
@@ -422,6 +500,60 @@ export function InboxPage() {
     selectedItem?.inboxItemId ?? '',
     selectedRootPath,
   );
+
+  // Group-scoped classification for scanned-but-unclassified folders
+  // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
+  // selection — a source-group row is not selectable — so it is driven by an
+  // explicit button in the row.
+  const { pendingSourceGroupId, classifySourceGroup } =
+    useInboxClassifySourceGroup();
+
+  // CHK011 handoff: set once a classify succeeds, cleared when the refetched
+  // list settles and `resolveClassifiedGroupSelection` decides.
+  const [pendingClassifiedGroupId, setPendingClassifiedGroupId] = useState<
+    string | null
+  >(null);
+
+  const handleClassifySourceGroup = useCallback(
+    (group: InboxSourceGroupListItem) => {
+      void classifySourceGroup({
+        sourceGroupId: group.sourceGroupId,
+        rootAbsolutePath: group.rootAbsolutePath,
+      })
+        .then(() => {
+          setPendingClassifiedGroupId(group.sourceGroupId);
+        })
+        .catch((e: unknown) => {
+          // The row erases itself on success, so a silent failure would look
+          // like nothing happened at all. Surface it.
+          addToast({
+            variant: 'error',
+            message: m.inbox_toast_classify_group_failed({
+              message: e instanceof Error ? e.message : String(e),
+            }),
+          });
+        });
+    },
+    [classifySourceGroup],
+  );
+
+  // Completes the CHK011 handoff once the invalidated list has settled. Mirrors
+  // the reclassify handoff above, including its bounded give-up: a decision is
+  // only taken on a settled list, and the pending id is always cleared so it
+  // cannot gate `useStaleSelectionCleanup` open indefinitely.
+  useEffect(() => {
+    if (!pendingClassifiedGroupId) return;
+    const decision = resolveClassifiedGroupSelection(
+      pendingClassifiedGroupId,
+      items,
+      listLoading,
+    );
+    if (decision.action === 'wait') return;
+    setPendingClassifiedGroupId(null);
+    if (decision.action === 'select' && decision.id !== selected) {
+      void navigate({ search: (prev) => ({ ...prev, selected: decision.id }) });
+    }
+  }, [pendingClassifiedGroupId, items, listLoading, selected, navigate]);
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
   // Issue #643: `loading`/`error` used to be discarded here, so a metadata
@@ -627,16 +759,17 @@ export function InboxPage() {
   );
 
   const handleConfirm = async () => {
-    // spec 041 T071/T072 (FR-050): the backend "split" action is removed —
-    // classification.type === "mixed" is only reachable when the SELECTED
-    // item is still the pre-materialization leaf-folder row spanning more
-    // than one frame type (T066 already split it into single-type
-    // sub-items, which appear as separate list rows). Such a row can never
-    // itself be confirmed (its classification.result is never
-    // "classified"), so confirm is gated off entirely for it via
-    // `canConfirm` below — guard here too as defense in depth.
-    if (!selectedItem || !classification || classification.type === 'mixed')
-      return;
+    // Spec 058 T035/T036: the `classification.type === "mixed"` guard is gone
+    // with the vocabulary it tested.
+    //
+    // It was accurate when written: `mixed` was reachable only on the
+    // pre-materialization leaf-folder row spanning more than one frame type,
+    // and that row could never be confirmed. T012 stopped creating that row and
+    // T035 retired the label, so the condition can no longer be true — keeping
+    // it would read as a live safeguard while testing a value the backend never
+    // returns. A multi-type folder now reports `unclassified`, which
+    // `canConfirm` already refuses.
+    if (!selectedItem || !classification) return;
     // Re-entrancy guard (#943 follow-up): covers this whole function,
     // including the suggest await below — see `confirmFlowBusy`'s
     // declaration for why `confirmLoading` alone isn't enough.
@@ -787,10 +920,10 @@ export function InboxPage() {
   const handlePickDestinationRoot = async (rootId: string) => {
     if (!rootPickItemId || !selectedItem || !classification) return;
     if (selectedItem.inboxItemId !== rootPickItemId) return;
-    // A "mixed" classification can never reach the destination-root picker
-    // (confirm rejects it with classification.ambiguous before root
-    // resolution runs) — guarded as defense in depth, matching handleConfirm.
-    if (classification.type === 'mixed') return;
+    // Spec 058 T035: the companion `mixed` guard is gone here too. It can no
+    // longer be true, and a guard that cannot fire reads as protection while
+    // providing none. A multi-type folder reports `unclassified`, which confirm
+    // already rejects before root resolution runs.
     await runConfirm(
       {
         inboxItemId: selectedItem.inboxItemId,
@@ -921,12 +1054,11 @@ export function InboxPage() {
     [fileMetadata],
   );
 
-  // spec 041 T071/T072 (FR-050): the backend "split" action for MIXED items
-  // is removed — a folder that still classifies as "mixed" (multiple frame
-  // types on this row) can never itself be confirmed; only "single_type"
-  // rows (including the sub-items T066 already materialized alongside it)
-  // are confirmable, so confirm is disabled for both "unclassified" and
-  // "mixed" here.
+  // spec 041 T071/T072 (FR-050): only "single_type" rows are confirmable. A
+  // folder spanning several frame types is not one thing to confirm, so it
+  // reports "unclassified" and confirm stays disabled. Spec 058 T035 retired
+  // the separate "mixed" label; the rows it described are the sub-items
+  // materialization produces, each single-type and confirmable on its own.
   // Issue #643: while per-file metadata is loading or failed to load, we
   // cannot know whether mandatory attributes are missing — fail safe by
   // keeping Confirm disabled instead of judging over an empty array.
@@ -989,7 +1121,21 @@ export function InboxPage() {
   // spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
   // the header/footer count from (distinct-folder counting) so the stats strip,
   // header, and footer always reconcile — a mixed folder counts once overall.
-  const derivedStats = useMemo(() => deriveInboxStats(items), [items]);
+  //
+  // spec 058 T022 / SC-004 (owner decision, 2026-07-20): derived from
+  // `filteredItems`, NOT `items`. `InboxList` renders `filteredItems`, so
+  // deriving the summary from the unfiltered array made the strip report more
+  // rows than the list showed whenever a lane or kind filter was active. A
+  // summary sitting above a filtered list and disagreeing with it is the same
+  // class of lie this feature exists to remove, so the counts now describe what
+  // the user is actually looking at.
+  // T022 / CHK010: source-group rows are counted, and from the same filtered
+  // arrays `InboxList` renders — otherwise the strip and the list disagree the
+  // moment a scanned-but-unclassified folder exists.
+  const derivedStats = useMemo(
+    () => deriveInboxStats(filteredItems, filteredSourceGroups),
+    [filteredItems, filteredSourceGroups],
+  );
 
   // #75: frame-type hint per ingestion, derived from the inbox item's
   // classification/breakdown (here: the dominant `groupFrameType`, or the
@@ -1281,8 +1427,7 @@ export function InboxPage() {
               classification={classification ?? null}
               fileMetadata={fileMetadata}
               // Confirm runs the same flow the old top-bar button did.
-              // Disabled entirely for "mixed" rows (FR-050) — see
-              // canConfirm above.
+              // Disabled for any row that is not single-type — see canConfirm.
               onConfirm={() => void handleConfirm()}
               confirmLabel={confirmLabel}
               confirmDisabled={!canConfirm}
@@ -1302,6 +1447,9 @@ export function InboxPage() {
       >
         <InboxList
           items={filteredItems}
+          sourceGroups={filteredSourceGroups}
+          onClassifySourceGroup={handleClassifySourceGroup}
+          classifyingSourceGroupId={pendingSourceGroupId}
           selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}

@@ -10,18 +10,17 @@
 //! Legacy `inbox.scan` is retained for backward compatibility.
 
 use app_core::inbox::attribution::suggest_candidates;
-use app_core::inbox::classify::{classify, ClassifyRequest};
+use app_core::inbox::classify::{classify, classify_source_group, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::property_registry::property_registry as get_property_registry;
 use app_core::inbox::reclassify::{
     reclassify, reclassify_v2, ReclassifyOverride, ReclassifyRequest,
 };
-use app_core::inbox::scan::{scan_root, ScannedInboxItem, ScannedMasterFile};
+use app_core::inbox::scan::{scan_root, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use app_core::inbox::target_recommendations::{
-    target_recommendations as target_recommendations_uc, RecommendationTarget,
-    DEFAULT_FIXED_RADIUS_DEG,
+    target_recommendations as target_recommendations_uc, DEFAULT_FIXED_RADIUS_DEG,
 };
 use app_core::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
@@ -31,25 +30,25 @@ use app_core::inbox_scan::resolve_scan_options;
 use contracts_core::framing::IngestionAttributionCandidateDto;
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
-    InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
-    InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
-    InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
-    InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
-    InboxReclassifyV2Request, InboxReclassifyV2Response, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
-    InboxTargetRecommendationsRequest, InboxTargetRecommendationsResponse,
+    InboxClassifyResponse, InboxClassifySourceGroupRequest, InboxClassifySourceGroupResponse,
+    InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry, InboxItemMetadataRequest,
+    InboxItemMetadataResponse, InboxItemSummary, InboxListItem, InboxListResponse,
+    InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView, InboxPropertyRegistryResponse,
+    InboxReclassifyRequest, InboxReclassifyResponse, InboxReclassifyV2Request,
+    InboxReclassifyV2Response, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
+    InboxSourceGroupListItem, InboxStatsResponse, InboxTargetRecommendationsRequest,
+    InboxTargetRecommendationsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
 use domain_core::first_run::OrganizationState;
 use persistence_db::repositories::first_run::get_source_organization_state;
 use persistence_db::repositories::inbox::{
-    get_inbox_source_group_by_path, grouping_keys_for_items, link_placeholder_to_source_group,
-    list_unacknowledged_across_roots, upsert_inbox_source_group, UpsertSourceGroup,
+    grouping_keys_for_items, list_unacknowledged_across_roots, list_unclassified_source_groups,
+    upsert_inbox_source_group, UpsertSourceGroup,
 };
 use persistence_db::repositories::q_desktop::{
-    get_inbox_master_item_row, get_inbox_placeholder_row, insert_inbox_folder_placeholder,
-    insert_inbox_master_item,
+    get_inbox_master_item_row, insert_inbox_master_item,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -100,6 +99,46 @@ pub async fn inbox_classify(
         unclassified_files: resp.unclassified_files,
         sample_files: resp.sample_files,
         computed_at: resp.computed_at,
+    })
+}
+
+// ── inbox.classify.sourceGroup ────────────────────────────────────────────────
+
+/// `inbox.classify.sourceGroup` — classify a scanned folder that has no
+/// `inbox_items` row yet, materializing its sub-items directly from the group
+/// (spec 058 FR-015/FR-016, T012).
+///
+/// This is the entry point that makes a source-group row actionable. Without
+/// it, removing the scan-time placeholder (T020) leaves every scanned folder
+/// permanently unclassifiable: `inbox.classify` is keyed on `inboxItemId` and
+/// fails `inbox.item.not_found` without one, and `inbox.reclassify` v2 rebuilds
+/// its file records from evidence rows that are only ever written against an
+/// item id. No item ⇒ no evidence ⇒ no item.
+///
+/// Mints nothing confirmable — it returns a count, not a plan and not an id.
+/// Confirmation continues to happen only against the materialized item rows,
+/// which preserves the source-group row's structural non-confirmability.
+///
+/// # Errors
+/// `inbox.item.not_found` (no such source group) | `metadata.unreadable` (the
+/// folder holds no readable FITS/XISF files)
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_classify_source_group(
+    req: InboxClassifySourceGroupRequest,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxClassifySourceGroupResponse, ContractError> {
+    let resp = classify_source_group(
+        &pool,
+        &req.source_group_id,
+        std::path::Path::new(&req.root_absolute_path),
+    )
+    .await?;
+
+    Ok(InboxClassifySourceGroupResponse {
+        source_group_id: resp.source_group_id,
+        materialized_sub_item_count: u32::try_from(resp.materialized_sub_item_count)
+            .unwrap_or(u32::MAX),
     })
 }
 
@@ -285,7 +324,8 @@ pub async fn inbox_attribution_suggest(
 /// header is returned only as a display hint, never used for matching. The
 /// chosen target is written separately via `inbox.reclassify` (T068).
 ///
-/// Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+/// Identify the sub-group by `inboxItemId`. The request's legacy
+/// `sourceGroupId` is no longer accepted (spec 058 D-002).
 ///
 /// # Errors
 /// `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
@@ -295,21 +335,18 @@ pub async fn inbox_target_recommendations(
     req: InboxTargetRecommendationsRequest,
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<InboxTargetRecommendationsResponse, ContractError> {
-    // inboxItemId takes precedence when both are supplied (contract semantics).
-    let target = if let Some(item_id) = req.inbox_item_id {
-        RecommendationTarget::InboxItem(item_id)
-    } else if let Some(sg_id) = req.source_group_id {
-        RecommendationTarget::SourceGroup(sg_id)
-    } else {
+    // Spec 058 D-002: recommendations belong to exactly one inbox item, so a
+    // `sourceGroupId`-only request is no longer serviceable.
+    let Some(item_id) = req.inbox_item_id else {
         return Err(ContractError::new(
             contracts_core::error_code::ErrorCode::InboxItemNotFound,
-            "target_recommendations requires inboxItemId or sourceGroupId".to_owned(),
+            "target_recommendations requires inboxItemId".to_owned(),
             contracts_core::ErrorSeverity::Blocking,
             false,
         ));
     };
 
-    target_recommendations_uc(&pool, &target, DEFAULT_FIXED_RADIUS_DEG).await
+    target_recommendations_uc(&pool, &item_id, DEFAULT_FIXED_RADIUS_DEG).await
 }
 
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────
@@ -350,6 +387,14 @@ pub async fn inbox_scan_folder(
         // refreshed on rescan. child_count stays 0 here; classify (T066) sets it.
         // No per-file header reads; reuses the cheap folder content_signature
         // already computed by scan_root (Constitution §I, lazy hashing).
+        //
+        // Spec 058 T013 stores the sub-frame count on the group because the
+        // Inbox list row for a scanned-but-unclassified folder is the group
+        // itself, and a 0 marks a masters-only folder as having nothing left
+        // to classify (`list_unclassified_source_groups`). The FR-015 carve-out
+        // arithmetic lives on the scan record, next to the masters it excludes.
+        let sub_count = scanned_item.sub_frame_count();
+
         let sg_id = Uuid::new_v4().to_string();
         upsert_inbox_source_group(
             &pool,
@@ -360,6 +405,7 @@ pub async fn inbox_scan_folder(
                 content_signature: Some(&scanned_item.content_signature),
                 format: Some(scanned_item.format.as_str()),
                 lane: Some(group_lane),
+                file_count: i64::try_from(sub_count).unwrap_or(i64::MAX),
             },
         )
         .await
@@ -373,113 +419,25 @@ pub async fn inbox_scan_folder(
             }
         }
 
-        // ── B. Grouped row for the remaining sub-frames in the folder ─────────
+        // ── B. No grouped row ────────────────────────────────────────────────
         //
-        // If ALL files in this folder are masters, skip the grouped row — there
-        // are no remaining subs.
-        let master_count = scanned_item.masters.len();
-        let total_image_count = scanned_item.fits_files.len() + scanned_item.xisf_files.len();
-        let sub_count =
-            total_image_count.saturating_sub(master_count) + scanned_item.video_files.len();
-
-        if sub_count == 0 && !scanned_item.masters.is_empty() {
-            // Every file in this folder was a master — no grouped sub row.
-            continue;
-        }
-
-        // For sub-count: use total minus masters for FITS-lane items.
-        let persist_file_count = if scanned_item.masters.is_empty() {
-            total_image_count + scanned_item.video_files.len()
-        } else {
-            sub_count
-        };
-
-        if let Some(summary) =
-            persist_folder_placeholder(&pool, &req.root_id, scanned_item, sg_id, persist_file_count)
-                .await?
-        {
-            items.push(summary);
-        }
+        // Spec 058 FR-015/T012: scan creates the source group (above) and NO
+        // inbox item for the folder's sub-frames. The folder-level placeholder
+        // written here previously carried no frame type and no classification,
+        // yet it was the row the user selected and confirmed — the false
+        // statement this feature exists to delete.
+        //
+        // The folder is now represented by its `inbox_source_groups` row alone
+        // until classification materialises real single-type items. It stays
+        // visible in the queue through `list_unclassified_source_groups`, and
+        // `inbox.classify.sourceGroup` is what turns it into items.
+        //
+        // Masters keep their own item rows (block A): the FR-015 carve-out is
+        // untouched, because a detected master IS a real, classified,
+        // confirmable thing. `sub_count` remains the source group's file count.
     }
 
     Ok(InboxScanFolderResponse { root_id: req.root_id, items })
-}
-
-/// Insert (or reuse) the folder-level PLACEHOLDER `inbox_items` row
-/// (`group_key = ''`) for a scanned folder, linked to its source group, and
-/// return its summary.
-///
-/// The placeholder MUST be linked to its source group: `classify`'s
-/// single-type sub-item materialization (spec 041 T066,
-/// `materialize_sub_items`) is gated on `inbox_items.source_group_id` and
-/// silently never runs for unlinked items, which left mixed folders
-/// permanently un-split for every newly scanned root (caught by the spec 037
-/// Layer-2 Inbox journeys, PR #457). On a rescan the source-group upsert
-/// keeps the ORIGINAL row (conflict target `root_id`+`relative_path`), so the
-/// caller's freshly generated `fallback_sg_id` may not be the persisted one —
-/// resolve the authoritative id first.
-async fn persist_folder_placeholder(
-    pool: &SqlitePool,
-    root_id: &str,
-    scanned_item: &ScannedInboxItem,
-    fallback_sg_id: String,
-    persist_file_count: usize,
-) -> Result<Option<InboxItemSummary>, ContractError> {
-    let item_id = Uuid::new_v4().to_string();
-    let folder_format_str = scanned_item.format.as_str();
-
-    let authoritative_sg_id =
-        get_inbox_source_group_by_path(pool, root_id, &scanned_item.relative_path)
-            .await
-            .map_err(|e| ContractError::internal(e.to_string()))?
-            .map_or(fallback_sg_id, |row| row.id);
-
-    insert_inbox_folder_placeholder(
-        pool,
-        &item_id,
-        root_id,
-        &scanned_item.relative_path,
-        &authoritative_sg_id,
-        i64::try_from(persist_file_count).unwrap_or(i64::MAX),
-        &scanned_item.content_signature,
-        scanned_item.lane.as_str(),
-        folder_format_str,
-    )
-    .await
-    .map_err(|e| ContractError::internal(e.to_string()))?;
-
-    // Backfill the link for placeholder rows that predate it (the INSERT
-    // above is OR IGNORE, so an existing row keeps its columns).
-    link_placeholder_to_source_group(
-        pool,
-        root_id,
-        &scanned_item.relative_path,
-        &authoritative_sg_id,
-    )
-    .await
-    .map_err(|e| ContractError::internal(e.to_string()))?;
-
-    // Fetch the authoritative row (may have existed before). Scoped to
-    // the placeholder (`group_key = ''`): once classify has materialized
-    // single-type sub-items they share this (root_id, relative_path) and
-    // an unscoped lookup would return an arbitrary one of them.
-    let row = get_inbox_placeholder_row(pool, root_id, &scanned_item.relative_path)
-        .await
-        .map_err(|e| ContractError::internal(e.to_string()))?;
-
-    Ok(row.map(|r| InboxItemSummary {
-        inbox_item_id: r.id,
-        relative_path: scanned_item.relative_path.clone(),
-        file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
-        lane: r.lane,
-        format: r.format.unwrap_or_else(|| folder_format_str.to_owned()),
-        state: r.state,
-        content_signature: r.content_signature.unwrap_or_default(),
-        is_master: false,
-        master_frame_type: None,
-        master_filter: None,
-        master_exposure_s: None,
-    }))
 }
 
 /// Insert (or reuse) the individual `inbox_items` row for a single detected
@@ -533,8 +491,10 @@ async fn persist_master_item(
 /// `inbox.list` — return all unacknowledged inbox items across all registered
 /// roots (states `pending_classification` and `classified`).
 ///
-/// Results are capped at 500 items (FR-006). Each item carries its root's
-/// absolute path so the UI can group/label by root without a second call.
+/// Each of the two result arrays is capped at 500 rows (FR-006); `capped` is
+/// true when either hit its limit, so the UI never silently drops folders.
+/// Each item carries its root's absolute path so the UI can group/label by
+/// root without a second call.
 ///
 /// # Errors
 /// Returns a string error on database failure.
@@ -548,7 +508,6 @@ pub async fn inbox_list(
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let total = rows.len();
-    let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
 
     // Per-item grouping aggregates for the multi-level grouping UI (spec 041).
     // Single GROUP BY pass over the items we're about to return — no N+1.
@@ -588,9 +547,12 @@ pub async fn inbox_list(
                 group_exposure: g.group_exposure,
                 group_instrument: g.group_instrument,
                 // T070: per-item rollup populated as empty; the gate is enforced
-                // at confirm time (group_key == SENTINEL_NEEDS_REVIEW) and the
+                // at confirm time (spec 058: `inbox_items.needs_review`) and the
                 // per-file detail is surfaced via inbox.item.metadata.
                 missing_mandatory: Vec::new(),
+                // Spec 058 FR-028 (T008): the list reads the persisted verdict
+                // rather than guessing it from `group_key`.
+                needs_review: r.needs_review != 0,
                 // spec 041 Phase 12 (T072/FR-043): single-type sub-item identity,
                 // sourced directly from the inbox_items row (no aggregation).
                 source_group_id: r.source_group_id,
@@ -602,8 +564,33 @@ pub async fn inbox_list(
         })
         .collect();
 
+    // Spec 058 FR-016 (T013): folders scan has discovered but classification
+    // has not yet split. These rows expose no item id and are therefore not
+    // confirmable.
+    let source_groups: Vec<InboxSourceGroupListItem> =
+        list_unclassified_source_groups(&pool, INBOX_LIST_LIMIT)
+            .await
+            .map_err(|e| ContractError::internal(e.to_string()))?
+            .into_iter()
+            .map(|g| InboxSourceGroupListItem {
+                source_group_id: g.id,
+                root_id: g.root_id,
+                root_absolute_path: g.root_path,
+                relative_path: g.relative_path,
+                file_count: u32::try_from(g.file_count).unwrap_or(u32::MAX),
+                format: g.format.unwrap_or_else(|| "fits".to_owned()),
+                lane: g.lane.unwrap_or_else(|| "move".to_owned()),
+                content_signature: g.content_signature.unwrap_or_default(),
+                discovered_at: g.discovered_at,
+            })
+            .collect();
+
+    let limit = usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
+    let capped = total >= limit || source_groups.len() >= limit;
+
     Ok(InboxListResponse {
         items,
+        source_groups,
         capped,
         limit: u32::try_from(INBOX_LIST_LIMIT).unwrap_or(u32::MAX),
     })

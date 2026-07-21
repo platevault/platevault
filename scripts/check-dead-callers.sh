@@ -178,6 +178,18 @@ collect_dead() {
     # first `#[cfg(test)]` instead would discard the production code that
     # follows an inline test module, which is common here and silently turns
     # live functions (pid_is_alive, discover_all) into false positives.
+    #
+    # `use` statements (`use x;`, `pub use x;`, `pub(crate) use x;`, grouped
+    # `pub use x::{a, b};`, and their multi-line forms) are dropped for the
+    # same reason `defs` excludes definition lines from counting as their own
+    # caller: a re-export names a function without calling it. A module split
+    # that turns a file into a `mod.rs` gains one `pub use` per moved item, and
+    # without this exclusion every such name reads as "called" forever after,
+    # silently disabling the guard for genuinely dead functions (#968 split of
+    # inbox.rs hit this for find_orphaned_plan_links/set_manual_override; the
+    # same shape pre-existed in repositories/projects/mod.rs and
+    # repositories/first_run/mod.rs). Grouped imports span lines, so this
+    # tracks brace depth exactly like the cfg(test) skip above.
     local -a roots=("$crates_root")
     [ -d "$tauri_root" ] && roots+=("$tauri_root")
 
@@ -204,7 +216,7 @@ collect_dead() {
     # shellcheck disable=SC2016  # the awk program is literal, not shell-expanded
     find_rs_files "${roots[@]}" -type f -name '*.rs' -not -path '*/tests/*' \
         | xargs -0 awk '
-            FNR == 1 { skip = 0; depth = 0; opened = 0 }
+            FNR == 1 { skip = 0; depth = 0; opened = 0; inuse = 0; usedepth = 0 }
             /^[[:space:]]*\/\// { next }
             skip {
                 o = gsub(/\{/, "{"); c = gsub(/\}/, "}")
@@ -217,6 +229,18 @@ collect_dead() {
                 next
             }
             /#\[cfg\(test\)\]/ { skip = 1; depth = 0; opened = 0; next }
+            inuse {
+                o = gsub(/\{/, "{"); c = gsub(/\}/, "}")
+                usedepth += o - c
+                if (usedepth <= 0) { inuse = 0 }
+                next
+            }
+            /^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?use[[:space:]]/ {
+                o = gsub(/\{/, "{"); c = gsub(/\}/, "}")
+                usedepth = o - c
+                if (usedepth > 0) inuse = 1
+                next
+            }
             { print }
         ' > "$corpus"
 
@@ -243,16 +267,17 @@ collect_dead() {
     ' "$corpus" | sort
 }
 
-# Prove the detector detects. The probe tree contains one function called from
-# production, one called only from a #[cfg(test)] module, one named only by a
 # doc comment, one called only AFTER an inline test module (guards the
 # brace-scope handling, since skipping to end-of-file instead would report it
-# dead), and two out-of-line `#[cfg(test)] mod name;` cases — a flat-file
-# sibling and a `mod.rs`-directory sibling with its own nested submodule
-# (guards collect_test_mod_exclusions, and the directory-form exclusion being
-# swept recursively). A detector that reports nothing, or that reports
-# everything — the vacuous-green failure this guard exists to prevent — fails
-# here.
+# dead), two out-of-line `#[cfg(test)] mod name;` cases — a flat-file sibling
+# and a `mod.rs`-directory sibling with its own nested submodule (guards
+# collect_test_mod_exclusions, and the directory-form exclusion being swept
+# recursively) — and a `mod.rs`-style split: a single-line `pub use ... as`, a
+# multi-line grouped `pub use { ... };` re-exporting two otherwise-dead names,
+# and a re-export of a genuinely live name — the last guards against the fix
+# over-stripping and hiding a real caller. A detector that reports nothing, or
+# that reports everything — the vacuous-green failure this guard exists to
+# prevent — fails here.
 self_test() {
     local tmp
     tmp="$(mktemp -d)"
@@ -271,6 +296,23 @@ pub fn test_only_fn() -> bool { true }
 pub fn caller() -> bool { live_fn() }
 
 pub fn live_after_tests() -> bool { true }
+
+pub fn reexport_dead_fn() -> bool { true }
+
+pub use self::reexport_dead_fn as reexport_dead_alias;
+
+pub fn grouped_reexport_dead_fn() -> bool { true }
+pub fn grouped_reexport_dead_fn_2() -> bool { true }
+
+pub use self::{
+    grouped_reexport_dead_fn, grouped_reexport_dead_fn_2,
+};
+
+pub fn reexported_live_fn() -> bool { true }
+
+pub use self::reexported_live_fn;
+
+pub fn calls_reexported_live() -> bool { reexported_live_fn() }
 
 pub fn outofline_flat_dead_fn() -> bool { true }
 
@@ -329,7 +371,7 @@ PROBE
 
     local got expected
     got="$(collect_dead "$tmp/crates" "$tmp/none" | tr '\n' ' ')"
-    expected="caller doc_only_fn late_caller outofline_dir_dead_fn outofline_flat_dead_fn outofline_nested_dead_fn test_only_fn "
+    expected="caller calls_reexported_live doc_only_fn grouped_reexport_dead_fn grouped_reexport_dead_fn_2 late_caller outofline_dir_dead_fn outofline_flat_dead_fn outofline_nested_dead_fn reexport_dead_fn test_only_fn "
 
     if [ "$got" != "$expected" ]; then
         echo "FAIL: self-test detector mismatch." >&2

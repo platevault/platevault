@@ -49,12 +49,14 @@ async fn anchor_project_path(pool: &SqlitePool, raw: &str) -> Result<String, Con
     let candidate = std::path::Path::new(trimmed);
 
     if candidate.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        let message = "Project path must not contain '..' components.";
         return Err(ContractError::new(
             ErrorCode::PathInvalid,
-            "Project path must not contain '..' components.",
+            message,
             ErrorSeverity::Blocking,
             false,
-        ));
+        )
+        .with_field_error(super::field_error("path", ErrorCode::PathInvalid, message)));
     }
 
     if candidate.is_absolute() {
@@ -69,13 +71,15 @@ async fn anchor_project_path(pool: &SqlitePool, raw: &str) -> Result<String, Con
         .map(|s| s.path);
 
     let Some(root) = project_root else {
+        let message = "Project path is relative and no project folder is registered; \
+             register a project folder in setup or provide an absolute path.";
         return Err(ContractError::new(
             ErrorCode::PathInvalid,
-            "Project path is relative and no project folder is registered; \
-             register a project folder in setup or provide an absolute path.",
+            message,
             ErrorSeverity::Blocking,
             false,
-        ));
+        )
+        .with_field_error(super::field_error("path", ErrorCode::PathInvalid, message)));
     };
 
     // Join with '/' (valid on all supported platforms); strip trailing
@@ -169,41 +173,41 @@ pub async fn create(
 ) -> Result<ProjectCreateResult, ContractError> {
     // 1. Validate name.
     validate_name(&req.name).map_err(|code| {
-        ContractError::new(
-            str_to_error_code(code),
-            format!("Project name error: {code}"),
-            ErrorSeverity::Blocking,
-            false,
-        )
+        let error_code = str_to_error_code(code);
+        let message = format!("Project name error: {code}");
+        ContractError::new(error_code, message.clone(), ErrorSeverity::Blocking, false)
+            .with_field_error(super::field_error("name", error_code, message))
     })?;
     validate_tool(req.tool.as_db_str()).map_err(|code| {
-        ContractError::new(
-            str_to_error_code(code),
-            format!("Processing tool error: {code}"),
-            ErrorSeverity::Blocking,
-            false,
-        )
+        let error_code = str_to_error_code(code);
+        let message = format!("Processing tool error: {code}");
+        ContractError::new(error_code, message.clone(), ErrorSeverity::Blocking, false)
+            .with_field_error(super::field_error("tool", error_code, message))
     })?;
 
     // 2. Check name uniqueness.
     if let Some(conflict_id) = repo::name_exists(pool, &req.name, None).await.map_err(db_err)? {
+        let message = "A project with this name already exists.";
         return Err(ContractError::new(
             ErrorCode::NameDuplicate,
-            "A project with this name already exists.",
+            message,
             ErrorSeverity::Blocking,
             false,
         )
+        .with_field_error(super::field_error("name", ErrorCode::NameDuplicate, message))
         .with_details(serde_json::json!({ "conflictingProjectId": conflict_id })));
     }
 
     // 3. Validate path non-empty.
     if req.path.trim().is_empty() {
+        let message = "Project path must not be empty.";
         return Err(ContractError::new(
             ErrorCode::PathInvalid,
-            "Project path must not be empty.",
+            message,
             ErrorSeverity::Blocking,
             false,
-        ));
+        )
+        .with_field_error(super::field_error("path", ErrorCode::PathInvalid, message)));
     }
 
     // 3b. Anchor a relative path to the registered project folder so the
@@ -212,12 +216,14 @@ pub async fn create(
 
     // 4. Check path uniqueness (on the anchored path).
     if let Some(collide_id) = repo::path_exists(pool, &project_path, None).await.map_err(db_err)? {
+        let message = "Another project already uses this path.";
         return Err(ContractError::new(
             ErrorCode::PathCollision,
-            "Another project already uses this path.",
+            message,
             ErrorSeverity::Blocking,
             false,
         )
+        .with_field_error(super::field_error("path", ErrorCode::PathCollision, message))
         .with_details(serde_json::json!({ "collidingProjectId": collide_id })));
     }
 

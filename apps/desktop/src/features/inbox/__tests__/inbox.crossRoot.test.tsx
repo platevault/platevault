@@ -47,6 +47,7 @@ const itemRoot1a: InboxListItem = {
   inboxItemId: 'item-r1-a',
   groupId: 'item-r1-a',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-001',
   rootAbsolutePath: '/astro/raw',
   relativePath: '2025-10-10/NGC7000',
@@ -66,6 +67,7 @@ const itemRoot1b: InboxListItem = {
   inboxItemId: 'item-r1-b',
   groupId: 'item-r1-b',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-001',
   rootAbsolutePath: '/astro/raw',
   relativePath: '2025-10-10/darks',
@@ -85,6 +87,7 @@ const itemRoot2a: InboxListItem = {
   inboxItemId: 'item-r2-a',
   groupId: 'item-r2-a',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-002',
   rootAbsolutePath: '/astro/inbox',
   relativePath: '2025-11-01/Jupiter',
@@ -102,6 +105,7 @@ const itemRoot2a: InboxListItem = {
 
 const multiRootResponse: InboxListResponse = {
   items: [itemRoot1a, itemRoot1b, itemRoot2a],
+  sourceGroups: [],
   capped: false,
   limit: 500,
 };

@@ -9,10 +9,13 @@
 //! - `plan.applying.completed` with `terminal_state = "applied"` →
 //!   `InboxItem.state = "resolved"` + delete `inbox_plan_links` row.
 //! - `plan.applying.completed` with any other terminal
-//!   (`partially_applied`, `failed`, `cancelled`) →
-//!   `InboxItem.state = "classified"` + delete `inbox_plan_links` row.
-//! - `plan.discarded` →
-//!   `InboxItem.state = "classified"` + delete `inbox_plan_links` row.
+//!   (`partially_applied`, `failed`, `cancelled`) → back to unconfirmed +
+//!   delete `inbox_plan_links` row.
+//! - `plan.discarded` → back to unconfirmed + delete `inbox_plan_links` row.
+//!
+//! "Back to unconfirmed" is `classified` or `pending_classification` depending
+//! on whether the row carries its own `frame_type` (spec 058 SC-003); it is
+//! derived in SQL by `reset_inbox_item_to_unconfirmed`, never asserted here.
 //!
 //! The listener is started once at application startup via
 //! [`start_inbox_plan_listener`] which spawns a detached `tokio::task`. It is
@@ -142,10 +145,11 @@ async fn handle_plan_completed(
         // does not block the inbox item's resolved transition — the frames can be
         // re-ingested by re-applying or a future repair sweep.
         ingest_light_frames_if_applicable(pool, bus, &payload.plan_id, resolve_cache).await;
-        "resolved"
+        Some("resolved")
     } else {
-        // partially_applied, failed, cancelled → allow re-split
-        "classified"
+        // partially_applied, failed, cancelled → allow re-split, back to
+        // whatever unconfirmed state the row's own frame type supports.
+        None
     };
 
     transition_via_plan_id(pool, &payload.plan_id, new_state).await
@@ -399,15 +403,19 @@ async fn write_calibration_frame_record(
 
 /// Called when a plan is discarded (any state → discarded).
 async fn handle_plan_discarded(pool: &SqlitePool, plan_id: &str) -> Result<(), String> {
-    transition_via_plan_id(pool, plan_id, "classified").await
+    transition_via_plan_id(pool, plan_id, None).await
 }
 
-/// Find the InboxItem linked to `plan_id`, transition it to `new_state`,
-/// and delete the plan link row.
+/// Find the InboxItem linked to `plan_id`, transition it, and delete the plan
+/// link row.
+///
+/// `new_state = None` means "back to unconfirmed": the state is then derived
+/// from the row's own `frame_type` instead of being asserted, so a row with no
+/// frame type cannot be sent to `classified` (spec 058 SC-003).
 async fn transition_via_plan_id(
     pool: &SqlitePool,
     plan_id: &str,
-    new_state: &str,
+    new_state: Option<&str>,
 ) -> Result<(), String> {
     // Find the inbox item linked to this plan.
     let link = inbox_repo::get_plan_link_by_plan_id(pool, plan_id)
@@ -420,9 +428,11 @@ async fn transition_via_plan_id(
     };
 
     // Update inbox item state.
-    inbox_repo::update_inbox_item_state(pool, &link.inbox_item_id, new_state)
-        .await
-        .map_err(|e| format!("update_inbox_item_state({}): {e}", link.inbox_item_id))?;
+    match new_state {
+        Some(state) => inbox_repo::update_inbox_item_state(pool, &link.inbox_item_id, state).await,
+        None => inbox_repo::reset_inbox_item_to_unconfirmed(pool, &link.inbox_item_id).await,
+    }
+    .map_err(|e| format!("update_inbox_item_state({}): {e}", link.inbox_item_id))?;
 
     // Delete the plan link so the item can accept a new plan in the future.
     inbox_repo::delete_plan_link(pool, &link.inbox_item_id)
@@ -491,6 +501,14 @@ mod tests {
         )
         .await
         .unwrap();
+
+        // A confirmable item carries its own frame type (spec 058 SC-003);
+        // `insert_inbox_item` leaves it NULL, which would model an illegal row.
+        sqlx::query("UPDATE inbox_items SET frame_type = 'light' WHERE id = ?")
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
 
         inbox_repo::update_inbox_item_state(db.pool(), item_id, "plan_open").await.unwrap();
 
@@ -682,6 +700,36 @@ mod tests {
 
         let item = inbox_repo::get_inbox_item(db.pool(), "item-t3").await.unwrap();
         assert_eq!(item.state, "classified");
+    }
+
+    /// spec 058 SC-003 on the `plan.discarded` listener — the sibling writer to
+    /// `cancel_inbox_plan`. Both used to stamp the literal `classified`, so a
+    /// guard on either one alone leaves the other lying about the row.
+    #[tokio::test]
+    async fn discarded_plan_does_not_report_classified_without_a_frame_type_sc003() {
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        setup_item_with_plan(&db, "item-sc003", "plan-sc003").await;
+        sqlx::query("UPDATE inbox_items SET frame_type = NULL WHERE id = 'item-sc003'")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
+
+        let payload = audit::event_bus::PlanDiscarded {
+            plan_id: "plan-sc003".to_owned(),
+            prior_state: "ready_for_review".to_owned(),
+            discarded_at: "2025-10-10T22:00:00Z".to_owned(),
+        };
+        bus.publish(TOPIC_PLAN_DISCARDED, Source::User, payload).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let item = inbox_repo::get_inbox_item(db.pool(), "item-sc003").await.unwrap();
+        assert_eq!(
+            item.state, "pending_classification",
+            "an item with no frame type must not report `classified` after its plan is discarded"
+        );
     }
 
     // ── spec 048 US1/T012: calibration master frame_ids population ─────────────

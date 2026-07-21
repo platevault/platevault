@@ -162,36 +162,42 @@ pub async fn reclassify(
         }
     }
 
-    // DB values (migration 0048 CHECK): 'classified' / 'unclassified'.
-    // API values (stable frontend vocabulary): 'single_type' / 'mixed' / 'unclassified'.
+    // DB values (migration 0049 CHECK): 'classified' / 'unclassified'.
+    // API values (stable frontend vocabulary): 'single_type' / 'unclassified'.
+    //
+    // Spec 058 T035 retires 'mixed' here as well as in `classify`. This arm was
+    // missed by the first pass, and it is why a needs-review item resolved into
+    // two frame types still reported `mixed` after the classify-side change:
+    // the label survived on the reclassify path alone.
     let (mut db_result, mut updated_type, mut single_frame_type) = match frame_types.len() {
-        0 => ("unclassified".to_owned(), "unclassified".to_owned(), None),
         1 => ("classified".to_owned(), "single_type".to_owned(), frame_types.into_iter().next()),
-        _ => ("unclassified".to_owned(), "mixed".to_owned(), None),
+        // Zero resolved types and two-or-more are the same answer: not one
+        // thing, therefore not confirmable.
+        _ => ("unclassified".to_owned(), "unclassified".to_owned(), None),
     };
 
-    // issue #711 Instance B: an item still carrying the `__needs_review__`
-    // sentinel must not be reported classified from frame-type agreement
-    // alone. `inbox_confirm` gates on `inbox_items.group_key ==
-    // SENTINEL_NEEDS_REVIEW` directly, and the frame-type aggregation above
+    // issue #711 Instance B: an item still flagged `needs_review` must not be
+    // reported classified from frame-type agreement alone. `inbox_confirm`
+    // gates on `inbox_items.needs_review` directly, and the frame-type
+    // aggregation above
     // only tracks whether overrides agree on ONE type — not whether every
     // mandatory attribute (filter/exposureS/gain/target) is now actually
     // present. Left unchecked, the cached classification (and hence
     // `inbox.classify`/the detail panel) can flip to "single_type" while the
-    // list row and `inbox_confirm` still correctly see the sentinel,
+    // list row and `inbox_confirm` still correctly see needs-review,
     // producing the exact list/detail disagreement #711 reports. Re-check
     // against the same mandatory-attribute gate `materialize_sub_items` uses
     // before promoting a row, and downgrade the result when it fails.
-    // Scoped to items that already carry the sentinel — a non-sentinel
-    // item's reclassify aggregation is unaffected (issue #724 precedent).
-    let mut sentinel_resolved_ft: Option<metadata_core::FrameType> = None;
-    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+    // Scoped to items already flagged needs-review — an unflagged item's
+    // reclassify aggregation is unaffected (issue #724 precedent).
+    let mut needs_review_resolved_ft: Option<metadata_core::FrameType> = None;
+    if item.needs_review != 0 {
         match single_frame_type.as_deref().and_then(metadata_core::FrameType::from_str_ci) {
             Some(ft)
                 if mandatory_attrs_present(pool, &req.inbox_item_id, ft, &updated_evidence)
                     .await =>
             {
-                sentinel_resolved_ft = Some(ft);
+                needs_review_resolved_ft = Some(ft);
             }
             _ => {
                 "unclassified".clone_into(&mut db_result);
@@ -215,16 +221,45 @@ pub async fn reclassify(
     .await
     .map_err(|e| db_internal_ctx(e, "upsert inbox classification"))?;
 
-    // 6b. Clear the __needs_review__ sentinel now that the check above
-    // (issue #724) confirmed the item is fully resolved.
-    if let Some(ft) = sentinel_resolved_ft {
-        persistence_db::repositories::inbox::clear_needs_review_sentinel(
-            pool,
-            &req.inbox_item_id,
-            &ft.to_string(),
-        )
-        .await
-        .map_err(|e| db_internal_ctx(e, "clear needs-review sentinel"))?;
+    // 6b. Resolve the item out of needs-review now that the check above
+    // (issue #724) confirmed every mandatory attribute is supplied.
+    //
+    // Spec 058 T006: this goes through the same materialisation upsert every
+    // other write path uses, so `frame_type`, `needs_review` and
+    // `state = 'classified'` land in ONE statement (FR-029 — no observable
+    // moment where the row reports classified without a frame type). The
+    // synthetic `type=<ft>·resolved=<id>` key that the old in-place UPDATE
+    // wrote is gone rather than replaced: the item keeps its classification
+    // identity, and `ON CONFLICT(root_id, relative_path, group_key)` converges
+    // it onto any sibling already holding that identity, because two rows
+    // sharing a classification identity in one folder ARE the same item.
+    //
+    // The write PROPAGATES rather than `.ok()`s: #1376 established that
+    // discarding it lets a SQLITE_BUSY or full disk return a success response
+    // describing state that was never saved. That fix landed on main against
+    // `clear_needs_review_sentinel`, which 058 replaced with this upsert —
+    // the reasoning carries over unchanged.
+    if let Some(ft) = needs_review_resolved_ft {
+        if let Some(source_group_id) = item.source_group_id.as_deref() {
+            inbox_repo::upsert_inbox_sub_item(
+                pool,
+                &persistence_db::repositories::inbox::UpsertInboxSubItem {
+                    id: &item.id,
+                    root_id: &item.root_id,
+                    relative_path: &item.relative_path,
+                    source_group_id,
+                    group_key: &item.group_key,
+                    group_label: item.group_label.as_deref().unwrap_or_default(),
+                    frame_type: Some(ft.as_str()),
+                    content_signature: item.content_signature.as_deref().unwrap_or_default(),
+                    file_count: item.file_count,
+                    lane: &item.lane,
+                    needs_review: false,
+                },
+            )
+            .await
+            .map_err(|e| db_internal_ctx(e, "resolve inbox item out of needs-review"))?;
+        }
     }
 
     // 7. Rebuild breakdown rows so the next classify cache hit returns fresh
@@ -603,7 +638,7 @@ pub async fn reclassify_v2(
     // ── 8. Re-run classification + grouping via materialize_sub_items ─────────
     //
     // We call the T066 pub(crate) API directly. This re-partitions all files in
-    // the source group into single-type sub-items (and the needs-review sentinel)
+    // the source group into single-type sub-items (some flagged needs-review)
     // based on their current effective metadata (header + overrides). It upserts
     // inbox_items rows and updates child_count on the source group.
     //
@@ -863,7 +898,7 @@ pub async fn reclassify_v2(
     let mut sub_items: Vec<InboxSubItemSummary> = Vec::new();
 
     for row in &sub_item_rows {
-        let is_needs_review = row.group_key == super::classify::SENTINEL_NEEDS_REVIEW;
+        let is_needs_review = row.needs_review != 0;
         if is_needs_review {
             needs_review_count = needs_review_count
                 .saturating_add(u32::try_from(row.file_count).unwrap_or(u32::MAX));
@@ -874,6 +909,9 @@ pub async fn reclassify_v2(
             group_label: row.group_label.clone().unwrap_or_default(),
             frame_type: row.frame_type.clone(),
             file_count: u32::try_from(row.file_count).unwrap_or(u32::MAX),
+            // #1126: the real missing set, deduplicated and deterministically
+            // ordered, rather than a hardcoded `["frameType"]` that asked the
+            // user for the one thing they had just supplied.
             missing_mandatory: if is_needs_review { needs_review_missing.clone() } else { vec![] },
         });
     }
@@ -886,8 +924,8 @@ pub async fn reclassify_v2(
 /// `true` when every evidence row's effective filter/exposure/gain/object
 /// (override, else the extracted `inbox_file_metadata` value) satisfies the
 /// mandatory-attribute gate (T070/FR-047/FR-048) for `ft`. Shared by the
-/// needs-review sentinel-clear decision (issue #724) and the classification
-/// aggregation's own sentinel downgrade (issue #711 Instance B) — both need
+/// needs-review resolve decision (issue #724) and the classification
+/// aggregation's own downgrade (issue #711 Instance B) — both need
 /// the identical per-file check.
 async fn mandatory_attrs_present(
     pool: &SqlitePool,
@@ -903,9 +941,7 @@ async fn mandatory_attrs_present(
     let target_resolved = ft == metadata_core::FrameType::Light
         && crate::target_recommendations::auto_resolve_target(
             pool,
-            &crate::target_recommendations::RecommendationTarget::InboxItem(
-                inbox_item_id.to_owned(),
-            ),
+            inbox_item_id,
             crate::target_recommendations::DEFAULT_FIXED_RADIUS_DEG,
         )
         .await
@@ -958,6 +994,41 @@ mod tests {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
+    }
+
+    /// Attach `item_id` to a real source group and flag it needs-review.
+    ///
+    /// Spec 058 FR-028: needs-review is `inbox_items.needs_review`, not a
+    /// `group_key` value — `group_key` keeps the item's classification
+    /// identity throughout. A source group is required because the resolve
+    /// path writes through `upsert_inbox_sub_item` (T006).
+    async fn flag_needs_review(db: &Database, item_id: &str, group_key: &str) {
+        let sg_id = format!("sg-{item_id}");
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &persistence_db::repositories::inbox::UpsertSourceGroup {
+                id: &sg_id,
+                root_id: "root-1",
+                relative_path: "inbox_folder",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE inbox_items
+                SET needs_review = 1, source_group_id = ?, group_key = ?
+              WHERE id = ?",
+        )
+        .bind(&sg_id)
+        .bind(group_key)
+        .bind(item_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
     }
 
     async fn setup_unclassified_item(db: &Database, item_id: &str) {
@@ -1025,6 +1096,257 @@ mod tests {
         .unwrap();
     }
 
+    /// Spec 058 T052 (phase 6b, FR-014): a needs-review item resolved into TWO
+    /// frame types yields exactly two siblings, each carrying its own frame
+    /// type, with no `mixed` item and no orphaned original row.
+    ///
+    /// This is the real user flow: classify a folder whose headers are
+    /// unreadable (one needs-review item), then supply per-file frame types
+    /// AND the mandatory attributes each type requires, exactly as the
+    /// "Apply manual overrides" button does. `reclassify_v2` re-derives the
+    /// groups and reuses `materialize_sub_items` — no bespoke split path, which
+    /// is what T050 asks for.
+    ///
+    /// The mandatory attributes are load-bearing, not fixture noise.
+    /// `materialize_sub_items` suppresses `frame_type` while a group is still
+    /// needs-review (`classify.rs`), so supplying frame types alone yields two
+    /// siblings that both carry `frame_type: None` and `needs_review: 1`. That
+    /// is correct — a light frame without OBJECT/FILTER/EXPTIME is genuinely
+    /// unresolved — but it means a test that omits them would assert a weaker
+    /// property than T050 states.
+    #[tokio::test]
+    async fn t052_needs_review_resolved_into_two_types_yields_two_siblings() {
+        use contracts_core::inbox::{InboxReclassifyFileOverride, InboxReclassifyV2Request};
+
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("a.fits"), "M42", 0);
+        write_ambiguous_fits(&root.path().join("b.fits"), "M42", 1);
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-t052",
+                root_id: "root-t052",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 2,
+            },
+        )
+        .await
+        .unwrap();
+
+        crate::classify::classify_source_group(db.pool(), "sg-t052", root.path()).await.unwrap();
+
+        let before = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t052").await.unwrap();
+        assert_eq!(before.len(), 1, "unreadable headers must land as ONE needs-review item");
+        assert_eq!(before[0].needs_review, 1, "the pre-resolve item must be needs-review");
+
+        let mut light = std::collections::HashMap::new();
+        light.insert("frameType".to_owned(), serde_json::json!("light").into());
+        light.insert("filter".to_owned(), serde_json::json!("Ha").into());
+        light.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+        light.insert("target".to_owned(), serde_json::json!("M42").into());
+        let mut dark = std::collections::HashMap::new();
+        dark.insert("frameType".to_owned(), serde_json::json!("dark").into());
+        dark.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+        dark.insert("gain".to_owned(), serde_json::json!("100").into());
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-t052".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![
+                    InboxReclassifyFileOverride {
+                        file_path: "a.fits".to_owned(),
+                        properties: light,
+                    },
+                    InboxReclassifyFileOverride {
+                        file_path: "b.fits".to_owned(),
+                        properties: dark,
+                    },
+                ],
+                bulk: vec![],
+            },
+        )
+        .await
+        .unwrap();
+
+        let after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t052").await.unwrap();
+        assert_eq!(after.len(), 2, "two frame types must yield exactly two siblings");
+
+        let mut types: Vec<String> = after.iter().filter_map(|r| r.frame_type.clone()).collect();
+        types.sort();
+        assert_eq!(
+            types,
+            vec!["dark".to_owned(), "light".to_owned()],
+            "each sibling must carry its OWN frame type, not inherit one or none"
+        );
+        assert!(
+            after.iter().all(|r| r.needs_review == 0),
+            "with every mandatory attribute supplied, neither sibling stays needs-review"
+        );
+
+        // No orphaned original: every row for this group IS one of the two
+        // siblings, so the pre-resolve needs-review item is gone rather than
+        // lingering beside them.
+        let all = inbox_repo::list_item_ids_for_source_group(db.pool(), "sg-t052").await.unwrap();
+        assert_eq!(
+            all.len(),
+            2,
+            "the pre-resolve item must be replaced by its siblings, not left orphaned alongside them"
+        );
+    }
+
+    /// The BULK override path must clear the confirm gate, not just the
+    /// per-file path (T051).
+    ///
+    /// The Inbox UI's "Apply manual overrides" sends `bulk` entries when the
+    /// user sets a frame type for the whole selection — which is what the L3
+    /// journey `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`
+    /// drives. `t052_...` above covers the per-file `overrides` path only, so
+    /// a bulk-specific regression can hide behind it.
+    ///
+    /// Asserts the property the UI actually gates on: after the bulk apply,
+    /// `get_inbox_item_metadata` for the resulting item reports NO missing
+    /// path attributes. Asserting on `frame_type` alone would not catch the
+    /// case where the item resolves but the durable override never reaches
+    /// the file metadata read that `canConfirm` consults.
+    #[tokio::test]
+    async fn t051_bulk_override_clears_missing_path_attributes() {
+        use contracts_core::inbox::{InboxReclassifyBulk, InboxReclassifyV2Request};
+
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("ambiguous_001.fits"), "M42", 0);
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-t051",
+                root_id: "root-t051",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+        crate::classify::classify_source_group(db.pool(), "sg-t051", root.path()).await.unwrap();
+
+        let bulk_of = |property: &str, value: serde_json::Value| InboxReclassifyBulk {
+            property: property.to_owned(),
+            value: value.into(),
+            // The UI's `handleBulkApply` always sends the SELECTED file paths,
+            // never the all-files form — so the scoped form is what the L3
+            // journey exercises and what this must cover.
+            file_paths: Some(vec!["ambiguous_001.fits".to_owned()]),
+        };
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-t051".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    bulk_of("frameType", serde_json::json!("light")),
+                    bulk_of("exposureS", serde_json::json!(300.0)),
+                    bulk_of("filter", serde_json::json!("Ha")),
+                    bulk_of("target", serde_json::json!("M42")),
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        let ids = inbox_repo::list_item_ids_for_source_group(db.pool(), "sg-t051").await.unwrap();
+        assert_eq!(ids.len(), 1, "one file of one type must yield exactly one item");
+
+        let files = crate::metadata::get_inbox_item_metadata(db.pool(), &ids[0]).await.unwrap();
+        assert_eq!(files.len(), 1, "the item must expose its one file");
+        assert_eq!(
+            files[0].frame_type_effective.as_deref(),
+            Some("light"),
+            "the bulk frameType override must reach the per-file metadata read"
+        );
+        assert!(
+            !files[0].missing_path_attributes.iter().any(|a| a == "image type"),
+            "a supplied frame type must clear the \"image type\" gate; still missing: {:?}",
+            files[0].missing_path_attributes
+        );
+    }
+
+    /// The v1 `reclassify` path does not split, and that is by design.
+    ///
+    /// Originally written as a "T050 gap" test on the belief that resolving a
+    /// needs-review item into two frame types never splits. That belief was
+    /// wrong: it came from probing this v1 entry point, which is item-scoped
+    /// and never calls `materialize_sub_items`. The path the UI actually uses,
+    /// `reclassify_v2`, splits correctly — see
+    /// `t052_needs_review_resolved_into_two_types_yields_two_siblings`.
+    ///
+    /// Kept, reframed, because the distinction is load-bearing and easy to trip
+    /// over: v1 reports an aggregate verdict for one item, v2 re-derives the
+    /// whole group. A future change that routes group-scoped work through v1
+    /// would silently stop splitting, and this pins that.
+    ///
+    /// It also pins that v1 reports `unclassified` rather than `mixed` — the
+    /// reclassify path had its own `mixed` arm that the first T035 pass missed.
+    #[tokio::test]
+    async fn v1_reclassify_reports_an_aggregate_verdict_without_splitting() {
+        let db = test_db().await;
+        setup_unclassified_item(&db, "item-t052").await;
+
+        let resp = reclassify(
+            db.pool(),
+            ReclassifyRequest {
+                inbox_item_id: "item-t052".to_owned(),
+                overrides: vec![
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_001.fits".to_owned(),
+                        frame_type: "light".to_owned(),
+                        ..Default::default()
+                    },
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_002.fits".to_owned(),
+                        frame_type: "dark".to_owned(),
+                        ..Default::default()
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            resp.updated_type, "unclassified",
+            "two distinct resolved frame types are not one thing; `mixed` is retired (T035)"
+        );
+        assert_eq!(resp.frame_type, None);
+        assert_eq!(resp.applied_count, 2, "both overrides must still be applied");
+
+        // The T050 gap itself: no siblings are materialized for the group.
+        let sg = inbox_repo::get_source_group_id_for_item(db.pool(), "item-t052")
+            .await
+            .unwrap()
+            .expect("the fixture item is linked to a source group");
+        let subs = inbox_repo::list_inbox_sub_items(db.pool(), &sg).await.unwrap();
+        assert!(
+            subs.is_empty(),
+            "v1 `reclassify` is item-scoped and must NOT materialise siblings; \
+             group-scoped re-derivation belongs to `reclassify_v2`"
+        );
+    }
+
     #[tokio::test]
     async fn reclassify_two_files_to_dark() {
         let db = test_db().await;
@@ -1057,21 +1379,29 @@ mod tests {
         assert_eq!(resp.applied_count, 2);
     }
 
-    /// Issue #724: reclassifying every file of a needs-review item with all
-    /// mandatory attributes for the resolved frame type must clear the
-    /// `__needs_review__` sentinel on `inbox_items.group_key` in place, so
-    /// `inbox_confirm`'s sentinel gate (`crate::confirm::t070_...`) no longer
-    /// rejects the item forever.
+    /// Issue #724 + spec 058 T011 (FR-029, SC-003): reclassifying every file
+    /// of a needs-review item with all mandatory attributes for the resolved
+    /// frame type must resolve it, so `inbox_confirm`'s gate no longer rejects
+    /// the item forever.
+    ///
+    /// The resolve records the frame type, the classification identity, the
+    /// `classified` state and `needs_review = 0` in one statement.
+    ///
+    /// This does NOT establish SC-003 generally: `upsert_inbox_sub_item`
+    /// hardcodes `state = 'classified'` (inbox.rs:536,543), so an UNRESOLVED
+    /// needs-review row sits at `classified` with a NULL `frame_type` for as
+    /// long as it stays unresolved. That is a live SC-003 violation, pinned by
+    /// `needs_review_resolves_atomically_onto_its_natural_key_058` and fixed
+    /// by T018 — not by this test.
     #[tokio::test]
-    async fn reclassify_fully_resolved_clears_needs_review_sentinel() {
+    async fn reclassify_fully_resolved_clears_needs_review() {
         let db = test_db().await;
         setup_unclassified_item(&db, "item-recl-724").await;
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(super::super::classify::SENTINEL_NEEDS_REVIEW)
-            .bind("item-recl-724")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        // A key classify actually produces for a flat missing FILTER: the
+        // absent grouping dimension renders as SENTINEL_MISSING. Injecting a
+        // bare "type=flat" would only assert that a hand-written constant
+        // survives a round trip.
+        flag_needs_review(&db, "item-recl-724", "type=flat·filter=∅·exposure=∅").await;
 
         let resp = reclassify(
             db.pool(),
@@ -1099,38 +1429,69 @@ mod tests {
         assert_eq!(resp.updated_type, "single_type");
         assert_eq!(resp.frame_type, Some("flat".to_owned()));
 
-        let group_key: String =
-            sqlx::query_scalar("SELECT group_key FROM inbox_items WHERE id = ?")
-                .bind("item-recl-724")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        assert_ne!(
-            group_key,
-            super::super::classify::SENTINEL_NEEDS_REVIEW,
-            "sentinel must be cleared once every mandatory attribute is supplied"
+        let (needs_review, frame_type, state, group_key): (i64, Option<String>, String, String) =
+            sqlx::query_as(
+                "SELECT needs_review, frame_type, state, group_key FROM inbox_items WHERE id = ?",
+            )
+            .bind("item-recl-724")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            needs_review, 0,
+            "needs_review must clear once every mandatory attribute is supplied"
         );
+        assert_eq!(
+            frame_type.as_deref(),
+            Some("flat"),
+            "resolving must record the frame type in the same statement"
+        );
+        assert_eq!(state, "classified", "resolving must record the classified state");
+        // No synthetic `resolved=<id>` token is appended. KNOWN GAP: the
+        // resolve rewrites the row through `upsert_inbox_sub_item` with
+        // `group_key` passed through unchanged, so the identity still records
+        // the now-supplied FILTER as absent and will never converge with a
+        // sibling carrying the real value — defeating T006's ON CONFLICT
+        // rationale. Re-keying from override-merged metadata is a re-split
+        // decision owned by T012-T016; asserted as-is so it stays visible.
+        assert_eq!(
+            group_key, "type=flat·filter=∅·exposure=∅",
+            "resolve passes group_key through unchanged (stale ∅ identity — T012-T016)"
+        );
+
+        // SC-003 as written: unqualified. A `needs_review = 0` qualifier here
+        // would exclude exactly the rows that violate it.
+        let violations: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM inbox_items
+              WHERE state = 'classified' AND frame_type IS NULL",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(violations, 0, "SC-003: no item may be classified with no frame type");
     }
 
     /// Issue #711 Instance B: overriding every file's frame_type to a single
     /// agreed type is not enough to report "classified" while the item is
-    /// still a needs-review sentinel and a DIFFERENT mandatory attribute for
+    /// still flagged needs-review and a DIFFERENT mandatory attribute for
     /// that type (dark requires exposureS + gain) remains unsupplied.
     /// Without the fix, step 6's frame-type-only aggregation reported
     /// "single_type"/"dark" (matching `inbox_classify`'s cached response and
     /// wrongly enabling the detail panel's Confirm), while `group_key` stayed
     /// `__needs_review__` (matching the list row) — the exact list/detail
     /// disagreement #711 reports.
+    ///
+    /// Spec 058 T009 changed this test's MECHANISM only: needs-review is read
+    /// from `inbox_items.needs_review` (FR-028) instead of the retired
+    /// `__needs_review__` `group_key` sentinel. The invariant is unchanged and
+    /// not weakened — frame-type agreement alone must still not report the item
+    /// classified, and the API response, the item row and the cached
+    /// classification must still agree (SC-011).
     #[tokio::test]
     async fn reclassify_type_agreement_without_mandatory_attrs_stays_needs_review() {
         let db = test_db().await;
         setup_unclassified_item(&db, "item-recl-711b").await;
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(super::super::classify::SENTINEL_NEEDS_REVIEW)
-            .bind("item-recl-711b")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        flag_needs_review(&db, "item-recl-711b", "type=dark").await;
 
         let resp = reclassify(
             db.pool(),
@@ -1160,17 +1521,17 @@ mod tests {
         );
         assert_eq!(resp.frame_type, None);
 
-        let group_key: String =
-            sqlx::query_scalar("SELECT group_key FROM inbox_items WHERE id = ?")
+        let (needs_review, frame_type): (i64, Option<String>) =
+            sqlx::query_as("SELECT needs_review, frame_type FROM inbox_items WHERE id = ?")
                 .bind("item-recl-711b")
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
         assert_eq!(
-            group_key,
-            super::super::classify::SENTINEL_NEEDS_REVIEW,
-            "sentinel must stay set — the item is not actually fully resolved"
+            needs_review, 1,
+            "needs_review must stay set — the item is not actually fully resolved"
         );
+        assert_eq!(frame_type, None, "an unresolved item must carry no frame type");
 
         // The cached classification must agree with the DB result above: a
         // subsequent inbox.classify cache-hit reads this row.
@@ -1331,6 +1692,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -1736,6 +2098,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -1869,6 +2232,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -2005,6 +2369,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -2141,6 +2506,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -2458,12 +2824,21 @@ mod tests {
     /// `unclassified` and the bulk reclassify below drives the re-split.
     /// `pad` varies the file's byte length to give it distinct content.
     fn write_ambiguous_fits(path: &std::path::Path, object: &str, pad: usize) {
+        write_fits_cards(
+            path,
+            &[
+                "IMAGETYP= 'Frame Unknown'".to_owned(),
+                format!("OBJECT  = '{object}'"),
+                "FILTER  = 'Ha'".to_owned(),
+            ],
+            pad,
+        );
+    }
+
+    /// Write a minimal single-block FITS file carrying `cards` in its header.
+    /// `pad` varies the file's byte length to give it distinct content.
+    fn write_fits_cards(path: &std::path::Path, cards: &[String], pad: usize) {
         let mut data = vec![b' '; 2880 + pad];
-        let cards = [
-            "IMAGETYP= 'Frame Unknown'".to_owned(),
-            format!("OBJECT  = '{object}'"),
-            "FILTER  = 'Ha'".to_owned(),
-        ];
         for (i, c) in cards.iter().enumerate() {
             let card = format!("{c:<80}");
             data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
@@ -2489,6 +2864,7 @@ mod tests {
                 content_signature: Some("sig"),
                 format: Some("fits"),
                 lane: Some("fits"),
+                file_count: 1,
             },
         )
         .await
@@ -2620,6 +2996,476 @@ mod tests {
         );
     }
 
+    /// Spec 058 T012: **a bare source group — scan-time placeholder removed
+    /// per FR-015 — materializes sub-items directly, with no `inbox_items`
+    /// row ever required.**
+    ///
+    /// Previously pinned (as `source_group_without_items_cannot_be_classified_today_058`)
+    /// asserting the OPPOSITE: neither `classify()` (keyed on `inbox_item_id`,
+    /// fails `InboxItemNotFound` without one) nor `reclassify_v2()` (rebuilds
+    /// `file_records` from `inbox_classification_evidence`/
+    /// `inbox_file_metadata`, which are only ever written against an item id)
+    /// could turn a bare source group into item rows — so removing the
+    /// placeholder would have left every scanned folder permanently
+    /// unclassifiable. `classify_source_group` (`classify.rs`) closes that
+    /// gap: it loads the source group row, enumerates the folder's FITS/XISF
+    /// files straight from disk, and calls `materialize_sub_items` with the
+    /// group's own identity — no item row, no evidence, no cache read
+    /// required. Inverted here now that the entry point exists.
+    #[tokio::test]
+    async fn classify_source_group_materializes_sub_items_from_a_bare_group_058() {
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("frame.fits"), "M42", 0);
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-bare",
+                root_id: "root-bare",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Deliberately NO inbox_items row — this is the post-FR-015 shape.
+        let resp = crate::classify::classify_source_group(db.pool(), "sg-bare", root.path())
+            .await
+            .unwrap();
+
+        assert!(
+            resp.materialized_sub_item_count >= 1,
+            "classify_source_group materialized no sub-items for a bare source group \
+             with a real FITS file on disk"
+        );
+
+        let sigs: Vec<String> = inbox_repo::list_inbox_sub_items(db.pool(), "sg-bare")
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|r| r.content_signature)
+            .collect();
+        assert!(
+            !sigs.is_empty(),
+            "no inbox_items sub-item rows were actually persisted for the bare source group"
+        );
+    }
+
+    /// Spec 058 SC-003 (T023): **no `inbox_items` row may report
+    /// `state = 'classified'` while carrying no frame type.**
+    ///
+    /// Swept table-wide after running the REAL classify pass over all three
+    /// folder shapes 058 names — uniform, mixed, and needs-review — because the
+    /// two writers that produced the violation are on different code paths:
+    /// the folder aggregate is flipped by `classify()`'s step 9, while a
+    /// needs-review sub-item is written by `upsert_inbox_sub_item`. A test
+    /// scoped to either one alone passes while the other still lies.
+    ///
+    /// **Scope**: the SELECT is table-wide, but the fixture is classify-only —
+    /// it never confirms an item, opens a plan or cancels one, so the plan
+    /// lifecycle writers are out of its reach no matter what the sweep selects.
+    /// They are guarded separately by `app_core`'s
+    /// `cancel_does_not_report_classified_without_a_frame_type_sc003` and by
+    /// `plan_listener`'s
+    /// `discarded_plan_does_not_report_classified_without_a_frame_type_sc003`.
+    /// Neither can be driven from here: `app_core` depends on this crate, so
+    /// SC-003 needs three tests rather than one.
+    #[tokio::test]
+    async fn no_item_reports_classified_without_a_frame_type_sc003() {
+        let db = test_db().await;
+
+        let light = |object: &str| {
+            vec![
+                "IMAGETYP= 'LIGHT'".to_owned(),
+                format!("OBJECT  = '{object}'"),
+                "FILTER  = 'Ha'".to_owned(),
+                "EXPTIME =            300.0".to_owned(),
+                "GAIN    =              100".to_owned(),
+            ]
+        };
+        let dark = || {
+            vec![
+                "IMAGETYP= 'DARK'".to_owned(),
+                "EXPTIME =            300.0".to_owned(),
+                "GAIN    =              100".to_owned(),
+            ]
+        };
+
+        // Uniform — every file the same fully-attributed frame type.
+        let uniform = tempfile::tempdir().unwrap();
+        write_fits_cards(&uniform.path().join("a.fits"), &light("M42"), 0);
+        write_fits_cards(&uniform.path().join("b.fits"), &light("M42"), 80);
+        seed_and_classify(db.pool(), uniform.path(), "sg-u", "item-u", "root-u").await;
+
+        // Mixed — two frame types in one folder, so the aggregate resolves to
+        // no single frame type at all. This is the #711 shape.
+        let mixed = tempfile::tempdir().unwrap();
+        write_fits_cards(&mixed.path().join("a.fits"), &light("M31"), 0);
+        write_fits_cards(&mixed.path().join("b.fits"), &dark(), 160);
+        seed_and_classify(db.pool(), mixed.path(), "sg-m", "item-m", "root-m").await;
+
+        // Needs-review — an unmapped IMAGETYP yields no frame type.
+        let review = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&review.path().join("a.fits"), "M13", 240);
+        seed_and_classify(db.pool(), review.path(), "sg-r", "item-r", "root-r").await;
+
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inbox_items")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert!(total >= 3, "fixture is vacuous — classify produced no item rows at all");
+
+        // Positive direction. Without this, a regression that leaves EVERY row
+        // at `pending_classification` — classification silently never
+        // completing — satisfies the sweep below trivially and stays green.
+        let classified: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM inbox_items
+             WHERE state = 'classified' AND frame_type IS NOT NULL",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert!(
+            classified >= 1,
+            "fixture is vacuous — no row reached `classified` at all, so the sweep below \
+             proves nothing"
+        );
+
+        let offenders: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT id, state, COALESCE(group_key, '<null>') FROM inbox_items
+             WHERE state = 'classified' AND frame_type IS NULL",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+
+        assert!(
+            offenders.is_empty(),
+            "SC-003: {} row(s) report `classified` with no frame type: {offenders:?}",
+            offenders.len()
+        );
+    }
+
+    // ── US4: re-derivation without lifecycle coupling (spec 058) ──────────────
+
+    /// Write a minimal FITS file carrying `cards` verbatim.
+    fn write_fits(path: &std::path::Path, cards: &[&str]) {
+        let mut data = vec![b' '; 2880];
+        for (i, c) in cards.iter().enumerate() {
+            data[i * 80..i * 80 + 80].copy_from_slice(format!("{c:<80}").as_bytes());
+        }
+        data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+        std::fs::write(path, &data).unwrap();
+    }
+
+    /// A folder holding one bias and one flat: two files whose headers already
+    /// determine two *different* frame types, so classify materialises exactly
+    /// two sibling items with no needs-review between them. Returns the root.
+    ///
+    /// Both frame types are chosen so their mandatory-attribute sets
+    /// (`mandatory_set_for`: bias → gain, flat → filter) are satisfied from the
+    /// header alone — US4's premise is that nothing here is re-asked.
+    async fn seed_two_sibling_folder(
+        db: &Database,
+        sg_id: &str,
+        item_id: &str,
+        root_id: &str,
+    ) -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        write_fits(
+            &root.path().join("bias_001.fits"),
+            &["IMAGETYP= 'Bias Frame'", "GAIN    = 100", "EXPTIME = 0.0"],
+        );
+        write_fits(
+            &root.path().join("flat_001.fits"),
+            &["IMAGETYP= 'Flat Field'", "FILTER  = 'Ha'", "EXPTIME = 3.0"],
+        );
+        seed_and_classify(db.pool(), root.path(), sg_id, item_id, root_id).await;
+        root
+    }
+
+    /// `group_key → inbox_items.id` for a source group's materialised siblings.
+    ///
+    /// The row id is the identity FR-018/SC-008 talk about: it is what
+    /// `inbox_plan_links`, evidence, metadata and the UI's selection all key
+    /// on, so a new id for the same group means every one of those is orphaned.
+    async fn sibling_identity(
+        pool: &sqlx::SqlitePool,
+        sg_id: &str,
+    ) -> std::collections::BTreeMap<String, String> {
+        inbox_repo::list_inbox_sub_items(pool, sg_id)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| (r.group_key, r.id))
+            .collect()
+    }
+
+    /// T039/T041 (FR-018, SC-008): re-scanning an unchanged folder must not
+    /// change the identity of its existing items.
+    ///
+    /// "Identity" asserted here is `inbox_items.id` — the primary key every
+    /// plan link, evidence row and metadata row references. The natural key
+    /// `(root_id, relative_path, group_key)` is what makes it stable:
+    /// `upsert_inbox_sub_item` targets that triple in `ON CONFLICT` and returns
+    /// the PRE-EXISTING row's id, discarding the freshly generated one. This
+    /// test verifies that rather than assuming it, and uses
+    /// `force_rescan: true` so the classification cache cannot make the second
+    /// pass a no-op.
+    #[tokio::test]
+    async fn rescan_of_unchanged_folder_preserves_sub_item_identity() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-churn", "item-churn", "root-churn").await;
+
+        let before = sibling_identity(db.pool(), "sg-churn").await;
+        assert_eq!(
+            before.len(),
+            2,
+            "fixture must materialise two siblings before the rescan, got {before:?}"
+        );
+
+        // A genuine re-scan of a folder nothing has touched.
+        crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: "item-churn".to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let after = sibling_identity(db.pool(), "sg-churn").await;
+        assert_eq!(
+            before, after,
+            "re-scanning an unchanged folder churned item identity: the same \
+             group_keys came back under different inbox_items.id values, \
+             orphaning every plan link, evidence and metadata row keyed to them"
+        );
+    }
+
+    /// T038 (FR-014): re-derivation must not propagate state between siblings.
+    ///
+    /// Re-typing the *flat*'s file must move only the flat sibling. The bias
+    /// sibling shares nothing but a source group, so its id, frame type, file
+    /// count and content signature must all come back untouched.
+    #[tokio::test]
+    async fn resplit_does_not_propagate_state_between_siblings() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-prop", "item-prop", "root-prop").await;
+
+        let rows_before = inbox_repo::list_inbox_sub_items(db.pool(), "sg-prop").await.unwrap();
+        let bias_before = rows_before
+            .iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .clone();
+
+        // Re-type ONLY the flat's file. `file_paths` names it explicitly, so
+        // nothing about this request concerns the bias sibling.
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-prop".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("dark").into(),
+                        file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                    },
+                    InboxReclassifyBulk {
+                        property: "gain".to_owned(),
+                        value: serde_json::json!("100").into(),
+                        file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows_after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-prop").await.unwrap();
+
+        // The flat sibling moved — otherwise the assertions below are vacuous.
+        assert!(
+            rows_after.iter().any(|r| r.frame_type.as_deref() == Some("dark")),
+            "re-derivation did not apply the flat's new frame type; the \
+             isolation assertions below would prove nothing"
+        );
+
+        let bias_after = rows_after
+            .iter()
+            .find(|r| r.id == bias_before.id)
+            .expect("the bias sibling was destroyed by a re-derivation that never named it");
+        assert_eq!(
+            (
+                bias_after.frame_type.as_deref(),
+                bias_after.file_count,
+                bias_after.content_signature.as_deref(),
+                bias_after.needs_review,
+                bias_after.state.as_str(),
+            ),
+            (
+                bias_before.frame_type.as_deref(),
+                bias_before.file_count,
+                bias_before.content_signature.as_deref(),
+                bias_before.needs_review,
+                bias_before.state.as_str(),
+            ),
+            "re-deriving one sibling propagated state to the other: the bias \
+             sibling changed although none of its files were named"
+        );
+    }
+
+    /// Companion to T038, covering the case its tuple cannot reach: a sibling
+    /// whose lifecycle has already moved PAST `classified`.
+    ///
+    /// Both siblings are `classified` in the T038 fixture, so the `state` entry
+    /// in its tuple is satisfied by any implementation and proves nothing on
+    /// its own. The clobber only becomes observable once a sibling is
+    /// `resolved`, which is reachable in production WITHOUT an open plan: on
+    /// `plan.applying.completed` with `terminal_state == "applied"`,
+    /// `handle_plan_completed` picks `new_state = "resolved"` and
+    /// `transition_via_plan_id` then deletes the plan link
+    /// (plan_listener.rs:390-397). The item is therefore `resolved` with no
+    /// link row, so the group-wide open-plan interlock above — which scans
+    /// `get_plan_link` per sibling — does not refuse the re-derivation.
+    ///
+    /// `upsert_inbox_sub_item` writes `state = 'classified'` unconditionally on
+    /// its conflict branch (persistence/db/src/repositories/inbox.rs:545), so
+    /// re-deriving the flat resurrects the already-organized bias sibling in
+    /// the Inbox.
+    ///
+    /// Ignored because the fix belongs to that conflict clause, which is
+    /// outside this file's ownership boundary in the concurrent spec 058 split.
+    /// Observe it with
+    /// `cargo nextest run -p app_core_inbox --run-ignored all resurrect`.
+    #[tokio::test]
+    #[ignore = "reproduces a latent state clobber; the fix belongs in \
+                persistence_db upsert_inbox_sub_item, not in this crate"]
+    async fn resplit_does_not_resurrect_a_resolved_sibling() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-res", "item-res", "root-res").await;
+
+        let bias_id = inbox_repo::list_inbox_sub_items(db.pool(), "sg-res")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .id;
+
+        // The post-apply resting state: resolved, and with no plan link, so the
+        // open-plan interlock cannot be what protects this sibling.
+        inbox_repo::update_inbox_item_state(db.pool(), &bias_id, "resolved").await.unwrap();
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), &bias_id).await.unwrap().is_none(),
+            "fixture must leave the resolved sibling without a plan link, or the \
+             interlock — not the upsert — is what this test measures"
+        );
+
+        reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                source_group_id: Some("sg-res".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "frameType".to_owned(),
+                    value: serde_json::json!("dark").into(),
+                    file_paths: Some(vec!["flat_001.fits".to_owned()]),
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        let bias_after = inbox_repo::list_inbox_sub_items(db.pool(), "sg-res")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == bias_id)
+            .expect("the resolved sibling was destroyed by a re-derivation that never named it");
+
+        assert_eq!(
+            bias_after.state, "resolved",
+            "re-deriving the flat sibling reset the resolved bias sibling's \
+             state, resurrecting an already-organized item in the Inbox"
+        );
+    }
+
+    /// T040 (FR-019): folder-level re-derivation is anchored to the source
+    /// group, not to whichever item the caller happened to name.
+    ///
+    /// There is no folder-representative item to anchor on after spec 058, so
+    /// `reclassify_v2` called with one sibling's `inbox_item_id` must widen to
+    /// the whole group: a bulk with `file_paths: None` means "every file in the
+    /// group", including the files of siblings the caller never mentioned.
+    #[tokio::test]
+    async fn resplit_by_sibling_item_id_is_anchored_to_the_whole_group() {
+        let db = test_db().await;
+        let root = seed_two_sibling_folder(&db, "sg-anchor", "item-anchor", "root-anchor").await;
+
+        let bias_id = inbox_repo::list_inbox_sub_items(db.pool(), "sg-anchor")
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.frame_type.as_deref() == Some("bias"))
+            .expect("fixture must materialise a bias sibling")
+            .id;
+
+        let resp = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                root_absolute_path: root.path().to_string_lossy().into_owned(),
+                // Named by ONE sibling, not by the group.
+                source_group_id: None,
+                inbox_item_id: Some(bias_id.clone()),
+                overrides: vec![],
+                bulk: vec![InboxReclassifyBulk {
+                    property: "temperatureC".to_owned(),
+                    value: serde_json::json!(-10.0).into(),
+                    file_paths: None,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.source_group_id, "sg-anchor", "the item id must resolve to its group");
+
+        let touched: std::collections::BTreeSet<String> =
+            inbox_repo::list_file_overrides_for_group(db.pool(), "sg-anchor")
+                .await
+                .unwrap()
+                .into_iter()
+                .filter(|o| o.property_key == "temperatureC")
+                .map(|o| o.relative_file_path)
+                .collect();
+        assert_eq!(
+            touched,
+            ["bias_001.fits".to_owned(), "flat_001.fits".to_owned()].into_iter().collect(),
+            "a group-wide bulk reached only the named item's files — \
+             re-derivation is still anchored to a single item, so the sibling \
+             the caller did not name was left out of its own folder's re-derivation"
+        );
+    }
+
     /// Issue #1114: once the user supplies the frame type, the needs-review
     /// sub-item must stop reporting `frameType` as missing and must name the
     /// mandatory attributes that are ACTUALLY still absent (dark requires
@@ -2628,6 +3474,15 @@ mod tests {
     /// Before the fix `missing_mandatory` was hardcoded to `vec!["frameType"]`
     /// for every sentinel row, so the response asked the user for the one thing
     /// they had just supplied and never named the real blockers.
+    ///
+    /// **Adapted for spec 058 on merge (2026-07-20).** On `main` this test
+    /// located the row by `group_key == SENTINEL_NEEDS_REVIEW`; 058 retires
+    /// that sentinel (T006/T007) so the key now carries classification
+    /// identity only. The row is found by `frame_type.is_none()` instead — a
+    /// needs-review row never carries one (T018 derives `state` from exactly
+    /// that). Deliberately NOT keyed on `missing_mandatory` being non-empty,
+    /// which would make the assertion below circular. The invariant #1114
+    /// pins is unchanged: only the way the row is addressed moved.
     #[tokio::test]
     async fn v2_partially_resolved_reports_real_missing_attrs_not_frame_type() {
         let db = test_db().await;
@@ -2654,11 +3509,10 @@ mod tests {
         .await
         .unwrap();
 
-        let needs_review = resp
-            .sub_items
-            .iter()
-            .find(|s| s.group_key == super::super::classify::SENTINEL_NEEDS_REVIEW)
-            .unwrap_or_else(|| panic!("expected a needs-review sub-item: {:?}", resp.sub_items));
+        let needs_review =
+            resp.sub_items.iter().find(|s| s.frame_type.is_none()).unwrap_or_else(|| {
+                panic!("expected a needs-review sub-item: {:?}", resp.sub_items)
+            });
 
         assert!(
             !needs_review.missing_mandatory.iter().any(|k| k == "frameType"),
@@ -2669,6 +3523,89 @@ mod tests {
             needs_review.missing_mandatory,
             vec!["exposureS".to_owned(), "gain".to_owned()],
             "must name the mandatory attributes actually still absent for a dark frame"
+        );
+    }
+
+    /// **#1202 probe, requested on PR #1194 (2026-07-20).**
+    ///
+    /// `inbox_ui_unsplit_unclassified_folder_badge_is_not_classified` fails on
+    /// `main` with the Inbox list coming back **completely empty** after
+    /// classify (`Type cells were []`), not with a wrong badge. The open
+    /// question was which layer empties it, because the answer decides whether
+    /// T020 fixes #1202 or ships it:
+    ///
+    /// - rows returned here => the backend is fine, the defect is above it, and
+    ///   the placeholder is NOT the only row that renders — T020 is safe;
+    /// - no rows => the placeholder is currently the only thing rendering, and
+    ///   deleting it would make the empty list *guaranteed* while 058 believed
+    ///   it had fixed it.
+    ///
+    /// This asserts the FIRST outcome at Layer 1, on this branch, against the
+    /// #1202 fixture (one file, `IMAGETYP='Frame Unknown'`, OBJECT + FILTER
+    /// present).
+    ///
+    /// ⚠️ **The `registered_sources` row is inserted by hand and in full on
+    /// purpose.** `list_unacknowledged_across_roots` JOINs that table for
+    /// `r.path`, so a missing row yields zero results and a false "backend is
+    /// broken" reading. The long-standing `insert_source_group_with_item`
+    /// helper in `classify.rs` gets this wrong four ways (writes a
+    /// non-existent `organization_state`, `scan_depth = 1` against a
+    /// `CHECK (scan_depth IN ('recursive','single'))`, and omits NOT NULL
+    /// `created_at`/`created_via`) and swallows the failure via
+    /// `INSERT OR IGNORE`, which is why 17 classify tests join an empty table
+    /// (#1266). Do not "simplify" this back onto that helper.
+    #[tokio::test]
+    async fn unsplit_unclassified_folder_still_lists_rows_after_classify_1202() {
+        let db = test_db().await;
+        let root = tempfile::tempdir().unwrap();
+        write_ambiguous_fits(&root.path().join("frame_001.fits"), "M42", 0);
+
+        // Valid registered_sources row — see the warning above.
+        sqlx::query(
+            "INSERT INTO registered_sources \
+             (id, kind, path, scan_depth, created_at, created_via) \
+             VALUES (?, 'inbox', ?, 'recursive', '2026-07-20T00:00:00Z', 'settings_add')",
+        )
+        .bind("root-1202")
+        .bind(root.path().to_string_lossy().into_owned())
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        seed_and_classify(db.pool(), root.path(), "sg-1202", "item-1202", "root-1202").await;
+
+        let rows =
+            persistence_db::repositories::inbox::list_unacknowledged_across_roots(db.pool(), 500)
+                .await
+                .unwrap();
+
+        // Composition, not just count. `!rows.is_empty()` would be satisfied
+        // by the placeholder alone — which is exactly the case that makes T020
+        // UNSAFE — so the placeholder (`group_key = ''`) and the materialized
+        // sub-items are counted separately.
+        let (placeholders, sub_items): (Vec<_>, Vec<_>) =
+            rows.iter().partition(|r| r.group_key.is_empty());
+
+        eprintln!(
+            "#1202 probe: {} row(s) total — {} placeholder, {} sub-item; keys {:?}",
+            rows.len(),
+            placeholders.len(),
+            sub_items.len(),
+            rows.iter().map(|r| r.group_key.clone()).collect::<Vec<_>>()
+        );
+
+        assert!(
+            !rows.is_empty(),
+            "#1202: the repository layer returned NO rows at all for an unsplit \
+             unclassified folder."
+        );
+        assert!(
+            !sub_items.is_empty(),
+            "#1202: the ONLY row the repository returned is the scan-time \
+             placeholder — no materialized sub-item survives the query. T020 \
+             deletes that placeholder, so it would make the empty list \
+             GUARANTEED rather than fixing it. rows: {:?}",
+            rows.iter().map(|r| (&r.id, &r.group_key, &r.state)).collect::<Vec<_>>()
         );
     }
 }

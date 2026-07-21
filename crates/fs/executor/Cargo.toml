@@ -10,6 +10,9 @@ path = "src/lib.rs"
 [dependencies]
 domain_core = { path = "../../domain/core" }
 fs_pathsafe = { path = "../pathsafe" }
+# write_manifest renders the app-owned project marker via the domain-owned
+# `render_marker` (astro-plan-l3y0) instead of duplicating its JSON shape here.
+project_structure = { path = "../../project/structure" }
 camino = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true

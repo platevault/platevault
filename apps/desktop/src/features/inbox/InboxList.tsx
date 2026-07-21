@@ -22,8 +22,9 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import type { InboxListItem } from '@/bindings/index';
+import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
 import {
+  Btn,
   Table,
   tableIndent,
   Skeleton,
@@ -53,20 +54,16 @@ export const DEFAULT_INBOX_SORT: InboxSort = { col: 'detection', dir: 'asc' };
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * `true` for a materialized single-type sub-item that landed in the T070/
- * FR-047 needs-review sentinel bucket (spec 041 "single-type sub-items"):
- * one or more files are missing a mandatory attribute (or have no frame
- * type at all), so the group has no single dominant frame type — the
- * backend marks this with `groupKey === "__needs_review__"` and a non-empty
- * `missingMandatory` list (see `crates/app/inbox/src/classify.rs`'s
- * `SENTINEL_NEEDS_REVIEW`). Both signals are checked because legacy
- * pre-materialization rows may carry neither.
+ * `true` when the T070/FR-047 mandatory-attribute gate failed for this item:
+ * one or more files are missing a mandatory attribute, or have no frame type
+ * at all, so the item cannot be confirmed until the user supplies them.
+ *
+ * Spec 058 FR-028 (T008): this is the backend's persisted verdict
+ * (`inbox_items.needs_review`), not a guess derived from `groupKey`.
+ * `groupKey` now carries classification identity only.
  */
 function isNeedsReview(item: InboxListItem): boolean {
-  return (
-    item.groupKey === '__needs_review__' ||
-    (item.missingMandatory?.length ?? 0) > 0
-  );
+  return item.needsReview;
 }
 
 /**
@@ -192,6 +189,76 @@ function detectionLabel(item: InboxListItem): string {
   return base || m.inbox_list_root_label();
 }
 
+// ── Source groups (spec 058 FR-016 / T013) ───────────────────────────────────
+
+/**
+ * Path label for a source-group row, mirroring {@link detectionLabel}'s
+ * `relativePath`-else-root-basename rule so a group sitting directly in a root
+ * reads the same as an item there rather than as a blank cell.
+ */
+function sourceGroupDetectionLabel(group: InboxSourceGroupListItem): string {
+  if (group.relativePath) return group.relativePath;
+  const base = pathBasename(group.rootAbsolutePath);
+  return base || m.inbox_list_root_label();
+}
+
+/**
+ * Lane a source group belongs to for the `fits`/`video` lane filter.
+ *
+ * **Derived from `format`, never from `group.lane`** — issue #854.
+ * `inbox_source_groups.lane` is the `"move"`/`"catalogue"` lane and
+ * `inbox_items.lane` is `CHECK(lane IN ('fits','video'))`; the two columns
+ * share a name and nothing else. Filtering source groups on `group.lane` would
+ * compare `"move"` against `"fits"` and silently hide every source group.
+ */
+function sourceGroupLane(group: InboxSourceGroupListItem): string {
+  return group.format === 'video' ? 'video' : 'fits';
+}
+
+/** Short, uppercase format tag for a source-group row's Format column. */
+function sourceGroupFormatTag(group: InboxSourceGroupListItem): string {
+  switch (group.format) {
+    case 'video':
+      return 'VIDEO';
+    case 'xisf':
+      return 'XISF';
+    case 'mixed':
+      return 'MIXED';
+    default:
+      return 'FITS';
+  }
+}
+
+/**
+ * Sort comparator for source-group rows. They sort among themselves only —
+ * they render as their own leading block rather than interleaving with items
+ * (see {@link InboxListProps.sourceGroups}) — so the comparator only needs the
+ * fields a group actually has. The `type` column is a constant label for every
+ * source group, hence its deliberate no-op.
+ */
+function compareSourceGroups(
+  a: InboxSourceGroupListItem,
+  b: InboxSourceGroupListItem,
+  sort: InboxSort,
+): number {
+  let cmp = 0;
+  switch (sort.col) {
+    case 'detection':
+      cmp = a.relativePath.localeCompare(b.relativePath);
+      break;
+    case 'count':
+      cmp = a.fileCount - b.fileCount;
+      break;
+    case 'format':
+      cmp = sourceGroupFormatTag(a).localeCompare(sourceGroupFormatTag(b));
+      break;
+    case 'type':
+      cmp = 0;
+      break;
+  }
+  return sort.dir === 'asc' ? cmp : -cmp;
+}
+
 /** Dominant frame-type key for kind-filtering (matches the Kind filter options). */
 function itemKind(item: InboxListItem): string {
   if (item.isMaster) return item.masterFrameType ?? 'master';
@@ -226,6 +293,41 @@ function compareItems(
 
 export interface InboxListProps {
   items: InboxListItem[];
+  /**
+   * Spec 058 FR-016 / T013 — folders that have been scanned but have produced
+   * no item rows yet.
+   *
+   * These render as **structurally non-confirmable** rows: a source group has
+   * no `inboxItemId`, so there is no id to hand to `inbox.confirm` and no
+   * selection to drive the detail pane's Confirm button. That is the point —
+   * FR-016 asks for a row that *cannot* be confirmed rather than a row that is
+   * offered and then refused by a guard, because a guard is a runtime promise
+   * while an absent id is a structural one.
+   *
+   * They render as a leading block above the item rows rather than
+   * interleaving: the grouping engine (`groupByDimensions`/`ACCESSORS`) keys on
+   * `InboxListItem` fields that a source group does not have, and an
+   * unclassified folder has no dimension value to group under in any case.
+   *
+   * Inert until T020: while scan still writes a folder placeholder item, every
+   * scanned folder has an item row, so `inbox.list` always returns this empty.
+   */
+  sourceGroups?: InboxSourceGroupListItem[];
+  /**
+   * Spec 058 FR-017 — trigger group-scoped classification for a scanned folder.
+   *
+   * Deliberately separate from {@link InboxListProps.onSelect}: a source group
+   * has no `inboxItemId`, and `onSelect` feeds the `?selected=` URL param,
+   * which resolves against item ids only. Routing group classification through
+   * `onSelect` would both break selection and delete the FR-016 invariant that
+   * a source-group row never selects anything.
+   *
+   * When omitted the row renders its static "not yet classified" label, so
+   * existing callers and fixtures keep their current behaviour.
+   */
+  onClassifySourceGroup?: (group: InboxSourceGroupListItem) => void;
+  /** Source group whose classification is in flight — disables its action. */
+  classifyingSourceGroupId?: string | null;
   /** Issue #644: selection is by item identity, not list position — an index
    * silently points at whatever item now occupies that slot after search/lane/
    * kind filters change the array shape. */
@@ -273,7 +375,17 @@ export interface ItemVisualRow {
   indent: number;
 }
 
-export type VisualRow = HeaderVisualRow | ItemVisualRow;
+/**
+ * A scanned-but-unclassified folder row (spec 058 FR-016). Deliberately
+ * carries no `originalIdx` and no item — there is no item identity to select
+ * or confirm.
+ */
+export interface SourceGroupVisualRow {
+  kind: 'sourceGroup';
+  group: InboxSourceGroupListItem;
+}
+
+export type VisualRow = HeaderVisualRow | ItemVisualRow | SourceGroupVisualRow;
 
 /**
  * Walk the grouped tree in render order and produce the flat list of VISIBLE
@@ -319,6 +431,9 @@ export function flattenVisibleTree(
 
 export function InboxList({
   items,
+  sourceGroups = [],
+  onClassifySourceGroup,
+  classifyingSourceGroupId = null,
   selectedId,
   onSelect,
   filterType,
@@ -345,6 +460,26 @@ export function InboxList({
     return sorted;
   }, [items, filterType, kindFilter, sort]);
 
+  /**
+   * Source groups surviving the active filters.
+   *
+   * The lane filter maps through `sourceGroupLane` (format-derived, #854). The
+   * kind filter hides every source group whenever it is narrowed to a specific
+   * frame type: a source group is unclassified by definition, so it matches no
+   * frame-type kind — showing it under "bias" would be exactly the kind of row
+   * lying about itself that this feature removes.
+   */
+  const filteredSourceGroups = useMemo(() => {
+    let result = sourceGroups;
+    if (filterType !== 'all') {
+      result = result.filter((g) => sourceGroupLane(g) === filterType);
+    }
+    if (kindFilter && kindFilter !== 'all') {
+      return [];
+    }
+    return [...result].sort((a, b) => compareSourceGroups(a, b, sort));
+  }, [sourceGroups, filterType, kindFilter, sort]);
+
   const tree = useMemo(
     () => groupByDimensions(filtered, dims, ACCESSORS),
     [filtered, dims],
@@ -370,14 +505,35 @@ export function InboxList({
   const grouped = dims.length > 0;
 
   const visualRows = useMemo<VisualRow[]>(() => {
-    if (grouped) return flattenVisibleTree(tree, collapsed, originalIndexById);
-    return filtered.map((item) => ({
-      kind: 'item' as const,
-      item,
-      originalIdx: originalIndexById.get(item.inboxItemId) ?? -1,
-      indent: 0,
+    // Source-group rows lead, ungrouped and unindented, in both the grouped and
+    // flat views — see `InboxListProps.sourceGroups` for why they do not enter
+    // the grouping engine.
+    const groupRows: VisualRow[] = filteredSourceGroups.map((group) => ({
+      kind: 'sourceGroup' as const,
+      group,
     }));
-  }, [grouped, tree, collapsed, originalIndexById, filtered]);
+    if (grouped)
+      return [
+        ...groupRows,
+        ...flattenVisibleTree(tree, collapsed, originalIndexById),
+      ];
+    return [
+      ...groupRows,
+      ...filtered.map((item) => ({
+        kind: 'item' as const,
+        item,
+        originalIdx: originalIndexById.get(item.inboxItemId) ?? -1,
+        indent: 0,
+      })),
+    ];
+  }, [
+    grouped,
+    tree,
+    collapsed,
+    originalIndexById,
+    filtered,
+    filteredSourceGroups,
+  ]);
 
   // ── J/K triage navigation (spec 027 FR-022, issue #747) ─────────────────────
   // Bound here rather than on the page because this component owns the visual
@@ -533,6 +689,64 @@ export function InboxList({
             type: '',
             count: '',
             format: '',
+          };
+        }
+        if (row.kind === 'sourceGroup') {
+          const { group } = row;
+          const label = sourceGroupDetectionLabel(group);
+          const classifying = classifyingSourceGroupId === group.sourceGroupId;
+          // No `_onClick`, no `_selected`, no item id — the row carries no
+          // selection identity, so nothing here can reach `inbox.confirm`
+          // (FR-016). That guarantee is structural and still holds. What the
+          // row is NOT is actionless: its one action is Classify, which
+          // materialises the folder's item rows and replaces this row with them
+          // (FR-017).
+          //
+          // Classification is user-triggered, never fired on render, and never
+          // routed through selection. Selection is the `?selected=<inboxItemId>`
+          // URL param, so a `sourceGroupId` placed there resolves to no item and
+          // the stale-selection cleanup clears it on the same commit. Auto-firing
+          // on render would be worse still: it would write `inbox_items` rows for
+          // folders nobody touched, raise one blocking `MetadataUnreadable` per
+          // FITS-less folder, and transform rows under the user — the churn
+          // FR-023 exists to prevent. See Q-10.
+          return {
+            _testid: `inbox-source-group-${group.sourceGroupId}`,
+            _rowClassName: 'pv-inbox-table__row pv-inbox-table__row--muted',
+            detection: (
+              <span className="pv-inbox-cell__path-wrap">
+                <span
+                  className="pv-inbox-cell__path"
+                  title={m.inbox_source_group_row_aria({ path: label })}
+                >
+                  {label}
+                </span>
+              </span>
+            ),
+            type: (
+              <span className="pv-inbox-row__classification pv-inbox-row__classification--pending">
+                {classifying
+                  ? m.inbox_source_group_classifying()
+                  : m.inbox_state_not_yet_classified()}
+                {onClassifySourceGroup ? (
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid={`inbox-source-group-classify-${group.sourceGroupId}`}
+                    disabled={classifying}
+                    aria-label={m.inbox_source_group_classify_aria({
+                      path: label,
+                    })}
+                    onClick={() => onClassifySourceGroup(group)}
+                  >
+                    {m.inbox_source_group_classify()}
+                  </Btn>
+                ) : null}
+              </span>
+            ),
+            count: m.inbox_list_file_count({ count: group.fileCount }),
+            format: sourceGroupFormatTag(group),
           };
         }
         const { item, indent } = row;

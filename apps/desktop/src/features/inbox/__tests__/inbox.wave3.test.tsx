@@ -49,6 +49,7 @@ function makeListItem(overrides: Partial<InboxListItem> = {}): InboxListItem {
     inboxItemId: 'item-001',
     groupId: 'item-001',
     groupKey: '',
+    needsReview: false,
     rootId: 'root-001',
     rootAbsolutePath: '/astro',
     relativePath: 'lights/NGC7000',
