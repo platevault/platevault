@@ -19,9 +19,10 @@
 //!
 //! The listener is started once at application startup via
 //! [`start_inbox_plan_listener`] which spawns a detached `tokio::task`. It is
-//! NOT the only safety mechanism — [`crate::inbox::repair::run_repair`]
-//! provides a periodic background sweep for items whose plan closed while the
-//! listener was not running (crash, restart, missed event).
+//! NOT the only safety mechanism — [`crate::repair::run_repair`] provides a
+//! periodic background sweep for items whose plan closed while the listener was
+//! not running (crash, restart, missed event). Both halves of R-PlanOpen are
+//! started by [`start_inbox_plan_listener`].
 //!
 //! # Event bus limitations
 //!
@@ -42,7 +43,11 @@ use persistence_db::repositories::q_inbox::{
 };
 use sqlx::SqlitePool;
 use targeting_resolver::simbad::ResolveCache;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
+
+/// Serializes the check-and-insert sequence shared by the event listener and
+/// repair sweep. Both run in this process and may observe the same plan link.
+static MASTER_REGISTRATION_LOCK: Mutex<()> = Mutex::const_new(());
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -61,8 +66,36 @@ use tokio::sync::broadcast;
 pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus, resolve_cache: ResolveCache) {
     let mut rx = bus.subscribe();
     let bus = bus.clone();
+    spawn_repair_sweep(pool.clone(), bus.clone(), resolve_cache.clone());
     tokio::spawn(async move {
         run_listener_loop(pool, bus, resolve_cache, &mut rx).await;
+    });
+}
+
+/// Interval between repair sweeps (Ref: R-PlanOpen).
+const REPAIR_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_mins(5);
+
+/// Spawn the periodic [`crate::repair::run_repair`] sweep — the safety-net half
+/// of R-PlanOpen, started alongside its event-driven counterpart because the
+/// two are only correct together.
+///
+/// `tokio::time::interval` fires its first tick immediately, which is wanted: a
+/// plan that closed while the app was down is repaired at startup rather than
+/// five minutes into the session.
+///
+/// `bus` and `resolve_cache` are the same handles the event path uses: the
+/// sweep runs the identical applied-plan side effects via
+/// [`complete_applied_plan`], and those emit `target.resolved` events and drain
+/// the ingest-resolution queue.
+fn spawn_repair_sweep(pool: SqlitePool, bus: EventBus, resolve_cache: ResolveCache) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(REPAIR_SWEEP_INTERVAL);
+        loop {
+            ticker.tick().await;
+            if let Err(e) = crate::repair::run_repair(&pool, &bus, &resolve_cache).await {
+                tracing::warn!("inbox repair sweep: {e}");
+            }
+        }
     });
 }
 
@@ -130,29 +163,49 @@ async fn handle_plan_completed(
     resolve_cache: &ResolveCache,
     payload: &PlanApplyingCompleted,
 ) -> Result<(), String> {
-    let new_state = if payload.terminal_state == "applied" {
-        // spec 041 US4/T032: master registration is relocated here from the old
-        // confirm-time fast path. When the applied plan belongs to a detected
-        // calibration master inbox item, register the master now — this applies
-        // whether the master was catalogued (organized source) or moved
-        // (unorganized source). Registration happens before the resolved
-        // transition so a failure leaves the item recoverable.
-        register_master_if_applicable(pool, &payload.plan_id).await?;
-        // spec 035 US4/T042: fold the plan's applied light frames into
-        // acquisition sessions grouped by capture identity, linking the resolved
-        // canonical target (FR-016). Calibration frames are excluded (handled by
-        // the master path above). Idempotent (R12); a failure here is logged but
-        // does not block the inbox item's resolved transition — the frames can be
-        // re-ingested by re-applying or a future repair sweep.
-        ingest_light_frames_if_applicable(pool, bus, &payload.plan_id, resolve_cache).await;
-        Some("resolved")
+    if payload.terminal_state == "applied" {
+        complete_applied_plan(pool, bus, resolve_cache, &payload.plan_id).await
     } else {
         // partially_applied, failed, cancelled → allow re-split, back to
         // whatever unconfirmed state the row's own frame type supports.
-        None
-    };
+        transition_via_plan_id(pool, &payload.plan_id, None).await
+    }
+}
 
-    transition_via_plan_id(pool, &payload.plan_id, new_state).await
+/// Run the applied-plan side effects, then resolve the linked inbox item.
+///
+/// Shared by the event path ([`handle_plan_completed`]) and the crash-recovery
+/// sweep ([`crate::repair::run_repair`]); the sweep re-derives "this plan is
+/// applied" from committed state instead of from an event, but must produce the
+/// identical outcome, so both call this rather than duplicating the sequence.
+///
+/// Ordering invariant: [`transition_via_plan_id`] deletes the
+/// `inbox_plan_links` row, which is the only work queue the sweep has. It
+/// therefore runs strictly after [`register_master_if_applicable`] returns
+/// `Ok` — a propagated registration error leaves both the link and the
+/// `plan_open` state in place so the next sweep retries.
+///
+/// [`ingest_light_frames_if_applicable`] deliberately does not participate in
+/// that guard: it logs and swallows its errors (spec 035 US4/T042, R12), so a
+/// per-frame metadata/IO problem never strands the inbox item.
+pub(crate) async fn complete_applied_plan(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    resolve_cache: &ResolveCache,
+    plan_id: &str,
+) -> Result<(), String> {
+    // spec 041 US4/T032: master registration is relocated here from the old
+    // confirm-time fast path. When the applied plan belongs to a detected
+    // calibration master inbox item, register the master now — this applies
+    // whether the master was catalogued (organized source) or moved
+    // (unorganized source).
+    register_master_if_applicable(pool, plan_id).await?;
+    // spec 035 US4/T042: fold the plan's applied light frames into acquisition
+    // sessions grouped by capture identity, linking the resolved canonical
+    // target (FR-016). Calibration frames are excluded (handled by the master
+    // path above).
+    ingest_light_frames_if_applicable(pool, bus, plan_id, resolve_cache).await;
+    transition_via_plan_id(pool, plan_id, Some("resolved")).await
 }
 
 /// Ingest the applied light frames of a completed plan into acquisition sessions
@@ -214,6 +267,8 @@ async fn ingest_light_frames_if_applicable(
 ///
 /// Non-master items and plans with no linked inbox item are a no-op.
 async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Result<(), String> {
+    let _registration_guard = MASTER_REGISTRATION_LOCK.lock().await;
+
     let link = inbox_repo::get_plan_link_by_plan_id(pool, plan_id)
         .await
         .map_err(|e| format!("get_plan_link_by_plan_id({plan_id}): {e}"))?;
@@ -412,7 +467,7 @@ async fn handle_plan_discarded(pool: &SqlitePool, plan_id: &str) -> Result<(), S
 /// `new_state = None` means "back to unconfirmed": the state is then derived
 /// from the row's own `frame_type` instead of being asserted, so a row with no
 /// frame type cannot be sent to `classified` (spec 058 SC-003).
-async fn transition_via_plan_id(
+pub(crate) async fn transition_via_plan_id(
     pool: &SqlitePool,
     plan_id: &str,
     new_state: Option<&str>,
@@ -452,7 +507,7 @@ async fn transition_via_plan_id(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use audit::bus::EventBus;
     use audit::event_bus::{PlanApplyingCompleted, Source};
@@ -464,7 +519,7 @@ mod tests {
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
     };
 
-    async fn test_db() -> Database {
+    pub(crate) async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
@@ -737,7 +792,7 @@ mod tests {
     /// Set up a real-file, applied (`item_state='succeeded'`) master-item plan
     /// linked to `item_id`/`plan_id`, with the master file written under
     /// `tmp`/`rel` at `size` bytes. Returns `(root_id, rel)`.
-    async fn setup_master_item_plan(
+    pub(crate) async fn setup_master_item_plan(
         db: &Database,
         tmp: &std::path::Path,
         item_id: &str,

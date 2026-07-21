@@ -7,7 +7,9 @@
 //! args templates (R3).
 //!
 //! `all()` returns a fixed-size array of owned `ToolProfile` values.
-//! `validate_seeds()` is called once at app boot to assert seed integrity.
+//! `validate_seeds()` asserts seed integrity. The seeds are compile-time
+//! constants, so it is a test-time gate (`all_seeds_pass_validation`), not a
+//! runtime one; it has no caller outside this module's tests.
 
 use crate::{ArgsToken, DetachStrategy, ToolProfile, DEFAULT_SOURCE_VIEW_LAYOUT};
 
@@ -64,8 +66,6 @@ fn planetary_suite_profile() -> ToolProfile {
 }
 
 /// Return all seeded processing-tool profiles as an owned `Vec`.
-///
-/// Call `validate_seeds()` at app boot to assert integrity.
 #[must_use]
 pub fn all() -> Vec<ToolProfile> {
     vec![pixinsight_profile(), siril_profile(), planetary_suite_profile()]
