@@ -25,6 +25,15 @@ import {
   act,
 } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { queryClient } from '@/data/queryClient';
+
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Hoisted mock state — vi.hoisted runs BEFORE vi.mock factories, so
@@ -184,7 +193,7 @@ const WIZARD_STORAGE_KEY = 'alm-setup-wizard-state';
 
 /** Render the wizard and return the result. */
 function renderWizard() {
-  return render(<SetupWizard />);
+  return render(<SetupWizard />, { wrapper });
 }
 
 /**
@@ -199,7 +208,7 @@ function renderWizardAtSources() {
     WIZARD_STORAGE_KEY,
     JSON.stringify({ currentStep: 1 }),
   );
-  return render(<SetupWizard />);
+  return render(<SetupWizard />, { wrapper });
 }
 
 /**
@@ -261,6 +270,7 @@ beforeEach(() => {
   // Clear all wizard and preference state between tests.
   window.localStorage.clear();
   mockPickDirectory.mockReset();
+  queryClient.clear();
 });
 
 // ---------------------------------------------------------------------------

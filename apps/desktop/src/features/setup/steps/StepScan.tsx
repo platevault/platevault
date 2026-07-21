@@ -7,7 +7,8 @@
 // inbox_classify per source, showing per-source progress and a detection
 // summary.  Approval stays in the Inbox — no inbox_confirm called here.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
 import { Table } from '@/ui';
@@ -338,6 +339,75 @@ function SourceSummary({ state }: SourceSummaryProps) {
   );
 }
 
+// One scan+classify pass for a single source. Classify failures are captured
+// per-item (never thrown) so one bad folder doesn't fail the whole query —
+// only a `scanFolder` failure itself surfaces as the query's error.
+async function scanAndClassify(
+  rootId: string,
+  rootAbsolutePath: string,
+): Promise<{
+  items: InboxItemSummary[];
+  classifications: Map<string, InboxClassifyResponse>;
+  classifyFailures: Set<string>;
+}> {
+  const scanResponse = unwrap(
+    await commands.inboxScanFolder({ rootId, rootAbsolutePath }),
+  );
+  const items = scanResponse.items ?? [];
+
+  const classifications = new Map<string, InboxClassifyResponse>();
+  const classifyFailures = new Set<string>();
+  await Promise.allSettled(
+    items.map(async (item) => {
+      try {
+        const cls = unwrap(
+          await commands.inboxClassify({
+            inboxItemId: item.inboxItemId,
+            rootAbsolutePath,
+          }),
+        );
+        classifications.set(item.inboxItemId, cls);
+      } catch {
+        // Don't abort the whole scan for one item — but do record it.
+        // Swallowing it entirely made a crash look like a clean "nothing
+        // detected" result.
+        classifyFailures.add(item.inboxItemId);
+      }
+    }),
+  );
+  return { items, classifications, classifyFailures };
+}
+
+/** A source resolved to a real backend root, ready to scan+classify. */
+interface ScanRenderTarget {
+  source: SourceEntry;
+  rootId: string;
+  kind: 'scan';
+}
+/** A source whose already-scanned status couldn't be resolved (roots.list
+ * failed or returned no match) — surfaced as a static error, never scanned. */
+interface ResolutionErrorRenderTarget {
+  source: SourceEntry;
+  rootId: string;
+  kind: 'resolution-error';
+}
+type RenderTarget = ScanRenderTarget | ResolutionErrorRenderTarget;
+
+function isScanTarget(t: RenderTarget): t is ScanRenderTarget {
+  return t.kind === 'scan';
+}
+
+/** Map a `useQueries` result onto the same phase vocabulary the (still
+ * hand-rolled) `pending`/`scanning` display states used. */
+function queryPhase(q: {
+  status: 'pending' | 'error' | 'success';
+  fetchStatus: 'fetching' | 'paused' | 'idle';
+}): ScanPhase {
+  if (q.status === 'success') return 'done';
+  if (q.status === 'error') return 'error';
+  return q.fetchStatus === 'fetching' ? 'scanning' : 'pending';
+}
+
 // ── StepScan ─────────────────────────────────────────────────────────────────
 
 /**
@@ -350,221 +420,152 @@ function SourceSummary({ state }: SourceSummaryProps) {
  * Back and Finish buttons are rendered by the shared WizardShell footer in
  * SetupWizard.  StepScan notifies the parent of scan completion via
  * `onAllDoneChange` so the footer can enable/disable the Finish button.
+ *
+ * TanStack Query (#615/#630) replaces the former manual `cancelled`-flag
+ * orchestration. Query-cache identity (keyed per source) is what now protects
+ * against React StrictMode's mount→cleanup→remount double-invoke: the
+ * remounted observer subscribes to the SAME in-flight/cached query instead of
+ * starting a second scan, which is what a re-entry ref-guard was trying (and
+ * failing) to achieve by hand — see git history for that bug.
  */
 export function StepScan({
   sources,
   flushResult,
   onAllDoneChange,
 }: StepScanProps) {
-  const [sourceStates, setSourceStates] = useState<SourceScanState[]>([]);
-  // The alreadyRegistered resolution (roots.list) below is async, so
-  // sourceStates starts empty even when there is work to do — an empty array
-  // vacuously satisfies `.every()`, which would otherwise make `allDone`
-  // (below) briefly report true before scanning has even been set up. Gate
-  // on this instead of sourceStates.length so the transient empty state
-  // isn't mistaken for "nothing to scan".
-  const [resolved, setResolved] = useState(false);
-
-  useEffect(() => {
-    // No re-entry ref-guard here (there was one; removed — see git history):
-    // combined with the per-invocation `cancelled` flag below, it defeated
-    // React StrictMode's mount→cleanup→remount cycle. The guard let the
-    // first invocation's async scan keep running while marking it
-    // `cancelled` on the synthetic cleanup, then the remounted second
-    // invocation no-opped (guard already tripped) instead of starting a
-    // fresh, uncancelled scan — so no invocation ever delivered a result and
-    // every source stayed stuck on "scanning" forever. `[]` deps already
-    // guarantee this effect runs once per real mount; the `cancelled` flag
-    // below is the standard, StrictMode-safe way to discard a stale
-    // in-flight scan from a genuine unmount without needing a ref guard.
-
-    // The scan fans out into one independent async branch per source, each
-    // outliving the others. Any of them can still be awaiting IPC when the
-    // wizard unmounts, so every `setState` below is gated on this flag —
-    // otherwise a late update lands on a torn-down root (and, under vitest,
-    // after jsdom has removed `window`, failing the whole run).
-    let cancelled = false;
-
-    void (async () => {
-      // Issue #916: a wizard retry after a partial batch-registration
-      // failure resubmits *every* source, not just the ones that failed. A
-      // source that registered successfully on an earlier attempt in this
-      // same session therefore comes back from flushToDB as
-      // `alreadyRegistered` (duplicate) on the retry — the exact same shape
-      // a genuinely-already-scanned restart-flow source has (issue #704).
-      // flushResult alone can't tell the two apart: one has already been
-      // scanned and is safe to skip, the other has never been scanned and
-      // must not be dropped. Resolve the real root via roots.list and use
-      // its `lastScanned` (only set once inbox.scan_folder has actually run
-      // for that root — see roots.rs) as the ground truth.
-      const needsResolution = sources.filter((s) => {
+  // Issue #916: a wizard retry after a partial batch-registration failure
+  // resubmits *every* source, not just the ones that failed. A source that
+  // registered successfully on an earlier attempt in this same session
+  // therefore comes back from flushToDB as `alreadyRegistered` (duplicate) on
+  // the retry — the exact same shape a genuinely-already-scanned
+  // restart-flow source has (issue #704). flushResult alone can't tell the
+  // two apart: one has already been scanned and is safe to skip, the other
+  // has never been scanned and must not be dropped. Resolve the real root via
+  // roots.list and use its `lastScanned` (only set once inbox.scan_folder has
+  // actually run for that root — see roots.rs) as the ground truth.
+  const needsResolution = useMemo(
+    () =>
+      sources.filter((s) => {
         if (!s.path) return false;
         const row = flushResult.results.find((r) => r.path === s.path);
         return row?.alreadyRegistered ?? false;
+      }),
+    [sources, flushResult],
+  );
+
+  const rootsResolveQuery = useQuery({
+    queryKey: ['setup', 'rootsResolve'] as const,
+    queryFn: async () => unwrap(await commands.rootsList()),
+    enabled: needsResolution.length > 0,
+    retry: false,
+  });
+
+  const resolvedRoots = useMemo(() => {
+    const map = new Map<string, { id: string; lastScanned: string | null }>();
+    for (const root of rootsResolveQuery.data ?? []) {
+      map.set(root.path, {
+        id: root.id,
+        lastScanned: root.lastScanned ?? null,
       });
+    }
+    return map;
+  }, [rootsResolveQuery.data]);
 
-      const resolvedRoots = new Map<
-        string,
-        { id: string; lastScanned: string | null }
-      >();
-      if (needsResolution.length > 0) {
-        try {
-          const roots = unwrap(await commands.rootsList());
-          for (const root of roots) {
-            resolvedRoots.set(root.path, {
-              id: root.id,
-              lastScanned: root.lastScanned ?? null,
-            });
-          }
-        } catch {
-          // Best-effort: an unresolved lookup falls through to the
-          // conservative default below (skip — matches prior behaviour).
-        }
-      }
+  // Mirrors the former `resolved` flag: true once the alreadyRegistered
+  // resolution has settled (success or failure) or was never needed.
+  const resolutionReady =
+    needsResolution.length === 0 || rootsResolveQuery.isFetched;
 
-      // Issue #704 / #916: only scan folders this flush actually registered,
-      // or that a prior same-session attempt registered but never scanned. A
-      // root whose registration failed for a genuine reason (no rootId, not
-      // `alreadyRegistered`) is skipped — scanning it with the
-      // path-as-rootId fallback fails the registered_sources JOIN and would
-      // insert orphaned inbox_items.
-      const initialStates: SourceScanState[] = [];
-      for (const s of sources) {
-        if (!s.path) continue;
-        const row = flushResult.results.find((r) => r.path === s.path);
-        if (row?.success) {
-          initialStates.push({
-            source: s,
-            rootId: getRootId(flushResult, s.path),
-            phase: 'pending',
-            items: [],
-            classifications: new Map(),
-            classifyFailures: new Set(),
-          });
-          continue;
-        }
-        if (!row?.alreadyRegistered) continue;
-
-        const resolvedRoot = resolvedRoots.get(s.path);
-        if (resolvedRoot != null && resolvedRoot.lastScanned != null) {
-          // Genuinely already scanned in a prior session — safe to skip.
-          continue;
-        }
-        if (resolvedRoot != null) {
-          // Registered but never scanned (same-session retry) — rescan
-          // using the real resolved rootId.
-          initialStates.push({
-            source: s,
-            rootId: resolvedRoot.id,
-            phase: 'pending',
-            items: [],
-            classifications: new Map(),
-            classifyFailures: new Set(),
-          });
-          continue;
-        }
-        // Review round 2 #1: roots.list failed or returned no match for this
-        // path — we can't tell whether this source was already scanned.
-        // Silently excluding it here would resurrect the exact #916 bug via
-        // a resolution failure instead of a misclassification, so surface it
-        // as a visible error state instead of dropping it.
-        initialStates.push({
+  // Issue #704 / #916: only scan folders this flush actually registered, or
+  // that a prior same-session attempt registered but never scanned. A root
+  // whose registration failed for a genuine reason (no rootId, not
+  // `alreadyRegistered`) is skipped — scanning it with the path-as-rootId
+  // fallback fails the registered_sources JOIN and would insert orphaned
+  // inbox_items. A source genuinely already scanned in a prior session is
+  // skipped entirely (not rendered at all), matching the prior behaviour.
+  const renderTargets = useMemo((): RenderTarget[] | undefined => {
+    if (!resolutionReady) return undefined;
+    const out: RenderTarget[] = [];
+    for (const s of sources) {
+      if (!s.path) continue;
+      const row = flushResult.results.find((r) => r.path === s.path);
+      if (row?.success) {
+        out.push({
           source: s,
-          rootId: s.path,
+          rootId: getRootId(flushResult, s.path),
+          kind: 'scan',
+        });
+        continue;
+      }
+      if (!row?.alreadyRegistered) continue;
+
+      const resolvedRoot = resolvedRoots.get(s.path);
+      if (resolvedRoot != null && resolvedRoot.lastScanned != null) {
+        continue; // genuinely already scanned — safe to skip
+      }
+      if (resolvedRoot != null) {
+        out.push({ source: s, rootId: resolvedRoot.id, kind: 'scan' });
+        continue;
+      }
+      // Review round 2 #1: roots.list failed or returned no match for this
+      // path — we can't tell whether this source was already scanned.
+      // Silently excluding it here would resurrect the exact #916 bug via a
+      // resolution failure instead of a misclassification, so surface it as
+      // a visible error state instead of dropping it.
+      out.push({ source: s, rootId: s.path, kind: 'resolution-error' });
+    }
+    return out;
+  }, [sources, flushResult, resolvedRoots, resolutionReady]);
+
+  const scanTargets = useMemo(
+    () => (renderTargets ?? []).filter(isScanTarget),
+    [renderTargets],
+  );
+
+  // One query per source (StrictMode-safe dedup via the shared query cache —
+  // see the StepScan doc comment above). `retry`/`refetchOnWindowFocus` are
+  // disabled: a scan is a one-shot wizard action, not a resource to silently
+  // re-fetch or retry behind the user's back.
+  const scanQueries = useQueries({
+    queries: scanTargets.map((t) => ({
+      queryKey: ['setup', 'scan', t.rootId, t.source.path] as const,
+      queryFn: () => scanAndClassify(t.rootId, t.source.path),
+      retry: false,
+      refetchOnWindowFocus: false,
+    })),
+  });
+
+  const sourceStates: SourceScanState[] = useMemo(() => {
+    const scanResultByPath = new Map(
+      scanTargets.map((t, i) => [t.source.path, scanQueries[i]]),
+    );
+    return (renderTargets ?? []).map((t): SourceScanState => {
+      if (t.kind === 'resolution-error') {
+        return {
+          source: t.source,
+          rootId: t.rootId,
           phase: 'error',
           items: [],
           classifications: new Map(),
           classifyFailures: new Set(),
           error: m.setup_scan_resolution_failed(),
-        });
+        };
       }
-
-      if (cancelled) return;
-      setSourceStates(initialStates);
-      setResolved(true);
-
-      // Scan each source independently; one failure doesn't abort others.
-      for (let i = 0; i < initialStates.length; i++) {
-        const idx = i;
-        const entry = initialStates[idx];
-        // Already flagged (resolution failure above) — nothing to scan.
-        if (entry.phase === 'error') continue;
-
-        void (async () => {
-          if (cancelled) return;
-          // Mark as scanning
-          setSourceStates((prev) => {
-            const next = [...prev];
-            next[idx] = { ...next[idx], phase: 'scanning' };
-            return next;
-          });
-
-          try {
-            // 1. Scan the folder
-            const scanResponse = unwrap(
-              await commands.inboxScanFolder({
-                rootId: entry.rootId,
-                rootAbsolutePath: entry.source.path,
-              }),
-            );
-
-            const items = scanResponse.items ?? [];
-
-            // 2. Classify each discovered item
-            const classifications = new Map<string, InboxClassifyResponse>();
-            const classifyFailures = new Set<string>();
-            await Promise.allSettled(
-              items.map(async (item) => {
-                try {
-                  const cls = unwrap(
-                    await commands.inboxClassify({
-                      inboxItemId: item.inboxItemId,
-                      rootAbsolutePath: entry.source.path,
-                    }),
-                  );
-                  classifications.set(item.inboxItemId, cls);
-                } catch {
-                  // Don't abort the whole scan for one item — but do record it.
-                  // Swallowing it entirely made a crash look like a clean
-                  // "nothing detected" result.
-                  classifyFailures.add(item.inboxItemId);
-                }
-              }),
-            );
-
-            if (cancelled) return;
-            setSourceStates((prev) => {
-              const next = [...prev];
-              next[idx] = {
-                ...next[idx],
-                phase: 'done',
-                items,
-                classifications,
-                classifyFailures,
-              };
-              return next;
-            });
-          } catch (err: unknown) {
-            if (cancelled) return;
-            setSourceStates((prev) => {
-              const next = [...prev];
-              next[idx] = {
-                ...next[idx],
-                phase: 'error',
-                error: errMessage(err),
-              };
-              return next;
-            });
-          }
-        })();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      const q = scanResultByPath.get(t.source.path);
+      return {
+        source: t.source,
+        rootId: t.rootId,
+        phase: q ? queryPhase(q) : 'pending',
+        items: q?.data?.items ?? [],
+        classifications: q?.data?.classifications ?? new Map(),
+        classifyFailures: q?.data?.classifyFailures ?? new Set(),
+        error: q?.error ? errMessage(q.error) : undefined,
+      };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty: run once on mount
+  }, [renderTargets, scanTargets, scanQueries]);
 
+  const resolved = resolutionReady;
   const allDone =
     resolved &&
     sourceStates.every((s) => s.phase === 'done' || s.phase === 'error');
