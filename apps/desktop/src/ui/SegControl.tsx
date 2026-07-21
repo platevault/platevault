@@ -49,6 +49,16 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
         if (nextIndex == null) return;
         e.preventDefault();
         onChange(options[nextIndex].value);
+        // `onChange` only updates `aria-checked`/`tabIndex` on re-render —
+        // the browser never moves focus on its own just because `tabIndex`
+        // changed on a sibling button, so the roving-tabindex pattern this
+        // component documents needs an explicit `.focus()` on the new
+        // option. Queried via the DOM (not a ref array) since options are
+        // data-driven and can change count/order between renders.
+        const group = e.currentTarget.closest('[role="radiogroup"]');
+        const buttons =
+          group?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+        buttons?.[nextIndex]?.focus();
       },
       [options, value, onChange],
     );
