@@ -6,7 +6,7 @@
  *
  * `theme.ts` hardcodes SPACING_BASE_PX / TEXT_SCALE_BASE_PX as duplicates of
  * the `--pv-sp-*` / `--pv-text-*` base px values in
- * packages/tokens/foundation.css (jsdom can't reliably resolve stylesheet
+ * packages/tokens/tokens-docs.css (jsdom can't reliably resolve stylesheet
  * custom properties via getComputedStyle, so applyTokenScale reads these
  * tables instead of the stylesheet). Nothing else enforces that the two stay
  * in sync — this test parses foundation.css directly and fails if a value
@@ -26,7 +26,7 @@ import { ROW_HEIGHT_PX, SPACING_BASE_PX, TEXT_SCALE_BASE_PX } from './theme';
 const tokensCssPath = join(process.cwd(), 'src/styles/tokens.css');
 const foundationCssPath = join(
   process.cwd(),
-  '../../packages/tokens/foundation.css',
+  '../../packages/tokens/tokens-docs.css',
 );
 
 /**

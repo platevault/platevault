@@ -37,6 +37,8 @@ export default function setup(): void {
         "--outdir",
         "./src/paraglide",
         "--strategy",
+        "custom-almSettings",
+        "preferredLanguage",
         "baseLocale",
         "--emit-ts-declarations",
       ],

@@ -8,6 +8,8 @@ export interface RadioOption {
   value: string;
   label: string;
   desc?: string;
+  /** Stable automation hook — omit for options a real-UI journey never needs to select individually. */
+  testId?: string;
 }
 export interface RadioGroupProps
   extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
@@ -25,11 +27,13 @@ export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
           const val = typeof o === 'string' ? o : o.value;
           const label = typeof o === 'string' ? o : o.label;
           const desc = typeof o === 'string' ? null : o.desc;
+          const testId = typeof o === 'string' ? undefined : o.testId;
           return (
             <button
               key={val}
               className={`pv-radio ${value === val ? 'pv-radio--active' : ''}`}
               onClick={() => onChange(val)}
+              data-testid={testId}
             >
               <div>{label}</div>
               {desc && <div className="pv-radio__desc">{desc}</div>}

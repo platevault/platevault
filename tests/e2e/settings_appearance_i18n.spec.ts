@@ -12,12 +12,13 @@
  *     `data-theme` on <html>, persisted in `localStorage['alm.theme']`; the
  *     page-layout convention (`.pv-page__bar` pinned, content scroll region
  *     `overflow-y:auto` — action bar always visible, only content scrolls).
- *   - 046 (i18n / error-codes): Paraglide baseLocale catalog. FR-004 hard-pins
- *     English with NO in-app language switcher, so this suite asserts the
- *     HONEST single-locale state — every `settings_*` key resolves to a human
- *     string (no raw-key fallback leaks) and a plural-bearing message renders
- *     the correct plural form — rather than exercising a locale toggle that,
- *     by design (FR-004), does not exist in the UI.
+ *   - 046 (i18n / error-codes): Paraglide baseLocale catalog — every `settings_*`
+ *     key resolves to a human string (no raw-key fallback leaks) and a
+ *     plural-bearing message renders the correct plural form.
+ *   - 061 (selectable app language, US2): Settings → Appearance gains a
+ *     Language control (FR-004's old "hard-pinned English, no switcher" is
+ *     superseded). Changing it re-renders live (no reload, D2) and persists
+ *     across a restart (D8).
  *   - 019 (bottom log viewer): full-width fold-out log panel, level filter
  *     chips, follow-tail + export controls, Escape-to-close. FR-001/003/007.
  *
@@ -34,8 +35,22 @@
  *     directly and never marks the buffer truncated (only a real backend
  *     `log_recent` with `truncated:true` triggers it). This file asserts the
  *     marker is ABSENT and exercises the reachable controls instead.
- *   - Locale switching is not user-reachable (046 FR-004); no product switcher
- *     exists to drive.
+ *   - `settings_update('general', …)` is a no-op in the mock IPC layer (only
+ *     the `observing`/`cleanup`/`framing` scopes round-trip — see
+ *     `apps/desktop/src/api/mocks.ts`), so a real settings-DB round-trip for
+ *     `locale` cannot be proven here; that is what the Rust Layer-1 test
+ *     (`crates/app/core/tests/`, spec 061 T004) is for. What this file CAN
+ *     and does prove is the frontend half: the `localStorage['alm.locale']`
+ *     mirror survives a real `page.reload()`, and the UI re-hydrates from
+ *     that stored value rather than merely accepting a command that returned
+ *     `Ok` (research D8) — the same honest split already used by the
+ *     Appearance theme "survives a full reload" test below, which is
+ *     localStorage-only for the identical reason.
+ *   - pt-BR is a 5-key stub (`common_all`/`common_yes`/`common_no`/
+ *     `common_cancel`/`common_save` — spec 061 US3 is the rest); the
+ *     translation-propagation checks below use `common_all` (visible as the
+ *     Audit Log outcome filter's default selection) because it is the only
+ *     currently-translated string reachable without extra setup.
  */
 import { test, expect, seedSetupComplete } from './support/harness';
 import type { Page } from '@playwright/test';
@@ -252,6 +267,118 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
       'data-theme',
       'observatory-cool-light',
     );
+  });
+});
+
+// ── Scenario 2b — Language switcher (spec 061 US2) ──────────────────────────
+
+test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
+  test('renders flag + native name per option, is keyboard-operable, and exposes native-name-only accessible names', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto('/#/settings/general');
+    // The group title and the row label both read "Language" (the row is
+    // this group's only control) — `getByText(exact)` would match both, so
+    // scope to the group heading specifically.
+    await expect(
+      page.locator('.pv-settings__group-title', { hasText: 'Language' }),
+    ).toBeVisible();
+
+    // FR-007: flag + native name both render as visible text.
+    const english = page.getByRole('radio', { name: 'English (UK)' });
+    const portuguese = page.getByRole('radio', { name: 'Português (Brasil)' });
+    await expect(english).toBeVisible();
+    await expect(portuguese).toBeVisible();
+    await expect(english).toContainText('🇬🇧');
+    await expect(english).toContainText('English (UK)');
+    await expect(portuguese).toContainText('🇧🇷');
+    await expect(portuguese).toContainText('Português (Brasil)');
+
+    // Research D6: the accessible name (the `name` used above to find each
+    // radio) is the native name alone — Playwright's role/name lookup would
+    // not have matched 'English (UK)' at all if the flag were folded into
+    // the accessible name, since the query is exact-role-name matching.
+
+    // en-GB is the base locale — starts selected.
+    await expect(english).toHaveAttribute('aria-checked', 'true');
+    await expect(portuguese).toHaveAttribute('aria-checked', 'false');
+
+    // Keyboard operability (FR-008): the WAI-ARIA radiogroup pattern moves
+    // both focus and selection with arrow keys (SegControl, #1010).
+    await english.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(portuguese).toHaveAttribute('aria-checked', 'true');
+    await expect(portuguese).toBeFocused();
+  });
+
+  test('changing the language re-renders Settings live, with no reload (research D2)', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto('/#/');
+
+    // Open the bottom log panel first — Shell (and its expanded/collapsed
+    // state) wraps every route, so this state only survives a language
+    // change if `changeLocale` genuinely never triggers Paraglide's default
+    // `setLocale` reload path.
+    await page.getByRole('button', { name: 'Toggle log panel' }).click();
+    const logRegion = page.getByRole('log', { name: 'Operation log' });
+    await expect(logRegion).toBeVisible();
+
+    await page.goto('/#/settings/general');
+    await page.getByRole('radio', { name: 'Português (Brasil)' }).click();
+    await expect(
+      page.getByRole('radio', { name: 'Português (Brasil)' }),
+    ).toHaveAttribute('aria-checked', 'true');
+
+    // No reload happened: the Shell-level log panel (opened before the
+    // language change, on an unrelated page) is still expanded.
+    await expect(logRegion).toBeVisible();
+
+    // Live re-render, not just local state in the language control itself:
+    // a SIBLING pane's `common_all()` call (pt-BR translates it to "Todos")
+    // must reflect the change too, without navigating away and back. A
+    // <select>'s `textContent` concatenates every <option>, so the proof is
+    // the translated <option> existing in this specific select, not a
+    // display-value check. The nav item and the filter label are matched in
+    // Portuguese, not English — SettingsPageBody subscribes to the locale
+    // context (per the commit that added it), so the whole nav and every
+    // pane re-render live in pt-BR the moment the radio above is clicked.
+    await page.getByRole('button', { name: 'Registro de auditoria' }).click();
+    const outcomeFilter = page.getByLabel('Resultado').first();
+    await expect(outcomeFilter).toHaveValue('');
+    await expect(
+      outcomeFilter.locator('option', { hasText: 'Todos' }),
+    ).toHaveCount(1);
+  });
+
+  test('language choice persists across a reload (research D8 — the stored value, not just a resolved Ok)', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto('/#/settings/general');
+
+    await page.getByRole('radio', { name: 'Português (Brasil)' }).click();
+    await expect(
+      page.getByRole('radio', { name: 'Português (Brasil)' }),
+    ).toHaveAttribute('aria-checked', 'true');
+    const stored = await page.evaluate(() =>
+      localStorage.getItem('alm.locale'),
+    );
+    expect(stored).toBe('pt-BR');
+
+    await page.reload();
+
+    // The persisted mirror value — not a fresh default — drives the
+    // re-hydrated selection.
+    const storedAfter = await page.evaluate(() =>
+      localStorage.getItem('alm.locale'),
+    );
+    expect(storedAfter).toBe('pt-BR');
+    await expect(
+      page.getByRole('radio', { name: 'Português (Brasil)' }),
+    ).toHaveAttribute('aria-checked', 'true');
   });
 });
 

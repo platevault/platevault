@@ -46,27 +46,132 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BASELINE="$SCRIPT_DIR/dead-callers-baseline.txt"
 
+# Emit paths (one per line, in the same string form `find` would print them,
+# since resolution starts from a path `find` already returned) of files that
+# are out-of-line test modules: `#[cfg(test)] mod name;` in some other file,
+# with the body living in a sibling `name.rs` or `name/` directory per Rust's
+# module-file convention. Unlike `mod tests { ... }`, these files carry no
+# #[cfg(test)] attribute of their own (it lives only on the declaration) and
+# their directory need not be named `tests`, so neither the defs/corpus name
+# filters nor the corpus brace-scope skip below can see them — they must be
+# excluded by resolved path instead. A directory-form sibling is excluded
+# wholesale (not just its mod.rs) so a further out-of-line submodule declared
+# inside it (no attribute of its own needed — the cfg(test) gate is inherited
+# from the parent) is swept up too.
+#
+# Assumes the attribute sits on its own line directly above the declaration
+# (rustfmt's default, and the only shape found in this tree) — a same-line
+# `#[cfg(test)] mod x;` is not matched.
+#
+# Cleans up $pairs directly rather than via `trap ... RETURN`: this function
+# nests inside collect_dead (which sets its own RETURN trap), and bash RETURN
+# traps are a single shell-wide slot, not a per-call stack — the inner trap
+# would silently replace the outer one for the rest of the shell's life, the
+# same pre-existing hazard that already applies to self_test calling
+# collect_dead.
+collect_test_mod_exclusions() {
+    local pairs
+    pairs="$(mktemp)"
+
+    # shellcheck disable=SC2016  # the awk program is literal, not shell-expanded
+    find "$@" -type f -name '*.rs' -print0 \
+        | xargs -0 awk '
+            # Crude cfg(test)-ish detector: tokenize on non-word chars and
+            # look for both a `cfg` and a `test` token, so `#[cfg(test)]` and
+            # `#[cfg(all(test, feature = "x"))]` both match while an unrelated
+            # `#[cfg(target_os = "test")]`-shaped false positive stays rare
+            # enough not to be worth a real parser.
+            function is_test_attr(s,    t, n, i, toks, has_cfg, has_test) {
+                t = s
+                gsub(/[^A-Za-z0-9_]/, " ", t)
+                n = split(t, toks, " ")
+                for (i = 1; i <= n; i++) {
+                    if (toks[i] == "cfg") has_cfg = 1
+                    if (toks[i] == "test") has_test = 1
+                }
+                return (has_cfg && has_test)
+            }
+            function handle_item(    m) {
+                if (item ~ /^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?mod[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;[[:space:]]*$/) {
+                    m = item
+                    sub(/^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?mod[[:space:]]+/, "", m)
+                    sub(/[[:space:]]*;.*/, "", m)
+                    print FILENAME "\t" m
+                }
+                pending = 0
+                item = ""
+            }
+            FNR == 1 { in_attr = 0; depth = 0; abuf = ""; pending = 0; item = "" }
+            # accumulate a `#[cfg(\n ... \n)]`-shaped attribute split across lines
+            in_attr {
+                abuf = abuf " " $0
+                o = gsub(/\[/, "["); c = gsub(/\]/, "]")
+                depth += o - c
+                if (depth <= 0) { in_attr = 0; if (is_test_attr(abuf)) pending = 1 }
+                next
+            }
+            # blank/comment lines between the attribute and the item do not cancel it
+            pending && /^[[:space:]]*$/ { next }
+            pending && /^[[:space:]]*\/\// { next }
+            # an attribute line: start (or stacked continuation of) an attribute list
+            /^[[:space:]]*#\[/ {
+                o = gsub(/\[/, "["); c = gsub(/\]/, "]")
+                d = o - c
+                if (d > 0) { in_attr = 1; depth = d; abuf = $0 }
+                else if (is_test_attr($0)) { pending = 1 }
+                next
+            }
+            # the item the attribute stack (if any) applies to
+            {
+                if (!pending) next
+                item = $0
+                handle_item()
+            }
+        ' > "$pairs"
+
+    local declfile modname dir base subdir target_file target_dir
+    while IFS="$(printf '\t')" read -r declfile modname; do
+        [ -z "$declfile" ] && continue
+        dir="$(dirname "$declfile")"
+        base="$(basename "$declfile")"
+        case "$base" in
+            mod.rs | lib.rs | main.rs) subdir="$dir" ;;
+            *) subdir="$dir/${base%.rs}" ;;
+        esac
+        target_file="$subdir/$modname.rs"
+        target_dir="$subdir/$modname"
+        [ -f "$target_file" ] && printf '%s\n' "$target_file"
+        [ -d "$target_dir" ] && find "$target_dir" -type f -name '*.rs' -print
+    done < "$pairs"
+    rm -f "$pairs"
+}
+
+# find wrapper that inserts the out-of-line test-module exclusions computed by
+# the caller ($exclude_args) before appending `-print0` itself — callers pass
+# only their test predicates, never `-print0`. Both matter: `-not -path` must
+# precede `-print0` in a find expression or it is evaluated too late to affect
+# an action that already fired left-to-right; and bash 3.2 errors on
+# `"${arr[@]}"` expansion of a truly empty array under `set -u`, so the
+# emptiness check guards every call site instead of relying on 4.4+ behavior.
+find_rs_files() {
+    if [ "${#exclude_args[@]}" -eq 0 ]; then
+        find "$@" -print0
+    else
+        find "$@" "${exclude_args[@]}" -print0
+    fi
+}
+
 # Emit the sorted list of module-level `pub fn` names in $1 (a crates/ root)
 # that no production line outside their own definition mentions.
 collect_dead() {
     local crates_root="$1" tauri_root="$2"
 
-    local defs corpus
+    local defs corpus test_mod_files
     defs="$(mktemp)"
     corpus="$(mktemp)"
+    test_mod_files="$(mktemp)"
     # shellcheck disable=SC2064  # expand paths now, not at trap time
-    trap "rm -f '$defs' '$corpus'" RETURN
-
-    # Definitions exclude the e2e-tests crate (test code, not shipped) and the
-    # persistence query-builder reference module, which exists to be read rather
-    # than called — check-db-boundary.sh exempts it for the same reason.
-    find "$crates_root" -type f -name '*.rs' \
-        -not -path '*/tests/*' \
-        -not -path '*/e2e-tests/*' \
-        -not -name 'query_builder_example.rs' -print0 \
-        | xargs -0 grep -hE '^pub (async )?fn [a-z_0-9]+' \
-        | sed -E 's/^pub (async )?fn ([a-z_0-9]+).*/\2/' \
-        | sort -u > "$defs"
+    trap "rm -f '$defs' '$corpus' '$test_mod_files'" RETURN
 
     # Production corpus: comment lines dropped, then each `#[cfg(test)]` item
     # skipped for exactly its own brace scope. Truncating the whole file at the
@@ -75,8 +180,29 @@ collect_dead() {
     # live functions (pid_is_alive, discover_all) into false positives.
     local -a roots=("$crates_root")
     [ -d "$tauri_root" ] && roots+=("$tauri_root")
+
+    collect_test_mod_exclusions "${roots[@]}" > "$test_mod_files"
+    local -a exclude_args=()
+    local p
+    while IFS= read -r p; do
+        [ -n "$p" ] && exclude_args+=(-not -path "$p")
+    done < "$test_mod_files"
+
+    # Definitions exclude the e2e-tests crate (test code, not shipped), the
+    # persistence query-builder reference module, which exists to be read rather
+    # than called — check-db-boundary.sh exempts it for the same reason — and
+    # any out-of-line test-module file resolved above: a `pub fn` test helper
+    # in one of those is not a production definition either.
+    find_rs_files "$crates_root" -type f -name '*.rs' \
+        -not -path '*/tests/*' \
+        -not -path '*/e2e-tests/*' \
+        -not -name 'query_builder_example.rs' \
+        | xargs -0 grep -hE '^pub (async )?fn [a-z_0-9]+' \
+        | sed -E 's/^pub (async )?fn ([a-z_0-9]+).*/\2/' \
+        | sort -u > "$defs"
+
     # shellcheck disable=SC2016  # the awk program is literal, not shell-expanded
-    find "${roots[@]}" -type f -name '*.rs' -not -path '*/tests/*' -print0 \
+    find_rs_files "${roots[@]}" -type f -name '*.rs' -not -path '*/tests/*' \
         | xargs -0 awk '
             FNR == 1 { skip = 0; depth = 0; opened = 0 }
             /^[[:space:]]*\/\// { next }
@@ -119,16 +245,20 @@ collect_dead() {
 
 # Prove the detector detects. The probe tree contains one function called from
 # production, one called only from a #[cfg(test)] module, one named only by a
-# doc comment, and one called only AFTER an inline test module — the last guards
-# the brace-scope handling, since skipping to end-of-file instead would report
-# it dead. A detector that reports nothing, or that reports everything — the
-# vacuous-green failure this guard exists to prevent — fails here.
+# doc comment, one called only AFTER an inline test module (guards the
+# brace-scope handling, since skipping to end-of-file instead would report it
+# dead), and two out-of-line `#[cfg(test)] mod name;` cases — a flat-file
+# sibling and a `mod.rs`-directory sibling with its own nested submodule
+# (guards collect_test_mod_exclusions, and the directory-form exclusion being
+# swept recursively). A detector that reports nothing, or that reports
+# everything — the vacuous-green failure this guard exists to prevent — fails
+# here.
 self_test() {
     local tmp
     tmp="$(mktemp -d)"
     # shellcheck disable=SC2064  # expand $tmp now, not at trap time
     trap "rm -rf '$tmp'" RETURN
-    mkdir -p "$tmp/crates/probe/src"
+    mkdir -p "$tmp/crates/probe/src/outofline_dir_tests"
 
     cat > "$tmp/crates/probe/src/lib.rs" <<'PROBE'
 pub fn live_fn() -> bool { true }
@@ -142,6 +272,12 @@ pub fn caller() -> bool { live_fn() }
 
 pub fn live_after_tests() -> bool { true }
 
+pub fn outofline_flat_dead_fn() -> bool { true }
+
+pub fn outofline_dir_dead_fn() -> bool { true }
+
+pub fn outofline_nested_dead_fn() -> bool { true }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,11 +286,50 @@ mod tests {
 }
 
 pub fn late_caller() -> bool { live_after_tests() }
+
+#[cfg(test)]
+mod outofline_flat_tests;
+
+#[cfg(test)]
+mod outofline_dir_tests;
+PROBE
+
+    # Flat-file sibling: `outofline_flat_tests.rs` next to lib.rs.
+    cat > "$tmp/crates/probe/src/outofline_flat_tests.rs" <<'PROBE'
+use super::*;
+
+#[test]
+fn flat_calls_dead() {
+    assert!(outofline_flat_dead_fn());
+}
+PROBE
+
+    # Directory sibling: `outofline_dir_tests/mod.rs`, itself declaring a
+    # further out-of-line submodule with no attribute of its own (the
+    # cfg(test) gate is inherited from the parent declaration in lib.rs).
+    cat > "$tmp/crates/probe/src/outofline_dir_tests/mod.rs" <<'PROBE'
+use super::*;
+
+mod nested;
+
+#[test]
+fn dir_calls_dead() {
+    assert!(outofline_dir_dead_fn());
+}
+PROBE
+
+    cat > "$tmp/crates/probe/src/outofline_dir_tests/nested.rs" <<'PROBE'
+use crate::*;
+
+#[test]
+fn nested_calls_dead() {
+    assert!(outofline_nested_dead_fn());
+}
 PROBE
 
     local got expected
     got="$(collect_dead "$tmp/crates" "$tmp/none" | tr '\n' ' ')"
-    expected="caller doc_only_fn late_caller test_only_fn "
+    expected="caller doc_only_fn late_caller outofline_dir_dead_fn outofline_flat_dead_fn outofline_nested_dead_fn test_only_fn "
 
     if [ "$got" != "$expected" ]; then
         echo "FAIL: self-test detector mismatch." >&2

@@ -621,9 +621,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: beads
   host: github.com
-  resolved_commit: df10eb45b8a8306bed96ef925d1d5ca7d5d6d2c6
+  resolved_commit: afe45f5da31ac2adf13d0ecea8b6062cfd585eca
   resolved_ref: main
-  version: 0.4.0
+  version: 0.4.1
   virtual_path: packages/beads
   is_virtual: true
   package_type: marketplace_plugin
@@ -639,7 +639,7 @@ dependencies:
     .claude/rules/40-beads.md: sha256:c8bd01a2aab5346795681d9bc34169dcb3aa704df5b02cabf94266cecbaa454a
     .codex/hooks/beads/scripts/beads-gh-issue-guard.sh: sha256:9e8fc358f5d71f77899f0d6a102fa914758669430f5f403f198022a4f2304715
     .codex/hooks/beads/scripts/beads-subagent-reminder.sh: sha256:8834883359e99cfa7fbd883c07030d1e84273f19da6adb36ad322ce3b994def4
-  content_hash: sha256:27737a85735882d2d57d05bea3a71bb7d8a8682a2fd1c8f37833fec2e3b962b5
+  content_hash: sha256:ec3112dca9cf770afd4fc4b35b178998f66138ef4d50244752941e4328cb289a
   declared_license: Apache-2.0
 - repo_url: wshobson/agents
   name: database-design
