@@ -18,9 +18,9 @@ use crate::DbResult;
 
 /// Fetch one `inbox_source_groups` row by primary key `id`.
 ///
-/// Sibling of `repositories::inbox::get_inbox_source_group_by_path` (keyed on
-/// `(root_id, relative_path)` instead); `reclassify_v2` only has the group id
-/// on hand (from `source_group_id` request field or an item lookup).
+/// `reclassify_v2` and `classify_source_group` only have the group id on hand
+/// (from a `source_group_id` request field or an item lookup), not the
+/// `(root_id, relative_path)` natural key.
 ///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on connection failure.

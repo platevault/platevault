@@ -2514,10 +2514,8 @@ mod tests {
         assert_eq!(si.file_count, 2, "sub-item file_count must match files in the group");
 
         // Source group child_count updated.
-        let sg = inbox_repo::get_inbox_source_group_by_path(db.pool(), "root-sg1", "")
-            .await
-            .unwrap()
-            .unwrap();
+        let sg =
+            q_inbox::get_source_group_by_id(db.pool(), "sg-t066-single").await.unwrap().unwrap();
         assert_eq!(sg.child_count, 1, "source group child_count must be 1");
     }
 
@@ -2649,10 +2647,8 @@ mod tests {
         }
 
         // Source group child_count updated.
-        let sg = inbox_repo::get_inbox_source_group_by_path(db.pool(), "root-sg2", "")
-            .await
-            .unwrap()
-            .unwrap();
+        let sg =
+            q_inbox::get_source_group_by_id(db.pool(), "sg-t066-mixed").await.unwrap().unwrap();
         assert_eq!(sg.child_count, 2, "source group child_count must be 2");
     }
 
