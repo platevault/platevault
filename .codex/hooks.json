@@ -1,42 +1,79 @@
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "PostCompact": [
       {
         "hooks": [
           {
+            "command": "bd codex-hook PostCompact",
+            "statusMessage": "Scheduling Beads context refresh",
             "type": "command",
-            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
-            "timeout": 5
+            "timeout": 30
+          }
+        ],
+        "matcher": "manual|auto"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
+            "timeout": 5,
+            "type": "command"
           }
         ]
       },
       {
         "hooks": [
           {
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "timeout": 30,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {
             "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-deferred-issues.sh",
+            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/speckit/scripts/speckit-task-commit-check.sh",
             "timeout": 30
           }
         ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "bd codex-hook PreCompact",
+            "statusMessage": "Checking Beads context",
+            "type": "command",
+            "timeout": 30
+          }
+        ],
+        "matcher": "manual|auto"
       }
     ],
     "PreToolUse": [
       {
         "hooks": [
           {
-            "type": "command",
             "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Grep|Glob|Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/code-intelligence/scripts/code-discovery-steer.sh",
-            "timeout": 3
+            "timeout": 5,
+            "type": "command"
           }
         ]
       },
@@ -65,28 +102,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-issue-close-guard.sh",
+            "command": ".codex/hooks/speckit/scripts/speckit-pr-title.sh",
             "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-issue-label-guard.sh",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-pr-issue-refs.sh",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
-            "timeout": 3
           }
         ]
       },
@@ -102,78 +119,26 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/code-intelligence/scripts/reindex-after-commit.sh",
-            "if": "Bash(git commit*)",
-            "async": true,
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "apply_patch|Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
-            "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-task-commit-check.sh",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "apply_patch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-task-issue-sync.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
-        "matcher": "startup",
+        "hooks": [
+          {
+            "command": "bd codex-hook SessionStart",
+            "statusMessage": "Loading Beads context",
+            "type": "command",
+            "timeout": 30
+          }
+        ],
+        "matcher": "startup|resume|clear"
+      }
+    ],
+    "Stop": [
+      {
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/code-intelligence/scripts/codebase-index.sh",
-            "async": true,
-            "statusMessage": "Indexing codebase..."
+            "command": ".codex/hooks/speckit/scripts/speckit-stop-gate.sh",
+            "timeout": 30
           }
         ]
       }
@@ -189,15 +154,6 @@
         ]
       },
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/code-intelligence/scripts/subagent-context-inject.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "",
         "hooks": [
           {
@@ -207,14 +163,33 @@
             "timeout": 10
           }
         ]
-      }
-    ],
-    "Stop": [
+      },
       {
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/speckit/scripts/speckit-stop-gate.sh",
+            "command": ".codex/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "bd codex-hook UserPromptSubmit",
+            "statusMessage": "Refreshing Beads context",
+            "type": "command",
             "timeout": 30
           }
         ]

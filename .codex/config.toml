@@ -1,72 +1,15 @@
-[mcp_servers.codebase-memory-mcp]
-command = "codebase-memory-mcp"
-args = []
-id = ""
-
-[mcp_servers.context7]
-command = "npx"
-args = [ "-y", "@upstash/context7-mcp",]
-id = ""
-
-[mcp_servers.mcp-package-version]
-command = "npx"
-args = [ "-y", "mcp-package-version",]
-id = ""
-
-[mcp_servers.playwright]
-command = "npx"
-args = [ "-y", "@playwright/mcp@latest",]
-id = ""
-
-[mcp_servers.repomix]
-command = "npx"
-args = [ "-y", "repomix", "--mcp",]
-id = ""
-
-[mcp_servers.serena]
+[mcp_servers.1mcp]
 command = "bash"
-args = [ "-lc", "ctx=\"${SERENA_MCP_CONTEXT:-}\"; if [ -z \"$ctx\" ]; then parent=\"$(ps -o args= -p \"$PPID\" 2>/dev/null | tr \"[:upper:]\" \"[:lower:]\")\"; case \"$parent\" in *claude*) ctx=\"claude-code\" ;; *codex*) ctx=\"codex\" ;; *) ctx=\"agent\" ;; esac; fi; exec serena start-mcp-server --context \"$ctx\" --project-from-cwd",]
+args = ["-lc", "command -v 1mcp >/dev/null 2>&1 || { echo 1mcp-not-installed-install-agent-0.34.1-or-later >&2; exit 127; }; 1mcp serve --background >/dev/null || { ready=0; for i in 1 2 3 4 5 6 7 8 9 10; do 1mcp serve --status >/dev/null 2>&1 && { ready=1; break; }; sleep 1; done; [ \"$ready\" -eq 1 ] || { 1mcp serve --status >&2; exit 1; }; }; exec 1mcp proxy"]
 id = ""
+
+[mcp_servers.1mcp.env]
 
 [mcp_servers.tauri]
 command = "npx"
-args = [ "-y", "@hypothesi/tauri-mcp-server",]
+args = ["-y", "@hypothesi/tauri-mcp-server"]
 id = ""
 
-[mcp_servers.codebase-memory-mcp.env]
-
-[mcp_servers.context7.env]
-
-[mcp_servers.mcp-package-version.env]
-
-[mcp_servers.playwright.env]
-
-[mcp_servers.repomix.env]
-
-[mcp_servers.serena.env]
-
 [mcp_servers.tauri.env]
-
-[mcp_servers.codebase-memory-mcp.tools.index_status]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_resize]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_navigate]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_evaluate]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_click]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_tabs]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_hover]
-approval_mode = "approve"
-
-[mcp_servers.playwright.tools.browser_run_code_unsafe]
-approval_mode = "approve"
+[features]
+hooks = true

@@ -5,17 +5,6 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/hooks-quality/scripts/quality-before-commit.sh",
-          "timeout": 10
-        }
-      ],
-      "_apm_source": "hooks-quality"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
           "command": ".claude/hooks/release-please/scripts/release-please-guard.sh",
           "timeout": 10
         }
@@ -23,43 +12,14 @@
       "_apm_source": "release-please"
     },
     {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
-        }
-      ],
-      "_apm_source": "speckit"
-    },
-    {
       "matcher": "Bash",
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
+          "command": ".claude/hooks/speckit/scripts/speckit-pr-title.sh"
         }
       ],
       "_apm_source": "speckit"
-    },
-    {
-      "matcher": "Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "agent-coder"
     },
     {
       "matcher": "Bash",
@@ -71,65 +31,6 @@
         }
       ],
       "_apm_source": "beads"
-    }
-  ],
-  "PostToolUse": [
-    {
-      "matcher": "apply_patch|Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "hooks-quality"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "timeout": 30
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "if": "Bash(git commit*)",
-          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh"
-        }
-      ],
-      "_apm_source": "speckit"
-    }
-  ],
-  "UserPromptSubmit": [
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
-        }
-      ],
-      "_apm_source": "speckit"
-    }
-  ],
-  "Stop": [
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-stop-gate.sh"
-        }
-      ],
-      "_apm_source": "speckit"
     }
   ],
   "SubagentStart": [
@@ -149,22 +50,22 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
-          "timeout": 5
+          "statusMessage": "Injecting beads work contract...",
+          "command": ".claude/hooks/beads/scripts/beads-subagent-reminder.sh"
         }
       ],
-      "_apm_source": "code-intelligence"
+      "_apm_source": "beads"
     },
     {
       "matcher": "*",
       "hooks": [
         {
           "type": "command",
-          "statusMessage": "Injecting beads work contract...",
-          "command": ".claude/hooks/beads/scripts/beads-subagent-reminder.sh"
+          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+          "timeout": 5
         }
       ],
-      "_apm_source": "beads"
+      "_apm_source": "code-intelligence"
     }
   ]
 }

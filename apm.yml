@@ -4,8 +4,7 @@ description: APM project for Astro Library Manager.
 author: Sjors Robroek
 dependencies:
   apm:
-  - srobroek/agentic-packages/packages/core#main
-  - srobroek/agentic-packages/packages/beads#main
+  - srobroek/agentic-packages/packages/core#>=8.0.0 <9.0.0
   - srobroek/agentic-packages/packages/steering-pragmatic#main
   - srobroek/agentic-packages/packages/orchestrate#main
   - srobroek/agentic-packages/packages/release-please#main
@@ -14,21 +13,15 @@ dependencies:
   - srobroek/agentic-packages/packages/language-rust#main
   - srobroek/agentic-packages/packages/language-typescript#main
   - srobroek/agentic-packages/packages/language-shell#main
-  - srobroek/agentic-packages/packages/frontend#main
-  - srobroek/agentic-packages/packages/hooks-quality#main
+  - srobroek/agentic-packages/packages/frontend#>=4.0.0 <5.0.0
   - srobroek/agentic-packages/packages/docs-architecture#main
   - srobroek/agentic-packages/packages/steering-docs-specs#main
   - srobroek/agentic-packages/packages/steering-tools-scripts#main
   - srobroek/agentic-packages/packages/steering-infrastructure#main
   - srobroek/agentic-packages/packages/steering-data#main
-  - srobroek/agentic-packages/packages/mcp-playwright#main
-  - srobroek/agentic-packages/packages/mcp-codebase-memory#main
-  - srobroek/agentic-packages/packages/mcp-context7#main
-  - srobroek/agentic-packages/packages/mcp-package-version#main
-  - srobroek/agentic-packages/packages/mcp-repomix#main
-  - srobroek/agentic-packages/packages/mcp-tauri#main
+  - srobroek/agentic-packages/packages/mcp-1mcp#>=1.0.0 <2.0.0
+  - srobroek/agentic-packages/packages/mcp-tauri#>=2.0.0 <3.0.0
   - wshobson/agents/plugins/database-design
-  - srobroek/agentic-packages/packages/mcp-serena#main
   - srobroek/agentic-packages/packages/user-journeys#main
 includes: auto
 targets:
