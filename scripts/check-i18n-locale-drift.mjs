@@ -104,7 +104,20 @@ function main() {
     }
 
     anyDrift = true;
-    console.log(`  ${locale}  ${translated}/${baseKeys.size} keys (${pct}%)`);
+    // Lead with coverage only when coverage is the problem. An orphan-only
+    // locale is at 100% translated, and printing that next to a failure reads
+    // as a contradiction — so say what is actually wrong instead.
+    const faults = [
+      missing.length > 0 ? `${missing.length} missing` : null,
+      orphaned.length > 0 ? `${orphaned.length} orphaned` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const coverage =
+      missing.length > 0
+        ? `${translated}/${baseKeys.size} keys (${pct}%)`
+        : `all ${baseKeys.size} keys translated`;
+    console.log(`  ${locale}  ${coverage} — ${faults}`);
     if (missing.length > 0) {
       console.log(`    missing (${missing.length}):`);
       for (const k of missing.slice(0, 20)) console.log(`      - ${k}`);
