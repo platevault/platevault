@@ -858,29 +858,14 @@
   height: 28px;
 }
 
-/* Per-type table: action column width */
-.pv-cleanup__action-col {
-  width: 220px;
-}
-
-/* Per-type table cell: type name + Pill badge row */
+/* Cleanup policy row label: data-type name + Protected Pill badge */
 .pv-cleanup__type-cell {
   display: flex;
   align-items: center;
   gap: var(--pv-sp-2);
 }
 
-/* Per-type table: process-stage group subheader row */
-.pv-cleanup__group-row td {
-  padding-top: var(--pv-sp-3);
-  color: var(--pv-text-muted);
-  font-size: var(--pv-text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--pv-tracking-normal);
-}
-
-/* Impact warning banner above the per-type table */
+/* Impact warning banner above the cleanup policy rows */
 .pv-cleanup__warning {
   margin-bottom: var(--pv-sp-3);
 }

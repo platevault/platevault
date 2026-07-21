@@ -8,13 +8,16 @@ export interface ToggleProps
   extends Omit<LabelHTMLAttributes<HTMLLabelElement>, 'onChange'> {
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 export const Toggle = forwardRef<HTMLLabelElement, ToggleProps>(function Toggle(
-  { checked, onChange, className, ...rest },
+  { checked, onChange, className, disabled = false, ...rest },
   ref,
 ) {
-  const cls = ['pv-toggle', className].filter(Boolean).join(' ');
+  const cls = ['pv-toggle', disabled && 'pv-toggle--disabled', className]
+    .filter(Boolean)
+    .join(' ');
   // Route any accessible-name props onto the actual checkbox so screen
   // readers announce the switch; the rest stay on the wrapping label.
   const {
@@ -27,6 +30,7 @@ export const Toggle = forwardRef<HTMLLabelElement, ToggleProps>(function Toggle(
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
