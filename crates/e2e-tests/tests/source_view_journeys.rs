@@ -69,7 +69,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -121,13 +121,14 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     // ── 1. Real ingest precondition: one real, catalogued-in-place light frame ──
     let root_dir = tempfile::tempdir()?;
     let file_name = "light_m33_001.fits";
-    let light_path = write_minimal_fits(
+    let light_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         file_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(light_path.exists(), "fixture FITS file was not written");
 

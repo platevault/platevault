@@ -24,7 +24,7 @@ mod common;
 use std::time::Duration;
 
 use anyhow::Context;
-use common::{write_minimal_fits, E2eApp, DRAIN_BACKED_TIMEOUT};
+use common::{write_minimal_fits_with_exposure, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 use thirtyfour::{By, WebElement};
 
@@ -68,13 +68,14 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
     // confirmed session with a known target, so the wizard's Sources step
     // has something real to select.
     let root_dir = tempfile::tempdir()?;
-    write_minimal_fits(
+    write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_wizard_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-13T21:30:00"),
+        Some(300.0),
     )?;
     let register: serde_json::Value = app
         .invoke(

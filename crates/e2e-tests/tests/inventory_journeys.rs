@@ -38,7 +38,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 use thirtyfour::By;
 
@@ -96,21 +96,23 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     let root_dir = tempfile::tempdir()?;
     let keep_name = "light_m33_001.fits";
     let lose_name = "light_m33_002.fits";
-    let keep_path = write_minimal_fits(
+    let keep_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         keep_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T22:00:00"),
+        Some(300.0),
     )?;
-    let lose_path = write_minimal_fits(
+    let lose_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         lose_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T23:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(
         keep_path.exists() && lose_path.exists(),

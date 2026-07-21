@@ -31,7 +31,7 @@ mod common;
 use std::time::Duration;
 
 use anyhow::Context;
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(30);
@@ -127,13 +127,14 @@ async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
     // `journeys.rs`) — this journey's new value is the Sessions PAGE
     // assertions below, not re-proving the ingest pipeline itself.
     let root_dir = tempfile::tempdir()?;
-    write_minimal_fits(
+    write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_sessions_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-12T21:30:00"),
+        Some(300.0),
     )?;
     let register: serde_json::Value = app
         .invoke(

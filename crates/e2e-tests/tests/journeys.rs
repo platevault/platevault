@@ -37,7 +37,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp, DRAIN_BACKED_TIMEOUT};
+use common::{write_minimal_fits_with_exposure, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -162,13 +162,14 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     // 1. Register a disposable light-frames root with one real FITS file.
     let root_dir = tempfile::tempdir()?;
     let file_name = "light_001.fits";
-    let original_path = write_minimal_fits(
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         file_name,
         "Light Frame",
         Some("M 42"),
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
 
@@ -308,13 +309,14 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     let root_dir = tempfile::tempdir()?;
-    let original_path = write_minimal_fits(
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-11T21:30:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
 
