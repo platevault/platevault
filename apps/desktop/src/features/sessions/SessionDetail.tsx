@@ -43,7 +43,8 @@ import { SessionFrameInventory } from './SessionFrameInventory';
 import { SessionNotesSection } from './SessionNotesSection';
 import { RawFrameCleanupSection } from './RawFrameCleanupSection';
 import { sessionDisplayName } from './displayName';
-import { integrationLabel } from './integration';
+import { integrationSeconds } from './integration';
+import { formatIntegration } from '@/lib/format';
 import { connectivityLabel, connectivityVariant } from './connectivity';
 
 /** `SessionCalibrationMatch.kind` is the wider `CalibrationKind` (adds
@@ -221,7 +222,9 @@ export function SessionDetail({
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
   const prov = session.provenance;
-  const integration = integrationLabel(session);
+  // Null (not zero) means no derivable total, which omits the row entirely
+  // rather than rendering a dash for it.
+  const integrationSec = integrationSeconds(session);
   const connLabel = sourceState ? connectivityLabel(sourceState) : null;
 
   // Session facts as a clean tabular PropertyTable, spread across two columns.
@@ -256,12 +259,12 @@ export function SessionDetail({
       value: session.exposure ?? null,
       source: 'fits',
     },
-    ...(integration != null
+    ...(integrationSec != null
       ? [
           {
             key: 'integration',
             label: m.sessions_col_total_integration(),
-            value: integration,
+            value: formatIntegration(integrationSec),
           } as PropertyDef,
         ]
       : []),

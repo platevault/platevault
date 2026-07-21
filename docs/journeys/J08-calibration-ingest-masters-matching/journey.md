@@ -1,7 +1,7 @@
 ---
 id: J08
 title: Ingest calibration masters and match them to sessions
-version: 4
+version: 6
 status: draft
 last_reviewed: 2026-07-15
 actors: [astrophotographer]
@@ -87,13 +87,25 @@ assigned through an explicit, confirmable action — never silently.
 
 ### S3 — Browse the Calibration page {#S3}
 - **Do:** Open the Calibration page.
-- **Expect:** One row per master file. Fingerprint columns are
+- **Expect:** One row per master file. When the master's camera is
+  registered under a friendly name in Settings → Equipment, the row (and
+  detail, S4) shows that name instead of the raw instrument string the
+  capture program wrote into the file header — matching is
+  case-insensitive and covers every alias, and renaming the camera in
+  Settings updates the list immediately. A master whose camera is not
+  registered still shows the raw header string; a master with no camera
+  recorded stays blank. This resolution is display-only — calibration
+  match scoring still compares the raw header values. Fingerprint columns are
   kind-conditional per an explicit applicability matrix — a dark's
   temperature/gain columns don't apply to a bias and render as an explicit
   not-applicable marker, never inferred from missing data. Sort headers,
   search, and group-by work; a kind filter appears once a second kind
-  exists; a search with no matches reads as a filter miss, not an empty
-  library. Composed identifying strings (meta lines, cells) omit absent
+  exists; a search and/or kind filter that matches nothing reads as a
+  filter miss — naming the active filter and offering a "Clear filters"
+  action — not an empty library, and only when showable masters actually
+  exist (a library holding only never-shown kinds still gets the
+  onboarding "run a scan" copy, not a misleading filter-miss state).
+  Composed identifying strings (meta lines, cells) omit absent
   tokens rather than showing a placeholder inside the joined string. Master
   *light* frames never appear here. Only dark/flat/bias kinds surface in
   this v1 — `dark_flat` and `bad_pixel_map` are out of scope by design.
@@ -213,3 +225,18 @@ assigned through an explicit, confirmable action — never silently.
   when narrow — same mechanism as Sessions/Projects/Archive/Targets.
   Evidence: spec-054-adaptive-detail-dock (FR-001, FR-004) · by:
   journey-scribe (intent-gated)
+
+- **Δ5** 2026-07-20 · S3 · behavior-change
+  A search and/or kind filter that matches nothing on the Calibration page
+  now names the active filter and offers a "Clear filters" action, and only
+  when showable masters actually exist — previously a search miss always
+  rendered the "No calibration masters — run a scan" onboarding copy even
+  when masters existed, indistinguishable from a truly empty library.
+  Evidence: PR #1291 (closes #669, #812) · by: journey-scribe (intent-gated)
+
+- **Δ6** 2026-07-20 · S3 · behavior-change
+  Masters now display the camera's registered friendly name (Settings →
+  Equipment) instead of the raw instrument header string, case-insensitive
+  across aliases; an unregistered camera still shows the raw string.
+  Display-only — match scoring is unaffected.
+  Evidence: PR #1341 · by: journey-scribe (intent-gated)

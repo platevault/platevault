@@ -13,10 +13,10 @@ import { Pill, Section, Table } from '@/ui';
 import type { ProjectSourceDto_Deserialize } from '@/bindings/index';
 import {
   fmtFrames,
-  fmtIntegS,
   parseExposureSeconds,
   sourceTypeVariant,
 } from './projectDetailHelpers';
+import { formatIntegration } from '@/lib/format';
 
 export interface ProjectSourcesSectionProps {
   sources: ProjectSourceDto_Deserialize[];
@@ -86,7 +86,7 @@ export function ProjectSourcesSection({
       ),
       integ: (
         <span className="pv-project-detail__integ-cell">
-          {fmtIntegS(integS)}
+          {formatIntegration(integS)}
         </span>
       ),
     };

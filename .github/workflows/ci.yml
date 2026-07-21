@@ -29,11 +29,52 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on branches, but never on `main` (#1203).
+  #
+  # Every main push shares one concurrency group, because `github.ref` is
+  # `refs/heads/main` for all of them. A blanket `true` therefore made each
+  # merge cancel the previous merge's run, and during a merge campaign no main
+  # run survived to report: `6e624adc` and `67f48ee9` landed five minutes apart
+  # and both concluded `cancelled,cancelled`.
+  #
+  # That silently emptied main's gate for unit, integration and mock-mode UI —
+  # the suites this workflow owns. It is worse than a plain outage because it is
+  # merge-rate dependent: when merges space out a run completes and main looks
+  # green, so the gap only opens during periods of highest change velocity,
+  # which is exactly when verification matters most.
+  #
+  # e2e.yml took the same fix in #1268; this is the other half.
+  #
+  # `cancelled` still appears on main, and that is expected — not a regression
+  # of #1203. With `false`, GitHub keeps the in-flight run plus ONE queued run
+  # per group and evicts intermediate pending runs. Measured on main minutes
+  # after this landed: `f3668b86` survived while `89025366`, `b37b072e` and
+  # `30e29bd1` were each evicted while queued.
+  #
+  # So the guarantee is "main always has a recent run that completes", NOT
+  # "every main commit is verified". Individual intermediate commits can still
+  # go unverified when merges land seconds apart. That is the bounded cost that
+  # keeps this from serialising the queue indefinitely.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Incremental artifacts are not reusable across CI runs and only bloat the cache.
 env:
   CARGO_INCREMENTAL: 0
+  # Debuginfo is 53% of every compiled artifact and the runners have been
+  # exhausting disk on it: `target/debug` reaches 1.1 GB, the 11 e2e journey
+  # binaries total 356 MB (~32 MB each, 15.3 MB after `strip --strip-debug`),
+  # and that archive is then downloaded by six shard jobs. PR #1216's ubuntu
+  # leg died with `rustc-LLVM ERROR: IO failure on output stream: No space left
+  # on device`, which reads as a code failure and costs real triage time.
+  #
+  # `line-tables-only` keeps file/line information in panic backtraces -- the
+  # part that actually matters when a test or journey fails -- while dropping
+  # the type and variable debuginfo that dominates the size. A full strip would
+  # be smaller still but loses backtrace line numbers, a bad trade for a test
+  # suite. Set here rather than as a `[profile.*]` in Cargo.toml so local
+  # developer builds keep full debuginfo. See issue #1250.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
   # Cheap change-detection gate (dorny/paths-filter). Downstream jobs read its
@@ -48,7 +89,7 @@ jobs:
   #   all_files — CSV of every changed path, consumed by the changed-crate
   #               scoping step for `cargo test -p`.
   changes:
-    name: Detect changes
+    name: Detect changes (CI)
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.decide.outputs.rust }}
@@ -131,7 +172,42 @@ jobs:
           if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_rust }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
             rust=true
           fi
-          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+          # `frontend_full` activates the frontend lane as well as widening it.
+          # The two were independent, which was incoherent: an i18n catalogue
+          # change (`apps/desktop/messages/**`, JSON — matched by frontend_full
+          # but by no other frontend pattern) set frontend_full=true while
+          # leaving the lane off, so the flag asked for every frontend spec while
+          # no frontend step ran at all. It also activated no lane, which made
+          # such a PR unmergeable for the same reason described below.
+          if [ "$shared" = "true" ] || [ "${{ steps.filter.outputs.force_full_frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ] || [ "${{ steps.filter.outputs.frontend_full }}" = "true" ]; then
+            frontend=true
+          fi
+          # Fail closed on paths no filter recognises. The filter list is an
+          # allowlist of things we know how to classify; a path matching none of
+          # them is not evidence that nothing can break, it is evidence that we
+          # do not know. `apps/desktop/scripts/*.mjs` (the token generator) and
+          # `.design-sync/**` both land here today.
+          #
+          # Without this, such a change activates no lane, so `integration` is
+          # skipped and its required contexts are never published — the PR is
+          # unmergeable. Treating the unknown as "run everything" makes it both
+          # mergeable and actually tested, instead of green because nothing ran.
+          # Every meaningful filter counts as "recognised", including the
+          # force_full_* ones. Omitting them would drag a Cargo.lock bump — which
+          # matches force_full_rust but not `rust` — into the catch-all and run
+          # the frontend suite too, exactly the lane separation the filter
+          # comments above argue for.
+          if [ "${{ steps.filter.outputs.all }}" = "true" ] \
+            && [ "${{ steps.filter.outputs.rust }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.frontend }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.frontend_full }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.force_full_shared }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.force_full_rust }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.force_full_frontend }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.scripts }}" != "true" ] \
+            && [ "${{ steps.filter.outputs.docs }}" != "true" ]; then
+            echo "::notice::No path filter matched this change; running both lanes rather than assuming it is inert."
+            rust=true
             frontend=true
           fi
           # frontend_full: run every vitest spec rather than the `related`
@@ -300,11 +376,32 @@ jobs:
         if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
         run: just db-boundary
 
+      # Dead-caller ratchet: fails if a module-level `pub fn` in crates/ has no
+      # production caller. rustc's dead_code lint does not fire on `pub` items
+      # in a lib crate, which is how #712, #879 and #943 shipped fully tested
+      # but never invoked. Pure grep, no compile — same Linux-only gating as the
+      # DB boundary ratchet above. The script self-tests its own detector before
+      # reporting success, so a green result cannot be vacuous.
+      - name: Dead-caller ratchet
+        if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
+        run: just dead-callers
+
       # Compilation warnings/lints are OS-agnostic; running clippy on all 3 legs
       # is pure redundancy — the nextest step below builds the workspace anyway.
       - name: Clippy (workspace, all targets, deny warnings)
         if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The default workspace clippy above never enables `dev-tools`, so the
+      # developer-mode surface (apps/desktop/src-tauri/src/commands/dev.rs)
+      # was linted by nobody and four lints rotted unseen (#1165). Release
+      # binaries still omit `dev-tools` (see .claude/rules/21-astro-monorepo.md)
+      # — this step only adds lint coverage for the daily developer build, it
+      # does not touch the release build path. Same OS-agnostic reasoning as
+      # the step above, so Linux-only here too.
+      - name: Clippy (desktop_shell, dev-tools feature, deny warnings)
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
+        run: cargo clippy -p desktop_shell --features dev-tools --all-targets -- -D warnings
 
       # --- L1 (isolated units) + L2 (real-backend integration) ---
       # No standalone `cargo build --workspace` step: clippy --all-targets
@@ -402,15 +499,23 @@ jobs:
           # Changed files under this package, rebased to package-relative paths
           # and filtered to ones that exist (a deleted file has no dependents to
           # resolve and makes `vitest related` error).
-          mapfile -t files < <(
+          #
+          # Read with `while read`, NOT `mapfile`: the macOS runner's /bin/bash
+          # is 3.2 (Apple ships no GPLv3 bash), where `mapfile` does not exist.
+          # It exits 127 and takes the whole step with it, so the frontend suite
+          # never runs on macOS at all. The existence filter is folded into the
+          # same loop rather than kept as a second pass over an intermediate
+          # array — one loop cannot disagree with itself about which files it
+          # collected.
+          existing=()
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            [ -f "$f" ] && existing+=("$f")
+          done < <(
             printf '%s' "$CHANGED_FILES" | tr ',' '\n' \
               | sed -n 's#^apps/desktop/##p' \
               | grep -E '^src/.*\.(ts|tsx)$' || true
           )
-          existing=()
-          for f in "${files[@]}"; do
-            [ -f "$f" ] && existing+=("$f")
-          done
 
           if [ ${#existing[@]} -eq 0 ]; then
             echo "No existing apps/desktop/src TS files changed -> full suite (conservative)."
@@ -449,6 +554,59 @@ jobs:
       - name: Generated contract/binding drift
         if: needs.changes.outputs.rust == 'true'
         run: just check-generated
+
+  # Required-check shim for the case where BOTH lanes are idle.
+  #
+  # `integration` above is a MATRIX job. When a matrix job is skipped by its
+  # job-level `if`, GitHub never expands the matrix, so it publishes ONE check
+  # named with the literal, uninterpolated string
+  # `Unit + integration (L1+L2) — ${{ matrix.os }}`. The two contexts branch
+  # protection actually requires — `… — ubuntu-latest` and `… — windows-latest`
+  # — are therefore never created at all, and GitHub blocks the PR waiting for
+  # checks that can never arrive. Not a red check: an absent one.
+  #
+  # This is invisible for almost every PR, because any Rust or frontend change
+  # activates a lane. It bites exactly the changes that touch neither: a
+  # docs-only PR, or repo tooling such as `.design-sync/**` (which matches no
+  # filter at all, so it is not even `docs_only`). #1313 sat permanently
+  # unmergeable this way, and earlier tooling-only PRs were merged by admin
+  # override rather than by satisfying the gate.
+  #
+  # Single-lane jobs need no shim: `ui-e2e` below is not a matrix, so when it
+  # skips it still publishes `UI mock-mode (Playwright)` under its real name,
+  # and GitHub accepts a skipped check as satisfying a required context. Only
+  # the matrix name fails to materialise.
+  #
+  # This job runs for docs-only changes, so the matrix DOES expand and the
+  # required contexts are reported — green, and explicit that nothing was tested
+  # rather than implying a suite passed. It runs every leg on ubuntu because it
+  # executes no platform-specific work; the leg names exist to satisfy the
+  # contexts, not to claim Windows coverage.
+  #
+  # Gated on `docs_only` specifically, NOT on "both lanes idle". Those are no
+  # longer the same thing: `decide` now forces both lanes for any path no filter
+  # recognises, so an unclassified change is tested rather than waved through.
+  # Reporting green for "no filter matched" would be a check that degrades into
+  # "everything's fine" — the failure mode this whole gate exists to prevent.
+  # `docs_only` is the one case the repo positively asserts is inert.
+  integration-idle:
+    name: Unit + integration (L1+L2) — ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: No Rust or frontend changes to test
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          LEG: ${{ matrix.os }}
+        run: |
+          echo "Neither the Rust nor the frontend lane was triggered by this change."
+          echo "docs_only=$DOCS_ONLY"
+          echo "Reporting the required context for $LEG so the PR is mergeable."
+          echo "No tests ran, and none were applicable."
 
   # Mock-mode UI regression: fast Playwright run (Vite + chromium, mocks on, no
   # backend/Tauri build). The real UI->IPC->backend journeys run in the dedicated

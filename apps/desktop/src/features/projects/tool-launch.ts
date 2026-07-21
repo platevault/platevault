@@ -14,6 +14,7 @@
  *   one-time-per-tool "cwd anchored" hint state (T021, US3 acceptance scenario 3).
  */
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type {
@@ -189,6 +190,7 @@ export function useToolLaunch(
     working: false,
     priorInstanceAlive: false,
   });
+  const navigate = useNavigate();
 
   const launch = useCallback(
     async (force = false) => {
@@ -237,8 +239,14 @@ export function useToolLaunch(
             ? {
                 label: m.projects_tool_configure_path(),
                 onClick: () => {
-                  // Navigate to settings/tools pane — best-effort via location
-                  window.location.hash = '#/settings?pane=tools';
+                  // #735: was `window.location.hash = '#/settings?pane=tools'`,
+                  // which bypassed the router AND missed the pane entirely —
+                  // SettingsPage resolves its pane from the `/settings/$pane`
+                  // PATH param, so the `?pane=` search was simply ignored.
+                  void navigate({
+                    to: '/settings/$pane',
+                    params: { pane: 'tools' },
+                  });
                 },
               }
             : undefined,
@@ -255,7 +263,7 @@ export function useToolLaunch(
         setState((s) => ({ ...s, working: false }));
       }
     },
-    [projectId, toolId, toolName, supportsOpenFolder],
+    [projectId, toolId, toolName, supportsOpenFolder, navigate],
   );
 
   const dismissPriorWarning = useCallback(() => {

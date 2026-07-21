@@ -618,6 +618,29 @@ dependencies:
     .codex/agents/journey-validator.toml: sha256:3ba8746661c250a471c08ebbad6a241af50eceda7d5fd04e80e5bdaee8d64706
   content_hash: sha256:50e13e8f558f9b7970283fb56e7a187968ba704f3355fa917247681dc4281e44
   declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  name: beads
+  host: github.com
+  resolved_commit: afe45f5da31ac2adf13d0ecea8b6062cfd585eca
+  resolved_ref: main
+  version: 0.4.1
+  virtual_path: packages/beads
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .claude/hooks/beads/scripts/beads-gh-issue-guard.sh
+  - .claude/hooks/beads/scripts/beads-subagent-reminder.sh
+  - .claude/rules/40-beads.md
+  - .codex/hooks/beads/scripts/beads-gh-issue-guard.sh
+  - .codex/hooks/beads/scripts/beads-subagent-reminder.sh
+  deployed_file_hashes:
+    .claude/hooks/beads/scripts/beads-gh-issue-guard.sh: sha256:9e8fc358f5d71f77899f0d6a102fa914758669430f5f403f198022a4f2304715
+    .claude/hooks/beads/scripts/beads-subagent-reminder.sh: sha256:8834883359e99cfa7fbd883c07030d1e84273f19da6adb36ad322ce3b994def4
+    .claude/rules/40-beads.md: sha256:c8bd01a2aab5346795681d9bc34169dcb3aa704df5b02cabf94266cecbaa454a
+    .codex/hooks/beads/scripts/beads-gh-issue-guard.sh: sha256:9e8fc358f5d71f77899f0d6a102fa914758669430f5f403f198022a4f2304715
+    .codex/hooks/beads/scripts/beads-subagent-reminder.sh: sha256:8834883359e99cfa7fbd883c07030d1e84273f19da6adb36ad322ce3b994def4
+  content_hash: sha256:ec3112dca9cf770afd4fc4b35b178998f66138ef4d50244752941e4328cb289a
+  declared_license: Apache-2.0
 - repo_url: wshobson/agents
   name: database-design
   host: github.com
@@ -5861,6 +5884,24 @@ deployments:
   content_hash: sha256:664d02f8237f1bb78dcaa6ba4dca2a3e5a6ac43bdbef60a1efeb6c7dc68a43dd
 - kind: project-relative
   target: claude
+  value: .claude/hooks/beads/scripts/beads-gh-issue-guard.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/beads
+  active_owner: srobroek/agentic-packages/packages/beads
+  content_hash: sha256:9e8fc358f5d71f77899f0d6a102fa914758669430f5f403f198022a4f2304715
+- kind: project-relative
+  target: claude
+  value: .claude/hooks/beads/scripts/beads-subagent-reminder.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/beads
+  active_owner: srobroek/agentic-packages/packages/beads
+  content_hash: sha256:8834883359e99cfa7fbd883c07030d1e84273f19da6adb36ad322ce3b994def4
+- kind: project-relative
+  target: claude
   value: .claude/hooks/code-intelligence/scripts/subagent-context-inject.sh
   runtime: null
   scope: project
@@ -6048,6 +6089,15 @@ deployments:
   - srobroek/agentic-packages/packages/steering-frontend
   active_owner: srobroek/agentic-packages/packages/steering-frontend
   content_hash: sha256:658e4d9f2a801ad8a279326bcc117abaa62ac9a3b7779cce1c69b4817f464d0d
+- kind: project-relative
+  target: claude
+  value: .claude/rules/40-beads.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/beads
+  active_owner: srobroek/agentic-packages/packages/beads
+  content_hash: sha256:c8bd01a2aab5346795681d9bc34169dcb3aa704df5b02cabf94266cecbaa454a
 - kind: project-relative
   target: claude
   value: .claude/rules/45-git-workflow.md
@@ -9441,6 +9491,24 @@ deployments:
   - srobroek/agentic-packages/packages/agent-coder
   active_owner: srobroek/agentic-packages/packages/agent-coder
   content_hash: sha256:664d02f8237f1bb78dcaa6ba4dca2a3e5a6ac43bdbef60a1efeb6c7dc68a43dd
+- kind: project-relative
+  target: codex
+  value: .codex/hooks/beads/scripts/beads-gh-issue-guard.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/beads
+  active_owner: srobroek/agentic-packages/packages/beads
+  content_hash: sha256:9e8fc358f5d71f77899f0d6a102fa914758669430f5f403f198022a4f2304715
+- kind: project-relative
+  target: codex
+  value: .codex/hooks/beads/scripts/beads-subagent-reminder.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/beads
+  active_owner: srobroek/agentic-packages/packages/beads
+  content_hash: sha256:8834883359e99cfa7fbd883c07030d1e84273f19da6adb36ad322ce3b994def4
 - kind: project-relative
   target: codex
   value: .codex/hooks/code-intelligence/scripts/subagent-context-inject.sh

@@ -10,7 +10,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
+import { Table } from '@/ui';
+import type { TableColumn, TableRow } from '@/ui';
 import { m } from '@/lib/i18n';
+import { masterLabel } from '@/lib/master-label';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { InboxItemSummary } from '@/bindings/index';
@@ -32,6 +35,15 @@ interface SourceScanState {
   items: InboxItemSummary[];
   /** Per-item classify results keyed by inboxItemId. */
   classifications: Map<string, InboxClassifyResponse>;
+  /**
+   * Items whose classify call FAILED, as opposed to succeeding with nothing to
+   * report. Without this the two are indistinguishable downstream: a missing
+   * map entry renders exactly like an empty classification, so a crashed
+   * folder showed an em dash and silently dropped out of the per-kind chips
+   * while still counting toward the header's file total — the same
+   * reconciliation gap issue #513 closed for unmapped IMAGETYP.
+   */
+  classifyFailures: Set<string>;
   error?: string;
 }
 
@@ -84,26 +96,6 @@ function getRootId(flushResult: FlushResult, path: string): string {
   return row?.rootId ?? path;
 }
 
-/** Capitalize the first letter (e.g. "dark" → "Dark"). */
-function titleCase(s: string): string {
-  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
-/**
- * Human label for a detected calibration master item (spec 040 FR-006).
- * e.g. "Master Dark", "Master Flat · Ha · 120s".  Falls back to a generic
- * "Master" when the base frame type couldn't be inferred.
- */
-function masterLabel(item: InboxItemSummary): string {
-  const ft: string = item.masterFrameType
-    ? m.setup_scan_master_kind({ kind: titleCase(item.masterFrameType) })
-    : m.setup_scan_master();
-  const parts: string[] = [ft];
-  if (item.masterFilter) parts.push(item.masterFilter);
-  if (item.masterExposureS != null) parts.push(`${item.masterExposureS}s`);
-  return parts.join(' · ');
-}
-
 // ── Per-source detection summary ──────────────────────────────────────────────
 
 interface SourceSummaryProps {
@@ -111,7 +103,15 @@ interface SourceSummaryProps {
 }
 
 function SourceSummary({ state }: SourceSummaryProps) {
-  const { source, rootId, phase, items, classifications, error } = state;
+  const {
+    source,
+    rootId,
+    phase,
+    items,
+    classifications,
+    classifyFailures,
+    error,
+  } = state;
   const [expanded, setExpanded] = useState(false);
 
   // Spec 048 US4 T035: the wizard's Scan step is the earliest point a newly
@@ -141,6 +141,15 @@ function SourceSummary({ state }: SourceSummaryProps) {
       );
       continue;
     }
+    if (classifyFailures.has(item.inboxItemId)) {
+      // Count them so the chips still add up to the header total; a folder that
+      // failed must not simply vanish from the breakdown.
+      kindCounts.set(
+        'failed',
+        (kindCounts.get('failed') ?? 0) + item.fileCount,
+      );
+      continue;
+    }
     const cls = classifications.get(item.inboxItemId);
     for (const entry of cls?.breakdown ?? []) {
       kindCounts.set(
@@ -163,6 +172,52 @@ function SourceSummary({ state }: SourceSummaryProps) {
       a.lane.localeCompare(b.lane) ||
       a.relativePath.localeCompare(b.relativePath),
   );
+
+  // Built per render rather than hoisted to module scope: the `m.*` accessors
+  // resolve against the active locale at call time, so hoisting would freeze
+  // the header labels to whichever locale was active at import.
+  const columns: TableColumn[] = [
+    { key: 'folder', label: m.setup_scan_col_folder() },
+    { key: 'files', label: m.setup_scan_col_files() },
+    { key: 'format', label: m.setup_scan_col_format() },
+    { key: 'types', label: m.setup_scan_col_types() },
+  ];
+
+  const rows: TableRow[] = sortedItems.map((item) => {
+    const cls = classifications.get(item.inboxItemId);
+    const typeParts = (cls?.breakdown ?? []).map((b) => `${b.count} ${b.kind}`);
+    // Reconcile against fileCount (issue #513): files with no IMAGETYP (or an
+    // unmapped one) don't appear in the classify breakdown at all, so the type
+    // list previously undercounted the row's file total with no indication why.
+    const unclassifiedCount = cls?.unclassifiedFiles.length ?? 0;
+    if (unclassifiedCount > 0) {
+      typeParts.push(
+        m.setup_scan_unclassified_count({ count: unclassifiedCount }),
+      );
+    }
+    const types = typeParts.join(', ');
+    return {
+      _testid: `scan-item-${item.inboxItemId}`,
+      folder: (
+        <span className="pv-table__cell-inline">
+          {item.isMaster && <Pill variant="info">{m.setup_scan_master()}</Pill>}
+          {/* The root/top-level row of an expanded folder carries an empty
+              relativePath; label it instead of leaving it blank (issue #513). */}
+          {item.relativePath || m.setup_scan_root_label()}
+        </span>
+      ),
+      files: item.fileCount,
+      format: (item.format ?? item.lane).toUpperCase(),
+      // Individual calibration masters carry their frame type on the item
+      // itself (spec 040 FR-006); grouped sub-frame folders rely on the
+      // classify breakdown instead.
+      types: item.isMaster
+        ? masterLabel(item)
+        : classifyFailures.has(item.inboxItemId)
+          ? m.setup_scan_classify_failed()
+          : types || '—',
+    };
+  });
 
   // The detail panel (chips + table) is expandable only when scan is done and
   // there are items to show.
@@ -267,81 +322,16 @@ function SourceSummary({ state }: SourceSummaryProps) {
             </div>
           )}
 
-          {/* Scrollable metadata table of detected ingestion groups */}
-          <div className="pv-setup-scan__table-wrap">
-            <table className="pv-setup-scan__table">
-              <thead>
-                <tr className="pv-setup-scan__thead-row">
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_folder()}
-                  </th>
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_files()}
-                  </th>
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_format()}
-                  </th>
-                  <th className="pv-setup-scan__cell">
-                    {m.setup_scan_col_types()}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedItems.map((item) => {
-                  const cls = classifications.get(item.inboxItemId);
-                  const breakdown = cls?.breakdown ?? [];
-                  const typeParts = breakdown.map(
-                    (b) => `${b.count} ${b.kind}`,
-                  );
-                  // Reconcile against fileCount (issue #513): files with no
-                  // IMAGETYP (or an unmapped one) don't appear in the classify
-                  // breakdown at all, so the type list previously undercounted
-                  // the row's file total with no indication why.
-                  const unclassifiedCount = cls?.unclassifiedFiles.length ?? 0;
-                  if (unclassifiedCount > 0) {
-                    typeParts.push(
-                      m.setup_scan_unclassified_count({
-                        count: unclassifiedCount,
-                      }),
-                    );
-                  }
-                  const types = typeParts.join(', ');
-                  // Individual calibration masters carry their frame type on the
-                  // item itself (spec 040 FR-006); grouped sub-frame folders rely
-                  // on the classify breakdown instead.
-                  const detectedTypes = item.isMaster
-                    ? masterLabel(item)
-                    : types || '—';
-                  // The root/top-level row of an expanded folder carries an
-                  // empty relativePath; label it instead of leaving it blank
-                  // (issue #513).
-                  const rowLabel =
-                    item.relativePath || m.setup_scan_root_label();
-                  return (
-                    <tr
-                      key={item.inboxItemId}
-                      data-testid={`scan-item-${item.inboxItemId}`}
-                      className="pv-setup-scan__tbody-row"
-                    >
-                      <td className="pv-setup-scan__cell--path">
-                        <span className="pv-setup-scan__path-cell-inner">
-                          {item.isMaster && (
-                            <Pill variant="info">{m.setup_scan_master()}</Pill>
-                          )}
-                          {rowLabel}
-                        </span>
-                      </td>
-                      <td className="pv-setup-scan__cell">{item.fileCount}</td>
-                      <td className="pv-setup-scan__cell">
-                        {(item.format ?? item.lane).toUpperCase()}
-                      </td>
-                      <td className="pv-setup-scan__cell">{detectedTypes}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {/* Scrollable metadata table of detected ingestion groups.
+              `virtualized` is used for its scroll container + sticky header
+              (primitives.css `.pv-table__scroll`), not for windowing — a
+              per-source detection list is small. */}
+          <Table
+            columns={columns}
+            rows={rows}
+            virtualized
+            scrollClassName="pv-setup-scan__table-wrap"
+          />
         </div>
       )}
     </div>
@@ -382,6 +372,13 @@ export function StepScan({
   useEffect(() => {
     if (scanStartedRef.current) return;
     scanStartedRef.current = true;
+
+    // The scan fans out into one independent async branch per source, each
+    // outliving the others. Any of them can still be awaiting IPC when the
+    // wizard unmounts, so every `setState` below is gated on this flag —
+    // otherwise a late update lands on a torn-down root (and, under vitest,
+    // after jsdom has removed `window`, failing the whole run).
+    let cancelled = false;
 
     void (async () => {
       // Issue #916: a wizard retry after a partial batch-registration
@@ -437,6 +434,7 @@ export function StepScan({
             phase: 'pending',
             items: [],
             classifications: new Map(),
+            classifyFailures: new Set(),
           });
           continue;
         }
@@ -456,6 +454,7 @@ export function StepScan({
             phase: 'pending',
             items: [],
             classifications: new Map(),
+            classifyFailures: new Set(),
           });
           continue;
         }
@@ -470,10 +469,12 @@ export function StepScan({
           phase: 'error',
           items: [],
           classifications: new Map(),
+          classifyFailures: new Set(),
           error: m.setup_scan_resolution_failed(),
         });
       }
 
+      if (cancelled) return;
       setSourceStates(initialStates);
       setResolved(true);
 
@@ -485,6 +486,7 @@ export function StepScan({
         if (entry.phase === 'error') continue;
 
         void (async () => {
+          if (cancelled) return;
           // Mark as scanning
           setSourceStates((prev) => {
             const next = [...prev];
@@ -505,6 +507,7 @@ export function StepScan({
 
             // 2. Classify each discovered item
             const classifications = new Map<string, InboxClassifyResponse>();
+            const classifyFailures = new Set<string>();
             await Promise.allSettled(
               items.map(async (item) => {
                 try {
@@ -516,11 +519,15 @@ export function StepScan({
                   );
                   classifications.set(item.inboxItemId, cls);
                 } catch {
-                  // Classification failure for one item: skip but don't abort
+                  // Don't abort the whole scan for one item — but do record it.
+                  // Swallowing it entirely made a crash look like a clean
+                  // "nothing detected" result.
+                  classifyFailures.add(item.inboxItemId);
                 }
               }),
             );
 
+            if (cancelled) return;
             setSourceStates((prev) => {
               const next = [...prev];
               next[idx] = {
@@ -528,10 +535,12 @@ export function StepScan({
                 phase: 'done',
                 items,
                 classifications,
+                classifyFailures,
               };
               return next;
             });
           } catch (err: unknown) {
+            if (cancelled) return;
             setSourceStates((prev) => {
               const next = [...prev];
               next[idx] = {
@@ -545,6 +554,9 @@ export function StepScan({
         })();
       }
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty: run once on mount
 

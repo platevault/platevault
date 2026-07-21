@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PlateVault",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "identifier": "dev.astro-plan.astro-library-manager",
   "build": {
     "frontendDist": "../dist",
@@ -43,11 +43,16 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
+    "resources": {
+      "../src/assets/fonts/LICENSE.txt": "licenses/Inter-OFL.txt",
+      "../src/assets/fonts/FONTS.md": "licenses/Inter-NOTICE.md"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico",
+      "icons/icon.icns",
       "icons/icon.png"
     ]
   },

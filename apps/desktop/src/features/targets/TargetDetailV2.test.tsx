@@ -719,7 +719,26 @@ describe('TargetDetailV2', () => {
         screen.getAllByText('Horsehead 2026').length,
       ).toBeGreaterThanOrEqual(1),
     );
-    expect(screen.getAllByText('ready').length).toBeGreaterThanOrEqual(1);
+    // #739 US3-AC2: lifecycle renders via the shared StatusTag, so it shows
+    // the localized label ("Ready") rather than the raw stored state.
+    expect(screen.getAllByText('Ready').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('ready')).toBeNull();
+  });
+
+  it('24b. (US3) archived projects carry the shared archived lifecycle tone', async () => {
+    mockListTargetProjects.mockResolvedValue(
+      ok([{ id: 'proj-1', name: 'Old Horsehead', lifecycle: 'archived' }]),
+    );
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('Old Horsehead').length,
+      ).toBeGreaterThanOrEqual(1),
+    );
+    const tag = screen.getAllByText('Archived')[0];
+    // Reuses the shared tone token rather than a per-feature style (#739).
+    expect(tag).toHaveClass('pv-status-tag');
+    expect(tag).toHaveClass('pv-status-tag--ok');
   });
 
   it('25. (US3) clicking project row navigates to /projects with selected=id (mid-page link row)', async () => {

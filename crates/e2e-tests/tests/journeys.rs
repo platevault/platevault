@@ -590,11 +590,13 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
 /// `plans.approve`, `plans.apply.direct`, `plans.apply.status`.
 ///
 /// FORMERLY a documented gap: applying the generated plan needed
-/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
-/// argument this WebDriver harness cannot construct. `plans.apply.direct`
-/// (spec 037) is the channel-free equivalent — same executor, same durable
-/// audit trail, no `Channel` required — so this journey now drives the real
-/// filesystem mutation instead of stopping at `approved`.
+/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress argument
+/// this harness declines to construct — see the module docs: it is buildable
+/// from a WebDriver script, but only by reaching into Tauri internals.
+/// `plans.apply.direct` (spec 037) is the channel-free equivalent — same
+/// executor, same durable audit trail, no `Channel` required — so this
+/// journey now drives the real filesystem mutation instead of stopping at
+/// `approved`.
 ///
 /// `source.protection.set` marks this project `normal` before generating the
 /// plan: the app's safe-by-default protection level is `"protected"`

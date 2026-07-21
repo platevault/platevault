@@ -19,15 +19,14 @@
 //
 // Run: node scripts/generate-splash-wordmark.mjs  (from apps/desktop/,
 // wired as the `wordmark:generate` package script)
+//
+// Glyph outlining itself lives in lib/wordmark.mjs (shared with
+// generate-lockup.mjs); this script only owns the splash-specific splicing.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import * as fontkitNs from 'fontkit';
-
-// fontkit's CJS export shape isn't reliably synthesized as a default export
-// under Node's ESM loader — grab the namespace and unwrap.
-const fontkit = fontkitNs.default ?? fontkitNs;
+import { wordmarkPaths, FRAME_COLOR, ACCENT_COLOR } from './lib/wordmark.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const splashPath = join(__dirname, '..', 'splash.html');
@@ -35,50 +34,9 @@ const splashPath = join(__dirname, '..', 'splash.html');
 // Matches the splash CSS this replaces (previously .pv-wordmark's
 // font-size/letter-spacing) — see splash.html's pv-content layout.
 const FONT_SIZE = 34;
-const LETTER_SPACING_EM = -0.02;
-const PLATE_GLYPH_COUNT = 'Plate'.length;
-const FRAME_COLOR = '#f0ebe2';
-const ACCENT_COLOR = '#e8a86a';
 
 const START_MARKER = '<!-- pv-wordmark:generated:start -->';
 const END_MARKER = '<!-- pv-wordmark:generated:end -->';
-
-/**
- * Outlines "Plate" and "Vault" as two path `d` strings sharing one
- * continuous shaped run (so kerning across the "e"/"V" boundary matches a
- * single "PlateVault" render). Paths are pre-translated so the baseline
- * sits at y=ascender, i.e. they drop directly into a `viewBox="0 0 width
- * height"` with no further offset needed at the call site.
- */
-function wordmarkPaths() {
-  const woffUrl = import.meta.resolve(
-    '@fontsource/space-grotesk/files/space-grotesk-latin-700-normal.woff',
-  );
-  const font = fontkit.openSync(fileURLToPath(woffUrl));
-  const scale = FONT_SIZE / font.unitsPerEm;
-  const ascender = (font.ascent / font.unitsPerEm) * FONT_SIZE;
-  const descender = (font.descent / font.unitsPerEm) * FONT_SIZE;
-  const run = font.layout('PlateVault');
-
-  let x = 0;
-  let plateD = '';
-  let vaultD = '';
-  for (let i = 0; i < run.glyphs.length; i++) {
-    const glyph = run.glyphs[i];
-    const path = glyph.path.scale(scale, -scale).translate(x, ascender);
-    if (i < PLATE_GLYPH_COUNT) {
-      plateD += path.toSVG();
-    } else {
-      vaultD += path.toSVG();
-    }
-    x += run.positions[i].xAdvance * scale + LETTER_SPACING_EM * FONT_SIZE;
-  }
-  // letterSpacing was added after the *last* glyph too — that's the width of
-  // the shaped run for advance purposes but not the visual ink extent.
-  const width = x - LETTER_SPACING_EM * FONT_SIZE;
-
-  return { plateD, vaultD, width, height: ascender - descender };
-}
 
 function wordmarkSvg({ plateD, vaultD, width, height }) {
   const w = width.toFixed(2);
@@ -98,7 +56,7 @@ function main() {
   if (startIdx === -1 || endIdx === -1) {
     throw new Error(`splash.html is missing ${START_MARKER} / ${END_MARKER} markers`);
   }
-  const svg = wordmarkSvg(wordmarkPaths());
+  const svg = wordmarkSvg(wordmarkPaths({ fontSize: FONT_SIZE }));
   const next = html.slice(0, startIdx) + svg + html.slice(endIdx + END_MARKER.length);
   writeFileSync(splashPath, next);
   // eslint-disable-next-line no-console

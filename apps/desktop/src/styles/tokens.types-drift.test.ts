@@ -4,7 +4,7 @@
 /**
  * tokens.types-drift.test.ts — #1191 follow-up.
  *
- * `tokens.d.ts` is generated from `tokens.css` (+ `packages/tokens/foundation.css`)
+ * `tokens.d.ts` is generated from `tokens.css` (+ `packages/tokens/tokens-docs.css`)
  * by `scripts/gen-token-types.mjs`, wired only as the `tokens:types` package
  * script. Nothing enforces that a `tokens.css` edit is followed by
  * regeneration — a branch once added tokens to `tokens.css` without
@@ -31,7 +31,7 @@ import {
 const tokensCssPath = join(process.cwd(), 'src/styles/tokens.css');
 const foundationCssPath = join(
   process.cwd(),
-  '../../packages/tokens/foundation.css',
+  '../../packages/tokens/tokens-docs.css',
 );
 const tokensDtsPath = join(process.cwd(), 'src/styles/tokens.d.ts');
 
@@ -51,5 +51,35 @@ describe('tokens.d.ts matches tokens.css / foundation.css', () => {
       actual,
       'tokens.d.ts is out of sync with tokens.css / foundation.css — run `pnpm tokens:types` and commit the result.',
     ).toBe(expected);
+  });
+});
+
+/**
+ * Properties the extractor got for free while it scanned emitted CSS, and which
+ * become assumptions the moment anyone enumerates the token tree instead.
+ * Pinned so that refactor fails loudly rather than shipping a type quietly
+ * missing names.
+ */
+describe('extractTokenNames covers the union, not one representative block', () => {
+  it('includes a token declared only in a non-default theme block', () => {
+    const css = `
+      :root { --pv-shared: #000; }
+      :root,
+      [data-theme="warm-slate"] { --pv-shared: #000; }
+      [data-theme="observatory-cool"] { --pv-shared: #fff; --pv-dark-only: #123456; }
+    `;
+    // Resolving the default theme alone would miss --pv-dark-only entirely: it
+    // would ship in the CSS and be absent from the type.
+    expect(extractTokenNames([css])).toContain('pv-dark-only');
+  });
+
+  it('does not drop tokens containing uppercase or underscore', () => {
+    // A narrower [a-z0-9-] class fails OPEN — the token ships in the CSS and is
+    // silently absent from the type, so a typo at a call site still compiles.
+    const css = ':root { --pv-legacyName: 1px; --pv-snake_case: 2px; }';
+    expect(extractTokenNames([css])).toEqual([
+      'pv-legacyName',
+      'pv-snake_case',
+    ]);
   });
 });

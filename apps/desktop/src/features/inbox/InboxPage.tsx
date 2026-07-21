@@ -38,6 +38,8 @@ import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { queryKeys } from '@/data/queryKeys';
 import type {
+  ChosenAttributionDto_Deserialize as ChosenAttributionRequest,
+  IngestionAttributionCandidateDto,
   InboxConfirmDestination,
   InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
 } from '@/bindings/index';
@@ -48,9 +50,11 @@ import { m } from '@/lib/i18n';
 import type { FrameType } from '@/lib/route-contract';
 import { useGrouping } from '@/lib/use-grouping';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { useHotkeys } from '@/lib/useHotkeys';
 import { addToast } from '@/shared/toast';
 import { Btn } from '@/ui';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from './InboxControls';
+import { AttributionPicker } from './AttributionPicker';
 import { InboxDetail } from './InboxDetail';
 import { InboxList, DEFAULT_INBOX_SORT } from './InboxList';
 import type { InboxSortCol, InboxSort } from './InboxList';
@@ -312,9 +316,17 @@ export function InboxPage() {
   const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
     useState<string | null>(null);
 
+  // #735: `listLoading` joins the gate because on a cold reload the list cache
+  // is empty and an unguarded `selectedItem === undefined` wipes a valid
+  // `?selected=` before the list IPC resolves. This does NOT reopen the
+  // unbounded-gate hazard the reclassify handoff guards against: `listLoading`
+  // settles on its own, whereas `pendingReclassifySelectionId` needed
+  // `resolveReclassifyHandoff`'s explicit give-up path.
   useStaleSelectionCleanup(
     selected,
-    selectedItem !== undefined || pendingReclassifySelectionId !== null,
+    listLoading ||
+      selectedItem !== undefined ||
+      pendingReclassifySelectionId !== null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),
@@ -439,6 +451,15 @@ export function InboxPage() {
   // The literal 'archive' | 'trash' values are exactly what inbox.confirm accepts.
   const [destructiveDestination, setDestructiveDestination] =
     useState<DestructiveDestination>('archive');
+  // #943: `confirmLoading` (from `useInboxConfirm`) only covers the backend
+  // `inbox.confirm` mutation inside `runConfirm` — it says nothing about the
+  // `inboxAttributionSuggest` read that now runs BEFORE it. Without this,
+  // Confirm/the "C" hotkey stayed clickable for that whole await, so a
+  // re-entrant trigger landing in the window (slower CI runners widen it)
+  // could start a second `handleConfirm` and race an unattributed confirm
+  // in ahead of the picker. Guards the entire handleConfirm body, not just
+  // the mutation.
+  const [confirmFlowBusy, setConfirmFlowBusy] = useState(false);
 
   // spec 041 US8/FR-029: when a confirm needs the user to pick among multiple
   // candidate library roots, hold the prompt + the item it belongs to so the
@@ -446,6 +467,17 @@ export function InboxPage() {
   const [pendingRootPick, setPendingRootPick] =
     useState<PendingRootPick | null>(null);
   const [rootPickItemId, setRootPickItemId] = useState<string | null>(null);
+
+  // spec 008 US7/FR-022 (#943): ranked attribution suggestions for the item
+  // awaiting confirm. Held BEFORE the confirm fires — confirm creates the plan
+  // that blocks any second confirm, so the pick must ride the first one.
+  const [pendingAttribution, setPendingAttribution] = useState<{
+    itemId: string;
+    rootAbsolutePath: string;
+    contentSignature: string;
+    rootId?: string;
+    candidates: IngestionAttributionCandidateDto[];
+  } | null>(null);
 
   // spec 041 US8/FR-031: absolute destination paths keyed by source path,
   // accumulated from each successful confirm's `destinations[]`. Lets the plan
@@ -510,6 +542,7 @@ export function InboxPage() {
       item: { inboxItemId: string; rootAbsolutePath: string },
       contentSignature: string,
       rootId?: string,
+      chosenAttribution?: ChosenAttributionRequest,
     ) => {
       try {
         const result = await confirm({
@@ -518,10 +551,12 @@ export function InboxPage() {
           rootAbsolutePath: item.rootAbsolutePath,
           destructiveDestination,
           rootId: rootId ?? null,
+          chosenAttribution,
         });
         // Success: clear any pending root pick and capture absolute destinations.
         setPendingRootPick(null);
         setRootPickItemId(null);
+        setPendingAttribution(null);
         mergeDestinations(result.destinations);
         // spec 041: masters now always return a plan too — every confirm produces
         // a reviewable plan that appears in the aggregate surface below.
@@ -602,14 +637,85 @@ export function InboxPage() {
     // `canConfirm` below — guard here too as defense in depth.
     if (!selectedItem || !classification || classification.type === 'mixed')
       return;
+    // Re-entrancy guard (#943 follow-up): covers this whole function,
+    // including the suggest await below — see `confirmFlowBusy`'s
+    // declaration for why `confirmLoading` alone isn't enough.
+    if (confirmFlowBusy) return;
+    setConfirmFlowBusy(true);
+    try {
+      // "" = auto-select (let the backend choose); otherwise the picked root.
+      const rootId = selectedDestRootId || undefined;
+
+      // spec 008 US7/FR-019 (#943): read the ranked attribution suggestions
+      // BEFORE confirming, so the user's pick can ride this single confirm.
+      // Suggest-never-auto-merge (FR-020) — a non-empty list always stops here
+      // for an explicit pick; it is never applied on the user's behalf.
+      // A suggest failure must not cost the user their confirm: attribution is
+      // an optional enrichment, so fall through to an unattributed confirm —
+      // but the failure is logged (not just swallowed), so a suggest-side
+      // regression stays diagnosable instead of looking like "no candidates".
+      let candidates: IngestionAttributionCandidateDto[] = [];
+      try {
+        candidates = unwrap(
+          await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
+        );
+      } catch (err) {
+        console.error(
+          `inbox.attribution.suggest failed for item ${selectedItem.inboxItemId}; confirming without an attribution pick`,
+          err,
+        );
+        candidates = [];
+      }
+      if (candidates.length > 0) {
+        setPendingAttribution({
+          itemId: selectedItem.inboxItemId,
+          rootAbsolutePath: selectedRootPath,
+          contentSignature: classification.contentSignature,
+          rootId,
+          candidates,
+        });
+        return;
+      }
+
+      await runConfirm(
+        {
+          inboxItemId: selectedItem.inboxItemId,
+          rootAbsolutePath: selectedRootPath,
+        },
+        classification.contentSignature,
+        rootId,
+      );
+    } finally {
+      setConfirmFlowBusy(false);
+    }
+  };
+
+  // The candidate DTO carries project/framing ids only, so resolve display
+  // names client-side rather than widening the contract. Fetched only while a
+  // pick is pending; falls back to the raw id if a name is unavailable.
+  const { data: attributionProjects } = useQuery({
+    queryKey: queryKeys.projects.all(),
+    queryFn: async () => unwrap(await commands.projectsList(null)),
+    enabled: pendingAttribution != null,
+  });
+  const attributionProjectNames = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const p of attributionProjects ?? []) out[p.id] = p.name;
+    return out;
+  }, [attributionProjects]);
+
+  /** FR-022: confirm the pending item carrying the user's attribution pick. */
+  const handlePickAttribution = async (chosen: ChosenAttributionRequest) => {
+    const pending = pendingAttribution;
+    if (!pending) return;
     await runConfirm(
       {
-        inboxItemId: selectedItem.inboxItemId,
-        rootAbsolutePath: selectedRootPath,
+        inboxItemId: pending.itemId,
+        rootAbsolutePath: pending.rootAbsolutePath,
       },
-      classification.contentSignature,
-      // "" = auto-select (let the backend choose); otherwise the picked root.
-      selectedDestRootId || undefined,
+      pending.contentSignature,
+      pending.rootId,
+      chosen,
     );
   };
 
@@ -832,6 +938,22 @@ export function InboxPage() {
     !fileMetadataError &&
     !hasMissingRequiredMeta &&
     !hasOpenPlan;
+
+  // Spec 027 FR-022 (issue #747): confirm the selected detection from the
+  // keyboard, so a triage sweep never leaves the home row. Gated on the same
+  // `canConfirm` as the button — the shortcut must not reach a state the
+  // visible affordance refuses. J/K navigation lives in InboxList, which owns
+  // the visual row order.
+  useHotkeys(
+    {
+      KeyC: (e) => {
+        if (!canConfirm || confirmLoading || confirmFlowBusy) return;
+        e.preventDefault();
+        void handleConfirm();
+      },
+    },
+    [canConfirm, confirmLoading, confirmFlowBusy, handleConfirm],
+  );
 
   const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
 
@@ -1164,7 +1286,7 @@ export function InboxPage() {
               onConfirm={() => void handleConfirm()}
               confirmLabel={confirmLabel}
               confirmDisabled={!canConfirm}
-              confirmBusy={confirmLoading}
+              confirmBusy={confirmLoading || confirmFlowBusy}
               destinationRoots={destRoots}
               selectedRootId={selectedDestRootId}
               onSelectRoot={setSelectedDestRootId}
@@ -1190,6 +1312,17 @@ export function InboxPage() {
           onSort={handleSort}
         />
       </ListPageLayout>
+
+      {/* spec 008 US7/FR-022 (#943): the pre-confirm attribution pick. */}
+      {pendingAttribution && (
+        <AttributionPicker
+          candidates={pendingAttribution.candidates}
+          projectNames={attributionProjectNames}
+          busy={confirmLoading}
+          onPick={(chosen) => void handlePickAttribution(chosen)}
+          onCancel={() => setPendingAttribution(null)}
+        />
+      )}
 
       {/* Plan-approval overlay — opens via top-bar trigger.
 			    Wraps the existing PlanPanel; all apply/cancel/root-pick
