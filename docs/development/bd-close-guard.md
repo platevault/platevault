@@ -29,8 +29,8 @@ origin/main` then answers "no" for work that is on `main`.
 A non-empty `git merge-tree` does not prove the inverse either: a squashed
 branch keeps its diverged merge-from-main history, so it still conflicts.
 
-Landed-ness is proven by CONTENT: `git cat-file -e origin/main:<path>`, a file
-or tree diff, or the change's presence inside the squash commit.
+Landed-ness is proven by content: byte-identical blobs or trees, or the
+change's presence inside the squash commit.
 
 ## The check
 

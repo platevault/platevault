@@ -247,7 +247,7 @@ pr_content_ref() {
 # Decide by content whether a merged PR's changes are on origin/main, for the
 # case where ancestry cannot see through a squash.
 content_check() {
-  local repo="$1" pr="$2" merge_oid="$3" ref pr_files identical=0 inconclusive=0 never=0 truncated=no path
+  local repo="$1" pr="$2" merge_oid="$3" ref pr_files counts identical inconclusive never truncated
   if ! pr_files=$(gh pr view "$pr" --repo "$repo" --json changedFiles,files 2>/dev/null); then
     echo "ERROR:could not list PR files for the content check"
     return
@@ -257,18 +257,45 @@ content_check() {
     echo "ERROR:PR content is unreachable locally (merge commit pruned, refs/pull/$pr/head unfetchable)"
     return
   fi
+  if ! counts=$(content_evidence_counts "$ref" "$pr_files"); then
+    echo "ERROR:$counts"
+    return
+  fi
+  read -r identical inconclusive never truncated <<<"$counts"
+  classify_content "$identical" "$inconclusive" "$never" "$truncated"
+}
+
+# Validate GitHub's response before transporting paths as a NUL-delimited
+# stream. Git permits newlines in filenames, so line-oriented transport can
+# turn one unlanded path into several coincidentally identical landed paths.
+content_evidence_counts() {
+  local ref="$1" pr_files="$2" identical=0 inconclusive=0 never=0 truncated=no path evidence
+  local -a paths=()
+  if ! jq -e '
+    (.changedFiles | type == "number" and . >= 0 and floor == .)
+    and (.files | type == "array")
+    and all(.files[]; (.path | type == "string") and (.path | length > 0))
+  ' >/dev/null 2>&1 <<<"$pr_files"; then
+    echo "malformed PR file evidence"
+    return 1
+  fi
   if [ "$(jq -r '.files | length' <<<"$pr_files")" -lt "$(jq -r '.changedFiles' <<<"$pr_files")" ]; then
     truncated=yes
   fi
-  while IFS= read -r path; do
-    [ -n "$path" ] || continue
-    case "$(path_evidence "$ref" "$path")" in
+  mapfile -d '' -t paths < <(jq -j '.files[] | .path, "\u0000"' <<<"$pr_files")
+  for path in "${paths[@]}"; do
+    evidence=$(path_evidence "$ref" "$path")
+    case "$evidence" in
       identical) identical=$((identical + 1)) ;;
       inconclusive) inconclusive=$((inconclusive + 1)) ;;
       never) never=$((never + 1)) ;;
+      *)
+        echo "could not classify PR path evidence"
+        return 1
+        ;;
     esac
-  done < <(jq -r '.files[].path' <<<"$pr_files")
-  classify_content "$identical" "$inconclusive" "$never" "$truncated"
+  done
+  printf '%s %s %s %s\n' "$identical" "$inconclusive" "$never" "$truncated"
 }
 
 check_one() {
@@ -485,6 +512,42 @@ self_test() {
   got=$(classify_content 99 0 1 yes)
   [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content still reports NOT-ON-MAIN on a truncated list when a never-landed path is visible" \
     || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
+
+  # Filename ingestion: Git permits newlines in paths. The old line-oriented
+  # jq/read transport split this one unlanded path into README.md and LICENSE,
+  # both identical on main, and returned a false SQUASHED verdict.
+  local newline_repo newline_json counts
+  newline_repo=$(mktemp -d)
+  if (
+    cd "$newline_repo"
+    git init -q
+    git config user.name test
+    git config user.email test@example.invalid
+    printf 'landed\n' >README.md
+    printf 'landed\n' >LICENSE
+    git add README.md LICENSE
+    git commit -qm main
+    git update-ref refs/remotes/origin/main HEAD
+    git switch -qc pr
+    printf 'unlanded\n' >$'README.md\nLICENSE'
+    git add $'README.md\nLICENSE'
+    git commit -qm pr
+    newline_json=$(jq -cn --arg path $'README.md\nLICENSE' '{changedFiles: 1, files: [{path: $path}]}')
+    counts=$(content_evidence_counts HEAD "$newline_json")
+    read -r identical inconclusive never truncated <<<"$counts"
+    got=$(classify_content "$identical" "$inconclusive" "$never" "$truncated")
+    [ "$got" = "NOTONMAIN:" ]
+  ); then
+    echo "ok: content ingestion preserves a literal newline filename and cannot return false SQUASHED"
+  else
+    echo "FAIL: content ingestion split or misclassified a literal newline filename"
+    fail=1
+  fi
+  rm -rf -- "$newline_repo"
+
+  got=$(content_evidence_counts HEAD '{"changedFiles":1,"files":[{}]}' 2>/dev/null || true)
+  [ "$got" = "malformed PR file evidence" ] && echo "ok: content ingestion fails closed on missing path evidence" \
+    || { echo "FAIL: malformed content evidence got '$got'"; fail=1; }
 
   # path_evidence: reads this repo's own local origin/main ref, no network.
   got=$(path_evidence origin/main "scripts/bd-close-guard.sh")
