@@ -727,6 +727,7 @@
   "settings_calmatch_unit_d": "d",
   "settings_calmatch_warn": "warn",
   "settings_catalogue_enable_default_aria": "Enable {label} by default",
+  "settings_catalogue_restore_scope": "Default-enabled Planner catalogue toggles",
   "settings_catalogue_save_error": "Could not save catalogue defaults: {error}",
   "settings_cleanup_action_aria": "Action for {type}",
   "settings_cleanup_block_delete_label": "Block permanent delete",

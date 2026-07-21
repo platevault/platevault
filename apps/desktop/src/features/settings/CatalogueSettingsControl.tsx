@@ -20,7 +20,7 @@ import {
   saveDefaultCatalogues,
 } from '@/features/targets/catalogue-settings';
 import { m } from '@/lib/i18n';
-import { SettingsRow } from './SettingsKit';
+import { SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
 
 export function CatalogueSettingsControl() {
   const [enabled, setEnabled] = useState<Set<CatalogueId>>(
@@ -74,6 +74,15 @@ export function CatalogueSettingsControl() {
     void persist(next);
   };
 
+  // #802: same custom-onRestore shape as ResolverSettingsControl — this pane's
+  // defaults live in DEFAULT_ENABLED_CATALOGUES, not the generic settings-scope
+  // key list, so the button persists that constant directly instead of going
+  // through settings.restore-defaults.
+  const handleRestoreDefaults = useCallback(async () => {
+    toggledRef.current = true;
+    await persist(new Set(DEFAULT_ENABLED_CATALOGUES));
+  }, [persist]);
+
   return (
     <>
       {PLANNER_CATALOGS.map((c) => (
@@ -91,6 +100,16 @@ export function CatalogueSettingsControl() {
           />
         </SettingsRow>
       ))}
+
+      <SettingsRow
+        label={m.settings_action_restore_defaults()}
+        info={m.settings_catalogue_restore_scope()}
+      >
+        <RestoreDefaultsBtn
+          onRestore={handleRestoreDefaults}
+          scopeLabel={m.settings_catalogue_restore_scope()}
+        />
+      </SettingsRow>
 
       {saveError && (
         <div className="pv-settings__error" role="alert">
