@@ -6,16 +6,14 @@
  * T017-T022) — the wizard's new first step (FR-005), ahead of Source
  * Folders/Tools/Configuration/Observing Site/Confirm/Scan.
  *
- * Scope note on "renders in Portuguese" (spec 061 acceptance scenario 3):
- * this branch stacks on `061-p1-locale-runtime` and lands independently of
- * `061-us3-ptbr-catalog`, which owns the full pt-BR message catalog. At this
- * point in the stack `messages/pt-BR.json` is still a 5-key stub, so most
- * wizard step headings fall back to the base locale by design (FR-009) —
- * that fallback is what's asserted below, not translated Portuguese text.
- * What IS fully verifiable here, and is the actual mechanism this spec
- * exists to pin: the language choice applies immediately with no reload
- * (FR-004), survives Back-navigation (FR-005 US1 scenario 5) and the rest of
- * setup, and is still in effect once the main app opens (FR-003).
+ * The pt-BR catalog (`061-us3-ptbr-catalog`) is at full key parity with
+ * en-GB, so once Portuguese is selected every wizard step heading and
+ * button renders in Portuguese (spec 061 acceptance scenario 3) — the
+ * locators below match the actual Portuguese strings, not an English
+ * fallback. What this spec exists to pin: the language choice applies
+ * immediately with no reload (FR-004), survives Back-navigation (FR-005
+ * US1 scenario 5) and the rest of setup, and is still in effect once the
+ * main app opens (FR-003).
  *
  * Sources are pre-seeded in `alm-setup-wizard-state` (same technique
  * `setup_wizard_site_step.spec.ts` and `regression_setup_legacy_catalog.spec.ts`
@@ -112,42 +110,48 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
       'pt-BR',
     );
 
-    // Advance through the rest of setup. Steps whose message keys pt-BR
-    // doesn't have yet fall back to English (FR-009) — this only proves no
-    // raw key ever leaks to the screen, not that the string is translated.
-    await page.getByRole('button', { name: /Continue/i }).click();
+    // Advance through the rest of setup. pt-BR is at full key parity with
+    // en-GB, so from here every step heading and nav button renders in
+    // Portuguese — except this very first click: `changeLocale` re-renders
+    // only the Language step's own subtree (the context consumer), not the
+    // wizard chrome computed by the parent SetupWizard render, so the
+    // Continue button here is still showing its pre-switch English label.
+    // The next SetupWizard render — triggered by the step change this click
+    // causes — picks up the new locale for everything downstream.
+    const continueButton = page.getByRole('button', {
+      name: /^Continuar para/i,
+    });
+    await page.getByRole('button', { name: /^Continue to/i }).click();
     await expect(
-      page.getByRole('heading', { name: 'Where does your data live?' }),
+      page.getByRole('heading', { name: 'Onde seus dados residem?' }),
     ).toBeVisible();
     await expect(page.getByText(/^setup_/)).toHaveCount(0);
 
     // T020: Back-navigation returns to the Language step, and the earlier
     // choice is still there — a mistaken pick is recoverable.
-    await page.getByRole('button', { name: /Back/i }).click();
+    await page.getByRole('button', { name: /Voltar/i }).click();
     await expect(
-      page.getByRole('heading', { name: 'Choose your language' }),
+      page.getByRole('heading', { name: 'Escolha seu idioma' }),
     ).toBeVisible();
     await expect(portuguese).toHaveAttribute('aria-pressed', 'true');
 
     // Forward again, then through the rest of the flow to Finish.
-    await page.getByRole('button', { name: /Continue/i }).click();
+    await continueButton.click();
     await expect(
-      page.getByRole('heading', { name: 'Where does your data live?' }),
+      page.getByRole('heading', { name: 'Onde seus dados residem?' }),
     ).toBeVisible();
-    await page.getByRole('button', { name: /Continue/i }).click(); // -> Processing Tools
-    await page.getByRole('button', { name: /Continue/i }).click(); // -> Configuration
-    await page.getByRole('button', { name: /Continue/i }).click(); // -> Observing Site (optional)
-    await page
-      .getByRole('button', { name: /Continue without a site/i })
-      .click(); // acknowledge skip
-    await page
-      .getByRole('button', { name: /Continue without a site/i })
-      .click(); // proceed -> Confirm
+    await continueButton.click(); // -> Processing Tools
+    await continueButton.click(); // -> Configuration
+    await continueButton.click(); // -> Observing Site (optional)
+    const continueWithoutSite = page.getByTestId('setup-site-skip-ack');
+    await continueWithoutSite.click(); // acknowledge skip
+    await continueWithoutSite.click(); // proceed -> Confirm
 
-    await expect(page.getByRole('button', { name: /Start scan/i })).toBeVisible(
-      { timeout: 10_000 },
-    );
-    await page.getByRole('button', { name: /Start scan/i }).click();
+    const startScan = page.getByRole('button', {
+      name: /Iniciar escaneamento/i,
+    });
+    await expect(startScan).toBeVisible({ timeout: 10_000 });
+    await startScan.click();
 
     const finishBtn = page.getByTestId('finish-button');
     await expect(finishBtn).toBeEnabled({ timeout: 10_000 });
