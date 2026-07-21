@@ -212,16 +212,23 @@ path_evidence() {
 # PR's content would have put every path it touched into main's history. A
 # truncated file list can hide exactly that path, so truncation may confirm
 # NOT-ON-MAIN but must never conclude the content landed.
+#
+# `identical > 0` is not sufficient. One ancillary file can happen to be
+# byte-identical on main while the PR's deliverable remains unlanded. Every
+# visible path must therefore be identical before this fallback green-lights a
+# close; mixed evidence is unverifiable and fails closed.
 classify_content() {
-  local identical="$1" never="$2" truncated="$3"
+  local identical="$1" inconclusive="$2" never="$3" truncated="$4"
   if [ "$never" -gt 0 ]; then
     echo "NOTONMAIN:"
   elif [ "$truncated" = "yes" ]; then
     echo "ERROR:PR file list is truncated (gh returns at most 100 files) — content check cannot rule out an unlanded path"
-  elif [ "$identical" -gt 0 ]; then
-    echo "SQUASHED:"
-  else
+  elif [ "$inconclusive" -gt 0 ]; then
+    echo "ERROR:mixed evidence — $inconclusive of $((identical + inconclusive)) paths are not byte-identical on origin/main, so the PR's complete content cannot be proven landed"
+  elif [ "$identical" -eq 0 ]; then
     echo "ERROR:no path could be matched to origin/main by content"
+  else
+    echo "SQUASHED:"
   fi
 }
 
@@ -240,7 +247,7 @@ pr_content_ref() {
 # Decide by content whether a merged PR's changes are on origin/main, for the
 # case where ancestry cannot see through a squash.
 content_check() {
-  local repo="$1" pr="$2" merge_oid="$3" ref pr_files identical=0 never=0 truncated=no path
+  local repo="$1" pr="$2" merge_oid="$3" ref pr_files identical=0 inconclusive=0 never=0 truncated=no path
   if ! pr_files=$(gh pr view "$pr" --repo "$repo" --json changedFiles,files 2>/dev/null); then
     echo "ERROR:could not list PR files for the content check"
     return
@@ -257,10 +264,11 @@ content_check() {
     [ -n "$path" ] || continue
     case "$(path_evidence "$ref" "$path")" in
       identical) identical=$((identical + 1)) ;;
+      inconclusive) inconclusive=$((inconclusive + 1)) ;;
       never) never=$((never + 1)) ;;
     esac
   done < <(jq -r '.files[].path' <<<"$pr_files")
-  classify_content "$identical" "$never" "$truncated"
+  classify_content "$identical" "$inconclusive" "$never" "$truncated"
 }
 
 check_one() {
@@ -335,7 +343,7 @@ check_one() {
       echo "ON-MAIN  $id   PR #$pr merged into main, commit $merge_oid is on origin/main ($repo)$staleness"
       ;;
     SQUASHED)
-      echo "SQUASHED $id   CONTENT-ON-MAIN-VIA-SQUASH: PR #$pr merged into $base and its merge commit $merge_oid is not an ancestor of origin/main, but the file content it produced is byte-identical on origin/main — the stack root squashed the content in. Safe to close ($repo)$staleness"
+      echo "SQUASHED $id   CONTENT-ON-MAIN-VIA-SQUASH: PR #$pr merged into $base and its merge commit $merge_oid is not an ancestor of origin/main, but every visible path it produced is byte-identical on origin/main — the stack root squashed the content in. Safe to close ($repo)$staleness"
       ;;
     NOTONMAIN)
       echo "FAIL     $id   NOT-ON-MAIN: PR #$pr merged into $base, and paths it touches are absent from origin/main and from main's entire history — do not close ($repo)$staleness"
@@ -443,11 +451,11 @@ self_test() {
   # classify_content: one path that never existed on main outweighs any number
   # of content matches. Regression case: PR #1304 modifies files that are on
   # main while its deliverable check-token-refs.mjs never landed.
-  got=$(classify_content 12 1 no)
+  got=$(classify_content 12 0 1 no)
   [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content reports NOT-ON-MAIN when any path never existed on main" \
     || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
 
-  got=$(classify_content 4 0 no)
+  got=$(classify_content 4 0 0 no)
   [ "$got" = "SQUASHED:" ] && echo "ok: classify_content reports CONTENT-ON-MAIN-VIA-SQUASH when the PR's content is byte-identical on main" \
     || { echo "FAIL: classify_content got '$got', want 'SQUASHED:'"; fail=1; }
 
@@ -455,20 +463,26 @@ self_test() {
   # This is the fail-closed case for a stacked PR whose content has NOT landed:
   # its paths exist on main (so existence alone would wrongly pass it) but none
   # of its blobs match.
-  got=$(classify_content 0 0 no)
+  got=$(classify_content 0 1 0 no)
   [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content returns ERROR rather than passing a PR whose content matches nothing on main" \
+    || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
+
+  # One coincidentally identical ancillary path cannot green-light an
+  # inconclusive deliverable.
+  got=$(classify_content 1 1 0 no)
+  [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content fails closed on one identical plus one inconclusive path" \
     || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
 
   # classify_content: gh caps `files` at 100 (PR #1162 reports changedFiles=236,
   # files=100), and the hidden path could be the unlanded one. Truncation must
   # never conclude the content landed...
-  got=$(classify_content 100 0 yes)
+  got=$(classify_content 100 0 0 yes)
   [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content refuses to conclude on-main from a truncated file list" \
     || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
 
   # ...but a `never` path found within the visible 100 is positive evidence
   # that stands on its own.
-  got=$(classify_content 99 1 yes)
+  got=$(classify_content 99 0 1 yes)
   [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content still reports NOT-ON-MAIN on a truncated list when a never-landed path is visible" \
     || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
 

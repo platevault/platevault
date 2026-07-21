@@ -54,8 +54,10 @@ the working tree beyond fetching the `origin/main` remote-tracking ref.
 
 One `never` path resolves the PR to `NOT-ON-MAIN`. A squash that landed the
 PR's content would have put every path it touched into `main`'s history, so an
-empty log is proof the change never arrived. Otherwise one or more `identical`
-paths resolve to `CONTENT-ON-MAIN-VIA-SQUASH`.
+empty log is proof the change never arrived. Every visible path must be
+`identical` to resolve to `CONTENT-ON-MAIN-VIA-SQUASH`. Any `inconclusive`
+path reports `ERROR` because a matching ancillary file cannot prove that the
+PR's deliverable landed.
 
 Byte-identity is the positive test, not path existence. A stacked PR that only
 modifies pre-existing files would pass an existence test on the strength of
@@ -64,7 +66,7 @@ files that were already on `main`, whether or not its own changes landed.
 ```
 $ scripts/bd-close-guard.sh astro-plan-3ra astro-plan-698 astro-plan-sm7 astro-plan-tlw
 ON-MAIN  astro-plan-3ra   PR #1319 merged into main, commit 38b788943a95c239d5ce65fd6fb2c8aa45a03f31 is on origin/main (platevault/platevault)
-SQUASHED astro-plan-698   CONTENT-ON-MAIN-VIA-SQUASH: PR #1296 merged into feat/sd-token-pipeline and its merge commit fc0a2ad43efb3af763732ffae57c25e036743129 is not an ancestor of origin/main, but the file content it produced is byte-identical on origin/main — the stack root squashed the content in. Safe to close (platevault/platevault)
+ERROR    astro-plan-698   PR #1296 — mixed evidence — 2 of 11 paths are not byte-identical on origin/main, so the PR's complete content cannot be proven landed
 FAIL     astro-plan-sm7   NOT-ON-MAIN: PR #1304 merged into feat/sd-foundation-outputs, and paths it touches are absent from origin/main and from main's entire history — do not close (platevault/platevault)
 FAIL     astro-plan-tlw   PR #1048 is OPEN, not merged (platevault/platevault) — do not close
 ```
@@ -75,19 +77,18 @@ ancestry or by content.
 | Result | Meaning |
 |---|---|
 | `ON-MAIN` | The linked PR's merge commit is an ancestor of `origin/main`. Safe to close. |
-| `SQUASHED` | Ancestry says no, and content the PR produced is byte-identical on `origin/main`. It reached `main` through the stack root's squash. Safe to close. |
+| `SQUASHED` | Ancestry says no, and every visible path the PR produced is byte-identical on `origin/main`. It reached `main` through the stack root's squash. Safe to close. |
 | `FAIL` (`NOT-ON-MAIN`) | Ancestry says no, and at least one path the PR touched has no history on `origin/main`. Do not close. |
 | `FAIL` (open/closed) | The linked PR is `OPEN` or `CLOSED` without merging. Do not close. |
 | `UNKNOWN` | No PR reference could be resolved. Do not close on the strength of this check; verify by hand. |
-| `ERROR` | `bd show`/`gh` lookup failed, the PR reads `MERGED` with no merge commit reported (some squash/rebase merges), the PR's own tree is unreachable, no path matched by content, or the file list was truncated. Do not close on the strength of this check. |
+| `ERROR` | `bd show`/`gh` lookup failed, the PR reads `MERGED` with no merge commit reported (some squash/rebase merges), the PR's own tree is unreachable, any path is inconclusive, no path matched by content, or the file list was truncated. Do not close on the strength of this check. |
 
 ### Limits of the content check
 
 Every gap resolves to `ERROR` or `NOT-ON-MAIN`, never to a green-light.
 
-A PR whose files were all edited further on `main` after landing has no
-`identical` path left and reports `ERROR`. Confirm those by hand against the
-squash commit.
+A PR with any file edited further on `main` after landing reports `ERROR`.
+Confirm it by hand against the squash commit.
 
 `gh pr view --json files` returns at most 100 files: PR #1162 reports
 `changedFiles: 236` and 100 entries. A hidden path could be the unlanded one,
