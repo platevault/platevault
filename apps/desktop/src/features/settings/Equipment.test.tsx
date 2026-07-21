@@ -191,10 +191,102 @@ describe('Equipment', () => {
       // FR-035: sensor type defaults to unknown (null) until chosen.
       sensorType: null,
       passband: null,
+      // Migration 0079: blank geometry persists as absent, never as 0.
+      pixelSizeUm: null,
+      sensorWidthPx: null,
+      sensorHeightPx: null,
     });
     await waitFor(() =>
       expect(screen.getByText('ASI533MC Pro')).toBeInTheDocument(),
     );
+  });
+
+  // ── Sensor geometry (migration 0079) ──────────────────────────────────────
+
+  /** Fills the camera add-form with a name plus the given geometry text. */
+  async function submitCameraWithGeometry(geometry: {
+    pixelSize: string;
+    width: string;
+    height: string;
+  }) {
+    mockCamerasList.mockResolvedValue(ok([]));
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() => expect(mockCamerasList).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Geometry cam' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_pixel_size()),
+      { target: { value: geometry.pixelSize } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_sensor_width()),
+      { target: { value: geometry.width } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_sensor_height()),
+      { target: { value: geometry.height } },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText(m.common_save()));
+      await Promise.resolve();
+    });
+  }
+
+  it('submits sensor geometry entered in the camera form', async () => {
+    mockCamerasCreate.mockResolvedValue(ok(CAMERA));
+    await submitCameraWithGeometry({
+      pixelSize: '3.76',
+      width: '6248',
+      height: '4176',
+    });
+
+    expect(mockCamerasCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pixelSizeUm: 3.76,
+        sensorWidthPx: 6248,
+        sensorHeightPx: 4176,
+      }),
+    );
+  });
+
+  it('rejects non-positive geometry instead of sending it to the backend', async () => {
+    await submitCameraWithGeometry({
+      pixelSize: '0',
+      width: '6248',
+      height: '4176',
+    });
+
+    expect(mockCamerasCreate).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(m.settings_equipment_geometry_invalid()),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a train field of view only when the backend supplies one', async () => {
+    mockTrainsList.mockResolvedValueOnce(
+      ok([
+        { ...TRAIN, id: 'train-fov', name: 'With FOV', fovDiagonalDeg: 3.054 },
+        { ...TRAIN, id: 'train-none', name: 'No FOV', fovDiagonalDeg: null },
+      ]),
+    );
+    render(<Equipment save={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByText('With FOV')).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(m.settings_equipment_fov_value({ degrees: '3.05' })),
+    ).toBeInTheDocument();
+    // Absent geometry reads as "not known" — never a fabricated 0°.
+    expect(
+      screen.getByText(m.settings_equipment_fov_unknown()),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(m.settings_equipment_fov_value({ degrees: '0.00' })),
+    ).not.toBeInTheDocument();
   });
 
   it('edits a telescope via the edit action', async () => {

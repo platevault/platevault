@@ -21,6 +21,8 @@ export { Banner } from './Banner';
 export type { BannerProps, BannerVariant } from './Banner';
 export { Toggle } from './Toggle';
 export type { ToggleProps } from './Toggle';
+export { NumberField } from './NumberField';
+export type { NumberFieldProps } from './NumberField';
 export { SegControl } from './SegControl';
 export type { SegControlProps } from './SegControl';
 export { RadioGroup } from './RadioGroup';

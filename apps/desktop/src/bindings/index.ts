@@ -3040,6 +3040,15 @@ export type Camera = {
 	 *  meaningful when `sensor_type` is `Osc`.
 	 */
 	passband: string[] | null,
+	/**
+	 *  Pixel pitch in micrometres; `None` = not recorded. Square pixels are
+	 *  assumed on both axes, matching [`sessions::fov_diagonal_deg`].
+	 */
+	pixelSizeUm?: number | null,
+	/**  Unbinned sensor width in pixels (FITS `NAXIS1`); `None` = not recorded. */
+	sensorWidthPx?: number | null,
+	/**  Unbinned sensor height in pixels (FITS `NAXIS2`); `None` = not recorded. */
+	sensorHeightPx?: number | null,
 };
 
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
@@ -3470,6 +3479,10 @@ export type CreateCamera = {
 	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
 	sensorType?: SensorType | null,
 	passband?: string[] | null,
+	/**  Sensor geometry; `#[serde(default)]` keeps pre-0079 payloads valid. */
+	pixelSizeUm?: number | null,
+	sensorWidthPx?: number | null,
+	sensorHeightPx?: number | null,
 };
 
 export type CreateFilter = {
@@ -6761,6 +6774,16 @@ export type OpticalTrain = {
 	telescopeId: string | null,
 	cameraId: string | null,
 	focalLengthMm: number,
+	/**
+	 *  Diagonal field of view in degrees, derived from this train's focal
+	 *  length plus the linked camera's sensor geometry.
+	 * 
+	 *  `None` whenever any operand is absent or non-positive — no camera
+	 *  linked, or a camera with no recorded geometry. Absent MUST stay absent:
+	 *  a fabricated `0.0` would read as a real (degenerate) field of view.
+	 *  Derived on read, never stored.
+	 */
+	fovDiagonalDeg?: number | null,
 };
 
 /**
@@ -10126,6 +10149,10 @@ export type UpdateCamera = {
 	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
 	sensorType?: SensorType | null,
 	passband?: string[] | null,
+	/**  Sensor geometry; `#[serde(default)]` keeps pre-0079 payloads valid. */
+	pixelSizeUm?: number | null,
+	sensorWidthPx?: number | null,
+	sensorHeightPx?: number | null,
 };
 
 export type UpdateCleanupPolicy = {

@@ -18,6 +18,16 @@ get_library_root_state
 get_override
 get_run
 hard_violations_to_mismatched
+
+# astro-plan-xhj0: check-dead-callers.sh's corpus builder leaked out-of-line
+# `#[cfg(test)] mod name;` test files (sibling `name.rs` / `name/mod.rs`, no
+# attribute of their own) into the production corpus. Fixing that reveals this
+# one name, confirmed dead by manual review: its only real callers are inline
+# `#[cfg(test)] mod tests { ... }` blocks (already excluded) plus two
+# out-of-line `first_run/tests.rs` files (repositories/first_run and
+# app/core/src/first_run) that newly correctly get excluded too.
+insert_inbox_item
+
 is_first_run
 latest_snapshot
 list_events
