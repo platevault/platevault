@@ -1402,7 +1402,7 @@ async fn upsert_source_group_inserts_on_first_scan() {
     .await
     .unwrap();
 
-    let row = get_inbox_source_group_by_path(pool, "root-1", "2025-10-10/lights")
+    let row = crate::repositories::q_inbox::get_source_group_by_id(pool, "sg-t065-1")
         .await
         .unwrap()
         .expect("source group must exist after upsert");
@@ -1438,8 +1438,10 @@ async fn upsert_source_group_rescan_refreshes_without_duplicate() {
     .await
     .unwrap();
 
-    let first =
-        get_inbox_source_group_by_path(pool, "root-2", "2025-11-01/darks").await.unwrap().unwrap();
+    let first = crate::repositories::q_inbox::get_source_group_by_id(pool, "sg-t065-2")
+        .await
+        .unwrap()
+        .unwrap();
 
     // Record discovered_at so we can verify it is preserved on rescan.
     let discovered_at_first = first.discovered_at.clone();
@@ -1460,8 +1462,12 @@ async fn upsert_source_group_rescan_refreshes_without_duplicate() {
     .await
     .unwrap();
 
-    let second =
-        get_inbox_source_group_by_path(pool, "root-2", "2025-11-01/darks").await.unwrap().unwrap();
+    // Look up by the ORIGINAL id: the rescan's "sg-t065-2-ignored" id must
+    // never have been persisted (ON CONFLICT DO UPDATE does not touch id).
+    let second = crate::repositories::q_inbox::get_source_group_by_id(pool, "sg-t065-2")
+        .await
+        .unwrap()
+        .unwrap();
 
     // Row count is still 1 (not duplicated).
     let count: (i64,) = sqlx::query_as(
@@ -1535,7 +1541,7 @@ async fn upsert_source_group_video_lane_stored() {
     .await
     .unwrap();
 
-    let row = get_inbox_source_group_by_path(pool, "root-vid", "planetary/jupiter")
+    let row = crate::repositories::q_inbox::get_source_group_by_id(pool, "sg-t065-vid")
         .await
         .unwrap()
         .expect("video source group must be persisted");
@@ -1593,7 +1599,7 @@ async fn last_scanned_by_root_reports_max_across_leaf_folders() {
     .await
     .unwrap();
 
-    let later = get_inbox_source_group_by_path(pool, "root-scan", "2025-10-11/lights")
+    let later = crate::repositories::q_inbox::get_source_group_by_id(pool, "sg-scan-b")
         .await
         .unwrap()
         .expect("second group must exist");

@@ -84,30 +84,6 @@ pub async fn upsert_inbox_source_group(
     Ok(())
 }
 
-/// Fetch one `inbox_source_groups` row by `(root_id, relative_path)`.
-///
-/// Returns `None` when no matching row exists.
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn get_inbox_source_group_by_path(
-    pool: &SqlitePool,
-    root_id: &str,
-    relative_path: &str,
-) -> DbResult<Option<InboxSourceGroupRow>> {
-    let row = sqlx::query_as::<_, InboxSourceGroupRow>(
-        "SELECT id, root_id, relative_path, discovered_at, last_scanned_at,
-                content_signature, format, lane, child_count
-         FROM inbox_source_groups
-         WHERE root_id = ? AND relative_path = ?",
-    )
-    .bind(root_id)
-    .bind(relative_path)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
-}
-
 /// Most recent `inbox_source_groups.last_scanned_at` per `root_id` (P6a —
 /// `roots.list`'s `lastScanned` field).
 ///
@@ -183,14 +159,12 @@ pub struct InboxSourceGroupListRow {
 /// `file_count > 0` carries the FR-015 master carve-out. A folder of detected
 /// calibration masters has nothing left for classification to split, and its
 /// masters are `inbox_items` rows with a NULL `source_group_id`
-/// (`q_desktop.rs::insert_inbox_master_item`; a master row takes the same
-/// `group_key = ''` default as the folder placeholder, and stays unlinked only
-/// because its `relative_path` is the master FILE's path — `scan.rs` `rel_path`
-/// — which never equals the folder path [`link_placeholder_to_source_group`]
-/// matches on), so the `NOT EXISTS` clause alone
-/// would surface such a folder as an unclassified row *in addition to* the
-/// master rows already representing it. Scan writes `file_count` excluding
-/// masters, so that folder scores 0 here.
+/// (`q_desktop.rs::insert_inbox_master_item`), stored under the master FILE's
+/// own `relative_path` (`scan.rs` `rel_path`) rather than the folder's — so
+/// the `NOT EXISTS` clause alone would surface such a folder as an
+/// unclassified row *in addition to* the master rows already representing
+/// it. Scan writes `file_count` excluding masters, so that folder scores 0
+/// here.
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
