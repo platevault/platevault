@@ -331,13 +331,17 @@ pub async fn find_or_create_camera_by_alias(
     }
 
     // Create as auto-detected — the alias becomes both the name and the sole
-    // alias. Sensor type stays unknown (= mono behavior, FR-038) until the
-    // user sets it in Settings → Equipment.
+    // alias. Sensor type stays unknown (= mono behavior, FR-038) and sensor
+    // geometry stays absent (= no derived FOV, never a fabricated zero) until
+    // the user sets them in Settings → Equipment.
     let req = CreateCamera {
         name: alias.to_owned(),
         aliases: vec![alias.to_owned()],
         sensor_type: None,
         passband: None,
+        pixel_size_um: None,
+        sensor_width_px: None,
+        sensor_height_px: None,
     };
     let mut camera = match repo::create_camera(pool, &req).await {
         Ok(camera) => camera,
@@ -809,6 +813,9 @@ mod tests {
             auto_detected: false,
             sensor_type: None,
             passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
         }
     }
 
@@ -863,6 +870,9 @@ mod tests {
             aliases: vec![],
             sensor_type: None,
             passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
         };
         let camera = create_camera(db.pool(), &bus, &req).await.unwrap();
 

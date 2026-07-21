@@ -5,7 +5,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 use desktop_shell::{build_app, run_app};
-use persistence_db::Database;
+
 use tauri::Manager;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -41,7 +41,7 @@ async fn main() {
     // Build the Tauri app first so we can access the platform path resolver
     // (needed to locate the log directory before initialising tracing, and
     // the SQLite database path below). The event loop is NOT started yet —
-    // that happens in `run_app` after the database is ready.
+    // that happens in `run_app`.
     let app = build_app();
 
     // Spec 051 US7 (T041/T042): structured logging with both a stderr target
@@ -120,39 +120,10 @@ async fn main() {
         format!("sqlite://{}?mode=rwc", db_path.display())
     };
 
-    let db = Database::connect(&db_url).await.expect("connect SQLite");
-    if let Err(error) = db.migrate().await {
-        // A raw `expect()` here produced `Migration(VersionMismatch(71))` and a
-        // stack trace — technically true, actionable by nobody. Translate the
-        // recognised "this file predates this build" cases into a named failure
-        // that says which migration diverged and what to do about it, and exit
-        // instead of panicking.
-        if let Some(detail) = persistence_db::migration_divergence_detail(&error) {
-            let message = format!(
-                "Database schema does not match this build: {detail}.\n\
-                 \n\
-                 This database was created by a different revision of PlateVault. \
-                 It is a development-only condition — switching between branches \
-                 that each added migrations leaves a file whose migration history \
-                 no longer matches the running binary.\n\
-                 \n\
-                 To recover, delete the database and let it be recreated:\n\
-                 \x20 {db_url}\n\
-                 \n\
-                 Set ALM_DB_URL to point at a different file if you need to keep this one."
-            );
-            tracing::error!("{message}");
-            eprintln!("{message}");
-            std::process::exit(1);
-        }
-        panic!("run migrations: {error}");
-    }
-
-    // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
-    // cache. Opening is fast (no warm yet — `run_app` warms it in the
-    // background so a large seed never blocks startup).
-    let resolve_cache_path = data_dir.join("simbad-cache.redb");
-    let resolve_cache = desktop_shell::resolve_cache::open_or_in_memory(&resolve_cache_path);
-
-    run_app(app, db.pool().clone(), resolve_cache, resolve_cache_path);
+    // Connect + migrate happen inside `run_app`, on a task started once the
+    // event loop is already pumping. Tauri creates config-declared windows
+    // during `app.run()` rather than `.build()`, so doing that work here left
+    // a long migration with no window on screen at all — not a blank window,
+    // no window.
+    run_app(app, db_url, data_dir);
 }

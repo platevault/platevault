@@ -100,7 +100,22 @@ case "${1:-show}" in
     ;;
   apply)
     verify_contexts || { echo "refusing to apply: hyphen/em-dash problem" >&2; exit 1; }
-    verify_names_exist || echo "  (continuing despite name warnings)"
+    # Refuse, as verify_contexts does. This used to warn and continue, which
+    # made the check advisory against the very outcome it exists to prevent:
+    # protecting on a context no workflow emits leaves every PR waiting forever
+    # for a check that can never arrive. PR #1313 hit that shape from the other
+    # direction — a skipped matrix job never published its expanded names — and
+    # sat unmergeable until it was admin-merged.
+    if ! verify_names_exist; then
+      if [ "${ALLOW_MISSING_NAMES:-}" = "1" ]; then
+        echo "  (continuing: ALLOW_MISSING_NAMES=1)" >&2
+      else
+        echo "refusing to apply: a required context matches no workflow job name." >&2
+        echo "  Applying this would leave PRs permanently pending on that check." >&2
+        echo "  If the workflow lands separately, re-run with ALLOW_MISSING_NAMES=1." >&2
+        exit 1
+      fi
+    fi
     gh api -X PUT "repos/$REPO/branches/$BRANCH/protection" --input "$CONFIG"
     ;;
   remove)

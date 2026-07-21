@@ -1485,7 +1485,10 @@ export const commands = {
 	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 	 * 
 	 *  # Errors
-	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
+	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, `"file.not_found"`,
+	 *  or `"internal.database"` — the re-aggregation's writes (classification,
+	 *  needs-review sentinel, breakdown rows) surface a persistence failure rather
+	 *  than returning a response that describes state which was never saved.
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
@@ -1633,6 +1636,21 @@ export const commands = {
 	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
 	 */
 	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
+	/**
+	 *  `inbox.attribution.suggest` — ranked framing/project attribution candidates
+	 *  for a light-frame Inbox item (spec 008 US7/FR-019, F-Framing-5).
+	 * 
+	 *  Read-only: suggests, never merges (FR-020). The user picks one and the pick
+	 *  travels as `inbox.confirm`'s `chosenAttribution` (FR-022) on a **single**
+	 *  confirm — the candidates must be readable before that confirm, because
+	 *  confirm creates the plan that blocks any second confirm on the item.
+	 * 
+	 *  Returns an empty list for non-light items.
+	 * 
+	 *  # Errors
+	 *  `internal.database` — a query failed.
+	 */
+	inboxAttributionSuggest: (inboxItemId: string) => typedError<IngestionAttributionCandidateDto_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("inbox_attribution_suggest", { inboxItemId })),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
@@ -3022,6 +3040,15 @@ export type Camera = {
 	 *  meaningful when `sensor_type` is `Osc`.
 	 */
 	passband: string[] | null,
+	/**
+	 *  Pixel pitch in micrometres; `None` = not recorded. Square pixels are
+	 *  assumed on both axes, matching [`sessions::fov_diagonal_deg`].
+	 */
+	pixelSizeUm?: number | null,
+	/**  Unbinned sensor width in pixels (FITS `NAXIS1`); `None` = not recorded. */
+	sensorWidthPx?: number | null,
+	/**  Unbinned sensor height in pixels (FITS `NAXIS2`); `None` = not recorded. */
+	sensorHeightPx?: number | null,
 };
 
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
@@ -3452,6 +3479,10 @@ export type CreateCamera = {
 	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
 	sensorType?: SensorType | null,
 	passband?: string[] | null,
+	/**  Sensor geometry; `#[serde(default)]` keeps pre-0079 payloads valid. */
+	pixelSizeUm?: number | null,
+	sensorWidthPx?: number | null,
+	sensorHeightPx?: number | null,
 };
 
 export type CreateFilter = {
@@ -6880,6 +6911,16 @@ export type OpticalTrain = {
 	telescopeId: string | null,
 	cameraId: string | null,
 	focalLengthMm: number,
+	/**
+	 *  Diagonal field of view in degrees, derived from this train's focal
+	 *  length plus the linked camera's sensor geometry.
+	 * 
+	 *  `None` whenever any operand is absent or non-positive — no camera
+	 *  linked, or a camera with no recorded geometry. Absent MUST stay absent:
+	 *  a fabricated `0.0` would read as a real (degenerate) field of view.
+	 *  Derived on read, never stored.
+	 */
+	fovDiagonalDeg?: number | null,
 };
 
 /**
@@ -10238,6 +10279,10 @@ export type UpdateCamera = {
 	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
 	sensorType?: SensorType | null,
 	passband?: string[] | null,
+	/**  Sensor geometry; `#[serde(default)]` keeps pre-0079 payloads valid. */
+	pixelSizeUm?: number | null,
+	sensorWidthPx?: number | null,
+	sensorHeightPx?: number | null,
 };
 
 export type UpdateCleanupPolicy = {

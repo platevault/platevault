@@ -15,8 +15,11 @@
  *   <button>{m.common_save()}</button>
  *   <p>{m.sessions_count({ count })}</p>   // interpolation is type-checked
  *
- * English is hard-pinned (baseLocale strategy); there is no language switcher in
- * this release (FR-004). Adding a locale later requires only a new
- * `messages/<locale>.json` — no call-site changes (FR-005).
+ * The active locale is a persisted user preference (spec 061), resolved via
+ * the `["custom-almSettings", "preferredLanguage", "baseLocale"]` strategy
+ * chain (`vite.config.ts`) — see `src/data/locale.ts`. This supersedes the
+ * earlier hard-pinned English of spec 046 FR-004. Adding a shipped locale
+ * requires a new `messages/<locale>.json`, a `project.inlang/settings.json`
+ * entry, and a `src/data/locale-meta.ts` entry — no call-site changes here.
  */
 export { m } from '@/paraglide/messages';

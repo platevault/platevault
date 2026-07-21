@@ -107,3 +107,40 @@ describe('CatalogueSettingsControl mount-read vs user-toggle race', () => {
     expect(toggleFor(target)).not.toBeChecked();
   });
 });
+
+describe('CatalogueSettingsControl — restore defaults (#802)', () => {
+  it('renders a Restore defaults control for the Target Resolution catalogue pane', () => {
+    mockLoad.mockResolvedValue([...DEFAULT_ENABLED_CATALOGUES]);
+    render(<CatalogueSettingsControl />);
+    expect(
+      screen.getByRole('button', { name: /restore defaults/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('resets every catalogue toggle to DEFAULT_ENABLED_CATALOGUES', async () => {
+    // Start from a non-default state: only the first non-default catalogue on.
+    const nonDefault = PLANNER_CATALOGS.find(
+      (c) => !DEFAULT_ENABLED_CATALOGUES.includes(c.id),
+    );
+    if (!nonDefault) throw new Error('no non-default catalogue to exercise');
+    mockLoad.mockResolvedValue([nonDefault.id]);
+
+    render(<CatalogueSettingsControl />);
+    await act(async () => {});
+
+    expect(toggleFor(nonDefault)).toBeChecked();
+    const defaultOn = firstDefaultOn();
+    expect(toggleFor(defaultOn)).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: /restore defaults/i }));
+    await act(async () => {});
+
+    expect(toggleFor(defaultOn)).toBeChecked();
+    expect(toggleFor(nonDefault)).not.toBeChecked();
+    expect(mockSave).toHaveBeenLastCalledWith(
+      PLANNER_CATALOGS.map((c) => c.id).filter((id) =>
+        DEFAULT_ENABLED_CATALOGUES.includes(id),
+      ),
+    );
+  });
+});
