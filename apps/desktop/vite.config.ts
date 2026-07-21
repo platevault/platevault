@@ -32,13 +32,17 @@ export default defineConfig(({ mode, command }) => {
   return {
     plugins: [
       // Compile the message catalog (messages/*.json → src/paraglide/) on dev
-      // start + build, with HMR when a message changes. English is hard-pinned
-      // via the baseLocale strategy: no locale detection, no switcher (spec 046
-      // FR-004). The generated src/paraglide/ output is git-ignored.
+      // start + build, with HMR when a message changes. Strategy chain (spec
+      // 061 research D1), evaluated in order: a user's saved choice
+      // ("custom-almSettings", src/data/locale.ts) beats the OS/webview
+      // language ("preferredLanguage"), which beats the compiled-in
+      // "baseLocale" (en-GB) fallback. This supersedes the earlier hard-pinned
+      // English of spec 046 FR-004 — that constraint is retired by spec 061.
+      // The generated src/paraglide/ output is git-ignored.
       paraglideVitePlugin({
         project: "./project.inlang",
         outdir: "./src/paraglide",
-        strategy: ["baseLocale"],
+        strategy: ["custom-almSettings", "preferredLanguage", "baseLocale"],
         // Emit .d.ts alongside the compiled .js so a bare `tsc --noEmit` (which
         // does not run Vite) always finds declarations for `@/paraglide/*` —
         // keeps every compile path (dev, build, vitest, typecheck) consistent.

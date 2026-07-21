@@ -1,7 +1,8 @@
 use super::{
-    descriptors, is_catalogues_enabled_key, is_tools_auto_detected_key, is_tools_bundle_id_key,
-    is_tools_enabled_key, is_tools_executable_path_key, is_workflow_profile_attribution_window_key,
-    is_workflow_profile_watch_extensions_key, ContractError, ErrorCode, ErrorSeverity, Value,
+    descriptors, is_catalogues_enabled_key, is_locale_key, is_tools_auto_detected_key,
+    is_tools_bundle_id_key, is_tools_enabled_key, is_tools_executable_path_key,
+    is_workflow_profile_attribution_window_key, is_workflow_profile_watch_extensions_key,
+    ContractError, ErrorCode, ErrorSeverity, Value, SHIPPED_LOCALES,
 };
 
 // ── Value validation ──────────────────────────────────────────────────────
@@ -80,6 +81,16 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
         }
         _ if is_catalogues_enabled_key(key) => {
             descriptors::check_rule(descriptors::ValidationRule::CatalogueIds, value, &invalid)?;
+        }
+        _ if is_locale_key(key) => {
+            descriptors::check_rule(
+                descriptors::ValidationRule::EnumStr {
+                    allowed: &SHIPPED_LOCALES,
+                    expected_msg: "must be \"en-GB\" or \"pt-BR\"",
+                },
+                value,
+                &invalid,
+            )?;
         }
         _ => {
             // No additional validation for other keys.
