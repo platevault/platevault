@@ -87,115 +87,120 @@ fn frame_type_of(name: &str) -> FrameType {
     }
 }
 
-fn build_cases() -> Vec<Case> {
-    let mut cases = Vec::new();
+/// Pushes the seven per-type-family cells (raw/master × header/path/negative)
+/// for one `TypeSpec` onto `cases`. Split out of `build_cases` so each
+/// function stays under clippy's `too_many_lines` threshold.
+fn push_type_cases(cases: &mut Vec<Case>, t: &TypeSpec) {
+    let ft = frame_type_of(t.name);
 
-    for t in TYPES {
-        let ft = frame_type_of(t.name);
-
-        // ── raw · header (positive): plain IMAGETYP, no master signal ──────
+    // ── raw · header (positive): plain IMAGETYP, no master signal ──────
+    cases.push(Case {
+        name: leak(format!("{}_raw_header_primary", t.name)),
+        imagetyp: Some(t.primary),
+        stack_count: None,
+        file_name: leak(format!("{}_frame_0001.fits", t.lower)),
+        rel_path: leak(format!("Calibration/{}s/", t.name)),
+        expected: Some((ft, false)),
+    });
+    for (i, syn) in t.synonyms.iter().enumerate() {
         cases.push(Case {
-            name: leak(format!("{}_raw_header_primary", t.name)),
-            imagetyp: Some(t.primary),
+            name: leak(format!("{}_raw_header_synonym_{i}", t.name)),
+            imagetyp: Some(syn),
             stack_count: None,
-            file_name: leak(format!("{}_frame_0001.fits", t.lower)),
+            file_name: leak(format!("{}_frame_syn{i}.fits", t.lower)),
             rel_path: leak(format!("Calibration/{}s/", t.name)),
             expected: Some((ft, false)),
-        });
-        for (i, syn) in t.synonyms.iter().enumerate() {
-            cases.push(Case {
-                name: leak(format!("{}_raw_header_synonym_{i}", t.name)),
-                imagetyp: Some(syn),
-                stack_count: None,
-                file_name: leak(format!("{}_frame_syn{i}.fits", t.lower)),
-                rel_path: leak(format!("Calibration/{}s/", t.name)),
-                expected: Some((ft, false)),
-            });
-        }
-        // STACKCNT==1 is decisive evidence of "not stacked" — still raw.
-        cases.push(Case {
-            name: leak(format!("{}_raw_header_stackcnt_one_not_master", t.name)),
-            imagetyp: Some(t.primary),
-            stack_count: Some(1),
-            file_name: leak(format!("{}_frame_0002.fits", t.lower)),
-            rel_path: leak(format!("Calibration/{}s/", t.name)),
-            expected: Some((ft, false)),
-        });
-
-        // ── raw · name-only (NEGATIVE): no IMAGETYP, type token in name ────
-        // Filenames must never classify a raw — this is the #513 regression.
-        cases.push(Case {
-            name: leak(format!("{}_raw_nameonly_negative", t.name)),
-            imagetyp: None,
-            stack_count: None,
-            file_name: leak(format!("{}_sub_0001.fits", t.lower)),
-            rel_path: "Unsorted/",
-            expected: None,
-        });
-
-        // ── master · header (Siril STACKCNT), name/path carry NO master
-        // token so this isolates header evidence from the naming heuristic.
-        cases.push(Case {
-            name: leak(format!("{}_master_header_stackcnt", t.name)),
-            imagetyp: Some(t.primary),
-            stack_count: Some(30),
-            file_name: leak(format!("{}_0030combined.fits", t.lower)),
-            rel_path: leak(format!("Calibration/{}s/Combined30/", t.name)),
-            expected: Some((ft, true)),
-        });
-
-        // ── master · header (PixInsight "Master X"), incl. lowercase case ──
-        cases.push(Case {
-            name: leak(format!("{}_master_header_pi", t.name)),
-            imagetyp: Some(t.pi_label),
-            stack_count: None,
-            file_name: leak(format!("master{}.xisf", t.name)),
-            rel_path: leak(format!("Calibration/Masters/master{}s/", t.name)),
-            expected: Some((ft, true)),
-        });
-        cases.push(Case {
-            name: leak(format!("{}_master_header_pi_lowercase", t.name)),
-            imagetyp: Some(leak(t.pi_label.to_ascii_lowercase())),
-            stack_count: None,
-            file_name: leak(format!("master{}_lc.xisf", t.name)),
-            rel_path: leak(format!("Calibration/Masters/master{}s/", t.name)),
-            expected: Some((ft, true)),
-        });
-
-        // ── master · path fallback (no header at all) ───────────────────────
-        // Exercises `infer_frame_type_from_path`: type comes from the path
-        // itself only because the path also signals "master".
-        cases.push(Case {
-            name: leak(format!("{}_master_path_fallback", t.name)),
-            imagetyp: None,
-            stack_count: None,
-            file_name: leak(format!("master{}_A.fits", t.name)),
-            rel_path: leak(format!("Calibration/Masters/master{}s/", t.name)),
-            expected: Some((ft, true)),
-        });
-        cases.push(Case {
-            name: leak(format!("{}_master_path_stacked_suffix", t.name)),
-            imagetyp: None,
-            stack_count: None,
-            file_name: leak(format!("{}_LUM_stacked.fits", t.lower)),
-            rel_path: "Processed/",
-            expected: Some((ft, true)),
-        });
-
-        // ── master · NEGATIVE: STACKCNT present but no IMAGETYP and no
-        // master-signalling path — Siril needs IMAGETYP, PixInsight needs a
-        // master-signalling path when IMAGETYP is absent. Must stay None.
-        cases.push(Case {
-            name: leak(format!("{}_master_negative_stackcnt_no_header_no_path", t.name)),
-            imagetyp: None,
-            stack_count: Some(30),
-            file_name: leak(format!("integration_{}_20250503.fits", t.lower)),
-            rel_path: "Unsorted/",
-            expected: None,
         });
     }
+    // STACKCNT==1 is decisive evidence of "not stacked" — still raw.
+    cases.push(Case {
+        name: leak(format!("{}_raw_header_stackcnt_one_not_master", t.name)),
+        imagetyp: Some(t.primary),
+        stack_count: Some(1),
+        file_name: leak(format!("{}_frame_0002.fits", t.lower)),
+        rel_path: leak(format!("Calibration/{}s/", t.name)),
+        expected: Some((ft, false)),
+    });
 
-    // ── Global: header-vs-name CONFLICT — header MUST win ──────────────────
+    // ── raw · name-only (NEGATIVE): no IMAGETYP, type token in name ────
+    // Filenames must never classify a raw — this is the #513 regression.
+    cases.push(Case {
+        name: leak(format!("{}_raw_nameonly_negative", t.name)),
+        imagetyp: None,
+        stack_count: None,
+        file_name: leak(format!("{}_sub_0001.fits", t.lower)),
+        rel_path: "Unsorted/",
+        expected: None,
+    });
+
+    // ── master · header (Siril STACKCNT), name/path carry NO master
+    // token so this isolates header evidence from the naming heuristic.
+    cases.push(Case {
+        name: leak(format!("{}_master_header_stackcnt", t.name)),
+        imagetyp: Some(t.primary),
+        stack_count: Some(30),
+        file_name: leak(format!("{}_0030combined.fits", t.lower)),
+        rel_path: leak(format!("Calibration/{}s/Combined30/", t.name)),
+        expected: Some((ft, true)),
+    });
+
+    // ── master · header (PixInsight "Master X"), incl. lowercase case ──
+    cases.push(Case {
+        name: leak(format!("{}_master_header_pi", t.name)),
+        imagetyp: Some(t.pi_label),
+        stack_count: None,
+        file_name: leak(format!("master{}.xisf", t.name)),
+        rel_path: leak(format!("Calibration/Masters/master{}s/", t.name)),
+        expected: Some((ft, true)),
+    });
+    cases.push(Case {
+        name: leak(format!("{}_master_header_pi_lowercase", t.name)),
+        imagetyp: Some(leak(t.pi_label.to_ascii_lowercase())),
+        stack_count: None,
+        file_name: leak(format!("master{}_lc.xisf", t.name)),
+        rel_path: leak(format!("Calibration/Masters/master{}s/", t.name)),
+        expected: Some((ft, true)),
+    });
+
+    // ── master · path fallback (no header at all) ───────────────────────
+    // Exercises `infer_frame_type_from_path`: type comes from the path
+    // itself only because the path also signals "master".
+    cases.push(Case {
+        name: leak(format!("{}_master_path_fallback", t.name)),
+        imagetyp: None,
+        stack_count: None,
+        file_name: leak(format!("master{}_A.fits", t.name)),
+        rel_path: leak(format!("Calibration/Masters/master{}s/", t.name)),
+        expected: Some((ft, true)),
+    });
+    cases.push(Case {
+        name: leak(format!("{}_master_path_stacked_suffix", t.name)),
+        imagetyp: None,
+        stack_count: None,
+        file_name: leak(format!("{}_LUM_stacked.fits", t.lower)),
+        rel_path: "Processed/",
+        expected: Some((ft, true)),
+    });
+
+    // ── master · NEGATIVE: STACKCNT present but no IMAGETYP and no
+    // master-signalling path — Siril needs IMAGETYP, PixInsight needs a
+    // master-signalling path when IMAGETYP is absent. Must stay None.
+    cases.push(Case {
+        name: leak(format!("{}_master_negative_stackcnt_no_header_no_path", t.name)),
+        imagetyp: None,
+        stack_count: Some(30),
+        file_name: leak(format!("integration_{}_20250503.fits", t.lower)),
+        rel_path: "Unsorted/",
+        expected: None,
+    });
+}
+
+/// Pushes the type-independent cells (header-vs-name conflicts, stacked-light
+/// integration, unclassifiable inputs) onto `cases`. Split out of
+/// `build_cases` so each function stays under clippy's `too_many_lines`
+/// threshold.
+fn push_global_cases(cases: &mut Vec<Case>) {
+    // ── header-vs-name CONFLICT — header MUST win ──────────────────
     cases.push(Case {
         name: "conflict_header_dark_named_masterflat",
         imagetyp: Some("DARK"),
@@ -221,7 +226,7 @@ fn build_cases() -> Vec<Case> {
         expected: Some((FrameType::Flat, true)),
     });
 
-    // ── Global: master LIGHT (integration) via STACKCNT — a stacked light
+    // ── master LIGHT (integration) via STACKCNT — a stacked light
     // is a legitimate master-detection outcome, not just calibration frames.
     cases.push(Case {
         name: "master_light_via_stackcnt_integration",
@@ -232,7 +237,7 @@ fn build_cases() -> Vec<Case> {
         expected: Some((FrameType::Light, true)),
     });
 
-    // ── Global: unknown / unclassifiable ────────────────────────────────────
+    // ── unknown / unclassifiable ────────────────────────────────────
     cases.push(Case {
         name: "unknown_imagetyp_value",
         imagetyp: Some("JUNKTYPE"),
@@ -261,6 +266,15 @@ fn build_cases() -> Vec<Case> {
         rel_path: "Unknown/",
         expected: None,
     });
+}
+
+fn build_cases() -> Vec<Case> {
+    let mut cases = Vec::new();
+
+    for t in TYPES {
+        push_type_cases(&mut cases, t);
+    }
+    push_global_cases(&mut cases);
 
     cases
 }
@@ -300,7 +314,7 @@ fn detect_master_permutation_matrix() {
 
 /// Provenance check for a sample of cells where the winning detector matters:
 /// STACKCNT evidence must come from Siril; a no-header path-fallback master
-/// can only come from PixInsight (Siril requires IMAGETYP).
+/// can only come from `PixInsight` (Siril requires IMAGETYP).
 #[test]
 fn detect_master_permutation_matrix_provenance_sample() {
     let stackcnt_case = DetectInput {
