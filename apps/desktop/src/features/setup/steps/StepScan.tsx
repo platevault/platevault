@@ -35,6 +35,15 @@ interface SourceScanState {
   items: InboxItemSummary[];
   /** Per-item classify results keyed by inboxItemId. */
   classifications: Map<string, InboxClassifyResponse>;
+  /**
+   * Items whose classify call FAILED, as opposed to succeeding with nothing to
+   * report. Without this the two are indistinguishable downstream: a missing
+   * map entry renders exactly like an empty classification, so a crashed
+   * folder showed an em dash and silently dropped out of the per-kind chips
+   * while still counting toward the header's file total — the same
+   * reconciliation gap issue #513 closed for unmapped IMAGETYP.
+   */
+  classifyFailures: Set<string>;
   error?: string;
 }
 
@@ -94,7 +103,15 @@ interface SourceSummaryProps {
 }
 
 function SourceSummary({ state }: SourceSummaryProps) {
-  const { source, rootId, phase, items, classifications, error } = state;
+  const {
+    source,
+    rootId,
+    phase,
+    items,
+    classifications,
+    classifyFailures,
+    error,
+  } = state;
   const [expanded, setExpanded] = useState(false);
 
   // Spec 048 US4 T035: the wizard's Scan step is the earliest point a newly
@@ -121,6 +138,15 @@ function SourceSummary({ state }: SourceSummaryProps) {
       kindCounts.set(
         'master',
         (kindCounts.get('master') ?? 0) + item.fileCount,
+      );
+      continue;
+    }
+    if (classifyFailures.has(item.inboxItemId)) {
+      // Count them so the chips still add up to the header total; a folder that
+      // failed must not simply vanish from the breakdown.
+      kindCounts.set(
+        'failed',
+        (kindCounts.get('failed') ?? 0) + item.fileCount,
       );
       continue;
     }
@@ -185,7 +211,11 @@ function SourceSummary({ state }: SourceSummaryProps) {
       // Individual calibration masters carry their frame type on the item
       // itself (spec 040 FR-006); grouped sub-frame folders rely on the
       // classify breakdown instead.
-      types: item.isMaster ? masterLabel(item) : types || '—',
+      types: item.isMaster
+        ? masterLabel(item)
+        : classifyFailures.has(item.inboxItemId)
+          ? m.setup_scan_classify_failed()
+          : types || '—',
     };
   });
 
@@ -404,6 +434,7 @@ export function StepScan({
             phase: 'pending',
             items: [],
             classifications: new Map(),
+            classifyFailures: new Set(),
           });
           continue;
         }
@@ -423,6 +454,7 @@ export function StepScan({
             phase: 'pending',
             items: [],
             classifications: new Map(),
+            classifyFailures: new Set(),
           });
           continue;
         }
@@ -437,6 +469,7 @@ export function StepScan({
           phase: 'error',
           items: [],
           classifications: new Map(),
+          classifyFailures: new Set(),
           error: m.setup_scan_resolution_failed(),
         });
       }
@@ -474,6 +507,7 @@ export function StepScan({
 
             // 2. Classify each discovered item
             const classifications = new Map<string, InboxClassifyResponse>();
+            const classifyFailures = new Set<string>();
             await Promise.allSettled(
               items.map(async (item) => {
                 try {
@@ -485,7 +519,10 @@ export function StepScan({
                   );
                   classifications.set(item.inboxItemId, cls);
                 } catch {
-                  // Classification failure for one item: skip but don't abort
+                  // Don't abort the whole scan for one item — but do record it.
+                  // Swallowing it entirely made a crash look like a clean
+                  // "nothing detected" result.
+                  classifyFailures.add(item.inboxItemId);
                 }
               }),
             );
@@ -498,6 +535,7 @@ export function StepScan({
                 phase: 'done',
                 items,
                 classifications,
+                classifyFailures,
               };
               return next;
             });

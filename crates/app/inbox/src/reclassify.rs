@@ -219,7 +219,7 @@ pub async fn reclassify(
         },
     )
     .await
-    .ok();
+    .map_err(|e| db_internal_ctx(e, "upsert inbox classification"))?;
 
     // 6b. Resolve the item out of needs-review now that the check above
     // (issue #724) confirmed every mandatory attribute is supplied.
@@ -233,6 +233,12 @@ pub async fn reclassify(
     // identity, and `ON CONFLICT(root_id, relative_path, group_key)` converges
     // it onto any sibling already holding that identity, because two rows
     // sharing a classification identity in one folder ARE the same item.
+    //
+    // The write PROPAGATES rather than `.ok()`s: #1376 established that
+    // discarding it lets a SQLITE_BUSY or full disk return a success response
+    // describing state that was never saved. That fix landed on main against
+    // `clear_needs_review_sentinel`, which 058 replaced with this upsert —
+    // the reasoning carries over unchanged.
     if let Some(ft) = needs_review_resolved_ft {
         if let Some(source_group_id) = item.source_group_id.as_deref() {
             inbox_repo::upsert_inbox_sub_item(
@@ -252,7 +258,7 @@ pub async fn reclassify(
                 },
             )
             .await
-            .ok();
+            .map_err(|e| db_internal_ctx(e, "resolve inbox item out of needs-review"))?;
         }
     }
 
@@ -284,7 +290,7 @@ pub async fn reclassify(
                 &sample_json,
             )
             .await
-            .ok();
+            .map_err(|e| db_internal_ctx(e, "upsert inbox breakdown row"))?;
         }
     }
 
