@@ -1893,6 +1893,35 @@ impl E2eApp {
         self.shutdown().await
     }
 
+    /// Wait until the isolated WebView2 profile has materialized persisted
+    /// storage after the native window has closed. WebView2 writes LevelDB
+    /// files asynchronously during teardown; observing the profile here
+    /// prevents a relaunch from racing that final flush on Windows.
+    #[cfg(target_os = "windows")]
+    pub async fn wait_for_webview_storage_flush() -> Result<()> {
+        let dir = lookup(&instance_env().vars, "WEBVIEW2_USER_DATA_FOLDER")
+            .map(PathBuf::from)
+            .context("WEBVIEW2_USER_DATA_FOLDER was not configured")?;
+        let leveldb = dir.join("Default").join("Local Storage").join("leveldb");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let has_files = std::fs::read_dir(&leveldb)
+                .ok()
+                .map(|entries| entries.flatten().any(|entry| entry.path().is_file()))
+                .unwrap_or(false);
+            if has_files {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                anyhow::bail!(
+                    "WebView2 profile did not expose persisted LevelDB files at {}",
+                    leveldb.display()
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
     /// if present. Quitting the session (a `DELETE /session/{id}` through the
     /// CLI) makes the CLI terminate the app process it launched on our

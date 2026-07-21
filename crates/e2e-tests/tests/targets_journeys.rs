@@ -875,6 +875,18 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
     Ok((placement.to_string(), width))
 }
 
+/// Return the raw preference bytes held by the live webview. Keeping this
+/// assertion separate from the resolved dock value proves the write happened
+/// before native shutdown rather than being reconstructed by the UI.
+async fn read_raw_preferences(app: &E2eApp) -> anyhow::Result<String> {
+    let raw: Value = app
+        .driver
+        .execute("return localStorage.getItem('alm-preferences');", vec![])
+        .await?
+        .convert()?;
+    raw.as_str().map(str::to_owned).context("alm-preferences was absent before shutdown")
+}
+
 /// The rendered width of the side dock, as the browser actually lays it out.
 async fn rendered_side_width(app: &E2eApp) -> anyhow::Result<i64> {
     let v: Value = app
@@ -1022,8 +1034,17 @@ async fn targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Resul
          drag did not reach the handler, or clamping pinned it back to the default."
     );
 
+    let raw_before_shutdown = read_raw_preferences(&app).await?;
+    anyhow::ensure!(
+        raw_before_shutdown.contains("detailDock"),
+        "alm-preferences did not contain detailDock before shutdown: {raw_before_shutdown}"
+    );
+
     // Clean window close: WebView2 flushes localStorage here and not on a kill.
     app.graceful_shutdown().await?;
+
+    #[cfg(target_os = "windows")]
+    E2eApp::wait_for_webview_storage_flush().await?;
 
     // Cold start: new process, empty module cache, storage read from disk.
     let app = E2eApp::relaunch().await?;
