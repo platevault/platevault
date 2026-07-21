@@ -32,6 +32,9 @@
 //! (Ref: R-PlanOpen) as the expected degraded-mode behaviour.
 #![allow(clippy::doc_markdown)]
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex as StdMutex};
+
 use audit::bus::EventBus;
 use audit::event_bus::{
     PlanApplyingCompleted, PlanDiscarded, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_DISCARDED,
@@ -48,6 +51,12 @@ use tokio::sync::{broadcast, Mutex};
 /// Serializes the check-and-insert sequence shared by the event listener and
 /// repair sweep. Both run in this process and may observe the same plan link.
 static MASTER_REGISTRATION_LOCK: Mutex<()> = Mutex::const_new(());
+
+/// Prevents the event listener and immediate repair sweep from applying the
+/// same terminal plan concurrently. The database link is removed only after
+/// ingest completes, so both paths can otherwise observe the same work item.
+static COMPLETED_PLAN_IDS: LazyLock<StdMutex<HashSet<String>>> =
+    LazyLock::new(|| StdMutex::new(HashSet::new()));
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -189,6 +198,30 @@ async fn handle_plan_completed(
 /// that guard: it logs and swallows its errors (spec 035 US4/T042, R12), so a
 /// per-frame metadata/IO problem never strands the inbox item.
 pub(crate) async fn complete_applied_plan(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    resolve_cache: &ResolveCache,
+    plan_id: &str,
+) -> Result<(), String> {
+    {
+        let mut completed =
+            COMPLETED_PLAN_IDS.lock().map_err(|_| "completed plan guard poisoned".to_owned())?;
+        if !completed.insert(plan_id.to_owned()) {
+            tracing::debug!(plan_id, "inbox plan_listener: duplicate completion ignored");
+            return Ok(());
+        }
+    }
+
+    let result = complete_applied_plan_once(pool, bus, resolve_cache, plan_id).await;
+    if result.is_err() {
+        if let Ok(mut completed) = COMPLETED_PLAN_IDS.lock() {
+            completed.remove(plan_id);
+        }
+    }
+    result
+}
+
+async fn complete_applied_plan_once(
     pool: &SqlitePool,
     bus: &EventBus,
     resolve_cache: &ResolveCache,
