@@ -181,10 +181,10 @@ pub async fn confirm(
         ));
     }
 
-    // 3. T070 / FR-049 / SC-015: reject any item that is still in the
-    // needs-review sentinel bucket (missing mandatory attributes).  Splitting /
+    // 3. T070 / FR-049 / SC-015: reject any item still flagged `needs_review`
+    // (missing mandatory attributes; spec 058 FR-028).  Splitting /
     // recalculation happens at classify/reclassify (before confirm), never here.
-    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+    if item.needs_review != 0 {
         return Err(ContractError::new(
             ErrorCode::InboxMissingPathAttributes,
             "This item is in the needs-review bucket: one or more files are missing mandatory \
@@ -220,7 +220,7 @@ pub async fn confirm(
     // 7. Validate the request. Spec 041 FR-050/T071/T072: the "split" action
     // and the mixed per-type confirm branch are removed — the request no
     // longer carries an `action` field at all; `classified` (migration
-    // 0048's CHECK-constrained single-type DB value) is the only confirmable
+    // 0049's CHECK-constrained single-type DB value) is the only confirmable
     // classification result. A folder that classified as `unclassified`
     // (zero or multiple distinct frame types) is not confirmable directly; it
     // must be re-split into single-type sub-items (T066 materialization)
@@ -996,7 +996,8 @@ mod tests {
     use audit::bus::EventBus;
     use persistence_db::repositories::equipment as equipment_repo;
     use persistence_db::repositories::inbox::{
-        InsertEvidence, InsertInboxItem, UpsertClassification,
+        InsertEvidence, InsertInboxItem, UpsertClassification, UpsertInboxSubItem,
+        UpsertSourceGroup,
     };
     use persistence_db::Database;
     use std::io::Write;
@@ -1254,6 +1255,212 @@ mod tests {
 
         assert_eq!(resp.plan_state, "ready_for_review");
         assert_eq!(resp.items_total, 3);
+    }
+
+    /// Build one classified sibling sub-item under `sg_id`.
+    ///
+    /// Deliberately not [`setup_classified_item`]: that writes a legacy row via
+    /// `insert_inbox_item` with no `source_group_id` and an empty `group_key`,
+    /// so two of them are not siblings in the sense SC-006 is about. Sibling
+    /// identity is `(root_id, relative_path, group_key)` — same folder, same
+    /// group, different classification identity.
+    async fn setup_sibling_sub_item(
+        db: &Database,
+        item_id: &str,
+        sg_id: &str,
+        group_key: &str,
+        frame_type: &str,
+        sig: &str,
+        file_names: &[&str],
+    ) {
+        inbox_repo::upsert_inbox_sub_item(
+            db.pool(),
+            &UpsertInboxSubItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                source_group_id: sg_id,
+                group_key,
+                group_label: group_key,
+                frame_type: Some(frame_type),
+                content_signature: sig,
+                file_count: i64::try_from(file_names.len()).unwrap_or(i64::MAX),
+                lane: "fits",
+                needs_review: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: item_id,
+                result: "classified",
+                frame_type: Some(frame_type),
+                content_signature: sig,
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        for (i, fname) in file_names.iter().enumerate() {
+            inbox_repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &format!("ev-{item_id}-{i}"),
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    frame_type: Some(frame_type),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some(frame_type),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    /// Spec 058 T026 / FR-010 / SC-006: `inbox.confirm` operates on exactly one
+    /// `inbox_item_id` and alters no sibling.
+    ///
+    /// Contracts say this needs no code change — the point of the test is that
+    /// dropping the parent row (FR-001) makes the N siblings of a split folder
+    /// the *only* rows, so sibling isolation stops being incidental and becomes
+    /// the whole correctness story. Asserted in both directions: the confirmed
+    /// item must move to `plan_open` and gain a plan link, the sibling must be
+    /// byte-identical to its pre-confirm snapshot and have no link.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn confirm_alters_exactly_one_item_and_leaves_its_sibling_untouched_sc006() {
+        let tmp = tempfile::tempdir().unwrap();
+        for (i, name) in ["light_001.fits", "light_002.fits"].iter().enumerate() {
+            write_fits(
+                tmp.path(),
+                name,
+                "Light Frame",
+                Some("M42"),
+                Some("Ha"),
+                Some(&format!("2025-10-10T22:0{i}:00")),
+            );
+        }
+        for (i, name) in ["flat_001.fits", "flat_002.fits"].iter().enumerate() {
+            write_fits_exp(
+                tmp.path(),
+                name,
+                "Flat Field",
+                None,
+                Some("Ha"),
+                Some(&format!("2025-10-10T18:0{i}:00")),
+                3.0,
+            );
+        }
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-sc006",
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig-folder"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 4,
+            },
+        )
+        .await
+        .unwrap();
+
+        setup_sibling_sub_item(
+            &db,
+            "item-lights",
+            "sg-sc006",
+            "type=light",
+            "light",
+            "sig-lights",
+            &["light_001.fits", "light_002.fits"],
+        )
+        .await;
+        setup_sibling_sub_item(
+            &db,
+            "item-flats",
+            "sg-sc006",
+            "type=flat",
+            "flat",
+            "sig-flats",
+            &["flat_001.fits", "flat_002.fits"],
+        )
+        .await;
+
+        let sibling_before = inbox_repo::get_inbox_item(db.pool(), "item-flats").await.unwrap();
+
+        confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: "item-lights".to_owned(),
+                content_signature: "sig-lights".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Positive direction — without this the assertions below pass on a
+        // confirm that did nothing at all.
+        let confirmed = inbox_repo::get_inbox_item(db.pool(), "item-lights").await.unwrap();
+        assert_eq!(
+            confirmed.state, "plan_open",
+            "the confirmed item must have moved to `plan_open` — otherwise this test proves nothing"
+        );
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), "item-lights").await.unwrap().is_some(),
+            "the confirmed item must own the new plan link"
+        );
+
+        let sibling_after = inbox_repo::get_inbox_item(db.pool(), "item-flats").await.unwrap();
+        assert_eq!(
+            (
+                sibling_after.state.as_str(),
+                sibling_after.frame_type.as_deref(),
+                sibling_after.needs_review,
+                sibling_after.content_signature.as_deref(),
+                sibling_after.group_key.as_str(),
+                sibling_after.file_count,
+            ),
+            (
+                sibling_before.state.as_str(),
+                sibling_before.frame_type.as_deref(),
+                sibling_before.needs_review,
+                sibling_before.content_signature.as_deref(),
+                sibling_before.group_key.as_str(),
+                sibling_before.file_count,
+            ),
+            "SC-006: confirming one item must not alter its sibling"
+        );
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), "item-flats").await.unwrap().is_none(),
+            "SC-006: the sibling must not be bound to the confirmed item's plan"
+        );
+
+        let sibling_classification =
+            inbox_repo::get_classification(db.pool(), "item-flats").await.unwrap().unwrap();
+        assert_eq!(
+            (sibling_classification.result.as_str(), sibling_classification.frame_type.as_deref()),
+            ("classified", Some("flat")),
+            "SC-006: the sibling's own classification must survive the confirm untouched"
+        );
     }
 
     /// US7 / T042-T043: the chosen destructive destination must be persisted on
@@ -2326,7 +2533,7 @@ mod tests {
     // ── T070 tests — needs-review sentinel gate at confirm ───────────────────
 
     /// T070/FR-049/SC-015: confirm of an item whose group_key is the sentinel
-    /// __needs_review__ must be rejected with InboxMissingPathAttributes.
+    /// flagged `needs_review` must be rejected with InboxMissingPathAttributes.
     #[tokio::test]
     async fn t070_confirm_of_needs_review_item_is_rejected() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2339,9 +2546,9 @@ mod tests {
         let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
 
-        // Insert the inbox item with group_key = SENTINEL_NEEDS_REVIEW directly.
-        // The sentinel gate checks item.group_key, so we bypass setup_classified_item
-        // and set group_key explicitly via raw SQL.
+        // Insert the inbox item flagged needs_review directly. The gate reads
+        // `item.needs_review` (spec 058 FR-028), so we bypass
+        // setup_classified_item and set the column explicitly via raw SQL.
         let item_id = "item-t070-sentinel";
         let sig = "sig-t070-sentinel";
         inbox_repo::insert_inbox_item(
@@ -2357,9 +2564,7 @@ mod tests {
         )
         .await
         .unwrap();
-        // Set group_key to SENTINEL_NEEDS_REVIEW.
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(crate::classify::SENTINEL_NEEDS_REVIEW)
+        sqlx::query("UPDATE inbox_items SET needs_review = 1 WHERE id = ?")
             .bind(item_id)
             .execute(db.pool())
             .await
@@ -2435,8 +2640,8 @@ mod tests {
         )
         .await;
 
-        // A fully-resolved item (group_key defaults to '' in the helper, which is
-        // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
+        // A fully-resolved item (needs_review defaults to 0 in the helper) must
+        // pass the needs-review gate.
         // Same registered-source / classified-item shape as
         // `non_inbox_source_moves_in_place`, which deterministically succeeds —
         // a fully-resolved item must confirm cleanly, not merely "not fail on

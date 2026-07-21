@@ -61,6 +61,7 @@ const biasItem = {
   inboxItemId: 'item-bias',
   groupId: 'item-bias',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-inbox',
   rootAbsolutePath: '/astro/inbox',
   relativePath: 'calib/bias',

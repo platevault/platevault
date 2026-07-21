@@ -17,6 +17,7 @@ import type {
   CleanupPolicy,
   UpdateCleanupPolicy,
   InboxListResponse_Serialize,
+  InboxClassifySourceGroupResponse,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
   IngestionAttributionCandidateDto_Serialize,
@@ -1856,6 +1857,7 @@ export const mockHandlers = {
       items: [
         {
           inboxItemId: 'item-001',
+          needsReview: false,
           groupId: 'item-001',
           groupKey: '',
           rootId: 'root-lights-001',
@@ -1871,6 +1873,7 @@ export const mockHandlers = {
         },
         {
           inboxItemId: 'item-002',
+          needsReview: false,
           groupId: 'item-002',
           groupKey: '',
           rootId: 'root-lights-001',
@@ -1887,6 +1890,7 @@ export const mockHandlers = {
         {
           // Individual master item — spec 040 FR-005
           inboxItemId: 'item-master-dark',
+          needsReview: false,
           groupId: 'item-master-dark',
           groupKey: '',
           rootId: 'root-lights-001',
@@ -1905,6 +1909,7 @@ export const mockHandlers = {
         },
         {
           inboxItemId: 'item-003',
+          needsReview: false,
           groupId: 'item-003',
           groupKey: '',
           rootId: 'root-inbox-001',
@@ -1919,6 +1924,9 @@ export const mockHandlers = {
           isMaster: false,
         },
       ],
+      // Spec 058 FR-016: mock roots are all already classified, so no
+      // folder is awaiting its item rows.
+      sourceGroups: [],
       capped: false,
       limit: 500,
     } satisfies InboxListResponse_Serialize;
@@ -1964,13 +1972,36 @@ export const mockHandlers = {
       ],
     } satisfies InboxScanFolderResponse_Serialize;
   },
+  /**
+   * Spec 058 FR-017. Group-scoped classification, the action a source-group
+   * row offers.
+   *
+   * The real operation materialises item rows and returns only a count, so the
+   * mock returns a plausible count and nothing else — there is no
+   * classification payload to invent. Mock mode's `inbox_list` returns
+   * `sourceGroups: []` (every mock root is already classified), so no row
+   * actually invokes this today; it exists so the command is exercisable and
+   * so `tsc` checks this payload against the generated binding.
+   */
+  inbox_classify_source_group: async (_args) => {
+    const args = _args as { req: { sourceGroupId: string } } | undefined;
+    return {
+      sourceGroupId: args?.req?.sourceGroupId ?? 'sg-001',
+      materializedSubItemCount: 2,
+    } satisfies InboxClassifySourceGroupResponse;
+  },
   inbox_classify: async (_args) => {
     const args = _args as { req: { inboxItemId: string } } | undefined;
     const id = args?.req?.inboxItemId ?? 'item-001';
+    // spec 058 T035 retired `mixed`: a folder spanning several frame types
+    // now reports `unclassified` (both producers do), and the breakdown
+    // carries the composition FR-011 asks for. Keeping `mixed` here let the
+    // mock-mode Playwright specs pass against a shape the backend no longer
+    // emits.
     const isMixed = id === 'item-001';
     return {
       inboxItemId: id,
-      type: isMixed ? 'mixed' : 'single_type',
+      type: isMixed ? 'unclassified' : 'single_type',
       frameType: isMixed ? undefined : 'dark',
       contentSignature: `sig-${id}`,
       breakdown: isMixed

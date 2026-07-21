@@ -44,6 +44,7 @@ function makeItem(
     groupInstrument: null,
     groupId: over.inboxItemId,
     groupKey: 'type=dark',
+    needsReview: false,
     ...over,
   } as InboxListItem;
 }
@@ -68,6 +69,58 @@ describe('InboxList — classification label + path column (#550/#556)', () => {
     );
     expect(screen.getByText('bias')).toBeInTheDocument();
     expect(screen.queryByText(/mixed/i)).not.toBeInTheDocument();
+  });
+
+  // Spec 058 T008/FR-028: needs-review is the backend's persisted verdict on
+  // its own field. The old two-signal guess (`groupKey === '__needs_review__'`
+  // OR a non-empty `missingMandatory`) is gone, so both directions must hold:
+  // the field alone drives the label, and a classification-identity groupKey
+  // does not suppress it.
+  it('(058) the needs-review label comes from `needsReview`, not from `groupKey`', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'nr',
+        groupKey: 'type=light·filter=∅',
+        frameType: null,
+        needsReview: true,
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.getByText('needs review')).toBeInTheDocument();
+  });
+
+  // `frameType` and `groupFrameType` are deliberately null: both are checked
+  // BEFORE the needs-review branch in `classificationLabel`, so a fixture
+  // carrying either returns early and the negative assertion holds regardless
+  // of what `isNeedsReview` reports — the classic vacuous negative. With them
+  // null the branch is genuinely exercised.
+  it('(058) `needsReview: false` on a frame-typeless item is not labelled needs review', () => {
+    const items = [
+      makeItem({
+        inboxItemId: 'ok',
+        groupKey: 'type=light·filter=Ha',
+        frameType: null,
+        groupFrameType: null,
+        state: 'pending_classification',
+        needsReview: false,
+      }),
+    ];
+    render(
+      <InboxList
+        items={items}
+        selectedId={null}
+        onSelect={vi.fn()}
+        filterType="all"
+      />,
+    );
+    expect(screen.queryByText('needs review')).not.toBeInTheDocument();
   });
 
   it('(#556) column header reads "Path", not "Detection"', () => {

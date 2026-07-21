@@ -125,6 +125,7 @@ const oldItem = {
   inboxItemId: OLD_ID,
   groupId: OLD_ID,
   groupKey: '',
+  needsReview: false,
   sourceGroupId: 'sg-1',
   rootId: 'root-001',
   rootAbsolutePath: '/astro/inbox',
@@ -191,6 +192,7 @@ beforeEach(() => {
         {
           inboxItemId: NEW_ID,
           groupKey: 'type=light',
+          needsReview: false,
           groupLabel: '(root) · light',
           frameType: 'light',
           fileCount: 1,

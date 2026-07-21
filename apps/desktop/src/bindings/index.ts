@@ -1491,6 +1491,27 @@ export const commands = {
 	 */
 	inboxClassify: (req: InboxClassifyRequest) => typedError<InboxClassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_classify", { req })),
 	/**
+	 *  `inbox.classify.sourceGroup` — classify a scanned folder that has no
+	 *  `inbox_items` row yet, materializing its sub-items directly from the group
+	 *  (spec 058 FR-015/FR-016, T012).
+	 * 
+	 *  This is the entry point that makes a source-group row actionable. Without
+	 *  it, removing the scan-time placeholder (T020) leaves every scanned folder
+	 *  permanently unclassifiable: `inbox.classify` is keyed on `inboxItemId` and
+	 *  fails `inbox.item.not_found` without one, and `inbox.reclassify` v2 rebuilds
+	 *  its file records from evidence rows that are only ever written against an
+	 *  item id. No item ⇒ no evidence ⇒ no item.
+	 * 
+	 *  Mints nothing confirmable — it returns a count, not a plan and not an id.
+	 *  Confirmation continues to happen only against the materialized item rows,
+	 *  which preserves the source-group row's structural non-confirmability.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` (no such source group) | `metadata.unreadable` (the
+	 *  folder holds no readable FITS/XISF files)
+	 */
+	inboxClassifySourceGroup: (req: InboxClassifySourceGroupRequest) => typedError<InboxClassifySourceGroupResponse, ContractError_Serialize>(__TAURI_INVOKE("inbox_classify_source_group", { req })),
+	/**
 	 *  `inbox.confirm` — generate a reviewable plan from a classified Inbox item.
 	 * 
 	 *  # Errors
@@ -1534,8 +1555,10 @@ export const commands = {
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
 	 * 
-	 *  Results are capped at 500 items (FR-006). Each item carries its root's
-	 *  absolute path so the UI can group/label by root without a second call.
+	 *  Each of the two result arrays is capped at 500 rows (FR-006); `capped` is
+	 *  true when either hit its limit, so the UI never silently drops folders.
+	 *  Each item carries its root's absolute path so the UI can group/label by
+	 *  root without a second call.
 	 * 
 	 *  # Errors
 	 *  Returns a string error on database failure.
@@ -1647,7 +1670,8 @@ export const commands = {
 	 *  header is returned only as a display hint, never used for matching. The
 	 *  chosen target is written separately via `inbox.reclassify` (T068).
 	 * 
-	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+	 *  Identify the sub-group by `inboxItemId`. The request's legacy
+	 *  `sourceGroupId` is no longer accepted (spec 058 D-002).
 	 * 
 	 *  # Errors
 	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
@@ -4521,6 +4545,39 @@ export type InboxClassifyResponse_Serialize = {
 };
 
 /**
+ *  Request for `inbox.classify.sourceGroup` — classify a scanned folder that
+ *  has no `inbox_items` row yet.
+ * 
+ *  Spec 058 removes the scan-time folder placeholder (FR-015/T020), and with it
+ *  the only route into `materialize_sub_items`: both existing entry points are
+ *  keyed on an item id. This request is keyed on the source group instead, so a
+ *  bare group can become item rows without one ever having existed.
+ */
+export type InboxClassifySourceGroupRequest = {
+	sourceGroupId: string,
+	/**
+	 *  Absolute path to the registered root on disk, so the use case can locate
+	 *  the group's files. Transport detail, as on `InboxClassifyRequest`.
+	 */
+	rootAbsolutePath: string,
+};
+
+/**
+ *  Response from `inbox.classify.sourceGroup`.
+ * 
+ *  Deliberately returns a **count, not a plan, and no confirmable id**. The
+ *  source-group row is the thing you classify, never the thing you confirm
+ *  (FR-016) — confirmation continues to happen only against the item rows this
+ *  materializes, which the next `inbox.list` returns in `items` while the group
+ *  drops out of `sourceGroups` (FR-017, a consequence of that query's zero-item
+ *  predicate rather than a separate step).
+ */
+export type InboxClassifySourceGroupResponse = {
+	sourceGroupId: string,
+	materializedSubItemCount: number,
+};
+
+/**
  *  Summary of plan actions split by type (spec 041 US4/US5/FR-020).
  * 
  *  Lets the UI show "N move / M catalogue" without iterating plan items.
@@ -5056,6 +5113,12 @@ export type InboxListItem_Deserialize = {
 	 */
 	frameType: string | null,
 	/**
+	 *  Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+	 *  its own field rather than a `group_key` value. `true` means the item
+	 *  cannot be confirmed until the missing attributes are supplied.
+	 */
+	needsReview: boolean,
+	/**
 	 *  Cached classification result, DB vocabulary (`"classified"` /
 	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
 	 *  item. `None` when the item has never been classified.
@@ -5158,6 +5221,12 @@ export type InboxListItem_Serialize = {
 	 */
 	frameType?: string | null,
 	/**
+	 *  Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+	 *  its own field rather than a `group_key` value. `true` means the item
+	 *  cannot be confirmed until the missing attributes are supplied.
+	 */
+	needsReview: boolean,
+	/**
 	 *  Cached classification result, DB vocabulary (`"classified"` /
 	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
 	 *  item. `None` when the item has never been classified.
@@ -5178,6 +5247,12 @@ export type InboxListResponse = InboxListResponse_Serialize | InboxListResponse_
 /**  Response from `inbox.list`. */
 export type InboxListResponse_Deserialize = {
 	items: InboxListItem_Deserialize[],
+	/**
+	 *  Folders that have been scanned but have produced no items yet. Contains
+	 *  only groups with zero item rows, so FR-017's "replaced by its item
+	 *  rows" is a consequence of the query rather than a separate step.
+	 */
+	sourceGroups: InboxSourceGroupListItem[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -5187,6 +5262,12 @@ export type InboxListResponse_Deserialize = {
 /**  Response from `inbox.list`. */
 export type InboxListResponse_Serialize = {
 	items: InboxListItem_Serialize[],
+	/**
+	 *  Folders that have been scanned but have produced no items yet. Contains
+	 *  only groups with zero item rows, so FR-017's "replaced by its item
+	 *  rows" is a consequence of the query rather than a separate step.
+	 */
+	sourceGroups: InboxSourceGroupListItem[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -5577,6 +5658,34 @@ export type InboxScanResult = {
 	totalSizeBytes: number,
 };
 
+/**
+ *  A scanned-but-unclassified folder in `inbox.list` (spec 058 FR-016).
+ * 
+ *  Carries **no** `inboxItemId`. Non-confirmability is structural: there is
+ *  nothing to pass to `inbox.confirm`, so no new guard and no new error code
+ *  exist for it. A discriminated union with [`InboxListItem`] was rejected
+ *  precisely because it would restore a row that looks like an item and
+ *  carries an id the UI is tempted to confirm (FR-004).
+ */
+export type InboxSourceGroupListItem = {
+	sourceGroupId: string,
+	rootId: string,
+	/**  Absolute path of the registered root (for display). */
+	rootAbsolutePath: string,
+	relativePath: string,
+	/**  Sub-frames the scan found, excluding detected calibration masters. */
+	fileCount: number,
+	/**  Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`. */
+	format: string,
+	/**
+	 *  The source group's `"move"` | `"catalogue"` lane — NOT the
+	 *  `"fits"`/`"video"` item lane. The two columns share a name only.
+	 */
+	lane: string,
+	contentSignature: string,
+	discoveredAt: string,
+};
+
 /**  Per-frame-type queue stats entry. */
 export type InboxStatsPerType = {
 	frameType: string,
@@ -5661,38 +5770,37 @@ export type InboxTargetCandidate = {
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsRequest_Serialize | InboxTargetRecommendationsRequest_Deserialize;
 
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest_Deserialize = {
 	/**  The single-type inbox item (light sub-group) to resolve a target for. */
 	inboxItemId?: string | null,
-	/**  Alternatively, the originating source group (R-12 provenance). */
-	sourceGroupId?: string | null,
 };
 
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest_Serialize = {
 	/**  The single-type inbox item (light sub-group) to resolve a target for. */
 	inboxItemId?: string | null,
-	/**  Alternatively, the originating source group (R-12 provenance). */
-	sourceGroupId?: string | null,
 };
 
 /**

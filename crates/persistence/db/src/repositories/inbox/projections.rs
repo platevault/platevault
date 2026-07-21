@@ -9,54 +9,6 @@ use sqlx::SqlitePool;
 
 use crate::DbResult;
 
-/// SQL predicate that excludes a folder placeholder (`group_key = ''`) whose
-/// source group has genuinely SPLIT — i.e. `classify()` materialized two or
-/// more distinct single-type sub-items for it.
-///
-/// #711 (Instance A): after a split, `classify()` flips the placeholder's state
-/// to `'classified'` but never updates its `group_key`/`frame_type`, so the
-/// aggregate row renders a misleading "Classified" badge next to its own
-/// sub-items and disagrees with `inbox_classify` for that same id. Once the
-/// group has split, the sub-items are the authoritative rows and the aggregate
-/// placeholder is dead weight. Unscoped by sub-item state: a fully-processed
-/// folder must stay gone, not resurface as a lone aggregate placeholder.
-///
-/// The `> 1` bound is load-bearing, not a stylistic choice. `classify()` runs
-/// `materialize_sub_items` for EVERY source-group-backed item, so an ordinary
-/// UNSPLIT folder (all files one group, or all files in the
-/// `__needs_review__` sentinel bucket) also gets exactly one sub-item. In that
-/// case the placeholder is still the row the whole workflow is bound to — the
-/// user selects it, confirms it, and the resulting plan links to its id — so
-/// hiding it silently cleared the UI selection and dropped its plan from
-/// `list_open_inbox_plans` (which reads this same query), breaking Confirm and
-/// "Review plans" outright. See the Layer-2 journeys
-/// `inbox_ui_catalogue_in_place_zero_moves_byte_identical`,
-/// `inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination`, and
-/// `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`.
-///
-/// Legacy rows with a NULL `source_group_id` and master items (also NULL) are
-/// never hidden. Applied identically by `list_unacknowledged_across_roots`,
-/// [`inbox_stats`], and [`count_distinct_inbox_folders`] so the queue list and
-/// the stats summary always agree.
-macro_rules! exclude_split_placeholder {
-    () => {
-        "AND NOT (
-             i.group_key = ''
-             AND i.source_group_id IS NOT NULL
-             AND (
-                 SELECT COUNT(DISTINCT sub.group_key) FROM inbox_items sub
-                 WHERE sub.source_group_id = i.source_group_id
-                   AND sub.group_key <> ''
-             ) > 1
-         )"
-    };
-}
-
-// Re-exported crate-internally so `q_desktop::count_unacknowledged_inbox_items`
-// applies the identical predicate. It lives in another module, which is how it
-// was missed when the predicate was introduced — the status-bar badge counted
-// superseded placeholders the queue list had already hidden.
-pub(crate) use exclude_split_placeholder;
 /// Per-frame-type aggregate row returned by [`inbox_stats`].
 #[derive(Clone, Debug)]
 pub struct InboxStatsRow {
@@ -94,7 +46,7 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
         image_count: i64,
     }
 
-    let rows = sqlx::query_as::<_, StatsRow>(concat!(
+    let rows = sqlx::query_as::<_, StatsRow>(
         "SELECT
              COALESCE(ev.manual_override, ev.frame_type)          AS eff_type,
              COUNT(DISTINCT CASE WHEN i.is_master_item = 0
@@ -107,12 +59,9 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
          JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
            AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
-           ",
-        exclude_split_placeholder!(),
-        "
          GROUP BY eff_type
-         ORDER BY eff_type"
-    ))
+         ORDER BY eff_type",
+    )
     .fetch_all(pool)
     .await?;
 
@@ -139,15 +88,13 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
 pub async fn count_distinct_inbox_folders(pool: &SqlitePool) -> DbResult<i64> {
-    let (count,): (i64,) = sqlx::query_as(concat!(
+    let (count,): (i64,) = sqlx::query_as(
         "SELECT COUNT(DISTINCT i.id)
          FROM inbox_items i
          JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
-           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
-           ",
-        exclude_split_placeholder!()
-    ))
+           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL",
+    )
     .fetch_one(pool)
     .await?;
     Ok(count)
@@ -171,6 +118,9 @@ pub struct InboxListRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// Spec 058 FR-028 (T008): authoritative needs-review verdict, so the list
+    /// never has to guess it from `group_key`.
+    pub needs_review: i64,
     /// Real file format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
     pub format: Option<String>,
     /// Non-zero when this row represents a single detected calibration master file.
@@ -204,9 +154,6 @@ pub struct InboxListRow {
 /// `resolved` (acknowledged) state is excluded. `inbox_stats` uses the same
 /// predicate, so the queue list and the stats summary always agree.
 ///
-/// Placeholders of genuinely split source groups are excluded — see
-/// `exclude_split_placeholder!` for why the split bound matters.
-///
 /// Results are ordered by root path then by relative path.
 /// Pass `limit` to cap the result set (FR-006 bounding).
 ///
@@ -216,7 +163,7 @@ pub async fn list_unacknowledged_across_roots(
     pool: &SqlitePool,
     limit: i64,
 ) -> DbResult<Vec<InboxListRow>> {
-    let rows = sqlx::query_as::<_, InboxListRow>(concat!(
+    let rows = sqlx::query_as::<_, InboxListRow>(
         "SELECT
              i.id,
              i.root_id,
@@ -228,6 +175,7 @@ pub async fn list_unacknowledged_across_roots(
              i.content_signature,
              i.state,
              i.lane,
+             i.needs_review,
              i.format,
              COALESCE(i.is_master_item, 0) AS is_master,
              i.master_frame_type,
@@ -241,12 +189,9 @@ pub async fn list_unacknowledged_across_roots(
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
-           ",
-        exclude_split_placeholder!(),
-        "
-         ORDER BY r.path, i.relative_path
-         LIMIT ?"
-    ))
+         ORDER BY r.path, i.relative_path, i.group_key
+         LIMIT ?",
+    )
     .bind(limit)
     .fetch_all(pool)
     .await?;

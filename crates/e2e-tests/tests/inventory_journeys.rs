@@ -38,7 +38,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 use thirtyfour::By;
 
@@ -96,21 +96,23 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     let root_dir = tempfile::tempdir()?;
     let keep_name = "light_m33_001.fits";
     let lose_name = "light_m33_002.fits";
-    let keep_path = write_minimal_fits(
+    let keep_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         keep_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T22:00:00"),
+        Some(300.0),
     )?;
-    let lose_path = write_minimal_fits(
+    let lose_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         lose_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T23:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(
         keep_path.exists() && lose_path.exists(),
@@ -132,22 +134,15 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
         .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
         .to_owned();
 
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(

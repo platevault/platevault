@@ -37,13 +37,16 @@ use app_core_errors::db_internal_ctx;
 use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput};
 use camino::Utf8Path;
-use metadata_core::{v1_normalization_table, EvidenceSource, FrameType};
+use metadata_core::{
+    v1_normalization_table, EvidenceSource, FrameType, ImageTypNormalizationTable,
+};
 
 use super::grouping::{group_file, FrameMetadata, GroupingConfig};
 use super::signature::folder_signature;
 use persistence_db::repositories::inbox::{
     self as repo, InsertEvidence, UpsertClassification, UpsertInboxSubItem,
 };
+use persistence_db::repositories::q_inbox;
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -67,8 +70,8 @@ pub struct BreakdownEntry {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ClassifyResponse {
     pub inbox_item_id: String,
-    /// API vocabulary (stable for frontend): "single_type" | "mixed" | "unclassified".
-    /// Note: the DB stores "classified" / "unclassified" (migration 0048 CHECK);
+    /// API vocabulary (stable for frontend): "single_type" | "unclassified".
+    /// Note: the DB stores "classified" / "unclassified" (migration 0049 CHECK);
     /// the API vocabulary is mapped from the DB value so the frontend contract
     /// stays unchanged until T071/T072 update the contracts.
     pub classification_type: String,
@@ -185,93 +188,40 @@ pub async fn classify(
         Vec::new();
 
     for abs_path in &file_paths {
-        // Lossless path → wire-string conversion (camino). `abs_path` descends
-        // from a UTF-8 root supplied by the contract, so `Utf8Path::from_path`
-        // succeeds; the `to_string_lossy` arms are defensive fallbacks only and
-        // replace the previous always-lossy conversions.
-        let rel = match abs_path.strip_prefix(&req.root_absolute_path) {
-            Ok(p) => Utf8Path::from_path(p).map_or_else(
-                || p.to_string_lossy().replace('\\', "/"),
-                |u| u.as_str().replace('\\', "/"),
-            ),
-            Err(_) => Utf8Path::from_path(abs_path)
-                .map_or_else(|| abs_path.display().to_string(), |u| u.as_str().to_owned()),
-        };
+        let fc = classify_one_file(abs_path, &req.root_absolute_path, &norm_table);
 
-        let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-
-        // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size).
-        let raw_meta = cached_extract(abs_path).ok();
-
-        let image_typ_raw = raw_meta.as_ref().and_then(|m| m.image_typ.as_deref());
-        let stack_count = raw_meta.as_ref().and_then(|m| m.stack_count);
-        let file_name = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-
-        // Run master detection first (spec 040 FR-004).
-        // detect_master provides both frame_type and is_master when it matches.
-        let detect_input =
-            DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path: &rel };
-        let master_result = detect_master(&detect_input);
-
-        let (frame_type, evidence_source, raw_value, is_unclassified, is_master, master_detector) =
-            if let Some(ref det) = master_result {
-                // Detector produced a classification — use it directly.
-                let src = if ext == "xisf" {
-                    EvidenceSource::XisfProperty
-                } else {
-                    EvidenceSource::ImagetypHeader
-                };
-                (
-                    Some(det.frame_type),
-                    src,
-                    image_typ_raw.map(str::to_owned),
-                    false,
-                    det.is_master,
-                    Some(det.detector),
-                )
-            } else if let Some(raw) = image_typ_raw {
-                // No master detector matched; fall back to the normalization table.
-                match norm_table.normalize(raw) {
-                    Some(ft) => {
-                        let src = if ext == "xisf" {
-                            EvidenceSource::XisfProperty
-                        } else {
-                            EvidenceSource::ImagetypHeader
-                        };
-                        (Some(ft), src, Some(raw.to_owned()), false, false, None)
-                    }
-                    None => (None, EvidenceSource::None, Some(raw.to_owned()), true, false, None),
-                }
-            } else {
-                (None, EvidenceSource::None, None, true, false, None)
-            };
-
-        // #549: a detected calibration master is extracted into its own
-        // `inbox_items` row at scan time (`persist_master_item`), but the
-        // file is never moved off disk, so a folder-PLACEHOLDER classify run
-        // still walks it here. Without this guard the master was tallied a
-        // second time into the placeholder's evidence/breakdown/file_count —
-        // the placeholder must represent only the un-extracted remainder.
-        // Only skip when classifying the placeholder itself: a master's own
-        // classify call (`item.is_master_item != 0`) has exactly this one
-        // file and must still record it.
-        if is_master && item.is_master_item == 0 {
+        // Persist evidence (item-keyed — this is why `build_file_records`,
+        // used by the group-scoped `classify_source_group`, calls
+        // `classify_one_file` directly instead of going through this loop).
+        //
+        // #549/#1286, ported from main across this refactor: a detected
+        // calibration master gets its own `inbox_items` row at scan time
+        // (`persist_master_item`) but is never moved off disk, so a folder-level
+        // classify still walks it. Without this guard it is tallied a SECOND
+        // time into that item's evidence/breakdown/file_count. Only skip when
+        // the item being classified is not itself the master: a master's own
+        // classify call has exactly this one file and must record it.
+        //
+        // Spec 058 note: main wrote this to protect the folder placeholder,
+        // which T012 has since deleted. It is kept because the hazard is not
+        // placeholder-specific — any item whose folder still contains an
+        // extracted master would double-count it.
+        if fc.is_master && item.is_master_item == 0 {
             continue;
         }
 
-        // Persist evidence
         let ev_id = Uuid::new_v4().to_string();
         let ev = InsertEvidence {
             id: &ev_id,
             inbox_item_id: &req.inbox_item_id,
-            relative_file_path: &rel,
-            frame_type: frame_type.map(FrameType::as_str),
-            evidence_source: evidence_source.as_str(),
-            raw_value: raw_value.as_deref(),
-            unclassified: is_unclassified,
+            relative_file_path: &fc.relative_path,
+            frame_type: fc.frame_type.map(FrameType::as_str),
+            evidence_source: fc.evidence_source.as_str(),
+            raw_value: fc.raw_value.as_deref(),
+            unclassified: fc.is_unclassified,
             manual_override: None,
-            is_master,
-            master_detector,
+            is_master: fc.is_master,
+            master_detector: fc.master_detector,
         };
         repo::insert_evidence(pool, &ev)
             .await
@@ -280,14 +230,20 @@ pub async fn classify(
         // spec 041 US2/T016: persist per-file extracted header metadata. The
         // raw extractor returns string fields; we parse the numeric ones here
         // (gain stays a string — some cameras report scaled/non-integer gain).
-        persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref())
-            .await
-            .map_err(|e| db_internal_ctx(e, "classify: persist per-file metadata"))?;
+        persist_file_metadata(
+            pool,
+            &req.inbox_item_id,
+            &fc.relative_path,
+            abs_path,
+            fc.raw_meta.as_ref(),
+        )
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: persist per-file metadata"))?;
 
         // T066: collect for sub-item grouping and the folder tallies — both
         // computed AFTER the loop, once user overrides are layered on top of
         // this extraction-only record.
-        file_records.push((rel, frame_type, raw_meta));
+        file_records.push((fc.relative_path, fc.frame_type, fc.raw_meta));
     }
 
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
@@ -448,21 +404,31 @@ pub async fn classify(
     //
     // Two distinct string spaces are used:
     //   db_result    — stored in inbox_classifications.result; must match the
-    //                  CHECK constraint introduced in migration 0048:
+    //                  CHECK constraint introduced in migration 0049:
     //                  ('classified', 'unclassified').  'single_type' and
     //                  'mixed' no longer exist at the DB level. A folder with
     //                  a single frame type → 'classified'; a folder with
     //                  multiple frame types → 'unclassified' (the mixed case
     //                  will be re-split into single-type sub-items in T066).
-    //   api_result   — returned in ClassifyResponse.classification_type; kept
-    //                  on the stable pre-0048 vocabulary ('single_type' /
-    //                  'mixed' / 'unclassified') so the frontend contract and
-    //                  confirm routing remain unchanged until T071/T072 land.
+    //   api_result   — returned in ClassifyResponse.classification_type, on the
+    //                  pre-0049 vocabulary ('single_type' / 'unclassified').
+    //
+    // Spec 058 T035 retires 'mixed'. FR-031 required it "for as long as
+    // placeholder rows exist" and named this feature as the change that ends
+    // that condition: 'mixed' was reachable ONLY on a pre-materialization
+    // placeholder whose files spanned two or more frame types, and T012 stopped
+    // creating those rows. The multi-type arm stays for exhaustiveness and
+    // reports 'unclassified' — the value its DB result already carried — rather
+    // than becoming `unreachable!()`, because a panic is a poor way to discover
+    // that an assumption was wrong in a release build.
     let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
     let (db_result, api_result, single_frame_type) = match distinct_types.len() {
-        0 => ("unclassified", "unclassified", None),
         1 => ("classified", "single_type", Some(distinct_types[0].to_owned())),
-        _ => ("unclassified", "mixed", None),
+        // Zero readable frame types and two-or-more both mean "not one thing",
+        // and with `mixed` retired they are the same answer. Keeping them as
+        // separate arms with identical bodies would imply a distinction the
+        // vocabulary no longer draws.
+        _ => ("unclassified", "unclassified", None),
     };
 
     let unclassified_count = i64::try_from(unclassified_files.len()).unwrap_or(i64::MAX);
@@ -471,8 +437,8 @@ pub async fn classify(
     //
     // For each file we build a FrameMetadata from extracted raw_meta, then call
     // group_file with the per-type GroupingConfig::default_for to get its
-    // deterministic group_key. Files are partitioned by group_key; unclassifiable
-    // files go into the sentinel __needs_review__ bucket (gate logic is T070).
+    // deterministic group_key. Files are partitioned by group_key; the T070 gate
+    // sets `needs_review` on the resulting item without touching its identity.
     // For each group we upsert one inbox_items row with identity
     // (root_id, relative_path, group_key) and a per-sub-group content_signature.
     //
@@ -505,7 +471,7 @@ pub async fn classify(
         .await;
     }
 
-    // 8. Persist classification (use db_result which satisfies migration 0048 CHECK).
+    // 8. Persist classification (use db_result which satisfies migration 0049 CHECK).
     let classification = UpsertClassification {
         inbox_item_id: &req.inbox_item_id,
         result: db_result,
@@ -531,7 +497,23 @@ pub async fn classify(
     .await
     .map_err(|e| db_internal_ctx(e, "classify: update item scan columns"))?;
 
-    repo::update_inbox_item_state(pool, &req.inbox_item_id, "classified")
+    // spec 058 FR-007/SC-003: only a row that carries its own frame type may
+    // report `classified`. A folder aggregate never gets one, so flipping it
+    // unconditionally was the #711 "Classified badge on a row that knows no
+    // frame type" defect. Kept across main's error-handling refactor, which
+    // rewrote this call to propagate context but restored the unconditional
+    // "classified" this feature exists to remove.
+    //
+    // Keyed on `item.frame_type` — the row's OWN type — deliberately, not on
+    // the freshly computed `single_frame_type`. A uniform folder resolves to
+    // one type, but `classify` writes that type onto the materialized
+    // sub-items, never onto this row; keying on the computed value marks a
+    // row `classified` whose own frame_type column is still NULL, which is
+    // precisely the #711 badge defect (caught by
+    // `no_item_reports_classified_without_a_frame_type_sc003`).
+    let next_state =
+        if item.frame_type.is_some() { "classified" } else { "pending_classification" };
+    repo::update_inbox_item_state(pool, &req.inbox_item_id, next_state)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: mark item classified"))?;
 
@@ -549,7 +531,7 @@ pub async fn classify(
 
     Ok(ClassifyResponse {
         inbox_item_id: req.inbox_item_id,
-        // api_result retains the pre-0048 vocabulary for frontend stability.
+        // api_result retains the pre-0049 vocabulary for frontend stability.
         classification_type: api_result.to_owned(),
         frame_type: single_frame_type,
         content_signature,
@@ -560,7 +542,215 @@ pub async fn classify(
     })
 }
 
+// ── classify_source_group ────────────────────────────────────────────────────
+
+/// Response from the group-scoped classify entry point (spec 058 T012).
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ClassifySourceGroupResponse {
+    pub source_group_id: String,
+    pub materialized_sub_item_count: usize,
+}
+
+/// Classify a bare `inbox_source_groups` row directly — keyed on the group,
+/// not an `inbox_items` row (spec 058 T012).
+///
+/// Spec 058 removes the scan-time folder placeholder item (T020), which until
+/// now was the ONLY route to `materialize_sub_items`: `classify()` requires
+/// an `inbox_item_id`, and `reclassify_v2` rebuilds its `file_records` from
+/// `inbox_classification_evidence`/`inbox_file_metadata` rows that are
+/// themselves only ever written against an item id. A bare source group has
+/// none of that — no evidence, no overrides, no cache row — so this entry
+/// point deliberately SKIPS every item-keyed step `classify()` performs:
+/// `snapshot_overrides` (nothing to snapshot), the `delete_*_for_item` wipes
+/// (nothing to delete), the `get_classification` cache-hit check, and the
+/// classification cache write (all keyed on an item id that does not exist).
+/// It goes straight from the source group's own file list to
+/// `materialize_sub_items`, which is already fully group-keyed.
+///
+/// An empty folder returns `MetadataUnreadable`, mirroring `classify()`'s own
+/// behaviour for the same condition — no caller needs a typed "empty" result
+/// yet (YAGNI).
+///
+/// # Errors
+/// Returns `ContractError` when the source group row is missing or the
+/// folder has no FITS/XISF files.
+pub async fn classify_source_group(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    root_absolute_path: &Path,
+) -> Result<ClassifySourceGroupResponse, ContractError> {
+    let sg = q_inbox::get_source_group_by_id(pool, source_group_id)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?
+        .ok_or_else(|| {
+            ContractError::new(
+                ErrorCode::InboxItemNotFound,
+                format!("Source group not found: {source_group_id}"),
+                ErrorSeverity::Blocking,
+                false,
+            )
+        })?;
+
+    let folder_abs = root_absolute_path.join(&sg.relative_path);
+    let file_paths = enumerate_fits_files(&folder_abs);
+    if file_paths.is_empty() {
+        return Err(ContractError::new(
+            ErrorCode::MetadataUnreadable,
+            format!("No FITS/XISF files found for source group: {}", folder_abs.display()),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    let file_records = build_file_records(&file_paths, root_absolute_path);
+
+    // `inbox_source_groups.lane` is the move-vs-catalogue lane, NOT the
+    // fits/video lane `inbox_items` requires (CHECK(lane IN ('fits',
+    // 'video'))) — see `reclassify_v2`'s identical derivation and its #854
+    // fix comment. Deriving from `format` mirrors scan's own assignment
+    // (video-only folders → 'video', everything else → 'fits'); passing
+    // `sg.lane` straight through would fail that CHECK for any 'move'/
+    // 'catalogue'-lane group and silently drop every materialized sub-item.
+    let lane = match sg.format.as_deref() {
+        Some("video") => "video",
+        _ => "fits",
+    };
+
+    materialize_sub_items(
+        pool,
+        &sg.id,
+        &sg.root_id,
+        &sg.relative_path,
+        lane,
+        &file_paths,
+        &file_records,
+    )
+    .await;
+
+    let materialized_sub_item_count =
+        repo::list_inbox_sub_items(pool, &sg.id).await.map_or(0, |rows| rows.len());
+
+    Ok(ClassifySourceGroupResponse { source_group_id: sg.id, materialized_sub_item_count })
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Per-file classification outcome, shared by `classify()`'s item-keyed
+/// evidence-persist loop and `build_file_records` (spec 058 T012's
+/// `classify_source_group`, which has no `inbox_item_id` to persist evidence
+/// against). Carries every field `classify()` needs for `InsertEvidence`;
+/// `build_file_records` keeps only `relative_path`/`frame_type`/`raw_meta`.
+pub(crate) struct FileClassification {
+    pub relative_path: String,
+    pub frame_type: Option<FrameType>,
+    pub raw_meta: Option<metadata_core::RawFileMetadata>,
+    pub evidence_source: EvidenceSource,
+    pub raw_value: Option<String>,
+    pub is_unclassified: bool,
+    pub is_master: bool,
+    pub master_detector: Option<&'static str>,
+}
+
+/// Classify one file: master detection first (spec 040 FR-004), then
+/// IMAGETYP normalization fallback (T014/T016). Pure — no DB writes; callers
+/// persist evidence themselves (only `classify()` has an item id to persist
+/// it against).
+pub(crate) fn classify_one_file(
+    abs_path: &Path,
+    root_absolute_path: &Path,
+    norm_table: &ImageTypNormalizationTable,
+) -> FileClassification {
+    // Lossless path → wire-string conversion (camino). `abs_path` descends
+    // from a UTF-8 root supplied by the contract, so `Utf8Path::from_path`
+    // succeeds; the `to_string_lossy` arms are defensive fallbacks only and
+    // replace the previous always-lossy conversions.
+    let rel = match abs_path.strip_prefix(root_absolute_path) {
+        Ok(p) => Utf8Path::from_path(p).map_or_else(
+            || p.to_string_lossy().replace('\\', "/"),
+            |u| u.as_str().replace('\\', "/"),
+        ),
+        Err(_) => Utf8Path::from_path(abs_path)
+            .map_or_else(|| abs_path.display().to_string(), |u| u.as_str().to_owned()),
+    };
+
+    let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+
+    // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size).
+    let raw_meta = cached_extract(abs_path).ok();
+
+    let image_typ_raw = raw_meta.as_ref().and_then(|m| m.image_typ.as_deref());
+    let stack_count = raw_meta.as_ref().and_then(|m| m.stack_count);
+    let file_name = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+    // Run master detection first (spec 040 FR-004).
+    // detect_master provides both frame_type and is_master when it matches.
+    let detect_input =
+        DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path: &rel };
+    let master_result = detect_master(&detect_input);
+
+    let (frame_type, evidence_source, raw_value, is_unclassified, is_master, master_detector) =
+        if let Some(ref det) = master_result {
+            // Detector produced a classification — use it directly.
+            let src = if ext == "xisf" {
+                EvidenceSource::XisfProperty
+            } else {
+                EvidenceSource::ImagetypHeader
+            };
+            (
+                Some(det.frame_type),
+                src,
+                image_typ_raw.map(str::to_owned),
+                false,
+                det.is_master,
+                Some(det.detector),
+            )
+        } else if let Some(raw) = image_typ_raw {
+            // No master detector matched; fall back to the normalization table.
+            match norm_table.normalize(raw) {
+                Some(ft) => {
+                    let src = if ext == "xisf" {
+                        EvidenceSource::XisfProperty
+                    } else {
+                        EvidenceSource::ImagetypHeader
+                    };
+                    (Some(ft), src, Some(raw.to_owned()), false, false, None)
+                }
+                None => (None, EvidenceSource::None, Some(raw.to_owned()), true, false, None),
+            }
+        } else {
+            (None, EvidenceSource::None, None, true, false, None)
+        };
+
+    FileClassification {
+        relative_path: rel,
+        frame_type,
+        raw_meta,
+        evidence_source,
+        raw_value,
+        is_unclassified,
+        is_master,
+        master_detector,
+    }
+}
+
+/// Build `(relative_path, frame_type, raw_meta)` records for a set of files
+/// with no item-keyed persistence (spec 058 T012). Used by
+/// `classify_source_group`, which has no `inbox_item_id` to persist evidence
+/// against; `classify()` calls `classify_one_file` directly instead, since it
+/// also needs the fields this drops in order to write `InsertEvidence` rows.
+pub(crate) fn build_file_records(
+    file_paths: &[PathBuf],
+    root_absolute_path: &Path,
+) -> Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> {
+    let norm_table = v1_normalization_table();
+    file_paths
+        .iter()
+        .map(|abs_path| {
+            let fc = classify_one_file(abs_path, root_absolute_path, &norm_table);
+            (fc.relative_path, fc.frame_type, fc.raw_meta)
+        })
+        .collect()
+}
 
 /// Map extracted `RawFileMetadata` → an `inbox_file_metadata` upsert and write
 /// it (spec 041 US2/T016).
@@ -763,9 +953,14 @@ async fn snapshot_overrides(
     snapshots
 }
 
-/// Sentinel group key used for files that are unclassifiable or missing
-/// grouping-mandatory attributes (T066 / R-14 / T070).
-pub const SENTINEL_NEEDS_REVIEW: &str = "__needs_review__";
+/// Classification identity for a file whose frame type could not be determined
+/// at all (spec 058 FR-028, T007).
+///
+/// This is an identity *value* ("type undetermined"), not a needs-review flag:
+/// the review verdict lives in `inbox_items.needs_review`. No code branches on
+/// this string. `FrameType::as_str` never yields `"unknown"`, so it cannot
+/// collide with a real classification key.
+pub const GROUP_KEY_TYPE_UNKNOWN: &str = "type=unknown";
 
 // ── Mandatory-attribute gate (T070 / FR-047 / R-14) ──────────────────────────
 
@@ -965,9 +1160,9 @@ pub(crate) fn build_frame_metadata(
 /// 1. Build a [`FrameMetadata`] for each file from its extracted raw metadata.
 /// 2. Call [`group_file`] with [`GroupingConfig::default_for`] the file's frame
 ///    type to get a deterministic `(group_key, group_label)`.
-/// 3. Unclassifiable files (no frame type) **or** files missing a mandatory
-///    attribute (T070 / FR-047/FR-048) go into the sentinel
-///    [`SENTINEL_NEEDS_REVIEW`] bucket.
+/// 3. Files missing a mandatory attribute (T070 / FR-047/FR-048) keep their
+///    classification identity and are flagged `needs_review`; files with no
+///    frame type at all key on [`GROUP_KEY_TYPE_UNKNOWN`] (spec 058 FR-028).
 /// 4. Per group: compute a per-sub-group `content_signature` =
 ///    `folder_signature(sorted per-file sigs of files in that group)`, then
 ///    upsert an `inbox_items` row with identity `(root_id, relative_path,
@@ -994,41 +1189,61 @@ pub(crate) async fn materialize_sub_items(
     #[allow(clippy::type_complexity)]
     let mut groups: std::collections::HashMap<
         String,
-        (String, Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)>),
+        (String, bool, Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)>),
     > = std::collections::HashMap::new();
 
     for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
         let abs_path = file_paths.get(i).cloned();
 
-        // T070 / FR-047: an unclassifiable file and one missing a mandatory
-        // attribute are the same outcome — the sentinel bucket (FR-048).
+        // Spec 058 FR-028 (T007): `group_key` carries classification identity
+        // ONLY; the needs-review verdict travels alongside it as its own bool
+        // and is persisted to `inbox_items.needs_review`. A file missing a
+        // mandatory attribute keeps the identity of its frame type, so it can
+        // converge with a resolved sibling via the OR-fold below rather than
+        // being split off into a separate bucket.
+        //
+        // #1126 merge (2026-07-20): `missing_mandatory_for_file` is adopted
+        // from `main` — it folds the no-frame-type case into the same helper
+        // instead of branching on it separately, which is a real
+        // simplification. What is NOT adopted is the `SENTINEL_NEEDS_REVIEW`
+        // group key it feeds on `main`: 058 retires that sentinel (T006/T007),
+        // so the verdict lands on the `needs_review` bool while the key stays
+        // pure classification identity. `missing_mandatory_for_file(None, _)`
+        // returns `vec!["frameType"]`, i.e. non-empty, so the no-frame-type
+        // file is flagged by the same expression rather than a literal `true`.
         let missing = missing_mandatory_for_file(*frame_type_opt, raw_meta_opt.as_ref());
-        let (group_key, group_label) = match (*frame_type_opt, missing.is_empty()) {
-            (Some(ft), true) => {
-                // Build effective FrameMetadata for the grouping engine.
-                let meta = raw_meta_opt.as_ref().map_or_else(
-                    || FrameMetadata { frame_type: ft, ..Default::default() },
-                    |r| build_frame_metadata(ft, r),
-                );
-
-                let config = GroupingConfig::default_for(ft);
-                let result = group_file(&meta, &config);
-                (result.key.0, result.label.0)
-            }
-            _ => (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned()),
+        let needs_review = !missing.is_empty();
+        let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
+            // Build effective FrameMetadata for the grouping engine.
+            let meta = raw_meta_opt.as_ref().map_or_else(
+                || FrameMetadata { frame_type: ft, ..Default::default() },
+                |r| build_frame_metadata(ft, r),
+            );
+            let config = GroupingConfig::default_for(ft);
+            let result = group_file(&meta, &config);
+            (result.key.0, result.label.0)
+        } else {
+            (GROUP_KEY_TYPE_UNKNOWN.to_owned(), "(root) · needs review".to_owned())
         };
 
         // Files without a resolvable abs path (e.g. reclassify_v2's re-split,
         // which has no root path to join) still need to land in their group so
         // the sub-item is upserted with the correct file_count and evidence.
-        let entry = groups.entry(group_key).or_insert_with(|| (group_label, Vec::new()));
-        entry.1.push((rel.clone(), abs_path, raw_meta_opt.clone()));
+        let entry =
+            groups.entry(group_key).or_insert_with(|| (group_label, needs_review, Vec::new()));
+        // OR-folded, not first-file-wins: `target` is mandatory for lights yet
+        // is not a grouping dimension, so a file missing it shares a group_key
+        // with a resolved sibling. Any unresolved file must flag the whole
+        // group or it becomes confirmable on filename order alone.
+        entry.1 |= needs_review;
+        entry.2.push((rel.clone(), abs_path, raw_meta_opt.clone()));
     }
 
     // Step 4 + 5: upsert one sub-item per group and update child_count.
     let child_count = i64::try_from(groups.len()).unwrap_or(i64::MAX);
 
-    for (group_key, (group_label, files)) in &groups {
+    for (group_key, (group_label, is_needs_review, files)) in &groups {
+        let is_needs_review = *is_needs_review;
         // Per-sub-group content_signature (R-11).
         let file_sigs: Vec<[u8; 32]> = files
             .iter()
@@ -1038,7 +1253,7 @@ pub(crate) async fn materialize_sub_items(
         let sub_sig = folder_signature(file_sigs);
 
         // Determine frame_type from the group_key prefix (type=<value>).
-        let frame_type_str: Option<&str> = if group_key == SENTINEL_NEEDS_REVIEW {
+        let frame_type_str: Option<&str> = if is_needs_review {
             None
         } else {
             // group_key starts with "type=<ft>·..." — extract the type token.
@@ -1062,6 +1277,7 @@ pub(crate) async fn materialize_sub_items(
             content_signature: &sub_sig,
             file_count,
             lane,
+            needs_review: is_needs_review,
         };
 
         // Use the id that ACTUALLY persisted, not the freshly-generated
@@ -1086,7 +1302,8 @@ pub(crate) async fn materialize_sub_items(
         // source group, never copied to a freshly materialized sub-item id
         // otherwise), re-classifying it back to unclassified and leaving
         // Confirm permanently disabled (issue #755 CI fix, R-14).
-        seed_sub_item_cache(pool, &persisted_id, group_key, frame_type_str, &sub_sig, files).await;
+        seed_sub_item_cache(pool, &persisted_id, is_needs_review, frame_type_str, &sub_sig, files)
+            .await;
     }
 
     // Purge sub-item rows for groups that no longer exist: when a file's metadata
@@ -1130,19 +1347,23 @@ pub(crate) async fn materialize_sub_items(
 async fn seed_sub_item_cache(
     pool: &SqlitePool,
     sub_id: &str,
-    group_key: &str,
+    is_needs_review: bool,
     frame_type_str: Option<&str>,
     content_signature: &str,
     files: &[(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)],
 ) {
-    let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
-
-    // Every write below seeds a cache the next classify re-derives, so a
-    // failure degrades rather than corrupts: log and continue (#1101).
+    // #1101 (from main): every write below seeds a cache the next classify
+    // re-derives, so a failure degrades rather than corrupts — log and continue.
+    //
+    // Main's version of this hunk also recomputed `is_needs_review` locally as
+    // `group_key == SENTINEL_NEEDS_REVIEW`. That is deliberately NOT taken:
+    // spec 058 T008 made needs-review a real column, and this function already
+    // receives the caller's authoritative value as a parameter. Re-deriving it
+    // from the sentinel string would reintroduce the vocabulary 058 retired.
     let warn_seed = |op: &'static str, e: persistence_db::DbError| {
         tracing::warn!(
             sub_item = %sub_id,
-            group_key,
+            is_needs_review,
             "classify: seeding sub-item cache failed at {op}, cache is partial: {e}"
         );
     };
@@ -1362,7 +1583,7 @@ async fn build_response_from_cache(
     let computed_at = cached.computed_at.clone();
 
     // `inbox_classifications.result` stores the DB vocabulary introduced by
-    // migration 0048 ('classified' / 'unclassified'), but
+    // migration 0049 ('classified' / 'unclassified'), but
     // `ClassifyResponse.classification_type` is contractually the stable API
     // vocabulary ('single_type' / 'mixed' / 'unclassified') — see step 7 of
     // `classify`. Returning `cached.result` verbatim leaked 'classified' to
@@ -1370,23 +1591,18 @@ async fn build_response_from_cache(
     // refetch after `inbox.reclassify`), where `canConfirm` requires exactly
     // 'single_type' — permanently disabling Confirm for already-classified
     // items (caught by the spec 037 Layer-2 Inbox journeys, PR #457). Map DB
-    // → API here, mirroring `reclassify`'s aggregation: 'classified' is
-    // single-type by the 0048 CHECK's definition; a DB 'unclassified' with
-    // two or more distinct effective frame types is the mixed case.
+    // → API here: 'classified' is single-type by the 0049 CHECK's definition,
+    // and everything else is 'unclassified'.
+    //
+    // Spec 058 T035: this used to distinguish a 'mixed' case by counting
+    // distinct effective frame types across the evidence rows. That count could
+    // only reach two on a pre-materialization placeholder, which T012 no longer
+    // creates, so the branch reported a state the app can no longer be in. The
+    // cached path now mirrors the compute path above.
     let classification_type = match cached.result.as_str() {
         "classified" => "single_type".to_owned(),
-        "unclassified" => {
-            let distinct: std::collections::HashSet<&str> = evidence_rows
-                .iter()
-                .filter_map(|ev| ev.manual_override.as_deref().or(ev.frame_type.as_deref()))
-                .collect();
-            if distinct.len() >= 2 {
-                "mixed".to_owned()
-            } else {
-                "unclassified".to_owned()
-            }
-        }
-        // Pre-0048 rows can still carry the API vocabulary — pass through.
+        "unclassified" => "unclassified".to_owned(),
+        // Pre-0049 rows can still carry the API vocabulary — pass through.
         other => other.to_owned(),
     };
 
@@ -1505,6 +1721,18 @@ mod tests {
         let item_id = "item-1101-state";
         let tmp = single_light_fixture(&db, item_id).await;
 
+        // Spec 058 SC-003: `classify` only writes `state = 'classified'` for a
+        // row that carries its OWN frame type — a folder row does not, and
+        // marking it classified is the #711 badge defect. This test is about
+        // error PROPAGATION, not about which state value is chosen, so give the
+        // row a frame type: that is the case where the write this trigger
+        // blocks is legitimately attempted.
+        sqlx::query("UPDATE inbox_items SET frame_type = 'light' WHERE id = ?")
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
         sqlx::query(
             "CREATE TRIGGER block_classified BEFORE UPDATE ON inbox_items \
              WHEN NEW.state = 'classified' \
@@ -1568,7 +1796,7 @@ mod tests {
 
     /// Regression (PR #457 Layer-2 Inbox journeys): a SECOND classify of an
     /// unchanged item hits `build_response_from_cache`, which must translate
-    /// the persisted DB vocabulary ('classified', migration 0048) back to the
+    /// the persisted DB vocabulary ('classified', migration 0049) back to the
     /// API vocabulary ('single_type'). Leaking 'classified' permanently
     /// disabled the frontend's Confirm gate (`canConfirm` requires exactly
     /// 'single_type') for any already-classified item.
@@ -1612,8 +1840,17 @@ mod tests {
         assert_eq!(second.content_signature, first.content_signature);
     }
 
+    /// Spec 058 T035: a folder spanning two frame types reports `unclassified`,
+    /// not `mixed`.
+    ///
+    /// The vocabulary is retired, not the behaviour. The breakdown still
+    /// carries both types — that is what the UI needs to explain why the folder
+    /// cannot be confirmed as one thing — and the DB result is unchanged, since
+    /// it stored `unclassified` for this case all along. Only the API label
+    /// collapses, because `mixed` could only ever be observed on a
+    /// pre-materialization placeholder and T012 stopped creating those.
     #[tokio::test]
-    async fn classify_mixed_folder() {
+    async fn classify_multi_type_folder_reports_unclassified() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits_with_imagetyp(tmp.path(), "light.fits", "Light Frame");
         write_fits_with_imagetyp(tmp.path(), "dark.fits", "Dark Frame");
@@ -1641,7 +1878,7 @@ mod tests {
         };
 
         let resp = classify(db.pool(), req).await.unwrap();
-        assert_eq!(resp.classification_type, "mixed");
+        assert_eq!(resp.classification_type, "unclassified");
         assert!(resp.frame_type.is_none());
         assert_eq!(resp.breakdown.len(), 2);
     }
@@ -2284,6 +2521,63 @@ mod tests {
         assert_eq!(sg.child_count, 1, "source group child_count must be 1");
     }
 
+    /// Spec 058 T031 / FR-003 / SC-002: a folder with N distinct groups yields
+    /// exactly N items **and no aggregate**.
+    ///
+    /// The existing `t066_*` tests pin the N half, but they were written while
+    /// the folder placeholder still existed — they counted sub-items beside an
+    /// aggregate rather than instead of one. This asserts both halves together,
+    /// through the post-FR-015 entry point: a bare source group with no item
+    /// row, classified via `classify_source_group`.
+    ///
+    /// The no-aggregate half is asserted by comparing the UNFILTERED item count
+    /// for the group against the sub-item count. `list_inbox_sub_items` filters
+    /// `group_key != ''` in SQL, so asserting "no returned row has an empty
+    /// group_key" against it would be vacuous — it cannot return one. Only the
+    /// unfiltered `list_item_ids_for_source_group` can observe a resurrected
+    /// parent, so the two counts must agree.
+    #[tokio::test]
+    async fn t031_two_frame_types_yield_two_items_and_no_aggregate() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light.fits", "Light Frame");
+        write_fits_with_imagetyp(tmp.path(), "dark.fits", "Dark Frame");
+
+        let db = test_db().await;
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &inbox_repo::UpsertSourceGroup {
+                id: "sg-t031",
+                root_id: "root-t031",
+                relative_path: "",
+                content_signature: Some("sig-t031"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 2,
+            },
+        )
+        .await
+        .unwrap();
+
+        // No inbox_items row exists — the post-FR-015 shape scan now produces.
+        let resp = classify_source_group(db.pool(), "sg-t031", tmp.path()).await.unwrap();
+        assert_eq!(
+            resp.materialized_sub_item_count, 2,
+            "a folder holding lights and darks must materialize exactly two items"
+        );
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t031").await.unwrap();
+        assert_eq!(sub_items.len(), 2, "expected exactly two sub-items for this source group");
+
+        let all_items =
+            inbox_repo::list_item_ids_for_source_group(db.pool(), "sg-t031").await.unwrap();
+        assert_eq!(
+            all_items.len(),
+            sub_items.len(),
+            "every inbox_items row for this group must BE one of its sub-items; \
+             a surplus row is an aggregate (group_key = ''), which FR-003 forbids"
+        );
+    }
+
     #[tokio::test]
     async fn t066_mixed_folder_produces_n_sub_items() {
         // A folder with lights + darks → two single-type sub-items.
@@ -2443,7 +2737,7 @@ mod tests {
 
     #[tokio::test]
     async fn t066_unclassifiable_file_goes_to_sentinel_bucket() {
-        // A file with no IMAGETYP → sentinel __needs_review__ sub-item.
+        // A file with no IMAGETYP → one needs-review sub-item (spec 058 FR-028).
         let tmp = tempfile::tempdir().unwrap();
         // No IMAGETYP card.
         let path = tmp.path().join("mystery.fits");
@@ -2474,13 +2768,18 @@ mod tests {
 
         let sub_items =
             inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-sentinel").await.unwrap();
-        assert_eq!(sub_items.len(), 1, "unclassifiable file must produce one sentinel sub-item");
-        let si = &sub_items[0];
         assert_eq!(
-            si.group_key, SENTINEL_NEEDS_REVIEW,
-            "unclassifiable file must go to __needs_review__ sentinel bucket"
+            sub_items.len(),
+            1,
+            "unclassifiable file must produce one needs-review sub-item"
         );
-        assert!(si.frame_type.is_none(), "sentinel sub-item must have no frame_type");
+        let si = &sub_items[0];
+        assert_eq!(si.needs_review, 1, "unclassifiable file must be flagged needs_review");
+        assert_eq!(
+            si.group_key, GROUP_KEY_TYPE_UNKNOWN,
+            "a file with no determinable frame type keys on the undetermined-type identity"
+        );
+        assert!(si.frame_type.is_none(), "needs-review sub-item must have no frame_type");
     }
 
     // ── T067: composite identity + signature stability (FR-042) ──────────────
@@ -2974,7 +3273,7 @@ mod tests {
     }
 
     /// T070/FR-047/FR-048: a light frame missing `target` (no OBJECT header)
-    /// must route to the __needs_review__ sentinel sub-item.
+    /// must be flagged needs_review.
     #[tokio::test]
     async fn t070_light_missing_target_goes_to_sentinel() {
         let tmp = tempfile::tempdir().unwrap();
@@ -3012,16 +3311,113 @@ mod tests {
 
         let sub_items =
             inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-light-no-target").await.unwrap();
-        assert_eq!(sub_items.len(), 1, "light missing target must produce one sentinel sub-item");
         assert_eq!(
-            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
-            "light missing target must go to __needs_review__ sentinel"
+            sub_items.len(),
+            1,
+            "light missing target must produce one needs-review sub-item"
         );
-        assert!(sub_items[0].frame_type.is_none(), "sentinel sub-item must have no frame_type");
+        assert_eq!(
+            sub_items[0].needs_review, 1,
+            "light missing target must be flagged needs_review"
+        );
+        assert!(
+            sub_items[0].group_key.starts_with("type=light"),
+            "needs-review does not erase classification identity: {}",
+            sub_items[0].group_key
+        );
+        assert!(sub_items[0].frame_type.is_none(), "needs-review sub-item must have no frame_type");
+    }
+
+    /// FR-047/FR-049: `target` is mandatory for lights but is NOT a grouping
+    /// dimension (`Dimension` has no Target variant), so a light with OBJECT
+    /// and one without collapse into a single `group_key`. The group's verdict
+    /// must therefore be the OR across its files, not whichever file the
+    /// scanner enumerated first — otherwise a file missing a mandatory
+    /// attribute rides a resolved sibling's row past the confirm gate.
+    ///
+    /// Asserted in both enumeration orders because the defect this pins was
+    /// filename-order-dependent.
+    ///
+    /// The cardinality is asserted deliberately. On `main` the sentinel
+    /// `__needs_review__` key made this folder TWO sub-items — the resolved
+    /// sibling stayed independently confirmable, and only the offender was
+    /// gated. Folding onto the shared natural key makes it ONE, which gates
+    /// the resolved frames too and drops the folder out of
+    /// `exclude_split_placeholder!`'s `COUNT(DISTINCT group_key) > 1` bound.
+    /// That is a real behaviour change, accepted because the sentinel's
+    /// uniqueness-discriminator role is what let a file missing a mandatory
+    /// attribute become confirmable on filename order alone. Separating the two
+    /// again needs a grouping dimension for the missing attribute, which is a
+    /// spec decision (CHK003), not a local fix — so pin the number here and
+    /// make any future change to it deliberate.
+    #[tokio::test]
+    async fn light_missing_target_keeps_needs_review_beside_a_resolved_sibling() {
+        for (ok_name, bad_name) in
+            [("a_ok.fits", "b_no_object.fits"), ("z_ok.fits", "a_no_object.fits")]
+        {
+            let tmp = tempfile::tempdir().unwrap();
+            // Identical on every grouping dimension; differ only in OBJECT.
+            write_fits_full(
+                tmp.path(),
+                ok_name,
+                "Light Frame",
+                Some("M31"),
+                Some("Ha"),
+                Some(300.0),
+                Some("100"),
+            );
+            write_fits_full(
+                tmp.path(),
+                bad_name,
+                "Light Frame",
+                None,
+                Some("Ha"),
+                Some(300.0),
+                Some("100"),
+            );
+
+            let db = test_db().await;
+            insert_source_group_with_item(
+                &db,
+                "sg-mixed-obj",
+                "item-mixed-obj",
+                "root-mixed-obj",
+                "",
+            )
+            .await;
+
+            classify(
+                db.pool(),
+                ClassifyRequest {
+                    inbox_item_id: "item-mixed-obj".to_owned(),
+                    root_absolute_path: tmp.path().to_owned(),
+                    force_rescan: false,
+                },
+            )
+            .await
+            .unwrap();
+
+            let sub_items =
+                inbox_repo::list_inbox_sub_items(db.pool(), "sg-mixed-obj").await.unwrap();
+            assert!(
+                sub_items.iter().any(|s| s.needs_review == 1),
+                "a light missing its mandatory OBJECT must stay flagged when a resolved sibling \
+                 shares its group_key (order: {ok_name} / {bad_name}); got {:?}",
+                sub_items.iter().map(|s| (&s.group_key, s.needs_review)).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                sub_items.len(),
+                1,
+                "the two files share one classification identity, so they are ONE sub-item — \
+                 changing this changes whether the folder counts as split (order: {ok_name} / \
+                 {bad_name}); got {:?}",
+                sub_items.iter().map(|s| (&s.group_key, s.needs_review)).collect::<Vec<_>>()
+            );
+        }
     }
 
     /// T070/FR-047/FR-048: a dark frame missing `exposureS` must route to the
-    /// __needs_review__ sentinel sub-item.
+    /// needs-review sub-item.
     #[tokio::test]
     async fn t070_dark_missing_exposure_goes_to_sentinel() {
         let tmp = tempfile::tempdir().unwrap();
@@ -3059,10 +3455,14 @@ mod tests {
 
         let sub_items =
             inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-dark-no-exp").await.unwrap();
-        assert_eq!(sub_items.len(), 1, "dark missing exposure must produce one sentinel sub-item");
         assert_eq!(
-            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
-            "dark missing exposure must go to __needs_review__ sentinel"
+            sub_items.len(),
+            1,
+            "dark missing exposure must produce one needs-review sub-item"
+        );
+        assert_eq!(
+            sub_items[0].needs_review, 1,
+            "dark missing exposure must be flagged needs_review"
         );
     }
 
@@ -3250,7 +3650,7 @@ mod tests {
             sub_items.iter().map(|s| s.group_key.as_str()).collect();
         assert_eq!(keys.len(), 2, "group_key must differ between the two SET-TEMP groups");
         for si in &sub_items {
-            assert_ne!(si.group_key, SENTINEL_NEEDS_REVIEW, "darks must classify, not sentinel");
+            assert_eq!(si.needs_review, 0, "darks must classify, not need review");
             assert!(
                 si.group_key.contains("set_temp="),
                 "group_key must embed the set_temp dimension: {}",
@@ -3302,7 +3702,7 @@ mod tests {
             sub_items.iter().map(|s| s.group_key.as_str()).collect();
         assert_eq!(keys.len(), 2, "group_key must differ between the two pointing groups");
         for si in &sub_items {
-            assert_ne!(si.group_key, SENTINEL_NEEDS_REVIEW, "lights must classify, not sentinel");
+            assert_eq!(si.needs_review, 0, "lights must classify, not need review");
             assert!(
                 si.group_key.contains("pointing="),
                 "group_key must embed the pointing dimension: {}",

@@ -13,7 +13,21 @@
 
 import { describe, it, expect } from 'vitest';
 import { deriveInboxStats } from './inboxStatsFromItems';
-import type { InboxListItem } from '@/bindings/index';
+import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
+
+function sourceGroup(id: string, files: number): InboxSourceGroupListItem {
+  return {
+    sourceGroupId: id,
+    rootId: 'r1',
+    rootAbsolutePath: '/lib',
+    relativePath: id,
+    fileCount: files,
+    format: 'fits',
+    lane: 'move',
+    contentSignature: `sig-${id}`,
+    discoveredAt: '2026-07-20T00:00:00Z',
+  };
+}
 
 function folder(
   id: string,
@@ -24,6 +38,7 @@ function folder(
     inboxItemId: id,
     groupId: id,
     groupKey: '',
+    needsReview: false,
     rootId: 'r1',
     rootAbsolutePath: '/lib',
     relativePath: id,
@@ -88,6 +103,43 @@ describe('deriveInboxStats', () => {
     expect(unresolved?.folderCount).toBe(2);
     const folderSum = stats.perType.reduce((n, r) => n + r.folderCount, 0);
     expect(folderSum).toBe(3);
+  });
+
+  /**
+   * Spec 058 T022 / CHK010 — source-group rows ARE counted.
+   *
+   * The list renders a scanned-but-unclassified folder as a row, so a summary
+   * that skipped it would report fewer rows than the user can see. That is
+   * SC-004's exact failure mode, just in the opposite direction from the
+   * original double-count.
+   *
+   * Two-direction control (recorded 2026-07-20): deleting the `sourceGroups`
+   * loop in `deriveInboxStats` fails this with
+   * `expected 1 to be 3 // Object.is equality` on `totals.folders`; restoring
+   * it passes. The reconciliation assertion below fails in the same direction.
+   */
+  it('(CHK010) counts source groups as unresolved folders and still reconciles', () => {
+    const stats = deriveInboxStats(
+      [folder('a', 'light', 5)],
+      [sourceGroup('sg-1', 7), sourceGroup('sg-2', 2)],
+    );
+
+    expect(stats.totals.folders).toBe(3);
+    expect(stats.totals.masters).toBe(0);
+    expect(stats.totals.images).toBe(5 + 7 + 2);
+
+    const unresolved = stats.perType.find((r) => r.frameType === 'unresolved');
+    expect(unresolved?.folderCount).toBe(2);
+    expect(unresolved?.imageCount).toBe(9);
+
+    // The invariant the whole helper exists to hold.
+    const folderSum = stats.perType.reduce((n, r) => n + r.folderCount, 0);
+    expect(folderSum).toBe(stats.totals.folders);
+  });
+
+  it('is unchanged when no source groups are supplied (the state until T020)', () => {
+    const items = [folder('a', 'light', 5)];
+    expect(deriveInboxStats(items)).toEqual(deriveInboxStats(items, []));
   });
 
   // #791: this bucket must NOT be named/labelled "mixed" — that word is

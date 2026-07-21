@@ -405,9 +405,11 @@ pub async fn cancel_inbox_plan(
     // the inbox item state transition, but we also do it eagerly below).
     crate::plans::discard_plan(pool, bus, &plan_id).await?;
 
-    // Eagerly reset inbox item to `classified` and remove the link so the list
-    // shows the item as unconfirmed immediately (the listener catches up async).
-    inbox_repo::update_inbox_item_state(pool, inbox_item_id, "classified")
+    // Eagerly reset the inbox item and remove the link so the list shows it as
+    // unconfirmed immediately (the listener catches up async). The target state
+    // is derived from the row's own frame type, not asserted — see
+    // `reset_inbox_item_to_unconfirmed` (spec 058 SC-003).
+    inbox_repo::reset_inbox_item_to_unconfirmed(pool, inbox_item_id)
         .await
         .map_err(db_err_internal)?;
     inbox_repo::delete_plan_link(pool, inbox_item_id).await.map_err(db_err_internal)?;
@@ -493,13 +495,15 @@ mod tests {
         .await
         .unwrap();
 
-        // Insert inbox item in `classified` state.
+        // Insert inbox item in `classified` state. `frame_type` is set because
+        // spec 058 SC-003 only lets a row carrying one report `classified`; a
+        // fixture without it was silently modelling an illegal row.
         sqlx::query(
             "INSERT INTO inbox_items
              (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-              content_signature, state, lane)
+              content_signature, state, lane, frame_type)
              VALUES (?, ?, 'lights', 1, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z',
-                     'sig-abc', 'classified', 'fits')",
+                     'sig-abc', 'classified', 'fits', 'light')",
         )
         .bind(item_id)
         .bind(root_id)
@@ -648,6 +652,35 @@ mod tests {
         // Plan link must be gone.
         let link = inbox_repo::get_plan_link(db.pool(), &item_id).await.unwrap();
         assert!(link.is_none(), "plan link must be removed after cancel");
+    }
+
+    /// spec 058 SC-003 on the plan-lifecycle writers.
+    ///
+    /// `confirm` gates on `needs_review` and the cached classification result,
+    /// never on the item's own `state`/`frame_type`, so a row with no frame
+    /// type is confirmable. Cancelling its plan must not be the thing that
+    /// stamps `classified` onto it — that is the #711 badge defect arriving by
+    /// the back door, on a path no classify-side test covers.
+    #[tokio::test]
+    async fn cancel_does_not_report_classified_without_a_frame_type_sc003() {
+        let db = test_db().await;
+        let bus = make_bus(db.pool());
+        let (item_id, root_path) = setup_classified_item(&db).await;
+
+        sqlx::query("UPDATE inbox_items SET frame_type = NULL WHERE id = ?")
+            .bind(&item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        do_confirm(&db, &item_id, &root_path).await;
+        cancel_inbox_plan(db.pool(), &bus, &item_id).await.unwrap();
+
+        let item = inbox_repo::get_inbox_item(db.pool(), &item_id).await.unwrap();
+        assert_eq!(
+            item.state, "pending_classification",
+            "an item with no frame type must not report `classified` after its plan is cancelled"
+        );
     }
 
     // ── T015d: get_inbox_plan not_found for item without plan ───────────────
@@ -831,6 +864,7 @@ mod tests {
                 content_signature: Some("sig-abc"),
                 format: Some("fits"),
                 lane: Some("move"),
+                file_count: 1,
             },
         )
         .await
@@ -853,6 +887,7 @@ mod tests {
                 content_signature: "sig-sub",
                 file_count: 1,
                 lane: "fits",
+                needs_review: false,
             },
         )
         .await
@@ -865,6 +900,103 @@ mod tests {
         assert!(
             ids.contains(&item_id.as_str()),
             "the confirmed placeholder's plan must stay on the open-plans surface, got {ids:?}"
+        );
+    }
+
+    /// Spec 058 T028 / FR-024: after confirming a SUB-ITEM of a genuinely split
+    /// folder, its plan must be reachable on the plan surface.
+    ///
+    /// The test above covers the unsplit shape, where the confirmed row is the
+    /// placeholder and the `> 1` bound in `exclude_split_placeholder!` is what
+    /// keeps it visible. This covers the other side of that bound: with two
+    /// distinct sub-item group keys the suppression IS active, the placeholder
+    /// is correctly hidden, and the row the user actually confirmed is a
+    /// sub-item. FR-001 makes that the only shape there is, so the plan surface
+    /// must reach it without depending on the placeholder at all.
+    #[tokio::test]
+    async fn list_open_reaches_a_confirmed_sub_item_of_a_split_folder() {
+        let db = test_db().await;
+        let (placeholder_id, root_path) = setup_classified_item(&db).await;
+        let root_id = "root-plan-test";
+
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &inbox_repo::UpsertSourceGroup {
+                id: "sg-split",
+                root_id,
+                relative_path: "lights",
+                content_signature: Some("sig-abc"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET source_group_id = 'sg-split' WHERE id = ?")
+            .bind(&placeholder_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        // Two distinct group keys → the placeholder is suppressed.
+        for (id, key, frame_type) in
+            [("sub-light", "type=light", "light"), ("sub-flat", "type=flat", "flat")]
+        {
+            inbox_repo::upsert_inbox_sub_item(
+                db.pool(),
+                &inbox_repo::UpsertInboxSubItem {
+                    id,
+                    root_id,
+                    relative_path: "lights",
+                    source_group_id: "sg-split",
+                    group_key: key,
+                    group_label: key,
+                    frame_type: Some(frame_type),
+                    content_signature: "sig-abc",
+                    file_count: 1,
+                    lane: "fits",
+                    needs_review: false,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        // Only the light sub-item is confirmed, so only it needs its own
+        // classification + evidence.
+        sqlx::query(
+            "INSERT INTO inbox_classifications
+             (inbox_item_id, result, frame_type, computed_at, content_signature,
+              unclassified_file_count)
+             VALUES ('sub-light', 'classified', 'light', '2025-01-01T00:00:00Z', 'sig-abc', 0)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO inbox_classification_evidence
+             (id, inbox_item_id, relative_file_path, frame_type, evidence_source, raw_value,
+              unclassified, is_master)
+             VALUES ('ev-sub-light', 'sub-light', 'img001.fits', 'light', 'imagetyp_header',
+                     'Light Frame', 0, 0)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        do_confirm(&db, "sub-light", &root_path).await;
+
+        let resp = list_open_inbox_plans(db.pool()).await.unwrap();
+        let ids: Vec<&str> = resp.plans.iter().map(|p| p.inbox_item_id.as_str()).collect();
+        assert!(
+            ids.contains(&"sub-light"),
+            "FR-024: the confirmed sub-item's plan must be reachable on the plan surface, got \
+             {ids:?}"
+        );
+        assert!(
+            resp.plans.iter().any(|p| p.inbox_item_id == "sub-light" && !p.actions.is_empty()),
+            "FR-024: reaching the plan means reaching its actions, not just its id"
         );
     }
 
