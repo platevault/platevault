@@ -1,9 +1,16 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** All stateful logic for the Data Sources pane: roots CRUD + rescan/reconcile/remap/disable/delete. */
-import { useCallback, useEffect, useState } from 'react';
-import { useMountedRef } from '@/hooks/useMountedRef';
+/**
+ * All stateful logic for the Data Sources pane: roots CRUD + rescan/reconcile/
+ * remap/disable/delete — TanStack Query (issues #615/#630), replacing the
+ * hand-rolled `useState`/`useEffect` fetch + manual `useMountedRef` guard that
+ * preceded it. Query/mutation state supersedes the mounted-ref guard: updates
+ * land in the query cache, not local component state, so there is nothing left
+ * to guard against setting state on an unmounted component.
+ */
+import { useCallback, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listRoots,
   registerRoot,
@@ -15,104 +22,86 @@ import {
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
-import { queryClient } from '@/data/queryClient';
 import { queryKeys } from '@/data/queryKeys';
 import { useInvalidateInventory } from '@/features/sessions/store';
 import { CATEGORY_ORDER } from './datasources-model';
 
 export function useDataSources() {
-  const [roots, setRoots] = useState<LibraryRoot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
+  const queryClient = useQueryClient();
   const invalidateInventory = useInvalidateInventory();
+  const invalidateRoots = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.roots.all() }),
+    [queryClient],
+  );
+
+  const {
+    data: rootsData,
+    isFetching: loading,
+    error: loadErrorRaw,
+  } = useQuery({
+    queryKey: queryKeys.roots.all(),
+    queryFn: listRoots,
+  });
+  const roots = rootsData ?? [];
+  const loadError = loadErrorRaw ? errMessage(loadErrorRaw) : null;
 
   const [showAdd, setShowAdd] = useState(false);
   const [addingPath, setAddingPath] = useState('');
   const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
-  const [addError, setAddError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-
-  // ── Rescan (P6a) ──────────────────────────────────────────────────────────
-  const [rescanningId, setRescanningId] = useState<string | null>(null);
-
-  // ── Reconcile (spec 048 T022) ─────────────────────────────────────────────
-  const [reconcilingId, setReconcilingId] = useState<string | null>(null);
-  const [reconcileError, setReconcileError] = useState<string | null>(null);
-
-  // ── Remap dialog (P6a) ────────────────────────────────────────────────────
   const [remapRoot, setRemapRoot] = useState<LibraryRoot | null>(null);
 
-  // ── Disable/Enable (P6b) ──────────────────────────────────────────────────
-  const [disableTarget, setDisableTarget] = useState<LibraryRoot | null>(null);
-  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
-  const [toggleActiveError, setToggleActiveError] = useState<string | null>(
-    null,
-  );
-
-  // ── Delete (P6b) ───────────────────────────────────────────────────────────
-  const [deleteTarget, setDeleteTarget] = useState<LibraryRoot | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // `loadRoots` is re-invoked on user actions (add/delete/toggle), not just on
-  // mount, so a per-effect `cancelled` flag cannot reach every call site. A
-  // mounted ref covers all of them.
-  const mountedRef = useMountedRef();
-
-  const loadRoots = useCallback(() => {
-    setLoading(true);
-    setLoadError(null);
-    listRoots()
-      .then((data) => {
-        if (mountedRef.current) setRoots(data);
-      })
-      .catch((err: unknown) => {
-        if (mountedRef.current) setLoadError(errMessage(err));
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false);
-      });
-  }, [mountedRef]);
-
-  useEffect(() => {
-    loadRoots();
-  }, [loadRoots]);
+  // ── Add ────────────────────────────────────────────────────────────────────
+  const addMutation = useMutation({
+    mutationFn: (args: { path: string; category: RootCategory }) =>
+      registerRoot({
+        path: args.path,
+        category: args.category,
+        scanSettings: {},
+      }),
+    onSuccess: invalidateRoots,
+  });
+  const addError = addMutation.error ? errMessage(addMutation.error) : null;
+  const clearAddError = () => addMutation.reset();
 
   const handleAdd = async () => {
     if (!addingPath.trim()) return;
-    setAdding(true);
-    setAddError(null);
     try {
-      await registerRoot({
+      await addMutation.mutateAsync({
         path: addingPath.trim(),
         category: addingCategory,
-        scanSettings: {},
       });
       setAddingPath('');
       setAddingCategory('raw');
       setShowAdd(false);
-      loadRoots();
-    } catch (err: unknown) {
-      setAddError(errMessage(err));
-    } finally {
-      setAdding(false);
+    } catch {
+      // addError below surfaces the failure; form stays open for retry.
     }
   };
+
+  // ── Rescan (P6a) ──────────────────────────────────────────────────────────
+  const rescanMutation = useMutation({
+    mutationFn: (args: { rootId: string; rootAbsolutePath: string }) =>
+      rescanRoot(args),
+    onSuccess: invalidateRoots,
+  });
+  const rescanningId = rescanMutation.isPending
+    ? (rescanMutation.variables?.rootId ?? null)
+    : null;
 
   const handleRescan = async (root: LibraryRoot) => {
-    setRescanningId(root.id);
     try {
-      await rescanRoot({ rootId: root.id, rootAbsolutePath: root.path });
       // Real scan has already completed — reload immediately (no guess-delay).
-      loadRoots();
+      await rescanMutation.mutateAsync({
+        rootId: root.id,
+        rootAbsolutePath: root.path,
+      });
     } catch (err: unknown) {
       console.error('Rescan failed:', errMessage(err));
-    } finally {
-      setRescanningId(null);
     }
   };
 
+  // ── Reconcile (spec 048 T022) ─────────────────────────────────────────────
+  //
   // Per-frame reconcile (missing/recovered/size-backfill) only applies to
   // raw/calibration roots — those are the categories `file_record` rows are
   // populated for (light + calibration frame apply). The command exists on
@@ -125,20 +114,28 @@ export function useDataSources() {
   // inventory prefix backs the Sessions/Inventory page's own query
   // (`useInventorySources`, `sessions/store.ts`) via the shared
   // `useInvalidateInventory()` hook.
-  const handleReconcile = async (root: LibraryRoot) => {
-    setReconcilingId(root.id);
-    setReconcileError(null);
-    try {
-      await reconcileRoot({ rootId: root.id });
+  const reconcileMutation = useMutation({
+    mutationFn: (args: { rootId: string }) => reconcileRoot(args),
+    onSuccess: () => {
       invalidateInventory();
-      await queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: queryKeys.sessions.all(),
       });
-      loadRoots();
+      void invalidateRoots();
+    },
+  });
+  const reconcilingId = reconcileMutation.isPending
+    ? (reconcileMutation.variables?.rootId ?? null)
+    : null;
+  const reconcileError = reconcileMutation.error
+    ? errMessage(reconcileMutation.error)
+    : null;
+
+  const handleReconcile = async (root: LibraryRoot) => {
+    try {
+      await reconcileMutation.mutateAsync({ rootId: root.id });
     } catch (err: unknown) {
-      setReconcileError(errMessage(err));
-    } finally {
-      setReconcilingId(null);
+      console.error('Reconcile failed:', errMessage(err));
     }
   };
 
@@ -147,25 +144,37 @@ export function useDataSources() {
   // Disabling stops the root from being scanned/ingested but keeps its full
   // history intact, so it is gated by a lightweight confirm. Re-enabling is
   // restorative (non-destructive) and applies immediately, no confirm needed.
-  const requestToggleActive = (root: LibraryRoot) => {
-    if (root.active) {
-      setToggleActiveError(null);
-      setDisableTarget(root);
-    } else {
-      void applyToggleActive(root, true);
+  const [disableTarget, setDisableTarget] = useState<LibraryRoot | null>(null);
+
+  const toggleMutation = useMutation({
+    mutationFn: (args: { rootId: string; active: boolean }) =>
+      setRootActive(args),
+    onSuccess: invalidateRoots,
+  });
+  const togglingActiveId = toggleMutation.isPending
+    ? (toggleMutation.variables?.rootId ?? null)
+    : null;
+  const toggleActiveError = toggleMutation.error
+    ? errMessage(toggleMutation.error)
+    : null;
+  const clearToggleActiveError = () => toggleMutation.reset();
+
+  const applyToggleActive = async (root: LibraryRoot, active: boolean) => {
+    try {
+      await toggleMutation.mutateAsync({ rootId: root.id, active });
+    } catch {
+      // toggleActiveError below would surface the failure, but
+      // handleConfirmDisable closes the dialog unconditionally after confirm
+      // (matching the prior behaviour), so it is never actually shown.
     }
   };
 
-  const applyToggleActive = async (root: LibraryRoot, active: boolean) => {
-    setTogglingActiveId(root.id);
-    setToggleActiveError(null);
-    try {
-      await setRootActive({ rootId: root.id, active });
-      loadRoots();
-    } catch (err: unknown) {
-      setToggleActiveError(errMessage(err));
-    } finally {
-      setTogglingActiveId(null);
+  const requestToggleActive = (root: LibraryRoot) => {
+    if (root.active) {
+      clearToggleActiveError();
+      setDisableTarget(root);
+    } else {
+      void applyToggleActive(root, true);
     }
   };
 
@@ -179,23 +188,33 @@ export function useDataSources() {
   //
   // Blocks server-side when dependent records exist (root.has_dependents);
   // the block reason is surfaced in the confirm dialog rather than closing it.
+  const [deleteTarget, setDeleteTarget] = useState<LibraryRoot | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (args: { rootId: string }) => deleteRoot(args),
+    onSuccess: invalidateRoots,
+  });
+  const deletingId = deleteMutation.isPending
+    ? (deleteMutation.variables?.rootId ?? null)
+    : null;
+  const deleteError = deleteMutation.error
+    ? errMessage(deleteMutation.error)
+    : null;
+  const clearDeleteError = () => deleteMutation.reset();
+
   const requestDelete = (root: LibraryRoot) => {
-    setDeleteError(null);
+    clearDeleteError();
     setDeleteTarget(root);
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
-    setDeletingId(deleteTarget.id);
-    setDeleteError(null);
     try {
-      await deleteRoot({ rootId: deleteTarget.id });
+      await deleteMutation.mutateAsync({ rootId: deleteTarget.id });
       setDeleteTarget(null);
-      loadRoots();
-    } catch (err: unknown) {
-      setDeleteError(errMessage(err));
-    } finally {
-      setDeletingId(null);
+    } catch {
+      // Dialog stays open; deleteError below surfaces the block reason
+      // (e.g. root.has_dependents) instead of closing on failure.
     }
   };
 
@@ -218,11 +237,11 @@ export function useDataSources() {
     addingCategory,
     setAddingCategory,
     addError,
-    setAddError,
-    adding,
+    clearAddError,
+    adding: addMutation.isPending,
     handleAdd,
 
-    loadRoots,
+    loadRoots: invalidateRoots,
 
     rescanningId,
     handleRescan,
@@ -238,7 +257,7 @@ export function useDataSources() {
     setDisableTarget,
     togglingActiveId,
     toggleActiveError,
-    setToggleActiveError,
+    clearToggleActiveError,
     requestToggleActive,
     handleConfirmDisable,
 
@@ -246,7 +265,7 @@ export function useDataSources() {
     setDeleteTarget,
     deletingId,
     deleteError,
-    setDeleteError,
+    clearDeleteError,
     requestDelete,
     handleConfirmDelete,
   };

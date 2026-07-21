@@ -77,6 +77,7 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryClient.clear();
   mockSourceProtectionGet.mockResolvedValue({
     status: 'ok',
     data: {
