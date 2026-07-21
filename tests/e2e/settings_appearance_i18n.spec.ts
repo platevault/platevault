@@ -278,7 +278,12 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/settings/general');
-    await expect(page.getByText('Language', { exact: true })).toBeVisible();
+    // The group title and the row label both read "Language" (the row is
+    // this group's only control) — `getByText(exact)` would match both, so
+    // scope to the group heading specifically.
+    await expect(
+      page.locator('.pv-settings__group-title', { hasText: 'Language' }),
+    ).toBeVisible();
 
     // FR-007: flag + native name both render as visible text.
     const english = page.getByRole('radio', { name: 'English (UK)' });
@@ -311,6 +316,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     page,
   }) => {
     seedSetupComplete(page);
+    await page.goto('/#/');
 
     // Open the bottom log panel first — Shell (and its expanded/collapsed
     // state) wraps every route, so this state only survives a language
@@ -335,9 +341,12 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     // must reflect the change too, without navigating away and back. A
     // <select>'s `textContent` concatenates every <option>, so the proof is
     // the translated <option> existing in this specific select, not a
-    // display-value check.
-    await page.getByRole('button', { name: 'Audit', exact: true }).click();
-    const outcomeFilter = page.getByLabel('Outcome').first();
+    // display-value check. The nav item and the filter label are matched in
+    // Portuguese, not English — SettingsPageBody subscribes to the locale
+    // context (per the commit that added it), so the whole nav and every
+    // pane re-render live in pt-BR the moment the radio above is clicked.
+    await page.getByRole('button', { name: 'Registro de auditoria' }).click();
+    const outcomeFilter = page.getByLabel('Resultado').first();
     await expect(outcomeFilter).toHaveValue('');
     await expect(
       outcomeFilter.locator('option', { hasText: 'Todos' }),
