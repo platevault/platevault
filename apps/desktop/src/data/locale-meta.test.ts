@@ -6,8 +6,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { LOCALE_META, localeDisplayLabel } from './locale-meta';
-import { SHIPPED_LOCALES } from './locale';
+import {
+  LOCALE_META,
+  localeDisplayLabel,
+  needsReviewNotice,
+} from './locale-meta';
+import { BASE_LOCALE, SHIPPED_LOCALES } from './locale';
 
 describe('LOCALE_META', () => {
   it('has an entry for every shipped locale, with a non-empty native name distinct from the flag', () => {
@@ -32,5 +36,29 @@ describe('LOCALE_META', () => {
 
   it('localeDisplayLabel combines the flag and native name (FR-007)', () => {
     expect(localeDisplayLabel('pt-BR')).toBe('🇧🇷 Português (Brasil)');
+  });
+});
+
+describe('review status (FR-013)', () => {
+  it('declares a review status for every shipped locale', () => {
+    for (const id of SHIPPED_LOCALES) {
+      expect(LOCALE_META[id].reviewStatus).toBeDefined();
+    }
+  });
+
+  it('marks the base locale as the source catalogue, never as reviewed', () => {
+    // The base locale is what everything else is translated FROM, so
+    // "reviewed" would be a category error — there is nothing to check it
+    // against. This guards against a future contributor flipping it.
+    expect(LOCALE_META[BASE_LOCALE].reviewStatus).toBe('source');
+  });
+
+  it('marks pt-BR as machine-generated so it carries a review notice', () => {
+    expect(LOCALE_META['pt-BR'].reviewStatus).toBe('machine-generated');
+    expect(needsReviewNotice('pt-BR')).toBe(true);
+  });
+
+  it('does not flag the source catalogue as needing review', () => {
+    expect(needsReviewNotice(BASE_LOCALE)).toBe(false);
   });
 });
