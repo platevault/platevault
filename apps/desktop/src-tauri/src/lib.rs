@@ -8,6 +8,7 @@
 //! are emitted at test time by `tests/bindings.rs` via tauri-specta.
 
 pub mod commands;
+pub mod data_dir;
 pub mod resolve_cache;
 pub mod watcher;
 
@@ -17,7 +18,9 @@ use std::sync::Arc;
 
 use audit::bus::EventBus;
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-use sqlx::SqlitePool;
+use persistence_db::Database;
+use tauri::utils::config::WindowConfig;
+use tauri::webview::WebviewWindowBuilder;
 use tauri::{Emitter, Manager};
 
 use crate::bootstrap::background::{
@@ -30,6 +33,9 @@ use crate::commands::dev::CallBuffer;
 use crate::commands::lifecycle::AppState;
 
 pub const CRATE_NAME: &str = "desktop_shell";
+
+/// Label of the primary application window (`tauri.conf.json`).
+pub const MAIN_WINDOW_LABEL: &str = "main";
 
 // `include!`d, not `mod`-declared — see bootstrap/specta.rs's header comment
 // for why `collect_commands!`'s hidden macro hygiene requires this file's
@@ -66,9 +72,12 @@ pub fn build_app() -> tauri::App {
     // silently redirected/exited without ever opening a window, timing out the
     // WebDriver session (observed on the Windows shard). No journey exercises
     // single-instance behaviour, so when the var is set we skip the plugin
-    // entirely on every platform. Unset (real users, non-e2e builds), the
-    // guard is registered unchanged.
-    if std::env::var_os("ALM_E2E_INSTANCE_ID").is_none() {
+    // entirely on every platform. The bypass additionally requires the `e2e`
+    // feature at compile time, so release binaries ignore the variable — see
+    // `bootstrap::single_instance_guard_enabled`.
+    if crate::bootstrap::single_instance_guard_enabled(
+        std::env::var_os("ALM_E2E_INSTANCE_ID").is_some(),
+    ) {
         tb = tb.plugin(
             tauri_plugin_single_instance::Builder::new()
                 .callback(|app, argv, cwd| {
@@ -190,15 +199,6 @@ pub fn build_app() -> tauri::App {
         .setup(move |app| {
             builder.mount_events(app);
 
-            // Spec 051 US4 (T029/T030): enforce the min-size floor and
-            // off-screen fallback after tauri-plugin-window-state restores a
-            // persisted size/position — it may restore geometry from a prior
-            // app version or a since-disconnected monitor.
-            if let Some(window) = app.get_webview_window("main") {
-                enforce_min_window_size(&window);
-                recenter_if_offscreen(&window);
-            }
-
             // Spec 051 US5 (T032): native application menu — App submenu
             // (About/Settings/Quit), Window submenu, and a standard Edit
             // submenu (copy/cut/paste/select-all/undo/redo). Does not touch
@@ -215,19 +215,181 @@ pub fn build_app() -> tauri::App {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(instance_context())
         .expect("error while building tauri application")
+}
+
+/// The compiled-in Tauri context, with each config-declared window pointed at
+/// a per-instance webview user-data folder when `ALM_DATA_DIR` is set.
+///
+/// Issue #1204: concurrent instances on Windows otherwise share one `WebView2`
+/// user-data folder, and the loser fails to create its webview at all
+/// (`WindowsError(0x80070057)`) — see [`crate::data_dir`] for the full chain
+/// and for why this has to go through the *config* (as a relative path)
+/// rather than [`tauri::webview::WebviewWindowBuilder::data_directory`]:
+/// windows declared in `tauri.conf.json` are built by Tauri itself, during
+/// `.build()`, so there is no builder for us to reach.
+///
+/// Unset (real users, non-E2E builds) leaves every window's `data_directory`
+/// as `None` — byte-for-byte the previous behaviour.
+///
+/// **Windows only, deliberately.** Linux and macOS already get real webview
+/// isolation from the harness's `XDG_*`/`HOME` overrides, which those
+/// platforms actually honour; there is no collision to fix. Setting
+/// `data_directory` there would instead *move* WebKitGTK/WKWebView storage
+/// out from under the isolated root it currently lives in — a regression
+/// bought for nothing.
+///
+/// That gate is a runtime `cfg!`, not a `#[cfg]` attribute, so this body is
+/// type-checked on every platform. A `#[cfg(target_os = "windows")]` block
+/// here would be invisible to the Linux and macOS CI legs and could only
+/// break on the one platform whose failures this is meant to stop.
+/// Clear `create` on the [`MAIN_WINDOW_LABEL`] entry so Tauri's own `setup()`
+/// — which runs on `RunEvent::Ready`, i.e. *inside* `app.run()`, not during
+/// `.build()` (`tauri-2.11.5/src/app.rs:1424` + `:2524`) — creates the splash
+/// window only.
+///
+/// This is the migration gate. The main webview is the sole surface that loads
+/// the React app and issues IPC, so while it does not exist no route can
+/// render and no command can observe an unmigrated database or an unmanaged
+/// `AppState`. [`run_app`] rebuilds it from this same (retained) config entry
+/// once migration has finished, which is what lets the event loop — and
+/// therefore the splash's first frame — start *before* migration instead of
+/// after it.
+///
+/// Returns `false` if no such entry exists, so a config rename fails loudly
+/// rather than silently reverting to eager creation.
+fn defer_main_window(windows: &mut [WindowConfig]) -> bool {
+    let Some(main) = windows.iter_mut().find(|w| w.label == MAIN_WINDOW_LABEL) else {
+        return false;
+    };
+    main.create = false;
+    true
+}
+
+fn instance_context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+
+    assert!(
+        defer_main_window(&mut context.config_mut().app.windows),
+        "tauri.conf.json declares no `{MAIN_WINDOW_LABEL}` window; \
+         run_app has nothing to create after migration"
+    );
+
+    let subdir = crate::data_dir::webview_subdir();
+
+    if let (true, Some(subdir)) = (cfg!(target_os = "windows"), subdir.as_ref()) {
+        for window in &mut context.config_mut().app.windows {
+            window.data_directory = Some(subdir.clone());
+        }
+    }
+
+    // `eprintln!`, deliberately, not `tracing`: `build_app()` runs BEFORE
+    // `main.rs` installs the tracing subscriber, so anything logged from here
+    // is dropped on the floor. A first attempt at this used `tracing::info!`
+    // and produced no line in CI — which said nothing about whether the code
+    // had run, and cost a full Windows round-trip to find out. stderr is
+    // captured by the E2E harness's `ProcLog`, so this always shows up.
+    if let Some(dir) = &subdir {
+        eprintln!(
+            "ALM_DATA_DIR is set; webview data_directory = {} (applied: {})",
+            dir.display(),
+            cfg!(target_os = "windows")
+        );
+    } else {
+        eprintln!("ALM_DATA_DIR is unset; webview data_directory left at Tauri's default");
+    }
+
+    context
+}
+
+/// Start the event loop first, then finish database startup behind the splash.
+///
+/// The splash is the only window Tauri creates for itself (see
+/// [`defer_main_window`]), so it paints as soon as `app.run()` begins pumping.
+/// Connecting, migrating, and wiring shared state all happen on a background
+/// task from there, and the main window is built only once that task has
+/// finished — so a long migration is visible instead of being a windowless
+/// pause, and the UI still cannot reach an unmigrated database.
+pub fn run_app(app: tauri::App, db_url: String, data_dir: std::path::PathBuf) {
+    // Developer diagnostics call buffer (spec 021).
+    // Always managed so the type is available; only populated when dev-tools
+    // feature is compiled in and devMode is on at runtime. No database
+    // dependency, so it does not wait for `boot`.
+    #[cfg(feature = "dev-tools")]
+    app.manage(CallBuffer::new());
+
+    // Driven from a dedicated OS thread via the ambient runtime handle rather
+    // than `tokio::spawn`, because `boot` is not provably `Send`: holding a
+    // `&Database` across `migrate()`'s await trips a higher-ranked-lifetime
+    // limitation ("implementation of `sqlx::Acquire` is not general enough").
+    // `Handle::block_on` has no `Send` bound and still enters the runtime
+    // context, so `boot`'s own `tokio::spawn` calls land on the same
+    // multi-threaded runtime they always have. The alternative — reshaping
+    // `Database::migrate` — would disturb #1307's single-connection,
+    // FK-disabled migration chain.
+    let runtime = tokio::runtime::Handle::current();
+    let handle = app.handle().clone();
+    std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir)));
+
+    app.run(|_handle, _event| {});
+}
+
+/// Report an unrecoverable startup failure and terminate.
+///
+/// These were `.expect()` calls on the main thread while startup ran before
+/// `app.run()`. From a spawned task a panic would only kill the task, leaving
+/// the user in front of a splash that never resolves.
+fn fatal(handle: &tauri::AppHandle, message: &str) {
+    tracing::error!("{message}");
+    handle.exit(1);
+}
+
+/// Build the main window from its (retained, `create: false`) config entry.
+///
+/// Call only after every `State` a command can ask for is managed: this is the
+/// moment the React app becomes loadable and IPC becomes reachable.
+fn create_main_window(handle: &tauri::AppHandle) {
+    let config = handle.config().app.windows.iter().find(|w| w.label == MAIN_WINDOW_LABEL).cloned();
+    let Some(config) = config else {
+        fatal(handle, &format!("no `{MAIN_WINDOW_LABEL}` window config to build"));
+        return;
+    };
+
+    let window =
+        WebviewWindowBuilder::from_config(handle, &config).and_then(WebviewWindowBuilder::build);
+    match window {
+        // Spec 051 US4 (T029/T030): enforce the min-size floor and off-screen
+        // fallback after tauri-plugin-window-state restores a persisted
+        // size/position — it may restore geometry from a prior app version or
+        // a since-disconnected monitor.
+        Ok(window) => {
+            enforce_min_window_size(&window);
+            recenter_if_offscreen(&window);
+        }
+        Err(e) => fatal(handle, &format!("failed to create the `{MAIN_WINDOW_LABEL}` window: {e}")),
+    }
 }
 
 // Sequential startup/subscriber-wiring assembly, not complex logic — same
 // shape as `bootstrap::specta::specta_builder`, which carries the same allow.
 #[allow(clippy::too_many_lines)]
-pub fn run_app(
-    app: tauri::App,
-    pool: SqlitePool,
-    resolve_cache: targeting_resolver::simbad::ResolveCache,
-    resolve_cache_path: std::path::PathBuf,
-) {
+async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBuf) {
+    let db = match Database::connect(&db_url).await {
+        Ok(db) => db,
+        Err(e) => return fatal(&app, &format!("failed to connect to SQLite at {db_url}: {e}")),
+    };
+    if let Err(e) = db.migrate().await {
+        return fatal(&app, &format!("failed to run migrations on {db_url}: {e}"));
+    }
+    let pool = db.pool().clone();
+
+    // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
+    // cache. Opening is fast (no warm yet — the warm below is backgrounded so
+    // a large seed never blocks startup).
+    let resolve_cache_path = data_dir.join("simbad-cache.redb");
+    let resolve_cache = crate::resolve_cache::open_or_in_memory(&resolve_cache_path);
+
     let bus = EventBus::with_pool(pool.clone());
 
     // Live event-bus subscribers. Start these *before* `bus`/`pool` are moved
@@ -241,14 +403,18 @@ pub fn run_app(
     //  - spec 010 (#722): guided-flow event forwarder → re-emits
     //    inventory.confirmed/project.created/tool.launch as named events so
     //    `eventBridge.ts` can advance the coach on real domain completions.
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        resolve_cache.clone(),
+    );
     crate::commands::log::start_log_forwarder(
-        app.handle().clone(),
+        app.clone(),
         &bus,
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
-    crate::commands::guided::start_guided_event_forwarder(app.handle().clone(), &bus);
+    crate::commands::guided::start_guided_event_forwarder(app.clone(), &bus);
     drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
@@ -403,11 +569,39 @@ pub fn run_app(
 
     app.manage(state);
 
-    // Developer diagnostics call buffer (spec 021).
-    // Always managed so the type is available; only populated when dev-tools
-    // feature is compiled in and devMode is on at runtime.
-    #[cfg(feature = "dev-tools")]
-    app.manage(CallBuffer::new());
+    // Last, and only here: the schema is current and every `State` a command
+    // can ask for is managed, so it is now safe for a webview to exist.
+    create_main_window(&app);
+}
 
-    app.run(|_handle, _event| {});
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(label: &str) -> WindowConfig {
+        WindowConfig { label: label.to_owned(), ..WindowConfig::default() }
+    }
+
+    /// The ordering guarantee, at the only place it can be enforced: Tauri
+    /// creates `create: true` config windows on `RunEvent::Ready`, so the
+    /// splash must stay eager and `main` must not — otherwise the React app
+    /// loads, and its IPC reaches commands, while `boot` is still migrating.
+    #[test]
+    fn real_config_creates_the_splash_eagerly_and_defers_main() {
+        let context = instance_context();
+        let windows = &context.config().app.windows;
+
+        let main = windows.iter().find(|w| w.label == MAIN_WINDOW_LABEL).expect("main window");
+        assert!(!main.create, "`main` must not be created before migrations run");
+
+        let splash = windows.iter().find(|w| w.label == "splash").expect("splash window");
+        assert!(splash.create, "the splash must paint while migrations run");
+    }
+
+    #[test]
+    fn deferring_reports_a_missing_main_entry() {
+        let mut windows = [window("splash")];
+        assert!(!defer_main_window(&mut windows));
+        assert!(windows[0].create, "an unrelated window must keep its `create` flag");
+    }
 }

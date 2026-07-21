@@ -9,6 +9,7 @@
 //!
 //! Legacy `inbox.scan` is retained for backward compatibility.
 
+use app_core::inbox::attribution::suggest_candidates;
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
@@ -16,7 +17,7 @@ use app_core::inbox::property_registry::property_registry as get_property_regist
 use app_core::inbox::reclassify::{
     reclassify, reclassify_v2, ReclassifyOverride, ReclassifyRequest,
 };
-use app_core::inbox::scan::{scan_root, ScanOptions, ScannedInboxItem, ScannedMasterFile};
+use app_core::inbox::scan::{scan_root, ScannedInboxItem, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use app_core::inbox::target_recommendations::{
     target_recommendations as target_recommendations_uc, RecommendationTarget,
@@ -26,6 +27,8 @@ use app_core::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
     get_inbox_plan, list_open_inbox_plans,
 };
+use app_core::inbox_scan::resolve_scan_options;
+use contracts_core::framing::IngestionAttributionCandidateDto;
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
@@ -170,7 +173,10 @@ pub async fn inbox_confirm(
 /// `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 ///
 /// # Errors
-/// Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
+/// Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, `"file.not_found"`,
+/// or `"internal.database"` — the re-aggregation's writes (classification,
+/// needs-review sentinel, breakdown rows) surface a persistence failure rather
+/// than returning a response that describes state which was never saved.
 #[tauri::command]
 #[specta::specta]
 pub async fn inbox_reclassify(
@@ -246,6 +252,29 @@ pub async fn inbox_item_metadata(
     Ok(InboxItemMetadataResponse { inbox_item_id: req.inbox_item_id, files })
 }
 
+// ── inbox.attribution.suggest ─────────────────────────────────────────────────
+
+/// `inbox.attribution.suggest` — ranked framing/project attribution candidates
+/// for a light-frame Inbox item (spec 008 US7/FR-019, F-Framing-5).
+///
+/// Read-only: suggests, never merges (FR-020). The user picks one and the pick
+/// travels as `inbox.confirm`'s `chosenAttribution` (FR-022) on a **single**
+/// confirm — the candidates must be readable before that confirm, because
+/// confirm creates the plan that blocks any second confirm on the item.
+///
+/// Returns an empty list for non-light items.
+///
+/// # Errors
+/// `internal.database` — a query failed.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_attribution_suggest(
+    inbox_item_id: String,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<Vec<IngestionAttributionCandidateDto>, ContractError> {
+    suggest_candidates(&pool, &inbox_item_id).await
+}
+
 // ── inbox.target_recommendations ──────────────────────────────────────────────
 
 /// `inbox.target_recommendations` — recommend canonical targets for a light
@@ -297,7 +326,7 @@ pub async fn inbox_scan_folder(
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<InboxScanFolderResponse, ContractError> {
     let root_path = PathBuf::from(&req.root_absolute_path);
-    let opts = ScanOptions { follow_symlinks: req.follow_symlinks };
+    let opts = resolve_scan_options(&pool).await?;
     let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
 
     // Derive the move-vs-catalogue lane for source groups from the root's

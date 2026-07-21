@@ -137,11 +137,15 @@
   gap: var(--pv-sp-1);
   color: var(--pv-text-muted);
 }
+/* #606: carries BOTH the source and destination path, so it claims the row's
+   otherwise-empty trailing columns (file count / discard are group-level only)
+   rather than squeezing two absolute paths into one 1.3fr column. */
 .pv-plan-panel__file-dest {
   display: inline-flex;
   align-items: baseline;
   gap: var(--pv-sp-0);
   min-width: 0;
+  grid-column: 4 / -1;
 }
 .pv-plan-panel__inplace {
   color: var(--pv-text-muted);
@@ -312,12 +316,15 @@
   white-space: nowrap;
 }
 
-.pv-plan-panel__dest {
+/* Shared path cell for BOTH sides of a plan action (#606). `direction: rtl`
+   keeps the meaningful tail visible when a long absolute path is ellipsised. */
+.pv-plan-panel__path {
   color: var(--pv-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: rtl;
+  min-width: 0;
 }
 
 /* ── Destructive destination control ────────────────────────── */

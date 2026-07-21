@@ -11,7 +11,7 @@ Repo-specific gotchas for future `/design-sync` runs. One bullet per quirk.
   Lock, DirPicker, WizardShell, ToastContainer, InfoTip). Feature-level components live in
   `src/features/*` and are intentionally NOT synced (app screens, not reusable primitives).
 - **Theming**: tokens are `--pv-*` CSS custom properties in `src/styles/tokens.css`, which
-  `@import`s the shared type/space/radius scale from `packages/tokens/foundation.css`.
+  `@import`s the shared type/space/radius scale from `packages/tokens/tokens-docs.css`.
   `:root` = default (light); 6 named themes as `[data-theme="warm-slate"|"warm-clay"|
   "observatory-cool-light"|"observatory-cool"|"observatory-dark"|"espresso-dark"]` on
   `<html>` (`observatory-cool` is the canonical dark and the app's dark default); density
@@ -29,7 +29,7 @@ Repo-specific gotchas for future `/design-sync` runs. One bullet per quirk.
     outfile:'apps/desktop/.ds-css/flattened.css',loader:{'.css':'css'}})"
   ```
   esbuild inlines the relative `@import`s — `components.css` → `components/*.css` partials
-  (the `.pv-*` classes) and `tokens.css` → `packages/tokens/foundation.css`, which sits
+  (the `.pv-*` classes) and `tokens.css` → `packages/tokens/tokens-docs.css`, which sits
   OUTSIDE `apps/desktop`, so the aggregate must be built from a root that can reach it.
   **`external: ['*.woff2']` is required**: since spec 055 bundled the fonts, `tokens.css`
   carries six `@font-face` rules, and esbuild hard-fails the entire flatten with *no loader

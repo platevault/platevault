@@ -19,3 +19,11 @@
 # format .` (self-referential), so it needs the same LF treatment even
 # though it's JSON, not a source file the formatter otherwise touches.
 apps/desktop/biome.json text eol=lf
+
+# Generated design-token artifacts and their inputs. `build-tokens.mjs --check`
+# compares the committed file byte-for-byte against a freshly generated string,
+# which is always LF. Without this a Windows checkout converts these to CRLF and
+# the gate fails there — and only there — with a misleading "out of date" that
+# tells you to rebuild a file which is already correct.
+*.css text eol=lf
+apps/desktop/tokens/*.json text eol=lf

@@ -315,6 +315,56 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
     })
 }
 
+/// Build a [`targeting_resolver::simbad::SimbadResolver`] from the persisted
+/// `resolver_settings` row and run one full drain pass: [`resolve_pending`]
+/// then [`crate::ingest_sessions::backfill_session_targets`].
+///
+/// Shared by the spec-035 US4/T043 periodic backstop
+/// (`desktop_shell::bootstrap::background::spawn_ingest_resolution_drain`) and
+/// the spec-035 plan-applied path (`app_core_inbox::plan_listener::
+/// ingest_light_frames_if_applicable`, issue #1256): the latter calls this
+/// immediately after a plan's light frames are ingested so newly-enqueued
+/// `pending` rows (and any session left unlinked from an earlier pass) resolve
+/// promptly instead of waiting for the next ~30s periodic tick. Never returns
+/// an error — a failure to build the resolver, drain, or back-fill is logged
+/// and the caller (periodic tick or next plan-applied event) retries.
+pub async fn drain_and_backfill_once(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    resolve_cache: &targeting_resolver::simbad::ResolveCache,
+) {
+    use targeting_resolver::simbad::{SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT};
+
+    let settings =
+        persistence_db::repositories::q_desktop::get_resolver_settings(pool).await.unwrap_or(None);
+    let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
+        || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
+        |r| (r.online_enabled != 0, r.simbad_endpoint, r.request_timeout_secs),
+    );
+
+    // `SimbadResolver::new` never builds a reqwest/TLS client when
+    // `online_enabled` is false (mirrors target.resolve FIX-3); cache hits
+    // still resolve regardless.
+    let config =
+        SimbadConfig::from_settings(endpoint, u64::try_from(timeout_secs.max(1)).unwrap_or(10));
+    let resolver = match SimbadResolver::new(&config, resolve_cache, online_enabled) {
+        Ok(resolver) => resolver,
+        Err(e) => {
+            tracing::warn!("failed to build SimbadResolver for ingest drain: {e:?}");
+            return;
+        }
+    };
+
+    if let Err(e) = resolve_pending(pool, &resolver, Some(bus), online_enabled, 50).await {
+        tracing::warn!("ingest_resolution drain failed: {e:?}");
+        return;
+    }
+
+    if let Err(e) = crate::ingest_sessions::backfill_session_targets(pool).await {
+        tracing::warn!("acquisition_session target back-fill failed: {e:?}");
+    }
+}
+
 async fn mark_resolved(
     pool: &SqlitePool,
     row_id: &str,

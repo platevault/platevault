@@ -93,6 +93,198 @@ async fn masters_list_carries_absent_metadata_as_none_not_sentinels() {
     assert_eq!(m.size_bytes, None, "must never default to 0");
 }
 
+/// #879: a registered camera's user-facing name replaces the raw
+/// `optic_train` header string in the master fingerprint. Before this
+/// wiring, registered equipment was consumed nowhere outside Settings and
+/// the list rendered the FITS header spelling verbatim.
+#[tokio::test]
+async fn masters_list_renders_registered_camera_name_not_raw_header() {
+    let _guard = lock_cache_tests().await;
+    caches::invalidate_calibration_masters();
+    let db = test_db().await;
+    let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+    crate::equipment::create_camera(
+        db.pool(),
+        &bus,
+        &contracts_core::equipment::CreateCamera {
+            name: "Main Imaging Rig".to_owned(),
+            aliases: vec!["ASI2600MM".to_owned()],
+            sensor_type: None,
+            passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_master(&db, "cal-named", "ASI2600MM").await;
+
+    let masters = masters_list(db.pool()).await.unwrap();
+    assert_eq!(
+        masters[0].fingerprint.camera.as_deref(),
+        Some("Main Imaging Rig"),
+        "registered camera name must replace the raw optic_train header string"
+    );
+}
+
+/// #879: header spelling varies by capture program, so alias matching
+/// ignores case and surrounding whitespace.
+#[tokio::test]
+async fn masters_list_resolves_camera_name_ignoring_case_and_whitespace() {
+    let _guard = lock_cache_tests().await;
+    caches::invalidate_calibration_masters();
+    let db = test_db().await;
+    let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+    crate::equipment::create_camera(
+        db.pool(),
+        &bus,
+        &contracts_core::equipment::CreateCamera {
+            name: "Main Imaging Rig".to_owned(),
+            aliases: vec!["ASI2600MM".to_owned()],
+            sensor_type: None,
+            passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_master(&db, "cal-case", "  asi2600mm ").await;
+
+    let masters = masters_list(db.pool()).await.unwrap();
+    assert_eq!(masters[0].fingerprint.camera.as_deref(), Some("Main Imaging Rig"));
+}
+
+/// #879: an unregistered camera keeps rendering the raw header string —
+/// resolution adds names, it never blanks out unknown equipment.
+#[tokio::test]
+async fn masters_list_falls_back_to_raw_header_for_unregistered_camera() {
+    let _guard = lock_cache_tests().await;
+    caches::invalidate_calibration_masters();
+    let db = test_db().await;
+
+    insert_master(&db, "cal-unreg", "Unregistered Cam").await;
+
+    let masters = masters_list(db.pool()).await.unwrap();
+    assert_eq!(masters[0].fingerprint.camera.as_deref(), Some("Unregistered Cam"));
+}
+
+/// #879: `masters_get` resolves names on the same rule as `masters_list`,
+/// so the detail panel and the table never disagree.
+#[tokio::test]
+async fn masters_get_renders_registered_camera_name_not_raw_header() {
+    let _guard = lock_cache_tests().await;
+    caches::invalidate_calibration_masters();
+    let db = test_db().await;
+    let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+    crate::equipment::create_camera(
+        db.pool(),
+        &bus,
+        &contracts_core::equipment::CreateCamera {
+            name: "Main Imaging Rig".to_owned(),
+            aliases: vec!["ASI2600MM".to_owned()],
+            sensor_type: None,
+            passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_master(&db, "cal-detail", "ASI2600MM").await;
+
+    let detail = masters_get(db.pool(), "cal-detail").await.unwrap();
+    assert_eq!(detail.fingerprint.camera.as_deref(), Some("Main Imaging Rig"));
+}
+
+/// #879: renaming a camera must not serve the previous name out of the
+/// process-global masters snapshot.
+#[tokio::test]
+async fn renaming_a_camera_invalidates_the_cached_master_names() {
+    let _guard = lock_cache_tests().await;
+    caches::invalidate_calibration_masters();
+    let db = test_db().await;
+    let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+    let camera = crate::equipment::create_camera(
+        db.pool(),
+        &bus,
+        &contracts_core::equipment::CreateCamera {
+            name: "Old Name".to_owned(),
+            aliases: vec!["ASI2600MM".to_owned()],
+            sensor_type: None,
+            passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_master(&db, "cal-rename", "ASI2600MM").await;
+
+    // Prime the snapshot with the pre-rename name.
+    let before = masters_list(db.pool()).await.unwrap();
+    assert_eq!(before[0].fingerprint.camera.as_deref(), Some("Old Name"));
+
+    crate::equipment::update_camera(
+        db.pool(),
+        &bus,
+        &contracts_core::equipment::UpdateCamera {
+            id: camera.id,
+            name: "New Name".to_owned(),
+            aliases: vec!["ASI2600MM".to_owned()],
+            sensor_type: None,
+            passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let after = masters_list(db.pool()).await.unwrap();
+    assert_eq!(
+        after[0].fingerprint.camera.as_deref(),
+        Some("New Name"),
+        "rename must invalidate the cached masters snapshot"
+    );
+}
+
+/// Insert a dark master whose fingerprint carries `optic_train`.
+async fn insert_master(db: &Database, id: &str, optic_train: &str) {
+    sqlx::query(
+        "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+         VALUES (?, 'dark-300s', 'dark', '2026-06-01T00:00:00Z')",
+    )
+    .bind(id)
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO calibration_fingerprint \
+         (id, calibration_type, gain, exposure_s, temp_c, binning, optic_train) \
+         VALUES (?, 'dark', 100.0, 300.0, -10.0, '1x1', ?)",
+    )
+    .bind(id)
+    .bind(optic_train)
+    .execute(db.pool())
+    .await
+    .unwrap();
+}
+
 /// T032 / T037: masters_list returns empty on a fresh DB (no fixtures).
 #[tokio::test]
 async fn masters_list_returns_empty_on_fresh_db() {

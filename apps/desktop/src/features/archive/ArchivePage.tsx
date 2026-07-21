@@ -88,7 +88,9 @@ export function ArchivePage() {
   // the ✕ close button) with a bare `autoFocus`.
   const confirmInputRef = useRef<HTMLInputElement>(null);
 
-  useStaleSelectionCleanup(selected, item !== null, () => {
+  // #735: gated on `loading` so a cold reload's empty cache isn't mistaken for
+  // a stale id — see ProjectsPage for the full rationale.
+  useStaleSelectionCleanup(selected, loading || item !== null, () => {
     void navigate({
       search: (prev) => ({ ...prev, selected: undefined }),
       replace: true,

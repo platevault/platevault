@@ -27,7 +27,7 @@
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { Pill, Table, EmptyState, Skeleton, tableIndent } from '@/ui';
+import { Btn, Pill, Table, EmptyState, Skeleton, tableIndent } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
 import { SortHeader, ariaSortFor, renderValue } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
@@ -53,6 +53,16 @@ function shownKind(kind: string): Kind | null {
   const k = kind.toLowerCase();
   if (k === 'dark' || k === 'flat' || k === 'bias') return k;
   return null;
+}
+
+/**
+ * Whether a master would ever reach this table (FR-001 v1 kinds).
+ * Exported so CalibrationPage can tell "library has masters, the filter hides
+ * them" from "library has nothing showable" (#669) — the page owns the
+ * unfiltered set, this table only ever receives the filtered one.
+ */
+export function isShownMasterKind(kind: string): boolean {
+  return shownKind(kind) !== null;
 }
 
 function kindVariant(kind: string): PillVariant {
@@ -328,6 +338,15 @@ interface Props {
    * When empty the table renders a flat sorted list.
    */
   dims?: string[];
+  /**
+   * #669: describes the active search/kind filter when it is what emptied the
+   * table. Set by the caller ONLY while showable masters exist, so an empty
+   * library never gets the filter copy and a filter miss never gets the
+   * "run a scan" onboarding copy.
+   */
+  filterLabel?: string;
+  /** Clears the caller's filters — the empty state's CTA (#812). */
+  onClearFilters?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -342,6 +361,8 @@ export function MastersTable({
   onSort,
   agingThresholdDays,
   dims = [],
+  filterLabel,
+  onClearFilters,
 }: Props) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
@@ -396,13 +417,30 @@ export function MastersTable({
   }
 
   if (shown.length === 0) {
+    // #669: a filter miss must name the filter and never offer onboarding copy
+    // while masters exist. #812: first real consumer of EmptyState's `action`.
     return (
       <div className="pv-calib-table__status">
-        <EmptyState
-          title={m.calibration_empty_title()}
-          desc={m.calibration_empty_desc()}
-          data-testid="masters-empty"
-        />
+        {filterLabel ? (
+          <EmptyState
+            title={m.calibration_empty_filtered_title({ filter: filterLabel })}
+            desc={m.calibration_empty_filtered_desc()}
+            action={
+              onClearFilters && (
+                <Btn size="sm" onClick={onClearFilters}>
+                  {m.common_clear_filters()}
+                </Btn>
+              )
+            }
+            data-testid="masters-empty-filtered"
+          />
+        ) : (
+          <EmptyState
+            title={m.calibration_empty_title()}
+            desc={m.calibration_empty_desc()}
+            data-testid="masters-empty"
+          />
+        )}
       </div>
     );
   }
@@ -446,7 +484,7 @@ export function MastersTable({
       _selected: selected === master.id,
       _indent: indentPx || undefined,
       master: (
-        <span className="pv-calib-cell__master">
+        <span className="pv-table__cell-inline">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
           <span className="pv-calib-cell__master-label">
             {masterLabel(master)}

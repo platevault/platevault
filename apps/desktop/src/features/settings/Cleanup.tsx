@@ -5,20 +5,21 @@
 // protectedCategories. Loads from settings.get('cleanup') on mount and
 // auto-saves via the save() prop on change.
 //
-// Per-type cleanup action table: user overrides are the `cleanupTypeOverrides`
-// database-backed setting (spec 051 US3) — a JSON object mapping a known
-// stable data-type id (stringified `1`-`20`) to `"Keep"`, `"Archive"`, or
-// `"Delete"`. Loaded via the same `settings.get('cleanup')` call as the rest
-// of this pane and saved via the same `save()` prop, so changes are audited
-// (FR-007).
-import { useState, useEffect, useRef, Fragment } from 'react';
+// Cleanup policy (issue #804): the per-data-type actions that `cleanup_scan`
+// and `cleanup_plan_generate` actually read. Backed by the `cleanup.policy.get`
+// / `cleanup.policy.update` commands, NOT by the `cleanup` settings scope.
+// This replaces the former 15-row `CLEANUP_TYPES` fixture table, which wrote a
+// `cleanupTypeOverrides` blob no scan path ever consulted — it looked like the
+// cleanup configuration surface while having zero effect on cleanup.
+import { useState, useEffect, useRef } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
-import { getSettings } from './settingsIpc';
 import {
-  CLEANUP_TYPES,
-  CLEANUP_STAGE_ORDER,
-  type CleanupTypeFixture,
-} from '@/data/fixtures/settings';
+  getSettings,
+  cleanupPolicyGet,
+  cleanupPolicyUpdate,
+  type CleanupAction,
+  type CleanupPolicyEntry,
+} from './settingsIpc';
 import { m } from '@/lib/i18n';
 import {
   SettingsSection,
@@ -32,45 +33,61 @@ const CLEANUP_KEYS = [
   'protectedCategories',
 ];
 
-type CleanupAction = CleanupTypeFixture['action'];
 // 2-level model (issue #506): the third "normal" level is retired.
 type DefaultProtection = 'protected' | 'unprotected';
 
-/** Default per-type actions (from the CLEANUP_TYPES fixture). */
-function defaultActions(): Record<number, CleanupAction> {
-  const init: Record<number, CleanupAction> = {};
-  for (const row of CLEANUP_TYPES) {
-    init[row.id] = row.action;
+/**
+ * The data types the backend policy model knows (`DataType::as_str` in
+ * crates/app/core/src/cleanup_generator.rs). `isProtected` marks the types the
+ * backend maps to protected categories (`masters`/`finals`), so opting them
+ * into a destructive action warrants the impact warning.
+ */
+const POLICY_DATA_TYPES: ReadonlyArray<{
+  id: string;
+  label: () => string;
+  isProtected: boolean;
+}> = [
+  {
+    id: 'intermediate',
+    label: () => m.settings_cleanup_type_intermediate(),
+    isProtected: false,
+  },
+  {
+    id: 'master',
+    label: () => m.settings_cleanup_type_master(),
+    isProtected: true,
+  },
+  {
+    id: 'final',
+    label: () => m.settings_cleanup_type_final(),
+    isProtected: true,
+  },
+];
+
+/** All-Keep, no auto-run — mirrors `default_cleanup_policy()` on the backend. */
+const DEFAULT_ACTIONS: Record<string, CleanupAction> = {
+  intermediate: 'keep',
+  master: 'keep',
+  final: 'keep',
+};
+
+function entriesToActions(
+  entries: CleanupPolicyEntry[],
+): Record<string, CleanupAction> {
+  const actions = { ...DEFAULT_ACTIONS };
+  for (const entry of entries) {
+    if (entry.dataType in actions) actions[entry.dataType] = entry.action;
   }
-  return init;
+  return actions;
 }
 
-/** Parse the `cleanupTypeOverrides` backend value into the row-id-keyed shape. */
-function parseCleanupTypeOverrides(
-  value: unknown,
-): Record<number, CleanupAction> {
-  const init = defaultActions();
-  if (value && typeof value === 'object') {
-    const overrides = value as Record<string, string>;
-    for (const row of CLEANUP_TYPES) {
-      const override = overrides[String(row.id)];
-      if (override) {
-        init[row.id] = override as CleanupAction;
-      }
-    }
-  }
-  return init;
-}
-
-/** Serialize the row-id-keyed actions map into the backend's string-keyed shape. */
-function serializeCleanupTypeOverrides(
-  actions: Record<number, CleanupAction>,
-): Record<string, string> {
-  const serialisable: Record<string, string> = {};
-  for (const [id, action] of Object.entries(actions)) {
-    serialisable[id] = action;
-  }
-  return serialisable;
+function actionsToEntries(
+  actions: Record<string, CleanupAction>,
+): CleanupPolicyEntry[] {
+  return POLICY_DATA_TYPES.map((type) => ({
+    dataType: type.id,
+    action: actions[type.id] ?? 'keep',
+  }));
 }
 
 interface CleanupProps {
@@ -82,9 +99,10 @@ export function Cleanup({ save }: CleanupProps) {
   const [blockPermanentDelete, setBlockPermanentDelete] = useState(true);
   const [defaultProtection, setDefaultProtection] =
     useState<DefaultProtection>('protected');
-  // ── spec 051 US3: per-type action overrides, now database-backed ─────────
+  // ── Cleanup policy (issue #804), owned by cleanup.policy.* ───────────────
   const [actions, setActions] =
-    useState<Record<number, CleanupAction>>(defaultActions);
+    useState<Record<string, CleanupAction>>(DEFAULT_ACTIONS);
+  const [autoOnCompletion, setAutoOnCompletion] = useState(false);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (typeof vals?.blockPermanentDelete === 'boolean') {
@@ -92,9 +110,6 @@ export function Cleanup({ save }: CleanupProps) {
     }
     if (vals?.defaultProtection && typeof vals.defaultProtection === 'string') {
       setDefaultProtection(vals.defaultProtection as DefaultProtection);
-    }
-    if ('cleanupTypeOverrides' in vals) {
-      setActions(parseCleanupTypeOverrides(vals.cleanupTypeOverrides));
     }
   };
 
@@ -122,23 +137,61 @@ export function Cleanup({ save }: CleanupProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Per-type action table — database-backed (spec 051 US3, T023) ─────────
-  const handleTableChange = (id: number, action: string) => {
-    editedRef.current = true;
-    setActions((prev) => {
-      const next = { ...prev, [id]: action as CleanupAction };
-      save('cleanup', {
-        cleanupTypeOverrides: serializeCleanupTypeOverrides(next),
+  // Policy has its own store and its own in-flight guard: a slow policy fetch
+  // must not clobber a policy edit, independent of the settings-scope fetch.
+  const policyEditedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    cleanupPolicyGet()
+      .then((policy) => {
+        if (cancelled || policyEditedRef.current) return;
+        setActions(entriesToActions(policy.entries));
+        setAutoOnCompletion(policy.autoOnCompletion);
+      })
+      .catch(() => {
+        // Backend unavailable — stay with the all-Keep default.
       });
-      return next;
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistPolicy = (
+    nextActions: Record<string, CleanupAction>,
+    nextAuto: boolean,
+  ) => {
+    policyEditedRef.current = true;
+    void cleanupPolicyUpdate({
+      entries: actionsToEntries(nextActions),
+      autoOnCompletion: nextAuto,
+    }).catch(() => {
+      // Auto-save failure surfaces on the next load; the pane keeps the
+      // user's selection rather than silently snapping back.
     });
   };
 
+  const handlePolicyChange = (dataType: string, action: string) => {
+    const next = { ...actions, [dataType]: action as CleanupAction };
+    setActions(next);
+    persistPolicy(next, autoOnCompletion);
+  };
+
+  const handleRestorePolicy = async () => {
+    policyEditedRef.current = true;
+    const restored = await cleanupPolicyUpdate({
+      entries: actionsToEntries(DEFAULT_ACTIONS),
+      autoOnCompletion: false,
+    });
+    setActions(entriesToActions(restored.entries));
+    setAutoOnCompletion(restored.autoOnCompletion);
+  };
+
   // Protected (high-value) categories currently set to a destructive action —
-  // surfaced as an impact warning so the change is deliberate. (T028)
-  const warnedTypes = CLEANUP_TYPES.filter(
-    (row) => row.warnOnChange && (actions[row.id] ?? row.action) !== 'Keep',
-  ).map((row) => row.type);
+  // surfaced as an impact warning so the change is deliberate.
+  const warnedTypes = POLICY_DATA_TYPES.filter(
+    (type) => type.isProtected && actions[type.id] !== 'keep',
+  ).map((type) => type.label());
 
   return (
     <>
@@ -191,77 +244,69 @@ export function Cleanup({ save }: CleanupProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Per-type cleanup actions — persisted via cleanupTypeOverrides (spec 051 US3) */}
-      {/* TODO(spec 017 US2): replace CLEANUP_TYPES fixture with the archive plan generator once it lands */}
-      <SettingsSection title={m.settings_cleanup_pertype_title()}>
+      {/* Cleanup policy — the actions `cleanup.scan` reads (issue #804) */}
+      <SettingsSection
+        title={m.settings_cleanup_policy_title()}
+        action={
+          <RestoreDefaultsBtn
+            onRestore={handleRestorePolicy}
+            scopeLabel={m.settings_cleanup_policy_restore_scope()}
+          />
+        }
+      >
         {warnedTypes.length > 0 && (
           <Banner variant="danger" className="pv-cleanup__warning">
             {m.settings_cleanup_pertype_desc({ types: warnedTypes.join(', ') })}
           </Banner>
         )}
-        <table className="pv-table">
-          <thead>
-            <tr>
-              <th>{m.settings_cleanup_col_datatype()}</th>
-              <th className="pv-cleanup__action-col">
-                {m.settings_cleanup_col_action()}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {CLEANUP_STAGE_ORDER.map((stage) => (
-              <Fragment key={stage}>
-                <tr className="pv-cleanup__group-row">
-                  <td colSpan={2}>{stage}</td>
-                </tr>
-                {CLEANUP_TYPES.filter((row) => row.stage === stage).map(
-                  (row) => {
-                    const current = actions[row.id] ?? row.action;
-                    return (
-                      <tr key={row.id}>
-                        <td>
-                          <span className="pv-cleanup__type-cell">
-                            {row.type}
-                            {row.warnOnChange && (
-                              <Pill variant="neutral">
-                                {m.settings_cleanup_protection_protected()}
-                              </Pill>
-                            )}
-                          </span>
-                        </td>
-                        <td>
-                          <SegControl
-                            options={[
-                              {
-                                value: 'Keep',
-                                label: m.settings_cleanup_action_keep(),
-                              },
-                              {
-                                value: 'Archive',
-                                label: m.settings_cleanup_action_archive(),
-                              },
-                              {
-                                value: 'Delete',
-                                label: m.settings_cleanup_action_delete(),
-                              },
-                            ]}
-                            value={current}
-                            onChange={(v) => handleTableChange(row.id, v)}
-                            danger
-                            dangerValue="Delete"
-                            aria-label={m.settings_cleanup_action_aria({
-                              type: row.type,
-                            })}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  },
+        {POLICY_DATA_TYPES.map((type) => (
+          <SettingsRow
+            key={type.id}
+            label={
+              <span className="pv-cleanup__type-cell">
+                {type.label()}
+                {type.isProtected && (
+                  <Pill variant="neutral">
+                    {m.settings_cleanup_protection_protected()}
+                  </Pill>
                 )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+              </span>
+            }
+            info={m.settings_cleanup_policy_info()}
+          >
+            <SegControl
+              options={[
+                { value: 'keep', label: m.settings_cleanup_action_keep() },
+                {
+                  value: 'archive',
+                  label: m.settings_cleanup_action_archive(),
+                },
+                { value: 'delete', label: m.settings_cleanup_action_delete() },
+              ]}
+              value={actions[type.id] ?? 'keep'}
+              onChange={(v) => handlePolicyChange(type.id, v)}
+              danger
+              dangerValue="delete"
+              aria-label={m.settings_cleanup_action_aria({
+                type: type.label(),
+              })}
+            />
+          </SettingsRow>
+        ))}
+
+        <SettingsRow
+          label={m.settings_cleanup_policy_auto_label()}
+          info={m.settings_cleanup_policy_auto_info()}
+        >
+          <Toggle
+            checked={autoOnCompletion}
+            aria-label={m.settings_cleanup_policy_auto_label()}
+            onChange={(v) => {
+              setAutoOnCompletion(v);
+              persistPolicy(actions, v);
+            }}
+          />
+        </SettingsRow>
       </SettingsSection>
     </>
   );

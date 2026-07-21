@@ -25,8 +25,20 @@
 //! move into a chosen library root (`select_destination_root`, US8); non-inbox
 //! sources stay under their own root. A structural failure returns
 //! `pattern.unset`.
+//!
+//! Equipment resolution (#1342): the `camera` token resolves its raw
+//! `INSTRUME` string against the registered camera aliases, so one physical
+//! camera spelled several ways by different capture programs resolves to one
+//! destination directory. Resolution is read-only. Ingest deliberately does
+//! **not** call `find_or_create_camera_by_alias`: that function registers one
+//! camera per distinct spelling (`name = alias`, `aliases = [alias]`), so
+//! running it over a batch would mint sibling cameras for the very spellings
+//! the alias array exists to collapse. Growing the registry belongs to an
+//! explicit user action over the unclaimed strings, not to a batch write
+//! inferred during confirm.
 #![allow(clippy::doc_markdown)]
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use app_core_targets::metadata_cache::cached_extract;
@@ -36,6 +48,7 @@ use contracts_core::first_run::{OrganizationState, SourceKind};
 use contracts_core::framing::{
     AttributionAppliedDto, ChosenAttributionDto, IngestionAttributionCandidateDto,
 };
+use contracts_core::plans::ProvenanceEntry;
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
@@ -242,13 +255,7 @@ pub async fn confirm(
     // 9b. Attribution pass (spec 008 Q27, F-Framing-5, FR-019) — the first
     // pre-ingest pass at the confirm gate (composition point for the Q22
     // duplicate sweep once it lands, see `crate::attribution` module docs).
-    // A confirmable item is single-type (FR-050), so the first file's
-    // effective frame type determines the whole item's class.
-    let first_file_class = plan_files
-        .first()
-        .and_then(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
-        .and_then(|(ft, is_master)| classify_frame(ft, is_master));
-    let is_light_item = first_file_class == Some(FrameTypeClass::Light);
+    let is_light_item = evidence_is_light(&evidence_rows);
 
     if req.chosen_attribution.is_some() && !is_light_item {
         return Err(ContractError::new(
@@ -349,6 +356,10 @@ pub async fn confirm(
     // US9 gate (T056) is derived from it rather than a separate matrix. A hard
     // `Err(ResolveError)` signals a structural failure (traversal, length cap).
     let norm_table = v1_normalization_table();
+    // Loaded once per confirm, not per file: the whole registry is small and
+    // the resolve below runs for every plan file. Equipment being unreadable
+    // degrades to raw header strings rather than failing the confirm.
+    let cameras = app_core_calibration::equipment::list_cameras(pool).await.unwrap_or_default();
 
     let mut resolved_items: Vec<ResolvedRow> = Vec::with_capacity(plan_files.len());
     // Per-file missing path attributes for the US9 gate (FR-032/FR-033).
@@ -371,6 +382,11 @@ pub async fn confirm(
         let basename = ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
         let item_name = format!("[{}] {basename}", ft.to_uppercase());
 
+        // Built once per file for both branches so a catalogued item carries the
+        // same frozen context as a moved one; the unorganized branch below also
+        // resolves its destination pattern against this bundle.
+        let bundle = build_metadata_bundle(&abs_path, ft, &norm_table, &cameras);
+
         match org_state {
             OrganizationState::Organized => {
                 // Catalogue-in-place: dest == source; stays under its own root.
@@ -380,6 +396,7 @@ pub async fn confirm(
                     item_name,
                     action: "catalogue",
                     to_root_id: item.root_id.clone(),
+                    provenance: freeze_confirm_provenance(&bundle, is_master, None),
                 });
             }
             OrganizationState::Unorganized => {
@@ -409,8 +426,6 @@ pub async fn confirm(
                         .push((ev.relative_file_path.clone(), vec!["image type".to_owned()]));
                     continue;
                 };
-
-                let bundle = build_metadata_bundle(&abs_path, ft, &norm_table);
 
                 let result = match resolve_pattern_str(&pattern, &bundle) {
                     Ok(r) => r,
@@ -466,6 +481,7 @@ pub async fn confirm(
                     item_name,
                     action: "move",
                     to_root_id: dest_root.root_id,
+                    provenance: freeze_confirm_provenance(&bundle, is_master, Some(&pattern)),
                 });
             }
         }
@@ -571,7 +587,7 @@ pub async fn confirm(
             reason: "inbox_confirm",
             protection: "normal",
             linked_entity: None,
-            provenance_json: None,
+            provenance_json: row.provenance.as_deref(),
             archive_path: None,
             source_id: None,
             category: None,
@@ -606,7 +622,12 @@ pub async fn confirm(
         .await
         .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
 
-    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
+    // Load-bearing (#1101): the plan and its link were just committed above, so
+    // an item left off `plan_open` contradicts them — same class as the two
+    // propagating writes it follows.
+    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open")
+        .await
+        .map_err(|e| db_internal_ctx(e, "mark inbox item plan_open"))?;
 
     // 14. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
     // plan now exists, so the pick can be persisted (`plans.chosen_framing_id`)
@@ -679,6 +700,8 @@ struct ResolvedRow {
     item_name: String,
     action: &'static str,
     to_root_id: String,
+    /// Frozen inferred context at approval time (`freeze_confirm_provenance`).
+    provenance: Option<String>,
 }
 
 /// A chosen destination library root (id + absolute path) for inbox moves.
@@ -781,10 +804,27 @@ async fn select_destination_root(
 /// the durable group-keyed `frameType` override, else the extracted
 /// `frame_type` (same priority chain as classify's split and the metadata
 /// DTO — the durable middle layer survives evidence rebuilds, #854).
-fn effective_frame_type(
+pub(crate) fn effective_frame_type(
     ev: &persistence_db::repositories::inbox::InboxEvidenceRow,
 ) -> Option<&str> {
     ev.manual_override.as_deref().or(ev.override_frame_type.as_deref()).or(ev.frame_type.as_deref())
+}
+
+/// Whether an item's classified evidence makes it a light-frame item — the
+/// gate for the whole attribution surface (FR-019).
+///
+/// A confirmable item is single-type (FR-050), so the first classified file's
+/// effective frame type determines the whole item's class. Shared by
+/// [`confirm`] and [`crate::attribution::suggest_candidates`] so the
+/// suggest-time and apply-time gates can never disagree.
+pub(crate) fn evidence_is_light(
+    evidence_rows: &[persistence_db::repositories::inbox::InboxEvidenceRow],
+) -> bool {
+    evidence_rows
+        .iter()
+        .find_map(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
+        .and_then(|(ft, is_master)| classify_frame(ft, is_master))
+        == Some(FrameTypeClass::Light)
 }
 
 /// Load the active `pattern` from the settings table, or fall back to the
@@ -827,6 +867,41 @@ pub(crate) async fn load_active_pattern(
         .collect())
 }
 
+/// Freeze the inferred context that produced this plan item's destination, as
+/// the free-form `[{label,value}]` JSON the `plan_items.provenance` column
+/// already carries (spec 002 FR-005, applied at the spec 041 Inbox confirm
+/// gate).
+///
+/// The snapshot is self-contained by construction: a later rescan re-extracts
+/// headers and overwrites the live metadata, so anything that referenced a
+/// metadata row instead of copying it would silently answer with today's values
+/// rather than the ones the approver saw.
+///
+/// `destination_pattern` is stored next to the metadata because the destination
+/// is a function of both. Without it, a path that no longer matches cannot be
+/// attributed to metadata drift as opposed to a changed pattern setting. It is
+/// `None` for catalogue-in-place items, which resolve no pattern.
+///
+/// `BTreeMap` fixes entry order so two snapshots of the same context compare
+/// equal byte-for-byte.
+fn freeze_confirm_provenance(
+    bundle: &MetadataBundle,
+    is_master: bool,
+    destination_pattern: Option<&str>,
+) -> Option<String> {
+    let mut frozen: BTreeMap<&str, String> =
+        bundle.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+    frozen.insert("is_master", is_master.to_string());
+    if let Some(pattern) = destination_pattern {
+        frozen.insert("destination_pattern", pattern.to_owned());
+    }
+    let entries: Vec<ProvenanceEntry> = frozen
+        .into_iter()
+        .map(|(label, value)| ProvenanceEntry { label: label.to_owned(), value })
+        .collect();
+    serde_json::to_string(&entries).ok()
+}
+
 /// Build a `MetadataBundle` for pattern resolution from extracted FITS/XISF
 /// headers + the known `frame_type` from classification evidence.
 ///
@@ -837,6 +912,7 @@ pub(crate) fn build_metadata_bundle(
     abs_path: &std::path::Path,
     frame_type: &str,
     norm_table: &metadata_core::ImageTypNormalizationTable,
+    cameras: &[contracts_core::equipment::Camera],
 ) -> MetadataBundle {
     let mut bundle = MetadataBundle::new();
 
@@ -869,11 +945,19 @@ pub(crate) fn build_metadata_bundle(
                 bundle.insert("date".to_owned(), date_part.to_owned());
             }
         }
-        // camera
+        // camera — a registered camera claims the raw INSTRUME string under
+        // case/whitespace-insensitive alias matching, so every spelling one
+        // capture program or another wrote for the same physical camera
+        // resolves to a single destination directory. An unregistered string
+        // stays raw; nothing is created here (see the module note on why
+        // ingest resolves but never registers equipment).
         if let Some(instrume) = &meta.instrume {
             let cleaned = instrume.trim();
             if !cleaned.is_empty() {
-                bundle.insert("camera".to_owned(), cleaned.to_owned());
+                let resolved =
+                    app_core_calibration::equipment::resolve_camera_display_name(cameras, cleaned)
+                        .unwrap_or_else(|| cleaned.to_owned());
+                bundle.insert("camera".to_owned(), resolved);
             }
         }
         // exposure
@@ -910,6 +994,7 @@ pub(crate) fn build_metadata_bundle(
 mod tests {
     use super::*;
     use audit::bus::EventBus;
+    use persistence_db::repositories::equipment as equipment_repo;
     use persistence_db::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertClassification,
     };
@@ -926,14 +1011,18 @@ mod tests {
         db
     }
 
-    /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
-    fn write_fits(
+    /// Write a minimal single-block FITS file from the optional cards the
+    /// destination-pattern tests care about. The `write_fits*` helpers below
+    /// are thin presets over this.
+    fn write_fits_cards(
         dir: &std::path::Path,
         name: &str,
         imagetyp: &str,
         object: Option<&str>,
         filter: Option<&str>,
         date_obs: Option<&str>,
+        exptime: Option<f64>,
+        instrume: Option<&str>,
     ) {
         let path = dir.join(name);
         let mut block = vec![b' '; 2880];
@@ -955,9 +1044,27 @@ mod tests {
         if let Some(d) = date_obs {
             write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
         }
+        if let Some(e) = exptime {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {e}")));
+        }
+        if let Some(i) = instrume {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("INSTRUME= '{i}'")));
+        }
         block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
         let mut f = std::fs::File::create(path).unwrap();
         f.write_all(&block).unwrap();
+    }
+
+    /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
+    fn write_fits(
+        dir: &std::path::Path,
+        name: &str,
+        imagetyp: &str,
+        object: Option<&str>,
+        filter: Option<&str>,
+        date_obs: Option<&str>,
+    ) {
+        write_fits_cards(dir, name, imagetyp, object, filter, date_obs, None, None);
     }
 
     /// Like [`write_fits`] but also writes an `EXPTIME` card. Used by calibration
@@ -973,29 +1080,7 @@ mod tests {
         date_obs: Option<&str>,
         exptime: f64,
     ) {
-        let path = dir.join(name);
-        let mut block = vec![b' '; 2880];
-        let mut idx = 0usize;
-        let write_card = |block: &mut Vec<u8>, idx: &mut usize, card: &str| {
-            let bytes = card.as_bytes();
-            let len = bytes.len().min(80);
-            block[*idx * 80..*idx * 80 + len].copy_from_slice(&bytes[..len]);
-            *idx += 1;
-        };
-        write_card(&mut block, &mut idx, &format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
-        if let Some(obj) = object {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("OBJECT  = '{obj}'")));
-        }
-        if let Some(f) = filter {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("FILTER  = '{f}'")));
-        }
-        if let Some(d) = date_obs {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
-        }
-        write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {exptime}")));
-        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
-        let mut f = std::fs::File::create(path).unwrap();
-        f.write_all(&block).unwrap();
+        write_fits_cards(dir, name, imagetyp, object, filter, date_obs, Some(exptime), None);
     }
 
     async fn setup_classified_item(
@@ -2655,5 +2740,273 @@ mod tests {
             Some("framing-attr2"),
             "the apply-path must persist the pick on the plan confirm() itself created"
         );
+    }
+
+    // ── #1342: equipment resolution on the ingest path ────────────────────
+
+    /// Confirm a one-light item whose header names `instrume`, under a
+    /// `{camera}/light/` destination pattern, and return the destination
+    /// directory the plan recorded.
+    async fn confirm_camera_dest_dir(db: &Database, instrume: &str, item: &str) -> String {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_cards(
+            tmp.path(),
+            "frame_000.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+            None,
+            Some(instrume),
+        );
+        settings_repo::set_pattern_for(
+            db.pool(),
+            patterns::FrameTypeClass::Light,
+            "{camera}/light/",
+        )
+        .await
+        .unwrap();
+
+        let bus = make_bus(db);
+        let sig = format!("sig-{item}");
+        setup_classified_item(db, item, "classified", Some("light"), &sig, &["frame_000.fits"])
+            .await;
+
+        let resp = confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: item.to_owned(),
+                content_signature: sig,
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let items = persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+            .await
+            .unwrap();
+        dest_dir(items.first().expect("confirm must record a plan item"))
+    }
+
+    /// #1342: a header string claimed by a registered camera's alias resolves
+    /// to that camera's name, so the destination directory carries the name
+    /// the user chose rather than whatever the capture program wrote. Case and
+    /// padding differ here to pin the normalized match.
+    #[tokio::test]
+    async fn confirm_resolves_a_registered_camera_alias_to_its_name() {
+        let db = test_db().await;
+        equipment_repo::create_camera(
+            db.pool(),
+            &contracts_core::equipment::CreateCamera {
+                name: "Main Imaging Rig".to_owned(),
+                aliases: vec!["ASI2600MM".to_owned()],
+                sensor_type: None,
+                passband: None,
+                pixel_size_um: None,
+                sensor_width_px: None,
+                sensor_height_px: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dir = confirm_camera_dest_dir(&db, " asi2600mm ", "item-cam-hit").await;
+        assert_eq!(
+            dir, "Main Imaging Rig/light",
+            "a registered alias must resolve to the camera's name in the destination path"
+        );
+    }
+
+    /// #1342: an unregistered header string keeps its raw spelling AND does
+    /// not register a camera. Ingest resolves equipment; it never creates it
+    /// (`find_or_create_camera_by_alias` stays uncalled here) — auto-creating
+    /// one camera per distinct spelling would defeat the alias model the
+    /// registry exists to provide.
+    #[tokio::test]
+    async fn confirm_leaves_an_unregistered_camera_raw_and_registers_nothing() {
+        let db = test_db().await;
+        equipment_repo::create_camera(
+            db.pool(),
+            &contracts_core::equipment::CreateCamera {
+                name: "Main Imaging Rig".to_owned(),
+                aliases: vec!["ASI2600MM".to_owned()],
+                sensor_type: None,
+                passband: None,
+                pixel_size_um: None,
+                sensor_width_px: None,
+                sensor_height_px: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dir = confirm_camera_dest_dir(&db, "ASI6200MM Pro", "item-cam-miss").await;
+        assert_eq!(
+            dir, "ASI6200MM Pro/light",
+            "an unclaimed header string must stay raw rather than resolve to another camera"
+        );
+
+        let cameras = equipment_repo::list_cameras(db.pool()).await.unwrap();
+        assert_eq!(
+            cameras.len(),
+            1,
+            "confirm must not register a camera for an unclaimed header string"
+        );
+        assert!(
+            !cameras.iter().any(|c| c.auto_detected),
+            "confirm must not write auto-detected equipment rows"
+        );
+    }
+
+    /// Read the single plan item's frozen provenance for `plan_id`.
+    async fn read_item_provenance(db: &Database, plan_id: &str) -> Vec<ProvenanceEntry> {
+        let raw = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT provenance FROM plan_items WHERE plan_id = ?",
+        )
+        .bind(plan_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        let json = raw.0.expect("confirm must write plan_items.provenance");
+        serde_json::from_str(&json).unwrap()
+    }
+
+    fn prov(entries: &[ProvenanceEntry], label: &str) -> Option<String> {
+        entries.iter().find(|e| e.label == label).map(|e| e.value.clone())
+    }
+
+    async fn confirm_defaults(
+        db: &Database,
+        bus: &EventBus,
+        item_id: &str,
+        sig: &str,
+        root_absolute_path: &std::path::Path,
+    ) -> ConfirmResponse {
+        confirm(
+            db.pool(),
+            bus,
+            ConfirmRequest {
+                inbox_item_id: item_id.to_owned(),
+                content_signature: sig.to_owned(),
+                destructive_destination: None,
+                root_absolute_path: root_absolute_path.to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Spec 002 FR-005 at the spec 041 Inbox confirm gate: the inferred context
+    /// behind an approved destination is frozen on the plan item, so a later
+    /// rescan that reads different headers cannot rewrite the record of what
+    /// was known at approval time — while still producing a new snapshot of
+    /// its own.
+    #[tokio::test]
+    async fn confirm_provenance_survives_later_metadata_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("light_001.fits");
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        register_source_org_state(&db, "root-1", "light_frames", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-prov",
+            "classified",
+            Some("light"),
+            "sig-prov",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let first = confirm_defaults(&db, &bus, "item-prov", "sig-prov", tmp.path()).await;
+
+        let approved = read_item_provenance(&db, &first.plan_id).await;
+        assert_eq!(prov(&approved, "target").as_deref(), Some("M42"));
+        assert_eq!(prov(&approved, "filter").as_deref(), Some("Ha"));
+        assert_eq!(prov(&approved, "date").as_deref(), Some("2025-10-10"));
+        assert_eq!(prov(&approved, "frame_type").as_deref(), Some("light"));
+        assert_eq!(prov(&approved, "is_master").as_deref(), Some("false"));
+        assert!(
+            prov(&approved, "destination_pattern").is_some_and(|p| !p.is_empty()),
+            "a moved item records the pattern its destination was resolved from"
+        );
+
+        // Rescan simulation: the same file now reports different headers.
+        // The metadata cache is keyed by (path, mtime, size), so this rewrite
+        // also changes the byte length — a same-second rewrite of identical
+        // length would be a cache hit and would make the "the live value really
+        // did change" leg below vacuous rather than failing loudly.
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("NGC7000"),
+            Some("Oiii"),
+            Some("2025-12-31T21:00:00"),
+        );
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file_path)
+            .unwrap()
+            .write_all(&[b' '; 2880])
+            .unwrap();
+        assert_eq!(
+            cached_extract(&file_path).unwrap().object.as_deref(),
+            Some("NGC7000"),
+            "precondition: the live metadata must actually have changed"
+        );
+
+        let after_rescan = read_item_provenance(&db, &first.plan_id).await;
+        assert_eq!(
+            prov(&after_rescan, "target").as_deref(),
+            Some("M42"),
+            "the approved snapshot must still report what was known at approval time"
+        );
+        assert_eq!(prov(&after_rescan, "filter").as_deref(), Some("Ha"));
+        assert_eq!(prov(&after_rescan, "date").as_deref(), Some("2025-10-10"));
+
+        // FR-005 also requires later rescans to produce their own snapshots.
+        // A second root: `inbox_items` is unique on (root_id, relative_path,
+        // group_key), so the rescanned item cannot reuse root-1.
+        // `registered_sources` is unique on (kind, path), so root-2 needs its
+        // own path rather than `register_source_org_state`'s fixed one.
+        sqlx::query(
+            "INSERT INTO registered_sources
+                (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES ('root-2', 'light_frames', '/tmp/src-2', NULL, 'recursive',
+                     '2026-01-01T00:00:00Z', 'first_run', 'unorganized')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        setup_classified_item_rooted(
+            &db,
+            "item-prov-2",
+            "root-2",
+            Some("light"),
+            "sig-prov-2",
+            &["light_001.fits"],
+        )
+        .await;
+        let second = confirm_defaults(&db, &bus, "item-prov-2", "sig-prov-2", tmp.path()).await;
+        let rescanned = read_item_provenance(&db, &second.plan_id).await;
+        assert_eq!(prov(&rescanned, "target").as_deref(), Some("NGC7000"));
+        assert_eq!(prov(&rescanned, "filter").as_deref(), Some("Oiii"));
     }
 }

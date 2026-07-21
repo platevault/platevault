@@ -419,6 +419,39 @@ fn match_score_from_distance(distance_deg: f64, tolerance_deg: f64) -> f32 {
     (1.0 - (distance_deg / tolerance_deg).clamp(0.0, 1.0)) as f32
 }
 
+// ── Read-only suggest surface (F-Framing-5/10) ──────────────────────────────
+
+/// Ranked attribution candidates for an Inbox item, read-only (FR-019).
+///
+/// This is the **suggest** half of FR-022: the UI calls it *before*
+/// `inbox.confirm` so the user can pick, then sends the pick as the confirm
+/// request's `chosenAttribution`. Reading candidates out of the confirm
+/// response instead is unusable — that confirm has already created the plan
+/// that [`crate::confirm::confirm`]'s open-plan guard then refuses to confirm
+/// over, so the pick could never be sent (issue #943).
+///
+/// Returns an empty list for non-light items, mirroring
+/// [`crate::confirm::confirm`]'s light-frame gate: attribution applies to
+/// light frames only, so there is nothing to suggest.
+///
+/// # Errors
+/// Returns [`ContractError`] (`internal.database`) on a query failure. Unlike
+/// the confirm-time pass — which degrades to "no candidates" rather than lose
+/// a user's confirm — a failure here is surfaced: nothing is at stake but the
+/// suggestion itself, and a silent empty list would be indistinguishable from
+/// an honest no-match.
+pub async fn suggest_candidates(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> Result<Vec<IngestionAttributionCandidateDto>, ContractError> {
+    let evidence_rows = inbox_repo::list_evidence(pool, inbox_item_id).await.map_err(db_err)?;
+    if !crate::confirm::evidence_is_light(&evidence_rows) {
+        return Ok(Vec::new());
+    }
+    let geometry = compute_item_geometry(pool, inbox_item_id).await?;
+    compute_candidates(pool, &geometry).await
+}
+
 // ── Apply-path (F-Framing-10, F-Framing-6) ──────────────────────────────────
 
 /// Result of applying a [`ChosenAttributionDto`] — see [`AttributionAppliedDto`].
@@ -1158,6 +1191,66 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].kind, IngestionAttributionKind::NewProject);
         assert_eq!(candidates[0].project_id, None);
+    }
+
+    // ── suggest_candidates (read-only suggest surface, issue #943) ───────────
+
+    async fn seed_evidence(pool: &SqlitePool, item_id: &str, frame_type: &str) {
+        persistence_db::repositories::inbox::insert_evidence(
+            pool,
+            &persistence_db::repositories::inbox::InsertEvidence {
+                id: &format!("ev-{item_id}"),
+                inbox_item_id: item_id,
+                relative_file_path: "sub_0001.fits",
+                frame_type: Some(frame_type),
+                evidence_source: "imagetyp_header",
+                raw_value: Some(frame_type),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    /// SC-008 read half: the candidates a user must pick from are readable
+    /// *without* confirming, so the pick can ride a single confirm.
+    #[tokio::test]
+    async fn suggest_candidates_ranks_matching_framing_first() {
+        let db = test_db().await;
+        seed_project(db.pool(), "proj-s1", "ready", false).await;
+        seed_canonical_target(db.pool(), "target-s1", "M 42").await;
+        projects_repo::set_project_canonical_target_id(db.pool(), "proj-s1", "target-s1")
+            .await
+            .unwrap();
+        seed_framing(db.pool(), "framing-s1", "proj-s1", Some("target-s1"), 83.633, 22.0145, 1.0)
+            .await;
+
+        seed_inbox_item(db.pool(), "item-s1").await;
+        seed_evidence(db.pool(), "item-s1", "light").await;
+        seed_geometry_row(db.pool(), "item-s1", "sub_0001.fits", 83.634, 22.015, 1.2, Some("M 42"))
+            .await;
+
+        let candidates = suggest_candidates(db.pool(), "item-s1").await.unwrap();
+
+        assert_eq!(candidates[0].kind, IngestionAttributionKind::AddToFraming);
+        assert_eq!(candidates[0].framing_id.as_deref(), Some("framing-s1"));
+        assert!(candidates[0].match_score > 0.5);
+        // Suggest-never-auto-merge (FR-020): the fallback is always offered, so
+        // the user can always decline the top match.
+        assert_eq!(candidates.last().unwrap().kind, IngestionAttributionKind::NewProject);
+    }
+
+    #[tokio::test]
+    async fn suggest_candidates_returns_empty_for_non_light_item() {
+        let db = test_db().await;
+        seed_inbox_item(db.pool(), "item-s2").await;
+        seed_evidence(db.pool(), "item-s2", "flat").await;
+        seed_geometry_row(db.pool(), "item-s2", "flat_0001.fits", 83.634, 22.015, 1.2, None).await;
+
+        assert!(suggest_candidates(db.pool(), "item-s2").await.unwrap().is_empty());
     }
 
     // ── apply_chosen_attribution ─────────────────────────────────────────────

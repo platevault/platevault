@@ -34,12 +34,40 @@ vi.mock('@/bindings/index', () => ({
   },
 }));
 
-/** Poll briefly for an async mock to have been called (mirrors theme.persistence.test.ts). */
-async function waitForCall(fn: ReturnType<typeof vi.fn>): Promise<void> {
-  for (let i = 0; i < 50; i++) {
+/**
+ * Poll for an async mock to have been called.
+ *
+ * The original version polled 50 `setTimeout(0)` ticks and then returned
+ * *silently*, so "hasn't arrived yet" was indistinguishable from "never
+ * will" — the giving-up surfaced as a confusing "expected vi.fn() to be
+ * called with…" failure one line later, pointing at the assertion rather
+ * than at the wait. That budget was also far too small: the write-through
+ * path resolves dynamic imports, and once the pt-BR catalogue became real
+ * (1856 keys) module resolution routinely outran 50 microtask ticks. The
+ * suite passed in isolation and went red beside its siblings.
+ *
+ * Now it waits on a wall-clock budget and throws on timeout, so a real
+ * regression fails loudly and a merely slow import does not fail at all.
+ *
+ * The budget is deliberately *below* the per-test timeout set on the cases
+ * that call it. If the two were equal, vitest would preempt the wait and
+ * report its own generic timeout instead of the labelled message here —
+ * hiding which wait actually failed, which is the diagnosis problem this
+ * helper exists to solve.
+ */
+async function waitForCall(
+  fn: ReturnType<typeof vi.fn>,
+  label = 'mock',
+  timeoutMs = 8000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     if (fn.mock.calls.length > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
+  throw new Error(
+    `timed out after ${timeoutMs}ms waiting for ${label} to be called`,
+  );
 }
 
 describe('custom-almSettings strategy — write-through to the settings DB', () => {
@@ -66,7 +94,10 @@ describe('custom-almSettings strategy — write-through to the settings DB', () 
     // resolves to (opral/inlang-paraglide-js#455) — prime and drain that
     // one-time side effect before asserting on our own explicit call below.
     getLocale();
-    await waitForCall(settingsUpdateMock);
+    await waitForCall(
+      settingsUpdateMock,
+      "Paraglide's first-getLocale persist",
+    );
     settingsUpdateMock.mockClear();
 
     void setLocale('pt-BR', { reload: false });
@@ -74,11 +105,11 @@ describe('custom-almSettings strategy — write-through to the settings DB', () 
     // The localStorage mirror write is synchronous.
     expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
 
-    await waitForCall(settingsUpdateMock);
+    await waitForCall(settingsUpdateMock, 'setLocale write-through');
     expect(settingsUpdateMock).toHaveBeenCalledWith('general', {
       locale: 'pt-BR',
     });
-  });
+  }, 20_000);
 
   it('still writes the mirror but skips settings.update outside Tauri (no-op)', async () => {
     isTauriMock.mockReturnValue(false);
@@ -101,9 +132,9 @@ describe('custom-almSettings strategy — write-through to the settings DB', () 
     registerLocaleStrategy();
 
     expect(() => setLocale('pt-BR', { reload: false })).not.toThrow();
-    await waitForCall(settingsUpdateMock);
+    await waitForCall(settingsUpdateMock, 'rejecting settings.update');
     expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
-  });
+  }, 20_000);
 });
 
 describe('hydrateLocaleFromSettings — DB wins over a disagreeing mirror', () => {

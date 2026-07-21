@@ -31,6 +31,9 @@ export interface LockProps extends HTMLAttributes<HTMLSpanElement> {
  * - `aria-label` on a role-less `<span>` is not reliably exposed — naming
  *   applies to elements with a role that supports it — so the role is what
  *   makes the label reach assistive tech at all.
+ *
+ * Distinct from `InfoTip`, which supplies help text and therefore has no
+ * decorative mode. See `docs/adr/0002-lock-and-infotip-stay-separate.md`.
  */
 export function Lock({ reason, decorative, className, ...rest }: LockProps) {
   const label = reason ?? m.settings_cleanup_protection_protected();
