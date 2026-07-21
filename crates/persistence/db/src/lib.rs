@@ -12,8 +12,8 @@
 //! Migration 0061 added `target_favourite` (spec 051 US2).
 //! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
 //! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
-//! Migration 0076 added `onboarding_state`/`onboarding_flags` (spec 056).
-//! Migration 0077 dropped the legacy spec-010 `guided_flow_state` table
+//! Migration 0080 added `onboarding_state`/`onboarding_flags` (spec 056).
+//! Migration 0081 dropped the legacy spec-010 `guided_flow_state` table
 //! (spec 056 deletion lane, T010).
 
 use std::str::FromStr;
@@ -136,8 +136,9 @@ impl Database {
     // main independently), and again for spec 056's onboarding migrations —
     // first as 0069/0070, then renumbered again (0069/0070 -> 0071/0072 -> 0072/0073) as main landed its
     // own 0069_fix_processing_artifact_project_fk and 0070_protection_two_level
-    // while this branch was open (a third independent collision) — to force
-    // `sqlx::migrate!` re-embed each time (project memory: stale-embed guard).
+    // while this branch was open (a third independent collision), then to
+    // 0080/0081 after main reached 0079 — to force `sqlx::migrate!` re-embed
+    // each time (project memory: stale-embed guard).
     //
     // #745 (spec 049 CL-2): this used to also run the spec 026 T006a
     // `kind_diverged` reconciliation scan on every start, force-flipping any
