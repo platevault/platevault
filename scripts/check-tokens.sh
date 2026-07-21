@@ -176,6 +176,20 @@ else
   PASS=false
 fi
 
+# ── Check 7: every var(--pv-*) in TS/TSX resolves to a real token ────────────
+# stylelint's no-unknown-custom-properties covers CSS: it parses the stylesheets
+# and understands same-file scoping. It cannot see a token reference written as
+# a string literal in an inline style, which is the remaining surface — and the
+# one where a bare `var(--pv-radius)` reached production (spec 028, R-4).
+echo ""
+echo "7. Checking var(--pv-*) references in TS/TSX resolve to real tokens..."
+if node "$REPO_ROOT/apps/desktop/scripts/check-token-refs.mjs"; then
+  echo "  OK: All TS/TSX token references resolve."
+else
+  echo "FAIL: A TS/TSX file references a token that does not exist (see above)."
+  PASS=false
+fi
+
 # ── Result ────────────────────────────────────────────────────────────────────
 echo ""
 if [ "$PASS" = true ]; then

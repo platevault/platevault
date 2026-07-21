@@ -3,17 +3,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Locale drift report (spec 061 T029, research D5).
+ * Locale drift gate (spec 061 T029, research D5).
  *
- * Compares every shipped locale's key set against the base locale and reports
- * the gap. It DELIBERATELY DOES NOT FAIL THE BUILD: FR-013 accepts partial
- * translation as a shipping state, so a missing key is news, not an error.
- * Shipping a half-translated locale is better than shipping none, provided
- * the gap is visible — which is this script's entire job.
+ * Compares every shipped locale's key set against the base locale and FAILS
+ * THE BUILD on any gap.
  *
- * Exit code is always 0 except for a genuine malfunction (unreadable or
- * malformed catalogue), where staying silent would be the worse failure: a
- * drift report that cannot read its inputs must not look like a clean run.
+ * This reverses the original FR-013 position that partial translation is an
+ * accepted shipping state (owner ruling, 2026-07-21). Reporting alone did not
+ * hold the line: pt-BR silently accumulated 19 missing keys and 3 orphans
+ * within a day of shipping, all from inbox work that landed after the
+ * translation did. A report nobody fails on is a report nobody reads.
+ *
+ * The tradeoff is deliberate: adding a user-facing string now obliges you to
+ * translate it in the same change. That is the cost of keeping every shipped
+ * locale whole.
+ *
+ * Exit code is 1 on drift, and 1 on a genuine malfunction (unreadable or
+ * malformed catalogue) — staying silent there would be the worse failure: a
+ * drift gate that cannot read its inputs must not look like a clean run.
  *
  * Reports two kinds of drift per locale:
  *   1. missing — in the base catalogue, absent here. The translation lags.
@@ -97,7 +104,20 @@ function main() {
     }
 
     anyDrift = true;
-    console.log(`  ${locale}  ${translated}/${baseKeys.size} keys (${pct}%)`);
+    // Lead with coverage only when coverage is the problem. An orphan-only
+    // locale is at 100% translated, and printing that next to a failure reads
+    // as a contradiction — so say what is actually wrong instead.
+    const faults = [
+      missing.length > 0 ? `${missing.length} missing` : null,
+      orphaned.length > 0 ? `${orphaned.length} orphaned` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const coverage =
+      missing.length > 0
+        ? `${translated}/${baseKeys.size} keys (${pct}%)`
+        : `all ${baseKeys.size} keys translated`;
+    console.log(`  ${locale}  ${coverage} — ${faults}`);
     if (missing.length > 0) {
       console.log(`    missing (${missing.length}):`);
       for (const k of missing.slice(0, 20)) console.log(`      - ${k}`);
@@ -116,11 +136,18 @@ function main() {
     }
   }
 
-  console.log(
-    anyDrift
-      ? '\nPartial translation is an accepted shipping state (FR-013) — reporting only, not failing.'
-      : '\nNo drift: every locale matches the base catalogue.',
+  if (!anyDrift) {
+    console.log('\nNo drift: every locale matches the base catalogue.');
+    return;
+  }
+
+  console.error(
+    '\nLocale drift fails the build. Every shipped locale must carry exactly the\n' +
+      "base catalogue's key set: translate the missing keys, and delete the\n" +
+      'orphaned ones — they are absent from the base and can never render.\n' +
+      'Re-check with `pnpm --filter @astro-plan/desktop run lint:i18n-drift`.',
   );
+  process.exitCode = 1;
 }
 
 main();

@@ -29,9 +29,9 @@ path = "src/lib.rs"
 
 [dependencies]
 target-match = "0.4"
-skymath = "0.4"
+skymath = "0.5"
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
-simbad-resolver = "0.3.0"
+simbad-resolver = "0.3"
 
 [lints]
 workspace = true
