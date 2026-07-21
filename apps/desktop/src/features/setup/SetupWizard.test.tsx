@@ -4,13 +4,18 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
  * SetupWizard gating tests (T044 — rewritten for 5-step flow; spec 044 T016
- * inserted an Observing Site step before Confirm, making it a 6-step flow).
+ * inserted an Observing Site step before Confirm, making it a 6-step flow;
+ * spec 061 US1 inserted a Language step ahead of everything else, making it
+ * a 7-step flow — every seeded `currentStep` and "step N of 7" assertion
+ * below is one higher than it would have been pre-061).
  *
- * Validates that Step 1 (Source Folders) blocks advancement when required
- * folder types (light_frames, project) are missing, and that Steps 2–3
- * advance freely. Step 4 (Observing Site) is covered separately below (it's
- * optional and never blocks advancement). The Scan step (step 6) has its own
- * StepScan.test.tsx.
+ * Validates that Step 2 (Source Folders) blocks advancement when required
+ * folder types (light_frames, project) are missing, and that Steps 3–4
+ * advance freely. Step 5 (Observing Site) is covered separately below (it's
+ * optional and never blocks advancement). The Scan step (step 7) has its own
+ * StepScan.test.tsx. The Language step (step 1) has its own
+ * `steps/StepLanguage.test.tsx`; the tests below cover its wizard-level
+ * integration (T019 immediate re-render, T020 back-navigation recovery).
  */
 import {
   render,
@@ -152,8 +157,14 @@ vi.mock('@/bindings/index', () => ({
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
+// isTauri must be mocked too (not just invoke): LocaleProvider now wraps this
+// component (spec 061 US1) and calls it during mount hydration — the real
+// implementation only degrades to `false` inside an actual Tauri webview,
+// which jsdom is not, but leaving it unmocked destructures to `undefined` on
+// this mocked module and throws when called.
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockRejectedValue(new Error('no tauri')),
+  isTauri: () => false,
 }));
 
 // Ensure mock mode is OFF so the gating logic actually fires.
@@ -173,6 +184,21 @@ const WIZARD_STORAGE_KEY = 'alm-setup-wizard-state';
 
 /** Render the wizard and return the result. */
 function renderWizard() {
+  return render(<SetupWizard />);
+}
+
+/**
+ * Render the wizard already positioned at the Source Folders step (index 1,
+ * spec 061 US1 inserted the Language step at index 0 ahead of it). Most of
+ * this suite exercises Source-Folders-and-later gating and has no interest
+ * in the Language step itself — that gets its own coverage below and in
+ * `steps/StepLanguage.test.tsx`.
+ */
+function renderWizardAtSources() {
+  window.localStorage.setItem(
+    WIZARD_STORAGE_KEY,
+    JSON.stringify({ currentStep: 1 }),
+  );
   return render(<SetupWizard />);
 }
 
@@ -241,21 +267,58 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('SetupWizard 5-step flow', () => {
-  it('starts on Step 1 (Source Folders) and shows the heading', () => {
+describe('SetupWizard 7-step flow (spec 061 US1 added the Language step)', () => {
+  it('starts on the Language step and shows the heading', () => {
     renderWizard();
-    expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
-    expect(screen.getByText(/step 1 of 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose your language/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1 of 7/i)).toBeInTheDocument();
   });
 
-  it('blocks Continue on Step 1 when no paths are added', () => {
+  it('advances from the Language step to Source Folders on Continue', () => {
     renderWizard();
+    fireEvent.click(getContinueButton());
+    expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 2 of 7/i)).toBeInTheDocument();
+  });
+
+  it('blocks Continue on the Source Folders step when no paths are added', () => {
+    renderWizardAtSources();
     const continueBtn = getContinueButton();
     expect(continueBtn).toBeDisabled();
   });
 
-  it('blocks Continue on Step 1 when only light_frames is added (project missing)', async () => {
+  // spec 061 US1 T019/T020: selecting a language re-renders the wizard
+  // immediately (no reload) and does not discard whatever progress the user
+  // already made — go back to Language mid-flow, switch, and confirm the
+  // folder added before Back is still there afterwards.
+  it('T019: selecting a language on Back-navigation preserves wizard progress', () => {
+    const seeded = {
+      currentStep: 1,
+      sources: [{ path: '/astro/lights', kind: 'light_frames' }],
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
     renderWizard();
+    expect(screen.getByText('/astro/lights')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(screen.getByText(/choose your language/i)).toBeInTheDocument();
+
+    const portuguese = screen.getByRole('button', {
+      name: 'Português (Brasil)',
+    });
+    fireEvent.click(portuguese);
+
+    // Applies immediately, in place — no navigation/reload occurred.
+    expect(portuguese).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+
+    // Progress from before Back survives the language change.
+    fireEvent.click(getContinueButton());
+    expect(screen.getByText('/astro/lights')).toBeInTheDocument();
+  });
+
+  it('blocks Continue on Step 1 when only light_frames is added (project missing)', async () => {
+    renderWizardAtSources();
 
     await addFolder('/astro/lights');
     await waitFor(() => {
@@ -269,7 +332,7 @@ describe('SetupWizard 5-step flow', () => {
 
   it('enables Continue on Step 1 after adding all required folder types', async () => {
     // spec 039: inbox is now optional — only light_frames + project are required.
-    renderWizard();
+    renderWizardAtSources();
 
     // Add a folder to each required group via its own per-group add button.
     await addFolder('/astro/lights', 'light_frames');
@@ -290,7 +353,7 @@ describe('SetupWizard 5-step flow', () => {
 
   it('allows Step 1 to advance without an inbox folder (spec 039 FR-004)', async () => {
     // Completing setup without an inbox folder must be allowed.
-    renderWizard();
+    renderWizardAtSources();
 
     await addFolder('/astro/lights', 'light_frames');
     await addFolder('/astro/projects', 'project');
@@ -309,7 +372,7 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('renders one persistent group card per source kind, even when empty', () => {
-    renderWizard();
+    renderWizardAtSources();
 
     for (const kind of ['light_frames', 'calibration', 'project', 'inbox']) {
       expect(screen.getByTestId(`source-group-${kind}`)).toBeInTheDocument();
@@ -317,7 +380,7 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('highlights required group cards with met/unmet status', async () => {
-    renderWizard();
+    renderWizardAtSources();
 
     // Required groups start unmet; optional groups carry no requirement flag.
     expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute(
@@ -352,7 +415,7 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('lists added folders inside their own kind group card', async () => {
-    renderWizard();
+    renderWizardAtSources();
 
     await addFolder('/astro/lights', 'light_frames');
     await waitFor(() =>
@@ -370,10 +433,10 @@ describe('SetupWizard 5-step flow', () => {
     expect(calGroup).toContainElement(screen.getByText('/astro/cals'));
   });
 
-  it('allows Step 2 (Processing Tools) to advance without changes', async () => {
-    // Seed state at step 1 with required folders already filled
+  it('allows Step 3 (Processing Tools) to advance without changes', async () => {
+    // Seed state at step 2 (Source Folders) with required folders already filled
     const seeded = {
-      currentStep: 1,
+      currentStep: 2,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -394,7 +457,7 @@ describe('SetupWizard 5-step flow', () => {
     expect(
       screen.getByRole('heading', { name: /processing tools/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/step 2 of 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 3 of 7/i)).toBeInTheDocument();
 
     // Continue should be enabled (tools step has no requirements)
     const continueBtn = getContinueButton();
@@ -407,10 +470,10 @@ describe('SetupWizard 5-step flow', () => {
     ).toBeInTheDocument();
   });
 
-  it('allows Step 3 (Catalogs) to advance without changes', async () => {
-    // Seed state at step 2
+  it('allows Step 4 (Catalogs) to advance without changes', async () => {
+    // Seed state at step 3 (Processing Tools)
     const seeded = {
-      currentStep: 2,
+      currentStep: 3,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -431,18 +494,18 @@ describe('SetupWizard 5-step flow', () => {
     expect(
       screen.getByRole('heading', { name: /configuration/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/step 3 of 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 4 of 7/i)).toBeInTheDocument();
 
     // Continue should be enabled
     const continueBtn = getContinueButton();
     expect(continueBtn).not.toBeDisabled();
   });
 
-  it('allows Step 4 (Observing Site) to advance while completely empty (spec 044 T016, optional)', () => {
+  it('allows Step 5 (Observing Site) to advance while completely empty (spec 044 T016, optional)', () => {
     // Seed state at step 3 (Observing Site) with required folders already
     // satisfied so Continue is gated only by the site step itself.
     const seeded = {
-      currentStep: 3,
+      currentStep: 4,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -467,7 +530,7 @@ describe('SetupWizard 5-step flow', () => {
     expect(
       screen.getByRole('heading', { name: /where do you observe from/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/step 4 of 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 5 of 7/i)).toBeInTheDocument();
 
     // Never required — Continue stays enabled with every field blank (spec 044
     // T016). Skipping is acknowledged, not blocked (#1050): the first click
@@ -489,7 +552,7 @@ describe('SetupWizard 5-step flow', () => {
 
   it('re-arms the observing-site skip warning if the user edits then clears the step', () => {
     const seeded = {
-      currentStep: 3,
+      currentStep: 4,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -533,7 +596,7 @@ describe('SetupWizard 5-step flow', () => {
 
   it('blocks Continue on the Observing Site step when latitude is out of range', () => {
     const seeded = {
-      currentStep: 3,
+      currentStep: 4,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -566,7 +629,7 @@ describe('SetupWizard 5-step flow', () => {
     // filled-in site, then drive to Scan -> Finish the same way the
     // tool-persistence test does.
     const seeded = {
-      currentStep: 4,
+      currentStep: 5,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -636,7 +699,7 @@ describe('SetupWizard 5-step flow', () => {
     mockFirstrunComplete.mockClear();
 
     const seeded = {
-      currentStep: 4,
+      currentStep: 5,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -679,11 +742,11 @@ describe('SetupWizard 5-step flow', () => {
     );
   });
 
-  it('shows Confirm step (Step 5) with Start scan button', async () => {
+  it('shows Confirm step (Step 6) with Start scan button', async () => {
     // Seed state at step 4 (Confirm, after the spec 044 Site step) with all
     // required kinds satisfied.
     const seeded = {
-      currentStep: 4,
+      currentStep: 5,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -703,7 +766,7 @@ describe('SetupWizard 5-step flow', () => {
 
     // Verify we are on the Confirm step
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
-    expect(screen.getByText(/step 5 of 6/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 6 of 7/i)).toBeInTheDocument();
 
     // "Start scan" button should be present and enabled (not "Complete setup")
     const startScanBtn = screen.getByRole('button', { name: /start scan/i });
@@ -716,7 +779,7 @@ describe('SetupWizard 5-step flow', () => {
   it('blocks Start scan on Confirm step when required folders are missing', async () => {
     // Seed at step 4 (Confirm) but WITHOUT a project folder
     const seeded = {
-      currentStep: 4,
+      currentStep: 5,
       sources: [{ path: '/astro/lights', kind: 'light_frames' }],
       catalogSettings: {
         selectedCatalogIds: ['common', 'openngc'],
@@ -741,7 +804,7 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('rejects a duplicate path within the same kind', async () => {
-    renderWizard();
+    renderWizardAtSources();
 
     // Add a folder path
     await addFolder('/home/user/astrophoto/raw');
@@ -771,7 +834,7 @@ describe('SetupWizard 5-step flow', () => {
     // Seed at the Confirm step (step 4) with PixInsight enabled+pathed and
     // Siril disabled, so we can verify both tools are sent to toolUpdate.
     const seeded = {
-      currentStep: 4,
+      currentStep: 5,
       sources: [
         { path: '/astro/lights', kind: 'light_frames' },
         { path: '/astro/projects', kind: 'project' },
@@ -846,7 +909,7 @@ describe('SetupWizard restart re-confirm (issue #704)', () => {
     window.localStorage.setItem(
       WIZARD_STORAGE_KEY,
       JSON.stringify({
-        currentStep: 4,
+        currentStep: 5,
         sources: [
           {
             path: '/astro/lights',
@@ -985,20 +1048,19 @@ describe('SetupWizard restart re-confirm (issue #704)', () => {
 describe('SetupWizard step-tab navigation (issue #512)', () => {
   it('renders step tabs as buttons and marks the current step', () => {
     renderWizard();
-    const sourcesTab = screen.getByRole('button', {
-      name: /1\. Source Folders/i,
-    });
-    expect(sourcesTab).toHaveAttribute('aria-current', 'step');
+    const languageTab = screen.getByRole('button', { name: /1\. Language/i });
+    expect(languageTab).toHaveAttribute('aria-current', 'step');
   });
 
   it('disables forward tabs while step validation fails, enables them once it passes', async () => {
-    renderWizard();
+    renderWizardAtSources();
 
-    // No folders yet: step 0 fails validation, so every forward tab is disabled.
+    // No folders yet: the Source Folders step fails validation, so every
+    // forward tab is disabled.
     expect(
-      screen.getByRole('button', { name: /2\. Processing Tools/i }),
+      screen.getByRole('button', { name: /3\. Processing Tools/i }),
     ).toBeDisabled();
-    expect(screen.getByRole('button', { name: /5\. Confirm/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /6\. Confirm/i })).toBeDisabled();
 
     await addFolder('/astro/lights', 'light_frames');
     await addFolder('/astro/projects', 'project');
@@ -1006,34 +1068,52 @@ describe('SetupWizard step-tab navigation (issue #512)', () => {
     // Required kinds present: intermediate steps and Confirm become reachable…
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: /2\. Processing Tools/i }),
+        screen.getByRole('button', { name: /3\. Processing Tools/i }),
       ).not.toBeDisabled(),
     );
     expect(
-      screen.getByRole('button', { name: /5\. Confirm/i }),
+      screen.getByRole('button', { name: /6\. Confirm/i }),
     ).not.toBeDisabled();
     // …but Scan is never a plain jump target (it runs registration on entry).
-    expect(screen.getByRole('button', { name: /6\. Scan/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /7\. Scan/i })).toBeDisabled();
   });
 
   it('jumps forward and freely back via the tabs', async () => {
-    renderWizard();
+    renderWizardAtSources();
     await addFolder('/astro/lights', 'light_frames');
     await addFolder('/astro/projects', 'project');
 
     // Forward jump straight to Confirm (all gates pass).
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: /5\. Confirm/i }),
+        screen.getByRole('button', { name: /6\. Confirm/i }),
       ).not.toBeDisabled(),
     );
-    fireEvent.click(screen.getByRole('button', { name: /5\. Confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /6\. Confirm/i }));
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
 
     // Free backward jump to any visited/earlier step.
     fireEvent.click(
-      screen.getByRole('button', { name: /1\. Source Folders/i }),
+      screen.getByRole('button', { name: /2\. Source Folders/i }),
     );
     expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
+  });
+
+  // spec 061 US1 T020: a language chosen by mistake must be recoverable
+  // without completing setup first — Back must always reach the Language
+  // step, and the tab bar must expose it as a free backward jump too.
+  it('T020: Back navigation from Source Folders returns to the Language step', () => {
+    renderWizardAtSources();
+    expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(screen.getByText(/choose your language/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1 of 7/i)).toBeInTheDocument();
+  });
+
+  it('T020: the Language tab is always a free backward jump once visited', () => {
+    renderWizardAtSources();
+    fireEvent.click(screen.getByRole('button', { name: /1\. Language/i }));
+    expect(screen.getByText(/choose your language/i)).toBeInTheDocument();
   });
 });

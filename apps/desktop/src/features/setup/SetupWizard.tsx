@@ -11,7 +11,9 @@ import { setPreference } from '@/data/preferences';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { errMessage } from '@/lib/errors';
+import { LocaleProvider, registerLocaleStrategy } from '@/data/locale';
 import {
+  StepLanguage,
   StepSourceFolders,
   StepTools,
   StepCatalogs,
@@ -46,6 +48,13 @@ import {
 import { saveSites } from '@/features/targets/observing-sites/site-store';
 import type { ObserverSite } from '@/features/targets/observing-sites/observer-site';
 
+// Registers the custom-almSettings Paraglide strategy as soon as this module
+// loads — before StepLanguage's first `useLocale()` render. Idempotent, so
+// safe alongside any future app-root call (spec 061 p1 left that boot-time
+// wiring unaddressed; this is the narrowest fix that makes US1 functional
+// without reaching into main.tsx, which is outside this feature's scope).
+registerLocaleStrategy();
+
 function newSiteId(): string {
   if (
     typeof crypto !== 'undefined' &&
@@ -68,6 +77,13 @@ interface WizardState {
 
 const STEPS = [
   {
+    // spec 061 US1: the wizard's first step, ahead of every other step (FR-005)
+    // — no message key shares the label/heading here the way Confirm/Config do.
+    label: () => m.setup_language_label(),
+    heading: () => m.setup_language_heading(),
+    description: () => m.setup_language_desc(),
+  },
+  {
     label: () => m.setup_step_sources_label(),
     heading: () => m.setup_step_sources_heading(),
     description: () => m.setup_step_sources_desc(),
@@ -78,7 +94,7 @@ const STEPS = [
     description: () => m.setup_step_tools_desc(),
   },
   {
-    // Step 3: label and heading share the same key (identical text).
+    // Step 4: label and heading share the same key (identical text).
     label: () => m.setup_step_config_label_heading(),
     heading: () => m.setup_step_config_label_heading(),
     description: () => m.setup_step_config_desc(),
@@ -100,11 +116,19 @@ const STEPS = [
   },
 ];
 
-// Index of the Scan step (last step).
-const SCAN_STEP = STEPS.length - 1;
+// Named step indices (spec 061 US1 trap: a step inserted ahead of the rest
+// shifts every other index — every step reference below MUST go through one
+// of these constants, never a bare literal, so a future insertion can't
+// silently point validation/rendering at the wrong step again).
+const LANGUAGE_STEP = 0;
+const SOURCES_STEP = 1;
+const TOOLS_STEP = 2;
+const CATALOGS_STEP = 3;
+const SITE_STEP = 4;
 
-// Index of the (optional) Observing Site step.
-const SITE_STEP = 3;
+// Index of the Scan step (last step) and its predecessor, Confirm.
+const SCAN_STEP = STEPS.length - 1;
+const CONFIRM_STEP = SCAN_STEP - 1;
 
 function loadWizardState(): WizardState {
   try {
@@ -443,16 +467,16 @@ export function SetupWizard() {
     // T016 persistence surfaced it, so both are listed now for correctness.
   }, [isMockMode, navigate, state.tools, state.site]);
 
-  // Validation gate for a given step index. Step 0 (Source Folders) and the
+  // Validation gate for a given step index. The Source Folders step and the
   // Confirm step require all required folder kinds; the Observing Site step
   // (T016) must be internally consistent (FR-025 never blocks, but a partially
-  // filled-in, out-of-range site can't silently proceed). Every other step
-  // advances freely. Used both for "Continue" and for validation-gated forward
-  // step-tab jumps (issue #512).
+  // filled-in, out-of-range site can't silently proceed). Every other step —
+  // including the Language step — advances freely. Used both for "Continue"
+  // and for validation-gated forward step-tab jumps (issue #512).
   const isStepValid = useCallback(
     (i: number): boolean => {
       if (isMockMode) return true;
-      if (i === 0 || i === SCAN_STEP - 1) {
+      if (i === SOURCES_STEP || i === CONFIRM_STEP) {
         return getMissingRequiredKinds(state.sources).length === 0;
       }
       if (i === SITE_STEP) {
@@ -522,7 +546,7 @@ export function SetupWizard() {
       {step > 0 ? (
         <Btn
           variant="ghost"
-          onClick={() => goTo(isOnScanStep ? SCAN_STEP - 1 : step - 1)}
+          onClick={() => goTo(isOnScanStep ? CONFIRM_STEP : step - 1)}
           disabled={isSubmitting || isFinishing}
         >
           {m.setup_wizard_back()}
@@ -532,7 +556,7 @@ export function SetupWizard() {
       )}
       <div className="pv-setup-wizard__footer-spacer" />
       {/* Folder count summary on source step */}
-      {step === 0 && totalFolders > 0 && (
+      {step === SOURCES_STEP && totalFolders > 0 && (
         <span className="pv-setup-wizard__folder-count">
           {m.setup_wizard_folder_count({ count: totalFolders })}
         </span>
@@ -550,8 +574,8 @@ export function SetupWizard() {
         >
           {isFinishing ? m.setup_wizard_finishing() : m.setup_wizard_finish()}
         </Btn>
-      ) : step < SCAN_STEP - 1 ? (
-        // Steps 0–2: "Continue to <next>"
+      ) : step < CONFIRM_STEP ? (
+        // Language through Observing Site: "Continue to <next>"
         <Btn
           variant="primary"
           onClick={() => {
@@ -573,7 +597,7 @@ export function SetupWizard() {
               })}
         </Btn>
       ) : (
-        // Step 3 (Confirm): register + enter Scan
+        // Confirm step: register + enter Scan
         <Btn
           variant="primary"
           onClick={() => {
@@ -590,82 +614,89 @@ export function SetupWizard() {
   );
 
   return (
-    // Layout fix (mirrors the project wizard): flex column + minHeight:0 so the
-    // WizardShell fills the main content area instead of overflowing/mis-placing.
-    <div className="pv-page pv-setup-wizard">
-      <WizardShell
-        steps={wizardSteps}
-        currentStep={step}
-        footer={footer}
-        // Scan runs registration side-effects on entry, so disable step-tab
-        // navigation while on it (Back button still works) — issue #512.
-        onStepSelect={isOnScanStep ? undefined : handleStepSelect}
-        className="pv-setup-wizard__shell"
-      >
-        {/* Step label + heading */}
-        <div className="pv-setup-wizard__step-label">
-          {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
-        </div>
-        <h1 className="pv-setup-wizard__heading">{stepMeta.heading()}</h1>
-        {stepMeta.description && (
-          <p className="pv-setup-wizard__description">
-            {stepMeta.description()}
-          </p>
-        )}
+    // LocaleProvider scoped to the wizard (spec 061 US1): StepLanguage's
+    // changeLocale() re-renders this subtree immediately (FR-004) without a
+    // reload, and without requiring the not-yet-wired app-root provider (see
+    // the registerLocaleStrategy() comment above).
+    <LocaleProvider>
+      {/* Layout fix (mirrors the project wizard): flex column + minHeight:0 so
+      the WizardShell fills the main content area instead of overflowing/mis-placing. */}
+      <div className="pv-page pv-setup-wizard">
+        <WizardShell
+          steps={wizardSteps}
+          currentStep={step}
+          footer={footer}
+          // Scan runs registration side-effects on entry, so disable step-tab
+          // navigation while on it (Back button still works) — issue #512.
+          onStepSelect={isOnScanStep ? undefined : handleStepSelect}
+          className="pv-setup-wizard__shell"
+        >
+          {/* Step label + heading */}
+          <div className="pv-setup-wizard__step-label">
+            {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
+          </div>
+          <h1 className="pv-setup-wizard__heading">{stepMeta.heading()}</h1>
+          {stepMeta.description && (
+            <p className="pv-setup-wizard__description">
+              {stepMeta.description()}
+            </p>
+          )}
 
-        {/* Wizard-level submit error (source registration / finish failures) */}
-        {submitError && (
-          <Banner variant="danger" data-testid="setup-submit-error">
-            {submitError}
-          </Banner>
-        )}
+          {/* Wizard-level submit error (source registration / finish failures) */}
+          {submitError && (
+            <Banner variant="danger" data-testid="setup-submit-error">
+              {submitError}
+            </Banner>
+          )}
 
-        {/* Step body */}
-        {step === 0 && (
-          <StepSourceFolders
-            entries={state.sources}
-            errors={errors}
-            onAdd={handleAddSource}
-            onRemove={handleRemoveSource}
-            onKindChange={handleKindChange}
-            onOrganizationStateChange={handleOrganizationStateChange}
-          />
-        )}
-        {step === 1 && (
-          <StepTools tools={state.tools} onToolsChange={handleToolsChange} />
-        )}
-        {step === 2 && (
-          <StepCatalogs
-            settings={state.catalogSettings}
-            onSettingsChange={handleCatalogSettingsChange}
-          />
-        )}
-        {step === SITE_STEP && (
-          <>
-            <StepSite state={state.site} onChange={handleSiteChange} />
-            {siteSkipAcked && !siteStepHasSite(state.site) && (
-              <Banner variant="warn" data-testid="setup-site-skip-warning">
-                {m.setup_step_site_skip_warning()}
-              </Banner>
-            )}
-          </>
-        )}
-        {step === 4 && (
-          <StepConfirm
-            sources={state.sources}
-            catalogSettings={state.catalogSettings}
-            tools={state.tools}
-            isSubmitting={isSubmitting}
-          />
-        )}
-        {step === SCAN_STEP && flushResult && (
-          <StepScan
-            sources={state.sources}
-            flushResult={flushResult}
-            onAllDoneChange={setScanComplete}
-          />
-        )}
-      </WizardShell>
-    </div>
+          {/* Step body */}
+          {step === LANGUAGE_STEP && <StepLanguage />}
+          {step === SOURCES_STEP && (
+            <StepSourceFolders
+              entries={state.sources}
+              errors={errors}
+              onAdd={handleAddSource}
+              onRemove={handleRemoveSource}
+              onKindChange={handleKindChange}
+              onOrganizationStateChange={handleOrganizationStateChange}
+            />
+          )}
+          {step === TOOLS_STEP && (
+            <StepTools tools={state.tools} onToolsChange={handleToolsChange} />
+          )}
+          {step === CATALOGS_STEP && (
+            <StepCatalogs
+              settings={state.catalogSettings}
+              onSettingsChange={handleCatalogSettingsChange}
+            />
+          )}
+          {step === SITE_STEP && (
+            <>
+              <StepSite state={state.site} onChange={handleSiteChange} />
+              {siteSkipAcked && !siteStepHasSite(state.site) && (
+                <Banner variant="warn" data-testid="setup-site-skip-warning">
+                  {m.setup_step_site_skip_warning()}
+                </Banner>
+              )}
+            </>
+          )}
+          {step === CONFIRM_STEP && (
+            <StepConfirm
+              sources={state.sources}
+              catalogSettings={state.catalogSettings}
+              tools={state.tools}
+              isSubmitting={isSubmitting}
+            />
+          )}
+          {step === SCAN_STEP && flushResult && (
+            <StepScan
+              sources={state.sources}
+              flushResult={flushResult}
+              onAllDoneChange={setScanComplete}
+            />
+          )}
+        </WizardShell>
+      </div>
+    </LocaleProvider>
   );
 }
