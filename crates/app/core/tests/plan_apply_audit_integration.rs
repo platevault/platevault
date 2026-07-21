@@ -14,6 +14,7 @@
 
 mod support;
 
+use fs_executor::failure::FailureCode;
 use persistence_db::repositories::plans as plans_repo;
 use uuid::Uuid;
 
@@ -80,6 +81,20 @@ async fn seed_approved_plan_with_real_files(
     plans_repo::set_approved(pool, plan_id, "2026-06-19T00:00:00Z", "tok-test-fixed")
         .await
         .expect("set_approved");
+}
+
+async fn persisted_item_failure(
+    pool: &sqlx::SqlitePool,
+    plan_id: &str,
+) -> (String, Option<String>) {
+    sqlx::query_as(
+        "SELECT new_state, failure_code FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NOT NULL AND failure_code IS NOT NULL",
+    )
+    .bind(plan_id)
+    .fetch_one(pool)
+    .await
+    .expect("query persisted item failure")
 }
 
 // ── Test 1: plan content round-trip ──────────────────────────────────────────
@@ -407,24 +422,111 @@ async fn apply_plan_refuses_to_overwrite_existing_destination() {
         "destination must not be overwritten"
     );
 
-    // A failed item event must be recorded.
-    let (failed_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM plan_apply_events \
-         WHERE plan_id = ? AND item_id IS NOT NULL AND new_state = 'failed'",
-    )
-    .bind(&plan_id)
-    .fetch_one(db.pool())
-    .await
-    .expect("query failed events");
-
-    assert!(
-        failed_count >= 1,
-        "expected at least 1 failed item event when destination already exists; found {failed_count}"
-    );
+    let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
+    assert_eq!(item_state, "failed");
+    assert_eq!(failure_code.as_deref(), Some(FailureCode::ConflictDestinationExists.as_str()));
 
     // Plan terminal state must be 'failed' (0 successes, 1 failure).
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan row");
     assert_eq!(plan_row.state, "failed", "plan should reach 'failed' when the only item conflicts");
+}
+
+#[tokio::test]
+async fn apply_plan_persists_source_missing_failure_code() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("missing.fits");
+    let dst = dir.path().join("processed/missing.fits");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should start");
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
+    assert_eq!(item_state, "failed");
+    assert_eq!(failure_code.as_deref(), Some(FailureCode::SourceMissing.as_str()));
+}
+
+#[tokio::test]
+async fn apply_plan_persists_protected_source_failure_code() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("protected.fits");
+    let dst = dir.path().join("processed/protected.fits");
+    std::fs::write(&src, b"protected-content").expect("write src");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+    sqlx::query("UPDATE plan_items SET protection = 'protected' WHERE plan_id = ?")
+        .bind(&plan_id)
+        .execute(db.pool())
+        .await
+        .expect("protect plan item");
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should start");
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
+    assert_eq!(item_state, "failed");
+    assert_eq!(failure_code.as_deref(), Some(FailureCode::ProtectedSource.as_str()));
+}
+
+#[tokio::test]
+async fn apply_plan_persists_destructive_unconfirmed_failure_code() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("delete.fits");
+    let dst = dir.path().join("unused.fits");
+    std::fs::write(&src, b"delete-content").expect("write src");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+    sqlx::query("UPDATE plan_items SET action = 'delete' WHERE plan_id = ?")
+        .bind(&plan_id)
+        .execute(db.pool())
+        .await
+        .expect("make plan item destructive");
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should start");
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
+    assert_eq!(item_state, "refused");
+    assert_eq!(failure_code.as_deref(), Some(FailureCode::DestructiveUnconfirmed.as_str()));
+}
+
+#[tokio::test]
+async fn apply_plan_persists_item_stale_failure_code() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("stale.fits");
+    let dst = dir.path().join("processed/stale.fits");
+    std::fs::write(&src, b"changed-content").expect("write src");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+    sqlx::query("UPDATE plan_items SET approved_size_bytes = 1 WHERE plan_id = ?")
+        .bind(&plan_id)
+        .execute(db.pool())
+        .await
+        .expect("set stale size snapshot");
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should start");
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
+    assert_eq!(item_state, "stale");
+    assert_eq!(failure_code.as_deref(), Some(FailureCode::ItemStale.as_str()));
 }
 
 // ── Test 3b: root_id resolved via registered_sources (gen-3) ─────────────────
