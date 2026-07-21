@@ -24,6 +24,15 @@ import {
   within,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { queryClient } from '@/data/queryClient';
+
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
 
@@ -190,6 +199,7 @@ function renderStep(overrides: Partial<StepScanProps> = {}) {
       onAllDoneChange={onAllDoneChange}
       {...overrides}
     />,
+    { wrapper },
   );
 }
 
@@ -206,6 +216,10 @@ beforeEach(() => {
   mockInboxScanFolder.mockReset();
   mockInboxClassify.mockReset();
   mockRootsList.mockReset();
+  // Query cache is keyed per source path/rootId; several tests reuse the same
+  // fixture paths with different mock responses, so a stale cache entry from
+  // a prior test would otherwise leak in as fresh data.
+  queryClient.clear();
 });
 
 describe('StepScan', () => {
