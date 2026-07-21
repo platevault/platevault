@@ -261,6 +261,49 @@ mod tests {
         assert!(!link_exists(&db, "sweep-master").await);
     }
 
+    #[tokio::test]
+    async fn concurrent_listener_and_sweep_register_one_master() {
+        let db = test_db().await;
+        let tmp = tempfile::tempdir().unwrap();
+        setup_master_item_plan(&db, tmp.path(), "race-master", "race-master-plan", 2048).await;
+        plans::update_plan_state(db.pool(), "race-master-plan", "applied").await.unwrap();
+
+        let bus = make_bus(&db);
+        let resolve_cache = ResolveCache::in_memory().unwrap();
+        let start = std::sync::Arc::new(tokio::sync::Barrier::new(3));
+
+        let listener = async {
+            start.wait().await;
+            crate::plan_listener::complete_applied_plan(
+                db.pool(),
+                &bus,
+                &resolve_cache,
+                "race-master-plan",
+            )
+            .await
+        };
+        let sweep = async {
+            start.wait().await;
+            run_repair(db.pool(), &bus, &resolve_cache).await
+        };
+        let (_, (listener_result, sweep_result)) =
+            tokio::join!(start.wait(), async { tokio::join!(listener, sweep) });
+
+        listener_result.unwrap();
+        sweep_result.unwrap();
+        assert_eq!(calibration_sessions_for(&db, "race-master").await, 1);
+        let fingerprints = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM calibration_fingerprint cf
+             JOIN calibration_session cs ON cs.id = cf.id
+             WHERE cs.source_inbox_item_id = ?",
+        )
+        .bind("race-master")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(fingerprints, 1);
+    }
+
     /// Ordering invariant: the link row outlives a failed side effect, so the
     /// next sweep retries. Here the applied destination names a root that was
     /// never registered, so `calibration_session.root_id` cannot satisfy its

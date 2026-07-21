@@ -43,7 +43,11 @@ use persistence_db::repositories::q_inbox::{
 };
 use sqlx::SqlitePool;
 use targeting_resolver::simbad::ResolveCache;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
+
+/// Serializes the check-and-insert sequence shared by the event listener and
+/// repair sweep. Both run in this process and may observe the same plan link.
+static MASTER_REGISTRATION_LOCK: Mutex<()> = Mutex::const_new(());
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -263,6 +267,8 @@ async fn ingest_light_frames_if_applicable(
 ///
 /// Non-master items and plans with no linked inbox item are a no-op.
 async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Result<(), String> {
+    let _registration_guard = MASTER_REGISTRATION_LOCK.lock().await;
+
     let link = inbox_repo::get_plan_link_by_plan_id(pool, plan_id)
         .await
         .map_err(|e| format!("get_plan_link_by_plan_id({plan_id}): {e}"))?;
