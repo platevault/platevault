@@ -189,6 +189,41 @@ pub struct BlockTransitionRecord {
     pub condition: BlockCondition,
 }
 
+/// Check the `source_missing` block invariant (US4, FR-020) across every
+/// project whose linked acquisition sessions reference a `missing` frame
+/// record, and apply the `* → blocked` transition to each.
+///
+/// This is the detection half that `emit_block_transition` (the emission half)
+/// has no caller for on its own — a project whose files disappeared stays
+/// `ready` unless something runs this. `frame_inventory::run_reconcile` is the
+/// production trigger: it is the only writer of `file_record.state='missing'`.
+///
+/// `debounce` is passed in rather than read from a global here because the
+/// process-global table lives in `app_core::caches`, which depends on this
+/// crate.
+///
+/// # Errors
+/// Returns `HealthError` on database failure.
+pub async fn check_project_source_missing_invariant(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    debounce: &DebounceCache<DebounceKey>,
+) -> Result<Vec<BlockTransitionRecord>, HealthError> {
+    let pairs =
+        repo::find_blockable_missing_sources(pool).await.map_err(HealthError::Persistence)?;
+
+    let mut applied = Vec::new();
+    for (project_id, inventory_id) in pairs {
+        let condition = BlockCondition::SourceMissing { inventory_id };
+        if let Some(record) =
+            emit_block_transition(pool, bus, debounce, &project_id, &condition).await?
+        {
+            applied.push(record);
+        }
+    }
+    Ok(applied)
+}
+
 /// Emit a system-driven `* → blocked` transition for the given project.
 ///
 /// - Performs debounce (P7): if the same `(project_id, condition_kind)` was

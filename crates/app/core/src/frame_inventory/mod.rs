@@ -37,8 +37,43 @@ mod relink;
 mod tests;
 
 pub use list::list_frames;
-pub use reconcile::run_reconcile;
 pub use relink::relink_frame;
+
+use contracts_core::inventory_frame::{
+    InventoryReconcileRunRequest, InventoryReconcileRunResponse,
+};
+
+/// `inventory.reconcile.run` — the reconcile pass followed by the project
+/// `source_missing` block check (spec 009 US4, FR-020/FR-021).
+///
+/// The two are deliberately one exported symbol rather than two the caller
+/// must remember to chain: reconcile is the only production writer of
+/// `file_record.state='missing'`, so a project whose sources vanished can only
+/// be detected here. Composing at the command layer instead is what left the
+/// `source_missing` trigger with zero production callers, and is unreachable
+/// from a Layer-1 test.
+///
+/// # Errors
+///
+/// Returns `ContractError` per [`reconcile::run_reconcile`], or an internal
+/// database error if the block check fails.
+pub async fn run_reconcile(
+    pool: &SqlitePool,
+    bus: &audit::bus::EventBus,
+    req: &InventoryReconcileRunRequest,
+) -> Result<InventoryReconcileRunResponse, ContractError> {
+    let response = reconcile::run_reconcile(pool, bus, req).await?;
+
+    app_core_projects::project_health::check_project_source_missing_invariant(
+        pool,
+        bus,
+        crate::caches::project_block_debounce(),
+    )
+    .await
+    .map_err(internal)?;
+
+    Ok(response)
+}
 
 fn internal(msg: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, msg.to_string(), ErrorSeverity::Fatal, true)
