@@ -21,7 +21,9 @@ const MIGRATION_0060: &str = include_str!("../migrations/0060_project_path_ancho
 
 async fn setup() -> Database {
     let db = Database::in_memory().await.expect("in-memory db");
-    db.migrate().await.expect("migrations should apply cleanly");
+    // Uncached: this file covers the migration chain, so replaying a schema
+    // snapshot would mean the thing under test never ran (#1230).
+    db.migrate_uncached().await.expect("migrations should apply cleanly");
     db
 }
 
