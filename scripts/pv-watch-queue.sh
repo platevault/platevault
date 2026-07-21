@@ -29,6 +29,12 @@ ci_runs_json="$work_dir/ci-runs.json"
 e2e_runs_json="$work_dir/e2e-runs.json"
 merged_json="$work_dir/merged.json"
 
+main_sha=$(gh api "repos/$REPO/commits/main" --jq .sha)
+if [[ ! "$main_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  printf 'ERROR: GitHub returned an invalid main SHA: %s\n' "$main_sha" >&2
+  exit 1
+fi
+
 gh pr list -R "$REPO" --state open --base main --limit 100 \
   --json number,title,isDraft,headRefName,mergeStateStatus,statusCheckRollup >"$prs_json"
 
@@ -144,12 +150,6 @@ if ((${#unranked_ready[@]} > 0)); then
   printf '   !! UNRANKED AND READY:'
   printf ' #%s' "${unranked_ready[@]}"
   printf '\n   !! Re-rank the whole order before merging anything.\n'
-fi
-
-main_sha=$(gh api "repos/$REPO/commits/main" --jq .sha)
-if [[ ! "$main_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
-  printf 'ERROR: GitHub returned an invalid main SHA: %s\n' "$main_sha" >&2
-  exit 1
 fi
 
 gh run list -R "$REPO" --branch main --workflow CI --limit 100 \

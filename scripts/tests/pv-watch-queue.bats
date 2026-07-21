@@ -36,6 +36,9 @@ if [[ "$1" == "pr" && "$2" == "list" ]]; then
   done
   if [[ "$state" == "open" ]]; then
     [[ "${PV_TEST_FAIL_PR_LIST:-0}" != "1" ]] || exit 1
+    if [[ "${PV_TEST_MOVE_MAIN_ON_PR_LIST:-0}" == "1" ]]; then
+      : >"$TEST_ROOT/main-moved"
+    fi
     cat "$PV_TEST_PRS"
   else
     cat "$PV_TEST_MERGED"
@@ -44,7 +47,9 @@ if [[ "$1" == "pr" && "$2" == "list" ]]; then
 fi
 
 if [[ "$1" == "api" ]]; then
-  if [[ -n "${PV_TEST_MAIN_SHA_NEXT:-}" && -f "$TEST_ROOT/main-sha-read" ]]; then
+  if [[ -n "${PV_TEST_MAIN_SHA_NEXT:-}" && -f "$TEST_ROOT/main-moved" ]]; then
+    printf '%s\n' "$PV_TEST_MAIN_SHA_NEXT"
+  elif [[ -n "${PV_TEST_MAIN_SHA_NEXT:-}" && -f "$TEST_ROOT/main-sha-read" ]]; then
     printf '%s\n' "$PV_TEST_MAIN_SHA_NEXT"
   else
     : >"$TEST_ROOT/main-sha-read"
@@ -128,6 +133,10 @@ write_main_runs() {
     conclusion: (if $state == "success" then "success" elif $state == "failed" then "failure" else null end),
     createdAt: "2026-07-21T00:00:00Z"
   }]' >"$PV_TEST_E2E"
+}
+
+set_next_main_sha() {
+  export PV_TEST_MAIN_SHA_NEXT="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 }
 
 @test "six successful required contexts produce the ranked candidate" {
@@ -215,7 +224,16 @@ write_main_runs() {
 }
 
 @test "main moving during inspection holds the gate" {
-  export PV_TEST_MAIN_SHA_NEXT="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  set_next_main_sha
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HOLD — main moved during inspection (aaaaaaaa -> bbbbbbbb)."* ]]
+  [[ "$output" != *"next merge is #42"* ]]
+}
+
+@test "main moving during PR listing is detected from the initial snapshot" {
+  set_next_main_sha
+  export PV_TEST_MOVE_MAIN_ON_PR_LIST=1
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   [[ "$output" == *"HOLD — main moved during inspection (aaaaaaaa -> bbbbbbbb)."* ]]
