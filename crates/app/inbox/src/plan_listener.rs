@@ -19,9 +19,10 @@
 //!
 //! The listener is started once at application startup via
 //! [`start_inbox_plan_listener`] which spawns a detached `tokio::task`. It is
-//! NOT the only safety mechanism — [`crate::inbox::repair::run_repair`]
-//! provides a periodic background sweep for items whose plan closed while the
-//! listener was not running (crash, restart, missed event).
+//! NOT the only safety mechanism — [`crate::repair::run_repair`] provides a
+//! periodic background sweep for items whose plan closed while the listener was
+//! not running (crash, restart, missed event). Both halves of R-PlanOpen are
+//! started by [`start_inbox_plan_listener`].
 //!
 //! # Event bus limitations
 //!
@@ -61,8 +62,31 @@ use tokio::sync::broadcast;
 pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus, resolve_cache: ResolveCache) {
     let mut rx = bus.subscribe();
     let bus = bus.clone();
+    spawn_repair_sweep(pool.clone());
     tokio::spawn(async move {
         run_listener_loop(pool, bus, resolve_cache, &mut rx).await;
+    });
+}
+
+/// Interval between repair sweeps (Ref: R-PlanOpen).
+const REPAIR_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_mins(5);
+
+/// Spawn the periodic [`crate::repair::run_repair`] sweep — the safety-net half
+/// of R-PlanOpen, started alongside its event-driven counterpart because the
+/// two are only correct together.
+///
+/// `tokio::time::interval` fires its first tick immediately, which is wanted: a
+/// plan that closed while the app was down is repaired at startup rather than
+/// five minutes into the session.
+fn spawn_repair_sweep(pool: SqlitePool) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(REPAIR_SWEEP_INTERVAL);
+        loop {
+            ticker.tick().await;
+            if let Err(e) = crate::repair::run_repair(&pool).await {
+                tracing::warn!("inbox repair sweep: {e}");
+            }
+        }
     });
 }
 
@@ -412,7 +436,7 @@ async fn handle_plan_discarded(pool: &SqlitePool, plan_id: &str) -> Result<(), S
 /// `new_state = None` means "back to unconfirmed": the state is then derived
 /// from the row's own `frame_type` instead of being asserted, so a row with no
 /// frame type cannot be sent to `classified` (spec 058 SC-003).
-async fn transition_via_plan_id(
+pub(crate) async fn transition_via_plan_id(
     pool: &SqlitePool,
     plan_id: &str,
     new_state: Option<&str>,

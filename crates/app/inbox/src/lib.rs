@@ -27,6 +27,7 @@ pub mod metadata;
 pub mod plan_listener;
 pub mod property_registry;
 pub mod reclassify;
+pub mod repair;
 pub mod scan;
 pub mod signature;
 pub mod stats;
