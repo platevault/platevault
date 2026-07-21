@@ -1,13 +1,13 @@
 ---
 id: J01
 title: Register data source folders and keep them current
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [setup, data-sources]
 interfaces: [desktop-ui]
-trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911, PR #925, PR #1176, PR #1185]
+trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911, PR #925, PR #1176, PR #1185, spec-061 FR-004, spec-061 FR-005]
 ---
 
 ## Goal
@@ -31,13 +31,14 @@ produces both a visible answer-back and a durable audit record.
 ### S1 — Open the setup wizard {#S1}
 - **Do:** Launch the app for the first time, or trigger a first-run restart
   (P1) and confirm.
-- **Expect:** The app opens a 6-step wizard: Source Folders, Processing
-  Tools, Configuration, Observing Site, Confirm, Scan. On a restart, all
-  previously registered folders are pre-filled. The step bar above the
-  wizard content renders each step as a real, focusable button (not an inert
-  div): a completed step is always a free backward jump, and a jump forward
-  is gated on the steps between here and there being valid (Scan is never a
-  plain jump target — entering it is what runs registration).
+- **Expect:** The app opens a 7-step wizard: Language, Source Folders,
+  Processing Tools, Configuration, Observing Site, Confirm, Scan. On a
+  restart, all previously registered folders are pre-filled. The step bar
+  above the wizard content renders each step as a real, focusable button
+  (not an inert div): a completed step is always a free backward jump, and a
+  jump forward is gated on the steps between here and there being valid
+  (Scan is never a plain jump target — entering it is what runs
+  registration).
 - **Expect (negative):** A first-run restart never deletes previously
   registered folders. Re-confirming an unchanged, pre-filled restart buffer
   no longer gets stuck on Confirm behind a misleading "batch registration
@@ -46,7 +47,37 @@ produces both a visible answer-back and a durable audit record.
   wizard rewrite, making the wizard 6 steps), PR-686 (map picker added to
   that step); PR #893 fixes #512 (step bar renders real buttons,
   `apps/desktop/src/ui/WizardShell.tsx`), fixes #704 (restart re-confirm no
-  longer sticks).
+  longer sticks); spec-061 US1 inserted the Language step ahead of
+  everything else, making it 7 steps (see S1a).
+
+### S1a — Choose a language (Step: Language) {#S1a}
+- **Do:** Pick a language card, each labelled with its own native name and a
+  decorative flag (e.g. "🇬🇧 English (UK)", "🇧🇷 Português (Brasil)").
+- **Expect:** This is always the wizard's first step, before any step that
+  explains itself in prose. The base locale starts selected. Picking a
+  different one applies to the wizard's own interface immediately — no
+  reload, no loss of anything entered on a later step already visited in
+  this session (research D2: the choice is a live re-render, not a
+  navigation). Every option is reachable and selectable by keyboard alone,
+  and the currently-selected option is exposed to assistive technology
+  (`aria-pressed`), with the accessible name coming from the native name,
+  never the flag.
+- **Expect:** The choice carries through the rest of setup and into the main
+  app once Finish (S8) completes, and survives a full app restart
+  thereafter — the same durable preference Settings → Appearance's language
+  control (J10) reads and writes.
+- **Expect (negative):** A language picked here is never lost by navigating
+  forward and then back — Back-navigation from any later step, or the
+  step-tab bar, always reaches this step again, and the earlier choice is
+  still selected. A locale a translation key is missing for falls back to
+  the base locale for that string rather than showing a raw key or a blank
+  region.
+- **Trace:** `apps/desktop/src/features/setup/steps/StepLanguage.tsx`;
+  `apps/desktop/src/features/setup/SetupWizard.tsx` (step ordering,
+  `LocaleProvider`); `apps/desktop/src/data/locale.tsx`
+  (`useLocale`/`changeLocale`); `apps/desktop/src/data/locale-meta.ts`
+  (native name + flag, accessible naming). Evidence: spec-061 FR-004,
+  FR-005, US1.
 
 ### S2 — Add source folders (Step: Source Folders) {#S2}
 - **Do:** For each folder category — Light frames, Calibration, Project
@@ -316,8 +347,8 @@ produces both a visible answer-back and a durable audit record.
   parent directory.
 
 ## Success criteria
-- SC1: S1–S8 complete once per install; after S8, relaunching the app never
-  re-shows `/setup`.
+- SC1: S1–S8 (including S1a) complete once per install; after S8,
+  relaunching the app never re-shows `/setup`.
 - SC2: Each of S9–S13 produces both a visible answer-back at its control and
   a durable audit row; S10 and S12 leave zero filesystem mutation beyond
   PlateVault's own registration state.
@@ -400,3 +431,12 @@ produces both a visible answer-back and a durable audit record.
   Settings picker filtering not mirrored in
   apps/desktop/src/features/setup/steps/StepCatalogs.tsx) · by:
   journey-scribe (intent-gated)
+
+- **Δ8** 2026-07-20 · S1, +S1a · behavior-change
+  A new Language step is now the wizard's first step, ahead of Source
+  Folders and everything else — the wizard is 7 steps, not 6. Picking a
+  language applies to the wizard's own interface immediately (no reload),
+  survives Back-navigation back to this step, and carries through Finish
+  into the running app and across a full restart. Every option shows its
+  own native name and a flag; the accessible name is the native name.
+  Evidence: spec-061 FR-004, FR-005, US1 · by: journey-scribe (intent-gated)

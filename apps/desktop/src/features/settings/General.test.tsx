@@ -27,6 +27,7 @@ import {
   getThemeChoice,
   getFontSizeChoice,
 } from '@/data/theme';
+import { LocaleProvider } from '@/data/locale';
 import { General } from './General';
 
 beforeEach(() => {
@@ -40,9 +41,20 @@ afterEach(() => {
   cleanup();
 });
 
+// `General` reads/writes the active locale (spec 061 T013), so every render
+// needs a `LocaleProvider` ancestor the same way the real app's
+// SettingsPage.tsx supplies one.
+function renderGeneral() {
+  return render(
+    <LocaleProvider>
+      <General />
+    </LocaleProvider>,
+  );
+}
+
 describe('General — density', () => {
   it('scales the shared spacing tokens on <html> when changed', () => {
-    render(<General />);
+    renderGeneral();
 
     const select = screen.getByDisplayValue('Comfortable (32px row)');
     fireEvent.change(select, { target: { value: 'compact' } });
@@ -58,7 +70,7 @@ describe('General — density', () => {
 
 describe('General — font size', () => {
   it('scales the shared type-scale tokens on <html> when changed', () => {
-    render(<General />);
+    renderGeneral();
 
     const select = screen.getByDisplayValue('Default (14px)');
     fireEvent.change(select, { target: { value: 'large' } });
@@ -72,20 +84,20 @@ describe('General — font size', () => {
   });
 
   it('persists the choice so it does not reset on a revisit', () => {
-    const { unmount } = render(<General />);
+    const { unmount } = renderGeneral();
 
     const select = screen.getByDisplayValue('Default (14px)');
     fireEvent.change(select, { target: { value: 'large' } });
     unmount();
 
-    render(<General />);
+    renderGeneral();
     expect(screen.getByDisplayValue('Large (16px)')).toBeInTheDocument();
   });
 });
 
 describe('General — theme picker (handoff 03: canonical themes, grouped)', () => {
   it('shows the four canonical themes grouped Warm/Cool, and hides the two disabled variants', () => {
-    render(<General />);
+    renderGeneral();
 
     expect(screen.getByText('Warm')).toBeInTheDocument();
     expect(screen.getByText('Cool')).toBeInTheDocument();
@@ -114,14 +126,14 @@ describe('General — theme picker (handoff 03: canonical themes, grouped)', () 
 
 describe('General — restore defaults (#802)', () => {
   it('renders a Restore defaults control for the Appearance pane', () => {
-    render(<General />);
+    renderGeneral();
     expect(
       screen.getByRole('button', { name: /restore defaults/i }),
     ).toBeInTheDocument();
   });
 
   it('resets theme, font size, and density to their in-code defaults', async () => {
-    render(<General />);
+    renderGeneral();
 
     // Density's underlying preference store is shared module state (not
     // localStorage-synchronous like theme/font size), so an earlier test in

@@ -36,7 +36,8 @@ function seedWizardAtSiteStep(page: import('@playwright/test').Page): void {
     window.localStorage.setItem(
       'alm-setup-wizard-state',
       JSON.stringify({
-        currentStep: 3, // Site step (STEPS[3], spec 044 US3 inserted before Confirm).
+        currentStep: 4, // Site step (STEPS[4]; spec 044 US3 put it before Confirm,
+        // then spec 061 US1's new Language step at index 0 shifted it 3→4).
         sources: [
           {
             kind: 'light_frames',

@@ -46,12 +46,12 @@ describe('Attribution', () => {
   // branch would never execute anywhere, which is how it would rot unnoticed.
   it('falls back to naming the licence path when it cannot be opened', async () => {
     render(<Attribution />);
-    fireEvent.click(screen.getByRole('button', { name: /view license/i }));
+    fireEvent.click(screen.getByRole('button', { name: /view licence/i }));
     await waitFor(() =>
       expect(screen.getByText(/licenses\/Inter-OFL\.txt/)).toBeInTheDocument(),
     );
     expect(
-      screen.queryByRole('button', { name: /view license/i }),
+      screen.queryByRole('button', { name: /view licence/i }),
     ).not.toBeInTheDocument();
   });
 });

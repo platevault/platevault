@@ -4,6 +4,11 @@
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { m } from '@/lib/i18n';
+import {
+  LocaleProvider,
+  registerLocaleStrategy,
+  useLocale,
+} from '@/data/locale';
 import { useAutoSave } from './useAutoSave';
 import { DataSources } from './DataSources';
 import { Equipment } from './Equipment';
@@ -19,6 +24,18 @@ import { SourceViews } from './SourceViews';
 import { General } from './General';
 import { Advanced } from './Advanced';
 import { AuditLog } from './AuditLog';
+
+// Registers the locale runtime's "custom-almSettings" Paraglide strategy
+// (spec 061 T007) so the language control below (General.tsx) can actually
+// persist a choice. `getLocale()` re-walks the full strategy chain on every
+// call (no memoization beyond a one-time bootstrap self-persist), so it is
+// enough for this to run before Settings mounts — it does not need to race
+// app boot. The ideal home is main.tsx, next to `initAppearance()`, so a
+// previously-saved language also applies to chrome rendered before the user
+// ever opens Settings (route-lazy chunk, spec 061 US1/app-boot wiring, not
+// yet landed); registering it here at minimum keeps the Settings surface
+// itself (this pane's own nav/content) correct regardless of that gap.
+registerLocaleStrategy();
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 const PANES = [
@@ -160,7 +177,29 @@ function renderPane(
   }
 }
 
+// Owns the Settings surface's `LocaleProvider` (spec 061 T013): every pane's
+// nav label/title/content is a descendant of `SettingsPageBody`, so wrapping
+// there — rather than requiring a global app-root provider that doesn't
+// exist yet — is enough for a language change made in Appearance (General.tsx)
+// to re-render the whole pane live.
 export function SettingsPage() {
+  return (
+    <LocaleProvider>
+      <SettingsPageBody />
+    </LocaleProvider>
+  );
+}
+
+function SettingsPageBody() {
+  // Subscribing here (not just inside General.tsx) is load-bearing, not
+  // decorative: React only force-updates fibers that actually consume a
+  // changed context, piercing past components that merely receive the same
+  // `children` reference. Calling the hook makes THIS component itself a
+  // consumer, so on `changeLocale()` it re-renders and freshly recreates its
+  // nav items/pane content — which is what makes their `m.*()` calls
+  // re-evaluate — rather than only the language control itself updating.
+  useLocale();
+
   const params = useParams({ strict: false });
   // #799: the active pane is derived from the `/settings/$pane` URL param
   // rather than tracked in local state, so deep links and the address bar
