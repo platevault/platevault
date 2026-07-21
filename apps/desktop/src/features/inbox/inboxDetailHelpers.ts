@@ -9,7 +9,6 @@
  */
 
 import type { PillVariant } from '@/ui';
-import type { InboxClassifyResponse } from './store';
 
 /**
  * Resolve an inbox item's reveal target: the source root joined with the
