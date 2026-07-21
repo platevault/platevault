@@ -11,6 +11,15 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { queryClient } from '@/data/queryClient';
+
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 const { mockPick, mockToolsDiscover } = vi.hoisted(() => ({
   mockPick: vi.fn(),
@@ -44,12 +53,15 @@ beforeEach(() => {
   mockPick.mockReset();
   mockToolsDiscover.mockReset();
   mockToolsDiscover.mockResolvedValue({ status: 'ok', data: { entries: [] } });
+  queryClient.clear();
 });
 
 function renderStep(tools: ToolsState, onToolsChange = vi.fn()) {
   return {
     onToolsChange,
-    ...render(<StepTools tools={tools} onToolsChange={onToolsChange} />),
+    ...render(<StepTools tools={tools} onToolsChange={onToolsChange} />, {
+      wrapper,
+    }),
   };
 }
 
