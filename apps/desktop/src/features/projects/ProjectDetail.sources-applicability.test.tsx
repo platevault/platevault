@@ -22,6 +22,12 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     // unrelated to this file's assertions, so a static empty selection is
     // enough.
     useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+    // #735: the tool-launch toast's "Configure path" action now navigates
+    // through the router instead of assigning window.location.hash, and the
+    // tool-not-configured hint is a real `Link` — neither works against the
+    // spread-in real implementations without a router context.
+    useNavigate: () => vi.fn(),
+    Link: (await import('@/test/router-link-stub')).LinkStub,
   };
 });
 

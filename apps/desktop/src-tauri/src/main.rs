@@ -5,7 +5,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 use desktop_shell::{build_app, run_app};
-use persistence_db::Database;
+
 use tauri::Manager;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -41,7 +41,7 @@ async fn main() {
     // Build the Tauri app first so we can access the platform path resolver
     // (needed to locate the log directory before initialising tracing, and
     // the SQLite database path below). The event loop is NOT started yet —
-    // that happens in `run_app` after the database is ready.
+    // that happens in `run_app`.
     let app = build_app();
 
     // Spec 051 US7 (T041/T042): structured logging with both a stderr target
@@ -51,10 +51,18 @@ async fn main() {
     // `tauri_plugin_log::Builder::new().skip_logger()` comment in
     // `build_app()` for why the plugin does not also try to install one.
     {
-        let log_dir = app
-            .path()
-            .app_log_dir()
-            .unwrap_or_else(|_| std::env::temp_dir().join("plate-vault-logs"));
+        // `ALM_DATA_DIR` (issue #1204) relocates the whole app-data root, logs
+        // included — otherwise concurrent E2E instances on Windows interleave
+        // their lines into one shared daily log file, which is exactly the
+        // evidence trail those runs exist to produce.
+        let log_dir = desktop_shell::data_dir::resolve().map_or_else(
+            || {
+                app.path()
+                    .app_log_dir()
+                    .unwrap_or_else(|_| std::env::temp_dir().join("plate-vault-logs"))
+            },
+            |root| root.join("logs"),
+        );
         let _ = std::fs::create_dir_all(&log_dir);
 
         // Prune before creating today's writer so a just-rotated file from a
@@ -92,7 +100,16 @@ async fn main() {
     // redb resolve-cache file (`simbad-cache.redb`, D2 — one global file,
     // independent of the `ALM_DB_URL` override so dev/test SQLite swaps don't
     // also relocate the resolve cache).
-    let data_dir = app.path().app_data_dir().expect("failed to resolve platform data directory");
+    //
+    // `ALM_DATA_DIR` overrides it outright (issue #1204). The platform
+    // resolver goes through `dirs`, which on Windows reads a Known Folder and
+    // therefore ignores the `APPDATA`/`LOCALAPPDATA` overrides the E2E harness
+    // sets — so concurrent instances there all landed on ONE real root and
+    // fought over `simbad-cache.redb` ("Database already open. Cannot acquire
+    // lock"). See `desktop_shell::data_dir`.
+    let data_dir = desktop_shell::data_dir::resolve().unwrap_or_else(|| {
+        app.path().app_data_dir().expect("failed to resolve platform data directory")
+    });
     std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
 
     // `ALM_DB_URL` lets dev/test runs target an alternate SQLite store.
@@ -103,14 +120,10 @@ async fn main() {
         format!("sqlite://{}?mode=rwc", db_path.display())
     };
 
-    let db = Database::connect(&db_url).await.expect("connect SQLite");
-    db.migrate().await.expect("run migrations");
-
-    // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
-    // cache. Opening is fast (no warm yet — `run_app` warms it in the
-    // background so a large seed never blocks startup).
-    let resolve_cache_path = data_dir.join("simbad-cache.redb");
-    let resolve_cache = desktop_shell::resolve_cache::open_or_in_memory(&resolve_cache_path);
-
-    run_app(app, db.pool().clone(), resolve_cache, resolve_cache_path);
+    // Connect + migrate happen inside `run_app`, on a task started once the
+    // event loop is already pumping. Tauri creates config-declared windows
+    // during `app.run()` rather than `.build()`, so doing that work here left
+    // a long migration with no window on screen at all — not a blank window,
+    // no window.
+    run_app(app, db_url, data_dir);
 }

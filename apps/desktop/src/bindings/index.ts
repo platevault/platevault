@@ -740,10 +740,11 @@ export const commands = {
 	 *  Auto-approves the plan if it is still `ready_for_review`, then runs the
 	 *  same background executor and writes the same durable audit trail as
 	 *  `plans_apply_real` — it just takes no `tauri::ipc::Channel`, so it can be
-	 *  invoked directly by the Layer-2 `WebDriver` E2E bridge (which cannot
-	 *  construct a `Channel` from a test script) or by any UI surface that only
-	 *  needs a fire-and-poll apply (poll `plans.apply.status` for the durable
-	 *  terminal counts) rather than a live progress stream.
+	 *  invoked directly by the Layer-2 `WebDriver` E2E bridge (which could build
+	 *  a `Channel`, but should not have to reach into Tauri internals to do it)
+	 *  or by any UI surface that only needs a fire-and-poll apply (poll
+	 *  `plans.apply.status` for the durable terminal counts) rather than a live
+	 *  progress stream.
 	 * 
 	 *  Intended for archive/cleanup plans, which — unlike inbox plans — have no
 	 *  `inbox.plan.apply` channel-free equivalent to route through.
@@ -5509,11 +5510,17 @@ export type InboxReclassifyV2Response_Serialize = {
 	needsReviewCount: number,
 };
 
-/**  Request to scan a root directory and discover inbox items. */
+/**
+ *  Request to scan a root directory and discover inbox items.
+ * 
+ *  Traversal behaviour is deliberately not a request field: `inbox.scan.folder`
+ *  resolves `followSymlinks` from persisted ingestion settings so every caller
+ *  gets the behaviour the user configured (issue #878). Every previous caller
+ *  hardcoded `false`, which silently overrode that setting.
+ */
 export type InboxScanFolderRequest = {
 	rootId: string,
 	rootAbsolutePath: string,
-	followSymlinks?: boolean,
 };
 
 /**  Response from `inbox.scan.folder`. */

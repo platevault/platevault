@@ -38,6 +38,7 @@ use persistence_db::repositories::q_inbox::{
     self, InsertCalibrationFingerprint, InsertCalibrationSession,
 };
 use sqlx::SqlitePool;
+use targeting_resolver::simbad::ResolveCache;
 use tokio::sync::broadcast;
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -49,12 +50,16 @@ use tokio::sync::broadcast;
 ///
 /// The `EventBus` is cloned into the task so the spec-035 light-frame ingest
 /// (`handle_plan_completed` → `ingest_light_frames`) can emit `target.resolved`
-/// events for inline cache hits.
-pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus) {
+/// events for inline cache hits. `resolve_cache` (also cheap to clone — an
+/// `Arc` handle) is threaded through to
+/// [`ingest_light_frames_if_applicable`], which uses it to trigger an
+/// immediate ingest-resolution drain pass after a plan's light frames are
+/// ingested (issue #1256) instead of waiting on the periodic backstop.
+pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus, resolve_cache: ResolveCache) {
     let mut rx = bus.subscribe();
     let bus = bus.clone();
     tokio::spawn(async move {
-        run_listener_loop(pool, bus, &mut rx).await;
+        run_listener_loop(pool, bus, resolve_cache, &mut rx).await;
     });
 }
 
@@ -63,12 +68,13 @@ pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus) {
 async fn run_listener_loop(
     pool: SqlitePool,
     bus: EventBus,
+    resolve_cache: ResolveCache,
     rx: &mut broadcast::Receiver<audit::event_bus::EventEnvelope<serde_json::Value>>,
 ) {
     loop {
         match rx.recv().await {
             Ok(envelope) => {
-                if let Err(e) = handle_event(&pool, &bus, &envelope).await {
+                if let Err(e) = handle_event(&pool, &bus, &resolve_cache, &envelope).await {
                     tracing::warn!("inbox plan_listener: error handling event: {e}");
                 }
             }
@@ -93,6 +99,7 @@ async fn run_listener_loop(
 async fn handle_event(
     pool: &SqlitePool,
     bus: &EventBus,
+    resolve_cache: &ResolveCache,
     envelope: &audit::event_bus::EventEnvelope<serde_json::Value>,
 ) -> Result<(), String> {
     match envelope.topic.as_str() {
@@ -100,7 +107,7 @@ async fn handle_event(
             if let Ok(payload) =
                 serde_json::from_value::<PlanApplyingCompleted>(envelope.payload.clone())
             {
-                handle_plan_completed(pool, bus, &payload).await?;
+                handle_plan_completed(pool, bus, resolve_cache, &payload).await?;
             }
         }
         TOPIC_PLAN_DISCARDED => {
@@ -117,6 +124,7 @@ async fn handle_event(
 async fn handle_plan_completed(
     pool: &SqlitePool,
     bus: &EventBus,
+    resolve_cache: &ResolveCache,
     payload: &PlanApplyingCompleted,
 ) -> Result<(), String> {
     let new_state = if payload.terminal_state == "applied" {
@@ -133,7 +141,7 @@ async fn handle_plan_completed(
         // the master path above). Idempotent (R12); a failure here is logged but
         // does not block the inbox item's resolved transition — the frames can be
         // re-ingested by re-applying or a future repair sweep.
-        ingest_light_frames_if_applicable(pool, bus, &payload.plan_id).await;
+        ingest_light_frames_if_applicable(pool, bus, &payload.plan_id, resolve_cache).await;
         "resolved"
     } else {
         // partially_applied, failed, cancelled → allow re-split
@@ -150,7 +158,23 @@ async fn handle_plan_completed(
 /// header marks them as light frames, so non-inbox and calibration plans are
 /// no-ops. Errors are logged rather than propagated so a metadata/IO problem on
 /// one frame never blocks the inbox lifecycle transition.
-async fn ingest_light_frames_if_applicable(pool: &SqlitePool, bus: &EventBus, plan_id: &str) {
+///
+/// issue #1256: on success, spawns a detached ingest-resolution drain pass
+/// ([`app_core_targets::ingest_resolution::drain_and_backfill_once`])
+/// immediately afterward, rather than leaving newly-`pending` rows (a cache
+/// miss enqueued by `ingest_light_frames` above) to wait for the ~30s
+/// periodic backstop (`desktop_shell::bootstrap::background::
+/// spawn_ingest_resolution_drain`). Spawned (not awaited) so a slow/offline
+/// SIMBAD lookup never blocks this listener's event loop from processing the
+/// next bus event; it is safe to spawn after the `.await` above because the
+/// enqueue it depends on has already committed by then — no read-before-write
+/// race with the drain's own query.
+async fn ingest_light_frames_if_applicable(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    plan_id: &str,
+    resolve_cache: &ResolveCache,
+) {
     match app_core_targets::ingest_sessions::ingest_light_frames(pool, Some(bus), plan_id).await {
         Ok(summary) if summary.ingested > 0 || summary.skipped > 0 => {
             tracing::info!(
@@ -163,8 +187,17 @@ async fn ingest_light_frames_if_applicable(pool: &SqlitePool, bus: &EventBus, pl
         Ok(_) => {}
         Err(e) => {
             tracing::warn!(plan_id, "inbox plan_listener: light-frame ingest failed: {e:?}");
+            return;
         }
     }
+
+    let pool = pool.clone();
+    let bus = bus.clone();
+    let resolve_cache = resolve_cache.clone();
+    tokio::spawn(async move {
+        app_core_targets::ingest_resolution::drain_and_backfill_once(&pool, &bus, &resolve_cache)
+            .await;
+    });
 }
 
 /// Register a calibration master at plan-apply completion (spec 041 US4/T032).
@@ -416,6 +449,10 @@ mod tests {
     use persistence_db::repositories::inbox::InsertInboxItem;
     use persistence_db::repositories::plans;
     use persistence_db::Database;
+    use targeting_resolver::cache::upsert_resolved;
+    use targeting_resolver::{
+        AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
+    };
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
@@ -478,7 +515,7 @@ mod tests {
         let bus = make_bus(&db);
         setup_item_with_plan(&db, "item-t1", "plan-t1").await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = PlanApplyingCompleted {
             plan_id: "plan-t1".to_owned(),
@@ -503,13 +540,108 @@ mod tests {
         assert!(link.is_none(), "plan link should be deleted after resolution");
     }
 
+    /// issue #1256: a `plan.applying.completed`("applied") event must trigger
+    /// prompt resolution of pending `ingest_resolution` rows on its own — no
+    /// periodic backstop task is running in this test at all, so if the event
+    /// path didn't drain-and-backfill immediately, this row would never
+    /// resolve within the test's short sleep window (it previously only
+    /// resolved on a ~30s timer this test doesn't run).
+    #[tokio::test]
+    async fn applied_plan_triggers_prompt_target_resolution() {
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        setup_item_with_plan(&db, "item-t9", "plan-t9").await;
+
+        // A `library_root` + `file_record` so the `ingest_resolution` FK holds,
+        // plus a `pending` row left over from an earlier (unrelated) ingest —
+        // mirrors `app_core_targets::ingest_resolution`'s own
+        // `drain_cache_hit_resolves_without_resolver` test fixture.
+        let root_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
+             VALUES (?, 'test', '/tmp/test', 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&root_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        let image_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO file_record
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
+             VALUES (?, ?, 'pending.fits', 1, '2026-01-01T00:00:00Z', 'observed',
+                     '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&image_id)
+        .bind(&root_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Seed a resolvable canonical target (cache/seed hit — no network
+        // needed) and force a `pending` row directly, bypassing the inline
+        // cache-hit path in `associate_or_enqueue`.
+        upsert_resolved(
+            db.pool(),
+            &ResolvedIdentity {
+                simbad_oid: Some(1_575_544),
+                primary_designation: "M 31".to_owned(),
+                common_name: Some("Andromeda Galaxy".to_owned()),
+                object_type: ObjectType::Galaxy,
+                ra_deg: 10.684_708,
+                dec_deg: 41.268_75,
+                v_mag: None,
+                aliases: vec![
+                    ResolvedAlias::new("M 31", AliasKind::Designation),
+                    ResolvedAlias::new("NGC 224", AliasKind::Designation),
+                ],
+                source: TargetSource::Resolved,
+            },
+        )
+        .await
+        .unwrap();
+        app_core_targets::ingest_resolution::enqueue(db.pool(), &image_id, "NGC 224")
+            .await
+            .unwrap();
+
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
+
+        let payload = PlanApplyingCompleted {
+            plan_id: "plan-t9".to_owned(),
+            run_id: "run-t9".to_owned(),
+            terminal_state: "applied".to_owned(),
+            items_applied: 1,
+            items_failed: 0,
+            items_skipped: 0,
+            items_cancelled: 0,
+            at: "2026-07-20T00:00:00Z".to_owned(),
+        };
+        bus.publish(TOPIC_PLAN_APPLYING_COMPLETED, Source::System, payload).await.unwrap();
+
+        // Well under the 30s periodic backstop interval — proves the event
+        // path itself resolves promptly rather than depending on the timer.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let (state, target_id): (String, Option<String>) =
+            sqlx::query_as("SELECT state, target_id FROM ingest_resolution WHERE image_id = ?")
+                .bind(&image_id)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            state, "resolved",
+            "plan-applied event must trigger prompt resolution, not wait on a 30s backstop"
+        );
+        assert!(target_id.is_some());
+    }
+
     #[tokio::test]
     async fn failed_plan_transitions_back_to_classified() {
         let db = test_db().await;
         let bus = make_bus(&db);
         setup_item_with_plan(&db, "item-t2", "plan-t2").await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = PlanApplyingCompleted {
             plan_id: "plan-t2".to_owned(),
@@ -536,7 +668,7 @@ mod tests {
         let bus = make_bus(&db);
         setup_item_with_plan(&db, "item-t3", "plan-t3").await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = audit::event_bus::PlanDiscarded {
             plan_id: "plan-t3".to_owned(),
@@ -661,7 +793,7 @@ mod tests {
         let size: usize = 4096;
         let (root_id, rel) = setup_master_item_plan(&db, tmp.path(), item_id, plan_id, size).await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = PlanApplyingCompleted {
             plan_id: plan_id.to_owned(),

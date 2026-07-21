@@ -336,32 +336,6 @@
   margin-bottom: var(--pv-sp-2);
 }
 
-/* === INFO TIP (settings ⓘ — replaces always-on help prose) === */
-.pv-info-tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1px solid var(--pv-text-faint);
-  color: var(--pv-text-muted);
-  font-size: var(--pv-text-xs);
-  font-weight: var(--pv-weight-semibold);
-  font-style: normal;
-  line-height: 1;
-  cursor: help;
-  position: relative;
-  flex: none;
-  user-select: none;
-}
-.pv-info-tip:hover,
-.pv-info-tip:focus-visible {
-  border-color: var(--pv-accent);
-  color: var(--pv-accent);
-  outline: none;
-}
-
 /* === ADVANCED settings-row control col (flex column for desc + action button) — */
 /* shared by the guided-tour restart and first-run setup restart controls. */
 .pv-adv-settings__control-col { display: flex; flex-direction: column; gap: var(--pv-sp-2); align-items: flex-start; }
