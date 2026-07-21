@@ -437,11 +437,7 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     // persists auto-ticks from domain-completion topics and emits
     // `onboarding:state-changed`. Started here, before the webview can invoke,
     // so no tick can be lost to a UI race (PQ-005 ordering).
-    crate::commands::onboarding::start_onboarding_subscriber(
-        app.handle().clone(),
-        pool.clone(),
-        &bus,
-    );
+    crate::commands::onboarding::start_onboarding_subscriber(app.clone(), pool.clone(), &bus);
     // spec 056 (PQ-005): recover ticks whose live event was missed — published
     // before the subscriber subscribed, or lost to a kill between the action
     // and the tick write. Started AFTER the subscriber so the two can only
