@@ -849,7 +849,7 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
         "var raw = localStorage.getItem('alm-preferences');\
          if (!raw) {{ return null; }}\
          var dock = (JSON.parse(raw).detailDock || {{}})['{dock_id}'];\
-         return dock ? [String(dock.placement), Number(dock.width)] : null;"
+         return dock ? [String(dock.placement), dock.width] : null;"
     );
     let v: Value = app
         .driver
@@ -861,7 +861,17 @@ async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, 
     anyhow::ensure!(!v.is_null(), "no persisted detailDock entry for {dock_id:?} at all");
     let placement =
         v.get(0).and_then(Value::as_str).context("persisted placement was not a string")?;
-    let width = v.get(1).and_then(Value::as_i64).context("persisted width was not a number")?;
+    // Deliberately NOT `Number(dock.width)` on the JS side and NOT a lossy
+    // fallback here: `width: null` is the legitimate "never resized"
+    // sentinel (`DetailDockPref.width: number | null`), and `Number(null)`
+    // silently coercing to `0` once let a drag that never reached the
+    // resize handler read back as "resized to 0px" instead of surfacing the
+    // real problem. A null width is a caller bug (this helper is only used
+    // once the test has forced a resize) that must fail loudly, not compare
+    // equal to some later default-width fallback.
+    let width = v.get(1).and_then(Value::as_i64).with_context(|| {
+        format!("persisted width for {dock_id:?} was null or not a number: {v:?}")
+    })?;
     Ok((placement.to_string(), width))
 }
 
@@ -882,8 +892,36 @@ async fn rendered_side_width(app: &E2eApp) -> anyhow::Result<i64> {
 }
 
 /// Drives the Targets page to a pinned side dock holding a NON-DEFAULT width,
-/// using only real UI: the three-state placement control, then a real pointer
-/// drag of the resize handle. Returns the persisted `(placement, width)`.
+/// using only real UI: the three-state placement control, then a drag of the
+/// resize handle that reaches the actual `onResizeStart` pointer-event
+/// handler. Returns the persisted `(placement, width)`.
+///
+/// The drag is a JS-dispatched `PointerEvent` sequence, NOT
+/// `action_chain()`. `tauri-plugin-webdriver` 0.2.1's Actions API cannot
+/// drive this interaction at all, on two independent counts (verified by
+/// reading its vendored source and by running this test locally with each
+/// workaround attempted in turn — both left the CSS `--pv-side-detail-w` var
+/// and the persisted width unchanged at their defaults):
+/// - `.../src/server/handlers/actions.rs`'s `PointerAction::PointerMove` has
+///   no `origin` field, so the W3C-spec `origin: "pointer"` /
+///   `origin: WebElement` that `move_by_offset`/`move_to_element_center`
+///   produce is silently dropped; every move is executed as if it were
+///   `origin: "viewport"`, landing the pointer far from the handle even when
+///   using `move_to` with the handle's own on-screen coordinates.
+/// - `.../src/platform/executor.rs`'s `dispatch_pointer_event` synthesizes a
+///   `MouseEvent` (`mousedown`/`mousemove`/`mouseup`) via
+///   `element.dispatchEvent()`, never a `PointerEvent`. Browsers do not
+///   synthesize Pointer Events from a script-dispatched, untrusted
+///   MouseEvent, so `ResizeHandle`'s `onPointerDown` and
+///   `useAdaptiveDock.onResizeStart`'s `window.addEventListener('pointermove'
+///   | 'pointerup', ...)` (`apps/desktop/src/ui/useAdaptiveDock.ts`) never
+///   fire — regardless of coordinates.
+///
+/// Dispatching real `PointerEvent`s ourselves reaches the same handler,
+/// exercises the same `setWidth` -> `writeStored` -> `localStorage.setItem`
+/// path a genuine OS drag would, and differs from a native drag only in how
+/// the pointer sequence is injected — which this WebDriver plugin version
+/// cannot do for Pointer Events at all.
 async fn pin_and_widen_dock(app: &E2eApp) -> anyhow::Result<(String, i64)> {
     // Option order in `DetailDockPlacementControl` is Auto, Bottom, Right.
     let side = app
@@ -897,17 +935,40 @@ async fn pin_and_widen_dock(app: &E2eApp) -> anyhow::Result<(String, i64)> {
     let handle = app
         .find_waiting(By::Css("[data-testid='dock-resize-handle']"), "the dock resize handle")
         .await?;
-
-    // The side panel sits on the right edge, so dragging LEFT grows it.
-    app.driver
-        .action_chain()
-        .move_to_element_center(&handle)
-        .click_and_hold()
-        .move_by_offset(-DRAG_PX, 0)
-        .release()
-        .perform()
+    let (center_x, center_y) = handle
+        .rect()
         .await
-        .context("real pointer drag of the dock resize handle failed")?;
+        .context("reading the resize handle's screen position failed")?
+        .icenter();
+    // The side panel sits on the right edge, so dragging LEFT grows it.
+    let end_x = center_x - DRAG_PX;
+
+    let script = format!(
+        "var handle = document.querySelector(\"[data-testid='dock-resize-handle']\");\
+         if (!handle) return false;\
+         function fire(target, type, x, buttons) {{\
+           target.dispatchEvent(new PointerEvent(type, {{\
+             bubbles: true, cancelable: true, pointerId: 1, isPrimary: true,\
+             pointerType: 'mouse', button: 0, buttons: buttons,\
+             clientX: x, clientY: {center_y}\
+           }}));\
+         }}\
+         fire(handle, 'pointerdown', {center_x}, 1);\
+         fire(window, 'pointermove', {end_x}, 1);\
+         fire(window, 'pointerup', {end_x}, 0);\
+         return true;"
+    );
+    let found: bool = app
+        .driver
+        .execute(&script, vec![])
+        .await
+        .context("dispatching the synthetic resize-handle drag failed")?
+        .convert()
+        .context("the drag dispatch result did not deserialise")?;
+    anyhow::ensure!(
+        found,
+        "the dock resize handle disappeared before the drag could be dispatched"
+    );
 
     read_dock_pref(app, "targets").await
 }
