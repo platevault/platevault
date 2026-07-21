@@ -1908,10 +1908,15 @@ export const mockHandlers = {
   inbox_classify: async (_args) => {
     const args = _args as { req: { inboxItemId: string } } | undefined;
     const id = args?.req?.inboxItemId ?? 'item-001';
+    // spec 058 T035 retired `mixed`: a folder spanning several frame types
+    // now reports `unclassified` (both producers do), and the breakdown
+    // carries the composition FR-011 asks for. Keeping `mixed` here let the
+    // mock-mode Playwright specs pass against a shape the backend no longer
+    // emits.
     const isMixed = id === 'item-001';
     return {
       inboxItemId: id,
-      type: isMixed ? 'mixed' : 'single_type',
+      type: isMixed ? 'unclassified' : 'single_type',
       frameType: isMixed ? undefined : 'dark',
       contentSignature: `sig-${id}`,
       breakdown: isMixed
