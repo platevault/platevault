@@ -78,3 +78,11 @@ get_project_source
 get_resolver_settings_online
 mark_recovered
 reattribute
+
+# Deliberately test-only per its own docstring
+# (crates/app/core/src/protection/global_defaults.rs): a thin wrapper around
+# `update_setting` kept for callers with this narrower signature. The real
+# desktop save path is `settings.update` (Tauri command) → `update_setting`
+# directly, which already performs the same
+# `app_core_cache::invalidate_protection_defaults()` call this wrapper makes.
+set_global_protection_default

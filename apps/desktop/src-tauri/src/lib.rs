@@ -424,6 +424,21 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
         });
     }
 
+    // spec 018 T018/T019: hydrate defaults for missing settings rows and repair
+    // invalid stored values (delete the bad row, fall back to the in-code
+    // default, emit a settings.repair audit event), then prime the settings-bag
+    // read cache. Runs once per app start, before the snapshot pass below reads
+    // noisy-key values and before any settings.get call.
+    {
+        let repair_pool = pool.clone();
+        let repair_bus = bus.clone();
+        tokio::spawn(async move {
+            if let Err(e) = app_core::settings::get_settings(&repair_pool, &repair_bus).await {
+                tracing::warn!("settings repair pass failed: {e:?}");
+            }
+        });
+    }
+
     // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
     // This gives the audit log a durable record of the active configuration even when
     // noisy keys (pattern, protectedCategories, …) haven't changed individually.
