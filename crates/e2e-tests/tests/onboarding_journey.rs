@@ -41,7 +41,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::{write_minimal_fits, E2eApp};
+use common::{scan_and_classify_one_item, write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
@@ -171,13 +171,14 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     // a project root purely to satisfy `firstrun.complete` (needs one raw AND
     // one project source — see `inventory_journeys.rs::complete_first_run`).
     let root_dir = tempfile::tempdir()?;
-    let fixture = write_minimal_fits(
+    let fixture = write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-12T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(fixture.exists(), "fixture FITS file was not written");
 
@@ -289,22 +290,9 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     );
 
     // ── 3. Real inventory confirm → publishes `inventory.confirmed`.
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    let inbox_item_id =
+        scan_and_classify_one_item(&app, &root_id, root_dir.path().to_string_lossy().as_ref())
+            .await?;
 
     let classify: serde_json::Value = app
         .invoke(
