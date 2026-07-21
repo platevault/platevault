@@ -1025,6 +1025,9 @@ async fn targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Resul
     // Clean window close: WebView2 flushes localStorage here and not on a kill.
     app.graceful_shutdown().await?;
 
+    #[cfg(target_os = "windows")]
+    E2eApp::wait_for_webview_storage_flush().await?;
+
     // Cold start: new process, empty module cache, storage read from disk.
     let app = E2eApp::relaunch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
