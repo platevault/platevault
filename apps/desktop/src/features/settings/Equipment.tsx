@@ -23,7 +23,7 @@
  *    gets an actionable message instead of a raw database error; the backend
  *    constraint remains the source of truth for correctness.
  */
-import { Btn, Table } from '@/ui';
+import { Btn, NumberField, Table } from '@/ui';
 import type { TableRow } from '@/ui';
 import { Modal } from '@/components';
 import { m } from '@/lib/i18n';
@@ -33,6 +33,7 @@ import {
   autoDetectedBadge,
   filterCategoryLabel,
   formatAliases,
+  fovSummary,
   FILTER_CATEGORIES,
   passbandChoiceFrom,
   passbandLabel,
@@ -150,6 +151,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 key: 'focalLength',
                 label: m.settings_equipment_col_focal_length(),
               },
+              { key: 'fov', label: m.settings_equipment_col_fov() },
               { key: 'actions', label: '', style: { width: 140 } },
             ]}
             rows={trains.map(
@@ -164,6 +166,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                     })}
                   </code>
                 ),
+                // Backend-derived; absent when the linked camera has no
+                // sensor geometry. Rendered as "Not known", never as 0°.
+                fov: fovSummary(t.fovDiagonalDeg),
                 actions: (
                   <span className="pv-equipment__row-actions">
                     <Btn
@@ -307,6 +312,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 aliasesText: '',
                 sensorType: '',
                 passband: 'rgb',
+                pixelSizeUmText: '',
+                sensorWidthPxText: '',
+                sensorHeightPxText: '',
               })
             }
           >
@@ -348,6 +356,11 @@ export function Equipment({ save: _save }: EquipmentProps) {
                           aliasesText: c.aliases.join(', '),
                           sensorType: c.sensorType ?? '',
                           passband: passbandChoiceFrom(c.passband),
+                          // Absent geometry opens as blank, not as '0'.
+                          pixelSizeUmText: c.pixelSizeUm?.toString() ?? '',
+                          sensorWidthPxText: c.sensorWidthPx?.toString() ?? '',
+                          sensorHeightPxText:
+                            c.sensorHeightPx?.toString() ?? '',
                         })
                       }
                     >
@@ -479,6 +492,39 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 </select>
               </div>
             )}
+            {/* Migration 0079: sensor geometry. All three are optional — a
+                camera without them simply reports no field of view. */}
+            <NumberField
+              id="equipment-camera-pixel-size"
+              label={m.settings_equipment_field_pixel_size()}
+              hint={m.settings_equipment_geometry_hint()}
+              min={0}
+              step="any"
+              value={cameraForm.pixelSizeUmText}
+              onChange={(value) =>
+                setCameraForm({ ...cameraForm, pixelSizeUmText: value })
+              }
+            />
+            <NumberField
+              id="equipment-camera-sensor-width"
+              label={m.settings_equipment_field_sensor_width()}
+              min={0}
+              step={1}
+              value={cameraForm.sensorWidthPxText}
+              onChange={(value) =>
+                setCameraForm({ ...cameraForm, sensorWidthPxText: value })
+              }
+            />
+            <NumberField
+              id="equipment-camera-sensor-height"
+              label={m.settings_equipment_field_sensor_height()}
+              min={0}
+              step={1}
+              value={cameraForm.sensorHeightPxText}
+              onChange={(value) =>
+                setCameraForm({ ...cameraForm, sensorHeightPxText: value })
+              }
+            />
           </SettingsFormShell>
         )}
       </SettingsSection>

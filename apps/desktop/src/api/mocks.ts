@@ -14,6 +14,8 @@ import type {
 } from '@/bindings/types';
 import type {
   CalibrationTolerances,
+  CleanupPolicy,
+  UpdateCleanupPolicy,
   InboxListResponse_Serialize,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
@@ -284,12 +286,18 @@ function observingValues(): Record<string, unknown> {
   return mockObservingValues;
 }
 
-// Mutable so `settings_update('cleanup', { cleanupTypeOverrides })` round-trips
-// through `settings_get('cleanup')` in mock mode (spec 051 US3) — the
-// per-type cleanup action table now persists via this database-backed
-// setting instead of `localStorage`, so its mock-mode round-trip must mirror
-// real persistence the same way `mockIngestionSettings` does below.
-let mockCleanupTypeOverrides: Record<string, string> = {};
+// Mutable so `cleanup_policy_update` round-trips through `cleanup_policy_get`
+// in mock mode (issue #804). Seeded at `default_cleanup_policy()` — all-Keep,
+// no auto-run — so mock mode reproduces the real fresh-install state, where a
+// scan legitimately finds nothing until the user opts a data type in.
+let mockCleanupPolicy: CleanupPolicy = {
+  entries: [
+    { dataType: 'intermediate', action: 'keep' },
+    { dataType: 'master', action: 'keep' },
+    { dataType: 'final', action: 'keep' },
+  ],
+  autoOnCompletion: false,
+};
 
 // Mutable so `settings_update('framing', …)` round-trips through
 // `settings_get('framing')` in mock mode (spec 008 Q27 F-Framing-11) —
@@ -400,14 +408,22 @@ let mockCameras: Camera[] = [
     autoDetected: false,
     sensorType: 'mono',
     passband: null,
+    pixelSizeUm: 3.76,
+    sensorWidthPx: 6248,
+    sensorHeightPx: 4176,
   },
   {
+    // No sensor geometry: exercises the absent-FOV branch in mock mode, which
+    // is the common state for a camera registered before migration 0079.
     id: 'cam-002',
     name: 'ASI533MC Pro',
     aliases: ['ZWO ASI533MC'],
     autoDetected: false,
     sensorType: 'osc',
     passband: null,
+    pixelSizeUm: null,
+    sensorWidthPx: null,
+    sensorHeightPx: null,
   },
 ];
 
@@ -439,6 +455,20 @@ let mockOpticalTrains: OpticalTrain[] = [
     telescopeId: 'tel-001',
     cameraId: 'cam-001',
     focalLengthMm: 530,
+    // Fixture value for cam-001's geometry at 530 mm. Held as a constant
+    // rather than recomputed here: the FOV formula lives in the backend
+    // (`sessions::fov_diagonal_deg`) and must not be reimplemented in TS.
+    fovDiagonalDeg: 3.05,
+  },
+  {
+    // Linked to the geometry-less cam-002, so mock mode renders the
+    // "not known" branch alongside a real value.
+    id: 'train-002',
+    name: 'GT81 + ASI533MC',
+    telescopeId: 'tel-002',
+    cameraId: 'cam-002',
+    focalLengthMm: 478,
+    fovDiagonalDeg: null,
   },
 ];
 
@@ -1308,12 +1338,6 @@ export const mockHandlers = {
         values: observingValues(),
       } satisfies SettingsData;
     }
-    if (scope === 'cleanup') {
-      return {
-        scope: 'cleanup',
-        values: { cleanupTypeOverrides: mockCleanupTypeOverrides },
-      } satisfies SettingsData;
-    }
     if (scope === 'framing') {
       return {
         scope: 'framing',
@@ -1470,6 +1494,15 @@ export const mockHandlers = {
       (_args as { planId?: string } | undefined)?.planId ?? 'mock-plan';
     return { planId, itemsConfirmed: 1 };
   },
+  cleanup_policy_get: async () => {
+    return mockCleanupPolicy;
+  },
+  cleanup_policy_update: async (_args) => {
+    const req = (_args as { request?: UpdateCleanupPolicy } | undefined)
+      ?.request;
+    if (req) mockCleanupPolicy = { ...req };
+    return mockCleanupPolicy;
+  },
   cleanup_scan: async (_args) => {
     // D11 step 1: pure read-only preview. Reason strings follow the backend
     // generator format (see cleanup_generator.rs::scan_with_policy).
@@ -1585,16 +1618,6 @@ export const mockHandlers = {
       const values = (_args as { values?: Record<string, unknown> } | undefined)
         ?.values;
       if (values) mockObservingValues = { ...observingValues(), ...values };
-    }
-    if (scope === 'cleanup') {
-      const values = (_args as { values?: Record<string, unknown> } | undefined)
-        ?.values;
-      const overrides = values?.cleanupTypeOverrides;
-      if (overrides && typeof overrides === 'object') {
-        mockCleanupTypeOverrides = {
-          ...(overrides as Record<string, string>),
-        };
-      }
     }
     if (scope === 'framing') {
       const values = (_args as { values?: Record<string, unknown> } | undefined)
@@ -2403,6 +2426,9 @@ export const mockHandlers = {
       autoDetected: false,
       sensorType: req?.sensorType ?? null,
       passband: req?.passband ?? null,
+      pixelSizeUm: req?.pixelSizeUm ?? null,
+      sensorWidthPx: req?.sensorWidthPx ?? null,
+      sensorHeightPx: req?.sensorHeightPx ?? null,
     };
     mockCameras = [...mockCameras, camera];
     return camera;
@@ -2423,6 +2449,9 @@ export const mockHandlers = {
       aliases: req.aliases,
       sensorType: req.sensorType ?? null,
       passband: req.passband ?? null,
+      pixelSizeUm: req.pixelSizeUm ?? null,
+      sensorWidthPx: req.sensorWidthPx ?? null,
+      sensorHeightPx: req.sensorHeightPx ?? null,
     };
     mockCameras = mockCameras.map((c) => (c.id === req.id ? updated : c));
     return updated;
@@ -2503,6 +2532,9 @@ export const mockHandlers = {
       telescopeId: req?.telescopeId ?? null,
       cameraId: req?.cameraId ?? null,
       focalLengthMm: req?.focalLengthMm ?? 0,
+      // The FOV is backend-derived. Mock mode does not reimplement the
+      // formula, so a mock-created train honestly reports no FOV.
+      fovDiagonalDeg: null,
     };
     mockOpticalTrains = [...mockOpticalTrains, train];
     return train;

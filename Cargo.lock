@@ -4191,6 +4191,8 @@ dependencies = [
  "sea-query",
  "serde",
  "serde_json",
+ "sessions",
+ "sha2 0.10.9",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",

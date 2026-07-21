@@ -4,7 +4,7 @@
 
 /**
  * i18n catalog lint (spec 046 follow-up, run-jc0717 i18n-guard hardening).
- * Cheap, JSON-only checks over apps/desktop/messages/en.json that the
+ * Cheap, JSON-only checks over apps/desktop/messages/en-GB.json that the
  * alm/no-user-string ESLint rule cannot see (it only inspects src/*.tsx call
  * sites, not the catalog's own values):
  *
@@ -45,7 +45,7 @@ import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, '..');
-const CATALOG_PATH = path.join(REPO_ROOT, 'apps/desktop/messages/en.json');
+const CATALOG_PATH = path.join(REPO_ROOT, 'apps/desktop/messages/en-GB.json');
 const BASELINE_PATH = path.join(here, 'i18n-catalog-baseline.txt');
 
 // A duplicate value is noise (not flagged) unless it is multi-word or longer

@@ -546,6 +546,7 @@ async fn restore_defaults_rejects_unknown_key() {
 #[case("tools.startools.auto_detected", true)]
 #[case("workflow_profile.my_profile.watch_extensions", true)]
 #[case("workflow_profile.my_profile.launch_attribution_window_hours", true)]
+#[case("locale", true)]
 // Invalid: unknown + malformed structured-path keys.
 #[case("notARealKey", false)]
 #[case("tools.UPPERCASE.bundle_id", false)] // tool id must be lowercase
@@ -554,6 +555,15 @@ async fn restore_defaults_rejects_unknown_key() {
 #[case("calibration.video.override_penalty", false)] // video not a valid frame type
 fn is_valid_key_cases(#[case] key: &str, #[case] expected: bool) {
     assert_eq!(is_valid_key(key), expected);
+}
+
+// ── Locale (spec 061 T001-T003, research D8) ────────────────────────
+
+/// T002: a store with no stored `locale` row answers the base locale, not
+/// an empty/null value.
+#[test]
+fn locale_default_is_base_locale() {
+    assert_eq!(default_value_for_key("locale"), serde_json::json!("en-GB"));
 }
 
 // ── Value validation unit tests ─────────────────────────────────────
@@ -621,6 +631,8 @@ fn is_valid_key_cases(#[case] key: &str, #[case] expected: bool) {
 #[case("theme", serde_json::json!("observatory-cool-light"))]
 #[case("theme", serde_json::json!("espresso-dark"))]
 #[case("theme", serde_json::json!("system"))]
+#[case("locale", serde_json::json!("en-GB"))]
+#[case("locale", serde_json::json!("pt-BR"))]
 #[case("framingPointingFractionOfFov", serde_json::json!(0.10))]
 #[case("framingPointingFractionOfFov", serde_json::json!(0.01))]
 #[case("framingPointingFractionOfFov", serde_json::json!(2.0))]
@@ -680,6 +692,9 @@ fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
 #[case("cleanupTypeOverrides", serde_json::json!({"1": 5}))] // action not a string
 #[case("theme", serde_json::json!("neon"))] // not an allowed variant
 #[case("theme", serde_json::json!(5))] // not a string
+#[case("locale", serde_json::json!("fr-FR"))] // not a shipped locale
+#[case("locale", serde_json::json!("en-US"))] // close but not the shipped GB tag
+#[case("locale", serde_json::json!(5))] // not a string
 #[case("framingPointingFractionOfFov", serde_json::json!(0.0))] // below [0.01, 2.0]
 #[case("framingPointingFractionOfFov", serde_json::json!(2.1))] // above range
 #[case("framingPointingFractionOfFov", serde_json::json!("x"))] // not a number

@@ -1,7 +1,7 @@
 use super::{
-    bus_err, caches, db_err, descriptors, is_catalogues_enabled_key, is_tools_bundle_id_key, repo,
-    validate_value, ContractError, EventBus, SettingsGetResponse, SettingsRepair, SettingsState,
-    Source, SqlitePool, Timestamp, Value, TOPIC_SETTINGS_REPAIR,
+    bus_err, caches, db_err, descriptors, is_catalogues_enabled_key, is_locale_key,
+    is_tools_bundle_id_key, repo, validate_value, ContractError, EventBus, SettingsGetResponse,
+    SettingsRepair, SettingsState, Source, SqlitePool, Timestamp, Value, TOPIC_SETTINGS_REPAIR,
 };
 
 // ── get_settings ──────────────────────────────────────────────────────────
@@ -94,6 +94,11 @@ pub(super) fn default_value_for_key(key: &str) -> Value {
     }
     if is_catalogues_enabled_key(key) {
         return serde_json::json!(["M", "NGC", "IC", "Sh2"]);
+    }
+    // T002: a store with no stored `locale` row answers the base locale
+    // (data-model.md "Stored state" — `en-GB`), never an empty value.
+    if is_locale_key(key) {
+        return Value::String("en-GB".to_owned());
     }
     Value::Null
 }

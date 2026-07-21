@@ -1,0 +1,15 @@
+{
+  "sidebar-width": {
+    "$value": "220px",
+    "$type": "dimension",
+    "$description": "#962: was 200px with ZERO slack against the header's own content sum (mark + brand-name + version chip + collapse button + gaps/padding measured at exactly 199px) \u2014 any platform font-metric variance (Windows subpixel rendering, non-1.0 DPR) tips \"PlateVault\" into its ellipsis safety net. +20px gives real headroom."
+  },
+  "sidebar-collapsed": {
+    "$value": "48px",
+    "$type": "dimension"
+  },
+  "action-sidebar-width": {
+    "$value": "220px",
+    "$type": "dimension"
+  }
+}

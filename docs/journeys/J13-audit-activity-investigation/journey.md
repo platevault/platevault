@@ -1,7 +1,7 @@
 ---
 id: J13
 title: Reconstruct what happened to my library
-version: 1
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -49,7 +49,10 @@ happened" or "nothing was recorded".
 
 ### S1 — Open the Activity panel {#S1}
 - **Do:** Toggle the status-bar Log control.
-- **Expect:** The panel opens showing a live, newest-first stream of
+- **Expect:** The panel opens as a full-width bottom fold-out, expanding to
+  40% of the frame height (header always visible, only the event list
+  scrolls) — not a small, largely unstyled box capped at 200px. It shows a
+  live, newest-first stream of
   in-session events, each with a severity/level and a source indicator; rows
   that reference a specific entity are visually marked as navigable.
 - **Expect (negative):** Opening or closing the panel writes no Audit Log
@@ -145,18 +148,24 @@ happened" or "nothing was recorded".
   13 HEADLINE. Candidate Known Gap for this journey — needs explicit user
   confirmation before being recorded as one.
 
-### S8 — Find a settings, protection, equipment, or source change {#S8}
+### S8 — Find a settings, protection, equipment, source, or calibration change {#S8}
 - **Do:** After changing a setting, overriding or acknowledging a protection
-  rule, adding/editing equipment, or registering/enabling/disabling/remapping
-  a data source, filter the Audit Log by that entity type and date.
+  rule, adding/editing equipment, registering/enabling/disabling/remapping
+  a data source, or assigning/unassigning a calibration master to a session,
+  filter the Audit Log by that entity type and date.
 - **Expect:** The change is present as a durable row with outcome and actor.
   An equipment record created by auto-detection (not a direct user action)
   appears with actor=system at diagnostic severity, not attributed to the
-  user.
-- **Expect (negative):** A refused or failed attempt in any of these four
+  user. A calibration master assign/unassign is a durable row too — it is
+  not visible only in the transient Activity panel stream (S1).
+- **Expect (negative):** A refused or failed attempt in any of these five
   categories (P3's blocked override/duplicate-alias/blocked-delete case, or
   equivalent) still appears as a row, with outcome=refused or outcome=failed
   and a reason code — it is never silently dropped from the log.
+- **Trace:** `crates/app/calibration/src/matching/assign.rs` (assign/unassign
+  routed through `EventBus::write_audit`, PR #1287, refs #1120) — previously
+  these mutations were recorded only via the non-authoritative in-memory
+  `events` table, so they were absent from `audit_log_entry`.
 
 ### S9 — Confirm reads produce no audit noise {#S9}
 - **Do:** Navigate through several pages/panes performing only reads (no
@@ -226,3 +235,17 @@ happened" or "nothing was recorded".
 - G2: (dissolved 2026-07-15) — tracked as issue #647; activity-over-durable-audit, same audit-classes lane.
 
 ## Delta log
+
+- **Δ2** 2026-07-20 · S1 · behavior-change
+  The Activity panel now opens as the specified full-width bottom fold-out
+  (40% of the frame height, header always visible, list scrolls) —
+  previously most of its rows/chips/filters/buttons had no CSS at all and
+  the body was hard-capped at 200px, reading as a small unstyled debug box.
+  Evidence: PR #1303 (closes #734) · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-20 · S8 · behavior-change
+  Assigning or unassigning a calibration master to a session is now a
+  durable Audit Log row (outcome + actor) — previously recorded only in the
+  transient, non-authoritative in-memory events table, so it never appeared
+  in the durable Audit Log at all.
+  Evidence: PR #1287 (refs #1120) · by: journey-scribe (intent-gated)
