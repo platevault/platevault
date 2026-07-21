@@ -220,7 +220,16 @@ pub enum ExecutorItemAction {
     Link {
         kind: domain_core::source_view::Materialization,
     },
-    /// RecordOnly / WriteManifest — no FS mutation; mark succeeded.
+    /// Write the app-owned project marker file (spec 008 F-1, astro-plan-l3y0).
+    ///
+    /// Destination-only (no source). `project_id` is the plan item's
+    /// `linked_entity`; the executor refuses (rather than guesses) when it is
+    /// absent. Idempotent when the destination already holds identical
+    /// content — see `ops::write_manifest_op`.
+    WriteManifest {
+        project_id: String,
+    },
+    /// RecordOnly — no FS mutation; mark succeeded.
     NoOp,
 }
 
