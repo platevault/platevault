@@ -56,7 +56,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     addingCategory,
     setAddingCategory,
     addError,
-    setAddError,
+    clearAddError,
     adding,
     handleAdd,
 
@@ -76,7 +76,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     setDisableTarget,
     togglingActiveId,
     toggleActiveError,
-    setToggleActiveError,
+    clearToggleActiveError,
     requestToggleActive,
     handleConfirmDisable,
 
@@ -84,7 +84,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     setDeleteTarget,
     deletingId,
     deleteError,
-    setDeleteError,
+    clearDeleteError,
     requestDelete,
     handleConfirmDelete,
   } = useDataSources();
@@ -94,13 +94,13 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const closeDisableConfirm = () => {
     if (togglingActiveId) return;
     setDisableTarget(null);
-    setToggleActiveError(null);
+    clearToggleActiveError();
   };
 
   const closeDeleteConfirm = () => {
     if (deletingId) return;
     setDeleteTarget(null);
-    setDeleteError(null);
+    clearDeleteError();
   };
 
   return (
@@ -121,7 +121,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               size="sm"
               onClick={() => {
                 setShowAdd(true);
-                setAddError(null);
+                clearAddError();
               }}
             >
               {m.settings_datasources_add_btn()}
@@ -171,7 +171,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
                 variant="ghost"
                 onClick={() => {
                   setShowAdd(false);
-                  setAddError(null);
+                  clearAddError();
                   setAddingPath('');
                 }}
               >
