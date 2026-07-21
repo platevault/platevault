@@ -41,28 +41,31 @@ the working tree beyond fetching the `origin/main` remote-tracking ref.
 
 1. **Ancestry, the fast path.** The PR's merge commit is an ancestor of
    `origin/main` → `ON-MAIN`.
-2. **Content, the fallback.** Ancestry says no → judge each non-deleted path
-   from `gh pr view <n> --json files` against `origin/main`:
+2. **Content, the fallback.** Ancestry says no → compare the blob the PR
+   produced for each of its paths against `origin/main`. The PR's own tree
+   comes from its merge commit, or from `refs/pull/<n>/head` when that commit
+   has been pruned.
 
 | Path evidence | Test | Meaning |
 |---|---|---|
-| present | `git cat-file -e origin/main:<path>` succeeds | Path is on `main` now |
+| identical | Blob oid at the PR's tree equals the oid at `origin/main` | This PR's exact content for that path is on `main` |
 | never | `git log origin/main -- <path>` is empty | Path never existed on `main` at any point |
-| gone | Absent now, non-empty log | Deleted or renamed after landing; proves nothing |
+| inconclusive | Blobs differ, or path is absent with a non-empty log | Landed then edited further, deleted, renamed — or never landed |
 
 One `never` path resolves the PR to `NOT-ON-MAIN`. A squash that landed the
-PR's content would have put every path it added or modified into `main`'s
-history, so an empty log is proof the change never arrived. Otherwise one or
-more `present` paths resolve to `CONTENT-ON-MAIN-VIA-SQUASH`.
+PR's content would have put every path it touched into `main`'s history, so an
+empty log is proof the change never arrived. Otherwise one or more `identical`
+paths resolve to `CONTENT-ON-MAIN-VIA-SQUASH`.
 
-Deleted paths are excluded: an unlanded deletion leaves its file present on
-`main`, which would read as evidence of landing.
+Byte-identity is the positive test, not path existence. A stacked PR that only
+modifies pre-existing files would pass an existence test on the strength of
+files that were already on `main`, whether or not its own changes landed.
 
 ```
 $ scripts/bd-close-guard.sh astro-plan-3ra astro-plan-698 astro-plan-sm7 astro-plan-tlw
 ON-MAIN  astro-plan-3ra   PR #1319 merged into main, commit 38b788943a95c239d5ce65fd6fb2c8aa45a03f31 is on origin/main (platevault/platevault)
-SQUASHED astro-plan-698   CONTENT-ON-MAIN-VIA-SQUASH: PR #1296 merged into feat/sd-token-pipeline and its merge commit fc0a2ad43efb3af763732ffae57c25e036743129 is not an ancestor of origin/main, but every added/modified path it touches is on origin/main — the stack root squashed the content in. Safe to close (platevault/platevault)
-FAIL     astro-plan-sm7   NOT-ON-MAIN: PR #1304 merged into feat/sd-foundation-outputs, and paths it added are absent from origin/main and from main's entire history — do not close (platevault/platevault)
+SQUASHED astro-plan-698   CONTENT-ON-MAIN-VIA-SQUASH: PR #1296 merged into feat/sd-token-pipeline and its merge commit fc0a2ad43efb3af763732ffae57c25e036743129 is not an ancestor of origin/main, but the file content it produced is byte-identical on origin/main — the stack root squashed the content in. Safe to close (platevault/platevault)
+FAIL     astro-plan-sm7   NOT-ON-MAIN: PR #1304 merged into feat/sd-foundation-outputs, and paths it touches are absent from origin/main and from main's entire history — do not close (platevault/platevault)
 FAIL     astro-plan-tlw   PR #1048 is OPEN, not merged (platevault/platevault) — do not close
 ```
 
@@ -72,20 +75,19 @@ ancestry or by content.
 | Result | Meaning |
 |---|---|
 | `ON-MAIN` | The linked PR's merge commit is an ancestor of `origin/main`. Safe to close. |
-| `SQUASHED` | Ancestry says no, and every judged path the PR added or modified is on `origin/main`. The content reached `main` through the stack root's squash. Safe to close. |
-| `FAIL` (`NOT-ON-MAIN`) | Ancestry says no, and at least one path the PR added has no history on `origin/main`. Do not close. |
+| `SQUASHED` | Ancestry says no, and content the PR produced is byte-identical on `origin/main`. It reached `main` through the stack root's squash. Safe to close. |
+| `FAIL` (`NOT-ON-MAIN`) | Ancestry says no, and at least one path the PR touched has no history on `origin/main`. Do not close. |
 | `FAIL` (open/closed) | The linked PR is `OPEN` or `CLOSED` without merging. Do not close. |
 | `UNKNOWN` | No PR reference could be resolved. Do not close on the strength of this check; verify by hand. |
-| `ERROR` | `bd show`/`gh` lookup failed, the PR reads `MERGED` with no merge commit reported (some squash/rebase merges), no path was judgeable, or the file list was truncated. Do not close on the strength of this check. |
+| `ERROR` | `bd show`/`gh` lookup failed, the PR reads `MERGED` with no merge commit reported (some squash/rebase merges), the PR's own tree is unreachable, no path matched by content, or the file list was truncated. Do not close on the strength of this check. |
 
 ### Limits of the content check
 
-`git cat-file -e` proves a path exists on `main`, not that this PR's diff
-landed. A stacked PR that only modifies pre-existing files reads as
-`CONTENT-ON-MAIN-VIA-SQUASH` on the strength of paths that were already there.
-The `never` test on added paths carries the discrimination, so a PR that adds
-no files gets a weaker answer than one that does. Confirm those by diffing the
-PR's content against `main`.
+Every gap resolves to `ERROR` or `NOT-ON-MAIN`, never to a green-light.
+
+A PR whose files were all edited further on `main` after landing has no
+`identical` path left and reports `ERROR`. Confirm those by hand against the
+squash commit.
 
 `gh pr view --json files` returns at most 100 files: PR #1162 reports
 `changedFiles: 236` and 100 entries. A hidden path could be the unlanded one,

@@ -182,51 +182,72 @@ classify_pr() {
   esac
 }
 
-# Evidence that one path carries about whether a PR's content reached
-# origin/main:
-#   present — the path exists on origin/main right now
-#   never   — the path has NO history on origin/main at all, which is the only
-#             available proof that the change never landed; mere absence is
-#             also what a later delete or rename produces
-#   gone    — absent now but present in origin/main's history: deleted or
-#             renamed after landing, so it proves nothing either way
+# Evidence one path carries about whether a PR's content reached origin/main,
+# comparing the blob the PR produced (at <ref>) against origin/main:
+#   identical    — same blob oid, so this PR's exact content for that path is
+#                  on main. Mere existence of the path proves nothing: a PR
+#                  that only modifies pre-existing files would read as landed
+#                  on the strength of files that were already there.
+#   never        — the path has NO history on origin/main at all, the only
+#                  available proof that the change never landed; bare absence
+#                  is also what a later delete or rename produces
+#   inconclusive — differing blobs (landed then edited further, or never
+#                  landed) or a path deleted/renamed after landing
 path_evidence() {
-  if git cat-file -e "origin/main:$1" 2>/dev/null; then
-    echo present
-  elif [ -z "$(git log --oneline -1 origin/main -- "$1" 2>/dev/null)" ]; then
+  local ref="$1" path="$2" ours theirs
+  ours=$(git rev-parse "$ref:$path" 2>/dev/null) || ours=""
+  theirs=$(git rev-parse "origin/main:$path" 2>/dev/null) || theirs=""
+  if [ -n "$ours" ] && [ "$ours" = "$theirs" ]; then
+    echo identical
+  elif [ -z "$(git log --oneline -1 origin/main -- "$path" 2>/dev/null)" ]; then
     echo never
   else
-    echo gone
+    echo inconclusive
   fi
 }
 
 # Pure decision table over per-path evidence counts, kept side-effect-free so
 # --self-test can exercise it without git or gh. One path that never existed on
-# origin/main outweighs any number of present ones: a squash that landed this
-# PR's content would have put every added/modified path into main's history.
-# A truncated file list can hide exactly that one path, so it may confirm
+# origin/main outweighs any number of identical ones: a squash that landed this
+# PR's content would have put every path it touched into main's history. A
+# truncated file list can hide exactly that path, so truncation may confirm
 # NOT-ON-MAIN but must never conclude the content landed.
 classify_content() {
-  local present="$1" never="$2" truncated="$3"
+  local identical="$1" never="$2" truncated="$3"
   if [ "$never" -gt 0 ]; then
     echo "NOTONMAIN:"
   elif [ "$truncated" = "yes" ]; then
     echo "ERROR:PR file list is truncated (gh returns at most 100 files) — content check cannot rule out an unlanded path"
-  elif [ "$present" -gt 0 ]; then
+  elif [ "$identical" -gt 0 ]; then
     echo "SQUASHED:"
   else
-    echo "ERROR:no added/modified path could be judged against origin/main"
+    echo "ERROR:no path could be matched to origin/main by content"
+  fi
+}
+
+# The tree to read the PR's own version of each path from. The merge commit is
+# usually still local; when its branch has been deleted and pruned, GitHub
+# still serves the PR head under refs/pull/<n>/head.
+pr_content_ref() {
+  local pr="$1" merge_oid="$2"
+  if [ -n "$merge_oid" ] && git cat-file -e "${merge_oid}^{commit}" 2>/dev/null; then
+    printf '%s\n' "$merge_oid"
+  elif git fetch --quiet origin "refs/pull/$pr/head" 2>/dev/null; then
+    git rev-parse FETCH_HEAD
   fi
 }
 
 # Decide by content whether a merged PR's changes are on origin/main, for the
-# case where ancestry cannot see through a squash. DELETED paths are excluded:
-# an unlanded deletion leaves the file present on main and would read as
-# evidence of landing.
+# case where ancestry cannot see through a squash.
 content_check() {
-  local repo="$1" pr="$2" pr_files present=0 never=0 truncated=no path
+  local repo="$1" pr="$2" merge_oid="$3" ref pr_files identical=0 never=0 truncated=no path
   if ! pr_files=$(gh pr view "$pr" --repo "$repo" --json changedFiles,files 2>/dev/null); then
     echo "ERROR:could not list PR files for the content check"
+    return
+  fi
+  ref=$(pr_content_ref "$pr" "$merge_oid")
+  if [ -z "$ref" ]; then
+    echo "ERROR:PR content is unreachable locally (merge commit pruned, refs/pull/$pr/head unfetchable)"
     return
   fi
   if [ "$(jq -r '.files | length' <<<"$pr_files")" -lt "$(jq -r '.changedFiles' <<<"$pr_files")" ]; then
@@ -234,12 +255,12 @@ content_check() {
   fi
   while IFS= read -r path; do
     [ -n "$path" ] || continue
-    case "$(path_evidence "$path")" in
-      present) present=$((present + 1)) ;;
+    case "$(path_evidence "$ref" "$path")" in
+      identical) identical=$((identical + 1)) ;;
       never) never=$((never + 1)) ;;
     esac
-  done < <(jq -r '.files[] | select(.changeType != "DELETED") | .path' <<<"$pr_files")
-  classify_content "$present" "$never" "$truncated"
+  done < <(jq -r '.files[].path' <<<"$pr_files")
+  classify_content "$identical" "$never" "$truncated"
 }
 
 check_one() {
@@ -290,7 +311,7 @@ check_one() {
   # ancestor. Only a merged PR reaches here, so there is always something to
   # look for on main.
   if [ "$code" = "STACKED" ]; then
-    verdict=$(content_check "$repo" "$pr")
+    verdict=$(content_check "$repo" "$pr" "$merge_oid")
     code="${verdict%%:*}"
     detail="${verdict#*:}"
   fi
@@ -314,10 +335,10 @@ check_one() {
       echo "ON-MAIN  $id   PR #$pr merged into main, commit $merge_oid is on origin/main ($repo)$staleness"
       ;;
     SQUASHED)
-      echo "SQUASHED $id   CONTENT-ON-MAIN-VIA-SQUASH: PR #$pr merged into $base and its merge commit $merge_oid is not an ancestor of origin/main, but every added/modified path it touches is on origin/main — the stack root squashed the content in. Safe to close ($repo)$staleness"
+      echo "SQUASHED $id   CONTENT-ON-MAIN-VIA-SQUASH: PR #$pr merged into $base and its merge commit $merge_oid is not an ancestor of origin/main, but the file content it produced is byte-identical on origin/main — the stack root squashed the content in. Safe to close ($repo)$staleness"
       ;;
     NOTONMAIN)
-      echo "FAIL     $id   NOT-ON-MAIN: PR #$pr merged into $base, and paths it added are absent from origin/main and from main's entire history — do not close ($repo)$staleness"
+      echo "FAIL     $id   NOT-ON-MAIN: PR #$pr merged into $base, and paths it touches are absent from origin/main and from main's entire history — do not close ($repo)$staleness"
       return 1
       ;;
     FAIL)
@@ -420,20 +441,22 @@ self_test() {
     || { echo "FAIL: resolve_pr_reference got '$got', want 'NUM:1364:yes'"; fail=1; }
 
   # classify_content: one path that never existed on main outweighs any number
-  # of present ones. Regression case: PR #1304 modifies .pre-commit-config.yaml
-  # (present on main) while its deliverable check-token-refs.mjs never landed.
+  # of content matches. Regression case: PR #1304 modifies files that are on
+  # main while its deliverable check-token-refs.mjs never landed.
   got=$(classify_content 12 1 no)
-  [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content reports NOT-ON-MAIN when any added path never existed on main" \
+  [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content reports NOT-ON-MAIN when any path never existed on main" \
     || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
 
   got=$(classify_content 4 0 no)
-  [ "$got" = "SQUASHED:" ] && echo "ok: classify_content reports CONTENT-ON-MAIN-VIA-SQUASH when every judged path is on main" \
+  [ "$got" = "SQUASHED:" ] && echo "ok: classify_content reports CONTENT-ON-MAIN-VIA-SQUASH when the PR's content is byte-identical on main" \
     || { echo "FAIL: classify_content got '$got', want 'SQUASHED:'"; fail=1; }
 
-  # classify_content: every path inconclusive (all deleted/renamed after
-  # landing) -> ERROR, never a silent pass.
+  # classify_content: no path matched by content -> ERROR, never a silent pass.
+  # This is the fail-closed case for a stacked PR whose content has NOT landed:
+  # its paths exist on main (so existence alone would wrongly pass it) but none
+  # of its blobs match.
   got=$(classify_content 0 0 no)
-  [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content returns ERROR rather than passing a PR with no judgeable path" \
+  [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content returns ERROR rather than passing a PR whose content matches nothing on main" \
     || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
 
   # classify_content: gh caps `files` at 100 (PR #1162 reports changedFiles=236,
@@ -449,15 +472,21 @@ self_test() {
   [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content still reports NOT-ON-MAIN on a truncated list when a never-landed path is visible" \
     || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
 
-  # path_evidence: distinguishes never-on-main from present, using this repo's
-  # own local origin/main ref (no network).
-  got=$(path_evidence "scripts/bd-close-guard.sh")
-  [ "$got" = "present" ] && echo "ok: path_evidence sees a path that is on origin/main" \
-    || { echo "FAIL: path_evidence got '$got', want 'present'"; fail=1; }
+  # path_evidence: reads this repo's own local origin/main ref, no network.
+  got=$(path_evidence origin/main "scripts/bd-close-guard.sh")
+  [ "$got" = "identical" ] && echo "ok: path_evidence matches a blob that is byte-identical on origin/main" \
+    || { echo "FAIL: path_evidence got '$got', want 'identical'"; fail=1; }
 
-  got=$(path_evidence "scripts/definitely-not-a-real-path-9f3a.mjs")
+  got=$(path_evidence origin/main "scripts/definitely-not-a-real-path-9f3a.mjs")
   [ "$got" = "never" ] && echo "ok: path_evidence reports 'never' for a path absent from all of origin/main's history" \
     || { echo "FAIL: path_evidence got '$got', want 'never'"; fail=1; }
+
+  # path_evidence: a path that exists on main but whose blob differs is
+  # inconclusive, never positive evidence. `origin/main~1` stands in for a PR
+  # tree carrying a different version of a file main also has.
+  got=$(path_evidence origin/main~1 "$(git diff --name-only origin/main~1 origin/main | head -1)")
+  [ "$got" = "inconclusive" ] && echo "ok: path_evidence treats a differing blob as inconclusive, not as landed" \
+    || { echo "FAIL: path_evidence got '$got', want 'inconclusive'"; fail=1; }
 
   if [ "$fail" -eq 0 ]; then
     echo "bd-close-guard self-test: PASS"
