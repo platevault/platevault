@@ -213,7 +213,7 @@ pub async fn reclassify(
         },
     )
     .await
-    .ok();
+    .map_err(|e| db_internal_ctx(e, "upsert inbox classification"))?;
 
     // 6b. Clear the __needs_review__ sentinel now that the check above
     // (issue #724) confirmed the item is fully resolved.
@@ -224,7 +224,7 @@ pub async fn reclassify(
             &ft.to_string(),
         )
         .await
-        .ok();
+        .map_err(|e| db_internal_ctx(e, "clear needs-review sentinel"))?;
     }
 
     // 7. Rebuild breakdown rows so the next classify cache hit returns fresh
@@ -255,7 +255,7 @@ pub async fn reclassify(
                 &sample_json,
             )
             .await
-            .ok();
+            .map_err(|e| db_internal_ctx(e, "upsert inbox breakdown row"))?;
         }
     }
 

@@ -130,6 +130,9 @@ async fn inventory_row_shows_registered_camera_name_not_raw_header() {
             aliases: vec!["ASI2600MM".to_owned()],
             sensor_type: None,
             passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
         },
     )
     .await
@@ -167,6 +170,9 @@ async fn inventory_row_resolves_camera_name_ignoring_case_and_whitespace() {
             aliases: vec!["ASI2600MM".to_owned()],
             sensor_type: None,
             passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
         },
     )
     .await
@@ -247,6 +253,9 @@ async fn renaming_a_camera_changes_the_next_inventory_listing() {
             aliases: vec!["ASI2600MM".to_owned()],
             sensor_type: None,
             passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
         },
     )
     .await
@@ -263,6 +272,9 @@ async fn renaming_a_camera_changes_the_next_inventory_listing() {
             aliases: vec!["ASI2600MM".to_owned()],
             sensor_type: None,
             passband: None,
+            pixel_size_um: None,
+            sensor_width_px: None,
+            sensor_height_px: None,
         },
     )
     .await

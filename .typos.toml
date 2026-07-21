@@ -17,6 +17,8 @@ extend-exclude = [
     "CHANGELOG.md",
     # generated star-catalog seed data (Bayer designations trip the checker)
     "assets/seed/",
+    # non-English UI catalogue (Portuguese text trips the English checker)
+    "apps/desktop/messages/pt-BR.json",
 ]
 
 [default.extend-words]

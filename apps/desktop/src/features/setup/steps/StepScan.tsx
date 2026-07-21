@@ -7,7 +7,7 @@
 // inbox_classify per source, showing per-source progress and a detection
 // summary.  Approval stays in the Inbox — no inbox_confirm called here.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
 import { Table } from '@/ui';
@@ -35,6 +35,15 @@ interface SourceScanState {
   items: InboxItemSummary[];
   /** Per-item classify results keyed by inboxItemId. */
   classifications: Map<string, InboxClassifyResponse>;
+  /**
+   * Items whose classify call FAILED, as opposed to succeeding with nothing to
+   * report. Without this the two are indistinguishable downstream: a missing
+   * map entry renders exactly like an empty classification, so a crashed
+   * folder showed an em dash and silently dropped out of the per-kind chips
+   * while still counting toward the header's file total — the same
+   * reconciliation gap issue #513 closed for unmapped IMAGETYP.
+   */
+  classifyFailures: Set<string>;
   error?: string;
 }
 
@@ -94,7 +103,15 @@ interface SourceSummaryProps {
 }
 
 function SourceSummary({ state }: SourceSummaryProps) {
-  const { source, rootId, phase, items, classifications, error } = state;
+  const {
+    source,
+    rootId,
+    phase,
+    items,
+    classifications,
+    classifyFailures,
+    error,
+  } = state;
   const [expanded, setExpanded] = useState(false);
 
   // Spec 048 US4 T035: the wizard's Scan step is the earliest point a newly
@@ -121,6 +138,15 @@ function SourceSummary({ state }: SourceSummaryProps) {
       kindCounts.set(
         'master',
         (kindCounts.get('master') ?? 0) + item.fileCount,
+      );
+      continue;
+    }
+    if (classifyFailures.has(item.inboxItemId)) {
+      // Count them so the chips still add up to the header total; a folder that
+      // failed must not simply vanish from the breakdown.
+      kindCounts.set(
+        'failed',
+        (kindCounts.get('failed') ?? 0) + item.fileCount,
       );
       continue;
     }
@@ -185,7 +211,11 @@ function SourceSummary({ state }: SourceSummaryProps) {
       // Individual calibration masters carry their frame type on the item
       // itself (spec 040 FR-006); grouped sub-frame folders rely on the
       // classify breakdown instead.
-      types: item.isMaster ? masterLabel(item) : types || '—',
+      types: item.isMaster
+        ? masterLabel(item)
+        : classifyFailures.has(item.inboxItemId)
+          ? m.setup_scan_classify_failed()
+          : types || '—',
     };
   });
 
@@ -335,13 +365,18 @@ export function StepScan({
   // isn't mistaken for "nothing to scan".
   const [resolved, setResolved] = useState(false);
 
-  // Guard: track whether scanning has already been initiated to prevent
-  // re-entry double-scans when the user navigates Back and then Next again.
-  const scanStartedRef = useRef(false);
-
   useEffect(() => {
-    if (scanStartedRef.current) return;
-    scanStartedRef.current = true;
+    // No re-entry ref-guard here (there was one; removed — see git history):
+    // combined with the per-invocation `cancelled` flag below, it defeated
+    // React StrictMode's mount→cleanup→remount cycle. The guard let the
+    // first invocation's async scan keep running while marking it
+    // `cancelled` on the synthetic cleanup, then the remounted second
+    // invocation no-opped (guard already tripped) instead of starting a
+    // fresh, uncancelled scan — so no invocation ever delivered a result and
+    // every source stayed stuck on "scanning" forever. `[]` deps already
+    // guarantee this effect runs once per real mount; the `cancelled` flag
+    // below is the standard, StrictMode-safe way to discard a stale
+    // in-flight scan from a genuine unmount without needing a ref guard.
 
     // The scan fans out into one independent async branch per source, each
     // outliving the others. Any of them can still be awaiting IPC when the
@@ -404,6 +439,7 @@ export function StepScan({
             phase: 'pending',
             items: [],
             classifications: new Map(),
+            classifyFailures: new Set(),
           });
           continue;
         }
@@ -423,6 +459,7 @@ export function StepScan({
             phase: 'pending',
             items: [],
             classifications: new Map(),
+            classifyFailures: new Set(),
           });
           continue;
         }
@@ -437,6 +474,7 @@ export function StepScan({
           phase: 'error',
           items: [],
           classifications: new Map(),
+          classifyFailures: new Set(),
           error: m.setup_scan_resolution_failed(),
         });
       }
@@ -474,6 +512,7 @@ export function StepScan({
 
             // 2. Classify each discovered item
             const classifications = new Map<string, InboxClassifyResponse>();
+            const classifyFailures = new Set<string>();
             await Promise.allSettled(
               items.map(async (item) => {
                 try {
@@ -485,7 +524,10 @@ export function StepScan({
                   );
                   classifications.set(item.inboxItemId, cls);
                 } catch {
-                  // Classification failure for one item: skip but don't abort
+                  // Don't abort the whole scan for one item — but do record it.
+                  // Swallowing it entirely made a crash look like a clean
+                  // "nothing detected" result.
+                  classifyFailures.add(item.inboxItemId);
                 }
               }),
             );
@@ -498,6 +540,7 @@ export function StepScan({
                 phase: 'done',
                 items,
                 classifications,
+                classifyFailures,
               };
               return next;
             });

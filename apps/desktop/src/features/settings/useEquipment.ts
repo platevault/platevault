@@ -35,6 +35,7 @@ import {
   isDuplicateName,
   hasDuplicateAlias,
   parseFocalLength,
+  parseGeometry,
   passbandBandsFrom,
   type DeleteTarget,
   type PassbandChoice,
@@ -52,6 +53,10 @@ export function useEquipment() {
     /** FR-035: '' = unknown (behaves as mono, FR-038). */
     sensorType: '' | SensorType;
     passband: PassbandChoice;
+    /** Sensor geometry, held as raw text; '' = not provided (persists null). */
+    pixelSizeUmText: string;
+    sensorWidthPxText: string;
+    sensorHeightPxText: string;
   } | null>(null);
   const [cameraFormError, setCameraFormError] = useState<string | null>(null);
   const [cameraSaving, setCameraSaving] = useState(false);
@@ -203,6 +208,21 @@ export function useEquipment() {
       setCameraFormError(m.settings_equipment_alias_duplicate());
       return;
     }
+    // Migration 0079: a blank geometry field persists as null (no FOV); a
+    // non-positive or non-numeric one is rejected here so it never reaches
+    // the backend's FOV computation.
+    const pixelSize = parseGeometry(cameraForm.pixelSizeUmText, false);
+    const sensorWidth = parseGeometry(cameraForm.sensorWidthPxText, true);
+    const sensorHeight = parseGeometry(cameraForm.sensorHeightPxText, true);
+    if (
+      pixelSize.kind === 'invalid' ||
+      sensorWidth.kind === 'invalid' ||
+      sensorHeight.kind === 'invalid'
+    ) {
+      setCameraFormError(m.settings_equipment_geometry_invalid());
+      return;
+    }
+
     setCameraSaving(true);
     setCameraFormError(null);
     try {
@@ -211,6 +231,12 @@ export function useEquipment() {
         cameraForm.sensorType === '' ? null : cameraForm.sensorType;
       const passband =
         sensorType === 'osc' ? passbandBandsFrom(cameraForm.passband) : null;
+      const geometry = {
+        pixelSizeUm: pixelSize.kind === 'valid' ? pixelSize.value : null,
+        sensorWidthPx: sensorWidth.kind === 'valid' ? sensorWidth.value : null,
+        sensorHeightPx:
+          sensorHeight.kind === 'valid' ? sensorHeight.value : null,
+      };
       if (cameraForm.id) {
         await equipmentCameraUpdate({
           id: cameraForm.id,
@@ -218,9 +244,16 @@ export function useEquipment() {
           aliases,
           sensorType,
           passband,
+          ...geometry,
         });
       } else {
-        await equipmentCameraCreate({ name, aliases, sensorType, passband });
+        await equipmentCameraCreate({
+          name,
+          aliases,
+          sensorType,
+          passband,
+          ...geometry,
+        });
       }
       setCameraForm(null);
       loadCameras();
