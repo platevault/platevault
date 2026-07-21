@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde = { workspace = true }
-skymath = "0.4"
+skymath = "0.5"
 thiserror = { workspace = true }
 
 [lints]
