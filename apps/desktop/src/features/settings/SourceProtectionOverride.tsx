@@ -15,9 +15,11 @@
 // settings pane (one control per registered root, keyed by root.id).
 
 import { useEffect, useState, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Pill, Btn } from '@/ui';
 import { sourceProtectionGet, sourceProtectionSet } from './settingsIpc';
 import type { ProtectionLevel } from './settingsIpc';
+import { protectionLabel } from '@/lib/protection-label';
 import { m } from '@/lib/i18n';
 
 interface SourceProtectionOverrideProps {
@@ -36,11 +38,6 @@ type LoadState = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
 // 2-level model (issue #506): the third "normal" level is retired — absence
 // of a per-source override already means inherit-global, so a distinct
 // explicit "normal" state added confusion without capability.
-const LEVEL_LABEL: Record<ProtectionLevel, () => string> = {
-  protected: m.settings_cleanup_protection_protected,
-  unprotected: m.settings_cleanup_protection_unprotected,
-};
-
 const LEVEL_VARIANT: Record<
   ProtectionLevel,
   'ok' | 'info' | 'warn' | 'danger' | 'neutral'
@@ -73,17 +70,22 @@ export function SourceProtectionOverride({
     useState<ProtectionLevel>('protected');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // `load` runs on mount and on retry, so the guard lives in the callback
+  // rather than in a per-effect `cancelled` flag.
+  const mountedRef = useMountedRef();
+
   const load = useCallback(() => {
     setLoadState('loading');
     sourceProtectionGet(sourceId)
       .then((resp) => {
+        if (!mountedRef.current) return;
         setLevel(resp.level);
         setInheritsDefault(resp.inheritsDefault);
         setPendingLevel(resp.level);
         setLoadState('ready');
       })
       .catch(() => {
-        setLoadState('error');
+        if (mountedRef.current) setLoadState('error');
       });
   }, [sourceId]);
 
@@ -143,7 +145,7 @@ export function SourceProtectionOverride({
         variant={LEVEL_VARIANT[level]}
         title={levelHint(level, inheritsDefault)}
       >
-        {LEVEL_LABEL[level]()}
+        {protectionLabel(level)}
       </Pill>
 
       {open && (

@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use common::E2eApp;
-use serde_json::json;
+use serde_json::{json, Value};
 use thirtyfour::{By, WebElement};
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
@@ -665,6 +665,392 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
             || label.contains("No Moon-favourable night"),
         "expected the Best-date aria-label to carry one of the three real Moon-state \
          explanations (coincides / diverged / none found), got {label:?}"
+    );
+
+    app.shutdown().await
+}
+
+/// Measure, relative to the scroll container's own left edge, where the
+/// pinned cells and a non-pinned control cell actually render.
+///
+/// Positions are taken from `getBoundingClientRect` — real post-layout
+/// geometry — because that is the only thing that can observe `position:
+/// sticky`. This measurement is the entire reason T026 must be a Layer-2
+/// journey: jsdom has no layout engine, so a Layer-1 test reports 0 for
+/// every one of these and would pass against a completely unpinned table.
+async fn measure_pinned_columns(app: &E2eApp) -> anyhow::Result<serde_json::Value> {
+    let script = r#"
+        var sc = document.querySelector('.pv-targets-table__scroll');
+        if (!sc) { return { error: 'no .pv-targets-table__scroll in the DOM' }; }
+        var row = sc.querySelector('.pv-targets-table__row');
+        if (!row) { return { error: 'no .pv-targets-table__row rendered' }; }
+        var headRow = sc.querySelector('thead tr');
+        var scLeft = sc.getBoundingClientRect().left;
+        function offset(el) {
+            return el ? Math.round(el.getBoundingClientRect().left - scLeft) : null;
+        }
+        var cells = row.children;
+        return {
+            scrollWidth: Math.round(sc.scrollWidth),
+            clientWidth: Math.round(sc.clientWidth),
+            scrollLeft: Math.round(sc.scrollLeft),
+            cellCount: cells.length,
+            star: offset(cells[0]),
+            designation: offset(cells[1]),
+            designationHeader: offset(headRow ? headRow.children[1] : null),
+            control: offset(cells[cells.length - 1])
+        };
+    "#;
+    let v: serde_json::Value = app
+        .driver
+        .execute(script, vec![])
+        .await
+        .context("failed to measure the pinned columns")?
+        .convert()
+        .context("pinned-column measurement was not JSON")?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        anyhow::bail!("cannot measure pinned columns: {err}");
+    }
+    Ok(v)
+}
+
+fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
+    m.get(key)
+        .and_then(serde_json::Value::as_i64)
+        .ok_or_else(|| anyhow::anyhow!("measurement {key:?} missing or not a number in {m}"))
+}
+
+/// T026 (spec 054, #1257) — the star and designation columns stay put while
+/// the rest of the Targets table scrolls sideways, so a row's identity is
+/// never lost (FR-006/FR-007, shipped in #1253).
+///
+/// **Pins the dock rather than relying on the 1400px width threshold**, so
+/// this runs on both supported platforms. GitHub-hosted Windows runners are
+/// fixed at 1024x768 and cannot be resized — the runner service runs in
+/// non-interactive Session 0 with no real display (actions/runner-images
+/// #2935, #8606) — so a journey demanding a 1400px viewport would be
+/// Linux-only by construction. A user pin is a first-class supported
+/// configuration, not a test-only shortcut: `useAdaptiveDock` honours an
+/// override at any width wide enough for a side dock at all.
+///
+/// Pinning also sidesteps a counter-intuitive trap. A LARGER screen produces
+/// LESS horizontal overflow, because the table's 1000px min-width floor is
+/// fixed while the space left for it grows: at a 1400px viewport the table
+/// gets ~760px and overflows by ~240px, but at 1600px it gets ~960px and
+/// overflows by only ~40px. Asserting against a fixed viewport would be
+/// fragile in the direction people intuitively assume is safer. So the
+/// assertion is on MEASURED overflow — ~616px at the Windows runners'
+/// 1024px, ~240px at 1400px.
+///
+/// Asserts a non-pinned CONTROL column moves by the scroll distance. Without
+/// it this journey would pass in the one case it most needs to catch: if the
+/// table never actually scrolled, every "drift == 0" assertion below would
+/// hold trivially against a static table and the test would be vacuous.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
+    const MIN_SCROLL: i64 = 200;
+
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+
+    // Best-effort: widens the window where the display allows (Ubuntu, whose
+    // xvfb screen e2e.yml sizes to 1600x1200) and is a no-op on a Windows
+    // runner that cannot resize. Nothing below depends on the result — the
+    // dock is pinned explicitly, and the real gate is measured overflow.
+    let (viewport_w, viewport_h) = app.set_viewport(1400, 900).await?;
+
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    let target_id = add_target_via_ui(&app, "M 1").await?;
+
+    // Pin the side dock through the app's REAL persisted preference, then
+    // let the reload apply it. The reload is what makes this work at all:
+    // `data/preferences.ts` memoises into a module-level cache on first
+    // read, so seeding localStorage into a booted page would be inert.
+    app.seed_preference("detailDock", r#"{"targets":{"placement":"side","width":420}}"#).await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // Return to the SELECTED target, not bare `/targets`. The side dock only
+    // takes width when there is a detail to show — `ListPageLayout` mounts the
+    // panel solely when its `detail` prop is non-null. Navigating to the bare
+    // route drops the `?selected=` that `add_target_via_ui` landed on, which
+    // leaves the pinned preference correctly loaded but with nothing to
+    // render, so the table keeps full width and barely overflows at all.
+    app.goto_route(&format!("/targets?selected={target_id}")).await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+
+    let before = measure_pinned_columns(&app).await?;
+    let overflow = px(&before, "scrollWidth")? - px(&before, "clientWidth")?;
+    anyhow::ensure!(
+        overflow >= MIN_SCROLL,
+        "the table must really overflow horizontally for this journey to mean \
+         anything, but scrollWidth-clientWidth is only {overflow}px (need \
+         >= {MIN_SCROLL}) at a {viewport_w}x{viewport_h} viewport. Likely \
+         causes, in the order they have actually bitten: (1) the side dock \
+         mounted nothing because no target is selected — the panel needs a \
+         non-null `detail`, so the route must keep `?selected=<id>`; (2) the \
+         seeded `detailDock` preference did not survive the reload past the \
+         module-level cache in `data/preferences.ts`; (3) the table's 1000px \
+         min-width floor changed. A reported 0x0 viewport with a huge \
+         clientWidth means `set_viewport` failed to converge. Note a WIDER \
+         viewport yields LESS overflow, so a large screen is not the safe \
+         direction here: {before}"
+    );
+
+    // Scroll to the far right — the worst case for identity loss.
+    app.driver
+        .execute(
+            "var sc = document.querySelector('.pv-targets-table__scroll');\
+             sc.scrollLeft = sc.scrollWidth; return sc.scrollLeft;",
+            vec![],
+        )
+        .await
+        .context("failed to scroll the targets table horizontally")?;
+
+    let after = measure_pinned_columns(&app).await?;
+    let scrolled = px(&after, "scrollLeft")?;
+    anyhow::ensure!(
+        scrolled >= MIN_SCROLL,
+        "expected the table to really scroll by >= {MIN_SCROLL}px, got {scrolled}px: {after}"
+    );
+
+    // The control proves the scroll actually moved content.
+    let control_drift = px(&after, "control")? - px(&before, "control")?;
+    anyhow::ensure!(
+        control_drift <= -MIN_SCROLL,
+        "the non-pinned control column should have moved left by ~{scrolled}px, but it \
+         shifted {control_drift}px — the table did not really scroll, so the pinned \
+         assertions below would be vacuous.\nbefore: {before}\nafter:  {after}"
+    );
+
+    // The point of the feature: identity does not move, at all.
+    for key in ["star", "designation", "designationHeader"] {
+        let drift = px(&after, key)? - px(&before, key)?;
+        anyhow::ensure!(
+            drift == 0,
+            "{key} must stay pinned while the table scrolls {scrolled}px, but it drifted \
+             {drift}px. A non-zero drift here is exactly the regression this journey \
+             exists to catch (an approximate sticky offset, or a percentage offset \
+             resolving against the scroll container instead of the table).\n\
+             before: {before}\nafter:  {after}"
+        );
+    }
+
+    app.shutdown().await
+}
+
+/// Reads the app's REAL persisted `detailDock` entry for one dock, straight
+/// out of `localStorage` — the bytes, not a React value. Returns
+/// `(placement, width)`.
+async fn read_dock_pref(app: &E2eApp, dock_id: &str) -> anyhow::Result<(String, i64)> {
+    let script = format!(
+        "var raw = localStorage.getItem('alm-preferences');\
+         if (!raw) {{ return null; }}\
+         var dock = (JSON.parse(raw).detailDock || {{}})['{dock_id}'];\
+         return dock ? [String(dock.placement), dock.width] : null;"
+    );
+    let v: Value = app
+        .driver
+        .execute(&script, vec![])
+        .await
+        .context("failed to read the persisted detailDock preference")?
+        .convert()
+        .context("the detailDock preference did not deserialise")?;
+    anyhow::ensure!(!v.is_null(), "no persisted detailDock entry for {dock_id:?} at all");
+    let placement =
+        v.get(0).and_then(Value::as_str).context("persisted placement was not a string")?;
+    // Deliberately NOT `Number(dock.width)` on the JS side and NOT a lossy
+    // fallback here: `width: null` is the legitimate "never resized"
+    // sentinel (`DetailDockPref.width: number | null`), and `Number(null)`
+    // silently coercing to `0` once let a drag that never reached the
+    // resize handler read back as "resized to 0px" instead of surfacing the
+    // real problem. A null width is a caller bug (this helper is only used
+    // once the test has forced a resize) that must fail loudly, not compare
+    // equal to some later default-width fallback.
+    let width = v.get(1).and_then(Value::as_i64).with_context(|| {
+        format!("persisted width for {dock_id:?} was null or not a number: {v:?}")
+    })?;
+    Ok((placement.to_string(), width))
+}
+
+/// The rendered width of the side dock, as the browser actually lays it out.
+async fn rendered_side_width(app: &E2eApp) -> anyhow::Result<i64> {
+    let v: Value = app
+        .driver
+        .execute(
+            "var el = document.querySelector('.pv-listpage__detail--side');\
+             return el ? Math.round(el.getBoundingClientRect().width) : -1;",
+            vec![],
+        )
+        .await
+        .context("failed to measure the side dock")?
+        .convert()
+        .context("side dock width did not deserialise")?;
+    v.as_i64().context("side dock width was not a number")
+}
+
+/// Drives the Targets page to a pinned side dock holding a NON-DEFAULT width,
+/// using only real UI: the three-state placement control, then a drag of the
+/// resize handle that reaches the actual `onResizeStart` pointer-event
+/// handler. Returns the persisted `(placement, width)`.
+///
+/// The drag is a JS-dispatched `PointerEvent` sequence, NOT
+/// `action_chain()`. `tauri-plugin-webdriver` 0.2.1's Actions API cannot
+/// drive this interaction at all, on two independent counts (verified by
+/// reading its vendored source and by running this test locally with each
+/// workaround attempted in turn — both left the CSS `--pv-side-detail-w` var
+/// and the persisted width unchanged at their defaults):
+/// - `.../src/server/handlers/actions.rs`'s `PointerAction::PointerMove` has
+///   no `origin` field, so the W3C-spec `origin: "pointer"` /
+///   `origin: WebElement` that `move_by_offset`/`move_to_element_center`
+///   produce is silently dropped; every move is executed as if it were
+///   `origin: "viewport"`, landing the pointer far from the handle even when
+///   using `move_to` with the handle's own on-screen coordinates.
+/// - `.../src/platform/executor.rs`'s `dispatch_pointer_event` synthesizes a
+///   `MouseEvent` (`mousedown`/`mousemove`/`mouseup`) via
+///   `element.dispatchEvent()`, never a `PointerEvent`. Browsers do not
+///   synthesize Pointer Events from a script-dispatched, untrusted
+///   MouseEvent, so `ResizeHandle`'s `onPointerDown` and
+///   `useAdaptiveDock.onResizeStart`'s `window.addEventListener('pointermove'
+///   | 'pointerup', ...)` (`apps/desktop/src/ui/useAdaptiveDock.ts`) never
+///   fire — regardless of coordinates.
+///
+/// Dispatching real `PointerEvent`s ourselves reaches the same handler,
+/// exercises the same `setWidth` -> `writeStored` -> `localStorage.setItem`
+/// path a genuine OS drag would, and differs from a native drag only in how
+/// the pointer sequence is injected — which this WebDriver plugin version
+/// cannot do for Pointer Events at all.
+async fn pin_and_widen_dock(app: &E2eApp) -> anyhow::Result<(String, i64)> {
+    // Option order in `DetailDockPlacementControl` is Auto, Bottom, Right.
+    let side = app
+        .find_waiting(
+            By::Css("[data-testid='dock-placement-control'] button[role='radio']:nth-of-type(3)"),
+            "the 'Right' option of the dock placement control",
+        )
+        .await?;
+    side.click().await.context("clicking the 'Right' dock placement option failed")?;
+
+    let handle = app
+        .find_waiting(By::Css("[data-testid='dock-resize-handle']"), "the dock resize handle")
+        .await?;
+    let (center_x, center_y) = handle
+        .rect()
+        .await
+        .context("reading the resize handle's screen position failed")?
+        .icenter();
+    // The side panel sits on the right edge, so dragging LEFT grows it.
+    let end_x = center_x - DRAG_PX;
+
+    let script = format!(
+        "var handle = document.querySelector(\"[data-testid='dock-resize-handle']\");\
+         if (!handle) return false;\
+         function fire(target, type, x, buttons) {{\
+           target.dispatchEvent(new PointerEvent(type, {{\
+             bubbles: true, cancelable: true, pointerId: 1, isPrimary: true,\
+             pointerType: 'mouse', button: 0, buttons: buttons,\
+             clientX: x, clientY: {center_y}\
+           }}));\
+         }}\
+         fire(handle, 'pointerdown', {center_x}, 1);\
+         fire(window, 'pointermove', {end_x}, 1);\
+         fire(window, 'pointerup', {end_x}, 0);\
+         return true;"
+    );
+    let found: bool = app
+        .driver
+        .execute(&script, vec![])
+        .await
+        .context("dispatching the synthetic resize-handle drag failed")?
+        .convert()
+        .context("the drag dispatch result did not deserialise")?;
+    anyhow::ensure!(
+        found,
+        "the dock resize handle disappeared before the drag could be dispatched"
+    );
+
+    read_dock_pref(app, "targets").await
+}
+
+/// How far to drag the resize handle. Must land the width clear of the 420px
+/// default: restoring a value that happens to equal the default would pass
+/// against a restore that never happened.
+const DRAG_PX: i64 = 140;
+
+/// T023 (spec 054) — the reload half, and the last open task in that spec.
+///
+/// The dock's pin + width are covered across a REMOUNT at Layer 1 (#1195,
+/// #1265). A remount proves less than it looks: `getPreferences()` hands back
+/// a module-level `cachedPreferences` whenever one exists, so a remount
+/// re-reads the CACHE and never touches storage. Those tests stayed green even
+/// with `setItem` stubbed out entirely.
+///
+/// Only a real restart drops that module cache and forces a cold read back
+/// from real storage, and jsdom cannot do it — hence Layer 2. `relaunch()`
+/// preserves webview storage for exactly this; `graceful_shutdown()` is what
+/// makes it meaningful on Windows, where WebView2 flushes its LevelDB store on
+/// a clean window close but NOT on a forced kill.
+///
+/// Note `relaunch()` resets the SQLite DB, so the target added before the
+/// restart is gone afterwards and a fresh one is added to give the dock
+/// something to render. That is fine here: the dock preference lives in
+/// `localStorage`, which is the thing under test.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Result<()> {
+    const DEFAULT_WIDTH: i64 = 420;
+
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+    app.set_viewport(1400, 900).await?;
+
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    add_target_via_ui(&app, "M 1").await?;
+
+    let (placement, width) = pin_and_widen_dock(&app).await?;
+    anyhow::ensure!(
+        placement == "side",
+        "the 'Right' placement option should have persisted placement=side, got {placement:?}"
+    );
+    anyhow::ensure!(
+        width != DEFAULT_WIDTH,
+        "the drag must move the width OFF its {DEFAULT_WIDTH}px default, otherwise a restore \
+         that never happened would still satisfy this journey — got {width}px. Either the \
+         drag did not reach the handler, or clamping pinned it back to the default."
+    );
+
+    // Clean window close: WebView2 flushes localStorage here and not on a kill.
+    app.graceful_shutdown().await?;
+
+    // Cold start: new process, empty module cache, storage read from disk.
+    let app = E2eApp::relaunch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+    app.set_viewport(1400, 900).await?;
+
+    let (restored_placement, restored_width) = read_dock_pref(&app, "targets").await?;
+    anyhow::ensure!(
+        restored_placement == placement && restored_width == width,
+        "the dock preference must survive a real restart exactly, but {placement}/{width}px \
+         came back as {restored_placement}/{restored_width}px. This is the assertion a \
+         remount cannot make: it would read the module-level cache instead of storage."
+    );
+
+    // Storage surviving is only half of it — the app must also READ it back on
+    // a cold boot and lay the dock out at that width.
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    add_target_via_ui(&app, "M 1").await?;
+
+    let laid_out = rendered_side_width(&app).await?;
+    anyhow::ensure!(
+        (laid_out - restored_width).abs() <= 2,
+        "after a real restart the side dock should render at its restored {restored_width}px \
+         (±2px for borders), but measured {laid_out}px. A -1 here means no side dock rendered \
+         at all, so the restored 'side' pin never reached the layout."
     );
 
     app.shutdown().await

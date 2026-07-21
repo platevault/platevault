@@ -24,6 +24,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem, InboxSourceGroupListItem } from '@/bindings/index';
 import {
+  Btn,
   Table,
   tableIndent,
   Skeleton,
@@ -35,6 +36,8 @@ import { SortHeader, ariaSortFor } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';
 import { m } from '@/lib/i18n';
+import { masterLabel } from '@/lib/master-label';
+import { useHotkeys } from '@/lib/useHotkeys';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -152,17 +155,14 @@ function formatTag(item: InboxListItem): string {
 
 /**
  * The exact label rendered in the Format column cell (issue #649): a master
- * row displays `"{type} master"`, not its raw `formatTag`. The sort
- * comparator MUST compare this same displayed string — comparing the
- * internal format tag instead (as before) let master rows interleave
- * arbitrarily with FITS rows because "FITS" never equals "bias master" etc.
+ * row displays its spec 040 FR-006 "type · filter · exposure" label, not its
+ * raw `formatTag`. The sort comparator MUST compare this same displayed
+ * string — comparing the internal format tag instead (as before) let master
+ * rows interleave arbitrarily with FITS rows because "FITS" never equals
+ * "Master Bias" etc.
  */
 function formatDisplayLabel(item: InboxListItem): string {
-  return item.isMaster
-    ? m.inbox_master_row_label({
-        type: item.masterFrameType ?? m.inbox_state_master_fallback(),
-      })
-    : formatTag(item);
+  return item.isMaster ? masterLabel(item) : formatTag(item);
 }
 
 /**
@@ -313,6 +313,21 @@ export interface InboxListProps {
    * scanned folder has an item row, so `inbox.list` always returns this empty.
    */
   sourceGroups?: InboxSourceGroupListItem[];
+  /**
+   * Spec 058 FR-017 — trigger group-scoped classification for a scanned folder.
+   *
+   * Deliberately separate from {@link InboxListProps.onSelect}: a source group
+   * has no `inboxItemId`, and `onSelect` feeds the `?selected=` URL param,
+   * which resolves against item ids only. Routing group classification through
+   * `onSelect` would both break selection and delete the FR-016 invariant that
+   * a source-group row never selects anything.
+   *
+   * When omitted the row renders its static "not yet classified" label, so
+   * existing callers and fixtures keep their current behaviour.
+   */
+  onClassifySourceGroup?: (group: InboxSourceGroupListItem) => void;
+  /** Source group whose classification is in flight — disables its action. */
+  classifyingSourceGroupId?: string | null;
   /** Issue #644: selection is by item identity, not list position — an index
    * silently points at whatever item now occupies that slot after search/lane/
    * kind filters change the array shape. */
@@ -417,6 +432,8 @@ export function flattenVisibleTree(
 export function InboxList({
   items,
   sourceGroups = [],
+  onClassifySourceGroup,
+  classifyingSourceGroupId = null,
   selectedId,
   onSelect,
   filterType,
@@ -518,6 +535,67 @@ export function InboxList({
     filteredSourceGroups,
   ]);
 
+  // ── J/K triage navigation (spec 027 FR-022, issue #747) ─────────────────────
+  // Bound here rather than on the page because this component owns the visual
+  // order: grouping, collapse state, sort and filters all reshape it, and J/K
+  // must step through what the user actually sees.
+  const navigableIds = useMemo(
+    () =>
+      visualRows
+        .filter((r): r is ItemVisualRow => r.kind === 'item')
+        .map((r) => r.item.inboxItemId),
+    [visualRows],
+  );
+
+  const step = useCallback(
+    (delta: number) => {
+      if (navigableIds.length === 0) return;
+      const cur = selectedId ? navigableIds.indexOf(selectedId) : -1;
+      // Clamped, not wrapped: triage is a top-to-bottom sweep, and silently
+      // jumping back to the top reads as "nothing happened" at the last row.
+      // With nothing selected, J enters at the top and K at the bottom.
+      const next =
+        cur === -1
+          ? delta > 0
+            ? 0
+            : navigableIds.length - 1
+          : Math.min(navigableIds.length - 1, Math.max(0, cur + delta));
+      const id = navigableIds[next];
+      if (id && id !== selectedId) onSelect(id);
+    },
+    [navigableIds, selectedId, onSelect],
+  );
+
+  // Single-key bindings, matching the scheme the retired Inbox ActionSidebar
+  // used. useHotkeys suppresses these while a text field has focus.
+  useHotkeys(
+    {
+      KeyJ: (e) => {
+        e.preventDefault();
+        step(1);
+      },
+      KeyK: (e) => {
+        e.preventDefault();
+        step(-1);
+      },
+    },
+    [step],
+  );
+
+  // Selection moves without moving DOM focus (the target row may not even be
+  // rendered under virtualization), so nothing would reach a screen reader
+  // without an explicit announcement.
+  const selectedItem = useMemo(
+    () =>
+      selectedId
+        ? visualRows.find(
+            (r): r is ItemVisualRow =>
+              r.kind === 'item' && r.item.inboxItemId === selectedId,
+          )?.item
+        : undefined,
+    [visualRows, selectedId],
+  );
+
   // ── Sortable column headers (SessionsTable convention) ──────────────────────
   const makeSortHeader = (
     col: InboxSortCol,
@@ -616,9 +694,22 @@ export function InboxList({
         if (row.kind === 'sourceGroup') {
           const { group } = row;
           const label = sourceGroupDetectionLabel(group);
-          // No `_onClick`, no `_selected`, no item id: the row is inert by
-          // construction rather than by a guard (FR-016). Nothing here can
-          // reach `inbox.confirm`, because there is no id to give it.
+          const classifying = classifyingSourceGroupId === group.sourceGroupId;
+          // No `_onClick`, no `_selected`, no item id — the row carries no
+          // selection identity, so nothing here can reach `inbox.confirm`
+          // (FR-016). That guarantee is structural and still holds. What the
+          // row is NOT is actionless: its one action is Classify, which
+          // materialises the folder's item rows and replaces this row with them
+          // (FR-017).
+          //
+          // Classification is user-triggered, never fired on render, and never
+          // routed through selection. Selection is the `?selected=<inboxItemId>`
+          // URL param, so a `sourceGroupId` placed there resolves to no item and
+          // the stale-selection cleanup clears it on the same commit. Auto-firing
+          // on render would be worse still: it would write `inbox_items` rows for
+          // folders nobody touched, raise one blocking `MetadataUnreadable` per
+          // FITS-less folder, and transform rows under the user — the churn
+          // FR-023 exists to prevent. See Q-10.
           return {
             _testid: `inbox-source-group-${group.sourceGroupId}`,
             _rowClassName: 'pv-inbox-table__row pv-inbox-table__row--muted',
@@ -634,7 +725,24 @@ export function InboxList({
             ),
             type: (
               <span className="pv-inbox-row__classification pv-inbox-row__classification--pending">
-                {m.inbox_state_not_yet_classified()}
+                {classifying
+                  ? m.inbox_source_group_classifying()
+                  : m.inbox_state_not_yet_classified()}
+                {onClassifySourceGroup ? (
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid={`inbox-source-group-classify-${group.sourceGroupId}`}
+                    disabled={classifying}
+                    aria-label={m.inbox_source_group_classify_aria({
+                      path: label,
+                    })}
+                    onClick={() => onClassifySourceGroup(group)}
+                  >
+                    {m.inbox_source_group_classify()}
+                  </Btn>
+                ) : null}
               </span>
             ),
             count: m.inbox_list_file_count({ count: group.fileCount }),
@@ -723,6 +831,21 @@ export function InboxList({
           {groupingHint}
         </div>
       )}
+      {/* Discoverability for the otherwise invisible J/K/C bindings (#747). */}
+      <div className="pv-listtable__foot" data-testid="inbox-hotkey-hint">
+        {m.inbox_hotkey_hint()}
+      </div>
+      {/* Keyboard selection moves no DOM focus, so announce it explicitly. */}
+      <div
+        className="pv-visually-hidden"
+        role="status"
+        aria-live="polite"
+        data-testid="inbox-selection-announcer"
+      >
+        {selectedItem
+          ? m.inbox_row_selected_aria({ label: detectionLabel(selectedItem) })
+          : ''}
+      </div>
     </div>
   );
 }

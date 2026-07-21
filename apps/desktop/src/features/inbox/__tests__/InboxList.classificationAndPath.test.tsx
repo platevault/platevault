@@ -282,11 +282,11 @@ describe('InboxList — unsplit-folder badge agrees with inbox_classify (#711 In
 });
 
 describe('InboxList — Format column sort matches the displayed value (#649)', () => {
-  it('sorts master rows by their displayed "{type} master" label, not the internal format tag', () => {
-    // Displayed labels, ascending (locale compare): "bias master" <
-    // "dark master" < "FITS". Sorting by the internal `formatTag` (always
-    // "FITS" for masters, ignoring the displayed "{type} master" swap) left
-    // masters interleaved arbitrarily with plain FITS rows instead.
+  it('sorts master rows by their displayed spec 040 label, not the internal format tag', () => {
+    // Displayed labels, ascending (locale compare): "FITS" < "Master Bias" <
+    // "Master Dark". Sorting by the internal `formatTag` (always "FITS" for
+    // masters, ignoring the displayed master-label swap) left masters
+    // interleaved arbitrarily with plain FITS rows instead.
     const items = [
       makeItem({
         inboxItemId: 'dark-master',
@@ -312,9 +312,9 @@ describe('InboxList — Format column sort matches the displayed value (#649)', 
     const rows = screen.getAllByTestId(/^inbox-item-/);
     const order = rows.map((r) => r.getAttribute('data-testid'));
     expect(order).toEqual([
+      'inbox-item-plain-fits',
       'inbox-item-bias-master',
       'inbox-item-dark-master',
-      'inbox-item-plain-fits',
     ]);
   });
 });

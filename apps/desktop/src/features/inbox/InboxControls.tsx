@@ -47,6 +47,25 @@ function basename(p: string | null | undefined): string | null {
  */
 export const GROUPING_DIMENSIONS: readonly Dimension[] = [
   {
+    /**
+     * Spec 058 T034 / FR-025 / SC-010: group siblings under their folder.
+     *
+     * A folder that split into several frame types produces N rows sharing one
+     * `relativePath`. Without this the list reads as N near-identical
+     * detections rather than "one folder, N types". `relativePath` IS the
+     * folder identity for an item — a materialized sub-item inherits its source
+     * folder's path — so grouping on it puts exactly the siblings of one folder
+     * under one header, which is what FR-025 asks for.
+     *
+     * Listed first because it explains the list's post-058 shape; every other
+     * dimension describes what is inside a folder rather than which folder a
+     * row came from.
+     */
+    id: 'folder',
+    label: () => m.inbox_dim_folder(),
+    accessor: (i) => i.relativePath,
+  },
+  {
     id: 'target',
     label: () => m.inbox_dim_target(),
     accessor: (i) => i.groupTarget,

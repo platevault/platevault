@@ -36,7 +36,7 @@ Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 | 14 | SIMBAD target resolution | ✅ | ✅ | **HTTP-boundary mocked** (wiremock) |
 | 15 | Token pattern builder | ✅ | ✅ | parse/resolve tokens |
 | 16 | Source protection defaults | ✅ | — | protection asserted via L1 + plans |
-| 17 | Cleanup & archive review plans | ✅ | ✅ | plan generation/review |
+| 17 | Cleanup & archive review plans | ✅ | ✅ | plan generation/review; protected-item gate covered separately by `cleanup_protection_gate` — `cleanup_plan_review` sets protection `unprotected`, so it does not exercise a refusal |
 | 18 | Filesystem plan application | ✅ | ✅ | **mutation + audit record assert** |
 | 19 | Settings / configuration model | ✅ | ✅ | persist + reload |
 | 20 | Bottom log viewer | ✅ | ✅ | log stream render |
@@ -121,6 +121,7 @@ local gates (compile, clippy, fmt) are clean.
 | `lifecycle_integrity` | `journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
 | `cleanup_plan_review` (NEW, D22; apply extended 2026-07-05) | `journeys.rs` | #10/#11, #17 | `projects.create`, `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status` |
 | `archive_lifecycle_apply_trash_permanent_delete` (NEW, 2026-07-05) | `archive_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
+| `cleanup_protection_gate` (NEW, 2026-07-20) | `cleanup_protection_gate_journey.rs` | #10/#11, #17 | `projects.create`, `settings.update` (global `defaultProtection`), `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status`, `plans.get` |
 | `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
 
 **Spec 052 (SIMBAD cache / dual-lookup / cone-search) sync — 2026-07-14.**
@@ -156,8 +157,10 @@ prose"):
 - **RESOLVED 2026-07-05: `cleanup_plan_review`'s apply gap.** The blocker was
   a missing channel-free apply command for archive/cleanup plans (unlike
   `inbox.plan.apply` for inbox plans) — `plans.apply_real` takes a
-  `tauri::ipc::Channel` progress argument this WebDriver harness cannot
-  construct. `plans.apply.direct` (a.k.a. `plans_apply_direct`,
+  `tauri::ipc::Channel` progress argument this WebDriver harness declines to
+  construct (buildable from a test script, but only by reaching into
+  Tauri internals — see #1234).
+  `plans.apply.direct` (a.k.a. `plans_apply_direct`,
   `app_core::plan_apply::apply_plan_channel_free`) now exists: same executor
   (`apply_plan`) and durable audit trail as `plans.apply_real`, no `Channel`
   required. `cleanup_plan_review` now drives a real apply past `plans.approve`
@@ -242,7 +245,7 @@ everything neither automated layer reaches.
 
 | Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
 |---|:--:|:--:|:--:|---|
-| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Full 6-step happy path and Data-Sources management (rescan/remap/disable/delete/reveal) still uncovered | `windows-journeys/journey-01-first-run-setup.md` |
+| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Data Sources Rescan/Disable/Enable/Delete have vitest coverage (`DataSources.rescan.test.tsx`, `DataSources.disable-delete.test.tsx` — see correction below); full 6-step happy path and Remap/Reveal remain uncovered at every layer | `windows-journeys/journey-01-first-run-setup.md` |
 | 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path, unsplit-folder Type-badge reads "unclassified" not "classified" (`inbox_ui_unsplit_unclassified_folder_badge_is_not_classified`, #711 Instance A, NEW 2026-07-19 — **written, not yet executed**). Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448, 2026-07-05): mixed-folder split, needs-review gate + bulk reclassify, single-type confirm→plan toast, plan-approval overlay review→apply/cancel | `windows-journeys/journey-02-inbox-ingest-move.md` |
 | 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448): catalogue-in-place plan distinguishable from a move plan in the review overlay | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 real-UI (`sessions_journeys.rs`): nothing before apply, real session row appears automatically, no review-lifecycle controls anywhere, no-op rescan never duplicates. Notes-edit invariant (Test 4) found untestable — see finding below | 🟡 rows/detail render only (`lifecycle_detail.spec.ts`, pre-existing) | `windows-journeys/journey-04-sessions-review.md` |
@@ -272,10 +275,11 @@ see the finding below).
 | 041 | Inbox single-type sub-items / destination model | ✅ | 🟡 (IPC only) | ❌ | journey-02/03 | iteration-2 now on `main` via #349 |
 | 043 | UI redesign (theming, layout convention, `aria-sort`) | n/a | 🟡 (smoke only) | ❌ | journey-10 | Foundation + round-2 shipped; pill-system unification and resizable splitters still pending per SPEC_STATUS |
 | 044 | Targets planner — Track B ephemeris/observer engine | n/a (frontend-only) | ❌ | ❌ | journey-09 | **Compute engine merged (`a395ce93`) but functionally unreachable**: real astronomy is gated behind `useObserverSiteExists()`, and `site-gate.ts::readSiteExists()` is hardcoded `return false` — no site-creation UI/command exists on `main` until PR #440 (spec 044 US3, open) merges. Verify this is still true before reusing this row. |
-| 046 | i18n infrastructure & error-code translation | ✅ | n/a (cross-cutting) | ❌ | journey-10 | `specs/SPEC_STATUS.md`: Implemented, 36/36 |
+| 046 | i18n infrastructure & error-code translation | ✅ | n/a (cross-cutting) | ❌ | journey-10 | `specs/SPEC_STATUS.md`: Implemented, 36/36. **No longer single-locale.** 046 shipped the catalogue with English hard-pinned and no switcher (its own FR-004); spec 061 supersedes that with a second locale and a runtime chooser — see the 061 row. The catalogue-completeness guarantee 046 established (1856 keys, zero unused) is what let 061 be an add-locales job rather than a string-extraction job |
 | 047 | Targets planner — Track A (Moon/filter/opposition) | ✅ | ❌ | ❌ | journey-09 | Implemented in code but **also gated by the same site-exists check as 044** (spec 047 D7) — see 044 row; spec's own T028 explicitly defers verify-on-windows here |
 | 048 | Per-frame inventory / live session membership | ✅ | ✅ `inventory_journeys.rs::reconcile_drops_externally_deleted_frame_from_real_ui_count` | ❌ | — (folds into journeys 4/6) | `main` PRs #435/#442/#500 merged; US1-US4 frontend surfaces landed (this PR): a per-root "Reconcile now" button (Settings → Data Sources, `reconcile-now-<rootId>` testid) drives `inventory.reconcile.run`; per-session frame inventory + relink UI drives `inventory.frame.list`/`inventory.frame.relink`; a session-scoped raw sub-frame cleanup review drives `cleanup.candidates.scan`/`cleanup.plan.generate` (US3, #500); per-root reconcile-mode/detection-trigger controls (wizard Scan step + Settings) drive `inventory.root_config.{get,set}`. The journey now clicks the REAL "Reconcile now" button instead of invoking the command over the bridge directly — closes the prior zero-frontend-callers gap. **US5 (T037-T039, calibration match missing-frame awareness) merged via #503**: Layer-1 covers both trigger paths (`crates/app/core/tests/calibration_missing_flag_integration.rs`, real `run_reconcile`/artifact `mark_missing`/`mark_recovered`, no mocks); the flag surfaces in `MasterDetail.tsx` (`calibration.masters.get`), but journey 8's Matching/assign UI is flagged UNREACHABLE (see row 8) so no new Layer-2 journey was written for it — same blocker, not a new gap |
 | 049 | Source-view generation (symlinks/junctions) | ✅ (partial) | 🟡 `source_view_journeys.rs::generate_source_view_creates_reviewable_wbpp_plan` | ❌ | — (new journey needed, none written this pass) | `main` PR #439 (US1) + #443 (US2 profile layout) merged; junction/symlink behavior is real, OS-specific filesystem behavior a mock layer structurally cannot prove — highest-value Layer-2 candidate of the unlisted specs. New journey drives the REAL "Generate source view" dialog end-to-end to a reviewable, approved `prepared_view_generation` plan and asserts the real WBPP 3-level destination layout — **but stops at `approved`**: real symlink/junction materialization needs `plans.apply_real`'s `tauri::ipc::Channel`, which no product UI constructs for this plan type (`SourceViewsSection`/`ProjectBottomDetail` drop the generated plan id on the floor — see the journey's module docs), the same channel-free-apply blocker already tracked for cleanup/archive (batch items #1/#2 below). Also surfaced a real, pre-existing data-quality gap: `projects.source.add`/`projects.create` have shipped empty `filter_snapshot`/`exposure_snapshot` since spec 003 and were never wired to the real per-session values available since spec 048, so every real project's generated layout falls back to `nofilter`/`unknown-exposure` folders instead of the frame's real filter |
+| 061 | Selectable application language | ✅ `crates/app/core/tests/locale_settings_gate.rs` | 🟡 (written, CI-unproven) | 🟡 (Playwright, mock-mode) | ⏳ pending (`astro-plan-8tc`) | **All four PRs still open at the time of writing (#1310 runtime, #1319 wizard step, #1320 Settings control, #1321 pt-BR) — re-verify this row once they land.** Layer-1 is the strongest link: the gate writes `locale` through the real settings use case against real SQLite, drops the handle, reopens and asserts the *stored value*, because `settings_update` returns `Ok` for an unregistered key and silently persists nothing (research D8) — a UI-only check would have passed against a feature that loses the preference every restart. Layer-2: the wizard journey (`setup_wizard_language_step.spec.ts`) was executed 2/2 by its author; the Settings journey (`settings_appearance_i18n.spec.ts`) was **written but never run** — no dev server in the authoring session — so treat it as unproven until CI. Mock mode cannot prove persistence at all here: it no-ops `settings_update('general', …)`, which is exactly why the durable proof lives at Layer-1. Manual-Windows is genuinely outstanding and covers the three things no automated layer reaches: layout at 1100×720 under longer Portuguese strings, count rendering at 0/1/many across the 50 plural keys, and a cold start into a non-Settings route proving the `main.tsx` boot wiring applies a saved locale to app chrome — that last one has no unit test by design, matching the repo's untested-boot-call-site convention, which is precisely how the wiring came to be missing in the first place |
 
 **Finding (verified against code, not spec prose)**: `specs/SPEC_STATUS.md`
 row 77 (044) reads "Track B specced, implementation in progress... T001–T003
@@ -506,11 +510,64 @@ the existing batch work, not newly gapped: 046 i18n cross-cutting
 disclosure are both exercised by `settings_appearance_i18n.spec.ts` and
 `targets_planner.spec.ts` respectively (see the per-journey table).
 
-**Still open (not closed this pass, out of this task's named scope)**: the
-full 6-step wizard happy path (Sources→Tools→Config→Site→Confirm→Scan) end
-to end, and Data Sources management (rescan/remap/disable/delete/reveal) —
-both remain "UNCOVERED" per the original audit and are follow-up candidates,
-not regressions.
+**Correction (2026-07-20, issue #1235): the Data Sources line above was
+stale.** Rescan and Disable/Enable/Delete already had vitest component
+coverage *before* this note was originally written:
+`apps/desktop/src/features/settings/DataSources.rescan.test.tsx` (rescan,
+`7e19d7bb`, 2026-07-04) and `DataSources.disable-delete.test.tsx`
+(disable/enable/delete, `7219fb57`, 2026-07-04) — both predate this section's
+2026-07-09 date. Per this file's own convention (the `ObservingSites.test.tsx`
+precedent a few lines above), a vitest `.test.tsx` counts as real coverage,
+so "UNCOVERED" was never accurate for those two actions. **Remap and Reveal
+remain genuinely uncovered at every layer** — no test references `remap` or
+`reveal`/`RemapRootDialog`/`handleReveal` in any of the three DataSources
+`.test.tsx` files, and no Mock-Playwright spec exists for Data Sources at all
+(only `setup_wizard_site_step.spec.ts`, `settings_framing.spec.ts`,
+`settings_appearance_i18n.spec.ts`, and `source_view_*.spec.ts` exist under
+`tests/e2e/`). **Still open (not closed this pass, out of this task's named
+scope)**: the full 6-step wizard happy path (Sources→Tools→Config→Site→
+Confirm→Scan) end to end, and any Mock-Playwright or Layer-2 real-UI coverage
+of Data Sources management (rescan/remap/disable/delete/reveal) — these
+remain follow-up candidates, not regressions.
+
+## Spec 051 (tauri-shell-integration) — shipped-and-untested surface — 2026-07-20
+
+Per `specs/SPEC_STATUS.md:92` (🟡 Partial, 34/64 tasks ticked — undercounts,
+several merged tasks aren't checked off), US1/US2/US3/US4/US5/US6/US7/US10 are
+merged to `main` and this matrix has **zero reference to any of them** at any
+layer:
+
+- US1 single-instance guard (`64a94881`/#471)
+- US2 favourites-in-DB (`54378086`/#472)
+- US3 cleanup-overrides-in-DB (`c990f967`/#474)
+- US4 window-state persistence (`e9b1622b`/#476)
+- US5 native menu bar (`e9b1622b`/#476)
+- US6 native theme sync (`29617775`/#475)
+- US7 diagnostics log file (`e9b1622b`/#476)
+- US10 signed-update groundwork (`c1f3ede9`/#473, `a33dc427`, `60732f2f`/#469)
+
+None of these have a Layer-1 integration test, a Layer-2 real-UI journey, or a
+Mock-Playwright spec in this repo as of this writing — they are desktop-shell
+integrations (native OS behavior, window chrome, update signing) that are
+plausibly hard to assert in the existing harnesses, but that has not been
+verified either way; this row exists so the gap is tracked rather than
+silently absent. US8 (OS notifications) and US9 (release-build native
+behavior/reload-guard) are real open *product* scope per `SPEC_STATUS.md`, not
+a testing gap, and are excluded from this row.
+
+## Specs not yet implemented — no coverage expected — 2026-07-20
+
+Per `specs/SPEC_STATUS.md:92-95`, these specs in the 050-058 range have no
+shipped product code, so their absence from this matrix is not a test gap:
+
+- **050** publishable-crate-extractions — docs-only plan-of-record (#429)
+- **056** onboarding-redesign — 📄 Specified (2026-07-18), no implementation
+- **058** inbox-drop-parent-items — 📄 Specified (2026-07-19), no implementation
+
+Check `specs/SPEC_STATUS.md` before re-deriving shipped-vs-specified for any
+spec above 049; specs 052-055/057 (including 053, which has a `specs/`
+directory but no row in `SPEC_STATUS.md`'s table) aren't tracked there and
+are out of scope here too.
 
 ## Spec 008 Q27 iteration — framing clustering + Inbox-confirm attribution (F-Framing-8/9/11) — 2026-07-17
 
@@ -568,10 +625,13 @@ even earlier: no consuming component exists at all yet.
 ## Spec 058 — Inbox drops the parent item — 2026-07-20
 
 Re-shapes area #3 (and every Layer-2 journey that touches the Inbox queue).
-**Status at the time of writing: SPECIFIED, phases 2–4 in flight** — verified
-against real code at `38227ca3`, not against spec prose. The rows below say
-what the coverage must become; the "State at `38227ca3`" column says what is
-actually true today, so a later reader can tell a plan from a fact.
+**Status refreshed 2026-07-20 at `94db2e7a`** — verified against real code,
+not against spec prose. The rows below say what the coverage must become; the
+State column says what is actually true, so a later reader can tell a plan
+from a fact. The L2 rows are marked ⚠️ rather than ✅ deliberately: the
+journeys were rewritten for the new row shape and every referenced testid was
+checked against real app source, but **the SC-005 journeys have never been
+run** (T030), so nothing here is evidence they pass.
 
 The behaviour change: a scanned folder no longer produces a placeholder inbox
 row. Before classification a folder appears as a **source-group row** that is
@@ -581,15 +641,15 @@ row states only facts about its own files. This deletes the read-side
 suppression predicate that has been hiding the placeholder (SC-007) rather
 than adding a new one.
 
-| Coverage obligation | Layer | Target test | State at `38227ca3` |
+| Coverage obligation | Layer | Target test | State at `94db2e7a` |
 |---|---|---|---|
-| A scanned-but-unclassified folder is visible as exactly one row, and that row is NOT an inbox item (SC-002b) | L2 | `crates/e2e-tests/tests/inbox_ui_journeys.rs`, source-group-row variant of `rescan_and_wait_for_item` (T014) | ❌ helper waits for an item row; no source-group row type exists in `InboxPage.tsx` |
-| Selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present | L2 | split of `select_only_item` (T015) | ❌ the single current helper waits for `inbox-confirm-btn` to mount — exactly what a source-group row must never provide |
-| Classification replaces the source-group row with N item rows without dropping the user's selection (FR-017/FR-023, CHK011 rule: N=1 → select that item; N>1 → select the folder group header, never a sibling; N=0 → the source-group row stays selected, [#1178](https://github.com/platevault/platevault/issues/1178)) | L2 | T016/T017 update to the five journeys in `inbox_ui_journeys.rs` | ❌ not written |
-| 1 row for a uniform folder, N rows for N frame-type groups, zero aggregate rows (SC-002) | L1 + L2 | `crates/app/inbox` classify tests; `inbox_ui_journeys.rs::inbox_ui_mixed_folder_splits_into_single_type_items` | 🟡 split ships, but the placeholder still exists and is hidden by `exclude_split_placeholder!` (`crates/persistence/db/src/repositories/inbox.rs:1503`) |
-| List badge, detail badge and the item's own classification agree — the #711 exit condition (SC-001) | L1 + L2 | as above | 🟡 achieved today via suppression, which SC-007 removes |
-| Confirming one sibling leaves the other N−1 unchanged in state, classification and plan binding (SC-006) | L2 | `inbox_ui_journeys.rs` | ❌ not asserted |
-| Group the Inbox by folder and see one folder's siblings under one header (SC-010, D-007) | L2 | `inbox_ui_journeys.rs` | ❌ not asserted |
+| A scanned-but-unclassified folder is visible as exactly one row, and that row is NOT an inbox item (SC-002b) | L2 | `crates/e2e-tests/tests/inbox_ui_journeys.rs`, source-group-row variant of `rescan_and_wait_for_item` (T014) | ⚠️ helper split done (T014) — `rescan_and_wait_for_source_group`; source-group rows render. Not yet run. |
+| Selecting a source-group row asserts Confirm is **absent**; selecting an item row asserts Confirm is present | L2 | split of `select_only_item` (T015) | ⚠️ `assert_source_group_not_confirmable` (T015) asserts Confirm is ABSENT; `select_only_item` still asserts it present. Not yet run. |
+| Classification replaces the source-group row with N item rows without dropping the user's selection (FR-017/FR-023, CHK011 rule: N=1 → select that item; N>1 → select the folder group header, never a sibling; N=0 → the source-group row stays selected, [#1178](https://github.com/platevault/platevault/issues/1178)) | L2 | T016/T017 update to the five journeys in `inbox_ui_journeys.rs` | ⚠️ written (T016/T017). CHK011 N>1 selects NOTHING — the folder group header now exists (T034) but header selection is a follow-up; selecting a sibling would designate a primary (D-002). |
+| 1 row for a uniform folder, N rows for N frame-type groups, zero aggregate rows (SC-002) | L1 + L2 | `crates/app/inbox` classify tests; `inbox_ui_journeys.rs::inbox_ui_mixed_folder_splits_into_single_type_items` | ✅ L1: placeholder deleted at source (T012) and the suppression removed (T024); `t031_two_frame_types_yield_two_items_and_no_aggregate` pins N items + zero aggregate. ⚠️ L2 not run. |
+| List badge, detail badge and the item's own classification agree — the #711 exit condition (SC-001) | L1 + L2 | as above | ✅ achieved by construction — there is no longer a row that can disagree, rather than one hidden at read time. |
+| Confirming one sibling leaves the other N−1 unchanged in state, classification and plan binding (SC-006) | L1 + L2 | `confirm.rs::confirm_alters_exactly_one_item_and_leaves_its_sibling_untouched_sc006`; `inbox_ui_journeys.rs` | ✅ L1 asserted in both directions (T037). ⚠️ L2 not run. |
+| Group the Inbox by folder and see one folder's siblings under one header (SC-010, D-007) | L1 + L2 | `InboxList.folderGrouping.test.tsx`; `inbox_ui_journeys.rs` | ✅ L1 (T034 folder dimension). ⚠️ L2 not asserted. |
 | Reclassify does not report `classified` while mandatory attributes are missing — #711 Instance B stays fixed (SC-011) | L1 | the `22f94a9e` regression test (PR #1086) | ✅ merged, must be preserved |
 
 ### The three SC-005 journeys are the gate
@@ -638,3 +698,28 @@ the not-yet-implemented boundary and the SC-009 exclusion. J03
 row-shape change; it has not been re-versioned in this pass because its steps
 describe confirm-and-catalogue rather than the scan/classify row shape — worth
 a re-read once phases 2–4 land, not a silent assumption that it is unaffected.
+
+## Recorded for whoever sequences the next journey-suite batch — 2026-07-20
+
+Net wall-clock impact of the proposed next batch of real-UI journey work, so
+sequencing doesn't have to re-derive it (issue #1228):
+
+- Four new real-UI journeys: cleanup/apply (~45s), archive/trash (~50s), root
+  remap (~35s), first-run wizard (~40s) — **+170s**.
+- Delete `plan_review_apply_with_audit`
+  (`crates/e2e-tests/tests/journeys.rs:155`, confirmed still present as of
+  this writing) as subsumed by the new cleanup/apply journey — **−30s**.
+- Move six IPC-only tests to `apps/desktop/src-tauri/tests/` — **−180s**.
+- **Net: ≈ −40s.**
+
+Caveats: `.config/nextest.toml`'s `e2e` profile runs with `test-threads > 1`,
+so real wall-clock is better than this raw sum suggests. The actual
+constraint is per-boot memory on a 4-vCPU CI runner, not seconds — sequence
+this batch to bound concurrent app boots, not to shave time. **This estimate
+assumes the Real-UI E2E suite actually runs to completion on `main`, which is
+not true today**: `main`'s `e2e.yml` concurrency group cancels in-flight runs
+on every subsequent merge, so the suite has been silently non-reporting
+(#1202, #1208; fix in #1268). Re-baseline these numbers once #1268 lands and
+a full run is observed to finish.
+
+Documentation only; no code change follows from this note in this task.

@@ -37,6 +37,7 @@ import type {
   InboxStatsTotals,
   InboxFileMetadata_Serialize as InboxFileMetadata,
   ConeSearchReason,
+  ChosenAttributionDto_Deserialize as ChosenAttributionRequest,
 } from '@/bindings/index';
 import type {
   InboxClassifyResponse,
@@ -222,7 +223,6 @@ export function useInboxScan(rootId: string, rootAbsolutePath: string) {
         await commands.inboxScanFolder({
           rootId,
           rootAbsolutePath,
-          followSymlinks: false,
         }),
       ),
     enabled: !!rootId && !!rootAbsolutePath,
@@ -320,6 +320,8 @@ export function useInboxConfirm() {
       destructiveDestination?: string;
       /** Caller-selected destination root (spec 041 US8/FR-029). */
       rootId?: string | null;
+      /** The user's attribution pick (spec 008 FR-022) — omitted when unpicked. */
+      chosenAttribution?: ChosenAttributionRequest;
     }) => {
       setState({
         loading: true,
@@ -336,6 +338,7 @@ export function useInboxConfirm() {
             rootAbsolutePath: args.rootAbsolutePath,
             destructiveDestination: args.destructiveDestination ?? null,
             rootId: args.rootId ?? null,
+            chosenAttribution: args.chosenAttribution ?? null,
           }),
         );
         setState({
@@ -368,6 +371,78 @@ export function useInboxConfirm() {
   );
 
   return { ...state, confirm };
+}
+
+export interface ClassifySourceGroupState {
+  /** Id of the group currently being classified, or null when idle. */
+  pendingSourceGroupId: string | null;
+  error: string | null;
+}
+
+/**
+ * Group-scoped classification for a scanned-but-unclassified folder
+ * (spec 058 FR-017).
+ *
+ * Deliberately NOT a `useQuery`, unlike {@link useInboxClassification}.
+ * `inbox.classify` is idempotent and safe to cache; this operation
+ * *materialises item rows* as a side effect, so firing it from a cache miss on
+ * remount would silently create rows the user never asked for. It follows the
+ * hand-rolled mutation pattern this file uses everywhere else (see
+ * {@link useInboxConfirm}).
+ *
+ * Busy state is keyed by `sourceGroupId` rather than a bare boolean because a
+ * successful call *erases the row that triggered it*: the group leaves
+ * `sourceGroups` and reappears as item rows on the next `inbox.list`. A bare
+ * boolean would keep a spinner alive on a row that no longer exists.
+ *
+ * It is deliberately NOT fired on render (Q-10). Auto-firing would write
+ * `inbox_items` rows for every folder the user never touched, raise one
+ * blocking `MetadataUnreadable` per FITS-less folder on load, and transform
+ * rows underneath the user — the selection churn FR-023 exists to prevent and
+ * which Q-4 already rejected its Option A over. The trigger is an explicit
+ * per-row action.
+ *
+ * Re-running is safe: `upsert_inbox_sub_item` is `ON CONFLICT(root_id,
+ * relative_path, group_key) DO UPDATE` and orphaned siblings are removed by
+ * `delete_sub_item_if_unlinked`, so a double-click converges rather than
+ * duplicating rows.
+ */
+export function useInboxClassifySourceGroup() {
+  const queryClient = useQueryClient();
+  const [state, setState] = useState<ClassifySourceGroupState>({
+    pendingSourceGroupId: null,
+    error: null,
+  });
+
+  const classifySourceGroup = useCallback(
+    async (args: { sourceGroupId: string; rootAbsolutePath: string }) => {
+      setState({ pendingSourceGroupId: args.sourceGroupId, error: null });
+      try {
+        const result = unwrap(
+          await commands.inboxClassifySourceGroup({
+            sourceGroupId: args.sourceGroupId,
+            rootAbsolutePath: args.rootAbsolutePath,
+          }),
+        );
+        setState({ pendingSourceGroupId: null, error: null });
+        // Required for the row to turn over: without this the group row stays
+        // on screen and the freshly materialised items never appear.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.list('all'),
+        });
+        return result;
+      } catch (e) {
+        setState({
+          pendingSourceGroupId: null,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        throw e;
+      }
+    },
+    [queryClient],
+  );
+
+  return { ...state, classifySourceGroup };
 }
 
 export interface ReclassifyState {
@@ -526,7 +601,6 @@ export function useInboxRescan(
             await commands.inboxScanFolder({
               rootId: r.rootId,
               rootAbsolutePath: r.rootAbsolutePath,
-              followSymlinks: false,
             }),
           ),
         ),

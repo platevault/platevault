@@ -87,7 +87,7 @@ mod writes;
 #[cfg(test)]
 mod tests;
 
-pub use keys::{is_global_protection_default_key, is_valid_key, overridable_keys};
+pub use keys::{is_global_protection_default_key, is_valid_key, overridable_keys, stable_keys};
 pub use read::get_settings;
 pub use validation::{settings_value_eq, validate_value};
 pub use writes::{
@@ -96,10 +96,10 @@ pub use writes::{
 };
 
 use keys::{
-    is_catalogues_enabled_key, is_noisy_audited_key, is_tools_auto_detected_key,
+    is_catalogues_enabled_key, is_locale_key, is_noisy_audited_key, is_tools_auto_detected_key,
     is_tools_bundle_id_key, is_tools_enabled_key, is_tools_executable_path_key,
     is_workflow_profile_attribution_window_key, is_workflow_profile_watch_extensions_key,
-    settings_entity_id, GLOBAL_PROTECTION_DEFAULT_SCOPE,
+    settings_entity_id, GLOBAL_PROTECTION_DEFAULT_SCOPE, SHIPPED_LOCALES,
 };
 #[cfg(test)]
 use read::apply_value_to_state;

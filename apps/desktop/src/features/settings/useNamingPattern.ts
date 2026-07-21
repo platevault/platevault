@@ -3,6 +3,7 @@
 
 /** State + handlers for the top-level Project Folder Pattern (spec 015/018). */
 import { useCallback, useEffect, useState } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { m } from '@/lib/i18n';
 import {
   getSettings,
@@ -27,6 +28,8 @@ export function useNamingPattern(
   } | null>(null);
   const [loaded, setLoaded] = useState(false);
 
+  const mountedRef = useMountedRef();
+
   const applyValues = (vals: Record<string, unknown>) => {
     if (Array.isArray(vals.pattern) && vals.pattern.length > 0) {
       setPattern(vals.pattern as PatternPart[]);
@@ -40,29 +43,36 @@ export function useNamingPattern(
   useEffect(() => {
     getSettings({ scope: 'naming' })
       .then((data) => {
-        applyValues(data.values as Record<string, unknown>);
+        if (mountedRef.current)
+          applyValues(data.values as Record<string, unknown>);
       })
       .catch(() => {
         // Use defaults on load failure (e.g. in test/mock environment).
       })
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        if (mountedRef.current) setLoaded(true);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Live validation (T1.3 / T1.4) ────────────────────────────────────────
-  const runValidation = useCallback((parts: PatternPart[]) => {
-    patternValidate(parts)
-      .then((resp) => {
-        setValidateResult({
-          valid: resp.valid,
-          warnings: resp.warnings,
-          errorCode: resp.errorCode ?? undefined,
+  const runValidation = useCallback(
+    (parts: PatternPart[]) => {
+      patternValidate(parts)
+        .then((resp) => {
+          if (!mountedRef.current) return;
+          setValidateResult({
+            valid: resp.valid,
+            warnings: resp.warnings,
+            errorCode: resp.errorCode ?? undefined,
+          });
+        })
+        .catch(() => {
+          // Ignore validation errors in mock/offline environments.
         });
-      })
-      .catch(() => {
-        // Ignore validation errors in mock/offline environments.
-      });
-  }, []);
+    },
+    [mountedRef],
+  );
 
   // ── Live preview (T2.2 / T3.11) ─────────────────────────────────────────
   const runPreview = useCallback((parts: PatternPart[]) => {
@@ -73,10 +83,12 @@ export function useNamingPattern(
     }
     patternPreview(parts, SAMPLE_METADATA)
       .then((resp) => {
+        if (!mountedRef.current) return;
         setPreview(resp);
         setPreviewError(null);
       })
       .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setPreview(null);
         setPreviewError(
           typeof err === 'string'

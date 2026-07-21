@@ -96,6 +96,7 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryClient.clear();
   mockSourceProtectionGet.mockResolvedValue(
     ok({
       sourceId: 'root-1',
@@ -253,17 +254,16 @@ describe('DataSources — Delete', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /^Remove$/i }));
 
     const dialog = await screen.findByRole('dialog');
-    await act(async () => {
-      fireEvent.click(
-        within(dialog).getByRole('button', { name: /^Remove$/i }),
-      );
-      await Promise.resolve();
-    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Remove$/i }));
 
-    expect(mockDelete).toHaveBeenCalledWith('root-1');
+    await waitFor(() => {
+      expect(mockDelete).toHaveBeenCalledWith('root-1');
+    });
     // The dialog stays open — the block reason must be surfaced, not swallowed.
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText(m.err_root_has_dependents())).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(m.err_root_has_dependents())).toBeInTheDocument();
+    });
     // The root was NOT removed from the list (no optimistic/premature removal).
     expect(
       screen.getByText('/astro/raw', { selector: 'code' }),

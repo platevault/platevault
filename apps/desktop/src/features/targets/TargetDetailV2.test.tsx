@@ -167,6 +167,7 @@ vi.mock('./astro/best-moon-date', async (importOriginal) => {
 // ── Import under test (after mocks) ──────────────────────────────────────────
 
 import { TargetDetailV2 } from './TargetDetailV2';
+import { assertDefined } from '@/test/assertDefined';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -693,7 +694,12 @@ describe('TargetDetailV2', () => {
       expect(screen.getByText(/5 frames/i)).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByText(/5 frames/i).closest('button')!);
+    fireEvent.click(
+      assertDefined(
+        screen.getByText(/5 frames/i).closest('button'),
+        '"5 frames" button ancestor',
+      ),
+    );
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({
@@ -719,7 +725,26 @@ describe('TargetDetailV2', () => {
         screen.getAllByText('Horsehead 2026').length,
       ).toBeGreaterThanOrEqual(1),
     );
-    expect(screen.getAllByText('ready').length).toBeGreaterThanOrEqual(1);
+    // #739 US3-AC2: lifecycle renders via the shared StatusTag, so it shows
+    // the localized label ("Ready") rather than the raw stored state.
+    expect(screen.getAllByText('Ready').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('ready')).toBeNull();
+  });
+
+  it('24b. (US3) archived projects carry the shared archived lifecycle tone', async () => {
+    mockListTargetProjects.mockResolvedValue(
+      ok([{ id: 'proj-1', name: 'Old Horsehead', lifecycle: 'archived' }]),
+    );
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('Old Horsehead').length,
+      ).toBeGreaterThanOrEqual(1),
+    );
+    const tag = screen.getAllByText('Archived')[0];
+    // Reuses the shared tone token rather than a per-feature style (#739).
+    expect(tag).toHaveClass('pv-status-tag');
+    expect(tag).toHaveClass('pv-status-tag--ok');
   });
 
   it('25. (US3) clicking project row navigates to /projects with selected=id (mid-page link row)', async () => {
@@ -735,7 +760,10 @@ describe('TargetDetailV2', () => {
 
     // Click the first project button (mid-page link row)
     fireEvent.click(
-      screen.getAllByText('Horsehead 2026')[0].closest('button')!,
+      assertDefined(
+        screen.getAllByText('Horsehead 2026')[0].closest('button'),
+        '"Horsehead 2026" mid-page button ancestor',
+      ),
     );
 
     await waitFor(() =>
@@ -760,7 +788,9 @@ describe('TargetDetailV2', () => {
     // Click the last project button (bottom Projects section)
     const btns = screen
       .getAllByText('Horsehead 2026')
-      .map((el) => el.closest('button')!);
+      .map((el) =>
+        assertDefined(el.closest('button'), '"Horsehead 2026" button ancestor'),
+      );
     fireEvent.click(btns[btns.length - 1]);
 
     await waitFor(() =>

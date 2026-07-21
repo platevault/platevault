@@ -145,7 +145,11 @@ async fn r3_1_start_inbox_plan_listener_callable() {
     let bus = EventBus::with_pool(db.pool().clone());
 
     // Must not panic.
-    start_inbox_plan_listener(db.pool().clone(), &bus);
+    start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
 
     // Pool is still usable after the call (pool.clone() was taken, not moved).
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM inbox_items")
@@ -166,7 +170,11 @@ async fn r3_2_listener_resolves_inbox_item_on_plan_applied() {
     let bus = EventBus::with_pool(db.pool().clone());
 
     // Start the listener (this is the fix we're pinning).
-    start_inbox_plan_listener(db.pool().clone(), &bus);
+    start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
 
     let root_id = format!("root-r3-{}", Uuid::new_v4());
     let item_id = format!("r3-item-{}", Uuid::new_v4());
@@ -215,7 +223,11 @@ async fn r3_3_listener_reclassifies_inbox_item_on_plan_failed() {
     let db = setup_db().await;
     let bus = EventBus::with_pool(db.pool().clone());
 
-    start_inbox_plan_listener(db.pool().clone(), &bus);
+    start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
 
     let root_id = format!("root-r3-fail-{}", Uuid::new_v4());
     let item_id = format!("r3-fail-{}", Uuid::new_v4());

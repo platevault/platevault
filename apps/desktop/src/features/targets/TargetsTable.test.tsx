@@ -781,3 +781,76 @@ describe('TargetsTable — no-dark-window summer night (#579, glyph model)', () 
     }
   });
 });
+
+// ── Sessions column (#622) ───────────────────────────────────────────────────
+
+/**
+ * The Sessions cell used to be a hardcoded em-dash even though the backend
+ * populates `TargetListItem.sessionCount` (#877). These assert the column reads
+ * the real field, still shows '—' for genuinely-unshot targets, and that its
+ * header sort is no longer a no-op.
+ */
+describe('TargetsTable Sessions column (#622)', () => {
+  function sessionCell(label: string): HTMLElement {
+    const row = within(screen.getByRole('table'))
+      .getByText(label)
+      .closest('tr') as HTMLTableRowElement;
+    const cells = row.querySelectorAll('td');
+    // Sessions is the last column (COLUMNS order).
+    return cells[cells.length - 1] as HTMLElement;
+  }
+
+  it('renders the real sessionCount instead of a placeholder dash', () => {
+    renderTable({
+      targets: [{ ...item('SHOT'), sessionCount: 12 }],
+    });
+    expect(sessionCell('SHOT')).toHaveTextContent('12');
+  });
+
+  it("renders '—' for a target with no linked sessions (never a bare 0)", () => {
+    renderTable({ targets: [{ ...item('UNSHOT'), sessionCount: 0 }] });
+    const cell = sessionCell('UNSHOT');
+    expect(cell).toHaveTextContent('—');
+    expect(cell).not.toHaveTextContent('0');
+  });
+
+  it('treats an absent sessionCount (older client) as no sessions', () => {
+    const noField = item('LEGACY');
+    delete (noField as { sessionCount?: number }).sessionCount;
+    renderTable({ targets: [noField] });
+    expect(sessionCell('LEGACY')).toHaveTextContent('—');
+  });
+
+  it('sorts by session count ascending, tie-breaking on designation', () => {
+    renderTable({
+      targets: [
+        { ...item('MANY'), sessionCount: 9 },
+        { ...item('ZED'), sessionCount: 1 },
+        { ...item('ABLE'), sessionCount: 1 },
+      ],
+      sort: { col: 'sessions', dir: 'asc' },
+    });
+    const labels = Array.from(
+      screen.getByRole('table').querySelectorAll('tbody tr'),
+    )
+      .map((tr) => tr.querySelector('td:nth-child(2)')?.textContent ?? '')
+      .filter((t) => t.length > 0);
+    expect(labels[0]).toContain('ABLE');
+    expect(labels[1]).toContain('ZED');
+    expect(labels[2]).toContain('MANY');
+  });
+
+  it('reverses order when sorted descending (sort is not a no-op)', () => {
+    renderTable({
+      targets: [
+        { ...item('MANY'), sessionCount: 9 },
+        { ...item('FEW'), sessionCount: 1 },
+      ],
+      sort: { col: 'sessions', dir: 'desc' },
+    });
+    const first = screen
+      .getByRole('table')
+      .querySelector('tbody tr td:nth-child(2)');
+    expect(first?.textContent).toContain('MANY');
+  });
+});

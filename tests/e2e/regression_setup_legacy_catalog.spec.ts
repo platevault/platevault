@@ -28,8 +28,10 @@ function seedLegacyWizardState(page: import('@playwright/test').Page): void {
       'alm-setup-wizard-state',
       JSON.stringify({
         // Confirm step — reads catalogSettings.selectedCatalogIds.length.
-        // (spec 044 US3 inserted a first-run Site step at index 3, shifting Confirm 3→4.)
-        currentStep: 4,
+        // (spec 044 US3 inserted a first-run Site step at index 3, shifting
+        // Confirm 3→4; spec 061 US1 then inserted a Language step at index
+        // 0, shifting every step +1, so Confirm is now 5.)
+        currentStep: 5,
         sources: [
           {
             kind: 'light_frames',
@@ -84,7 +86,7 @@ test.describe('Regression · setup legacy catalogSettings', () => {
       window.localStorage.setItem(
         'alm-setup-wizard-state',
         JSON.stringify({
-          currentStep: 2, // Catalogs step
+          currentStep: 3, // Catalogs/Configuration step (spec 061 US1 shifted this 2→3)
           sources: [],
           catalogSettings: { downloadAll: true },
           tools: {

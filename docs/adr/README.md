@@ -9,6 +9,7 @@ old one `Superseded`.
 | ADR | Title | Status | Date |
 | --- | --- | --- | --- |
 | [0001](0001-astronomy-compute-boundary.md) | Planner astronomy math runs in the frontend (astronomy-engine), not a Rust core crate | Accepted | 2026-07-04 |
+| [0002](0002-lock-and-infotip-stay-separate.md) | Lock and InfoTip stay separate components | Accepted | 2026-07-20 |
 
 ## Status values
 

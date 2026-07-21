@@ -38,6 +38,8 @@ import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { queryKeys } from '@/data/queryKeys';
 import type {
+  ChosenAttributionDto_Deserialize as ChosenAttributionRequest,
+  IngestionAttributionCandidateDto,
   InboxConfirmDestination,
   InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
 } from '@/bindings/index';
@@ -48,9 +50,11 @@ import { m } from '@/lib/i18n';
 import type { FrameType } from '@/lib/route-contract';
 import { useGrouping } from '@/lib/use-grouping';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { useHotkeys } from '@/lib/useHotkeys';
 import { addToast } from '@/shared/toast';
 import { Btn } from '@/ui';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from './InboxControls';
+import { AttributionPicker } from './AttributionPicker';
 import { InboxDetail } from './InboxDetail';
 import { InboxList, DEFAULT_INBOX_SORT } from './InboxList';
 import type { InboxSortCol, InboxSort } from './InboxList';
@@ -70,6 +74,7 @@ import {
   normalizeConfirmError,
   useApplySelectedInboxPlans,
   useInboxClassification,
+  useInboxClassifySourceGroup,
   useInboxConfirm,
   useInboxItemMetadata,
   useInboxList,
@@ -149,6 +154,47 @@ export function resolveReclassifyHandoff(
   }
   const visible = filteredItems.some((it) => it.inboxItemId === pendingId);
   return visible ? { action: 'navigate', id: pendingId } : { action: 'giveUp' };
+}
+
+/** Outcome of {@link resolveClassifiedGroupSelection}. */
+export type ClassifiedGroupSelection =
+  | { action: 'wait' }
+  | { action: 'select'; id: string }
+  | { action: 'none' };
+
+/**
+ * CHK011 (spec 058 T017/FR-023): where selection goes when a source-group row
+ * is replaced by the items classification materialized from it.
+ *
+ * The rule is deliberately asymmetric:
+ *
+ *  - **N = 1** — select that item. The folder resolved to exactly one thing, so
+ *    putting the user on it is unambiguous and saves a click.
+ *  - **N > 1** — select NOTHING here. The rule says the folder group header,
+ *    never a sibling, because picking one sibling would silently designate a
+ *    primary — the thing D-002 forbids and which #1102 deleted `ids.next()` to
+ *    avoid. The header is part of T034's grouping UI and does not exist yet, so
+ *    selecting nothing is the correct conservative behaviour until it does.
+ *    Selecting a sibling now would be actively wrong, not merely early.
+ *  - **N = 0** — nothing to select. A source-group row was never selectable
+ *    (FR-016), so unlike the reclassify handoff there is no prior selection to
+ *    restore or lose.
+ *
+ * Bounded the same way {@link resolveReclassifyHandoff} is: it only decides
+ * once the list has settled, so an in-flight refetch is never mistaken for
+ * "the items never arrived".
+ */
+export function resolveClassifiedGroupSelection(
+  sourceGroupId: string,
+  items: Array<{ inboxItemId: string; sourceGroupId?: string | null }>,
+  listLoading: boolean,
+): ClassifiedGroupSelection {
+  if (listLoading) return { action: 'wait' };
+  const siblings = items.filter((it) => it.sourceGroupId === sourceGroupId);
+  if (siblings.length === 1) {
+    return { action: 'select', id: siblings[0].inboxItemId };
+  }
+  return { action: 'none' };
 }
 
 /** Type-guard for the destination-root-required details payload. */
@@ -336,9 +382,17 @@ export function InboxPage() {
   const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
     useState<string | null>(null);
 
+  // #735: `listLoading` joins the gate because on a cold reload the list cache
+  // is empty and an unguarded `selectedItem === undefined` wipes a valid
+  // `?selected=` before the list IPC resolves. This does NOT reopen the
+  // unbounded-gate hazard the reclassify handoff guards against: `listLoading`
+  // settles on its own, whereas `pendingReclassifySelectionId` needed
+  // `resolveReclassifyHandoff`'s explicit give-up path.
   useStaleSelectionCleanup(
     selected,
-    selectedItem !== undefined || pendingReclassifySelectionId !== null,
+    listLoading ||
+      selectedItem !== undefined ||
+      pendingReclassifySelectionId !== null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),
@@ -411,12 +465,24 @@ export function InboxPage() {
       listLoading,
     );
     if (decision.action === 'wait') return;
-    setPendingReclassifySelectionId(null);
     if (decision.action === 'navigate' && decision.id !== selected) {
+      // Hold the handoff OPEN across the navigate. `navigate` is async, so
+      // clearing the pending id here (as this did) drops
+      // `useStaleSelectionCleanup`'s guard one commit BEFORE `?selected=`
+      // carries the new id. In that commit the old id is already gone from
+      // the list, so `selectedItem` is undefined and the gate opens — the
+      // cleanup's `selected: undefined` then lands AFTER this navigate and
+      // clobbers it, leaving the page with no selection at all.
+      // (T051; measured on `..._bulk_reclassify_unblocks_confirm`, where the
+      // URL went old-id → undefined instead of old-id → new-id.)
+      // Re-running with `selected === decision.id` falls through to the
+      // clear below, so the guard is still bounded.
       void navigate({
         search: (prev) => ({ ...prev, selected: decision.id }),
       });
+      return;
     }
+    setPendingReclassifySelectionId(null);
   }, [
     pendingReclassifySelectionId,
     items,
@@ -434,6 +500,60 @@ export function InboxPage() {
     selectedItem?.inboxItemId ?? '',
     selectedRootPath,
   );
+
+  // Group-scoped classification for scanned-but-unclassified folders
+  // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
+  // selection — a source-group row is not selectable — so it is driven by an
+  // explicit button in the row.
+  const { pendingSourceGroupId, classifySourceGroup } =
+    useInboxClassifySourceGroup();
+
+  // CHK011 handoff: set once a classify succeeds, cleared when the refetched
+  // list settles and `resolveClassifiedGroupSelection` decides.
+  const [pendingClassifiedGroupId, setPendingClassifiedGroupId] = useState<
+    string | null
+  >(null);
+
+  const handleClassifySourceGroup = useCallback(
+    (group: InboxSourceGroupListItem) => {
+      void classifySourceGroup({
+        sourceGroupId: group.sourceGroupId,
+        rootAbsolutePath: group.rootAbsolutePath,
+      })
+        .then(() => {
+          setPendingClassifiedGroupId(group.sourceGroupId);
+        })
+        .catch((e: unknown) => {
+          // The row erases itself on success, so a silent failure would look
+          // like nothing happened at all. Surface it.
+          addToast({
+            variant: 'error',
+            message: m.inbox_toast_classify_group_failed({
+              message: e instanceof Error ? e.message : String(e),
+            }),
+          });
+        });
+    },
+    [classifySourceGroup],
+  );
+
+  // Completes the CHK011 handoff once the invalidated list has settled. Mirrors
+  // the reclassify handoff above, including its bounded give-up: a decision is
+  // only taken on a settled list, and the pending id is always cleared so it
+  // cannot gate `useStaleSelectionCleanup` open indefinitely.
+  useEffect(() => {
+    if (!pendingClassifiedGroupId) return;
+    const decision = resolveClassifiedGroupSelection(
+      pendingClassifiedGroupId,
+      items,
+      listLoading,
+    );
+    if (decision.action === 'wait') return;
+    setPendingClassifiedGroupId(null);
+    if (decision.action === 'select' && decision.id !== selected) {
+      void navigate({ search: (prev) => ({ ...prev, selected: decision.id }) });
+    }
+  }, [pendingClassifiedGroupId, items, listLoading, selected, navigate]);
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
   // Issue #643: `loading`/`error` used to be discarded here, so a metadata
@@ -463,6 +583,15 @@ export function InboxPage() {
   // The literal 'archive' | 'trash' values are exactly what inbox.confirm accepts.
   const [destructiveDestination, setDestructiveDestination] =
     useState<DestructiveDestination>('archive');
+  // #943: `confirmLoading` (from `useInboxConfirm`) only covers the backend
+  // `inbox.confirm` mutation inside `runConfirm` — it says nothing about the
+  // `inboxAttributionSuggest` read that now runs BEFORE it. Without this,
+  // Confirm/the "C" hotkey stayed clickable for that whole await, so a
+  // re-entrant trigger landing in the window (slower CI runners widen it)
+  // could start a second `handleConfirm` and race an unattributed confirm
+  // in ahead of the picker. Guards the entire handleConfirm body, not just
+  // the mutation.
+  const [confirmFlowBusy, setConfirmFlowBusy] = useState(false);
 
   // spec 041 US8/FR-029: when a confirm needs the user to pick among multiple
   // candidate library roots, hold the prompt + the item it belongs to so the
@@ -470,6 +599,17 @@ export function InboxPage() {
   const [pendingRootPick, setPendingRootPick] =
     useState<PendingRootPick | null>(null);
   const [rootPickItemId, setRootPickItemId] = useState<string | null>(null);
+
+  // spec 008 US7/FR-022 (#943): ranked attribution suggestions for the item
+  // awaiting confirm. Held BEFORE the confirm fires — confirm creates the plan
+  // that blocks any second confirm, so the pick must ride the first one.
+  const [pendingAttribution, setPendingAttribution] = useState<{
+    itemId: string;
+    rootAbsolutePath: string;
+    contentSignature: string;
+    rootId?: string;
+    candidates: IngestionAttributionCandidateDto[];
+  } | null>(null);
 
   // spec 041 US8/FR-031: absolute destination paths keyed by source path,
   // accumulated from each successful confirm's `destinations[]`. Lets the plan
@@ -534,6 +674,7 @@ export function InboxPage() {
       item: { inboxItemId: string; rootAbsolutePath: string },
       contentSignature: string,
       rootId?: string,
+      chosenAttribution?: ChosenAttributionRequest,
     ) => {
       try {
         const result = await confirm({
@@ -542,10 +683,12 @@ export function InboxPage() {
           rootAbsolutePath: item.rootAbsolutePath,
           destructiveDestination,
           rootId: rootId ?? null,
+          chosenAttribution,
         });
         // Success: clear any pending root pick and capture absolute destinations.
         setPendingRootPick(null);
         setRootPickItemId(null);
+        setPendingAttribution(null);
         mergeDestinations(result.destinations);
         // spec 041: masters now always return a plan too — every confirm produces
         // a reviewable plan that appears in the aggregate surface below.
@@ -616,24 +759,96 @@ export function InboxPage() {
   );
 
   const handleConfirm = async () => {
-    // spec 041 T071/T072 (FR-050): the backend "split" action is removed —
-    // classification.type === "mixed" is only reachable when the SELECTED
-    // item is still the pre-materialization leaf-folder row spanning more
-    // than one frame type (T066 already split it into single-type
-    // sub-items, which appear as separate list rows). Such a row can never
-    // itself be confirmed (its classification.result is never
-    // "classified"), so confirm is gated off entirely for it via
-    // `canConfirm` below — guard here too as defense in depth.
-    if (!selectedItem || !classification || classification.type === 'mixed')
-      return;
+    // Spec 058 T035/T036: the `classification.type === "mixed"` guard is gone
+    // with the vocabulary it tested.
+    //
+    // It was accurate when written: `mixed` was reachable only on the
+    // pre-materialization leaf-folder row spanning more than one frame type,
+    // and that row could never be confirmed. T012 stopped creating that row and
+    // T035 retired the label, so the condition can no longer be true — keeping
+    // it would read as a live safeguard while testing a value the backend never
+    // returns. A multi-type folder now reports `unclassified`, which
+    // `canConfirm` already refuses.
+    if (!selectedItem || !classification) return;
+    // Re-entrancy guard (#943 follow-up): covers this whole function,
+    // including the suggest await below — see `confirmFlowBusy`'s
+    // declaration for why `confirmLoading` alone isn't enough.
+    if (confirmFlowBusy) return;
+    setConfirmFlowBusy(true);
+    try {
+      // "" = auto-select (let the backend choose); otherwise the picked root.
+      const rootId = selectedDestRootId || undefined;
+
+      // spec 008 US7/FR-019 (#943): read the ranked attribution suggestions
+      // BEFORE confirming, so the user's pick can ride this single confirm.
+      // Suggest-never-auto-merge (FR-020) — a non-empty list always stops here
+      // for an explicit pick; it is never applied on the user's behalf.
+      // A suggest failure must not cost the user their confirm: attribution is
+      // an optional enrichment, so fall through to an unattributed confirm —
+      // but the failure is logged (not just swallowed), so a suggest-side
+      // regression stays diagnosable instead of looking like "no candidates".
+      let candidates: IngestionAttributionCandidateDto[] = [];
+      try {
+        candidates = unwrap(
+          await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
+        );
+      } catch (err) {
+        console.error(
+          `inbox.attribution.suggest failed for item ${selectedItem.inboxItemId}; confirming without an attribution pick`,
+          err,
+        );
+        candidates = [];
+      }
+      if (candidates.length > 0) {
+        setPendingAttribution({
+          itemId: selectedItem.inboxItemId,
+          rootAbsolutePath: selectedRootPath,
+          contentSignature: classification.contentSignature,
+          rootId,
+          candidates,
+        });
+        return;
+      }
+
+      await runConfirm(
+        {
+          inboxItemId: selectedItem.inboxItemId,
+          rootAbsolutePath: selectedRootPath,
+        },
+        classification.contentSignature,
+        rootId,
+      );
+    } finally {
+      setConfirmFlowBusy(false);
+    }
+  };
+
+  // The candidate DTO carries project/framing ids only, so resolve display
+  // names client-side rather than widening the contract. Fetched only while a
+  // pick is pending; falls back to the raw id if a name is unavailable.
+  const { data: attributionProjects } = useQuery({
+    queryKey: queryKeys.projects.all(),
+    queryFn: async () => unwrap(await commands.projectsList(null)),
+    enabled: pendingAttribution != null,
+  });
+  const attributionProjectNames = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const p of attributionProjects ?? []) out[p.id] = p.name;
+    return out;
+  }, [attributionProjects]);
+
+  /** FR-022: confirm the pending item carrying the user's attribution pick. */
+  const handlePickAttribution = async (chosen: ChosenAttributionRequest) => {
+    const pending = pendingAttribution;
+    if (!pending) return;
     await runConfirm(
       {
-        inboxItemId: selectedItem.inboxItemId,
-        rootAbsolutePath: selectedRootPath,
+        inboxItemId: pending.itemId,
+        rootAbsolutePath: pending.rootAbsolutePath,
       },
-      classification.contentSignature,
-      // "" = auto-select (let the backend choose); otherwise the picked root.
-      selectedDestRootId || undefined,
+      pending.contentSignature,
+      pending.rootId,
+      chosen,
     );
   };
 
@@ -705,10 +920,10 @@ export function InboxPage() {
   const handlePickDestinationRoot = async (rootId: string) => {
     if (!rootPickItemId || !selectedItem || !classification) return;
     if (selectedItem.inboxItemId !== rootPickItemId) return;
-    // A "mixed" classification can never reach the destination-root picker
-    // (confirm rejects it with classification.ambiguous before root
-    // resolution runs) — guarded as defense in depth, matching handleConfirm.
-    if (classification.type === 'mixed') return;
+    // Spec 058 T035: the companion `mixed` guard is gone here too. It can no
+    // longer be true, and a guard that cannot fire reads as protection while
+    // providing none. A multi-type folder reports `unclassified`, which confirm
+    // already rejects before root resolution runs.
     await runConfirm(
       {
         inboxItemId: selectedItem.inboxItemId,
@@ -839,12 +1054,11 @@ export function InboxPage() {
     [fileMetadata],
   );
 
-  // spec 041 T071/T072 (FR-050): the backend "split" action for MIXED items
-  // is removed — a folder that still classifies as "mixed" (multiple frame
-  // types on this row) can never itself be confirmed; only "single_type"
-  // rows (including the sub-items T066 already materialized alongside it)
-  // are confirmable, so confirm is disabled for both "unclassified" and
-  // "mixed" here.
+  // spec 041 T071/T072 (FR-050): only "single_type" rows are confirmable. A
+  // folder spanning several frame types is not one thing to confirm, so it
+  // reports "unclassified" and confirm stays disabled. Spec 058 T035 retired
+  // the separate "mixed" label; the rows it described are the sub-items
+  // materialization produces, each single-type and confirmable on its own.
   // Issue #643: while per-file metadata is loading or failed to load, we
   // cannot know whether mandatory attributes are missing — fail safe by
   // keeping Confirm disabled instead of judging over an empty array.
@@ -856,6 +1070,22 @@ export function InboxPage() {
     !fileMetadataError &&
     !hasMissingRequiredMeta &&
     !hasOpenPlan;
+
+  // Spec 027 FR-022 (issue #747): confirm the selected detection from the
+  // keyboard, so a triage sweep never leaves the home row. Gated on the same
+  // `canConfirm` as the button — the shortcut must not reach a state the
+  // visible affordance refuses. J/K navigation lives in InboxList, which owns
+  // the visual row order.
+  useHotkeys(
+    {
+      KeyC: (e) => {
+        if (!canConfirm || confirmLoading || confirmFlowBusy) return;
+        e.preventDefault();
+        void handleConfirm();
+      },
+    },
+    [canConfirm, confirmLoading, confirmFlowBusy, handleConfirm],
+  );
 
   const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
 
@@ -1214,12 +1444,11 @@ export function InboxPage() {
               classification={classification ?? null}
               fileMetadata={fileMetadata}
               // Confirm runs the same flow the old top-bar button did.
-              // Disabled entirely for "mixed" rows (FR-050) — see
-              // canConfirm above.
+              // Disabled for any row that is not single-type — see canConfirm.
               onConfirm={() => void handleConfirm()}
               confirmLabel={confirmLabel}
               confirmDisabled={!canConfirm}
-              confirmBusy={confirmLoading}
+              confirmBusy={confirmLoading || confirmFlowBusy}
               destinationRoots={destRoots}
               selectedRootId={selectedDestRootId}
               onSelectRoot={setSelectedDestRootId}
@@ -1236,6 +1465,8 @@ export function InboxPage() {
         <InboxList
           items={filteredItems}
           sourceGroups={filteredSourceGroups}
+          onClassifySourceGroup={handleClassifySourceGroup}
+          classifyingSourceGroupId={pendingSourceGroupId}
           selectedId={selected ?? null}
           onSelect={onSelect}
           filterType={type ?? 'all'}
@@ -1246,6 +1477,17 @@ export function InboxPage() {
           onSort={handleSort}
         />
       </ListPageLayout>
+
+      {/* spec 008 US7/FR-022 (#943): the pre-confirm attribution pick. */}
+      {pendingAttribution && (
+        <AttributionPicker
+          candidates={pendingAttribution.candidates}
+          projectNames={attributionProjectNames}
+          busy={confirmLoading}
+          onPick={(chosen) => void handlePickAttribution(chosen)}
+          onCancel={() => setPendingAttribution(null)}
+        />
+      )}
 
       {/* Plan-approval overlay — opens via top-bar trigger.
 			    Wraps the existing PlanPanel; all apply/cancel/root-pick

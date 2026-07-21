@@ -165,6 +165,53 @@ mod tests {
         assert_eq!(plan.state, "applied");
     }
 
+    /// astro-plan-l3y0: the `write_manifest` plan item previously fell
+    /// through to `ExecutorItemAction::NoOp` (`plan_apply/paths.rs`), so
+    /// auto-apply reported the whole plan "applied" while the app-owned
+    /// project marker file was never written to disk. Proves the marker is a
+    /// real file with the correct project id — not just that the executor
+    /// was invoked — and that its own durable `audit_log_entry` row exists
+    /// (constitution §II: an audit record per attempted action and outcome).
+    #[tokio::test]
+    async fn create_auto_apply_writes_project_marker_to_disk_with_audit() {
+        let (db, bus) = setup().await;
+        let root = tempfile::tempdir().unwrap();
+        let project_path = format!("{}/ngc7000", root.path().to_str().unwrap());
+
+        let result = create(db.pool(), &bus, &empty_cache(), &make_req("NGC 7000", &project_path))
+            .await
+            .unwrap();
+
+        assert_eq!(result.scaffold_applied, Some(true), "mkdir + marker plan must auto-apply");
+
+        let marker_path = format!("{project_path}/.astro-plan-project.json");
+        let marker_content = std::fs::read_to_string(&marker_path).unwrap_or_else(|e| {
+            panic!("project marker file must exist on disk at {marker_path}: {e}")
+        });
+        let parsed = project_structure::parse_marker(&marker_content)
+            .expect("marker file must be valid, versioned marker JSON");
+        assert_eq!(parsed.project_id, result.project_id, "marker must record the project's own id");
+
+        // The per-item audit trail (constitution §II) must cover the marker
+        // write specifically, not just the sibling mkdir items.
+        let plan_id = result.plan_id.expect("plan_id present");
+        let items = plans_repo::list_plan_items(db.pool(), &plan_id).await.unwrap();
+        let marker_item = items
+            .iter()
+            .find(|i| i.action == "write_manifest")
+            .expect("plan must contain the write_manifest item");
+
+        let (payload,): (String,) = sqlx::query_as(
+            "SELECT payload FROM audit_log_entry \
+             WHERE payload LIKE '%' || ? || '%' AND to_state = 'succeeded' LIMIT 1",
+        )
+        .bind(&marker_item.id)
+        .fetch_one(db.pool())
+        .await
+        .expect("a durable audit_log_entry row must record the write_manifest item's outcome");
+        assert!(payload.contains(&marker_item.id));
+    }
+
     /// Failure path: a file blocking a scaffolding folder makes the apply
     /// fail; create still succeeds, `scaffold_applied` is `Some(false)`, and
     /// the plan lands in the reviewable `failed` state.

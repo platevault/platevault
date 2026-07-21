@@ -77,6 +77,7 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryClient.clear();
   mockSourceProtectionGet.mockResolvedValue({
     status: 'ok',
     data: {
@@ -123,7 +124,6 @@ describe('DataSources — Rescan', () => {
       expect(mockScanFolder).toHaveBeenCalledWith({
         rootId: 'root-1',
         rootAbsolutePath: '/astro/raw',
-        followSymlinks: false,
       });
     });
 

@@ -10,82 +10,9 @@
 
 use sqlx::SqlitePool;
 
-use super::inbox::exclude_split_placeholder;
 use crate::DbResult;
 
 // ── inbox.scan.folder support (spec 041 T065) ──────────────────────────────────
-
-/// Insert (or reuse, via `INSERT OR IGNORE`) the folder-level PLACEHOLDER
-/// `inbox_items` row (`group_key = ''`) for a scanned folder, linked to its
-/// source group.
-///
-/// # Errors
-/// Returns [`crate::DbError::Database`] on query failure.
-#[allow(clippy::too_many_arguments)]
-pub async fn insert_inbox_folder_placeholder(
-    pool: &SqlitePool,
-    id: &str,
-    root_id: &str,
-    relative_path: &str,
-    source_group_id: &str,
-    file_count: i64,
-    content_signature: &str,
-    lane: &str,
-    format: &str,
-) -> DbResult<()> {
-    sqlx::query(
-        "INSERT OR IGNORE INTO inbox_items
-            (id, root_id, relative_path, source_group_id, file_count, discovered_at,
-             last_scanned_at, content_signature, state, lane, format, is_master_item)
-         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
-    )
-    .bind(id)
-    .bind(root_id)
-    .bind(relative_path)
-    .bind(source_group_id)
-    .bind(file_count)
-    .bind(content_signature)
-    .bind(lane)
-    .bind(format)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-/// Folder-placeholder `inbox_items` row shape (`group_key = ''`), scoped by
-/// `(root_id, relative_path)`.
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct InboxPlaceholderRow {
-    pub id: String,
-    pub state: String,
-    pub file_count: i64,
-    pub lane: String,
-    pub content_signature: Option<String>,
-    pub format: Option<String>,
-}
-
-/// Fetch the authoritative folder-placeholder `inbox_items` row (`group_key =
-/// ''`) for a scanned folder. Scoping to the placeholder avoids returning an
-/// arbitrary single-type sub-item once `classify` has materialized them.
-///
-/// # Errors
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn get_inbox_placeholder_row(
-    pool: &SqlitePool,
-    root_id: &str,
-    relative_path: &str,
-) -> DbResult<Option<InboxPlaceholderRow>> {
-    let row = sqlx::query_as::<_, InboxPlaceholderRow>(
-        "SELECT id, state, file_count, lane, content_signature, format
-         FROM inbox_items
-         WHERE root_id = ? AND relative_path = ? AND group_key = ''",
-    )
-    .bind(root_id)
-    .bind(relative_path)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
-}
 
 /// Insert (or reuse, via `INSERT OR IGNORE`) the individual `inbox_items` row
 /// for a single detected calibration master.
@@ -167,22 +94,24 @@ pub async fn get_inbox_master_item_row(
 /// Count unacknowledged inbox items (`pending_classification` or
 /// `classified`) across all registered roots.
 ///
-/// Applies the same superseded-placeholder exclusion the queue list and stats
-/// summary use, so the status-bar badge never counts a row the queue has
-/// already hidden. Without it a split folder was counted once per sub-item
-/// *plus* once for its placeholder, so the badge read higher than the visible
-/// queue — contradicting journey J02, which requires the badge and the
-/// status-bar breakdown to match the queue's real contents.
+/// Journey J02 requires this badge to match the queue's real contents. It used
+/// to need a superseded-placeholder exclusion to manage that: a split folder
+/// was counted once per sub-item *plus* once for its placeholder, so the badge
+/// read higher than the visible queue.
+///
+/// Spec 058 T012/T024 removed the need rather than the symptom. Scan no longer
+/// writes a placeholder, so there is no row for this count and the queue list
+/// to disagree about, and both now use the same plain state predicate with no
+/// suppression on either side (FR-026, SC-007).
 ///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
 pub async fn count_unacknowledged_inbox_items(pool: &SqlitePool) -> DbResult<i64> {
-    let count: i64 = sqlx::query_scalar(concat!(
+    let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
-         WHERE i.state IN ('pending_classification', 'classified') ",
-        exclude_split_placeholder!()
-    ))
+         WHERE i.state IN ('pending_classification', 'classified')",
+    )
     .fetch_one(pool)
     .await?;
     Ok(count)
@@ -257,95 +186,6 @@ mod tests {
         assert_eq!(count_projects(db.pool()).await.unwrap(), 0);
     }
 
-    /// Journey J02 (S1/S8): the status-bar badge must match the queue's real
-    /// contents. A split folder keeps its placeholder row in `inbox_items`,
-    /// but the queue list hides it via `exclude_split_placeholder!`. Before
-    /// this fix `count_unacknowledged_inbox_items` applied no such exclusion,
-    /// so the badge counted the placeholder *and* both sub-items — reading 3
-    /// where the queue showed 2.
-    ///
-    /// Asserts the invariant directly (count == visible rows) rather than a
-    /// hardcoded number, so it keeps holding if the predicate changes.
-    #[tokio::test]
-    async fn status_count_matches_visible_queue_for_split_folder() {
-        use crate::repositories::inbox::{
-            list_unacknowledged_across_roots, upsert_inbox_source_group, upsert_inbox_sub_item,
-            UpsertInboxSubItem, UpsertSourceGroup,
-        };
-
-        let db = setup().await;
-        let root_id = register_test_root(db.pool()).await;
-
-        upsert_inbox_source_group(
-            db.pool(),
-            &UpsertSourceGroup {
-                id: "sg-split",
-                root_id: &root_id,
-                relative_path: "mixed_folder",
-                content_signature: Some("sig-folder"),
-                format: Some("fits"),
-                lane: Some("move"),
-                file_count: 1,
-            },
-        )
-        .await
-        .unwrap();
-
-        // The folder placeholder (group_key = '') left behind by scan.
-        insert_inbox_folder_placeholder(
-            db.pool(),
-            "item-placeholder",
-            &root_id,
-            "mixed_folder",
-            "sg-split",
-            10,
-            "sig-folder",
-            "fits",
-            "fits",
-        )
-        .await
-        .unwrap();
-
-        // Two distinct groups → a genuine split, so the placeholder is superseded.
-        for (id, key, ft) in
-            [("item-light", "type=light", "light"), ("item-dark", "type=dark", "dark")]
-        {
-            upsert_inbox_sub_item(
-                db.pool(),
-                &UpsertInboxSubItem {
-                    id,
-                    root_id: &root_id,
-                    relative_path: "mixed_folder",
-                    source_group_id: "sg-split",
-                    group_key: key,
-                    group_label: key,
-                    frame_type: Some(ft),
-                    content_signature: "sig-sub",
-                    file_count: 5,
-                    lane: "fits",
-                    needs_review: false,
-                },
-            )
-            .await
-            .unwrap();
-        }
-
-        let visible = list_unacknowledged_across_roots(db.pool(), 500).await.unwrap();
-        let count = count_unacknowledged_inbox_items(db.pool()).await.unwrap();
-
-        assert_eq!(
-            visible.len(),
-            2,
-            "queue should show the two sub-items and hide the superseded placeholder: {visible:?}"
-        );
-        assert_eq!(
-            count,
-            i64::try_from(visible.len()).unwrap(),
-            "badge count must equal the visible queue (J02); counting the superseded \
-             placeholder is the #711-class disagreement this guards against"
-        );
-    }
-
     #[tokio::test]
     async fn resolver_settings_seeded_by_migration_0031() {
         let db = setup().await;
@@ -374,75 +214,6 @@ mod tests {
         let batch_resp =
             crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
         batch_resp.items[0].source_id.as_deref().unwrap().to_owned()
-    }
-
-    #[tokio::test]
-    async fn inbox_folder_placeholder_round_trips() {
-        let db = setup().await;
-        let root_id = register_test_root(db.pool()).await;
-        // source_group_id is a real FK (inbox_source_groups.id); INSERT OR
-        // IGNORE silently drops the row on FK/CHECK violation instead of
-        // erroring, so the group must exist first.
-        crate::repositories::inbox::upsert_inbox_source_group(
-            db.pool(),
-            &crate::repositories::inbox::UpsertSourceGroup {
-                id: "sg-1",
-                root_id: &root_id,
-                relative_path: "2026-01-01/Lights",
-                content_signature: Some("sig-abc"),
-                format: Some("fits"),
-                lane: Some("move"),
-                file_count: 1,
-            },
-        )
-        .await
-        .unwrap();
-
-        insert_inbox_folder_placeholder(
-            db.pool(),
-            "item-1",
-            &root_id,
-            "2026-01-01/Lights",
-            "sg-1",
-            10,
-            "sig-abc",
-            "fits",
-            "fits",
-        )
-        .await
-        .unwrap();
-
-        let row = get_inbox_placeholder_row(db.pool(), &root_id, "2026-01-01/Lights")
-            .await
-            .unwrap()
-            .expect("row inserted");
-        assert_eq!(row.id, "item-1");
-        assert_eq!(row.state, "pending_classification");
-        assert_eq!(row.file_count, 10);
-        assert_eq!(row.lane, "fits");
-        assert_eq!(row.content_signature.as_deref(), Some("sig-abc"));
-        assert_eq!(row.format.as_deref(), Some("fits"));
-
-        // INSERT OR IGNORE: a second insert with a different id must not
-        // overwrite the original row.
-        insert_inbox_folder_placeholder(
-            db.pool(),
-            "item-2",
-            &root_id,
-            "2026-01-01/Lights",
-            "sg-1",
-            20,
-            "sig-def",
-            "video",
-            "xisf",
-        )
-        .await
-        .unwrap();
-        let row = get_inbox_placeholder_row(db.pool(), &root_id, "2026-01-01/Lights")
-            .await
-            .unwrap()
-            .expect("row still present");
-        assert_eq!(row.id, "item-1", "OR IGNORE keeps the original row");
     }
 
     #[tokio::test]

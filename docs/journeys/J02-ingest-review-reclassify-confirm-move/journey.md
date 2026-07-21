@@ -1,7 +1,7 @@
 ---
 id: J02
 title: Move newly-arrived frames from an inbox drop folder into the library
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -15,10 +15,11 @@ trace:
     scrollable detail body, missing-attribute banner placement)
   - PR #898 (framing-attribution backend: ranked attribution candidates +
     chosenAttribution apply-path at Inbox confirm)
+  - issue #943 (`inbox.attribution.suggest` + Inbox attribution picker —
+    the UI caller for PR #898's backend)
   - docs/product/journeys/J02-ingest-review-reclassify-confirm-move/deltas/2026-07-14-q27-f5.md,
     2026-07-14-q27-f6.md, 2026-07-14-q27-f10.md (legacy pre-merge drafts;
-    superseded by S5 below — the shipped feature has no Inbox UI surface,
-    unlike what those drafts anticipated)
+    superseded by S5 below)
   - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
   - e2e-agentic-test/041-inbox-plan-surface/mixed-folder-single-type-subitems/scenario.md
   - e2e-agentic-test/041-inbox-plan-surface/missing-mandatory-gate/scenario.md
@@ -223,26 +224,27 @@ explicit, reviewed plan, and the action is visible in the audit history.
   now marked "planned" — it does not disappear from the list.
 - **Expect (negative):** No file on disk changes as a result of Confirm
   alone.
-- **Expect (negative — backend-only capability):** For a light-frame item,
-  the confirm call now also computes and returns ranked attribution
-  candidates matching the item against existing framings/projects (add to
-  a framing, start a new framing — including a mosaic project's first new
-  panel, flag an optic-train mismatch, or start a new project; a
-  completed-project candidate carries a reopen flag with the raw-subs-
-  archived warning) and accepts an optional per-item `chosenAttribution`
-  pick that persists framing/project membership at confirm time — but
-  today this is reachable only by calling the IPC command directly. No
-  control in the Inbox UI displays a candidate list or lets the user make
-  a pick, so this step's on-screen behavior is unchanged: Confirm still
-  just turns the item into a plan with no attribution UI shown. Tracked as
-  issue #943.
-- **Trace:** `crates/app/inbox/src/attribution.rs`,
-  `crates/app/inbox/src/confirm.rs` (`attribution_candidates`,
-  `chosenAttribution`); no reference to `attribution`/`Attribution` exists
-  under `apps/desktop/src/features/inbox/` — confirmed by repo-wide search
-  and by `docs/development/windows-journeys/journey-11-framing-clustering-
-  attribution.md`, which states this explicitly as "a real, currently-
-  accurate product gap, not a testing gap." Issue: #943.
+- **Expect (light-frame items — attribution pick):** Confirm on a
+  light-frame item first shows a ranked list of attribution suggestions
+  matching the item against existing framings and projects: add to a
+  framing, start a new framing (including a mosaic project's first new
+  panel), add to a project flagged with an optic-train mismatch, or start
+  a new project. A candidate whose project is completed carries a reopen
+  warning about archived raw subs. A "Leave unassigned" option is always
+  offered. Picking an option and choosing "Confirm with this attribution"
+  produces the plan and persists framing/project membership in the same
+  single confirm call. Cancelling dismisses the list without creating a
+  plan.
+- **Expect (negative):** No option is preselected, and no plan is created
+  while the list is on screen. Membership is written only for the option
+  the user picked.
+- **Trace:** `crates/app/inbox/src/attribution.rs`
+  (`suggest_candidates`, `apply_chosen_attribution`),
+  `apps/desktop/src-tauri/src/commands/inbox.rs`
+  (`inbox_attribution_suggest`),
+  `apps/desktop/src/features/inbox/AttributionPicker.tsx`,
+  `apps/desktop/src/features/inbox/InboxPage.tsx` (`handlePickAttribution`).
+  Issue: #943.
 
 ### S6 — Review the plan before anything touches disk {#S6}
 - **Do:** Open the plan review surface (e.g. via a "Review plans (N)"
@@ -367,7 +369,28 @@ explicit, reviewed plan, and the action is visible in the audit history.
   Evidence: PR #938 (fixes #557), PR #939 (fixes #552, #553, #554, #569) ·
   by: journey-scribe (intent-gated)
 
-- **Δ4** 2026-07-20 · S1, S2, SC1, +SC6, +SC7, +G2, +G3 · behavior-change
+- **Δ4** 2026-07-19 · S1 · behavior-change
+  A folder row whose files resolve to no frame type no longer reports
+  "classified" in the Type column. It now reads "unclassified", agreeing
+  with what the detail panel already said about that same item — the list
+  badge is read from the item's own cached classification instead of from
+  its scan state, which is set to "classified" for every scanned folder
+  regardless of the result.
+  Evidence: commit 4a96389b (fix(inbox): list badge no longer reports
+  Classified for an unsplit folder), issue #711 Instance A · by:
+  journey-scribe (intent-gated)
+
+- **Δ5** 2026-07-20 · S5 · behavior-change
+  Confirm on a light-frame item shows a ranked attribution picker before
+  creating the plan. The user's pick rides the same single confirm call
+  that creates the plan, so framing/project membership is persisted at
+  confirm time. Nothing is preselected and nothing is merged without a
+  pick. A read-only `inbox.attribution.suggest` command supplies the
+  candidates; reading them from the confirm response was unusable, because
+  that confirm's plan blocks any second confirm on the item.
+  Evidence: issue #943, spec-008 US7/FR-019/FR-022/SC-008 · by: rust-pro
+
+- **Δ6** 2026-07-21 · S1, S2, SC1, +SC6, +SC7, +G2, +G3 · behavior-change
   A scanned folder no longer produces a placeholder inbox row. Before
   classification the folder appears as a source-group row that is structurally
   non-confirmable; after classification it becomes exactly N item rows, one
@@ -378,5 +401,6 @@ explicit, reviewed plan, and the action is visible in the audit history.
   supersession signal is explicitly NOT part of this change (G3).
   Evidence: spec-058-inbox-drop-parent-items (D-001/D-006/D-007,
   FR-001–FR-009, FR-015–FR-017, FR-023, FR-025) ·
-  by: journey-scribe (intent-gated) · NOT YET IMPLEMENTED as of `38227ca3` —
-  see G2
+  by: journey-scribe (intent-gated) · IMPLEMENTED on
+  spec/058-inbox-drop-parent-items (PR #1194); Layer-3 journeys green in CI
+  on both Linux and Windows

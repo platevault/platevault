@@ -1,7 +1,7 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 10
+version: 11
 status: draft
 last_reviewed: 2026-07-17
 actors: [astrophotographer]
@@ -36,6 +36,7 @@ trace:
   - PR #1176 (design-refresh handoff 03 — canonical themes, family-grouped
     picker, clay/espresso hidden)
   - PR #1185 (design-refresh handoff 08 — default dark theme)
+  - spec 061 US2 (selectable app language — Settings → Appearance control)
 ---
 
 ## Goal
@@ -46,6 +47,10 @@ the interface — including error text and audit detail — ever shows them a ra
 technical string. "Done" for a single settings change is: the control reflects
 its new value immediately, a restart still shows that value, and (for
 durable-data settings) the change is discoverable afterward in the Audit Log.
+"Fully localized" (S8, S12) now means the interface is translated into the
+user's chosen language, not just that it is honestly English throughout — a
+chosen language other than the base one may be partially translated, but
+never leaks a raw key or crashes for the parts that aren't (S12).
 
 ## Preconditions
 - P1: Setup is complete with at least one registered source, so every pane
@@ -345,6 +350,31 @@ Note: Release builds lack the /dev/contracts palette entry by design
   FR-003. PR #1070 (fixes #1066 — before this, the placement pin was a
   two-state Bottom/Right toggle with no way back to Auto once touched).
 
+### S12 — Choose the app's display language {#S12}
+- **Do:** In Appearance, use the Language control below Theme to pick a
+  different language by its own native name (e.g. "Português (Brasil)");
+  reach it by keyboard (arrow keys move the selection, matching the same
+  radio-group pattern as the Cleanup per-type action control).
+- **Expect:** Each option shows a flag next to the language's own name for
+  itself (e.g. "🇧🇷 Português (Brasil)"), but the option's accessible name is
+  the native name alone — the flag is decorative and never announced to
+  assistive technology (research D6). The current selection is exposed via
+  `aria-checked`. Text elsewhere in Settings (other panes, nav labels)
+  updates immediately with no reload — an already-open bottom log panel, or
+  a scroll position, are unaffected. The choice survives an app restart.
+- **Expect (negative):** As of this delta, only English (en-GB, complete)
+  and Portuguese (pt-BR, a 5-key stub: "All"/"Yes"/"No"/"Cancel"/"Save") are
+  offered. Selecting pt-BR does not translate the whole app on the spot —
+  every key outside that stub falls back to its English text rather than a
+  raw key or a crash. Full pt-BR coverage is separate follow-on work
+  (spec 061 US3).
+- **Trace:** apps/desktop/src/features/settings/General.tsx (language
+  control), apps/desktop/src/data/locale.tsx (`LocaleProvider`/`useLocale`/
+  `changeLocale`), apps/desktop/src/data/locale-meta.ts (native name + flag,
+  accessible-name rule), apps/desktop/src/features/settings/SettingsPage.tsx
+  (`LocaleProvider` mount point for the whole Settings surface),
+  tests/e2e/settings_appearance_i18n.spec.ts ("Language switcher"), spec 061.
+
 ## Success criteria
 - SC1: Every control across all 14 panes does something observable,
   persists, and round-trips a pane switch (S1–S5, S9, S10).
@@ -366,6 +396,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   window×zoom pairs (S2); CI-pinned in
   tests/e2e/settings_appearance_i18n.spec.ts ("Whole-app zoom envelope
   pins").
+- SC7: Selecting a non-base UI language (S12) never produces a raw key or a
+  crash — untranslated keys fall back to English text — and the choice
+  persists across a restart; CI-pinned in
+  tests/e2e/settings_appearance_i18n.spec.ts ("Language switcher").
 
 ## Known gaps
 - G1: (dissolved 2026-07-15, resolved 2026-07-15) — tracked as issue #587;
@@ -478,3 +512,15 @@ Note: Release builds lack the /dev/contracts palette entry by design
   `apps/desktop/src/data/theme.ts` (`DARK_DEFAULT`) on `origin/main` as of
   commit 8164b48a, ahead of this journey's prior `last_reviewed` snapshot.
   Evidence: PR #1185 (merged) · by: journey-scribe (intent-gated)
+
+- **Δ11** 2026-07-20 · +S12, +SC7 · behavior-change
+  Appearance gains a Language control (flag + native name per option,
+  keyboard-operable radiogroup, native-name-only accessible name) that
+  replaces spec 046 FR-004's "hard-pinned English, no switcher": choosing a
+  language re-renders Settings live with no reload and persists across a
+  restart. Only en-GB (complete) and pt-BR (a 5-key stub) are offered today
+  — "fully localized" (title, Goal) now means translated into the user's
+  chosen language rather than only honestly-English; a non-base choice is
+  allowed to be partial as long as it falls back to English text instead of
+  a raw key. Full pt-BR coverage is spec 061 US3, not yet done.
+  Evidence: spec 061 US2 (T013–T016) · by: journey-scribe (intent-gated)

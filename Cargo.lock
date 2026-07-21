@@ -1425,7 +1425,7 @@ dependencies = [
 
 [[package]]
 name = "desktop_shell"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "app_core",
  "audit",
@@ -1937,6 +1937,7 @@ dependencies = [
  "fs4",
  "fs_pathsafe",
  "path-clean",
+ "project_structure",
  "serde",
  "serde_json",
  "tempfile",
@@ -4191,6 +4192,8 @@ dependencies = [
  "sea-query",
  "serde",
  "serde_json",
+ "sessions",
+ "sha2 0.10.9",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",

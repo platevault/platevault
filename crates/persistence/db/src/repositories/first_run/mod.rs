@@ -10,7 +10,7 @@
 //! register/list/find/remove; [`source_state`] is per-source organization
 //! state / path / active-flag get-set; [`dependents`] is the
 //! `roots.delete`/`roots.remap` dependency-counting pair; [`wizard_state`]
-//! is the `first_run_state` singleton (get/complete/restart/update-step).
+//! is the `first_run_state` singleton (get/complete/restart).
 
 use domain_core::first_run::{OrganizationState, ScanDepth, SourceKind};
 use sqlx::SqlitePool;
@@ -35,9 +35,7 @@ pub use source_state::{
 pub use sources::{
     find_sources_by_path, list_sources, register_source, register_source_batch, remove_source,
 };
-pub use wizard_state::{
-    complete_first_run, get_first_run_state, restart_first_run, update_first_run_step,
-};
+pub use wizard_state::{complete_first_run, get_first_run_state, restart_first_run};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

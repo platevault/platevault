@@ -12,8 +12,15 @@ audit_types = { path = "../../audit-types" }
 domain_core = { path = "../../domain/core" }
 patterns = { path = "../../patterns" }
 sea-query.workspace = true
+# Sole FOV geometry helper in the workspace (`sessions::fov_diagonal_deg`),
+# reused here so a train's derived FOV cannot diverge from the one the inbox
+# attribution pass computes. `sessions` depends only on `domain_core`, so this
+# stays a leaf edge with no cycle.
+sessions = { path = "../../sessions" }
 serde.workspace = true
 serde_json.workspace = true
+# Keys the migration-snapshot cache on migration content (src/schema_cache.rs).
+sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true

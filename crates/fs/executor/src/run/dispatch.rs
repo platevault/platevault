@@ -15,6 +15,7 @@ use crate::ops::mkdir_op;
 use crate::ops::move_op;
 use crate::ops::path_gate;
 use crate::ops::trash_op;
+use crate::ops::write_manifest_op;
 
 use super::{ExecutorItem, ExecutorItemAction};
 
@@ -81,6 +82,12 @@ pub(super) fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
             let src = require_resolved_path(resolved_src.as_deref(), "source")?;
             let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
             link_op::create_link(src, dst, *kind)
+                .map_err(|f| (f, false, RollbackOutcome::NotApplicable, None))
+        }
+
+        ExecutorItemAction::WriteManifest { project_id } => {
+            let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
+            write_manifest_op::write_marker(dst, project_id)
                 .map_err(|f| (f, false, RollbackOutcome::NotApplicable, None))
         }
     }

@@ -190,7 +190,7 @@ placeholder by another name.
 `lane` (`fits`/`video`). The two columns share a name and do not share a
 meaning; see `data-model.md`.
 
-### `inbox.classify.sourceGroup` — **[proposed]**, new operation
+### `inbox.classify.sourceGroup` — **[shipped]**, new operation
 
 FR-015 deletes the scan-time placeholder, and with it the only route into
 `materialize_sub_items`. Both existing entry points are keyed on an item id:
@@ -233,6 +233,26 @@ mints no id the caller can pass to `inbox.confirm`. Confirmation still happens
 only against the materialized item rows, so structural non-confirmability
 (above) is preserved: the source-group row is the thing you classify, never the
 thing you confirm.
+
+**Shipped 2026-07-20, both halves.** Backend: `classify_source_group`
+(`crates/app/inbox/src/classify.rs`), the `inbox_classify_source_group` Tauri
+command, both specta registrations and the generated `inboxClassifySourceGroup`
+binding. UI: `useInboxClassifySourceGroup` (`features/inbox/store.ts`) driven by
+an explicit **Classify** button on the source-group row.
+
+The button matters to this contract rather than being a styling choice. The
+operation cannot ride the existing selection channel: selection is the
+`?selected=<inboxItemId>` URL param, so a `sourceGroupId` placed there resolves
+to no item and the stale-selection cleanup clears it on the same commit. Making
+the row selectable would also destroy the structural non-confirmability asserted
+above. An explicit control carries the `sourceGroupId` directly, leaves
+`onSelect` untouched, and matches the fact that this operation *writes rows* —
+that warrants a deliberate action, not a consequence of moving the cursor.
+
+Because materialization erases the row that triggered it, the caller must
+invalidate `inbox.list`; otherwise the group row persists and the new items
+never appear. Busy state is keyed by `sourceGroupId`, never a bare boolean, so
+no indicator outlives the row it belongs to.
 
 ⚠️ **`lane` trap.** The implementation must derive the item lane from
 `sourceGroup.format`, never from `sourceGroup.lane` — the latter is

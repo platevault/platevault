@@ -137,7 +137,7 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     );
   });
 
-  test('a mixed detection shows its composition, blocks Confirm, and its needs-review file can be bulk-reclassified (US2 FR-011 / US3 FR-014 / US11 / US12 gate)', async ({
+  test('an unclassified detection explains itself, blocks Confirm, and its needs-review file can be bulk-reclassified (US3 FR-014 / US11 / US12 gate)', async ({
     page,
   }) => {
     seedSetupComplete(page);
@@ -151,15 +151,24 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     const detail = page.locator('.pv-listpage__detail');
     await expect(detail).toBeVisible({ timeout: 5_000 });
 
-    // FR-011: explicit multi-type composition, not a bare "mixed" label.
-    const mixedAlert = detail.getByTestId('inbox-mixed-alert');
-    await expect(mixedAlert).toBeVisible();
-    await expect(mixedAlert).toContainText('Mixed folder');
-    await expect(detail).toContainText('16 light');
-    await expect(detail).toContainText('2 dark');
+    // Spec 058 T012/T035 retired both the multi-type placeholder row and the
+    // `mixed` classification it carried, and with them the FR-011 composition
+    // summary ("16 light · 2 dark") — that summary described a parent item
+    // the app no longer creates. A folder spanning several frame types is now
+    // a source-group row that classification splits into single-type items;
+    // that behaviour is pinned end-to-end by the Layer-3 journey
+    // `inbox_ui_mixed_folder_splits_into_single_type_items`.
+    //
+    // What remains checkable here, in mock mode, is the gate itself: an
+    // unresolved detection reports `unclassified`, says why, and blocks
+    // Confirm until its files are reclassified.
+    const unclassifiedAlert = detail.getByTestId('inbox-unclassified-alert');
+    await expect(unclassifiedAlert).toBeVisible();
+    await expect(unclassifiedAlert).toContainText('Frame types required');
 
-    // Confirm is disabled for a mixed row (spec 041 FR-050 — the backend
-    // "split" action was removed; only single_type rows are confirmable).
+    // Confirm is disabled for an unclassified row (spec 041 FR-050 — the
+    // backend "split" action was removed; only single_type rows are
+    // confirmable).
     await expect(detail.getByTestId('inbox-confirm-btn')).toBeDisabled();
 
     // US12 needs-review bucket: the item's one unclassified file is listed

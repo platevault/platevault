@@ -12,6 +12,15 @@ import { router } from './app/router';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { queryClient } from './data/queryClient';
 import { initAppearance, hydrateThemeFromSettings } from './data/theme';
+import { registerLocaleStrategy, LocaleProvider } from './data/locale';
+
+// Register the `custom-almSettings` strategy before the first render, so the
+// very first `getLocale()` already consults the stored choice. Without this
+// the chain falls through to `preferredLanguage`/`baseLocale` and a saved
+// language is ignored on a cold start. Mirrors `initAppearance()` below;
+// `LocaleProvider` (wrapped around the router) then reconciles against the
+// settings DB, which is the durable source of truth.
+registerLocaleStrategy();
 
 // Apply the persisted theme + density to <html> before first paint, and wire
 // OS light/dark changes for the `system` choice. Synchronous and driven off
@@ -105,7 +114,9 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AppErrorBoundary>
-        <RouterProvider router={router} />
+        <LocaleProvider>
+          <RouterProvider router={router} />
+        </LocaleProvider>
       </AppErrorBoundary>
     </QueryClientProvider>
   </StrictMode>,

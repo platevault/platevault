@@ -32,6 +32,7 @@ import { FilterToolbar } from '@/components';
 import { useGrouping } from '@/lib/use-grouping';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
 import type { InboxListItem } from '@/bindings/index';
+import { assertDefined } from '@/test/assertDefined';
 
 // ── Harness ───────────────────────────────────────────────────────────────────
 // Mirrors InboxPage's wiring: useGrouping owns the grouping state,
@@ -231,10 +232,11 @@ describe('InboxList — configurable grouping', () => {
       target: { value: 'frameType' },
     });
 
-    expect(JSON.parse(localStorage.getItem(GROUPING_STORAGE_KEY)!)).toEqual([
-      'target',
-      'frameType',
-    ]);
+    const storedDims = assertDefined(
+      localStorage.getItem(GROUPING_STORAGE_KEY),
+      'GROUPING_STORAGE_KEY entry in localStorage',
+    );
+    expect(JSON.parse(storedDims)).toEqual(['target', 'frameType']);
 
     unmount();
     cleanup();

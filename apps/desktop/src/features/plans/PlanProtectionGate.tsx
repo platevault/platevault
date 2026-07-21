@@ -11,6 +11,7 @@
 // until it is true.
 
 import { useEffect, useState, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Pill, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
@@ -54,12 +55,17 @@ export function PlanProtectionGate({
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
   const [ackErrors, setAckErrors] = useState<Record<string, string>>({});
 
+  // `load` reruns whenever `planId`/`onAcknowledgedChange` change, so the guard
+  // belongs in the callback rather than in a per-effect `cancelled` flag.
+  const mountedRef = useMountedRef();
+
   const load = useCallback(() => {
     setLoadState('loading');
     commands
       .planProtectionCheckCmd(planId)
       .then(unwrap)
       .then((resp) => {
+        if (!mountedRef.current) return;
         setCheckResult(resp);
         setLoadState('ready');
         // If no protected items, immediately signal all-acknowledged.
@@ -68,7 +74,7 @@ export function PlanProtectionGate({
         }
       })
       .catch(() => {
-        setLoadState('error');
+        if (mountedRef.current) setLoadState('error');
       });
   }, [planId, onAcknowledgedChange]);
 
