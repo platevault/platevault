@@ -14,8 +14,17 @@
 # defect this guard exists to prevent: astro-plan-pjg was closed on the
 # strength of PR #1310 reading MERGED, while #1310 merged into
 # `061-selectable-app-language` and its commit was never on origin/main.
-# "MERGED" is not "on main"; ancestry of the merge commit on origin/main is
-# the only authoritative test, so that is what this script checks.
+# "MERGED" is not "on main", so this script never trusts `state`.
+#
+# Ancestry of the merge commit is checked first, but it is not sufficient on
+# its own. This repo squash-merges, so a stacked PR's merge commit lives on the
+# stack branch and is NEVER an ancestor of origin/main even after the stack
+# root squashes the same content onto main. Ancestry then answers "not on main"
+# for work that is on main. That failure is fail-closed — it withholds a
+# green-light, it never grants one — but it blocked real closures on
+# 2026-07-21. A negative ancestry result therefore falls back to a CONTENT
+# check against origin/main (see content_check) instead of being reported as
+# the final answer.
 #
 # PR resolution order:
 #   1. A `FIX-PR:` line (start-of-line, see below) in `notes`. If present it
@@ -60,9 +69,9 @@
 # never modifies the working tree (only updates the origin/main
 # remote-tracking ref via fetch).
 #
-# Exit status: 0 only if every bead's fix commit is an ancestor of
-# origin/main. Non-zero if any bead is OPEN, STACKED (merged into a non-main
-# branch), UNKNOWN, or errored.
+# Exit status: 0 only if every bead's fix is on origin/main, either by
+# ancestry (ON-MAIN) or by content (CONTENT-ON-MAIN-VIA-SQUASH). Non-zero if
+# any bead is OPEN, NOT-ON-MAIN, UNKNOWN, or errored.
 set -euo pipefail
 
 REPO_DEFAULT="platevault/platevault"
@@ -158,6 +167,8 @@ classify_pr() {
       fi
       case "$is_ancestor" in
         yes) echo "PASS:" ;;
+        # Not a final verdict: ancestry cannot see through a squash, so the
+        # caller re-checks by content before reporting anything.
         no) echo "STACKED:" ;;
         *) echo "ERROR:could not verify ancestry" ;;
       esac
@@ -171,8 +182,124 @@ classify_pr() {
   esac
 }
 
+# Evidence one path carries about whether a PR's content reached origin/main,
+# comparing the blob the PR produced (at <ref>) against origin/main:
+#   identical    — same blob oid, so this PR's exact content for that path is
+#                  on main. Mere existence of the path proves nothing: a PR
+#                  that only modifies pre-existing files would read as landed
+#                  on the strength of files that were already there.
+#   never        — the path has NO history on origin/main at all, the only
+#                  available proof that the change never landed; bare absence
+#                  is also what a later delete or rename produces
+#   inconclusive — differing blobs (landed then edited further, or never
+#                  landed) or a path deleted/renamed after landing
+path_evidence() {
+  local ref="$1" path="$2" ours theirs
+  ours=$(git rev-parse "$ref:$path" 2>/dev/null) || ours=""
+  theirs=$(git rev-parse "origin/main:$path" 2>/dev/null) || theirs=""
+  if [ -n "$ours" ] && [ "$ours" = "$theirs" ]; then
+    echo identical
+  elif [ -z "$(git log --oneline -1 origin/main -- "$path" 2>/dev/null)" ]; then
+    echo never
+  else
+    echo inconclusive
+  fi
+}
+
+# Pure decision table over per-path evidence counts, kept side-effect-free so
+# --self-test can exercise it without git or gh. One path that never existed on
+# origin/main outweighs any number of identical ones: a squash that landed this
+# PR's content would have put every path it touched into main's history. A
+# truncated file list can hide exactly that path, so truncation may confirm
+# NOT-ON-MAIN but must never conclude the content landed.
+#
+# `identical > 0` is not sufficient. One ancillary file can happen to be
+# byte-identical on main while the PR's deliverable remains unlanded. Every
+# visible path must therefore be identical before this fallback green-lights a
+# close; mixed evidence is unverifiable and fails closed.
+classify_content() {
+  local identical="$1" inconclusive="$2" never="$3" truncated="$4"
+  if [ "$never" -gt 0 ]; then
+    echo "NOTONMAIN:"
+  elif [ "$truncated" = "yes" ]; then
+    echo "ERROR:PR file list is truncated (gh returns at most 100 files) — content check cannot rule out an unlanded path"
+  elif [ "$inconclusive" -gt 0 ]; then
+    echo "ERROR:mixed evidence — $inconclusive of $((identical + inconclusive)) paths are not byte-identical on origin/main, so the PR's complete content cannot be proven landed"
+  elif [ "$identical" -eq 0 ]; then
+    echo "ERROR:no path could be matched to origin/main by content"
+  else
+    echo "SQUASHED:"
+  fi
+}
+
+# The tree to read the PR's own version of each path from. The merge commit is
+# usually still local; when its branch has been deleted and pruned, GitHub
+# still serves the PR head under refs/pull/<n>/head.
+pr_content_ref() {
+  local pr="$1" merge_oid="$2"
+  if [ -n "$merge_oid" ] && git cat-file -e "${merge_oid}^{commit}" 2>/dev/null; then
+    printf '%s\n' "$merge_oid"
+  elif git fetch --quiet origin "refs/pull/$pr/head" 2>/dev/null; then
+    git rev-parse FETCH_HEAD
+  fi
+}
+
+# Decide by content whether a merged PR's changes are on origin/main, for the
+# case where ancestry cannot see through a squash.
+content_check() {
+  local repo="$1" pr="$2" merge_oid="$3" ref pr_files counts identical inconclusive never truncated
+  if ! pr_files=$(gh pr view "$pr" --repo "$repo" --json changedFiles,files 2>/dev/null); then
+    echo "ERROR:could not list PR files for the content check"
+    return
+  fi
+  ref=$(pr_content_ref "$pr" "$merge_oid")
+  if [ -z "$ref" ]; then
+    echo "ERROR:PR content is unreachable locally (merge commit pruned, refs/pull/$pr/head unfetchable)"
+    return
+  fi
+  if ! counts=$(content_evidence_counts "$ref" "$pr_files"); then
+    echo "ERROR:$counts"
+    return
+  fi
+  read -r identical inconclusive never truncated <<<"$counts"
+  classify_content "$identical" "$inconclusive" "$never" "$truncated"
+}
+
+# Validate GitHub's response before transporting paths as a NUL-delimited
+# stream. Git permits newlines in filenames, so line-oriented transport can
+# turn one unlanded path into several coincidentally identical landed paths.
+content_evidence_counts() {
+  local ref="$1" pr_files="$2" identical=0 inconclusive=0 never=0 truncated=no path evidence
+  local -a paths=()
+  if ! jq -e '
+    (.changedFiles | type == "number" and . >= 0 and floor == .)
+    and (.files | type == "array")
+    and all(.files[]; (.path | type == "string") and (.path | length > 0))
+  ' >/dev/null 2>&1 <<<"$pr_files"; then
+    echo "malformed PR file evidence"
+    return 1
+  fi
+  if [ "$(jq -r '.files | length' <<<"$pr_files")" -lt "$(jq -r '.changedFiles' <<<"$pr_files")" ]; then
+    truncated=yes
+  fi
+  mapfile -d '' -t paths < <(jq -j '.files[] | .path, "\u0000"' <<<"$pr_files")
+  for path in "${paths[@]}"; do
+    evidence=$(path_evidence "$ref" "$path")
+    case "$evidence" in
+      identical) identical=$((identical + 1)) ;;
+      inconclusive) inconclusive=$((inconclusive + 1)) ;;
+      never) never=$((never + 1)) ;;
+      *)
+        echo "could not classify PR path evidence"
+        return 1
+        ;;
+    esac
+  done
+  printf '%s %s %s %s\n' "$identical" "$inconclusive" "$never" "$truncated"
+}
+
 check_one() {
-  local id="$1" bead_json ref pr claim repo pr_json state base merge_oid is_ancestor verdict code detail staleness
+  local id="$1" bead_json ref pr claim repo pr_json state base merge_oid is_ancestor verdict code detail on_main staleness
   if ! bead_json=$(bd show "$id" --json 2>/dev/null | jq -e '.[0]' 2>/dev/null); then
     echo "ERROR    $id   bd show failed (bad id, or bd unavailable)"
     return 1
@@ -210,24 +337,43 @@ check_one() {
     fi
   fi
 
-  # The FIX-PR note's on-main= claim is a snapshot as of its `verified=`
-  # date, not truth — main moves after the note is written. A mismatch is
-  # reported, never silently trusted or silently overridden.
-  staleness=""
-  if [ -n "$claim" ] && [ "$claim" != "$is_ancestor" ]; then
-    staleness=" — FIX-PR note claims on-main=$claim, ancestry now says $is_ancestor (note is stale)"
-  fi
-
   verdict=$(classify_pr "$state" "$merge_oid" "$is_ancestor")
   code="${verdict%%:*}"
   detail="${verdict#*:}"
 
+  # Ancestry saying "no" is not the final answer: a squash-merged stack root
+  # puts this PR's content on main without its merge commit ever becoming an
+  # ancestor. Only a merged PR reaches here, so there is always something to
+  # look for on main.
+  if [ "$code" = "STACKED" ]; then
+    verdict=$(content_check "$repo" "$pr" "$merge_oid")
+    code="${verdict%%:*}"
+    detail="${verdict#*:}"
+  fi
+
+  # The FIX-PR note's on-main= claim is a snapshot as of its `verified=` date,
+  # not truth — main moves after the note is written. Compare it against the
+  # final determination rather than raw ancestry, or every squash-landed bead
+  # whose note reads on-main=yes gets falsely branded stale.
+  case "$code" in
+    PASS | SQUASHED) on_main="yes" ;;
+    NOTONMAIN) on_main="no" ;;
+    *) on_main="$is_ancestor" ;;
+  esac
+  staleness=""
+  if [ -n "$claim" ] && [ "$claim" != "$on_main" ]; then
+    staleness=" — FIX-PR note claims on-main=$claim, this check says on-main=$on_main (note is stale)"
+  fi
+
   case "$code" in
     PASS)
-      echo "PASS     $id   PR #$pr merged into main, commit $merge_oid is on origin/main ($repo)$staleness"
+      echo "ON-MAIN  $id   PR #$pr merged into main, commit $merge_oid is on origin/main ($repo)$staleness"
       ;;
-    STACKED)
-      echo "FAIL     $id   PR #$pr merged into $base, not on origin/main — do not close ($repo)$staleness"
+    SQUASHED)
+      echo "SQUASHED $id   CONTENT-ON-MAIN-VIA-SQUASH: PR #$pr merged into $base and its merge commit $merge_oid is not an ancestor of origin/main, but every visible path it produced is byte-identical on origin/main — the stack root squashed the content in. Safe to close ($repo)$staleness"
+      ;;
+    NOTONMAIN)
+      echo "FAIL     $id   NOT-ON-MAIN: PR #$pr merged into $base, and paths it touches are absent from origin/main and from main's entire history — do not close ($repo)$staleness"
       return 1
       ;;
     FAIL)
@@ -328,6 +474,96 @@ self_test() {
   got=$(resolve_pr_reference '{"metadata":{"pr":9999},"notes":"FIX-PR: #1364 | base=main | on-main=yes | verified=2026-07-21 -- see also PR #4242 for context.","description":""}')
   [ "$got" = "NUM:1364:yes" ] && echo "ok: resolve_pr_reference lets FIX-PR win outright over metadata.pr and other prose numbers" \
     || { echo "FAIL: resolve_pr_reference got '$got', want 'NUM:1364:yes'"; fail=1; }
+
+  # classify_content: one path that never existed on main outweighs any number
+  # of content matches. Regression case: PR #1304 modifies files that are on
+  # main while its deliverable check-token-refs.mjs never landed.
+  got=$(classify_content 12 0 1 no)
+  [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content reports NOT-ON-MAIN when any path never existed on main" \
+    || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
+
+  got=$(classify_content 4 0 0 no)
+  [ "$got" = "SQUASHED:" ] && echo "ok: classify_content reports CONTENT-ON-MAIN-VIA-SQUASH when the PR's content is byte-identical on main" \
+    || { echo "FAIL: classify_content got '$got', want 'SQUASHED:'"; fail=1; }
+
+  # classify_content: no path matched by content -> ERROR, never a silent pass.
+  # This is the fail-closed case for a stacked PR whose content has NOT landed:
+  # its paths exist on main (so existence alone would wrongly pass it) but none
+  # of its blobs match.
+  got=$(classify_content 0 1 0 no)
+  [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content returns ERROR rather than passing a PR whose content matches nothing on main" \
+    || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
+
+  # One coincidentally identical ancillary path cannot green-light an
+  # inconclusive deliverable.
+  got=$(classify_content 1 1 0 no)
+  [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content fails closed on one identical plus one inconclusive path" \
+    || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
+
+  # classify_content: gh caps `files` at 100 (PR #1162 reports changedFiles=236,
+  # files=100), and the hidden path could be the unlanded one. Truncation must
+  # never conclude the content landed...
+  got=$(classify_content 100 0 0 yes)
+  [ "${got%%:*}" = "ERROR" ] && echo "ok: classify_content refuses to conclude on-main from a truncated file list" \
+    || { echo "FAIL: classify_content got '$got', want ERROR:*"; fail=1; }
+
+  # ...but a `never` path found within the visible 100 is positive evidence
+  # that stands on its own.
+  got=$(classify_content 99 0 1 yes)
+  [ "$got" = "NOTONMAIN:" ] && echo "ok: classify_content still reports NOT-ON-MAIN on a truncated list when a never-landed path is visible" \
+    || { echo "FAIL: classify_content got '$got', want 'NOTONMAIN:'"; fail=1; }
+
+  # Filename ingestion: Git permits newlines in paths. The old line-oriented
+  # jq/read transport split this one unlanded path into README.md and LICENSE,
+  # both identical on main, and returned a false SQUASHED verdict.
+  local newline_repo newline_json counts
+  newline_repo=$(mktemp -d)
+  if (
+    cd "$newline_repo"
+    git init -q
+    git config user.name test
+    git config user.email test@example.invalid
+    printf 'landed\n' >README.md
+    printf 'landed\n' >LICENSE
+    git add README.md LICENSE
+    git commit -qm main
+    git update-ref refs/remotes/origin/main HEAD
+    git switch -qc pr
+    printf 'unlanded\n' >$'README.md\nLICENSE'
+    git add $'README.md\nLICENSE'
+    git commit -qm pr
+    newline_json=$(jq -cn --arg path $'README.md\nLICENSE' '{changedFiles: 1, files: [{path: $path}]}')
+    counts=$(content_evidence_counts HEAD "$newline_json")
+    read -r identical inconclusive never truncated <<<"$counts"
+    got=$(classify_content "$identical" "$inconclusive" "$never" "$truncated")
+    [ "$got" = "NOTONMAIN:" ]
+  ); then
+    echo "ok: content ingestion preserves a literal newline filename and cannot return false SQUASHED"
+  else
+    echo "FAIL: content ingestion split or misclassified a literal newline filename"
+    fail=1
+  fi
+  rm -rf -- "$newline_repo"
+
+  got=$(content_evidence_counts HEAD '{"changedFiles":1,"files":[{}]}' 2>/dev/null || true)
+  [ "$got" = "malformed PR file evidence" ] && echo "ok: content ingestion fails closed on missing path evidence" \
+    || { echo "FAIL: malformed content evidence got '$got'"; fail=1; }
+
+  # path_evidence: reads this repo's own local origin/main ref, no network.
+  got=$(path_evidence origin/main "scripts/bd-close-guard.sh")
+  [ "$got" = "identical" ] && echo "ok: path_evidence matches a blob that is byte-identical on origin/main" \
+    || { echo "FAIL: path_evidence got '$got', want 'identical'"; fail=1; }
+
+  got=$(path_evidence origin/main "scripts/definitely-not-a-real-path-9f3a.mjs")
+  [ "$got" = "never" ] && echo "ok: path_evidence reports 'never' for a path absent from all of origin/main's history" \
+    || { echo "FAIL: path_evidence got '$got', want 'never'"; fail=1; }
+
+  # path_evidence: a path that exists on main but whose blob differs is
+  # inconclusive, never positive evidence. `origin/main~1` stands in for a PR
+  # tree carrying a different version of a file main also has.
+  got=$(path_evidence origin/main~1 "$(git diff --name-only origin/main~1 origin/main | head -1)")
+  [ "$got" = "inconclusive" ] && echo "ok: path_evidence treats a differing blob as inconclusive, not as landed" \
+    || { echo "FAIL: path_evidence got '$got', want 'inconclusive'"; fail=1; }
 
   if [ "$fail" -eq 0 ]; then
     echo "bd-close-guard self-test: PASS"
