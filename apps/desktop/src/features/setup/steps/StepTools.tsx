@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { RotateCw } from 'lucide-react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Toggle } from '@/ui/Toggle';
 import { m } from '@/lib/i18n';
 import { useFilePicker } from '@/shared/native/picker';
+import { unwrap } from '@/api/ipc';
 
 export interface ToolConfig {
   enabled: boolean;
@@ -74,40 +76,40 @@ function looksExecutable(path: string): boolean {
  * then lets the user toggle/override the executable path.
  */
 export function StepTools({ tools, onToolsChange }: StepToolsProps) {
-  // Auto-detect installed tools once on mount and fill in any unset paths.
+  // Auto-detect installed tools once on mount (TanStack Query dedups a
+  // StrictMode double-invoke via the shared query cache) and fill in any
+  // unset paths. Detection is best-effort (spec 011): a failed/disabled
+  // discovery just leaves `tools` unchanged, never surfaced as an error.
+  const discoveryQuery = useQuery({
+    queryKey: ['setup', 'toolsDiscover'] as const,
+    queryFn: async () => {
+      const { commands } = await import('@/bindings/index');
+      return unwrap(await commands.toolsDiscover({ toolId: null }));
+    },
+    enabled: import.meta.env.VITE_USE_MOCKS !== 'true',
+    retry: false,
+  });
+
   useEffect(() => {
-    if (import.meta.env.VITE_USE_MOCKS === 'true') return undefined;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { commands } = await import('@/bindings/index');
-        const res = await commands.toolsDiscover({ toolId: null });
-        if (cancelled || res.status !== 'ok') return;
-        const found = new Map(
-          res.data.entries
-            .filter((e) => e.available)
-            .map((e) => [e.toolId, e.path]),
-        );
-        let changed = false;
-        const next: ToolsState = { ...tools };
-        for (const def of TOOL_DEFS) {
-          const path = found.get(def.key);
-          if (path && !next[def.key].path) {
-            next[def.key] = { enabled: true, path };
-            changed = true;
-          }
-        }
-        if (changed) onToolsChange(next);
-      } catch {
-        // detection is best-effort; the user can still set paths manually.
+    const found = discoveryQuery.data;
+    if (!found) return;
+    const foundPaths = new Map(
+      found.entries.filter((e) => e.available).map((e) => [e.toolId, e.path]),
+    );
+    let changed = false;
+    const next: ToolsState = { ...tools };
+    for (const def of TOOL_DEFS) {
+      const path = foundPaths.get(def.key);
+      if (path && !next[def.key].path) {
+        next[def.key] = { enabled: true, path };
+        changed = true;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Run once on mount; merging only fills empty paths so re-runs are safe.
+    }
+    if (changed) onToolsChange(next);
+    // Fires once when discovery data lands; merging only fills empty paths so
+    // a StrictMode double-invoke re-running this with the same data is safe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [discoveryQuery.data]);
 
   const handleToggle = (key: keyof ToolsState, checked: boolean) => {
     // Only flip `enabled`; keep the (detected or manually-set) path so disabling →
@@ -125,16 +127,20 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
     });
   };
 
-  // Re-run auto-detection for a single tool (the "Redetect" button). Returns
-  // true if a binary was found (and the path was filled in), false otherwise.
+  // Re-run auto-detection for a single tool (the "Redetect" button).
+  const redetectMutation = useMutation({
+    mutationFn: async (key: keyof ToolsState) => {
+      const { commands } = await import('@/bindings/index');
+      return unwrap(await commands.toolsDiscover({ toolId: key }));
+    },
+  });
+
+  // Returns true if a binary was found (and the path was filled in), false
+  // otherwise — ToolCard uses the result to show its "not found" message.
   const handleRedetect = async (key: keyof ToolsState): Promise<boolean> => {
     try {
-      const { commands } = await import('@/bindings/index');
-      const res = await commands.toolsDiscover({ toolId: key });
-      if (res.status !== 'ok') return false;
-      const entry = res.data.entries.find(
-        (e) => e.toolId === key && e.available,
-      );
+      const data = await redetectMutation.mutateAsync(key);
+      const entry = data.entries.find((e) => e.toolId === key && e.available);
       if (entry?.path) {
         onToolsChange({ ...tools, [key]: { enabled: true, path: entry.path } });
         return true;
