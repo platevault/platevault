@@ -1678,6 +1678,21 @@ export const commands = {
 	 */
 	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
 	/**
+	 *  `inbox.attribution.suggest` — ranked framing/project attribution candidates
+	 *  for a light-frame Inbox item (spec 008 US7/FR-019, F-Framing-5).
+	 * 
+	 *  Read-only: suggests, never merges (FR-020). The user picks one and the pick
+	 *  travels as `inbox.confirm`'s `chosenAttribution` (FR-022) on a **single**
+	 *  confirm — the candidates must be readable before that confirm, because
+	 *  confirm creates the plan that blocks any second confirm on the item.
+	 * 
+	 *  Returns an empty list for non-light items.
+	 * 
+	 *  # Errors
+	 *  `internal.database` — a query failed.
+	 */
+	inboxAttributionSuggest: (inboxItemId: string) => typedError<IngestionAttributionCandidateDto_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("inbox_attribution_suggest", { inboxItemId })),
+	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
 	 *  # Errors

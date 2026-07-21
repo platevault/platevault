@@ -255,13 +255,7 @@ pub async fn confirm(
     // 9b. Attribution pass (spec 008 Q27, F-Framing-5, FR-019) — the first
     // pre-ingest pass at the confirm gate (composition point for the Q22
     // duplicate sweep once it lands, see `crate::attribution` module docs).
-    // A confirmable item is single-type (FR-050), so the first file's
-    // effective frame type determines the whole item's class.
-    let first_file_class = plan_files
-        .first()
-        .and_then(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
-        .and_then(|(ft, is_master)| classify_frame(ft, is_master));
-    let is_light_item = first_file_class == Some(FrameTypeClass::Light);
+    let is_light_item = evidence_is_light(&evidence_rows);
 
     if req.chosen_attribution.is_some() && !is_light_item {
         return Err(ContractError::new(
@@ -810,10 +804,27 @@ async fn select_destination_root(
 /// the durable group-keyed `frameType` override, else the extracted
 /// `frame_type` (same priority chain as classify's split and the metadata
 /// DTO — the durable middle layer survives evidence rebuilds, #854).
-fn effective_frame_type(
+pub(crate) fn effective_frame_type(
     ev: &persistence_db::repositories::inbox::InboxEvidenceRow,
 ) -> Option<&str> {
     ev.manual_override.as_deref().or(ev.override_frame_type.as_deref()).or(ev.frame_type.as_deref())
+}
+
+/// Whether an item's classified evidence makes it a light-frame item — the
+/// gate for the whole attribution surface (FR-019).
+///
+/// A confirmable item is single-type (FR-050), so the first classified file's
+/// effective frame type determines the whole item's class. Shared by
+/// [`confirm`] and [`crate::attribution::suggest_candidates`] so the
+/// suggest-time and apply-time gates can never disagree.
+pub(crate) fn evidence_is_light(
+    evidence_rows: &[persistence_db::repositories::inbox::InboxEvidenceRow],
+) -> bool {
+    evidence_rows
+        .iter()
+        .find_map(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
+        .and_then(|(ft, is_master)| classify_frame(ft, is_master))
+        == Some(FrameTypeClass::Light)
 }
 
 /// Load the active `pattern` from the settings table, or fall back to the

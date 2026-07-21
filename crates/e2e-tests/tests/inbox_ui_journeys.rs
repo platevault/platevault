@@ -886,6 +886,17 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
     app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await?;
     app.click_testid("inbox-confirm-btn").await?;
 
+    // This is a light frame, so `handleConfirm` (spec 008 US7/FR-019, #943)
+    // reads attribution suggestions BEFORE confirming and stops at the picker
+    // instead of calling `inbox.confirm` immediately — the real backend
+    // always includes the zero-score `new_project` fallback (FR-020), so a
+    // light-frame confirm never skips the picker. Pick "Unassigned": the
+    // journey below only cares about the move-vs-catalogue plan mechanics,
+    // not attribution outcome.
+    app.wait_testid("inbox-attribution-picker", UI_TIMEOUT).await?;
+    app.click_testid("inbox-attribution-option-unassigned").await?;
+    app.click_testid("inbox-attribution-confirm").await?;
+
     // Test 5: Confirm alone must never move the file.
     anyhow::ensure!(
         original_path.exists(),
@@ -971,6 +982,14 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
 
     app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await?;
     app.click_testid("inbox-confirm-btn").await?;
+
+    // Light frame — same attribution-picker interception as the move-path
+    // journey above (spec 008 US7/FR-019/FR-020, #943). Pick "Unassigned":
+    // this journey only asserts catalogue-in-place plan mechanics.
+    app.wait_testid("inbox-attribution-picker", UI_TIMEOUT).await?;
+    app.click_testid("inbox-attribution-option-unassigned").await?;
+    app.click_testid("inbox-attribution-confirm").await?;
+
     anyhow::ensure!(original_path.exists(), "catalogue-in-place must never move the file");
 
     app.wait_testid("inbox-review-plans-btn", UI_TIMEOUT).await?;

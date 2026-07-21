@@ -9,6 +9,7 @@
 //!
 //! Legacy `inbox.scan` is retained for backward compatibility.
 
+use app_core::inbox::attribution::suggest_candidates;
 use app_core::inbox::classify::{classify, classify_source_group, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
@@ -26,6 +27,7 @@ use app_core::inbox_plan::{
     get_inbox_plan, list_open_inbox_plans,
 };
 use app_core::inbox_scan::resolve_scan_options;
+use contracts_core::framing::IngestionAttributionCandidateDto;
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
     InboxClassifyResponse, InboxClassifySourceGroupRequest, InboxClassifySourceGroupResponse,
@@ -287,6 +289,29 @@ pub async fn inbox_item_metadata(
 ) -> Result<InboxItemMetadataResponse, String> {
     let files = get_inbox_item_metadata(&pool, &req.inbox_item_id).await.map_err(|e| e.message)?;
     Ok(InboxItemMetadataResponse { inbox_item_id: req.inbox_item_id, files })
+}
+
+// ── inbox.attribution.suggest ─────────────────────────────────────────────────
+
+/// `inbox.attribution.suggest` — ranked framing/project attribution candidates
+/// for a light-frame Inbox item (spec 008 US7/FR-019, F-Framing-5).
+///
+/// Read-only: suggests, never merges (FR-020). The user picks one and the pick
+/// travels as `inbox.confirm`'s `chosenAttribution` (FR-022) on a **single**
+/// confirm — the candidates must be readable before that confirm, because
+/// confirm creates the plan that blocks any second confirm on the item.
+///
+/// Returns an empty list for non-light items.
+///
+/// # Errors
+/// `internal.database` — a query failed.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_attribution_suggest(
+    inbox_item_id: String,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<Vec<IngestionAttributionCandidateDto>, ContractError> {
+    suggest_candidates(&pool, &inbox_item_id).await
 }
 
 // ── inbox.target_recommendations ──────────────────────────────────────────────

@@ -20,6 +20,7 @@ import type {
   InboxClassifySourceGroupResponse,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
+  IngestionAttributionCandidateDto_Serialize,
   InboxConfirmResponse_Serialize,
   InboxConfirmActionsSummary,
   InboxConfirmDestination,
@@ -731,6 +732,68 @@ let mockInboxOpenPlans: InboxOpenPlan[] = seedInboxOpenPlans();
  * confirming it (or any id here) yields the catalogue-in-place shape.
  */
 const MOCK_ORGANIZED_ITEM_IDS = new Set<string>(['item-organized-inplace']);
+
+/**
+ * Ranked attribution suggestions (spec 008 US7/FR-019). Ordered by descending
+ * `matchScore`, ending in the always-present zero-score `new_project`
+ * fallback, so the picker can be exercised without a real library: an
+ * in-tolerance framing match, a completed-project match that offers reopen,
+ * an optic-train mismatch, and the fallback.
+ */
+const MOCK_ATTRIBUTION_CANDIDATES: IngestionAttributionCandidateDto_Serialize[] =
+  [
+    {
+      kind: 'add_to_framing',
+      projectId: 'proj-001',
+      framingId: 'framing-001',
+      targetId: 'target-ngc7000',
+      matchScore: 0.94,
+      reopen: false,
+      opticMismatch: false,
+    },
+    {
+      kind: 'new_framing',
+      projectId: 'proj-002',
+      framingId: null,
+      targetId: 'target-ngc7000',
+      matchScore: 0.61,
+      reopen: true,
+      opticMismatch: false,
+    },
+    {
+      kind: 'flag_optic_difference',
+      projectId: 'proj-003',
+      framingId: null,
+      targetId: 'target-ngc7000',
+      matchScore: 0.33,
+      reopen: false,
+      opticMismatch: true,
+    },
+    {
+      kind: 'new_project',
+      projectId: null,
+      framingId: null,
+      targetId: null,
+      matchScore: 0,
+      reopen: false,
+      opticMismatch: false,
+    },
+  ];
+
+/**
+ * Inbox items the mock has classified as LIGHT frames.
+ *
+ * Attribution is light-frame-only: `attribution::suggest_candidates` returns an
+ * empty list for anything else, gated on `confirm::evidence_is_light`. The mock
+ * must reproduce that gate, not just the happy path — returning candidates for
+ * every item made the picker intercept the confirm of a DARK item, so the
+ * reviewable-plan toast never fired (`inbox_ingest_confirm.spec.ts`).
+ *
+ * `inbox_classify` reports `dark` for every fixture item, so this stays empty
+ * until `inbox_reclassify` (which reports `frameType: 'light'`) puts an item in
+ * it — which is what makes the picker reachable in mock mode.
+ */
+const mockLightInboxItemIds = new Set<string>();
 
 /** Plan-required lifecycle edges (mirrors `lifecycle-actions.ts` `requiresPlan`). */
 const MOCK_PLAN_REQUIRED_EDGES = new Set<string>([
@@ -2014,12 +2077,32 @@ export const mockHandlers = {
       actionsSummary,
       organizationState: organized ? 'organized' : 'unorganized',
       destinations,
+      // spec 008 US7/FR-022 (#943): the candidate list also ships on the
+      // confirm response. Kept in sync with the `inbox_attribution_suggest`
+      // fixture below — a mock that omitted it hid the missing UI caller.
+      attributionCandidates: mockLightInboxItemIds.has(inboxItemId)
+        ? MOCK_ATTRIBUTION_CANDIDATES
+        : [],
+      attributionApplied: null,
     } satisfies InboxConfirmResponse_Serialize;
+  },
+  inbox_attribution_suggest: async (_args) => {
+    // spec 008 US7/FR-019 (#943): ranked, suggest-only, light-frames-only —
+    // mirroring `attribution::suggest_candidates`, which returns [] for any
+    // item that fails `confirm::evidence_is_light`.
+    const args = _args as { req?: { inboxItemId?: string } } | undefined;
+    return mockLightInboxItemIds.has(args?.req?.inboxItemId ?? '')
+      ? MOCK_ATTRIBUTION_CANDIDATES
+      : [];
   },
   inbox_reclassify: async (_args) => {
     const args = _args as { req: { inboxItemId: string } } | undefined;
+    const reclassifiedId = args?.req?.inboxItemId ?? 'item-001';
+    // Reports `frameType: 'light'` below, so the item now passes the
+    // attribution light gate.
+    mockLightInboxItemIds.add(reclassifiedId);
     return {
-      inboxItemId: args?.req?.inboxItemId ?? 'item-001',
+      inboxItemId: reclassifiedId,
       updatedType: 'single_type',
       frameType: 'light',
       remainingUnclassified: 0,

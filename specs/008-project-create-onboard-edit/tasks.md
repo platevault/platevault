@@ -253,7 +253,7 @@ task above. Cross-spec deltas land in spec-009 (reopen-on-match) and spec-006
   (`is_mosaic`); when set, framings inherit the project's declared target and
   per-frame OBJECT/coordinate resolution is suppressed. No panel entity, no
   OBJECT/panel-name string parsing. (FR-017/FR-018)
-- [ ] F-Framing-5. `[US7]` Inbox-confirm attribution pass in
+- [X] F-Framing-5. `[US7]` Inbox-confirm attribution pass in
   `crates/app/inbox/src/confirm.rs`: match each new light session against
   existing framings/projects; return ranked `IngestionAttributionCandidate`s
   (add-to-framing / new-framing / flag-optic-difference / new-project) with the
@@ -263,7 +263,7 @@ task above. Cross-spec deltas land in spec-009 (reopen-on-match) and spec-006
   pass**: the Q22 duplicate sweep exists in no spec/code yet and **joins this
   same pass when its iterate lands** (documented composition point — not a
   blocker). Blocked-by: F-Framing-1/2. (FR-019/FR-020)
-- [ ] F-Framing-6. `[US7]` Completed-project attribution match → add + reopen via
+- [X] F-Framing-6. `[US7]` Completed-project attribution match → add + reopen via
   the spec-009 `completed → processing` edge with the Q25 raw-subs-archived
   reopen warning. (FR-020)
 - [ ] F-Framing-7. `[US5]` Per-framing source view (Q20) + per-framing manifest
@@ -282,7 +282,7 @@ task above. Cross-spec deltas land in spec-009 (reopen-on-match) and spec-006
 - [ ] F-Framing-9. Quickstart + Windows-E2E scenario (tauri MCP) for the framing
   grouping + attribution flow; update
   `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`.
-- [ ] F-Framing-10. `[US7]` **Attribution apply-path (FR-022)**: extend the
+- [X] F-Framing-10. `[US7]` **Attribution apply-path (FR-022)**: extend the
   Inbox confirm **request** contract with the per-item `chosenAttribution`
   field (see data-model.md §Apply-path) and persist the picked membership at
   confirm time — create the framing/project when the kind requires it.
