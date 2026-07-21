@@ -451,6 +451,15 @@ export function InboxPage() {
   // The literal 'archive' | 'trash' values are exactly what inbox.confirm accepts.
   const [destructiveDestination, setDestructiveDestination] =
     useState<DestructiveDestination>('archive');
+  // #943: `confirmLoading` (from `useInboxConfirm`) only covers the backend
+  // `inbox.confirm` mutation inside `runConfirm` — it says nothing about the
+  // `inboxAttributionSuggest` read that now runs BEFORE it. Without this,
+  // Confirm/the "C" hotkey stayed clickable for that whole await, so a
+  // re-entrant trigger landing in the window (slower CI runners widen it)
+  // could start a second `handleConfirm` and race an unattributed confirm
+  // in ahead of the picker. Guards the entire handleConfirm body, not just
+  // the mutation.
+  const [confirmFlowBusy, setConfirmFlowBusy] = useState(false);
 
   // spec 041 US8/FR-029: when a confirm needs the user to pick among multiple
   // candidate library roots, hold the prompt + the item it belongs to so the
@@ -628,42 +637,57 @@ export function InboxPage() {
     // `canConfirm` below — guard here too as defense in depth.
     if (!selectedItem || !classification || classification.type === 'mixed')
       return;
-    // "" = auto-select (let the backend choose); otherwise the picked root.
-    const rootId = selectedDestRootId || undefined;
-
-    // spec 008 US7/FR-019 (#943): read the ranked attribution suggestions
-    // BEFORE confirming, so the user's pick can ride this single confirm.
-    // Suggest-never-auto-merge (FR-020) — a non-empty list always stops here
-    // for an explicit pick; it is never applied on the user's behalf.
-    // A suggest failure must not cost the user their confirm: attribution is
-    // an optional enrichment, so fall through to an unattributed confirm.
-    let candidates: IngestionAttributionCandidateDto[] = [];
+    // Re-entrancy guard (#943 follow-up): covers this whole function,
+    // including the suggest await below — see `confirmFlowBusy`'s
+    // declaration for why `confirmLoading` alone isn't enough.
+    if (confirmFlowBusy) return;
+    setConfirmFlowBusy(true);
     try {
-      candidates = unwrap(
-        await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
-      );
-    } catch {
-      candidates = [];
-    }
-    if (candidates.length > 0) {
-      setPendingAttribution({
-        itemId: selectedItem.inboxItemId,
-        rootAbsolutePath: selectedRootPath,
-        contentSignature: classification.contentSignature,
-        rootId,
-        candidates,
-      });
-      return;
-    }
+      // "" = auto-select (let the backend choose); otherwise the picked root.
+      const rootId = selectedDestRootId || undefined;
 
-    await runConfirm(
-      {
-        inboxItemId: selectedItem.inboxItemId,
-        rootAbsolutePath: selectedRootPath,
-      },
-      classification.contentSignature,
-      rootId,
-    );
+      // spec 008 US7/FR-019 (#943): read the ranked attribution suggestions
+      // BEFORE confirming, so the user's pick can ride this single confirm.
+      // Suggest-never-auto-merge (FR-020) — a non-empty list always stops here
+      // for an explicit pick; it is never applied on the user's behalf.
+      // A suggest failure must not cost the user their confirm: attribution is
+      // an optional enrichment, so fall through to an unattributed confirm —
+      // but the failure is logged (not just swallowed), so a suggest-side
+      // regression stays diagnosable instead of looking like "no candidates".
+      let candidates: IngestionAttributionCandidateDto[] = [];
+      try {
+        candidates = unwrap(
+          await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
+        );
+      } catch (err) {
+        console.error(
+          `inbox.attribution.suggest failed for item ${selectedItem.inboxItemId}; confirming without an attribution pick`,
+          err,
+        );
+        candidates = [];
+      }
+      if (candidates.length > 0) {
+        setPendingAttribution({
+          itemId: selectedItem.inboxItemId,
+          rootAbsolutePath: selectedRootPath,
+          contentSignature: classification.contentSignature,
+          rootId,
+          candidates,
+        });
+        return;
+      }
+
+      await runConfirm(
+        {
+          inboxItemId: selectedItem.inboxItemId,
+          rootAbsolutePath: selectedRootPath,
+        },
+        classification.contentSignature,
+        rootId,
+      );
+    } finally {
+      setConfirmFlowBusy(false);
+    }
   };
 
   // The candidate DTO carries project/framing ids only, so resolve display
@@ -923,12 +947,12 @@ export function InboxPage() {
   useHotkeys(
     {
       KeyC: (e) => {
-        if (!canConfirm || confirmLoading) return;
+        if (!canConfirm || confirmLoading || confirmFlowBusy) return;
         e.preventDefault();
         void handleConfirm();
       },
     },
-    [canConfirm, confirmLoading, handleConfirm],
+    [canConfirm, confirmLoading, confirmFlowBusy, handleConfirm],
   );
 
   const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
@@ -1262,7 +1286,7 @@ export function InboxPage() {
               onConfirm={() => void handleConfirm()}
               confirmLabel={confirmLabel}
               confirmDisabled={!canConfirm}
-              confirmBusy={confirmLoading}
+              confirmBusy={confirmLoading || confirmFlowBusy}
               destinationRoots={destRoots}
               selectedRootId={selectedDestRootId}
               onSelectRoot={setSelectedDestRootId}
