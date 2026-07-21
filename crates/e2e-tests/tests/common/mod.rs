@@ -1913,7 +1913,7 @@ impl E2eApp {
             .context("WEBVIEW2_USER_DATA_FOLDER was not configured")?;
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
-            if let Some(leveldb) = find_leveldb_dir(&dir) {
+            if let Some(leveldb) = Self::find_leveldb_dir(&dir) {
                 if std::fs::read_dir(&leveldb)
                     .ok()
                     .is_some_and(|entries| entries.flatten().any(|entry| entry.path().is_file()))
