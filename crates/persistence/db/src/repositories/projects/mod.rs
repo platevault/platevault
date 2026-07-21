@@ -130,6 +130,7 @@ pub use crud::{
     ArchivedProjectRow, ProjectCanonicalTargetRow,
 };
 pub use sources::{
-    delete_project_source, get_project_source, has_archived_raw_frames_for_project,
-    insert_project_source, list_project_ids_for_session, list_project_sources,
+    delete_project_source, find_blockable_missing_sources, get_project_source,
+    has_archived_raw_frames_for_project, insert_project_source, list_project_ids_for_session,
+    list_project_sources,
 };

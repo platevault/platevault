@@ -31,6 +31,34 @@ pub async fn list_project_ids_for_session(
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
+/// Every `(project_id, inventory_session_id)` pair where a linked acquisition
+/// session currently lists a frame whose `file_record.state = 'missing'`, and
+/// the project is still in a lifecycle a system block may move it out of.
+///
+/// `archived` is excluded as well as `blocked`: `emit_block_transition` only
+/// guards `blocked`, so without this filter an archived project would be
+/// dragged back to `blocked` by a reconcile pass.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_blockable_missing_sources(pool: &SqlitePool) -> DbResult<Vec<(String, String)>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT DISTINCT ps.project_id, ps.inventory_session_id
+         FROM project_sources ps
+         JOIN projects p ON p.id = ps.project_id
+         JOIN acquisition_session s ON s.id = ps.inventory_session_id
+         JOIN json_each(s.frame_ids) je
+         JOIN file_record fr ON fr.id = je.value
+         WHERE fr.state = 'missing'
+           AND p.lifecycle IN ('ready', 'setup_incomplete')
+         ORDER BY ps.project_id, ps.inventory_session_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Whether any of this project's linked sessions has had a raw-frame archived
 /// via an applied cleanup plan (spec 008 Q27 F-Framing-6, Q25 "raw-subs-archived"
 /// reopen warning).
