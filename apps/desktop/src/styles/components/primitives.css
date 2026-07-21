@@ -126,6 +126,17 @@
   -webkit-mask-size: contain;
 }
 .pv-btn--sm { height: var(--pv-control-h-sm); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
+/* --xs / --ghost were used in markup (log panel chips, dev call list,
+   ProcessingTools) but had no rule anywhere, so those controls silently fell
+   back to full-size bordered buttons (#734). Defined once here rather than
+   per-feature. */
+.pv-btn--xs { height: var(--pv-control-h-xs); padding: 0 var(--pv-sp-2); font-size: var(--pv-text-xs); }
+.pv-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pv-text-muted);
+}
+.pv-btn--ghost:hover { background: var(--pv-hover-bg); border-color: transparent; color: var(--pv-text); }
 
 /* === SECTION === */
 .pv-section { margin-bottom: var(--pv-sp-4); }
@@ -322,6 +333,20 @@
   padding-left: var(--pv-row-indent, 0);
 }
 
+/* Cell content that is a Pill (or several) sitting next to its label: without a
+   flex gap the pill butts straight against the text, since adjacent JSX nodes
+   emit no whitespace. Wrap the cell's children in this to space them. Replaces
+   the per-feature clones of the same three declarations (calibration masters,
+   setup scan). `flex-wrap` matters where a row carries two pills plus a label.
+   Note `.pv-table td` clips with an ellipsis; an inline-flex box is atomic and
+   clips rather than ellipsizing, which is the long-standing behaviour here. */
+.pv-table__cell-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  flex-wrap: wrap;
+}
+
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
    header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
 .pv-table__scroll {
@@ -436,3 +461,60 @@
  * Referenced by ~40 call sites across features/*; was a no-op while the
  * blanket `* { font-family !important }` reset overrode it (reset.css). */
 .pv-mono { font-family: var(--pv-font-mono); }
+
+/* === TOOLTIP TRIGGER GLYPHS (InfoTip ⓘ, Lock 🔒) ============================
+ * Both render a focusable span (role="note" + tabIndex=0) whose tooltip states
+ * something shown nowhere else on screen, so both are keyboard destinations and
+ * both need a visible focus indicator (WCAG 2.4.7, 2.4.11).
+ *
+ * The indicator is the `--pv-focus-ring` box-shadow and NOTHING ELSE may use it
+ * here: hover is signalled by the accent recolour alone. Conveying focus with
+ * that same recolour — as `.pv-info-tip` did while it shared one declaration
+ * block with `:hover` — leaves keyboard focus visually identical to pointer
+ * hover, which is the defect this section exists to prevent. Keep the two
+ * states' declarations disjoint; `primitives.focus-vs-hover.test.ts` asserts it.
+ *
+ * The ring is a 2px perimeter drawn outside the border box, which is exactly
+ * 2.4.11's minimum indicator area, and `--pv-accent` clears 3:1 against every
+ * theme's backgrounds (worst case 3.63:1, warm-clay on `--pv-bg3`). */
+.pv-info-tip,
+.pv-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex: none;
+  position: relative;
+  cursor: help;
+  user-select: none;
+}
+
+.pv-info-tip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--pv-text-faint);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  font-style: normal;
+}
+
+/* The padlock is an emoji, so it paints in the colour font's own palette and
+   cannot carry the accent recolour the ⓘ uses; a radius is still needed so the
+   focus ring hugs the glyph instead of boxing it. */
+.pv-lock {
+  border-radius: var(--pv-radius-sm);
+  font-size: var(--pv-text-xs);
+}
+
+.pv-info-tip:hover {
+  border-color: var(--pv-accent);
+  color: var(--pv-accent);
+}
+
+.pv-info-tip:focus-visible,
+.pv-lock:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}

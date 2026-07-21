@@ -297,6 +297,82 @@ pub async fn get_session_context_by_ids(
     Ok(rows)
 }
 
+/// One `(session, camera)` pairing with the number of the session's active
+/// frames that carry that camera string, as written by the capture program
+/// into the file header (`INSTRUME`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SessionCameraRow {
+    pub session_id: String,
+    /// Raw header string, never blank — callers resolve it to a registered
+    /// camera's name and fall back to this value.
+    pub camera: String,
+    pub frame_count: i64,
+}
+
+/// Batch-load the camera recorded against each session's frames (#1343), for
+/// the whole `session_ids` set in one query — callers MUST NOT call this
+/// per-session (N+1).
+///
+/// Reads `inbox_file_metadata.instrume` rather than
+/// `acquisition_fingerprint.optic_train`: the fingerprint tables have no
+/// production writer for that column, so a fingerprint-sourced camera would
+/// be `NULL` for every real session.
+///
+/// Both session kinds are covered — a calibration session names a camera just
+/// as a light session does. Rows are ordered so the caller can take the first
+/// row per session as the winner: a session is normally homogeneous by
+/// camera, and where it is not, the most-frequent string wins with a
+/// name-ascending tiebreak so the choice is stable across runs.
+///
+/// Sessions whose frames resolve no metadata row are simply absent.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_session_cameras(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> DbResult<Vec<SessionCameraRow>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = vec!["?"; session_ids.len()].join(",");
+    // The inner GROUP BY collapses to one row per frame before counting, so a
+    // root carrying several inbox groups cannot fan a single frame out into
+    // duplicate votes — same guard as `q_core::active_frame_exposure_seconds`.
+    let sql = format!(
+        "SELECT per.session_id AS session_id, per.camera AS camera, COUNT(*) AS frame_count
+         FROM (
+             SELECT s.id AS session_id, fr.id AS frame_id, MAX(ifm.instrume) AS camera
+             FROM (
+                 SELECT id, frame_ids FROM acquisition_session WHERE id IN ({placeholders})
+                 UNION ALL
+                 SELECT id, frame_ids FROM calibration_session WHERE id IN ({placeholders})
+             ) s
+             JOIN json_each(s.frame_ids) je
+             JOIN file_record fr ON fr.id = je.value AND fr.state != 'missing'
+             LEFT JOIN inbox_items ii ON ii.root_id = fr.root_id
+             LEFT JOIN inbox_file_metadata ifm
+                 ON ifm.inbox_item_id = ii.id AND ifm.relative_file_path = fr.relative_path
+             GROUP BY s.id, fr.id
+         ) per
+         WHERE TRIM(COALESCE(per.camera, '')) != ''
+         GROUP BY per.session_id, per.camera
+         ORDER BY per.session_id ASC, frame_count DESC, per.camera ASC"
+    );
+
+    // SQL is built only from a fixed `?` placeholder count (no user strings in
+    // the text); every id flows through `bind`. Same pattern as
+    // `get_session_context_by_ids`. The id list is bound twice — once per
+    // branch of the UNION.
+    let mut q = sqlx::query_as::<_, SessionCameraRow>(sqlx::AssertSqlSafe(sql));
+    for id in session_ids.iter().chain(session_ids) {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows)
+}
+
 /// Set `root_id` on an `acquisition_session` row (T036, FR-012).
 ///
 /// Called when the inbox confirm pipeline resolves the root for a session.

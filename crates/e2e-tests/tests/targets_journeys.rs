@@ -669,3 +669,174 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
 
     app.shutdown().await
 }
+
+/// Measure, relative to the scroll container's own left edge, where the
+/// pinned cells and a non-pinned control cell actually render.
+///
+/// Positions are taken from `getBoundingClientRect` — real post-layout
+/// geometry — because that is the only thing that can observe `position:
+/// sticky`. This measurement is the entire reason T026 must be a Layer-2
+/// journey: jsdom has no layout engine, so a Layer-1 test reports 0 for
+/// every one of these and would pass against a completely unpinned table.
+async fn measure_pinned_columns(app: &E2eApp) -> anyhow::Result<serde_json::Value> {
+    let script = r#"
+        var sc = document.querySelector('.pv-targets-table__scroll');
+        if (!sc) { return { error: 'no .pv-targets-table__scroll in the DOM' }; }
+        var row = sc.querySelector('.pv-targets-table__row');
+        if (!row) { return { error: 'no .pv-targets-table__row rendered' }; }
+        var headRow = sc.querySelector('thead tr');
+        var scLeft = sc.getBoundingClientRect().left;
+        function offset(el) {
+            return el ? Math.round(el.getBoundingClientRect().left - scLeft) : null;
+        }
+        var cells = row.children;
+        return {
+            scrollWidth: Math.round(sc.scrollWidth),
+            clientWidth: Math.round(sc.clientWidth),
+            scrollLeft: Math.round(sc.scrollLeft),
+            cellCount: cells.length,
+            star: offset(cells[0]),
+            designation: offset(cells[1]),
+            designationHeader: offset(headRow ? headRow.children[1] : null),
+            control: offset(cells[cells.length - 1])
+        };
+    "#;
+    let v: serde_json::Value = app
+        .driver
+        .execute(script, vec![])
+        .await
+        .context("failed to measure the pinned columns")?
+        .convert()
+        .context("pinned-column measurement was not JSON")?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        anyhow::bail!("cannot measure pinned columns: {err}");
+    }
+    Ok(v)
+}
+
+fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
+    m.get(key)
+        .and_then(serde_json::Value::as_i64)
+        .ok_or_else(|| anyhow::anyhow!("measurement {key:?} missing or not a number in {m}"))
+}
+
+/// T026 (spec 054, #1257) — the star and designation columns stay put while
+/// the rest of the Targets table scrolls sideways, so a row's identity is
+/// never lost (FR-006/FR-007, shipped in #1253).
+///
+/// **Pins the dock rather than relying on the 1400px width threshold**, so
+/// this runs on both supported platforms. GitHub-hosted Windows runners are
+/// fixed at 1024x768 and cannot be resized — the runner service runs in
+/// non-interactive Session 0 with no real display (actions/runner-images
+/// #2935, #8606) — so a journey demanding a 1400px viewport would be
+/// Linux-only by construction. A user pin is a first-class supported
+/// configuration, not a test-only shortcut: `useAdaptiveDock` honours an
+/// override at any width wide enough for a side dock at all.
+///
+/// Pinning also sidesteps a counter-intuitive trap. A LARGER screen produces
+/// LESS horizontal overflow, because the table's 1000px min-width floor is
+/// fixed while the space left for it grows: at a 1400px viewport the table
+/// gets ~760px and overflows by ~240px, but at 1600px it gets ~960px and
+/// overflows by only ~40px. Asserting against a fixed viewport would be
+/// fragile in the direction people intuitively assume is safer. So the
+/// assertion is on MEASURED overflow — ~616px at the Windows runners'
+/// 1024px, ~240px at 1400px.
+///
+/// Asserts a non-pinned CONTROL column moves by the scroll distance. Without
+/// it this journey would pass in the one case it most needs to catch: if the
+/// table never actually scrolled, every "drift == 0" assertion below would
+/// hold trivially against a static table and the test would be vacuous.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
+    const MIN_SCROLL: i64 = 200;
+
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
+
+    // Best-effort: widens the window where the display allows (Ubuntu, whose
+    // xvfb screen e2e.yml sizes to 1600x1200) and is a no-op on a Windows
+    // runner that cannot resize. Nothing below depends on the result — the
+    // dock is pinned explicitly, and the real gate is measured overflow.
+    let (viewport_w, viewport_h) = app.set_viewport(1400, 900).await?;
+
+    app.goto_route("/targets").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    let target_id = add_target_via_ui(&app, "M 1").await?;
+
+    // Pin the side dock through the app's REAL persisted preference, then
+    // let the reload apply it. The reload is what makes this work at all:
+    // `data/preferences.ts` memoises into a module-level cache on first
+    // read, so seeding localStorage into a booted page would be inert.
+    app.seed_preference("detailDock", r#"{"targets":{"placement":"side","width":420}}"#).await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // Return to the SELECTED target, not bare `/targets`. The side dock only
+    // takes width when there is a detail to show — `ListPageLayout` mounts the
+    // panel solely when its `detail` prop is non-null. Navigating to the bare
+    // route drops the `?selected=` that `add_target_via_ui` landed on, which
+    // leaves the pinned preference correctly loaded but with nothing to
+    // render, so the table keeps full width and barely overflows at all.
+    app.goto_route(&format!("/targets?selected={target_id}")).await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+
+    let before = measure_pinned_columns(&app).await?;
+    let overflow = px(&before, "scrollWidth")? - px(&before, "clientWidth")?;
+    anyhow::ensure!(
+        overflow >= MIN_SCROLL,
+        "the table must really overflow horizontally for this journey to mean \
+         anything, but scrollWidth-clientWidth is only {overflow}px (need \
+         >= {MIN_SCROLL}) at a {viewport_w}x{viewport_h} viewport. Likely \
+         causes, in the order they have actually bitten: (1) the side dock \
+         mounted nothing because no target is selected — the panel needs a \
+         non-null `detail`, so the route must keep `?selected=<id>`; (2) the \
+         seeded `detailDock` preference did not survive the reload past the \
+         module-level cache in `data/preferences.ts`; (3) the table's 1000px \
+         min-width floor changed. A reported 0x0 viewport with a huge \
+         clientWidth means `set_viewport` failed to converge. Note a WIDER \
+         viewport yields LESS overflow, so a large screen is not the safe \
+         direction here: {before}"
+    );
+
+    // Scroll to the far right — the worst case for identity loss.
+    app.driver
+        .execute(
+            "var sc = document.querySelector('.pv-targets-table__scroll');\
+             sc.scrollLeft = sc.scrollWidth; return sc.scrollLeft;",
+            vec![],
+        )
+        .await
+        .context("failed to scroll the targets table horizontally")?;
+
+    let after = measure_pinned_columns(&app).await?;
+    let scrolled = px(&after, "scrollLeft")?;
+    anyhow::ensure!(
+        scrolled >= MIN_SCROLL,
+        "expected the table to really scroll by >= {MIN_SCROLL}px, got {scrolled}px: {after}"
+    );
+
+    // The control proves the scroll actually moved content.
+    let control_drift = px(&after, "control")? - px(&before, "control")?;
+    anyhow::ensure!(
+        control_drift <= -MIN_SCROLL,
+        "the non-pinned control column should have moved left by ~{scrolled}px, but it \
+         shifted {control_drift}px — the table did not really scroll, so the pinned \
+         assertions below would be vacuous.\nbefore: {before}\nafter:  {after}"
+    );
+
+    // The point of the feature: identity does not move, at all.
+    for key in ["star", "designation", "designationHeader"] {
+        let drift = px(&after, key)? - px(&before, key)?;
+        anyhow::ensure!(
+            drift == 0,
+            "{key} must stay pinned while the table scrolls {scrolled}px, but it drifted \
+             {drift}px. A non-zero drift here is exactly the regression this journey \
+             exists to catch (an approximate sticky offset, or a percentage offset \
+             resolving against the scroll container instead of the table).\n\
+             before: {before}\nafter:  {after}"
+        );
+    }
+
+    app.shutdown().await
+}

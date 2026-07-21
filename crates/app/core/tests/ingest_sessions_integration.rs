@@ -205,7 +205,11 @@ async fn two_m31_frames_group_into_one_linked_session() {
 
     build_applied_plan(pool, "plan-1", root_id, &["a.fits", "b.fits"]).await;
 
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     publish_applied(&bus, "plan-1").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
@@ -255,7 +259,11 @@ async fn unknown_object_session_backfills_after_resolve() {
     );
     build_applied_plan(pool, "plan-2", root_id, &["u.fits"]).await;
 
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     publish_applied(&bus, "plan-2").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 

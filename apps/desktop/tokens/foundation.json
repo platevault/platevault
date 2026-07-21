@@ -1,0 +1,128 @@
+{
+  "font-sans": {
+    "$value": "'Inter', system-ui, -apple-system, sans-serif",
+    "$description": "Fonts"
+  },
+  "font-display": {
+    "$value": "'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif"
+  },
+  "text-xs": {
+    "$value": "0.7857rem",
+    "$type": "dimension",
+    "$description": "Type scale — rem, derived from a 14px root."
+  },
+  "text-sm": {
+    "$value": "0.8571rem",
+    "$type": "dimension",
+    "$description": "11px @14 (floor)"
+  },
+  "text-base": {
+    "$value": "1rem",
+    "$type": "dimension",
+    "$description": "12px @14"
+  },
+  "text-md": {
+    "$value": "1.1429rem",
+    "$type": "dimension",
+    "$description": "14px @14"
+  },
+  "text-lg": {
+    "$value": "1.2857rem",
+    "$type": "dimension",
+    "$description": "16px @14"
+  },
+  "text-xl": {
+    "$value": "1.4286rem",
+    "$type": "dimension",
+    "$description": "18px @14"
+  },
+  "text-2xl": {
+    "$value": "1.7143rem",
+    "$type": "dimension",
+    "$description": "20px @14"
+  },
+  "tracking-tight": {
+    "$value": "0.03em",
+    "$description": "Letter-spacing scale"
+  },
+  "tracking-normal": {
+    "$value": "0.04em"
+  },
+  "tracking-wide": {
+    "$value": "0.08em"
+  },
+  "weight-normal": {
+    "$value": "400"
+  },
+  "weight-medium": {
+    "$value": "500"
+  },
+  "weight-semibold": {
+    "$value": "600"
+  },
+  "leading-tight": {
+    "$value": "1.2"
+  },
+  "leading-normal": {
+    "$value": "1.5"
+  },
+  "leading-relaxed": {
+    "$value": "1.6"
+  },
+  "sp-0": {
+    "$value": "2px",
+    "$type": "dimension",
+    "$description": "Spacing — geometric base-4"
+  },
+  "sp-1": {
+    "$value": "4px",
+    "$type": "dimension"
+  },
+  "sp-2": {
+    "$value": "8px",
+    "$type": "dimension"
+  },
+  "sp-3": {
+    "$value": "12px",
+    "$type": "dimension"
+  },
+  "sp-4": {
+    "$value": "16px",
+    "$type": "dimension"
+  },
+  "sp-5": {
+    "$value": "24px",
+    "$type": "dimension"
+  },
+  "sp-6": {
+    "$value": "32px",
+    "$type": "dimension"
+  },
+  "sp-7": {
+    "$value": "48px",
+    "$type": "dimension"
+  },
+  "transition-fast": {
+    "$value": "100ms ease",
+    "$description": "Transitions"
+  },
+  "transition-base": {
+    "$value": "150ms ease"
+  },
+  "transition-slow": {
+    "$value": "250ms ease"
+  },
+  "radius-sm": {
+    "$value": "3px",
+    "$type": "dimension",
+    "$description": "Radius"
+  },
+  "radius-md": {
+    "$value": "5px",
+    "$type": "dimension"
+  },
+  "radius-lg": {
+    "$value": "8px",
+    "$type": "dimension"
+  }
+}

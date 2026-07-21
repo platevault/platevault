@@ -195,9 +195,11 @@ export function SessionsPage() {
       }),
     [navigate],
   );
+  // #735: gated on `loading` so a cold reload's empty cache isn't mistaken for
+  // a stale id — see ProjectsPage for the full rationale.
   useStaleSelectionCleanup(
     selected,
-    selectedSession !== undefined,
+    loading || selectedSession !== undefined,
     clearSelection,
   );
 

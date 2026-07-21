@@ -27,6 +27,12 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     // unrelated to this file's assertions, so a static empty selection is
     // enough.
     useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+    // #735: the tool-launch toast's "Configure path" action now navigates
+    // through the router instead of assigning window.location.hash, and the
+    // tool-not-configured hint is a real `Link` — neither works against the
+    // spread-in real implementations without a router context.
+    useNavigate: () => vi.fn(),
+    Link: (await import('@/test/router-link-stub')).LinkStub,
   };
 });
 
@@ -92,7 +98,7 @@ describe('ProjectDetail — sources Integ cell (#622)', () => {
     vi.clearAllMocks();
   });
 
-  it('computes Integ from frames * parsed exposure seconds (54 * 120s = 1.8h)', () => {
+  it('computes Integ from frames * parsed exposure seconds (54 * 120s = 1h 48m)', () => {
     setupStore({
       sources: [
         {
@@ -108,7 +114,8 @@ describe('ProjectDetail — sources Integ cell (#622)', () => {
       ],
     });
     render(<ProjectDetailContent projectId="proj-m31" />);
-    expect(screen.getByText('1.8h')).toBeInTheDocument();
+    // #631: was '1.8h' — Projects now shares the Sessions h/m grammar.
+    expect(screen.getByText('1h 48m')).toBeInTheDocument();
   });
 
   it('degrades to 0 (—) for an unparseable exposure snapshot rather than throwing', () => {

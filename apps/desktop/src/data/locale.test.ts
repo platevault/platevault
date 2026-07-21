@@ -79,17 +79,42 @@ describe('strategy precedence — custom-almSettings > preferredLanguage > baseL
 });
 
 describe('missing-translation fallback (research D5)', () => {
-  it('a key absent from pt-BR resolves to the base-locale (en-GB) string, never a raw key', async () => {
+  // The original version of this test asserted that `common_close` fell back
+  // to English because it was absent from the pt-BR stub. That premise died
+  // the moment the catalogue reached full coverage — it was a fixture that
+  // had to stay artificially incomplete to keep passing, which is a trap, not
+  // a guarantee. Whether a missing key falls back at all is Paraglide's
+  // compile-time behaviour, not ours.
+  //
+  // What we actually need to hold is the user-visible half of D5: a reader on
+  // pt-BR never sees a raw key or an empty string. That is checkable across
+  // the whole catalogue rather than one hand-picked key, it stays true at any
+  // coverage level, and if coverage regresses it still catches a bad fallback
+  // (a missing key either renders English — acceptable — or renders raw —
+  // caught here). Coverage drift itself is reported by
+  // `scripts/check-i18n-locale-drift.mjs`.
+  it('no pt-BR message renders as a raw key or an empty string', async () => {
     const { m } = await import('@/lib/i18n');
 
-    // common_close is not in the pt-BR stub catalog (spec 061 p1 ships only
-    // a handful of proof-of-mechanism keys; the full translation is a
-    // separate node). Paraglide compiles the fallback at build time.
-    const value = m.common_close({}, { locale: 'pt-BR' });
+    const offenders: string[] = [];
+    let checked = 0;
+    for (const [key, message] of Object.entries(m)) {
+      if (typeof message !== 'function') continue;
+      checked += 1;
+      const value = (message as (p: object, o: { locale: string }) => string)(
+        {},
+        { locale: 'pt-BR' },
+      );
+      if (value === '' || value === key) offenders.push(key);
+    }
 
-    expect(value).toBe('Close');
-    expect(value).not.toBe('common_close');
-    expect(value).not.toBe('');
+    expect(offenders).toEqual([]);
+    // Guard against the assertion above going vacuous: if `m` ever stops
+    // exposing enumerable message functions (a barrel rewrite, a Proxy), the
+    // loop would silently check nothing and still pass. The catalogue is 1856
+    // keys; a floor well under that stays honest without being brittle as
+    // keys are added.
+    expect(checked).toBeGreaterThan(1000);
   });
 
   it('a key present in pt-BR resolves to the translated string', async () => {
