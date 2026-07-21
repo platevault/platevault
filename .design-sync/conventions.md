@@ -35,7 +35,7 @@ tokens, so everything built with the tokens below re-themes automatically.
   `--pv-action-sidebar-width`, `--pv-list-width`, `--pv-rail-width`
 - **Depth/focus**: `--pv-shadow-sm`, `--pv-focus-ring`
 
-Type, spacing, and radius tokens come from `packages/tokens/foundation.css`, which
+Type, spacing, and radius tokens come from `packages/tokens/tokens-docs.css`, which
 `tokens.css` `@import`s — use those rather than hard-coded values:
 
 - **Type**: `--pv-font-sans`, `--pv-font-display`, `--pv-font-mono`;
