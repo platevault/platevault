@@ -73,22 +73,22 @@ pub async fn update(
     // Validate new name if changing.
     if let Some(new_name) = &req.name {
         validate_name(new_name).map_err(|code| {
-            ContractError::new(
-                str_to_error_code(code),
-                format!("Name error: {code}"),
-                ErrorSeverity::Blocking,
-                false,
-            )
+            let error_code = str_to_error_code(code);
+            let message = format!("Name error: {code}");
+            ContractError::new(error_code, message.clone(), ErrorSeverity::Blocking, false)
+                .with_field_error(super::field_error("name", error_code, message))
         })?;
         if let Some(conflict_id) =
             repo::name_exists(pool, new_name, Some(&req.project_id)).await.map_err(db_err)?
         {
+            let message = "A project with this name already exists.";
             return Err(ContractError::new(
                 ErrorCode::NameDuplicate,
-                "A project with this name already exists.",
+                message,
                 ErrorSeverity::Blocking,
                 false,
             )
+            .with_field_error(super::field_error("name", ErrorCode::NameDuplicate, message))
             .with_details(serde_json::json!({ "conflictingProjectId": conflict_id })));
         }
     }

@@ -39,7 +39,7 @@
 //! via `super::`.
 
 use contracts_core::projects_v2::ProjectChannelDto;
-use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, FieldError};
 use domain_core::project::channels::{infer_channels, Channel};
 use persistence_db::repositories::projects as repo;
 use persistence_db::repositories::q_core;
@@ -76,6 +76,20 @@ fn str_to_error_code(code: &str) -> ErrorCode {
             ErrorCode::InternalData
         }
     }
+}
+
+/// Build a `FieldError` naming the specific request field a validation
+/// failure belongs to (bd `astro-plan-qnj0`).
+///
+/// `code` is derived from `error_code`'s own wire string via serde rather
+/// than a second hardcoded literal, so it cannot drift from the
+/// `#[serde(rename = "...")]` on the `ErrorCode` variant.
+fn field_error(field: &str, error_code: ErrorCode, message: impl Into<String>) -> FieldError {
+    let code = serde_json::to_value(error_code)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    FieldError { field: field.to_owned(), code, message: message.into() }
 }
 
 fn db_err(e: persistence_db::DbError) -> ContractError {
