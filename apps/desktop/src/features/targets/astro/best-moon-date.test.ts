@@ -49,6 +49,7 @@ import {
   DEFAULT_MOON_AVOIDANCE,
   type MoonAvoidanceParams,
 } from './moon-avoidance';
+import { assertDefined } from '@/test/assertDefined';
 
 const MS_PER_DAY = 86_400_000;
 const FROM = new Date('2026-01-01T00:00:00Z');
@@ -72,47 +73,54 @@ describe('bestMoonDate — real ephemeris', () => {
   it('viable opposition night coincides — date and Moon facts unchanged', () => {
     // RA 120° from 2026-01-01 → opposition 2026-01-18, a ~1%-lit new Moon
     // ~169° away (scouted constants; preconditions asserted below).
-    const r = bestMoonDate(120, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(r).not.toBeNull();
-    expect(r!.moonAtOpposition.illumPct).toBeLessThanOrEqual(5); // precondition
-    expect(r!.state).toBe('coincides');
-    expect(r!.dateMs).toBe(r!.oppositionDateMs);
-    expect(r!.dateMs).toBe(Date.UTC(2026, 0, 18));
-    expect(r!.inDays).toBe(17);
-    expect(r!.moonAtBest).toEqual(r!.moonAtOpposition);
+    const r = assertDefined(
+      bestMoonDate(120, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate for RA 120 (viable opposition night)',
+    );
+    expect(r.moonAtOpposition.illumPct).toBeLessThanOrEqual(5); // precondition
+    expect(r.state).toBe('coincides');
+    expect(r.dateMs).toBe(r.oppositionDateMs);
+    expect(r.dateMs).toBe(Date.UTC(2026, 0, 18));
+    expect(r.inDays).toBe(17);
+    expect(r.moonAtBest).toEqual(r.moonAtOpposition);
   });
 
   it('full-Moon opposition diverges to a nearby darker, farther night', () => {
     // RA 135° → opposition 2026-02-02 lands on a full Moon ~2° away; the
     // nearest viable night is 7 nights earlier (2026-01-26, ~48% lit, ~98°).
-    const r = bestMoonDate(135, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(r).not.toBeNull();
-    expect(r!.moonAtOpposition.illumPct).toBeGreaterThanOrEqual(95); // precondition
-    expect(r!.state).toBe('diverged');
-    expect(r!.oppositionDateMs).toBe(Date.UTC(2026, 1, 2));
-    expect(r!.dateMs).toBe(Date.UTC(2026, 0, 26));
-    expect(r!.moonAtBest.illumPct).toBeLessThan(r!.moonAtOpposition.illumPct);
-    expect(r!.moonAtBest.sepDeg).toBeGreaterThan(r!.moonAtOpposition.sepDeg);
+    const r = assertDefined(
+      bestMoonDate(135, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate for RA 135 (full-Moon opposition diverges)',
+    );
+    expect(r.moonAtOpposition.illumPct).toBeGreaterThanOrEqual(95); // precondition
+    expect(r.state).toBe('diverged');
+    expect(r.oppositionDateMs).toBe(Date.UTC(2026, 1, 2));
+    expect(r.dateMs).toBe(Date.UTC(2026, 0, 26));
+    expect(r.moonAtBest.illumPct).toBeLessThan(r.moonAtOpposition.illumPct);
+    expect(r.moonAtBest.sepDeg).toBeGreaterThan(r.moonAtOpposition.sepDeg);
   });
 
   it('never recommends a night before the search start', () => {
     // RA 105° → opposition 2026-01-05, only 4 nights after `from`: every
     // earlier candidate that would win the tie-break is in the past and is
     // skipped — the pick lands after the opposition instead.
-    const r = bestMoonDate(105, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(r).not.toBeNull();
-    expect(r!.state).toBe('diverged');
-    expect(r!.oppositionDateMs).toBe(Date.UTC(2026, 0, 5));
-    expect(r!.dateMs).toBeGreaterThanOrEqual(FROM.getTime());
-    expect(r!.dateMs).toBe(Date.UTC(2026, 0, 11));
-    expect(r!.inDays).toBe(10);
+    const r = assertDefined(
+      bestMoonDate(105, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate for RA 105 (never before search start)',
+    );
+    expect(r.state).toBe('diverged');
+    expect(r.oppositionDateMs).toBe(Date.UTC(2026, 0, 5));
+    expect(r.dateMs).toBeGreaterThanOrEqual(FROM.getTime());
+    expect(r.dateMs).toBe(Date.UTC(2026, 0, 11));
+    expect(r.inDays).toBe(10);
   });
 });
 
 describe('bestMoonDate — controlled Moon (selection rules)', () => {
   const RA = 210;
   /** The real (unmocked) opposition anchoring the candidate window. */
-  const opposition = () => nextOpposition(RA, FROM)!;
+  const opposition = () =>
+    assertDefined(nextOpposition(RA, FROM), 'nextOpposition for RA 210');
   const windowStartMs = () =>
     opposition().date.getTime() - BEST_DATE_RADIUS_NIGHTS * MS_PER_DAY;
 
@@ -142,26 +150,35 @@ describe('bestMoonDate — controlled Moon (selection rules)', () => {
   it('equidistant viable nights tie-break to the earlier one', () => {
     const OPP = BEST_DATE_RADIUS_NIGHTS;
     moonMock.override = controlledMoon([OPP - 3, OPP + 3]);
-    const r = bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(r!.state).toBe('diverged');
-    expect(r!.dateMs).toBe(opposition().date.getTime() - 3 * MS_PER_DAY);
+    const r = assertDefined(
+      bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate for equidistant viable nights',
+    );
+    expect(r.state).toBe('diverged');
+    expect(r.dateMs).toBe(opposition().date.getTime() - 3 * MS_PER_DAY);
   });
 
   it('nearest viable night wins over a viable night farther out', () => {
     const OPP = BEST_DATE_RADIUS_NIGHTS;
     moonMock.override = controlledMoon([OPP - 9, OPP + 2]);
-    const r = bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(r!.state).toBe('diverged');
-    expect(r!.dateMs).toBe(opposition().date.getTime() + 2 * MS_PER_DAY);
+    const r = assertDefined(
+      bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate for nearest-viable-wins',
+    );
+    expect(r.state).toBe('diverged');
+    expect(r.dateMs).toBe(opposition().date.getTime() + 2 * MS_PER_DAY);
   });
 
   it('no viable night in ±15 falls back to the opposition with a distinct state', () => {
     moonMock.override = controlledMoon([]);
-    const r = bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(r!.state).toBe('none-viable');
-    expect(r!.dateMs).toBe(r!.oppositionDateMs);
-    expect(r!.moonAtBest).toEqual(r!.moonAtOpposition);
-    expect(r!.moonAtBest.illumPct).toBe(99);
+    const r = assertDefined(
+      bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate for no-viable-night fallback',
+    );
+    expect(r.state).toBe('none-viable');
+    expect(r.dateMs).toBe(r.oppositionDateMs);
+    expect(r.moonAtBest).toEqual(r.moonAtOpposition);
+    expect(r.moonAtBest.illumPct).toBe(99);
   });
 
   it('viability follows the live band parameters and the scoring band', () => {
@@ -177,19 +194,30 @@ describe('bestMoonDate — controlled Moon (selection rules)', () => {
       moonVec: targetUnitVector(RA + 100, DEC),
     });
 
-    const strict = bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE);
-    expect(strict!.state).toBe('none-viable');
+    const strict = assertDefined(
+      bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE),
+      'bestMoonDate under strict default params',
+    );
+    expect(strict.state).toBe('none-viable');
 
     __resetBestMoonDateCacheForTest();
     const loosened: MoonAvoidanceParams = {
       ...DEFAULT_MOON_AVOIDANCE,
       L: { distanceDeg: 90, widthDays: 14 },
     };
-    expect(bestMoonDate(RA, DEC, FROM, loosened)!.state).toBe('coincides');
+    expect(
+      assertDefined(
+        bestMoonDate(RA, DEC, FROM, loosened),
+        'bestMoonDate under loosened L param',
+      ).state,
+    ).toBe('coincides');
 
     __resetBestMoonDateCacheForTest();
     expect(
-      bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE, 'Ha')!.state,
+      assertDefined(
+        bestMoonDate(RA, DEC, FROM, DEFAULT_MOON_AVOIDANCE, 'Ha'),
+        'bestMoonDate scored against the Ha band',
+      ).state,
     ).toBe('coincides');
   });
 });

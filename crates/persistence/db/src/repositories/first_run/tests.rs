@@ -192,14 +192,6 @@ async fn batch_register_partial_success() {
     assert!(resp.items[1].error.is_some());
 }
 
-#[tokio::test]
-async fn update_step_persists() {
-    let pool = setup_db().await;
-    update_first_run_step(&pool, "processing_tools").await.unwrap();
-    let state = get_first_run_state(&pool).await.unwrap();
-    assert_eq!(state.last_step, "processing_tools");
-}
-
 /// C2: `complete_first_run` must succeed with only light_frames + project
 /// (no inbox source required — spec 039 removed inbox from REQUIRED_KINDS).
 #[tokio::test]

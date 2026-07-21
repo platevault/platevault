@@ -379,6 +379,11 @@ export function TargetsTable({
 
               if (row.kind === 'group') {
                 if (row.collapsible && row.path != null) {
+                  // Captured as a local so the onClick closure keeps the
+                  // narrowing above — a nested arrow function re-reads
+                  // `row.path` from scratch and TS would widen it back to
+                  // `string | undefined`.
+                  const { path } = row;
                   // Multi-level collapsible group header.
                   return (
                     <tr
@@ -393,7 +398,7 @@ export function TargetsTable({
                           data-testid={`targets-group-${row.key}`}
                           aria-expanded={!row.collapsed}
                           aria-label={row.label}
-                          onClick={() => toggleCollapsed(row.path!)}
+                          onClick={() => toggleCollapsed(path)}
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                           style={{ paddingLeft: tableIndent(row.depth ?? 0) }}
                         >

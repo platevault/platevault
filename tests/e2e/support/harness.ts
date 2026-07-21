@@ -109,4 +109,21 @@ export const test = base.extend({
   },
 });
 
+/**
+ * Narrows `value` to `T`, throwing loudly if it is `null`/`undefined`. Prefer
+ * this over `!` for a Playwright value that is possibly absent (e.g.
+ * `boundingBox()`, `getAttribute()`): `!` only satisfies the compiler, so a
+ * regression that makes the value genuinely absent proceeds into assertions
+ * against `undefined` instead of failing the test at the point of loss.
+ */
+export function assertDefined<T>(
+  value: T | null | undefined,
+  message: string,
+): T {
+  if (value === null || value === undefined) {
+    throw new Error(`assertDefined: ${message}`);
+  }
+  return value;
+}
+
 export { expect };
