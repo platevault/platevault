@@ -2417,3 +2417,78 @@ pub fn write_minimal_fits_with_exposure(
     std::fs::write(&path, &block).with_context(|| format!("write fixture FITS {path:?}"))?;
     Ok(path)
 }
+
+/// Scan a root through IPC and return the id of the inbox item it yields.
+///
+/// Spec 058 T012/FR-015 changed the shape every scan-seeded journey depended
+/// on: `inbox.scan.folder` no longer writes a placeholder `inbox_items` row,
+/// so an ordinary folder now comes back as `items: []` plus a source-group
+/// row. Reading `scan["items"][0]` therefore fails with an empty-items error
+/// that reads like "the scan found nothing" when the scan in fact worked.
+///
+/// Classification is what materializes the real single-type item rows, so
+/// this seeds the way the product now does: scan, then classify the group the
+/// scan recorded, then take the item.
+///
+/// Master-only folders still come back with items directly (a detected master
+/// is its own item row with no source group), so the direct hit is preferred
+/// when present rather than treated as an error.
+pub async fn scan_and_classify_one_item(
+    app: &E2eApp,
+    root_id: &str,
+    root_absolute_path: &str,
+) -> Result<String> {
+    let scan: Value = app
+        .invoke(
+            "inbox_scan_folder",
+            serde_json::json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_absolute_path,
+                }
+            }),
+        )
+        .await?;
+
+    if let Some(id) = scan["items"][0]["inboxItemId"].as_str() {
+        return Ok(id.to_owned());
+    }
+
+    let list: Value =
+        app.invoke("inbox_list", serde_json::json!({ "req": { "limit": 500 } })).await?;
+    let group_id = list["sourceGroups"]
+        .as_array()
+        .and_then(|groups| {
+            groups.iter().find(|g| g["rootId"].as_str() == Some(root_id)).or_else(|| groups.first())
+        })
+        .and_then(|g| g["sourceGroupId"].as_str())
+        .ok_or_else(|| {
+            anyhow::anyhow!("scan recorded no source group to classify: scan={scan} list={list}")
+        })?
+        .to_owned();
+
+    let _: Value = app
+        .invoke(
+            "inbox_classify_source_group",
+            serde_json::json!({
+                "req": {
+                    "sourceGroupId": group_id,
+                    "rootAbsolutePath": root_absolute_path,
+                }
+            }),
+        )
+        .await?;
+
+    let after: Value =
+        app.invoke("inbox_list", serde_json::json!({ "req": { "limit": 500 } })).await?;
+    after["items"]
+        .as_array()
+        .and_then(|items| {
+            items.iter().find(|i| i["rootId"].as_str() == Some(root_id)).or_else(|| items.first())
+        })
+        .and_then(|i| i["inboxItemId"].as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            anyhow::anyhow!("classifying source group {group_id} materialized no item: {after}")
+        })
+}

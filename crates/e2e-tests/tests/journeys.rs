@@ -200,29 +200,15 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
 
     // 2. Scan + classify + confirm — this is the real reviewable plan (FR-009
     // requires the plan to exist and be reviewable before it applies).
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let items = scan["items"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
-    anyhow::ensure!(
-        !items.is_empty(),
-        "expected inbox.scan.folder to discover the fixture file: {scan}"
-    );
-    let inbox_item_id = items[0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("scanned item has no inboxItemId: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -353,22 +339,15 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
         )
         .await?;
 
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
