@@ -184,9 +184,26 @@ degraded but usable, exactly what FR-009 asks for.
 
 The real risk is silent drift: pt-BR falling behind as keys are added, with
 nobody noticing. That is a CI concern, not a runtime one — a check comparing
-key sets per locale and reporting the gap. Note this must **report**, not fail:
-FR-013 accepts partial translation as a shipping state, so a hard failure would
-block legitimate work.
+key sets per locale.
+
+**Amended 2026-07-21 (owner ruling): the check FAILS the build.** As originally
+written this decision said the check must *report*, not fail, on the grounds
+that "FR-013 accepts partial translation as a shipping state". That reasoning
+was wrong on its own terms: FR-013 governs **review status** — an unreviewed
+translation must be *identifiable* as such — and says nothing about
+completeness. The two were conflated. A machine-generated catalogue is still
+FR-013-compliant while complete, because `LOCALE_META.reviewStatus` carries the
+`machine-generated` marker independently of key coverage.
+
+Reporting alone also failed empirically. Within a day of pt-BR shipping it had
+accumulated 19 missing keys and 3 orphans, entirely from inbox work that landed
+after the translation — nobody read the report. A gate that cannot fail does
+not hold a line.
+
+The accepted cost: adding a user-facing string now obliges you to add its
+translation in the same change. Partial translation remains acceptable in the
+sense FR-013 actually means — machine-generated, pending native review — but a
+*missing key* is now a build failure.
 
 ---
 
