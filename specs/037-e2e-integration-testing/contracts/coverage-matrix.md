@@ -106,7 +106,12 @@ memory); Layer-1 + vitest coverage above gates the merge.
 
 ## Layer-2 real-UI journey status — 2026-07-04 (WP-C, D21/D22)
 
-Six real journeys exist in `crates/e2e-tests/tests/`, none `#[ignore]`d.
+Thirteen journey files in `crates/e2e-tests/tests/` hold 29 real-UI tests, all
+29 `#[ignore]`d by design. `e2e.yml` runs its shards with `--run-ignored all`,
+so the attribute is the routing mechanism: it keeps these tests out of a plain
+`cargo test` run, and the required "Real-UI journeys (L3) — ubuntu-latest" and
+"— windows-latest" contexts execute every one of them.
+
 Harness: thirtyfour + `tauri-plugin-webdriver`/`tauri-webdriver`, the
 `window.__ALM_E2E__` invoke bridge (D21 renamed the harness's stale
 `__APP_E2E__` references to match — confirmed landed). CI (`e2e.yml`, 3-OS
@@ -122,6 +127,7 @@ local gates (compile, clippy, fmt) are clean.
 | `cleanup_plan_review` (NEW, D22; apply extended 2026-07-05) | `journeys.rs` | #10/#11, #17 | `projects.create`, `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status` |
 | `archive_lifecycle_apply_trash_permanent_delete` (NEW, 2026-07-05) | `archive_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
 | `cleanup_protection_gate` (NEW, 2026-07-20) | `cleanup_protection_gate_journey.rs` | #10/#11, #17 | `projects.create`, `settings.update` (global `defaultProtection`), `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status`, `plans.get` |
+| `plan_review_destructive_confirm_gate_and_apply` + `plan_review_empty_archive_plan_refuses_apply` (NEW, 2026-07-21, PR #1385) | `plan_review_overlay_journeys.rs` | #17, #18 | `roots.register`, `projects.create`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `lifecycle.transition.apply` (x3), then the real `PlanReviewOverlay` DOM: `cleanup.scan` / `cleanup.plan.generate` / `plans.approve` / `plans.apply_real` via the Cleanup section buttons, and `archive.plan.generate` via the plan-gated `archived` transition |
 | `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
 
 **Spec 052 (SIMBAD cache / dual-lookup / cone-search) sync — 2026-07-14.**
@@ -271,6 +277,7 @@ see the finding below).
 
 | Spec | Area | Layer-1 | Layer-2 | Mock | Manual-Windows | Note |
 |---|---|:--:|:--:|:--:|:--:|---|
+| 037 | Shared `PlanReviewOverlay` refusal gates (issue #1220) | ✅ | ✅ `plan_review_overlay_journeys.rs` | 🟡 (overlay review→apply/cancel only, `inbox_ingest_confirm.spec.ts`) | journey-06/07 | `PlanReviewOverlay.tsx` is the single review surface for the cleanup, archive, restore, and source-view-removal flows. Two real-UI tests cover its gates: `plan_review_destructive_confirm_gate_and_apply` (a `delete`-action cleanup item renders `plan-review-confirm-destructive`, `plan-review-approve-apply` stays disabled until it is ticked, apply then permanently removes the file from disk) and `plan_review_empty_archive_plan_refuses_apply` (a 0-item `archive.plan.generate` renders `plan-review-empty-reason` and keeps `plan-review-approve-apply` disabled). Prior plan journeys drive `plans.approve`/`plans.apply.direct` over the invoke bridge and never open the overlay DOM, so these testids had no real-backend hits |
 | 040 | Calibration master detection | ✅ | 🟡 (suggest only) | ❌ | journey-08 | Shipped without `plan.md`/`tasks.md` (documented deviation); least-scrutinized recent backend feature |
 | 041 | Inbox single-type sub-items / destination model | ✅ | 🟡 (IPC only) | ❌ | journey-02/03 | iteration-2 now on `main` via #349 |
 | 043 | UI redesign (theming, layout convention, `aria-sort`) | n/a | 🟡 (smoke only) | ❌ | journey-10 | Foundation + round-2 shipped; pill-system unification and resizable splitters still pending per SPEC_STATUS |
