@@ -99,10 +99,16 @@ failure-output = "immediate-final"
 # above, which was also Windows/macOS-only for the same reason: per-instance
 # isolation that exists on Linux and silently does not on Windows.
 #
-# Serialising is the honest fix available here, not the ideal one. Real
-# isolation needs the app to accept an explicit data-directory override (and
-# to pass it to the webview's `data_directory`), since no environment variable
-# can redirect a Known Folder. Tracked on #1204; revert this when that lands.
+# Update: real per-instance webview isolation landed (`WEBVIEW2_USER_DATA_FOLDER`,
+# `crates/e2e-tests/tests/common/mod.rs::InstanceEnv::new` +
+# `apps/desktop/src-tauri/src/data_dir.rs`) — the redb-lock and shared-webview
+# collisions above should no longer happen regardless of `threads-required`.
+# This override stays ON deliberately for now: it also gates a DIFFERENT,
+# still-open contamination symptom (three PRs failing this shard on opposite
+# assertions, consistent with shared localStorage surviving the reset — see
+# the bead tracking this) that concurrency, not identity, may have been
+# masking. Lower this only after a real Windows run demonstrates the fix
+# holds under `test-threads > 1`, not from reading this comment.
 [[profile.e2e.overrides]]
 platform = 'cfg(windows)'
 retries = 2
