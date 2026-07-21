@@ -66,10 +66,10 @@ use crate::commands::guided::{
 };
 use crate::commands::inbox::{
     inbox_attribution_suggest, inbox_classify, inbox_classify_source_group, inbox_confirm,
-    inbox_item_metadata, inbox_list,
-    inbox_plan, inbox_plan_apply, inbox_plan_apply_all, inbox_plan_apply_selected,
-    inbox_plan_cancel, inbox_plan_list_open, inbox_property_registry, inbox_reclassify,
-    inbox_reclassify_v2, inbox_scan, inbox_scan_folder, inbox_stats, inbox_target_recommendations,
+    inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply, inbox_plan_apply_all,
+    inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open, inbox_property_registry,
+    inbox_reclassify, inbox_reclassify_v2, inbox_scan, inbox_scan_folder, inbox_stats,
+    inbox_target_recommendations,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::{inventory_list, inventory_session_notes_update};
