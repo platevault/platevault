@@ -342,6 +342,13 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint
 
+      # Keep locale parity as a named CI gate, independent of the broader lint
+      # summary. The check is fast and its failure tells a catalogue author
+      # exactly which missing or orphaned keys must be corrected.
+      - name: Locale catalogue parity
+        if: needs.changes.outputs.frontend == 'true' && matrix.os == 'ubuntu-latest'
+        run: pnpm --filter @astro-plan/desktop run lint:i18n-drift
+
       # `tests/` is outside the pnpm workspace globs (`apps/*`, `packages/*`),
       # so `pnpm -r lint` never reaches it and `apps/desktop/biome.json` scopes
       # itself to `src/**`. Without this step the E2E suite is unlinted and
