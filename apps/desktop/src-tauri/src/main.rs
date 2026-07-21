@@ -5,7 +5,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 use desktop_shell::{build_app, run_app};
-use persistence_db::Database;
+
 use tauri::Manager;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -41,7 +41,7 @@ async fn main() {
     // Build the Tauri app first so we can access the platform path resolver
     // (needed to locate the log directory before initialising tracing, and
     // the SQLite database path below). The event loop is NOT started yet —
-    // that happens in `run_app` after the database is ready.
+    // that happens in `run_app`.
     let app = build_app();
 
     // Spec 051 US7 (T041/T042): structured logging with both a stderr target
@@ -120,14 +120,10 @@ async fn main() {
         format!("sqlite://{}?mode=rwc", db_path.display())
     };
 
-    let db = Database::connect(&db_url).await.expect("connect SQLite");
-    db.migrate().await.expect("run migrations");
-
-    // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
-    // cache. Opening is fast (no warm yet — `run_app` warms it in the
-    // background so a large seed never blocks startup).
-    let resolve_cache_path = data_dir.join("simbad-cache.redb");
-    let resolve_cache = desktop_shell::resolve_cache::open_or_in_memory(&resolve_cache_path);
-
-    run_app(app, db.pool().clone(), resolve_cache, resolve_cache_path);
+    // Connect + migrate happen inside `run_app`, on a task started once the
+    // event loop is already pumping. Tauri creates config-declared windows
+    // during `app.run()` rather than `.build()`, so doing that work here left
+    // a long migration with no window on screen at all — not a blank window,
+    // no window.
+    run_app(app, db_url, data_dir);
 }
