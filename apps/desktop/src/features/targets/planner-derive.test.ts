@@ -19,6 +19,7 @@ import {
 import type { ObserverSite } from './observing-sites/observer-site';
 import { BANDS, DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
 import { __resetOppositionCacheForTest } from './astro/opposition';
+import { assertDefined } from '@/test/assertDefined';
 
 const AMSTERDAM: ObserverSite = {
   id: 'site-ams',
@@ -524,17 +525,20 @@ describe('deriveObservability — OSC single-pass (FR-036/FR-037/FR-038)', () =>
       sensorConfig: { sensorType: 'osc', passband: ['Ha', 'OIII'] },
       moonAvoidanceParams: DEFAULT_MOON_AVOIDANCE,
     });
-    expect(d.oscSinglePassMinutes).not.toBeNull();
+    const oscSinglePassMinutes = assertDefined(
+      d.oscSinglePassMinutes,
+      'oscSinglePassMinutes for OSC narrowband passband',
+    );
     // Interference thresholds nest (larger required sep ⊆ smaller), so the
     // strictest-band aggregation equals the minimum per-line window.
     const expected = Math.min(
       d.moonFreeMinutesByBand.Ha,
       d.moonFreeMinutesByBand.OIII,
     );
-    expect(d.oscSinglePassMinutes).toBe(expected);
+    expect(oscSinglePassMinutes).toBe(expected);
     // Per-line windows (FR-037) stay available alongside the headline.
     expect(d.moonFreeMinutesByBand.Ha).toBeGreaterThanOrEqual(
-      d.oscSinglePassMinutes!,
+      oscSinglePassMinutes,
     );
   });
 

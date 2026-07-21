@@ -37,7 +37,12 @@
  *   - Locale switching is not user-reachable (046 FR-004); no product switcher
  *     exists to drive.
  */
-import { test, expect, seedSetupComplete } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  assertDefined,
+} from './support/harness';
 import type { Page } from '@playwright/test';
 
 // ── Scenario 1 — Settings config model persists (spec 018) ──────────────────
@@ -273,8 +278,10 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
 
     const bar = page.locator('.pv-page__bar').first();
     await expect(bar).toBeVisible();
-    const barBoxBefore = await bar.boundingBox();
-    expect(barBoxBefore).not.toBeNull();
+    const barBoxBefore = assertDefined(
+      await bar.boundingBox(),
+      'action bar boundingBox before scroll',
+    );
 
     const scroller = page.locator('.pv-two-pane__detail').first();
     // Content must genuinely overflow, else "only content scrolls" is untested.
@@ -292,9 +299,11 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
     // The pinned bar must NOT have moved and must still be visible after the
     // content region scrolled.
     await expect(bar).toBeVisible();
-    const barBoxAfter = await bar.boundingBox();
-    expect(barBoxAfter).not.toBeNull();
-    expect(Math.round(barBoxAfter!.y)).toBe(Math.round(barBoxBefore!.y));
+    const barBoxAfter = assertDefined(
+      await bar.boundingBox(),
+      'action bar boundingBox after scroll',
+    );
+    expect(Math.round(barBoxAfter.y)).toBe(Math.round(barBoxBefore.y));
   }
 
   test('action bar stays pinned while only the content region scrolls (1100x720 and a shorter height)', async ({
@@ -464,7 +473,10 @@ test.describe('Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)', ()
     await expect(page.locator('.pv-frame__main')).toBeVisible();
 
     const overflow = await page.evaluate(() => {
-      const doc = document.scrollingElement!;
+      // Runs in-browser (page.evaluate serializes this closure), so it can't
+      // reach the Node-side assertDefined helper — narrow inline instead.
+      const doc = document.scrollingElement;
+      if (!doc) throw new Error('document.scrollingElement is null');
       return doc.scrollWidth - window.innerWidth;
     });
     expect(overflow).toBeLessThanOrEqual(OVERFLOW_TOLERANCE_PX);

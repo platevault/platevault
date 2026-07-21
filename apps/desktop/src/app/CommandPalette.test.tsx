@@ -59,6 +59,7 @@ import { matchesSearch, normalizeDesig } from '@/features/targets/TargetsPage';
 import { commands } from '@/bindings/index';
 import type { TargetListItem } from '@/bindings/index';
 import { router } from './router';
+import { assertDefined } from '@/test/assertDefined';
 
 // ── Mocks (rendered smoke tests) ──────────────────────────────────────────────
 
@@ -153,8 +154,10 @@ describe('CommandPalette debounce contract', () => {
     // than pinning a local constant — a local constant can never disagree
     // with the component.
     await openPalette();
-    const input =
-      document.querySelector<HTMLInputElement>('.pv-palette__input')!;
+    const input = assertDefined(
+      document.querySelector<HTMLInputElement>('.pv-palette__input'),
+      'command palette search input',
+    );
     vi.mocked(commands.searchGlobal).mockClear();
 
     vi.useFakeTimers();
@@ -366,8 +369,10 @@ describe('CommandPalette rendered smoke (#581)', () => {
     await openPalette();
     // The focus race left focus on the popup container, which silenced all
     // of cmdk's input-keydown plumbing (arrow keys, Enter, selection).
-    const input =
-      document.querySelector<HTMLInputElement>('.pv-palette__input')!;
+    const input = assertDefined(
+      document.querySelector<HTMLInputElement>('.pv-palette__input'),
+      'command palette search input',
+    );
     await waitFor(() => {
       expect(document.activeElement).toBe(input);
     });
@@ -375,8 +380,10 @@ describe('CommandPalette rendered smoke (#581)', () => {
 
   it('navigates via ArrowDown + Enter (cmdk keyboard nav reaches the input)', async () => {
     await openPalette();
-    const input =
-      document.querySelector<HTMLInputElement>('.pv-palette__input')!;
+    const input = assertDefined(
+      document.querySelector<HTMLInputElement>('.pv-palette__input'),
+      'command palette search input',
+    );
     fireEvent.keyDown(input, { key: 'ArrowDown', code: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
     await waitFor(() => {
@@ -388,7 +395,10 @@ describe('CommandPalette rendered smoke (#581)', () => {
 
   it('navigates when an item is clicked (click-to-select)', async () => {
     await openPalette();
-    const item = document.querySelector('.pv-palette__item')!;
+    const item = assertDefined(
+      document.querySelector('.pv-palette__item'),
+      'first command palette item',
+    );
     // cmdk selects on pointer events, not plain click.
     fireEvent.pointerMove(item);
     fireEvent.pointerUp(item);

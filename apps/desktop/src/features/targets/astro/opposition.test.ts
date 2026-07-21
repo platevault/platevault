@@ -8,6 +8,7 @@ import {
   oppositionRelative,
   __resetOppositionCacheForTest,
 } from './opposition';
+import { assertDefined } from '@/test/assertDefined';
 
 /**
  * Seasonal anchor fixtures (spec 047 T021, SC-003 ±7 days). Reference dates
@@ -49,11 +50,13 @@ function daysBetween(a: Date, b: Date): number {
 describe('nextOpposition — seasonal anchors (SC-003, ±7 days)', () => {
   for (const { name, raDeg, expectedIso } of FIXTURES) {
     it(`${name} within ±7 days of the reference date`, () => {
-      const result = nextOpposition(raDeg, FROM);
-      expect(result).not.toBeNull();
+      const result = assertDefined(
+        nextOpposition(raDeg, FROM),
+        `nextOpposition for ${name}`,
+      );
       const expected = new Date(`${expectedIso}T00:00:00Z`);
-      expect(daysBetween(result!.date, expected)).toBeLessThanOrEqual(7);
-      expect(result!.daysUntil).toBeGreaterThanOrEqual(0);
+      expect(daysBetween(result.date, expected)).toBeLessThanOrEqual(7);
+      expect(result.daysUntil).toBeGreaterThanOrEqual(0);
     });
   }
 });
@@ -63,11 +66,13 @@ describe('nextOpposition — wrap-around year boundary', () => {
     // From Dec 20 2026, M42’s opposition (~Dec 17) has just passed for 2026;
     // the next occurrence is ~Dec 2027, inside the 366-day scan window.
     const from = new Date('2026-12-20T00:00:00Z');
-    const result = nextOpposition(83.822, from);
-    expect(result).not.toBeNull();
-    expect(result!.date.getUTCFullYear()).toBe(2027);
-    expect(result!.daysUntil).toBeGreaterThan(300);
-    expect(result!.daysUntil).toBeLessThanOrEqual(366);
+    const result = assertDefined(
+      nextOpposition(83.822, from),
+      'nextOpposition across the year boundary',
+    );
+    expect(result.date.getUTCFullYear()).toBe(2027);
+    expect(result.daysUntil).toBeGreaterThan(300);
+    expect(result.daysUntil).toBeLessThanOrEqual(366);
   });
 });
 
@@ -100,12 +105,13 @@ describe('nextOpposition — Sun-RA table memoization (SC-007 perf)', () => {
     // occurrence must be found in ~2027 — proves the second call recomputed
     // the Sun-RA table for the new `from` rather than reusing FROM's cached one.
     const afterOpposition = new Date('2026-12-20T00:00:00Z');
-    const a = nextOpposition(83.822, FROM);
-    const b = nextOpposition(83.822, afterOpposition);
-    expect(a).not.toBeNull();
-    expect(b).not.toBeNull();
-    expect(b!.date.getUTCFullYear()).toBe(2027);
-    expect(b!.daysUntil).toBeGreaterThan(300);
+    assertDefined(nextOpposition(83.822, FROM), 'nextOpposition from FROM');
+    const b = assertDefined(
+      nextOpposition(83.822, afterOpposition),
+      'nextOpposition from afterOpposition',
+    );
+    expect(b.date.getUTCFullYear()).toBe(2027);
+    expect(b.daysUntil).toBeGreaterThan(300);
   });
 });
 

@@ -16,6 +16,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { DevSettingsPage } from './DevSettingsPage';
+import { assertDefined } from '@/test/assertDefined';
 
 const { mockSettingsGet, mockSettingsUpdate } = vi.hoisted(() => ({
   mockSettingsGet: vi.fn(),
@@ -69,7 +70,10 @@ describe('DevSettingsPage (T032)', () => {
   it('calls settings.update with devMode=true when toggled on', async () => {
     render(<DevSettingsPage />);
     const toggle = await screen.findByTestId('dev-mode-toggle');
-    const input = toggle.querySelector('input')!;
+    const input = assertDefined(
+      toggle.querySelector('input'),
+      'dev-mode-toggle input',
+    );
     fireEvent.click(input);
     await waitFor(() => {
       expect(mockSettingsUpdate).toHaveBeenCalledWith('advanced', {
@@ -93,7 +97,10 @@ describe('DevSettingsPage (T032)', () => {
     mockSettingsUpdate.mockRejectedValue(new Error('db unavailable'));
     render(<DevSettingsPage />);
     const toggle = await screen.findByTestId('dev-mode-toggle');
-    const input = toggle.querySelector('input')!;
+    const input = assertDefined(
+      toggle.querySelector('input'),
+      'dev-mode-toggle input',
+    );
     fireEvent.click(input);
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
