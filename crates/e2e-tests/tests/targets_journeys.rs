@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use common::E2eApp;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use thirtyfour::{By, WebElement};
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
