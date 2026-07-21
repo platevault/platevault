@@ -269,6 +269,38 @@ describe('StepScan', () => {
         );
       });
     });
+
+    // A classify failure used to be swallowed entirely, leaving the row
+    // indistinguishable from a folder that genuinely had nothing to report:
+    // both rendered an em dash and both dropped out of the per-kind chips
+    // while still counting toward the header's file total. That is the
+    // reconciliation gap issue #513 closed for unmapped IMAGETYP, reopened
+    // for the crash case.
+    it('says so when classification failed, instead of showing an em dash', async () => {
+      mockInboxScanFolder.mockResolvedValue({
+        status: 'ok',
+        data: SCAN_RESPONSE_WITH_ITEMS,
+      });
+      mockInboxClassify.mockRejectedValue(new Error('classify exploded'));
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('scan-source-/astro/lights')).getByText(
+            /1 folder/,
+          ),
+        ).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+
+      const row = screen.getByTestId('scan-item-item-001');
+      expect(
+        within(row).getByText(/could not read types/i),
+      ).toBeInTheDocument();
+      expect(within(row).queryByText('—')).not.toBeInTheDocument();
+    });
   });
 
   describe('accordion — collapsed by default', () => {

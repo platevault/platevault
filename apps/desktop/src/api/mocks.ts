@@ -409,14 +409,22 @@ let mockCameras: Camera[] = [
     autoDetected: false,
     sensorType: 'mono',
     passband: null,
+    pixelSizeUm: 3.76,
+    sensorWidthPx: 6248,
+    sensorHeightPx: 4176,
   },
   {
+    // No sensor geometry: exercises the absent-FOV branch in mock mode, which
+    // is the common state for a camera registered before migration 0079.
     id: 'cam-002',
     name: 'ASI533MC Pro',
     aliases: ['ZWO ASI533MC'],
     autoDetected: false,
     sensorType: 'osc',
     passband: null,
+    pixelSizeUm: null,
+    sensorWidthPx: null,
+    sensorHeightPx: null,
   },
 ];
 
@@ -448,6 +456,20 @@ let mockOpticalTrains: OpticalTrain[] = [
     telescopeId: 'tel-001',
     cameraId: 'cam-001',
     focalLengthMm: 530,
+    // Fixture value for cam-001's geometry at 530 mm. Held as a constant
+    // rather than recomputed here: the FOV formula lives in the backend
+    // (`sessions::fov_diagonal_deg`) and must not be reimplemented in TS.
+    fovDiagonalDeg: 3.05,
+  },
+  {
+    // Linked to the geometry-less cam-002, so mock mode renders the
+    // "not known" branch alongside a real value.
+    id: 'train-002',
+    name: 'GT81 + ASI533MC',
+    telescopeId: 'tel-002',
+    cameraId: 'cam-002',
+    focalLengthMm: 478,
+    fovDiagonalDeg: null,
   },
 ];
 
@@ -2487,6 +2509,9 @@ export const mockHandlers = {
       autoDetected: false,
       sensorType: req?.sensorType ?? null,
       passband: req?.passband ?? null,
+      pixelSizeUm: req?.pixelSizeUm ?? null,
+      sensorWidthPx: req?.sensorWidthPx ?? null,
+      sensorHeightPx: req?.sensorHeightPx ?? null,
     };
     mockCameras = [...mockCameras, camera];
     return camera;
@@ -2507,6 +2532,9 @@ export const mockHandlers = {
       aliases: req.aliases,
       sensorType: req.sensorType ?? null,
       passband: req.passband ?? null,
+      pixelSizeUm: req.pixelSizeUm ?? null,
+      sensorWidthPx: req.sensorWidthPx ?? null,
+      sensorHeightPx: req.sensorHeightPx ?? null,
     };
     mockCameras = mockCameras.map((c) => (c.id === req.id ? updated : c));
     return updated;
@@ -2587,6 +2615,9 @@ export const mockHandlers = {
       telescopeId: req?.telescopeId ?? null,
       cameraId: req?.cameraId ?? null,
       focalLengthMm: req?.focalLengthMm ?? 0,
+      // The FOV is backend-derived. Mock mode does not reimplement the
+      // formula, so a mock-created train honestly reports no FOV.
+      fovDiagonalDeg: null,
     };
     mockOpticalTrains = [...mockOpticalTrains, train];
     return train;

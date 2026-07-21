@@ -2807,6 +2807,9 @@ mod tests {
                 aliases: vec!["ASI2600MM".to_owned()],
                 sensor_type: None,
                 passband: None,
+                pixel_size_um: None,
+                sensor_width_px: None,
+                sensor_height_px: None,
             },
         )
         .await
@@ -2834,6 +2837,9 @@ mod tests {
                 aliases: vec!["ASI2600MM".to_owned()],
                 sensor_type: None,
                 passband: None,
+                pixel_size_um: None,
+                sensor_width_px: None,
+                sensor_height_px: None,
             },
         )
         .await
