@@ -229,6 +229,14 @@ pub(super) fn item_row_to_executor_item(
         // to `symlink` (the constitution-preferred default) rather than
         // guessing a destructive kind.
         "link" => ExecutorItemAction::Link { kind: materialization_from_provenance(row) },
+        // astro-plan-l3y0: previously fell through to NoOp, so an applied
+        // project-create plan never wrote the app-owned project marker file
+        // to disk despite the plan reporting the item as applied. The
+        // project id rides `linked_entity` (set by `project_setup::create`
+        // for every item in the plan, including this one).
+        "write_manifest" => ExecutorItemAction::WriteManifest {
+            project_id: row.linked_entity.clone().unwrap_or_default(),
+        },
         _ => ExecutorItemAction::NoOp,
     };
 
