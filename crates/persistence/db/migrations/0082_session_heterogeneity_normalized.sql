@@ -61,6 +61,11 @@ CREATE INDEX idx_command_execution_recovery
     ON command_execution(lease_expires_at, row_id)
     WHERE state IN ('received','executing');
 
+-- Install intents must bind to the command's live ownership fence, not merely
+-- to its row identity. A NULL lease owner never matches a non-NULL child value.
+CREATE UNIQUE INDEX uq_command_execution_live_fence
+    ON command_execution(row_id, lease_owner, lease_generation);
+
 CREATE TABLE spec062_file_identity (
     row_id INTEGER PRIMARY KEY,
     public_id TEXT NOT NULL UNIQUE,
@@ -2053,7 +2058,9 @@ CREATE TABLE materialization_install_intent (
     UNIQUE (plan_item_row_id, plan_row_id, command_row_id, lease_owner, lease_generation),
     UNIQUE (plan_row_id, collision_key),
     FOREIGN KEY (plan_item_row_id, plan_row_id)
-        REFERENCES materialization_plan_entry(row_id, plan_row_id)
+        REFERENCES materialization_plan_entry(row_id, plan_row_id),
+    FOREIGN KEY (command_row_id, lease_owner, lease_generation)
+        REFERENCES command_execution(row_id, lease_owner, lease_generation)
 ) STRICT;
 
 CREATE TABLE materialization_item_journal (
@@ -2322,6 +2329,19 @@ LEFT JOIN inbox_plan_result_proposed_session AS child ON child.snapshot_row_id =
 GROUP BY p.row_id
 HAVING COUNT(child.row_id) <> p.proposed_session_count
 UNION ALL
+SELECT 'inbox_frame_count', p.row_id
+FROM inbox_materialization_plan_result_snapshot AS p
+WHERE (
+    (SELECT COUNT(*)
+     FROM inbox_plan_result_proposed_session_frame AS child
+     JOIN inbox_plan_result_proposed_session AS proposed
+       ON proposed.row_id = child.proposed_session_row_id
+     WHERE proposed.snapshot_row_id = p.row_id)
+    + (SELECT COUNT(*)
+       FROM inbox_plan_result_blocked_frame AS blocked
+       WHERE blocked.snapshot_row_id = p.row_id)
+) <> p.frame_count
+UNION ALL
 SELECT 'inbox_proposed_session_frame_count', p.row_id
 FROM inbox_plan_result_proposed_session AS p
 LEFT JOIN inbox_plan_result_proposed_session_frame AS child
@@ -2562,7 +2582,17 @@ CREATE TRIGGER imm_u_session_materialization_result_session BEFORE UPDATE ON ses
 CREATE TRIGGER imm_d_session_materialization_result_session BEFORE DELETE ON session_materialization_result_session BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
 CREATE TRIGGER imm_u_session_materialization_result_frame BEFORE UPDATE ON session_materialization_result_frame BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
 CREATE TRIGGER imm_d_session_materialization_result_frame BEFORE DELETE ON session_materialization_result_frame BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
-CREATE TRIGGER imm_u_panel_group_head_history BEFORE UPDATE ON panel_group_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
+CREATE TRIGGER imm_u_panel_group_head_history BEFORE UPDATE ON panel_group_head_history
+WHEN NEW.panel_group_row_id <> OLD.panel_group_row_id
+  OR NEW.generation <> OLD.generation
+  OR NEW.head_revision_row_id <> OLD.head_revision_row_id
+  OR NEW.accepted_sequence <> OLD.accepted_sequence
+  OR (OLD.retired_sequence IS NOT NULL AND NEW.retired_sequence IS NOT OLD.retired_sequence)
+  OR (OLD.retired_sequence IS NULL AND NEW.retired_sequence IS NULL)
+BEGIN SELECT RAISE(ABORT, 'head history permits only one retirement closure'); END;
+CREATE TRIGGER chk_u_panel_group_head_history BEFORE UPDATE OF retired_sequence ON panel_group_head_history
+WHEN OLD.retired_sequence IS NOT NULL OR NEW.retired_sequence IS NULL OR NEW.retired_sequence <= NEW.accepted_sequence
+BEGIN SELECT RAISE(ABORT, 'head retirement must advance the watermark exactly once'); END;
 CREATE TRIGGER imm_d_panel_group_head_history BEFORE DELETE ON panel_group_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
 CREATE TRIGGER imm_u_panel_group_lineage BEFORE UPDATE ON panel_group_lineage BEGIN SELECT RAISE(ABORT, 'lineage is append-only'); END;
 CREATE TRIGGER imm_d_panel_group_lineage BEFORE DELETE ON panel_group_lineage BEGIN SELECT RAISE(ABORT, 'lineage is append-only'); END;
@@ -2570,7 +2600,17 @@ CREATE TRIGGER imm_u_mosaic_edge_evidence BEFORE UPDATE ON mosaic_edge_evidence 
 CREATE TRIGGER imm_d_mosaic_edge_evidence BEFORE DELETE ON mosaic_edge_evidence BEGIN SELECT RAISE(ABORT, 'edge evidence is append-only'); END;
 CREATE TRIGGER imm_u_mosaic_edge_invalidation BEFORE UPDATE ON mosaic_edge_invalidation BEGIN SELECT RAISE(ABORT, 'invalidation is append-only'); END;
 CREATE TRIGGER imm_d_mosaic_edge_invalidation BEFORE DELETE ON mosaic_edge_invalidation BEGIN SELECT RAISE(ABORT, 'invalidation is append-only'); END;
-CREATE TRIGGER imm_u_mosaic_head_history BEFORE UPDATE ON mosaic_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
+CREATE TRIGGER imm_u_mosaic_head_history BEFORE UPDATE ON mosaic_head_history
+WHEN NEW.mosaic_row_id <> OLD.mosaic_row_id
+  OR NEW.generation <> OLD.generation
+  OR NEW.head_revision_row_id <> OLD.head_revision_row_id
+  OR NEW.accepted_sequence <> OLD.accepted_sequence
+  OR (OLD.retired_sequence IS NOT NULL AND NEW.retired_sequence IS NOT OLD.retired_sequence)
+  OR (OLD.retired_sequence IS NULL AND NEW.retired_sequence IS NULL)
+BEGIN SELECT RAISE(ABORT, 'head history permits only one retirement closure'); END;
+CREATE TRIGGER chk_u_mosaic_head_history BEFORE UPDATE OF retired_sequence ON mosaic_head_history
+WHEN OLD.retired_sequence IS NOT NULL OR NEW.retired_sequence IS NULL OR NEW.retired_sequence <= NEW.accepted_sequence
+BEGIN SELECT RAISE(ABORT, 'head retirement must advance the watermark exactly once'); END;
 CREATE TRIGGER imm_d_mosaic_head_history BEFORE DELETE ON mosaic_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
 CREATE TRIGGER imm_u_mosaic_lineage BEFORE UPDATE ON mosaic_lineage BEGIN SELECT RAISE(ABORT, 'lineage is append-only'); END;
 CREATE TRIGGER imm_d_mosaic_lineage BEFORE DELETE ON mosaic_lineage BEGIN SELECT RAISE(ABORT, 'lineage is append-only'); END;
@@ -2578,7 +2618,17 @@ CREATE TRIGGER imm_u_relation_decision_snapshot BEFORE UPDATE ON relation_decisi
 CREATE TRIGGER imm_d_relation_decision_snapshot BEFORE DELETE ON relation_decision_snapshot BEGIN SELECT RAISE(ABORT, 'accepted decision is append-only'); END;
 CREATE TRIGGER imm_u_relation_rejection BEFORE UPDATE ON relation_rejection BEGIN SELECT RAISE(ABORT, 'rejection is append-only'); END;
 CREATE TRIGGER imm_d_relation_rejection BEFORE DELETE ON relation_rejection BEGIN SELECT RAISE(ABORT, 'rejection is append-only'); END;
-CREATE TRIGGER imm_u_project_membership_head_history BEFORE UPDATE ON project_membership_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
+CREATE TRIGGER imm_u_project_membership_head_history BEFORE UPDATE ON project_membership_head_history
+WHEN NEW.project_row_id <> OLD.project_row_id
+  OR NEW.generation <> OLD.generation
+  OR NEW.head_revision_row_id <> OLD.head_revision_row_id
+  OR NEW.accepted_sequence <> OLD.accepted_sequence
+  OR (OLD.retired_sequence IS NOT NULL AND NEW.retired_sequence IS NOT OLD.retired_sequence)
+  OR (OLD.retired_sequence IS NULL AND NEW.retired_sequence IS NULL)
+BEGIN SELECT RAISE(ABORT, 'head history permits only one retirement closure'); END;
+CREATE TRIGGER chk_u_project_membership_head_history BEFORE UPDATE OF retired_sequence ON project_membership_head_history
+WHEN OLD.retired_sequence IS NOT NULL OR NEW.retired_sequence IS NULL OR NEW.retired_sequence <= NEW.accepted_sequence
+BEGIN SELECT RAISE(ABORT, 'head retirement must advance the watermark exactly once'); END;
 CREATE TRIGGER imm_d_project_membership_head_history BEFORE DELETE ON project_membership_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
 CREATE TRIGGER imm_u_group_action_session_snapshot BEFORE UPDATE ON group_action_session_snapshot BEGIN SELECT RAISE(ABORT, 'accepted snapshot is append-only'); END;
 CREATE TRIGGER imm_d_group_action_session_snapshot BEFORE DELETE ON group_action_session_snapshot BEGIN SELECT RAISE(ABORT, 'accepted snapshot is append-only'); END;
@@ -2588,7 +2638,17 @@ CREATE TRIGGER imm_u_project_materialization_snapshot_session BEFORE UPDATE ON p
 CREATE TRIGGER imm_d_project_materialization_snapshot_session BEFORE DELETE ON project_materialization_snapshot_session BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
 CREATE TRIGGER imm_u_project_materialization_snapshot_entry BEFORE UPDATE ON project_materialization_snapshot_entry BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
 CREATE TRIGGER imm_d_project_materialization_snapshot_entry BEFORE DELETE ON project_materialization_snapshot_entry BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
-CREATE TRIGGER imm_u_project_materialization_head_history BEFORE UPDATE ON project_materialization_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
+CREATE TRIGGER imm_u_project_materialization_head_history BEFORE UPDATE ON project_materialization_head_history
+WHEN NEW.project_row_id <> OLD.project_row_id
+  OR NEW.generation <> OLD.generation
+  OR NEW.head_snapshot_row_id <> OLD.head_snapshot_row_id
+  OR NEW.accepted_sequence <> OLD.accepted_sequence
+  OR (OLD.retired_sequence IS NOT NULL AND NEW.retired_sequence IS NOT OLD.retired_sequence)
+  OR (OLD.retired_sequence IS NULL AND NEW.retired_sequence IS NULL)
+BEGIN SELECT RAISE(ABORT, 'head history permits only one retirement closure'); END;
+CREATE TRIGGER chk_u_project_materialization_head_history BEFORE UPDATE OF retired_sequence ON project_materialization_head_history
+WHEN OLD.retired_sequence IS NOT NULL OR NEW.retired_sequence IS NULL OR NEW.retired_sequence <= NEW.accepted_sequence
+BEGIN SELECT RAISE(ABORT, 'head retirement must advance the watermark exactly once'); END;
 CREATE TRIGGER imm_d_project_materialization_head_history BEFORE DELETE ON project_materialization_head_history BEGIN SELECT RAISE(ABORT, 'head history is append-only'); END;
 CREATE TRIGGER imm_u_correction_overlay BEFORE UPDATE ON correction_overlay BEGIN SELECT RAISE(ABORT, 'overlay is append-only'); END;
 CREATE TRIGGER imm_d_correction_overlay BEFORE DELETE ON correction_overlay BEGIN SELECT RAISE(ABORT, 'overlay is append-only'); END;
@@ -2709,7 +2769,23 @@ CREATE TRIGGER guard_u_cross_target_association_target BEFORE UPDATE ON cross_ta
 CREATE TRIGGER guard_d_cross_target_association_target BEFORE DELETE ON cross_target_association_target BEGIN SELECT RAISE(ABORT, 'cross-target membership is append-only'); END;
 CREATE TRIGGER guard_u_spec062_target BEFORE UPDATE ON spec062_target BEGIN SELECT RAISE(ABORT, 'target identity is append-only'); END;
 CREATE TRIGGER guard_d_spec062_target BEFORE DELETE ON spec062_target BEGIN SELECT RAISE(ABORT, 'target identity is append-only'); END;
-CREATE TRIGGER guard_u_relation_proposal BEFORE UPDATE ON relation_proposal BEGIN SELECT RAISE(ABORT, 'relation proposal is append-only'); END;
+CREATE TRIGGER guard_u_relation_proposal BEFORE UPDATE ON relation_proposal
+WHEN OLD.state <> 'pending'
+  OR NEW.state = 'pending'
+  OR NEW.row_id <> OLD.row_id
+  OR NEW.public_id <> OLD.public_id
+  OR NEW.proposal_revision <> OLD.proposal_revision
+  OR NEW.kind <> OLD.kind
+  OR NEW.basis_digest <> OLD.basis_digest
+  OR NEW.evidence_digest <> OLD.evidence_digest
+  OR NEW.config_revision_row_id <> OLD.config_revision_row_id
+  OR NEW.created_sequence <> OLD.created_sequence
+  OR NEW.created_at <> OLD.created_at
+  OR NEW.actor_row_id IS NULL
+  OR NEW.reason_code IS NULL
+  OR NEW.decided_sequence IS NULL
+  OR NEW.decided_at IS NULL
+BEGIN SELECT RAISE(ABORT, 'proposal permits only one pending-to-decision transition'); END;
 CREATE TRIGGER guard_d_relation_proposal BEFORE DELETE ON relation_proposal BEGIN SELECT RAISE(ABORT, 'relation proposal is append-only'); END;
 CREATE TRIGGER guard_u_proposal_session_input BEFORE UPDATE ON proposal_session_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
 CREATE TRIGGER guard_d_proposal_session_input BEFORE DELETE ON proposal_session_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;

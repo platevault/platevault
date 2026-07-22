@@ -353,6 +353,61 @@ async fn footprint_rtree_preserves_outward_i32_bounds() {
         .await
         .unwrap();
     assert_eq!(corpus_count.0, 21);
+
+    // The RTree is a conservative bounding-box shortlist. For representative
+    // query windows, every exact box intersection must remain in the shortlist.
+    for (min_x, max_x, min_y, max_y, min_z, max_z) in [
+        (
+            -1_000_000_000_i64,
+            1_000_000_000,
+            -1_000_000_000,
+            1_000_000_000,
+            -1_000_000_000,
+            1_000_000_000,
+        ),
+        (-700, 700, -100, 100, -100, 100),
+        (-1_000_000_000, -999_999_999, -100, 100, -100, 100),
+        (-900_000_000, 900_000_000, -900_000_000, 900_000_000, -900_000_000, 900_000_000),
+    ] {
+        let exact: Vec<(i64,)> = sqlx::query_as(
+            "SELECT row_id
+             FROM frame_metadata_evidence
+             WHERE bbox_max_x_ppb >= ? AND bbox_min_x_ppb <= ?
+               AND bbox_max_y_ppb >= ? AND bbox_min_y_ppb <= ?
+               AND bbox_max_z_ppb >= ? AND bbox_min_z_ppb <= ?
+             ORDER BY row_id",
+        )
+        .bind(min_x)
+        .bind(max_x)
+        .bind(min_y)
+        .bind(max_y)
+        .bind(min_z)
+        .bind(max_z)
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        let shortlist: Vec<(i64,)> = sqlx::query_as(
+            "SELECT evidence_row_id
+             FROM frame_footprint_rtree
+             WHERE max_x_ppb >= ? AND min_x_ppb <= ?
+               AND max_y_ppb >= ? AND min_y_ppb <= ?
+               AND max_z_ppb >= ? AND min_z_ppb <= ?
+             ORDER BY evidence_row_id",
+        )
+        .bind(min_x)
+        .bind(max_x)
+        .bind(min_y)
+        .bind(max_y)
+        .bind(min_z)
+        .bind(max_z)
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert!(
+            exact.iter().all(|candidate| shortlist.contains(candidate)),
+            "RTree shortlist omitted an exact intersecting candidate for query bounds ({min_x}, {max_x}, {min_y}, {max_y}, {min_z}, {max_z})"
+        );
+    }
     let extrema: (i64, i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT min_x_ppb, max_x_ppb, min_y_ppb, max_y_ppb, min_z_ppb, max_z_ppb
          FROM frame_footprint_rtree WHERE evidence_row_id = 4",
@@ -372,6 +427,35 @@ async fn footprint_rtree_preserves_outward_i32_bounds() {
 async fn normalized_result_counts_and_visibility_history_are_enforced() {
     let (_dir, db) = fresh_database().await;
     seed_session(db.pool()).await;
+
+    sqlx::query(
+        "INSERT INTO spec062_inbox_materialization_plan
+         (row_id, public_id, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000009',
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO inbox_materialization_plan_result_snapshot
+         (row_id, public_id, plan_row_id, plan_revision, config_revision_row_id,
+          input_evidence_revision, proposed_session_count, frame_count,
+          blocked_frame_count, canonical_digest, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000010', 1, 1, 1, 1,
+                 0, 1, 0, 'inbox-result', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    let inbox_frame_mismatch: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM spec062_invariant_violation
+         WHERE invariant = 'inbox_frame_count' AND owner_row_id = 1",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(inbox_frame_mismatch.0, 1);
 
     sqlx::query(
         "INSERT INTO session_materialization_result_snapshot (
@@ -606,6 +690,43 @@ async fn owner_scoped_heads_and_parent_chains_reject_cross_owner_references() {
         .await
         .unwrap();
     }
+
+    sqlx::query(
+        "INSERT INTO repository_change(command_row_id, created_at)
+         VALUES (NULL, '2026-07-22T00:00:02.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO panel_group_head_history
+         (panel_group_row_id, generation, head_revision_row_id, accepted_sequence)
+         VALUES (1, 0, 1, 1)",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE panel_group_head_history SET retired_sequence = 2
+         WHERE panel_group_row_id = 1 AND generation = 0",
+    )
+    .execute(db.pool())
+    .await
+    .expect("current head may be retired exactly once");
+    assert!(sqlx::query(
+        "UPDATE panel_group_head_history SET retired_sequence = 3
+         WHERE panel_group_row_id = 1 AND generation = 0",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    assert!(sqlx::query(
+        "UPDATE panel_group_head_history SET accepted_sequence = 2
+         WHERE panel_group_row_id = 1 AND generation = 0",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
     assert!(sqlx::query("UPDATE panel_group SET head_revision_row_id = 2 WHERE row_id = 1")
         .execute(db.pool())
         .await
@@ -754,6 +875,19 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
     .execute(db.pool())
     .await
     .unwrap();
+    sqlx::query(
+        "UPDATE relation_proposal
+         SET state = 'accepted', actor_row_id = 1, reason_code = 'approved',
+             decided_sequence = 1, decided_at = '2026-07-22T00:00:01.000000Z'
+         WHERE row_id = 1",
+    )
+    .execute(db.pool())
+    .await
+    .expect("pending proposals may transition once to a decided state");
+    assert!(sqlx::query("UPDATE relation_proposal SET reason_code = 'rewritten' WHERE row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
     assert!(sqlx::query("INSERT INTO proposal_panel_revision_input VALUES (1, 999, 'source', 0)")
         .execute(db.pool())
         .await
@@ -844,6 +978,18 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
     .execute(db.pool())
     .await
     .unwrap();
+    sqlx::query(
+        "INSERT INTO materialization_install_intent
+         (plan_item_row_id, plan_row_id, collision_key, canonical_destination,
+          approved_fingerprint, ownership_token, command_row_id, lease_owner,
+          lease_generation, state, updated_at)
+         VALUES (1, 1, 'root:dark/frame.fit:mismatch', '/project/dark/frame.fit.mismatch',
+                 'sha256:abc', 'owner-token-mismatch', 1, 'worker-b', 7, 'prepared',
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .expect_err("install intent must match the live command lease owner");
     sqlx::query(
         "INSERT INTO materialization_install_intent
          (plan_item_row_id, plan_row_id, collision_key, canonical_destination,
