@@ -2061,6 +2061,7 @@ CREATE TABLE materialization_install_intent (
         REFERENCES materialization_plan_entry(row_id, plan_row_id),
     FOREIGN KEY (command_row_id, lease_owner, lease_generation)
         REFERENCES command_execution(row_id, lease_owner, lease_generation)
+        DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
 CREATE TABLE materialization_item_journal (
@@ -2774,7 +2775,7 @@ WHEN OLD.state <> 'pending'
   OR NEW.state = 'pending'
   OR NEW.row_id <> OLD.row_id
   OR NEW.public_id <> OLD.public_id
-  OR NEW.proposal_revision <> OLD.proposal_revision
+  OR NEW.proposal_revision <> OLD.proposal_revision + 1
   OR NEW.kind <> OLD.kind
   OR NEW.basis_digest <> OLD.basis_digest
   OR NEW.evidence_digest <> OLD.evidence_digest

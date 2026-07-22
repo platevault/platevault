@@ -876,14 +876,66 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
     .await
     .unwrap();
     sqlx::query(
+        "INSERT INTO relation_proposal_visibility_history
+         (proposal_row_id, proposal_revision, state, visible_sequence)
+         VALUES (1, 1, 'pending', 1)",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO repository_change(command_row_id, created_at)
+         VALUES (NULL, '2026-07-22T00:00:02.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query(
         "UPDATE relation_proposal
-         SET state = 'accepted', actor_row_id = 1, reason_code = 'approved',
-             decided_sequence = 1, decided_at = '2026-07-22T00:00:01.000000Z'
+         SET proposal_revision = 3, state = 'accepted', actor_row_id = 1,
+             reason_code = 'stale', decided_sequence = 2,
+             decided_at = '2026-07-22T00:00:02.000000Z'
+         WHERE row_id = 1",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    sqlx::query(
+        "UPDATE relation_proposal
+         SET proposal_revision = 2, state = 'accepted', actor_row_id = 1,
+             reason_code = 'approved', decided_sequence = 2,
+             decided_at = '2026-07-22T00:00:02.000000Z'
          WHERE row_id = 1",
     )
     .execute(db.pool())
     .await
     .expect("pending proposals may transition once to a decided state");
+    sqlx::query(
+        "UPDATE relation_proposal_visibility_history
+         SET hidden_sequence = 2
+         WHERE proposal_row_id = 1 AND proposal_revision = 1",
+    )
+    .execute(db.pool())
+    .await
+    .expect("pending proposal visibility closes at its decision sequence");
+    sqlx::query(
+        "INSERT INTO relation_proposal_visibility_history
+         (proposal_row_id, proposal_revision, state, visible_sequence)
+         VALUES (1, 2, 'accepted', 2)",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query(
+        "UPDATE relation_proposal
+         SET proposal_revision = 3, state = 'rejected', actor_row_id = 1,
+             reason_code = 'second-decision', decided_sequence = 2,
+             decided_at = '2026-07-22T00:00:02.000000Z'
+         WHERE row_id = 1",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
     assert!(sqlx::query("UPDATE relation_proposal SET reason_code = 'rewritten' WHERE row_id = 1")
         .execute(db.pool())
         .await
@@ -1002,12 +1054,34 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
     .execute(db.pool())
     .await
     .unwrap();
+    let mut connection = db.pool().acquire().await.unwrap();
+    let mut tx = connection.begin().await.unwrap();
+    sqlx::query(
+        "UPDATE command_execution
+         SET state = 'executing', state_version = 2, lease_owner = 'worker-b',
+             lease_generation = 8, lease_expires_at = '2026-07-22T00:10:00.000000Z',
+             heartbeat_at = '2026-07-22T00:00:03.000000Z', finished_at = NULL
+         WHERE row_id = 1",
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE materialization_install_intent
+         SET lease_owner = 'worker-b', lease_generation = 8,
+             updated_at = '2026-07-22T00:00:03.000000Z'
+         WHERE plan_item_row_id = 1",
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    tx.commit().await.expect("deferred fence permits an atomic lease takeover");
     assert!(sqlx::query(
         "INSERT INTO materialization_item_journal
          (plan_item_row_id, plan_row_id, operation_command_row_id,
           resulting_entry_row_id, destination_root_row_id, relative_path,
           content_fingerprint, lease_owner, lease_generation, completed_at)
-         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 8,
+         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 7,
                  '2026-07-22T00:00:00.000000Z')",
     )
     .execute(db.pool())
@@ -1018,7 +1092,7 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
          (plan_item_row_id, plan_row_id, operation_command_row_id,
           resulting_entry_row_id, destination_root_row_id, relative_path,
           content_fingerprint, lease_owner, lease_generation, completed_at)
-         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 7,
+         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-b', 8,
                  '2026-07-22T00:00:00.000000Z')",
     )
     .execute(db.pool())
@@ -1029,7 +1103,7 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
          (plan_item_row_id, plan_row_id, operation_command_row_id,
           resulting_entry_row_id, destination_root_row_id, relative_path,
           content_fingerprint, lease_owner, lease_generation, completed_at)
-         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 7,
+         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-b', 8,
                  '2026-07-22T00:00:00.000000Z')",
     )
     .execute(db.pool())
