@@ -124,14 +124,11 @@ fn migration_set_has_frozen_0001_and_unique_append_only_versions() {
 
     let mut versions = HashSet::new();
     for migration in migrations {
-        assert!(migration.version >= 1, "migration versions must be positive");
+        assert!(migration.version >= 2, "future migrations append after frozen 0001");
         assert!(
             versions.insert(migration.version),
             "duplicate migration version {}",
             migration.version
         );
-        if migration.version > 1 {
-            assert!(migration.version >= 2, "future migrations append after frozen 0001");
-        }
     }
 }
