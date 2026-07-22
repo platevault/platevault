@@ -1,10 +1,5 @@
 {
   "mcpServers": {
-    "codebase-memory-mcp": {
-      "type": "stdio",
-      "command": "codebase-memory-mcp",
-      "args": []
-    },
     "context7": {
       "type": "stdio",
       "command": "npx",
@@ -37,25 +32,6 @@
         "repomix",
         "--mcp"
       ]
-    },
-    "serena": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "ctx=\"${SERENA_MCP_CONTEXT:-}\"; if [ -z \"$ctx\" ]; then parent=\"$(ps -o args= -p \"$PPID\" 2>/dev/null | tr \"[:upper:]\" \"[:lower:]\")\"; case \"$parent\" in *claude*) ctx=\"claude-code\" ;; *codex*) ctx=\"codex\" ;; *) ctx=\"agent\" ;; esac; fi; exec serena start-mcp-server --context \"$ctx\" --project-from-cwd"
-      ]
-    },
-    "tauri": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "set -a; [ -f .mcp.tauri.env ] && . ./.mcp.tauri.env; set +a; exec npx -y @hypothesi/tauri-mcp-server"
-      ],
-      "env": {
-        "MCP_BRIDGE_PORT": "9223"
-      }
     }
   }
 }
