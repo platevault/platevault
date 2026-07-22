@@ -93,8 +93,8 @@ function main() {
     const keys = messageKeys(
       readJson(catalogPath(locale), `catalogue (${locale})`),
     );
-    const missing = [...baseKeys].filter((k) => !keys.has(k));
-    const orphaned = [...keys].filter((k) => !baseKeys.has(k));
+    const missing = [...baseKeys].filter((k) => !keys.has(k)).sort();
+    const orphaned = [...keys].filter((k) => !baseKeys.has(k)).sort();
     const translated = baseKeys.size - missing.length;
     const pct = ((translated / baseKeys.size) * 100).toFixed(1);
 
