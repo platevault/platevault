@@ -109,19 +109,15 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     expect(await page.evaluate(() => localStorage.getItem('alm.locale'))).toBe(
       'pt-BR',
     );
+    await expect(page.getByText('Escolha seu idioma preferido')).toBeVisible();
 
     // Advance through the rest of setup. pt-BR is at full key parity with
-    // en-GB, so from here every step heading and nav button renders in
-    // Portuguese — except this very first click: `changeLocale` re-renders
-    // only the Language step's own subtree (the context consumer), not the
-    // wizard chrome computed by the parent SetupWizard render, so the
-    // Continue button here is still showing its pre-switch English label.
-    // The next SetupWizard render — triggered by the step change this click
-    // causes — picks up the new locale for everything downstream.
+    // en-GB, so every step heading and navigation action renders in Portuguese.
     const continueButton = page.getByRole('button', {
       name: /^Continuar para/i,
     });
-    await page.getByRole('button', { name: /^Continue to/i }).click();
+    await expect(continueButton).toBeVisible();
+    await continueButton.click();
     await expect(
       page.getByRole('heading', { name: 'Onde seus dados residem?' }),
     ).toBeVisible();
