@@ -531,7 +531,7 @@ impl KeysetListOperation for RelationListOperation {
             Self::SessionSupersessionSuccessor => &["ordinal ASC", "successorSessionId ASC"],
             Self::SessionSupersessionPredecessor => &["ordinal ASC", "predecessorSessionId ASC"],
             Self::PanelMembership => &["ordinal ASC", "sessionId ASC"],
-            Self::PanelHistory | Self::MosaicHistory => &["revisionNumber DESC"],
+            Self::PanelHistory | Self::MosaicHistory => &["revisionNumber DESC", "revisionId ASC"],
             Self::PanelLineagePredecessor => &[
                 "acceptedAt DESC",
                 "acceptedProposalId ASC",
@@ -546,7 +546,7 @@ impl KeysetListOperation for RelationListOperation {
             ],
             Self::Panel => &["acceptedAt DESC", "panelGroupId ASC"],
             Self::MosaicPanel => &["ordinal ASC", "panelRevisionId ASC", "panelGroupId ASC"],
-            Self::MosaicEdge => &["ordinal ASC", "edgeId ASC"],
+            Self::MosaicEdge | Self::ProposalEdge => &["ordinal ASC", "edgeId ASC"],
             Self::MosaicLineagePredecessor => &[
                 "acceptedAt DESC",
                 "acceptedProposalId ASC",
@@ -561,17 +561,25 @@ impl KeysetListOperation for RelationListOperation {
             ],
             Self::MosaicObjectEvidence => &["canonicalObjectId ASC"],
             Self::Proposal => &["createdAt DESC", "proposalId ASC"],
-            Self::ProposalSourceRevision
-            | Self::ProposalSubject
-            | Self::ProposalMembership
-            | Self::ProposalEdge
-            | Self::ProposalLineage
-            | Self::DecisionRevision
-            | Self::DecisionRetiredGroup
-            | Self::DecisionSessionSupersession
-            | Self::DecisionGroupLineage
-            | Self::TraversalNode
-            | Self::TraversalEdge => &["ordinal ASC"],
+            Self::ProposalSourceRevision | Self::DecisionRevision => {
+                &["ordinal ASC", "entityType ASC", "entityId ASC", "revisionId ASC"]
+            }
+            Self::ProposalSubject | Self::ProposalMembership => {
+                &["ordinal ASC", "entityType ASC", "entityId ASC"]
+            }
+            Self::ProposalLineage | Self::DecisionGroupLineage => {
+                &["ordinal ASC", "predecessorGroupId ASC", "successorGroupId ASC"]
+            }
+            Self::DecisionRetiredGroup => &["ordinal ASC", "groupId ASC"],
+            Self::DecisionSessionSupersession => {
+                &["ordinal ASC", "predecessorSessionId ASC", "successorSessionId ASC"]
+            }
+            Self::TraversalNode => {
+                &["ordinal ASC", "nodeRef.entityType ASC", "nodeRef.entityId ASC"]
+            }
+            Self::TraversalEdge => {
+                &["ordinal ASC", "edgeRef.entityType ASC", "edgeRef.entityId ASC"]
+            }
         }
     }
 }
@@ -1112,13 +1120,9 @@ pub enum RelationCommand {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(
-    tag = "event",
-    content = "payload",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "event", rename_all_fields = "camelCase")]
 pub enum RelationEvent {
+    #[serde(rename = "session.materialized")]
     SessionMaterialized {
         session_id: CanonicalId,
         materialization_operation_id: CanonicalId,
@@ -1130,11 +1134,13 @@ pub enum RelationEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         panel_revision_id: Option<CanonicalId>,
     },
+    #[serde(rename = "session.superseded")]
     SessionSuperseded {
         predecessor_session_id: CanonicalId,
         replacement_session_count: u64,
         applied_reclassification_plan_revision_id: CanonicalId,
     },
+    #[serde(rename = "relation_proposal.created")]
     ProposalCreated {
         proposal_id: CanonicalId,
         kind: RelationProposalKind,
@@ -1145,6 +1151,7 @@ pub enum RelationEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         missing_evidence_code_count: Option<u64>,
     },
+    #[serde(rename = "relation_proposal.accepted")]
     ProposalAccepted {
         proposal_id: CanonicalId,
         decision_snapshot_id: CanonicalId,
@@ -1152,21 +1159,25 @@ pub enum RelationEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         cross_target_association_id: Option<CanonicalId>,
     },
+    #[serde(rename = "cross_target_association.created")]
     CrossTargetAssociationCreated {
         cross_target_association_id: CanonicalId,
         accepted_proposal_id: CanonicalId,
         canonical_target_count: u64,
     },
+    #[serde(rename = "relation_proposal.rejected")]
     ProposalRejected {
         proposal_id: CanonicalId,
         suppression_fingerprint: Digest,
         rejection_reason: SafeText,
     },
+    #[serde(rename = "relation_proposal.corrected")]
     ProposalCorrected {
         proposal_id: CanonicalId,
         corrected_proposal_id: CanonicalId,
         correction_note: SafeText,
     },
+    #[serde(rename = "group.head_changed")]
     GroupHeadChanged {
         group_type: GroupType,
         group_id: CanonicalId,

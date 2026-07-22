@@ -446,13 +446,9 @@ pub enum InboxCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(
-    tag = "event",
-    content = "payload",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "event", rename_all_fields = "camelCase")]
 pub enum InboxEvent {
+    #[serde(rename = "inbox.acquisition_site_resolved")]
     AcquisitionSiteResolved {
         plan_id: CanonicalId,
         resolution_id: CanonicalId,
@@ -464,11 +460,13 @@ pub enum InboxEvent {
         decision: SiteResolutionDecision,
         derived_observing_night: LocalDate,
     },
+    #[serde(rename = "inbox.materialization_approved")]
     MaterializationApproved {
         plan_id: CanonicalId,
         plan_revision: u64,
         approved_plan_digest: Digest,
     },
+    #[serde(rename = "session.materialization_progressed")]
     MaterializationProgressed {
         operation_id: CanonicalId,
         processed_session_count: u64,
@@ -476,10 +474,9 @@ pub enum InboxEvent {
         processed_frame_count: u64,
         total_frame_count: u64,
     },
-    MaterializationCancelled {
-        operation_id: CanonicalId,
-        source_plan_id: CanonicalId,
-    },
+    #[serde(rename = "session.materialization_cancelled")]
+    MaterializationCancelled { operation_id: CanonicalId, source_plan_id: CanonicalId },
+    #[serde(rename = "session.materialization_applied")]
     MaterializationApplied {
         operation_id: CanonicalId,
         kind: MaterializationKind,
@@ -491,13 +488,13 @@ pub enum InboxEvent {
         singleton_panel_group_count: u64,
         blocked_frame_count: u64,
     },
+    #[serde(rename = "session.materialization_failed")]
     MaterializationFailed {
         operation_id: CanonicalId,
         kind: MaterializationKind,
         source_plan_id: CanonicalId,
         failure_code: SafeText,
     },
-    MaterializationDiscarded {
-        plan_id: CanonicalId,
-    },
+    #[serde(rename = "inbox.materialization_discarded")]
+    MaterializationDiscarded { plan_id: CanonicalId },
 }

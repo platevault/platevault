@@ -539,13 +539,9 @@ pub enum CalibrationCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(
-    tag = "event",
-    content = "payload",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "event", rename_all_fields = "camelCase")]
 pub enum CalibrationEvent {
+    #[serde(rename = "calibration.handoff_created")]
     HandoffCreated {
         project_id: CanonicalId,
         handoff_id: CanonicalId,
@@ -554,6 +550,7 @@ pub enum CalibrationEvent {
         unselected_requirement_ids: BoundedList<CanonicalId, 100>,
         warning_codes: BoundedList<SafeText, 100>,
     },
+    #[serde(rename = "calibration.handoff_reviewed_selection_added")]
     HandoffReviewedSelectionAdded {
         project_id: CanonicalId,
         handoff_id: CanonicalId,

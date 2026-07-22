@@ -671,13 +671,9 @@ pub enum MetadataCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(
-    tag = "event",
-    content = "payload",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "event", rename_all_fields = "camelCase")]
 pub enum MetadataEvent {
+    #[serde(rename = "equipment.resolution.decided")]
     EquipmentResolutionDecided {
         resolution_id: CanonicalId,
         session_id: CanonicalId,
@@ -688,11 +684,13 @@ pub enum MetadataEvent {
         optical_profile_id: Option<CanonicalId>,
         decision: ResolutionDecision,
     },
+    #[serde(rename = "equipment.camera_marked_unregulated")]
     CameraMarkedUnregulated {
         camera_id: CanonicalId,
         effective_after: Rfc3339Timestamp,
         resolution_id: CanonicalId,
     },
+    #[serde(rename = "metadata.reclassification_planned")]
     ReclassificationPlanned {
         plan_id: CanonicalId,
         source_session_id: CanonicalId,
@@ -704,6 +702,7 @@ pub enum MetadataEvent {
         stale_mosaic_edge_count: u64,
         project_consequence_count: u64,
     },
+    #[serde(rename = "metadata.reclassification_applied")]
     ReclassificationApplied {
         plan_id: CanonicalId,
         applied_reclassification_plan_revision_id: CanonicalId,
@@ -716,7 +715,6 @@ pub enum MetadataEvent {
         invalidated_mosaic_edge_count: u64,
         project_replacement_proposal_count: u64,
     },
-    ReclassificationDiscarded {
-        plan_id: CanonicalId,
-    },
+    #[serde(rename = "metadata.reclassification_discarded")]
+    ReclassificationDiscarded { plan_id: CanonicalId },
 }

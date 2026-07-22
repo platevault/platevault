@@ -1,30 +1,31 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-use std::collections::HashSet;
-
 use contracts_core::sessions::heterogeneity::calibration::{
-    AutomaticEligibility, CalibrationCandidateEvidence, CalibrationHandoffFrame, CalibrationKind,
-    CalibrationListOperation, CalibrationQuery, HandoffOperationQueryRequest, IndexedReadableState,
+    AutomaticEligibility, CalibrationCandidateEvidence, CalibrationEvent, CalibrationHandoffFrame,
+    CalibrationKind, CalibrationListOperation, CalibrationQuery, HandoffOperationQueryRequest,
+    IndexedReadableState,
 };
 use contracts_core::sessions::heterogeneity::inbox::{
-    InboxListOperation, InboxQuery, OperationQueryRequest,
+    InboxEvent, InboxListOperation, InboxQuery, OperationQueryRequest,
 };
 use contracts_core::sessions::heterogeneity::metadata::{
-    MetadataEvidenceQueryRequest, MetadataListOperation, MetadataQuery,
+    MetadataEvent, MetadataEvidenceQueryRequest, MetadataListOperation, MetadataQuery,
 };
 use contracts_core::sessions::heterogeneity::projects::{
-    ProjectListOperation, ProjectQuery, ProjectQueryRequest, RelatedSessionListRequest,
+    ProjectEvent, ProjectListOperation, ProjectQuery, ProjectQueryRequest,
+    RelatedSessionListRequest,
 };
 use contracts_core::sessions::heterogeneity::relations::{
     EvidenceTernary, ManualRelationCreateRequest, ManualRelationKind, ManualTargetScope,
-    PanelListRequest, ParityEvidence, RelationEvidence, RelationListOperation, RelationQuery,
-    SessionQueryRequest, TargetCompatibility, TraversalStartRequest,
+    PanelListRequest, ParityEvidence, RelationEvent, RelationEvidence, RelationListOperation,
+    RelationQuery, SessionQueryRequest, TargetCompatibility, TraversalStartRequest,
 };
 use contracts_core::sessions::heterogeneity::settings::{
     CalibrationAgePolicy, DarkThermalThresholds, FixedMatchingRules, FlatAgeThresholds,
-    FlatOrientationThresholds, GeometryThresholds, MatchingSettings, MatchingSettingsGetRequest,
-    MatchingSettingsQuery, MosaicThresholds, SettingsSeverity,
+    FlatOrientationThresholds, GeometryThresholds, MatchingSettings, MatchingSettingsEvent,
+    MatchingSettingsGetRequest, MatchingSettingsQuery, MatchingSettingsUpdatedEvent,
+    MosaicThresholds, SettingsSeverity,
 };
 use contracts_core::sessions::heterogeneity::shared::{
     BoundedList, CanonicalId, CanonicalRelativePath, CanonicalUuid, CommandFence, ContractRange,
@@ -61,18 +62,14 @@ fn decimal(value: f64) -> FiniteDecimal {
     FiniteDecimal::try_new(value).expect("fixture decimal is finite")
 }
 
-fn assert_registry<T, const N: usize>(operations: [T; N], names: &mut HashSet<&'static str>)
-where
+fn append_registry<T, const N: usize>(
+    operations: [T; N],
+    entries: &mut Vec<(&'static str, &'static [&'static str])>,
+) where
     T: Copy + KeysetListOperation,
 {
     for operation in operations {
-        assert!(names.insert(operation.query_name()), "duplicate query operation");
-        let order = operation.unique_order();
-        assert!(!order.is_empty(), "list operation must define a total order");
-        assert!(
-            order.last().is_some_and(|field| field.ends_with(" ASC") || field.ends_with(" DESC")),
-            "the final keyset tie-breaker must be deterministic"
-        );
+        entries.push((operation.query_name(), operation.unique_order()));
     }
 }
 
@@ -140,51 +137,219 @@ fn runtime_bounds_and_defaults_are_present_in_json_schema() {
 
     let entity_id = serde_json::to_value(schema_for!(CanonicalId)).unwrap();
     assert!(entity_id["pattern"].as_str().unwrap().contains("-7"));
-}
 
-#[test]
-fn every_reviewed_list_operation_has_a_unique_name_and_total_keyset_order() {
-    let mut names = HashSet::new();
-    assert_registry(InboxListOperation::ALL, &mut names);
-    assert_registry(MetadataListOperation::ALL, &mut names);
-    assert_registry(CalibrationListOperation::ALL, &mut names);
-    assert_registry(RelationListOperation::ALL, &mut names);
-    assert_registry(ProjectListOperation::ALL, &mut names);
-    assert_eq!(names.len(), 65);
-}
-
-#[test]
-fn published_total_order_tuples_use_exact_documented_paths() {
-    assert_eq!(
-        MetadataListOperation::PanelConsequenceLineage.unique_order(),
-        &[
-            "ordinal ASC",
-            "lineage.predecessorPanelGroupId ASC",
-            "lineage.successorPanelGroupId ASC",
-        ]
-    );
-    assert_eq!(
-        MetadataListOperation::ApplyPanelRevision.unique_order(),
-        &["ordinal ASC", "revisionRef.revisionId ASC"]
-    );
-    for operation in [
-        RelationListOperation::ProposalSourceRevision,
-        RelationListOperation::ProposalSubject,
-        RelationListOperation::ProposalMembership,
-        RelationListOperation::ProposalEdge,
-        RelationListOperation::ProposalLineage,
-        RelationListOperation::DecisionRevision,
-        RelationListOperation::DecisionRetiredGroup,
-        RelationListOperation::DecisionSessionSupersession,
-        RelationListOperation::DecisionGroupLineage,
-        RelationListOperation::TraversalNode,
-        RelationListOperation::TraversalEdge,
-    ] {
-        assert_eq!(operation.unique_order(), &["ordinal ASC"], "{}", operation.query_name());
+    let relative_path = serde_json::to_value(schema_for!(CanonicalRelativePath)).unwrap();
+    assert_eq!(relative_path["x-maxUtf8Bytes"], 4096);
+    assert_eq!(relative_path["x-maxSegmentUtf8Bytes"], 255);
+    let path_pattern = relative_path["pattern"].as_str().unwrap();
+    for structural_rule in ["(?!/)", "(?![A-Za-z]:)", "(?!.*\\\\)", "\\.\\.?", "{0,63}"] {
+        assert!(path_pattern.contains(structural_rule), "missing schema rule {structural_rule}");
     }
-    assert_eq!(RelationListOperation::PanelHistory.unique_order(), &["revisionNumber DESC"]);
-    assert_eq!(RelationListOperation::MosaicHistory.unique_order(), &["revisionNumber DESC"]);
-    assert_eq!(ProjectListOperation::PlanOverlayMapping.unique_order(), &["ordinal ASC"]);
+}
+
+#[test]
+fn relative_path_runtime_matches_every_published_schema_boundary() {
+    for accepted in ["frame.fit", "night-1/frame.fit", &"a".repeat(255)] {
+        assert!(CanonicalRelativePath::try_new(accepted).is_ok(), "accepted path: {accepted}");
+    }
+    let too_many_segments = std::iter::repeat_n("a", 65).collect::<Vec<_>>().join("/");
+    let too_many_bytes = std::iter::repeat_n("a".repeat(64), 64).collect::<Vec<_>>().join("/");
+    for rejected in [
+        "",
+        "/frame.fit",
+        "C:/frame.fit",
+        "night\\frame.fit",
+        "night//frame.fit",
+        "night/./frame.fit",
+        "night/../frame.fit",
+        "night/frame.fit/",
+        &"a".repeat(256),
+        &too_many_segments,
+        &too_many_bytes,
+    ] {
+        assert!(CanonicalRelativePath::try_new(rejected).is_err(), "rejected path: {rejected}");
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn all_65_published_list_operations_match_the_documented_total_order_fixture() {
+    let mut actual = Vec::new();
+    append_registry(InboxListOperation::ALL, &mut actual);
+    append_registry(MetadataListOperation::ALL, &mut actual);
+    append_registry(RelationListOperation::ALL, &mut actual);
+    append_registry(ProjectListOperation::ALL, &mut actual);
+    append_registry(CalibrationListOperation::ALL, &mut actual);
+
+    let expected: &[(&str, &[&str])] = &[
+        (
+            "inbox.acquisition_site_candidate.list",
+            &["confidenceRank DESC", "normalizedLabel ASC", "siteId ASC"],
+        ),
+        (
+            "inbox.materialization_plan.proposed_session.list",
+            &["ordinal ASC", "proposedSessionKey ASC"],
+        ),
+        ("inbox.materialization_plan.proposed_frame.list", &["ordinal ASC", "frameId ASC"]),
+        ("inbox.materialization_plan.blocked_frame.list", &["ordinal ASC", "frameId ASC"]),
+        ("session.materialization.result_session.list", &["ordinal ASC", "sessionId ASC"]),
+        ("session.materialization.result_frame.list", &["ordinal ASC", "frameId ASC"]),
+        ("session.materialization.blocked_frame.list", &["ordinal ASC", "frameId ASC"]),
+        ("metadata.reclassification.replacement_frame.list", &["ordinal ASC", "frameId ASC"]),
+        (
+            "metadata.reclassification.replacement_session.list",
+            &["ordinal ASC", "replacementKey ASC"],
+        ),
+        ("metadata.reclassification.panel_consequence.list", &["ordinal ASC", "panelGroupId ASC"]),
+        (
+            "metadata.reclassification.panel_consequence_session.list",
+            &["ordinal ASC", "proposedSessionId ASC"],
+        ),
+        (
+            "metadata.reclassification.panel_consequence_retirement.list",
+            &["ordinal ASC", "predecessorPanelGroupId ASC"],
+        ),
+        (
+            "metadata.reclassification.panel_consequence_lineage.list",
+            &[
+                "ordinal ASC",
+                "lineage.predecessorPanelGroupId ASC",
+                "lineage.successorPanelGroupId ASC",
+            ],
+        ),
+        ("metadata.reclassification.stale_mosaic_edge.list", &["ordinal ASC", "edgeId ASC"]),
+        (
+            "metadata.reclassification.project_consequence.list",
+            &["projectId ASC", "unchangedPinnedSessionId ASC"],
+        ),
+        (
+            "metadata.reclassification.project_consequence_replacement.list",
+            &["ordinal ASC", "replacementKey ASC"],
+        ),
+        (
+            "metadata.reclassification.apply_result.replacement_session.list",
+            &["ordinal ASC", "replacementSessionId ASC"],
+        ),
+        (
+            "metadata.reclassification.apply_result.panel_revision.list",
+            &["ordinal ASC", "revisionRef.revisionId ASC"],
+        ),
+        (
+            "metadata.reclassification.apply_result.invalidated_edge.list",
+            &["ordinal ASC", "edgeId ASC"],
+        ),
+        (
+            "metadata.reclassification.apply_result.retired_panel_group.list",
+            &["ordinal ASC", "panelGroupId ASC"],
+        ),
+        (
+            "metadata.reclassification.apply_result.panel_lineage.list",
+            &[
+                "ordinal ASC",
+                "lineage.predecessorPanelGroupId ASC",
+                "lineage.successorPanelGroupId ASC",
+            ],
+        ),
+        (
+            "metadata.reclassification.apply_result.project_proposal.list",
+            &["ordinal ASC", "projectReplacementProposalId ASC"],
+        ),
+        ("session.list", &["createdAt DESC", "sessionId ASC"]),
+        ("session.frame.list", &["ordinal ASC", "frameId ASC"]),
+        ("session.supersession_successor.list", &["ordinal ASC", "successorSessionId ASC"]),
+        ("session.supersession_predecessor.list", &["ordinal ASC", "predecessorSessionId ASC"]),
+        ("panel_group.membership.list", &["ordinal ASC", "sessionId ASC"]),
+        ("panel_group.history.list", &["revisionNumber DESC", "revisionId ASC"]),
+        (
+            "panel_group.lineage_predecessor.list",
+            &["acceptedAt DESC", "acceptedProposalId ASC", "ordinal ASC", "predecessorGroupId ASC"],
+        ),
+        (
+            "panel_group.lineage_successor.list",
+            &["acceptedAt DESC", "acceptedProposalId ASC", "ordinal ASC", "successorGroupId ASC"],
+        ),
+        ("panel_group.list", &["acceptedAt DESC", "panelGroupId ASC"]),
+        ("mosaic.panel.list", &["ordinal ASC", "panelRevisionId ASC", "panelGroupId ASC"]),
+        ("mosaic.edge.list", &["ordinal ASC", "edgeId ASC"]),
+        ("mosaic.history.list", &["revisionNumber DESC", "revisionId ASC"]),
+        (
+            "mosaic.lineage_predecessor.list",
+            &[
+                "acceptedAt DESC",
+                "acceptedProposalId ASC",
+                "ordinal ASC",
+                "predecessorMosaicId ASC",
+            ],
+        ),
+        (
+            "mosaic.lineage_successor.list",
+            &["acceptedAt DESC", "acceptedProposalId ASC", "ordinal ASC", "successorMosaicId ASC"],
+        ),
+        ("mosaic.object_evidence.list", &["canonicalObjectId ASC"]),
+        ("relation_proposal.list", &["createdAt DESC", "proposalId ASC"]),
+        (
+            "relation_proposal.source_revision.list",
+            &["ordinal ASC", "entityType ASC", "entityId ASC", "revisionId ASC"],
+        ),
+        ("relation_proposal.subject.list", &["ordinal ASC", "entityType ASC", "entityId ASC"]),
+        ("relation_proposal.membership.list", &["ordinal ASC", "entityType ASC", "entityId ASC"]),
+        ("relation_proposal.edge.list", &["ordinal ASC", "edgeId ASC"]),
+        (
+            "relation_proposal.lineage.list",
+            &["ordinal ASC", "predecessorGroupId ASC", "successorGroupId ASC"],
+        ),
+        (
+            "relation_proposal.decision_revision.list",
+            &["ordinal ASC", "entityType ASC", "entityId ASC", "revisionId ASC"],
+        ),
+        ("relation_proposal.decision_retired_group.list", &["ordinal ASC", "groupId ASC"]),
+        (
+            "relation_proposal.decision_session_supersession.list",
+            &["ordinal ASC", "predecessorSessionId ASC", "successorSessionId ASC"],
+        ),
+        (
+            "relation_proposal.decision_group_lineage.list",
+            &["ordinal ASC", "predecessorGroupId ASC", "successorGroupId ASC"],
+        ),
+        (
+            "relation_traversal_preview.node.list",
+            &["ordinal ASC", "nodeRef.entityType ASC", "nodeRef.entityId ASC"],
+        ),
+        (
+            "relation_traversal_preview.edge.list",
+            &["ordinal ASC", "edgeRef.entityType ASC", "edgeRef.entityId ASC"],
+        ),
+        ("project.related_session.list", &["firstAvailableAt DESC", "sessionId ASC"]),
+        ("project.view_state.pin.list", &["sessionId ASC"]),
+        ("project.view_state.materialized_session.list", &["sessionId ASC"]),
+        ("project.view_state.unmaterialized_session.list", &["sessionId ASC"]),
+        ("project.manifest.entry.list", &["ordinal ASC", "entryId ASC"]),
+        ("project.manifest.correction_overlay.list", &["ordinal ASC", "overlayId ASC"]),
+        ("project.correction_overlay.mapping.list", &["ordinal ASC", "predecessorEntryId ASC"]),
+        ("project.update_view.pinned_session.list", &["ordinal ASC", "sessionId ASC"]),
+        ("project.update_view.added_session.list", &["ordinal ASC", "sessionId ASC"]),
+        ("project.update_view.item.list", &["ordinal ASC", "itemId ASC"]),
+        ("project.update_view.conflict.list", &["ordinal ASC", "itemId ASC"]),
+        ("project.update_view.overlay_mapping.list", &["ordinal ASC", "predecessorEntryId ASC"]),
+        (
+            "calibration.candidate.list",
+            &[
+                "compatibilityRank ASC",
+                "sufficiencyRank ASC",
+                "observingNight DESC",
+                "createdAt DESC",
+                "sessionId ASC",
+            ],
+        ),
+        ("calibration.handoff.requirement.list", &["requirementId ASC"]),
+        ("calibration.handoff.selection.list", &["selectedAt ASC", "selectionId ASC"]),
+        (
+            "calibration.handoff.frame.list",
+            &["selectionId ASC", "sessionMembershipOrdinal ASC", "frameId ASC"],
+        ),
+    ];
+    assert_eq!(expected.len(), 65);
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -228,6 +393,88 @@ fn six_surface_wire_operations_are_dotted_flat_and_operation_specific() {
     assert_eq!(samples[1]["evidenceRevision"], 3);
     assert!(samples[1].get("entityId").is_none());
     assert_eq!(samples[2]["sessionId"], ID);
+}
+
+#[test]
+fn six_surface_events_use_published_dotted_discriminants_and_flat_fields() {
+    let samples = [
+        (
+            serde_json::to_value(InboxEvent::MaterializationDiscarded { plan_id: id(ID) }).unwrap(),
+            json!({ "event": "inbox.materialization_discarded", "planId": ID }),
+        ),
+        (
+            serde_json::to_value(MetadataEvent::ReclassificationDiscarded { plan_id: id(ID) })
+                .unwrap(),
+            json!({ "event": "metadata.reclassification_discarded", "planId": ID }),
+        ),
+        (
+            serde_json::to_value(RelationEvent::SessionSuperseded {
+                predecessor_session_id: id(ID),
+                replacement_session_count: 2,
+                applied_reclassification_plan_revision_id: id(OTHER_ID),
+            })
+            .unwrap(),
+            json!({
+                "event": "session.superseded",
+                "predecessorSessionId": ID,
+                "replacementSessionCount": 2,
+                "appliedReclassificationPlanRevisionId": OTHER_ID,
+            }),
+        ),
+        (
+            serde_json::to_value(ProjectEvent::ViewStale {
+                project_id: id(ID),
+                unmaterialized_session_count: 3,
+            })
+            .unwrap(),
+            json!({
+                "event": "project.view_stale",
+                "projectId": ID,
+                "unmaterializedSessionCount": 3,
+            }),
+        ),
+        (
+            serde_json::to_value(CalibrationEvent::HandoffCreated {
+                project_id: id(ID),
+                handoff_id: id(OTHER_ID),
+                snapshot_id: id(ID),
+                automatic_selection_ids: BoundedList::default(),
+                unselected_requirement_ids: BoundedList::default(),
+                warning_codes: BoundedList::default(),
+            })
+            .unwrap(),
+            json!({
+                "event": "calibration.handoff_created",
+                "projectId": ID,
+                "handoffId": OTHER_ID,
+                "snapshotId": ID,
+                "automaticSelectionIds": [],
+                "unselectedRequirementIds": [],
+                "warningCodes": [],
+            }),
+        ),
+        (
+            serde_json::to_value(MatchingSettingsEvent::Updated(MatchingSettingsUpdatedEvent {
+                previous_revision: 7,
+                revision: 8,
+                changed_field_paths: BoundedList::default(),
+                warning_codes: BoundedList::default(),
+            }))
+            .unwrap(),
+            json!({
+                "event": "matching_settings.updated",
+                "previousRevision": 7,
+                "revision": 8,
+                "changedFieldPaths": [],
+                "warningCodes": [],
+            }),
+        ),
+    ];
+
+    for (actual, expected) in samples {
+        assert_eq!(actual, expected);
+        assert!(actual.get("payload").is_none());
+    }
 }
 
 #[test]
@@ -316,9 +563,10 @@ fn stale_errors_are_typed_and_detail_shapes_are_allowlisted_on_decode() {
         ErrorCode::RelationProposalStale,
         safe("Proposal basis is stale."),
         Some(SafeErrorDetails::StaleRevisions {
+            proposal_id: id(ID),
             revisions: BoundedList::default(),
             total_count: 0,
-            decision_snapshot_id: Some(id(ID)),
+            truncated: false,
         }),
     )
     .unwrap();
@@ -351,6 +599,104 @@ fn stale_errors_are_typed_and_detail_shapes_are_allowlisted_on_decode() {
         }),
     );
     assert!(wrong_field.is_err());
+}
+
+#[test]
+fn domain_errors_require_the_exact_published_field_set() {
+    let detail = |code: &str, values: Vec<(&str, SafeScalar)>, decision_snapshot_id| {
+        SafeErrorDetails::Domain {
+            code: safe(code),
+            values: BoundedList::try_new(
+                values
+                    .into_iter()
+                    .map(|(name, value)| NamedSafeValue { name: safe(name), value })
+                    .collect(),
+            )
+            .unwrap(),
+            decision_snapshot_id,
+        }
+    };
+    let text = || SafeScalar::Text(safe(ID));
+
+    assert!(PortableContractError::try_new(
+        ErrorCode::SessionNotFound,
+        safe("Session was not found."),
+        Some(detail("session.not_found", vec![("sessionId", text())], None)),
+    )
+    .is_ok());
+    assert!(PortableContractError::try_new(
+        ErrorCode::SessionNotFound,
+        safe("Session was not found."),
+        Some(detail("session.not_found", vec![], None)),
+    )
+    .is_err());
+    assert!(PortableContractError::try_new(
+        ErrorCode::InboxPlanDigestMismatch,
+        safe("Digest mismatch."),
+        Some(detail(
+            "inbox.plan_digest_mismatch",
+            vec![("planId", text()), ("expectedDigest", text())],
+            None,
+        )),
+    )
+    .is_err());
+    assert!(PortableContractError::try_new(
+        ErrorCode::SessionNotFound,
+        safe("Session was not found."),
+        Some(detail(
+            "session.not_found",
+            vec![("sessionId", text()), ("unexpected", text())],
+            None,
+        )),
+    )
+    .is_err());
+    assert!(PortableContractError::try_new(
+        ErrorCode::SessionNotFound,
+        safe("Session was not found."),
+        Some(
+            detail("session.not_found", vec![("sessionId", text()), ("sessionId", text())], None,)
+        ),
+    )
+    .is_err());
+    assert!(PortableContractError::try_new(
+        ErrorCode::InboxPlanStale,
+        safe("Plan is stale."),
+        Some(detail(
+            "inbox.plan_stale",
+            vec![("planId", text()), ("staleRevisionCount", SafeScalar::Unsigned(1)),],
+            None,
+        )),
+    )
+    .is_err());
+    assert!(PortableContractError::try_new(
+        ErrorCode::InboxPlanStale,
+        safe("Plan is stale."),
+        Some(detail(
+            "inbox.plan_stale",
+            vec![("planId", text()), ("staleRevisionCount", SafeScalar::Unsigned(1)),],
+            Some(id(ID)),
+        )),
+    )
+    .is_ok());
+    assert!(PortableContractError::try_new(
+        ErrorCode::SessionNotFound,
+        safe("Session was not found."),
+        Some(detail("session.not_found", vec![("sessionId", text())], Some(id(ID)),)),
+    )
+    .is_err());
+    assert!(PortableContractError::try_new(
+        ErrorCode::CalibrationHandoffTooLarge,
+        safe("Handoff is too large."),
+        Some(detail(
+            "calibration.handoff_too_large",
+            vec![
+                ("sourceByteCount", SafeScalar::Unsigned(10)),
+                ("maximumSourceBytes", SafeScalar::Unsigned(8)),
+            ],
+            None,
+        )),
+    )
+    .is_ok());
 }
 
 #[test]
@@ -447,7 +793,7 @@ fn optional_defaults_and_relation_bounds_are_enforced_on_decode() {
         "page": {}
     }))
     .unwrap();
-    assert!(related.include_pinned);
+    assert!(!related.include_pinned);
 
     let traversal: TraversalStartRequest = serde_json::from_value(json!({
         "startRefs": [{ "entityType": "panel_group", "entityId": ID }],

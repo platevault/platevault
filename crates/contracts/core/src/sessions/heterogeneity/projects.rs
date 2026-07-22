@@ -13,10 +13,6 @@ use super::shared::{
     StableIdentity,
 };
 
-const fn default_true() -> bool {
-    true
-}
-
 pub const MAX_UPDATE_VIEW_SESSIONS: u64 = 500;
 pub const MAX_UPDATE_VIEW_ITEMS: u64 = 100_000;
 pub const MAX_UPDATE_VIEW_SOURCE_FRAMES: u64 = 100_000;
@@ -430,14 +426,13 @@ impl KeysetListOperation for ProjectListOperation {
             Self::Pin | Self::MaterializedSession | Self::UnmaterializedSession => {
                 &["sessionId ASC"]
             }
-            Self::ManifestEntry
-            | Self::ManifestCorrectionOverlay
-            | Self::CorrectionOverlayMapping
-            | Self::PlanPinnedSession
-            | Self::PlanAddedSession
-            | Self::PlanItem
-            | Self::PlanConflict
-            | Self::PlanOverlayMapping => &["ordinal ASC"],
+            Self::ManifestEntry => &["ordinal ASC", "entryId ASC"],
+            Self::ManifestCorrectionOverlay => &["ordinal ASC", "overlayId ASC"],
+            Self::CorrectionOverlayMapping | Self::PlanOverlayMapping => {
+                &["ordinal ASC", "predecessorEntryId ASC"]
+            }
+            Self::PlanPinnedSession | Self::PlanAddedSession => &["ordinal ASC", "sessionId ASC"],
+            Self::PlanItem | Self::PlanConflict => &["ordinal ASC", "itemId ASC"],
         }
     }
 }
@@ -448,8 +443,8 @@ pub struct RelatedSessionListRequest {
     pub project_id: CanonicalId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_kinds: Option<BoundedList<RelatedSessionKind, 100>>,
-    #[serde(default = "default_true")]
-    #[schemars(default = "default_true")]
+    #[serde(default)]
+    #[schemars(default)]
     pub include_pinned: bool,
     pub page: PageRequest,
 }
@@ -677,35 +672,32 @@ pub enum ProjectCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(
-    tag = "event",
-    content = "payload",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase"
-)]
+#[serde(tag = "event", rename_all_fields = "camelCase")]
 pub enum ProjectEvent {
+    #[serde(rename = "project.related_session_available")]
     RelatedSessionAvailable {
         project_id: CanonicalId,
         session_id: CanonicalId,
         relation_kind: RelatedSessionKind,
         evidence_id: CanonicalId,
     },
+    #[serde(rename = "project.session_pinned")]
     SessionPinned {
         project_id: CanonicalId,
         session_id: CanonicalId,
         pin_revision: u64,
         source: PinSource,
     },
+    #[serde(rename = "project.session_pin_replaced")]
     SessionPinReplaced {
         project_id: CanonicalId,
         predecessor_session_id: CanonicalId,
         replacement_session_ids: BoundedList<CanonicalId, 500>,
         applied_reclassification_plan_revision_id: CanonicalId,
     },
-    ViewStale {
-        project_id: CanonicalId,
-        unmaterialized_session_count: u64,
-    },
+    #[serde(rename = "project.view_stale")]
+    ViewStale { project_id: CanonicalId, unmaterialized_session_count: u64 },
+    #[serde(rename = "project.update_view_planned")]
     UpdateViewPlanned {
         project_id: CanonicalId,
         plan_id: CanonicalId,
@@ -717,12 +709,14 @@ pub enum ProjectEvent {
         overlay_mapping_count: u64,
         remaining_session_count: u64,
     },
+    #[serde(rename = "project.update_view_approved")]
     UpdateViewApproved {
         project_id: CanonicalId,
         plan_id: CanonicalId,
         approval_id: CanonicalId,
         plan_revision: u64,
     },
+    #[serde(rename = "project.update_view_item_applied")]
     UpdateViewItemApplied {
         operation_id: CanonicalId,
         plan_id: CanonicalId,
@@ -730,6 +724,7 @@ pub enum ProjectEvent {
         session_id: CanonicalId,
         destination_relative_path: CanonicalRelativePath,
     },
+    #[serde(rename = "project.update_view_stopped")]
     UpdateViewStopped {
         operation_id: CanonicalId,
         plan_id: CanonicalId,
@@ -737,6 +732,7 @@ pub enum ProjectEvent {
         item_id: Option<CanonicalId>,
         error_code: SafeText,
     },
+    #[serde(rename = "project.update_view_failed")]
     UpdateViewFailed {
         operation_id: CanonicalId,
         plan_id: CanonicalId,
@@ -745,6 +741,7 @@ pub enum ProjectEvent {
         error_code: SafeText,
         resumable: bool,
     },
+    #[serde(rename = "project.update_view_applied")]
     UpdateViewApplied {
         operation_id: CanonicalId,
         plan_id: CanonicalId,

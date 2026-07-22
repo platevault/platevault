@@ -400,7 +400,9 @@ string_schema!(
         "type": "string",
         "minLength": 1,
         "maxLength": 4096,
-        "pattern": r"^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\.\.?/)(?!.*\\).+$",
+        "pattern": r"^(?!/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|/)\.\.?(/|$))(?:[^/\u0000]{1,255})(?:/[^/\u0000]{1,255}){0,63}$",
+        "x-maxUtf8Bytes": 4096,
+        "x-maxSegmentUtf8Bytes": 255,
     })
 );
 
@@ -786,16 +788,14 @@ pub enum SafeErrorDetails {
         actual_revision: u64,
     },
     StaleRevisions {
+        proposal_id: CanonicalId,
         revisions: BoundedList<RevisionRef, 500>,
         total_count: u64,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        decision_snapshot_id: Option<CanonicalId>,
+        truncated: bool,
     },
     Violations {
+        proposal_id: CanonicalId,
         violations: BoundedList<Violation, 100>,
-        total_count: u64,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        decision_snapshot_id: Option<CanonicalId>,
     },
     Idempotency {
         command_id: CanonicalId,
@@ -805,6 +805,7 @@ pub enum SafeErrorDetails {
         operation_id: CanonicalId,
     },
     AuthorizedPath {
+        plan_id: CanonicalId,
         item_id: CanonicalId,
         #[serde(skip_serializing_if = "Option::is_none")]
         relative_path: Option<CanonicalRelativePath>,
@@ -1093,7 +1094,8 @@ impl PortableContractError {
 }
 
 fn domain_details_match(code: ErrorCode, details: &SafeErrorDetails) -> bool {
-    let SafeErrorDetails::Domain { code: detail_code, values, .. } = details else {
+    let SafeErrorDetails::Domain { code: detail_code, values, decision_snapshot_id } = details
+    else {
         return false;
     };
     let Ok(serialized_code) = serde_json::to_value(code) else {
@@ -1104,10 +1106,29 @@ fn domain_details_match(code: ErrorCode, details: &SafeErrorDetails) -> bool {
     }
 
     let allowed = domain_detail_fields(code);
+    let optional = domain_optional_detail_fields(code);
     let mut seen = std::collections::HashSet::with_capacity(values.len());
-    values
-        .iter()
-        .all(|value| allowed.contains(&value.name.as_str()) && seen.insert(value.name.as_str()))
+    let values_valid = values.iter().all(|value| {
+        value.name.as_str() != "decisionSnapshotId"
+            && allowed.contains(&value.name.as_str())
+            && seen.insert(value.name.as_str())
+    });
+    let required_present = allowed.iter().all(|field| {
+        optional.contains(field)
+            || (*field == "decisionSnapshotId" && decision_snapshot_id.is_some())
+            || seen.contains(field)
+    });
+    let snapshot_allowed =
+        decision_snapshot_id.is_none() || allowed.contains(&"decisionSnapshotId");
+    values_valid && required_present && snapshot_allowed
+}
+
+fn domain_optional_detail_fields(code: ErrorCode) -> &'static [&'static str] {
+    match code {
+        ErrorCode::CalibrationHandoffTooLarge => &["handoffId", "sessionId"],
+        ErrorCode::CalibrationHandoffNotFound => &["snapshotId"],
+        _ => &[],
+    }
 }
 
 #[allow(clippy::match_same_arms, clippy::too_many_lines)]
@@ -1137,11 +1158,10 @@ fn domain_detail_fields(code: ErrorCode) -> &'static [&'static str] {
         ErrorCode::TraversalEdgeCeilingExceeded => &["operationId", "maxEdges", "visitedEdgeCount"],
         ErrorCode::TraversalDepthCeilingExceeded => &["operationId", "maxDepth", "deepestLevel"],
         ErrorCode::TraversalCancellationDeadlineExceeded => &["operationId", "cancelRequestedAt"],
-        ErrorCode::InboxPlanNotFound
-        | ErrorCode::InboxPlanNotOpen
-        | ErrorCode::InboxPlanNotApproved
-        | ErrorCode::InboxPlanDigestMismatch
-        | ErrorCode::InboxPlanStale => &["planId", "planRevision", "decisionSnapshotId"],
+        ErrorCode::InboxPlanNotFound => &["planId", "planRevision"],
+        ErrorCode::InboxPlanNotOpen | ErrorCode::InboxPlanNotApproved => &["planId", "state"],
+        ErrorCode::InboxPlanDigestMismatch => &["planId", "expectedDigest", "actualDigest"],
+        ErrorCode::InboxPlanStale => &["planId", "staleRevisionCount", "decisionSnapshotId"],
         ErrorCode::InboxSiteResolutionNotFound => &["planId", "resolutionRevision"],
         ErrorCode::InboxPlanResultSnapshotNotFound => &["planId", "planResultSnapshotId"],
         ErrorCode::InboxProposedSessionNotFound => {
@@ -1152,77 +1172,90 @@ fn domain_detail_fields(code: ErrorCode) -> &'static [&'static str] {
         ErrorCode::InboxTimestampConflict => &["planId", "conflictCount", "decisionSnapshotId"],
         ErrorCode::MaterializationOperationNotFound => &["operationId"],
         ErrorCode::MaterializationResultSnapshotNotFound => &["operationId", "resultSnapshotId"],
-        ErrorCode::MetadataEvidenceNotFound => &["metadataEvidenceId"],
-        ErrorCode::MetadataIdentityBlocked => &["metadataEvidenceId", "reasonCodes"],
-        ErrorCode::MetadataObservingNightConflict => {
-            &["metadataEvidenceId", "conflictCount", "decisionSnapshotId"]
+        ErrorCode::MetadataEvidenceNotFound => &["sessionId", "evidenceRevision"],
+        ErrorCode::MetadataIdentityBlocked => &["sessionId", "fieldStates"],
+        ErrorCode::MetadataObservingNightConflict => &["sessionId", "evidenceRefs"],
+        ErrorCode::EquipmentResolutionNotFound => &["sessionId", "resolutionRevision"],
+        ErrorCode::EquipmentNotRegistered => &["equipmentType", "equipmentId"],
+        ErrorCode::EquipmentOpticalProfileReviewRequired => &["sessionId", "differences"],
+        ErrorCode::CalibrationCoolingSetPointRequired => &["sessionId", "cameraId"],
+        ErrorCode::CalibrationFlatGainRequired => &["sessionId", "evidenceRefs"],
+        ErrorCode::CalibrationDarkFlatUnsupported => &["sourceRecordId"],
+        ErrorCode::ReclassificationPlanNotFound => &["planId"],
+        ErrorCode::ReclassificationPlanNotOpen => &["planId", "state"],
+        ErrorCode::ReclassificationPlanStale => {
+            &["planId", "staleRevisionCount", "decisionSnapshotId"]
         }
-        ErrorCode::EquipmentResolutionNotFound => &["resolutionId"],
-        ErrorCode::EquipmentNotRegistered => &["equipmentId", "equipmentKind"],
-        ErrorCode::EquipmentOpticalProfileReviewRequired => {
-            &["resolutionId", "candidateCount", "decisionSnapshotId"]
-        }
-        ErrorCode::CalibrationCoolingSetPointRequired
-        | ErrorCode::CalibrationFlatGainRequired
-        | ErrorCode::CalibrationDarkFlatUnsupported => &["frameId", "sessionId"],
-        ErrorCode::ReclassificationPlanNotFound
-        | ErrorCode::ReclassificationPlanNotOpen
-        | ErrorCode::ReclassificationPlanStale => &["planId", "planRevision"],
         ErrorCode::ReclassificationInvalidPartition => {
             &["planId", "violationCount", "decisionSnapshotId"]
         }
-        ErrorCode::ReclassificationReplacementNotFound => &["planId", "replacementId"],
-        ErrorCode::ReclassificationPanelConsequenceNotFound => &["planId", "panelConsequenceId"],
-        ErrorCode::ReclassificationResultSnapshotNotFound
-        | ErrorCode::ReclassificationApplyResultSnapshotNotFound => &["planId", "resultSnapshotId"],
-        ErrorCode::MatchingSettingsRevisionNotFound => &["revision"],
-        ErrorCode::MatchingSettingsOutOfBounds
-        | ErrorCode::MatchingSettingsCrossConstraint
-        | ErrorCode::MatchingSettingsWarningUnacknowledged => {
-            &["revision", "issueCount", "decisionSnapshotId"]
+        ErrorCode::ReclassificationReplacementNotFound => &["planId", "replacementKey"],
+        ErrorCode::ReclassificationPanelConsequenceNotFound => {
+            &["planId", "planResultSnapshotId", "proposedDestinationPanelGroupId"]
         }
-        ErrorCode::CalibrationRequirementInvalid => &["requirementId", "reasonCodes"],
-        ErrorCode::CalibrationCandidateNotFound
-        | ErrorCode::CalibrationCandidateBlocked
-        | ErrorCode::CalibrationCandidateIncompatible => &["candidateId", "reasonCodes"],
+        ErrorCode::ReclassificationResultSnapshotNotFound => &["planId", "planResultSnapshotId"],
+        ErrorCode::ReclassificationApplyResultSnapshotNotFound => {
+            &["planId", "applyResultSnapshotId"]
+        }
+        ErrorCode::MatchingSettingsRevisionNotFound => &["revision"],
+        ErrorCode::MatchingSettingsOutOfBounds | ErrorCode::MatchingSettingsCrossConstraint => {
+            &["issues"]
+        }
+        ErrorCode::MatchingSettingsWarningUnacknowledged => &["warningCodes"],
+        ErrorCode::CalibrationRequirementInvalid => &["requirementId", "fields"],
+        ErrorCode::CalibrationCandidateNotFound => &["sessionId", "requirementId"],
+        ErrorCode::CalibrationCandidateBlocked => &["sessionId", "requirementId", "blockingCodes"],
+        ErrorCode::CalibrationCandidateIncompatible => {
+            &["sessionId", "requirementId", "evidenceId"]
+        }
         ErrorCode::CalibrationHandoffTooLarge => {
             &["handoffId", "sessionId", "sourceByteCount", "maximumSourceBytes"]
         }
         ErrorCode::CalibrationHandoffOperationNotCancellable => {
             &["operationId", "state", "cancelSafe"]
         }
-        ErrorCode::CalibrationWarningUnacknowledged => &["warningCodes"],
-        ErrorCode::CalibrationSelectionDuplicate => &["selectionId", "sessionId"],
-        ErrorCode::CalibrationHandoffNotFound | ErrorCode::CalibrationHandoffStaleBasis => {
-            &["handoffId", "revision"]
+        ErrorCode::CalibrationWarningUnacknowledged => &["sessionId", "warningCodes"],
+        ErrorCode::CalibrationSelectionDuplicate => &["snapshotId", "sessionId", "requirementId"],
+        ErrorCode::CalibrationHandoffNotFound => &["handoffId", "snapshotId"],
+        ErrorCode::CalibrationHandoffStaleBasis => {
+            &["snapshotId", "expectedBasisFingerprint", "actualBasisFingerprint"]
         }
-        ErrorCode::CalibrationSourceUnavailable | ErrorCode::CalibrationSourceIdentityChanged => {
-            &["selectionId", "frameId"]
-        }
-        ErrorCode::CalibrationPageInvalid | ErrorCode::CalibrationPageStale => {
-            &["handoffId", "cursor"]
+        ErrorCode::CalibrationSourceUnavailable => &["sessionId", "frameId", "evidenceId"],
+        ErrorCode::CalibrationSourceIdentityChanged => &["snapshotId", "frameId", "fileRecordId"],
+        ErrorCode::CalibrationPageInvalid => &["field"],
+        ErrorCode::CalibrationPageStale => {
+            &["expectedProjectionRevision", "actualProjectionRevision"]
         }
         ErrorCode::ProjectNotFound => &["projectId"],
-        ErrorCode::ProjectSessionNotFound
-        | ErrorCode::ProjectSessionAlreadyPinned
-        | ErrorCode::ProjectSessionNotPinned
-        | ErrorCode::ProjectLifecycleDisallowsSessionAdd
-        | ErrorCode::ProjectReclassificationRevisionInvalid => {
-            &["projectId", "sessionId", "revisionId", "lifecycleState"]
+        ErrorCode::ProjectSessionNotFound => &["sessionId"],
+        ErrorCode::ProjectSessionAlreadyPinned | ErrorCode::ProjectSessionNotPinned => {
+            &["projectId", "sessionId"]
         }
-        ErrorCode::ProjectUpdateViewNoAdditions => &["projectId"],
-        ErrorCode::ProjectUpdateViewPlanNotFound
-        | ErrorCode::ProjectUpdateViewPlanNotOpen
-        | ErrorCode::ProjectUpdateViewPlanNotApproved
-        | ErrorCode::ProjectUpdateViewPlanStale
-        | ErrorCode::ProjectUpdateViewPlanDigestMismatch => {
-            &["projectId", "planId", "planRevision"]
+        ErrorCode::ProjectLifecycleDisallowsSessionAdd => &["projectId", "lifecycle"],
+        ErrorCode::ProjectReclassificationRevisionInvalid => &[
+            "appliedReclassificationPlanRevisionId",
+            "predecessorSessionId",
+            "replacementSessionIds",
+        ],
+        ErrorCode::ProjectUpdateViewNoAdditions => &["projectId", "materializedSnapshotId"],
+        ErrorCode::ProjectUpdateViewPlanNotFound => &["planId"],
+        ErrorCode::ProjectUpdateViewPlanNotOpen | ErrorCode::ProjectUpdateViewPlanNotApproved => {
+            &["planId", "state"]
         }
-        ErrorCode::ProjectUpdateViewSourceUnavailable
-        | ErrorCode::ProjectUpdateViewRootChanged
-        | ErrorCode::ProjectUpdateViewSessionTooLarge => {
-            &["projectId", "planId", "sessionId", "sourceByteCount", "maximumSourceBytes"]
-        }
+        ErrorCode::ProjectUpdateViewPlanStale => &["planId", "staleRefs"],
+        ErrorCode::ProjectUpdateViewPlanDigestMismatch => &["planId", "approvalId"],
+        ErrorCode::ProjectUpdateViewSourceUnavailable => &["planId", "itemId", "fileRecordId"],
+        ErrorCode::ProjectUpdateViewRootChanged => &["planId", "rootId"],
+        ErrorCode::ProjectUpdateViewSessionTooLarge => &[
+            "projectId",
+            "sessionId",
+            "itemCount",
+            "sourceFrameCount",
+            "sourceByteCount",
+            "maximumItems",
+            "maximumSourceFrames",
+            "maximumSourceBytes",
+        ],
         ErrorCode::ProjectUpdateViewOperationNotCancellable => {
             &["operationId", "state", "cancelSafe"]
         }

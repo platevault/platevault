@@ -532,6 +532,13 @@ pub struct MatchingSettingsUpdatedEvent {
     pub warning_codes: BoundedList<SafeText, 500>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(tag = "event")]
+pub enum MatchingSettingsEvent {
+    #[serde(rename = "matching_settings.updated")]
+    Updated(MatchingSettingsUpdatedEvent),
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "operation")]
 pub enum MatchingSettingsQuery {
