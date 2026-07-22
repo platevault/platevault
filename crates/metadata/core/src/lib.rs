@@ -23,9 +23,10 @@ mod profile;
 
 pub use evidence::{
     CalculatedFocalLength, CanonicalField, CaptureProfileVersion, EvidenceConfidence,
-    EvidenceState, FieldEvidence, MetadataEvidence, MetadataValue, RawMetadata,
+    EvidenceError, EvidenceState, FieldEvidence, MetadataEvidence, MetadataValue, RawMetadata,
+    MAX_EVIDENCE_PAYLOAD_BYTES, MAX_EVIDENCE_VALUE_BYTES,
 };
-pub use profile::{CaptureProfileError, CaptureProfileRegistry};
+pub use profile::{CaptureProfileError, CaptureProfileRegistry, MAX_CAPTURE_PROFILE_TOML_BYTES};
 
 // ── FrameType ─────────────────────────────────────────────────────────────────
 

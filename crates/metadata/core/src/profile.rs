@@ -7,14 +7,19 @@ use serde::Deserialize;
 
 use crate::{
     CalculatedFocalLength, CanonicalField, CaptureProfileVersion, EvidenceConfidence,
-    FieldEvidence, MetadataEvidence, MetadataValue, RawMetadata,
+    EvidenceError, FieldEvidence, MetadataEvidence, MetadataValue, RawMetadata,
 };
 
 const EMBEDDED_PROFILES: &str = include_str!("../data/capture_profiles.toml");
 
+/// Maximum UTF-8 size accepted for a capture-profile registry.
+pub const MAX_CAPTURE_PROFILE_TOML_BYTES: usize = 256 * 1024;
+
 /// Registry parse or validation failure.
 #[derive(Debug, thiserror::Error)]
 pub enum CaptureProfileError {
+    #[error("capture-profile TOML is {actual} UTF-8 bytes; maximum is {maximum}")]
+    SourceTooLarge { actual: usize, maximum: usize },
     #[error("invalid capture-profile TOML: {0}")]
     Toml(#[from] toml::de::Error),
     #[error("invalid capture-profile registry: {0}")]
@@ -45,6 +50,12 @@ impl CaptureProfileRegistry {
     /// Returns [`CaptureProfileError`] when `source` is not valid registry TOML
     /// or violates a registry invariant.
     pub fn from_toml(source: &str) -> Result<Self, CaptureProfileError> {
+        if source.len() > MAX_CAPTURE_PROFILE_TOML_BYTES {
+            return Err(CaptureProfileError::SourceTooLarge {
+                actual: source.len(),
+                maximum: MAX_CAPTURE_PROFILE_TOML_BYTES,
+            });
+        }
         let config: RegistryConfig = toml::from_str(source)?;
         validate(&config)?;
         Ok(Self {
@@ -54,51 +65,54 @@ impl CaptureProfileRegistry {
         })
     }
 
-    /// Selects a profile and extracts typed field evidence.
-    #[must_use]
+    /// Selects a profile and extracts bounded typed field evidence.
+    ///
+    /// # Errors
+    /// Returns [`EvidenceError`] when raw, normalized, or aggregate evidence
+    /// exceeds its contract bound or an internal registry invariant is absent.
     pub fn extract(
         &self,
         raw: &RawMetadata,
         calculated_focal_length: Option<CalculatedFocalLength>,
-    ) -> MetadataEvidence {
-        let profile = self.select_profile(raw);
+    ) -> Result<MetadataEvidence, EvidenceError> {
+        let profile = self.select_profile(raw)?;
         let mut fields = profile
             .fields
             .iter()
             .map(|(field, mapping)| (*field, extract_field(raw, mapping)))
-            .collect::<BTreeMap<_, _>>();
+            .map(|(field, evidence)| evidence.map(|evidence| (field, evidence)))
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
         fields.insert(
             CanonicalField::FocalLengthCalculated,
-            calculated_focal_length_evidence(calculated_focal_length),
+            calculated_focal_length_evidence(calculated_focal_length)?,
         );
 
-        MetadataEvidence {
-            profile: CaptureProfileVersion {
-                profile_id: profile.id.clone(),
-                version: profile.version,
-                registry_format_version: self.format_version,
-            },
+        MetadataEvidence::try_new(
+            CaptureProfileVersion::try_new(
+                profile.id.clone(),
+                profile.version,
+                self.format_version,
+            )?,
             fields,
-        }
+        )
     }
 
-    fn select_profile(&self, raw: &RawMetadata) -> &ProfileConfig {
-        self.profiles
+    fn select_profile(&self, raw: &RawMetadata) -> Result<&ProfileConfig, EvidenceError> {
+        let selected = self
+            .profiles
             .iter()
             .filter(|profile| profile.id != self.fallback_profile && profile.matches(raw))
             .min_by(|left, right| {
                 right.priority.cmp(&left.priority).then_with(|| left.id.cmp(&right.id))
-            })
-            .unwrap_or_else(|| {
-                self.profiles
-                    .iter()
-                    .find(|profile| profile.id == self.fallback_profile)
-                    .expect("validated fallback profile must exist")
-            })
+            });
+        selected
+            .or_else(|| self.profiles.iter().find(|profile| profile.id == self.fallback_profile))
+            .ok_or(EvidenceError::MissingFallbackProfile)
     }
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RegistryConfig {
     format_version: u32,
     fallback_profile: String,
@@ -106,6 +120,7 @@ struct RegistryConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProfileConfig {
     id: String,
     version: u32,
@@ -124,6 +139,7 @@ impl ProfileConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProfileMatcher {
     field: String,
     equals: Option<String>,
@@ -146,6 +162,7 @@ impl ProfileMatcher {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FieldMapping {
     confidence: EvidenceConfidence,
     sources: Vec<SourceMapping>,
@@ -154,6 +171,7 @@ struct FieldMapping {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SourceMapping {
     field: String,
     parser: ValueParser,
@@ -186,6 +204,12 @@ fn validate(config: &RegistryConfig) -> Result<(), CaptureProfileError> {
     for profile in &config.profiles {
         if profile.id.trim().is_empty() {
             return Err(CaptureProfileError::Registry("profile id must not be empty".to_owned()));
+        }
+        if profile.version == 0 {
+            return Err(CaptureProfileError::Registry(format!(
+                "profile {} has a zero version",
+                profile.id
+            )));
         }
         if !profile_ids.insert(profile.id.as_str()) {
             return Err(CaptureProfileError::Registry(format!(
@@ -242,7 +266,10 @@ fn validate(config: &RegistryConfig) -> Result<(), CaptureProfileError> {
     Ok(())
 }
 
-fn extract_field(raw: &RawMetadata, mapping: &FieldMapping) -> FieldEvidence {
+fn extract_field(
+    raw: &RawMetadata,
+    mapping: &FieldMapping,
+) -> Result<FieldEvidence, EvidenceError> {
     for source in &mapping.sources {
         let Some((source_field, raw_value)) = raw.get(&source.field) else {
             continue;
@@ -255,7 +282,7 @@ fn extract_field(raw: &RawMetadata, mapping: &FieldMapping) -> FieldEvidence {
             mapping.confidence,
         );
     }
-    FieldEvidence::absent(mapping.confidence)
+    Ok(FieldEvidence::absent(mapping.confidence))
 }
 
 fn parse_value(
@@ -288,15 +315,18 @@ fn parse_decimal(raw_value: &str, scale: Option<f64>, positive: bool) -> Option<
     (value.is_finite() && (!positive || value > 0.0)).then_some(MetadataValue::Decimal(value))
 }
 
-fn calculated_focal_length_evidence(calculated: Option<CalculatedFocalLength>) -> FieldEvidence {
+fn calculated_focal_length_evidence(
+    calculated: Option<CalculatedFocalLength>,
+) -> Result<FieldEvidence, EvidenceError> {
     let Some(calculated) = calculated else {
-        return FieldEvidence::absent(EvidenceConfidence::Calculated);
+        return Ok(FieldEvidence::absent(EvidenceConfidence::Calculated));
     };
-    let normalized = (calculated.millimetres.is_finite() && calculated.millimetres > 0.0)
-        .then_some(MetadataValue::Decimal(calculated.millimetres));
+    let millimetres = calculated.millimetres();
+    let normalized = (millimetres.is_finite() && millimetres > 0.0)
+        .then_some(MetadataValue::Decimal(millimetres));
     FieldEvidence::from_raw(
-        calculated.source,
-        calculated.millimetres.to_string(),
+        calculated.source().to_owned(),
+        millimetres.to_string(),
         normalized,
         EvidenceConfidence::Calculated,
     )
