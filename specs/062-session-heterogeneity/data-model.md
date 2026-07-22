@@ -1155,7 +1155,8 @@ the related filesystem step; a weaker connection mode refuses Update View apply.
    head_revision_id = ? AND head_generation = ? AND status = 'active'`.
 5. Require `changes() = 1`. Otherwise roll back the complete transaction. A
    proposal becomes stale only through a separate CAS transaction whose update
-   matches the proposal ID, `state = 'pending'`, and expected `state_version`.
+   matches the proposal ID, `state = 'pending'`, and expected
+   `proposal_revision`.
 6. Insert the audit event and outbox events before commit.
 7. Commit only after deferred foreign keys and invariant validation queries
    pass. Any failure rolls back all membership, edge, lineage, pin, audit, and
