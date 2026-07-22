@@ -43,9 +43,35 @@ describe('wizard progress accessibility CSS', () => {
       expect(declarations).toContain('overflow-x:auto');
       expect(declarations).toContain('overflow-y:hidden');
     }
-    expect(declarationsFor('.pv-wizard__steps-card')).toContain(
-      'min-width:max-content',
+    const cards = declarationsFor('.pv-wizard__steps-card');
+    expect(cards).toContain('flex:1 1 0');
+    expect(cards).toContain('min-width:0');
+    expect(cards).toContain('flex:0 0 auto');
+    expect(cards).toContain('min-width:max-content');
+  });
+
+  it('uses design tokens for the narrow progress overflow affordance', () => {
+    const bar = declarationsFor('.pv-wizard__steps-bar');
+    expect(bar).toContain(
+      'scrollbar-color:var(--pv-text-muted) var(--pv-surface)',
     );
+    expect(bar).toContain('padding-block-end:var(--pv-sp-2)');
+    expect(bar).toContain(
+      'scroll-padding-inline-end:calc(var(--pv-control-h) + var(--pv-sp-2))',
+    );
+    expect(
+      declarationsFor('.pv-wizard__steps-bar::-webkit-scrollbar'),
+    ).toContain('height:var(--pv-sp-2)');
+    expect(
+      declarationsFor('.pv-wizard__steps-bar::-webkit-scrollbar-thumb'),
+    ).toContain('background:var(--pv-text-muted)');
+
+    const hint = declarationsFor('.pv-wizard__steps-overflow-hint');
+    expect(hint).toContain('display:none');
+    expect(hint).toContain('display:grid');
+    expect(hint).toContain('inline-size:var(--pv-control-h)');
+    expect(hint).toContain('background:var(--pv-surface)');
+    expect(hint).toContain('color:var(--pv-text)');
   });
 
   it('reserves space inside the scrollport for the two-pixel focus ring', () => {

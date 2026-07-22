@@ -1690,6 +1690,7 @@
 }
 
 .pv-wizard__content--centered {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
 }
@@ -1707,16 +1708,74 @@
 
 /* Individual step card — future (default) */
 .pv-wizard__steps-card {
-  flex: 1;
-  min-width: max-content;
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--pv-sp-2) var(--pv-sp-1);
   border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
+  line-height: var(--pv-leading-tight);
   text-align: center;
+  white-space: normal;
   background: var(--pv-bg);
   color: var(--pv-text-muted);
   font-weight: var(--pv-weight-normal);
+}
+
+.pv-wizard__steps-overflow-hint {
+  display: none;
+}
+
+/* Below the content-driven fit point, keep every label intact and expose the
+   horizontal scroll range with a token-coloured cue and scrollbar. */
+@media (max-width: 700px) {
+  .pv-wizard__steps-bar {
+    padding-block-end: var(--pv-sp-2);
+    padding-inline-end: calc(var(--pv-control-h) + var(--pv-sp-2));
+    scroll-padding-inline-end: calc(var(--pv-control-h) + var(--pv-sp-2));
+    scrollbar-color: var(--pv-text-muted) var(--pv-surface);
+    scrollbar-width: auto;
+  }
+
+  .pv-wizard__steps-overflow-hint {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    display: grid;
+    place-items: center;
+    inline-size: var(--pv-control-h);
+    block-size: var(--pv-control-h);
+    border: 1px solid var(--pv-border);
+    border-radius: var(--pv-radius-sm);
+    background: var(--pv-surface);
+    color: var(--pv-text);
+    font-size: var(--pv-text-md);
+    font-weight: var(--pv-weight-semibold);
+    pointer-events: none;
+  }
+
+  .pv-wizard__steps-bar::-webkit-scrollbar {
+    height: var(--pv-sp-2);
+  }
+
+  .pv-wizard__steps-bar::-webkit-scrollbar-track {
+    background: var(--pv-surface);
+    border-radius: var(--pv-radius-lg);
+  }
+
+  .pv-wizard__steps-bar::-webkit-scrollbar-thumb {
+    border: var(--pv-sp-0) solid var(--pv-surface);
+    border-radius: var(--pv-radius-lg);
+    background: var(--pv-text-muted);
+  }
+
+  .pv-wizard__steps-card {
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding-inline: var(--pv-sp-3);
+    white-space: nowrap;
+  }
 }
 
 /* Step card — past (visited) */
