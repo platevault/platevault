@@ -7,7 +7,13 @@
  * validation, and scan-depth removal (issues #496, #497/#714, #502, #509).
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { m } from '@/lib/i18n';
@@ -85,6 +91,84 @@ describe('StepSourceFolders — required-first ordering', () => {
       .getAllByText(/^(Required|Optional)$/)
       .map((el) => el.textContent);
     expect(headings).toEqual(['Required', 'Optional']);
+  });
+
+  it('groups required and optional source kinds under a valid heading hierarchy', () => {
+    renderStep([]);
+
+    const requiredHeading = screen.getByRole('heading', {
+      level: 2,
+      name: 'Required',
+    });
+    const optionalHeading = screen.getByRole('heading', {
+      level: 2,
+      name: 'Optional',
+    });
+    const requiredSection = requiredHeading.closest('section');
+    const optionalSection = optionalHeading.closest('section');
+
+    expect(requiredSection).toHaveAccessibleName('Required');
+    expect(optionalSection).toHaveAccessibleName('Optional');
+    expect(
+      within(requiredSection as HTMLElement)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Light frames', 'Projects']);
+    expect(
+      within(optionalSection as HTMLElement)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Calibration frames', 'Inbox']);
+  });
+
+  it('uses shared semantic pills for met, unmet, and optional statuses', () => {
+    renderStep([makeEntry('/astro/lights', 'light_frames')]);
+
+    const met = screen.getByTestId('requirement-status-light_frames');
+    const unmet = screen.getByTestId('requirement-status-project');
+    expect(met).toHaveClass('pv-pill', 'pv-pill--ok');
+    expect(met).toHaveTextContent('required ✓');
+    expect(unmet).toHaveClass('pv-pill', 'pv-pill--warn');
+    expect(unmet).toHaveTextContent(/^required$/);
+    for (const kind of ['calibration', 'inbox']) {
+      const optional = screen.getByTestId(`requirement-status-${kind}`);
+      expect(optional).toHaveClass('pv-pill', 'pv-pill--ghost');
+      expect(optional).toHaveTextContent(/^optional$/);
+    }
+  });
+
+  it('uses shared select and input primitives without changing control order', () => {
+    renderStep([makeEntry('/astro/lights', 'light_frames')]);
+
+    const group = screen.getByTestId('source-group-light_frames');
+    const info = within(group).getByLabelText(/More information: Raw light/i);
+    const choose = within(group).getByRole('button', {
+      name: /add light frames folder/i,
+    });
+    const input = within(group).getByRole('textbox', {
+      name: /light frames folder path/i,
+    });
+    const addByPath = within(group).getByTestId(
+      'manual-add-path-btn-light_frames',
+    );
+    const organization = within(group).getByRole('combobox', {
+      name: /organization state/i,
+    });
+
+    expect(organization).toHaveClass(
+      'pv-select',
+      'pv-step-sources__org-select',
+    );
+    expect(input).toHaveClass('pv-input', 'pv-step-sources__manual-input');
+    expect(info.compareDocumentPosition(choose)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(choose.compareDocumentPosition(input)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(input.compareDocumentPosition(addByPath)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 });
 
