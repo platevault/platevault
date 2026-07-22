@@ -11,6 +11,7 @@ path = "src/lib.rs"
 serde = { workspace = true }
 skymath = "0.5"
 thiserror = { workspace = true }
+toml = "0.9.5"
 
 [lints]
 workspace = true
