@@ -105,45 +105,78 @@ fn validate_current_panel_membership(
 /// One exact accepted adjacency edge between panel revisions.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MosaicEdge {
-    pub left_panel_revision_id: String,
-    pub right_panel_revision_id: String,
-    pub evidence_id: String,
-}
-
-/// Live topology operations for exact mosaic revisions.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct MosaicTopology;
-
-impl MosaicTopology {
-    /// Whether an edge connects two components implied by accepted edges.
-    #[must_use]
-    pub fn edge_bridges(self, left: &str, right: &str, accepted_edges: &[MosaicEdge]) -> bool {
-        edge_bridges_components(left, right, accepted_edges)
-    }
-
-    /// Whether an edge connects two accepted mosaic membership snapshots.
-    #[must_use]
-    pub fn edge_bridges_accepted(
-        self,
-        left: &str,
-        right: &str,
-        accepted_components: &[BTreeSet<String>],
-    ) -> bool {
-        edge_bridges_accepted_mosaics(left, right, accepted_components)
-    }
+    id: String,
+    left_revision: String,
+    right_revision: String,
+    evidence: String,
 }
 
 impl MosaicEdge {
-    #[must_use]
+    /// Construct a validated undirected panel-adjacency edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invariant error when the edge ID, evidence ID, or either
+    /// endpoint is blank or whitespace-only.
     pub fn new(
+        edge_id: impl Into<String>,
         left: impl Into<String>,
         right: impl Into<String>,
         evidence_id: impl Into<String>,
-    ) -> Self {
-        Self {
-            left_panel_revision_id: left.into(),
-            right_panel_revision_id: right.into(),
-            evidence_id: evidence_id.into(),
+    ) -> Result<Self, RelationInvariantError> {
+        let id = edge_id.into();
+        let left_revision = left.into();
+        let right_revision = right.into();
+        let evidence = evidence_id.into();
+        if id.trim().is_empty() {
+            return Err(RelationInvariantError::BlankMosaicEdgeId);
+        }
+        if evidence.trim().is_empty() {
+            return Err(RelationInvariantError::BlankEvidenceId);
+        }
+        if left_revision.trim().is_empty() || right_revision.trim().is_empty() {
+            return Err(RelationInvariantError::BlankPanelRevisionId);
+        }
+        Ok(Self { id, left_revision, right_revision, evidence })
+    }
+
+    #[must_use]
+    pub fn edge_id(&self) -> &str {
+        &self.id
+    }
+
+    #[must_use]
+    pub fn evidence_id(&self) -> &str {
+        &self.evidence
+    }
+
+    #[must_use]
+    pub fn endpoints(&self) -> (&str, &str) {
+        (&self.left_revision, &self.right_revision)
+    }
+
+    /// Whether this edge connects two components implied by accepted edges.
+    #[must_use]
+    pub fn bridges(&self, accepted_edges: &[Self]) -> bool {
+        edge_bridges_components(&self.left_revision, &self.right_revision, accepted_edges)
+    }
+
+    /// Whether this edge connects two accepted mosaic membership snapshots.
+    #[must_use]
+    pub fn bridges_accepted(&self, accepted_components: &[BTreeSet<String>]) -> bool {
+        edge_bridges_accepted_mosaics(
+            &self.left_revision,
+            &self.right_revision,
+            accepted_components,
+        )
+    }
+
+    fn canonical_undirected_record(&self) -> (&str, &str, &str, &str) {
+        let (left, right) = self.endpoints();
+        if left <= right {
+            (left, right, self.edge_id(), self.evidence_id())
+        } else {
+            (right, left, self.edge_id(), self.evidence_id())
         }
     }
 }
@@ -164,8 +197,7 @@ pub fn validate_mosaic_connectivity(
     }
     let mut adjacency: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for edge in edges {
-        let left = edge.left_panel_revision_id.as_str();
-        let right = edge.right_panel_revision_id.as_str();
+        let (left, right) = edge.endpoints();
         if left == right || !panels.contains(left) || !panels.contains(right) {
             return Err(RelationInvariantError::InvalidMosaicEdge);
         }
@@ -199,10 +231,10 @@ fn edge_bridges_components(left: &str, right: &str, accepted_edges: &[MosaicEdge
     !reachable(left, right, accepted_edges)
         && accepted_edges
             .iter()
-            .any(|edge| edge.left_panel_revision_id == left || edge.right_panel_revision_id == left)
-        && accepted_edges.iter().any(|edge| {
-            edge.left_panel_revision_id == right || edge.right_panel_revision_id == right
-        })
+            .any(|edge| edge.left_revision == left || edge.right_revision == left)
+        && accepted_edges
+            .iter()
+            .any(|edge| edge.left_revision == right || edge.right_revision == right)
 }
 
 /// Detect a bridge when accepted component membership is already known.
@@ -223,10 +255,10 @@ fn reachable(start: &str, destination: &str, edges: &[MosaicEdge]) -> bool {
     let mut queue = VecDeque::from([start]);
     while let Some(node) = queue.pop_front() {
         for edge in edges {
-            let next = if edge.left_panel_revision_id == node {
-                Some(edge.right_panel_revision_id.as_str())
-            } else if edge.right_panel_revision_id == node {
-                Some(edge.left_panel_revision_id.as_str())
+            let next = if edge.left_revision == node {
+                Some(edge.right_revision.as_str())
+            } else if edge.right_revision == node {
+                Some(edge.left_revision.as_str())
             } else {
                 None
             };
@@ -355,13 +387,11 @@ impl ManualRelation {
                     return Err(RelationInvariantError::KindShapeMismatch);
                 }
                 let edge = &self.edges[0];
-                if edge.left_panel_revision_id == edge.right_panel_revision_id {
+                if edge.left_revision == edge.right_revision {
                     return Err(RelationInvariantError::InvalidMosaicEdge);
                 }
-                let reviewed_endpoints = BTreeSet::from([
-                    edge.left_panel_revision_id.clone(),
-                    edge.right_panel_revision_id.clone(),
-                ]);
+                let reviewed_endpoints =
+                    BTreeSet::from([edge.left_revision.clone(), edge.right_revision.clone()]);
                 if reviewed_endpoints != self.subject_ids {
                     return Err(RelationInvariantError::MosaicEdgeOutsideReviewedSubjects);
                 }
@@ -417,14 +447,15 @@ impl ProposalBasis {
         push_canonical_field(&mut canonical, "memberships");
         push_sorted_strings(&mut canonical, &self.membership_ids);
 
-        let mut edges = self.edges.clone();
-        edges.sort();
+        let edges: BTreeSet<_> =
+            self.edges.iter().map(MosaicEdge::canonical_undirected_record).collect();
         push_canonical_field(&mut canonical, "edges");
         push_canonical_field(&mut canonical, &edges.len().to_string());
-        for edge in edges {
-            push_canonical_field(&mut canonical, &edge.left_panel_revision_id);
-            push_canonical_field(&mut canonical, &edge.right_panel_revision_id);
-            push_canonical_field(&mut canonical, &edge.evidence_id);
+        for (left, right, edge_id, evidence_id) in edges {
+            push_canonical_field(&mut canonical, left);
+            push_canonical_field(&mut canonical, right);
+            push_canonical_field(&mut canonical, edge_id);
+            push_canonical_field(&mut canonical, evidence_id);
         }
 
         let mut lineage = self.lineage.clone();
@@ -684,6 +715,9 @@ pub enum RelationInvariantError {
     StaleProposalRevision,
     StaleProposalBasis,
     ProposalRevisionExhausted,
+    BlankMosaicEdgeId,
+    BlankEvidenceId,
+    BlankPanelRevisionId,
 }
 
 impl std::fmt::Display for RelationInvariantError {
@@ -701,7 +735,17 @@ mod tests {
     use target_match::{FootprintProvenance, ImageParity, SkyEllipse};
 
     fn edge(left: &str, right: &str) -> MosaicEdge {
-        MosaicEdge::new(left, right, format!("{left}-{right}"))
+        MosaicEdge::new(
+            format!("edge-{left}-{right}"),
+            left,
+            right,
+            format!("evidence-{left}-{right}"),
+        )
+        .expect("valid edge")
+    }
+
+    fn identified_edge(edge_id: &str, left: &str, right: &str, evidence_id: &str) -> MosaicEdge {
+        MosaicEdge::new(edge_id, left, right, evidence_id).expect("valid edge")
     }
 
     fn coordinate(ra: f64, dec: f64) -> Equatorial {
@@ -764,25 +808,63 @@ mod tests {
     }
 
     #[test]
+    fn mosaic_connectivity_is_edge_order_invariant() {
+        let panels = BTreeSet::from(["a".into(), "b".into(), "c".into(), "d".into()]);
+        let permutations = [
+            vec![edge("a", "b"), edge("b", "c"), edge("c", "d")],
+            vec![edge("c", "d"), edge("a", "b"), edge("b", "c")],
+            vec![edge("b", "c"), edge("c", "d"), edge("a", "b")],
+        ];
+        for edges in permutations {
+            assert_eq!(validate_mosaic_connectivity(&panels, &edges), Ok(()));
+        }
+    }
+
+    #[test]
     fn bridge_between_accepted_components_requires_merge_review() {
         let accepted = [edge("a", "b"), edge("c", "d")];
-        let topology = MosaicTopology;
-        assert!(topology.edge_bridges("b", "c", &accepted));
-        assert!(!topology.edge_bridges("a", "b", &accepted));
+        assert!(edge("b", "c").bridges(&accepted));
+        assert!(!edge("a", "b").bridges(&accepted));
         let components =
             [BTreeSet::from(["singleton".into()]), BTreeSet::from(["a".into(), "b".into()])];
-        assert!(topology.edge_bridges_accepted("singleton", "a", &components));
+        assert!(edge("singleton", "a").bridges_accepted(&components));
     }
 
     #[test]
     fn bridge_detection_handles_long_components_and_unknown_endpoints() {
-        let topology = MosaicTopology;
         let left: BTreeSet<String> = (0..1_000).map(|index| format!("left-{index}")).collect();
         let right: BTreeSet<String> = (0..1_000).map(|index| format!("right-{index}")).collect();
         let components = [left, right];
-        assert!(topology.edge_bridges_accepted("left-999", "right-999", &components));
-        assert!(!topology.edge_bridges_accepted("left-0", "left-999", &components));
-        assert!(!topology.edge_bridges_accepted("left-0", "unknown", &components));
+        assert!(edge("left-999", "right-999").bridges_accepted(&components));
+        assert!(!edge("left-0", "left-999").bridges_accepted(&components));
+        assert!(!edge("left-0", "unknown").bridges_accepted(&components));
+    }
+
+    #[test]
+    fn mosaic_edge_rejects_blank_nested_identifiers() {
+        for blank in ["", " ", "\t\n"] {
+            assert_eq!(
+                MosaicEdge::new(blank, "left", "right", "evidence"),
+                Err(RelationInvariantError::BlankMosaicEdgeId)
+            );
+            assert_eq!(
+                MosaicEdge::new("edge", "left", "right", blank),
+                Err(RelationInvariantError::BlankEvidenceId)
+            );
+            assert_eq!(
+                MosaicEdge::new("edge", blank, "right", "evidence"),
+                Err(RelationInvariantError::BlankPanelRevisionId)
+            );
+        }
+
+        let nested: Result<Vec<_>, _> =
+            [("edge-a", "evidence-a"), ("edge-b", "   "), ("edge-c", "evidence-c")]
+                .into_iter()
+                .map(|(edge_id, evidence_id)| {
+                    MosaicEdge::new(edge_id, "left", "right", evidence_id)
+                })
+                .collect();
+        assert_eq!(nested, Err(RelationInvariantError::BlankEvidenceId));
     }
 
     #[test]
@@ -846,6 +928,55 @@ mod tests {
         );
     }
 
+    fn populated_manual_relation(kind: RelationKind) -> ManualRelation {
+        ManualRelation {
+            kind,
+            review_reason: "reviewed".into(),
+            target_scope: TargetScope::SameTarget { canonical_target_id: "target".into() },
+            source_revision_ids: BTreeSet::from(["source".into()]),
+            subject_ids: BTreeSet::from(["a".into(), "b".into()]),
+            membership_ids: BTreeSet::from(["a".into(), "b".into()]),
+            edges: vec![edge("a", "b")],
+            lineage: vec![("old".into(), "new".into())],
+            missing_evidence_codes: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn every_manual_kind_rejects_its_vacuous_shape() {
+        let mut cases = Vec::new();
+        for kind in [RelationKind::PanelAdd, RelationKind::PanelReplace] {
+            let mut relation = populated_manual_relation(kind);
+            relation.membership_ids.clear();
+            cases.push(relation);
+        }
+        for kind in [RelationKind::PanelSplit, RelationKind::PanelMerge] {
+            let mut relation = populated_manual_relation(kind);
+            relation.lineage.clear();
+            cases.push(relation);
+        }
+        let mut mosaic_create = populated_manual_relation(RelationKind::MosaicCreate);
+        mosaic_create.membership_ids = BTreeSet::from(["a".into()]);
+        cases.push(mosaic_create);
+
+        let mut mosaic_edge = populated_manual_relation(RelationKind::MosaicEdge);
+        mosaic_edge.subject_ids = BTreeSet::from(["a".into()]);
+        cases.push(mosaic_edge);
+
+        let mut mosaic_split = populated_manual_relation(RelationKind::MosaicSplit);
+        mosaic_split.edges.clear();
+        cases.push(mosaic_split);
+
+        let mut mosaic_merge = populated_manual_relation(RelationKind::MosaicMerge);
+        mosaic_merge.lineage.clear();
+        cases.push(mosaic_merge);
+
+        assert_eq!(cases.len(), 8);
+        for relation in cases {
+            assert!(relation.validate().is_err(), "accepted invalid {:?}", relation.kind);
+        }
+    }
+
     fn proposal_basis() -> ProposalBasis {
         ProposalBasis {
             kind: RelationKind::MosaicMerge,
@@ -865,6 +996,37 @@ mod tests {
         reordered.edges.reverse();
         reordered.lineage.reverse();
         assert_eq!(basis.fingerprint("evidence-1", 7), reordered.fingerprint("evidence-1", 7));
+    }
+
+    #[test]
+    fn canonical_proposal_fingerprint_normalizes_undirected_edges_and_duplicates() {
+        let mut forward = proposal_basis();
+        forward.edges = vec![identified_edge("edge", "a", "b", "evidence")];
+
+        let mut reversed = forward.clone();
+        reversed.edges = vec![
+            identified_edge("edge", "b", "a", "evidence"),
+            identified_edge("edge", "a", "b", "evidence"),
+        ];
+        assert_eq!(
+            forward.fingerprint("evidence-revision", 7),
+            reversed.fingerprint("evidence-revision", 7)
+        );
+    }
+
+    #[test]
+    fn canonical_proposal_fingerprint_keeps_lineage_directed() {
+        let forward = proposal_basis();
+        let mut reversed = forward.clone();
+        reversed.lineage = forward
+            .lineage
+            .iter()
+            .map(|(predecessor, successor)| (successor.clone(), predecessor.clone()))
+            .collect();
+        assert_ne!(
+            forward.fingerprint("evidence-revision", 7),
+            reversed.fingerprint("evidence-revision", 7)
+        );
     }
 
     #[test]

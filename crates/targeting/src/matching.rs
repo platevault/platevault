@@ -172,6 +172,26 @@ impl MatchingSettings {
     pub fn is_valid(self) -> bool {
         !self.validate().iter().any(|issue| issue.severity == SettingsSeverity::Red)
     }
+
+    /// Compare solved footprints using this exact settings revision.
+    ///
+    /// Same-session is tested first and is restricted to the active
+    /// materialization. Sibling is therefore never returned for a pair already
+    /// classified into the same session. Mosaic overlap is evaluated only when
+    /// neither same-panel class applies.
+    ///
+    /// # Errors
+    ///
+    /// Returns the upstream typed geometry error when the footprints cannot
+    /// share a valid comparison plane or rotation-band calculation fails.
+    pub fn evaluate(
+        self,
+        left: &SkyFootprint,
+        right: &SkyFootprint,
+        context: RelationContext,
+    ) -> target_match::Result<GeometryEvidence> {
+        evaluate_relation(left, right, context, self)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -307,44 +327,6 @@ pub enum ThresholdComparison {
 /// Search resolution used for the fixed +/-10 degree mosaic cap.
 pub const MOSAIC_ROTATION_SAMPLE_DEG: f64 = 0.1;
 pub const MOSAIC_ROTATION_TOLERANCE_DEG: f64 = 0.001;
-
-/// Live entry point for relation matching policy.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct RelationMatcher;
-
-impl RelationMatcher {
-    /// Compare solved footprints and apply the configured relation policy.
-    ///
-    /// Same-session is tested first and is restricted to the active
-    /// materialization. Sibling is therefore never returned for a pair already
-    /// classified into the same session. Mosaic overlap is evaluated only when
-    /// neither same-panel class applies.
-    ///
-    /// # Errors
-    ///
-    /// Returns the upstream typed geometry error when the footprints cannot
-    /// share a valid comparison plane or rotation-band calculation fails.
-    pub fn evaluate(
-        self,
-        left: &SkyFootprint,
-        right: &SkyFootprint,
-        context: RelationContext,
-        settings: MatchingSettings,
-    ) -> target_match::Result<GeometryEvidence> {
-        evaluate_relation(left, right, context, settings)
-    }
-
-    /// Enforce complete linkage between a candidate and every accepted member.
-    #[must_use]
-    pub fn complete_linkage<T>(
-        self,
-        candidate: &T,
-        accepted_members: &[T],
-        matches: impl Fn(&T, &T) -> bool,
-    ) -> bool {
-        complete_linkage(candidate, accepted_members, matches)
-    }
-}
 
 fn evaluate_relation(
     left: &SkyFootprint,
@@ -493,12 +475,24 @@ fn residual_in_intervals(residual: f64, intervals: &[RotationInterval]) -> bool 
         .any(|interval| residual >= interval.start.degrees() && residual <= interval.end.degrees())
 }
 
-fn complete_linkage<T>(
-    candidate: &T,
-    accepted_members: &[T],
-    matches: impl Fn(&T, &T) -> bool,
-) -> bool {
-    !accepted_members.is_empty() && accepted_members.iter().all(|member| matches(candidate, member))
+/// Immutable membership snapshot used for complete-linkage admission.
+#[derive(Debug, Clone, Copy)]
+pub struct CompleteLinkage<'a, T> {
+    accepted_members: &'a [T],
+}
+
+impl<'a, T> CompleteLinkage<'a, T> {
+    #[must_use]
+    pub fn new(accepted_members: &'a [T]) -> Self {
+        Self { accepted_members }
+    }
+
+    /// Require the candidate to match every member of the immutable snapshot.
+    #[must_use]
+    pub fn accepts(&self, candidate: &T, matches: impl Fn(&T, &T) -> bool) -> bool {
+        !self.accepted_members.is_empty()
+            && self.accepted_members.iter().all(|member| matches(candidate, member))
+    }
 }
 
 #[cfg(test)]
@@ -633,10 +627,10 @@ mod tests {
     #[test]
     fn complete_linkage_does_not_allow_transitive_expansion() {
         let members = [0_i32, 4];
-        let matcher = RelationMatcher;
-        assert!(!matcher.complete_linkage(&7, &members, |left, right| (left - right).abs() <= 4));
-        assert!(matcher.complete_linkage(&3, &members, |left, right| (left - right).abs() <= 4));
-        assert!(!matcher.complete_linkage(&3, &[], |_, _| true));
+        let linkage = CompleteLinkage::new(&members);
+        assert!(!linkage.accepts(&7, |left, right| (left - right).abs() <= 4));
+        assert!(linkage.accepts(&3, |left, right| (left - right).abs() <= 4));
+        assert!(!CompleteLinkage::new(&[]).accepts(&3, |_, _| true));
     }
 
     #[test]
@@ -659,6 +653,36 @@ mod tests {
             parity_match: true,
         };
         assert!(geometry_passes(&comparison, MatchingSettings::default().sibling));
+    }
+
+    #[test]
+    fn mosaic_overlap_and_rotation_policy_is_inclusive_only_at_boundaries() {
+        let thresholds = MatchingSettings::default().mosaic;
+        let mut comparison = FootprintComparison {
+            anchor: coordinate(0.0, 0.0),
+            left_area: 1.0,
+            right_area: 1.0,
+            intersection_area: 0.05,
+            normalized_coverage: 0.05,
+            centre_separation: skymath::Angle::from_degrees(1.0),
+            smaller_diagonal: skymath::Angle::from_degrees(2.0),
+            normalized_centre_separation: 0.5,
+            residual_sky_rotation: skymath::Angle::from_degrees(10.0),
+            parity_match: true,
+        };
+        assert!(mosaic_band_contains(&comparison, thresholds));
+
+        comparison.normalized_coverage = 0.4;
+        comparison.intersection_area = 0.4;
+        assert!(mosaic_band_contains(&comparison, thresholds));
+
+        comparison.normalized_coverage = 0.05 - 1e-12;
+        assert!(!mosaic_band_contains(&comparison, thresholds));
+        comparison.normalized_coverage = 0.4 + 1e-12;
+        assert!(!mosaic_band_contains(&comparison, thresholds));
+        comparison.normalized_coverage = 0.2;
+        comparison.residual_sky_rotation = skymath::Angle::from_degrees(10.0 + 1e-12);
+        assert!(!mosaic_band_contains(&comparison, thresholds));
     }
 
     #[test]
@@ -699,14 +723,13 @@ mod tests {
             acquisition_geometry: Compatibility::Compatible,
             equipment: Compatibility::Compatible,
         };
-        let evidence = RelationMatcher
-            .evaluate(&left, &right, common, MatchingSettings::default())
-            .expect("valid geometry");
+        let evidence =
+            MatchingSettings::default().evaluate(&left, &right, common).expect("valid geometry");
         assert_eq!(evidence.relation, Some(AutomaticRelation::SameSession));
         assert_eq!(evidence.threshold_snapshot.len(), 3);
         assert!(evidence.threshold_snapshot.iter().all(|measurement| measurement.passed));
 
-        let sibling = RelationMatcher
+        let sibling = MatchingSettings::default()
             .evaluate(
                 &left,
                 &right,
@@ -714,7 +737,6 @@ mod tests {
                     materialization: MaterializationRelation::DifferentOrDiscriminatorMismatch,
                     ..common
                 },
-                MatchingSettings::default(),
             )
             .expect("valid geometry");
         assert_eq!(sibling.relation, Some(AutomaticRelation::Sibling));
@@ -743,14 +765,11 @@ mod tests {
 
     #[test]
     fn complete_linkage_is_order_invariant_and_rejects_long_chains() {
-        let matcher = RelationMatcher;
         let candidates = [[0_i32, 4, 8], [8, 4, 0], [4, 0, 8]];
         for members in candidates {
-            assert!(!matcher
-                .complete_linkage(&12, &members, |left, right| { (left - right).abs() <= 4 }));
-            assert!(
-                matcher.complete_linkage(&4, &members, |left, right| { (left - right).abs() <= 4 })
-            );
+            let linkage = CompleteLinkage::new(&members);
+            assert!(!linkage.accepts(&12, |left, right| { (left - right).abs() <= 4 }));
+            assert!(linkage.accepts(&4, |left, right| { (left - right).abs() <= 4 }));
         }
     }
 }
