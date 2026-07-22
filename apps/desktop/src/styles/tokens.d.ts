@@ -14,6 +14,7 @@ export type PvTokenName =
   | 'pv-border'
   | 'pv-border-subtle'
   | 'pv-chip'
+  | 'pv-control-border'
   | 'pv-control-h'
   | 'pv-control-h-sm'
   | 'pv-control-h-xs'

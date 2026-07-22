@@ -13,7 +13,8 @@
     "$value": "{ink4}"
   },
   "border": {
-    "$value": "{rule}"
+    "$value": "{control-border}",
+    "$description": "Interactive control and container boundaries. Decorative dividers use border-subtle."
   },
   "border-subtle": {
     "$value": "{rule2}"
