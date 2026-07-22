@@ -312,6 +312,9 @@ describe('SetupWizard 7-step flow (spec 061 US1 added the Language step)', () =>
 
     fireEvent.click(screen.getByRole('button', { name: /back/i }));
     expect(screen.getByText(/choose your language/i)).toBeInTheDocument();
+    expect(
+      screen.getByText('Pick your preferred language'),
+    ).toBeInTheDocument();
 
     const portuguese = screen.getByRole('button', {
       name: 'Português (Brasil)',
@@ -320,10 +323,13 @@ describe('SetupWizard 7-step flow (spec 061 US1 added the Language step)', () =>
 
     // Applies immediately, in place — no navigation/reload occurred.
     expect(portuguese).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      screen.getByText('Escolha seu idioma preferido'),
+    ).toBeInTheDocument();
     expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
 
     // Progress from before Back survives the language change.
-    fireEvent.click(getContinueButton());
+    fireEvent.click(screen.getByRole('button', { name: /continuar/i }));
     expect(screen.getByText('/astro/lights')).toBeInTheDocument();
   });
 
