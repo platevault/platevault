@@ -1081,9 +1081,10 @@ mod tests {
         seed_session(&db).await;
         let ledger = CommandLedger::with_lease_ttl(db.pool().clone(), Duration::from_secs(30));
         let request = request("worker-a");
-        let lease = match ledger.claim_at(&request, "2026-01-01T00:00:00Z").await.unwrap() {
-            ClaimOutcome::Claimed(lease) => lease,
-            _ => unreachable!(),
+        let ClaimOutcome::Claimed(lease) =
+            ledger.claim_at(&request, "2026-01-01T00:00:00Z").await.unwrap()
+        else {
+            unreachable!()
         };
         let input = TerminalInput {
             state: TerminalState::Applied,
@@ -1117,9 +1118,10 @@ mod tests {
         seed_session(&db).await;
         let ledger = CommandLedger::with_lease_ttl(db.pool().clone(), Duration::from_secs(1));
         let request_a = request("worker-a");
-        let first = match ledger.claim_at(&request_a, "2026-01-01T00:00:00Z").await.unwrap() {
-            ClaimOutcome::Claimed(lease) => lease,
-            _ => unreachable!(),
+        let ClaimOutcome::Claimed(first) =
+            ledger.claim_at(&request_a, "2026-01-01T00:00:00Z").await.unwrap()
+        else {
+            unreachable!()
         };
         let request_b = request("worker-b");
         let second = match ledger.claim_at(&request_b, "2026-01-01T00:00:02Z").await.unwrap() {
