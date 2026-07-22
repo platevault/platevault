@@ -116,7 +116,9 @@ impl MatchingSettings {
             "mosaic.overlap_max_percent",
             &mut issues,
         );
-        if (self.mosaic.residual_sky_rotation_cap_deg - 10.0).abs() > f64::EPSILON {
+        if !self.mosaic.residual_sky_rotation_cap_deg.is_finite()
+            || (self.mosaic.residual_sky_rotation_cap_deg - 10.0).abs() > f64::EPSILON
+        {
             push_red(
                 &mut issues,
                 "settings.mosaic_rotation_cap_fixed",
@@ -306,18 +308,45 @@ pub enum ThresholdComparison {
 pub const MOSAIC_ROTATION_SAMPLE_DEG: f64 = 0.1;
 pub const MOSAIC_ROTATION_TOLERANCE_DEG: f64 = 0.001;
 
-/// Compare solved footprints and apply the configured relation policy.
-///
-/// Same-session is tested first and is restricted to the active materialization.
-/// Sibling is therefore never returned for a pair already classified into the
-/// same session. Mosaic overlap is evaluated only when neither same-panel class
-/// applies.
-///
-/// # Errors
-///
-/// Returns the upstream typed geometry error when the footprints cannot share
-/// a valid comparison plane or the rotation-band calculation cannot complete.
-pub fn evaluate_relation(
+/// Live entry point for relation matching policy.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RelationMatcher;
+
+impl RelationMatcher {
+    /// Compare solved footprints and apply the configured relation policy.
+    ///
+    /// Same-session is tested first and is restricted to the active
+    /// materialization. Sibling is therefore never returned for a pair already
+    /// classified into the same session. Mosaic overlap is evaluated only when
+    /// neither same-panel class applies.
+    ///
+    /// # Errors
+    ///
+    /// Returns the upstream typed geometry error when the footprints cannot
+    /// share a valid comparison plane or rotation-band calculation fails.
+    pub fn evaluate(
+        self,
+        left: &SkyFootprint,
+        right: &SkyFootprint,
+        context: RelationContext,
+        settings: MatchingSettings,
+    ) -> target_match::Result<GeometryEvidence> {
+        evaluate_relation(left, right, context, settings)
+    }
+
+    /// Enforce complete linkage between a candidate and every accepted member.
+    #[must_use]
+    pub fn complete_linkage<T>(
+        self,
+        candidate: &T,
+        accepted_members: &[T],
+        matches: impl Fn(&T, &T) -> bool,
+    ) -> bool {
+        complete_linkage(candidate, accepted_members, matches)
+    }
+}
+
+fn evaluate_relation(
     left: &SkyFootprint,
     right: &SkyFootprint,
     context: RelationContext,
@@ -464,9 +493,7 @@ fn residual_in_intervals(residual: f64, intervals: &[RotationInterval]) -> bool 
         .any(|interval| residual >= interval.start.degrees() && residual <= interval.end.degrees())
 }
 
-/// Complete-linkage guard against an immutable representative.
-#[must_use]
-pub fn complete_linkage<T>(
+fn complete_linkage<T>(
     candidate: &T,
     accepted_members: &[T],
     matches: impl Fn(&T, &T) -> bool,
@@ -536,11 +563,80 @@ mod tests {
     }
 
     #[test]
+    fn every_non_finite_threshold_is_red() {
+        type Mutator = fn(&mut MatchingSettings, f64);
+        let mutators: [Mutator; 7] = [
+            |settings, value| settings.same_session.coverage_min_percent = value,
+            |settings, value| settings.same_session.center_separation_max_percent = value,
+            |settings, value| settings.same_session.rotation_max_deg = value,
+            |settings, value| settings.sibling.coverage_min_percent = value,
+            |settings, value| settings.sibling.center_separation_max_percent = value,
+            |settings, value| settings.sibling.rotation_max_deg = value,
+            |settings, value| settings.mosaic.residual_sky_rotation_cap_deg = value,
+        ];
+        for mutate in mutators {
+            for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let mut settings = MatchingSettings::default();
+                mutate(&mut settings, value);
+                assert!(!settings.is_valid(), "accepted non-finite value {value}");
+            }
+        }
+
+        for mutate in [
+            |settings: &mut MatchingSettings, value| settings.mosaic.overlap_min_percent = value,
+            |settings: &mut MatchingSettings, value| settings.mosaic.overlap_max_percent = value,
+        ] {
+            for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let mut settings = MatchingSettings::default();
+                mutate(&mut settings, value);
+                assert!(!settings.is_valid(), "accepted non-finite mosaic threshold {value}");
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_mosaic_rotation_cap_rejects_adjacent_float_values() {
+        let exact = MatchingSettings::default();
+        assert!(exact.is_valid());
+        for cap in [f64::from_bits(10.0_f64.to_bits() - 1), f64::from_bits(10.0_f64.to_bits() + 1)]
+        {
+            let mut settings = exact;
+            settings.mosaic.residual_sky_rotation_cap_deg = cap;
+            assert!(!settings.is_valid());
+        }
+    }
+
+    #[test]
+    fn every_configured_hard_bound_rejects_adjacent_outside_values() {
+        type Case = (fn(&mut MatchingSettings, f64), f64, f64);
+        let cases: [Case; 8] = [
+            (|s, v| s.same_session.coverage_min_percent = v, 90.0, 99.5),
+            (|s, v| s.same_session.center_separation_max_percent = v, 0.5, 5.0),
+            (|s, v| s.same_session.rotation_max_deg = v, 0.25, 3.0),
+            (|s, v| s.sibling.coverage_min_percent = v, 80.0, 95.0),
+            (|s, v| s.sibling.center_separation_max_percent = v, 2.0, 15.0),
+            (|s, v| s.sibling.rotation_max_deg = v, 1.0, 15.0),
+            (|s, v| s.mosaic.overlap_min_percent = v, 1.0, 20.0),
+            (|s, v| s.mosaic.overlap_max_percent = v, 20.0, 60.0),
+        ];
+        for (mutate, minimum, maximum) in cases {
+            for value in
+                [f64::from_bits(minimum.to_bits() - 1), f64::from_bits(maximum.to_bits() + 1)]
+            {
+                let mut settings = MatchingSettings::default();
+                mutate(&mut settings, value);
+                assert!(!settings.is_valid(), "accepted {value} outside {minimum}..={maximum}");
+            }
+        }
+    }
+
+    #[test]
     fn complete_linkage_does_not_allow_transitive_expansion() {
         let members = [0_i32, 4];
-        assert!(!complete_linkage(&7, &members, |left, right| (left - right).abs() <= 4));
-        assert!(complete_linkage(&3, &members, |left, right| (left - right).abs() <= 4));
-        assert!(!complete_linkage(&3, &[], |_, _| true));
+        let matcher = RelationMatcher;
+        assert!(!matcher.complete_linkage(&7, &members, |left, right| (left - right).abs() <= 4));
+        assert!(matcher.complete_linkage(&3, &members, |left, right| (left - right).abs() <= 4));
+        assert!(!matcher.complete_linkage(&3, &[], |_, _| true));
     }
 
     #[test]
@@ -581,6 +677,50 @@ mod tests {
     }
 
     #[test]
+    fn modulo_180_and_parity_hold_across_multiple_turns() {
+        for angle in (-720..=720).step_by(15) {
+            let base = footprint(f64::from(angle), ImageParity::Direct);
+            let equivalent = footprint(f64::from(angle + 180), ImageParity::Direct);
+            let mirrored = footprint(f64::from(angle + 180), ImageParity::Mirrored);
+            let comparison = compare_footprints(&base, &equivalent).expect("comparison");
+            assert!(comparison.residual_sky_rotation.degrees().abs() < 1e-9);
+            assert!(comparison.parity_match);
+            assert!(!compare_footprints(&base, &mirrored).expect("comparison").parity_match);
+        }
+    }
+
+    #[test]
+    fn same_session_wins_exclusively_over_sibling() {
+        let left = footprint(0.0, ImageParity::Direct);
+        let right = footprint(180.0, ImageParity::Direct);
+        let common = RelationContext {
+            materialization: MaterializationRelation::SameWithMatchingDiscriminators,
+            target: Compatibility::Compatible,
+            acquisition_geometry: Compatibility::Compatible,
+            equipment: Compatibility::Compatible,
+        };
+        let evidence = RelationMatcher
+            .evaluate(&left, &right, common, MatchingSettings::default())
+            .expect("valid geometry");
+        assert_eq!(evidence.relation, Some(AutomaticRelation::SameSession));
+        assert_eq!(evidence.threshold_snapshot.len(), 3);
+        assert!(evidence.threshold_snapshot.iter().all(|measurement| measurement.passed));
+
+        let sibling = RelationMatcher
+            .evaluate(
+                &left,
+                &right,
+                RelationContext {
+                    materialization: MaterializationRelation::DifferentOrDiscriminatorMismatch,
+                    ..common
+                },
+                MatchingSettings::default(),
+            )
+            .expect("valid geometry");
+        assert_eq!(sibling.relation, Some(AutomaticRelation::Sibling));
+    }
+
+    #[test]
     fn sampled_in_range_geometry_settings_avoid_bound_errors() {
         for sample in 0..=100 {
             let fraction = f64::from(sample) / 100.0;
@@ -598,6 +738,19 @@ mod tests {
                 ..MatchingSettings::default()
             };
             assert!(!settings.validate().iter().any(|issue| issue.code.contains("out_of_bounds")));
+        }
+    }
+
+    #[test]
+    fn complete_linkage_is_order_invariant_and_rejects_long_chains() {
+        let matcher = RelationMatcher;
+        let candidates = [[0_i32, 4, 8], [8, 4, 0], [4, 0, 8]];
+        for members in candidates {
+            assert!(!matcher
+                .complete_linkage(&12, &members, |left, right| { (left - right).abs() <= 4 }));
+            assert!(
+                matcher.complete_linkage(&4, &members, |left, right| { (left - right).abs() <= 4 })
+            );
         }
     }
 }

@@ -3,9 +3,13 @@
 
 //! Pure panel, mosaic, lineage, proposal, and object-evidence invariants.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    fmt::Write,
+};
 
 use target_match::{CoverageState, FootprintUnion, ObjectShape, SkyFootprint};
+use uuid::Uuid;
 
 /// Stable logical panel identity and one immutable accepted revision.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +57,19 @@ impl PanelGroupRevision {
         }
         Ok(())
     }
+
+    /// Validate all current panel heads as one immutable snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invariant error for an invalid revision, duplicate current
+    /// membership, or predecessor/replacement coexistence.
+    pub fn validate_current(
+        revisions: &[Self],
+        supersessions: &[(String, String)],
+    ) -> Result<(), RelationInvariantError> {
+        validate_current_panel_membership(revisions, supersessions)
+    }
 }
 
 /// Validate current panel heads as one snapshot.
@@ -64,7 +81,7 @@ impl PanelGroupRevision {
 ///
 /// Returns an invariant error for an invalid revision, duplicate current
 /// membership, or predecessor/replacement coexistence.
-pub fn validate_current_panel_membership(
+fn validate_current_panel_membership(
     revisions: &[PanelGroupRevision],
     supersessions: &[(String, String)],
 ) -> Result<(), RelationInvariantError> {
@@ -91,6 +108,29 @@ pub struct MosaicEdge {
     pub left_panel_revision_id: String,
     pub right_panel_revision_id: String,
     pub evidence_id: String,
+}
+
+/// Live topology operations for exact mosaic revisions.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct MosaicTopology;
+
+impl MosaicTopology {
+    /// Whether an edge connects two components implied by accepted edges.
+    #[must_use]
+    pub fn edge_bridges(self, left: &str, right: &str, accepted_edges: &[MosaicEdge]) -> bool {
+        edge_bridges_components(left, right, accepted_edges)
+    }
+
+    /// Whether an edge connects two accepted mosaic membership snapshots.
+    #[must_use]
+    pub fn edge_bridges_accepted(
+        self,
+        left: &str,
+        right: &str,
+        accepted_components: &[BTreeSet<String>],
+    ) -> bool {
+        edge_bridges_accepted_mosaics(left, right, accepted_components)
+    }
 }
 
 impl MosaicEdge {
@@ -152,7 +192,7 @@ pub fn validate_mosaic_connectivity(
 
 /// Whether a proposed edge connects two already accepted components.
 #[must_use]
-pub fn edge_bridges_components(left: &str, right: &str, accepted_edges: &[MosaicEdge]) -> bool {
+fn edge_bridges_components(left: &str, right: &str, accepted_edges: &[MosaicEdge]) -> bool {
     if left == right {
         return false;
     }
@@ -167,7 +207,7 @@ pub fn edge_bridges_components(left: &str, right: &str, accepted_edges: &[Mosaic
 
 /// Detect a bridge when accepted component membership is already known.
 #[must_use]
-pub fn edge_bridges_accepted_mosaics(
+fn edge_bridges_accepted_mosaics(
     left: &str,
     right: &str,
     accepted_components: &[BTreeSet<String>],
@@ -314,6 +354,17 @@ impl ManualRelation {
                 if self.subject_ids.len() != 2 || self.edges.len() != 1 {
                     return Err(RelationInvariantError::KindShapeMismatch);
                 }
+                let edge = &self.edges[0];
+                if edge.left_panel_revision_id == edge.right_panel_revision_id {
+                    return Err(RelationInvariantError::InvalidMosaicEdge);
+                }
+                let reviewed_endpoints = BTreeSet::from([
+                    edge.left_panel_revision_id.clone(),
+                    edge.right_panel_revision_id.clone(),
+                ]);
+                if reviewed_endpoints != self.subject_ids {
+                    return Err(RelationInvariantError::MosaicEdgeOutsideReviewedSubjects);
+                }
             }
             RelationKind::MosaicSplit | RelationKind::MosaicMerge => {
                 if self.membership_ids.is_empty()
@@ -329,12 +380,196 @@ impl ManualRelation {
     }
 }
 
+/// Lifecycle state of one immutable relation-proposal revision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProposalState {
+    Pending,
+    Accepted,
+    Rejected,
+    Superseded,
+    Stale,
+}
+
+/// Canonical inputs that materially determine an automatic proposal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposalBasis {
+    pub kind: RelationKind,
+    pub target_scope: TargetScope,
+    pub source_revision_ids: BTreeSet<String>,
+    pub subject_ids: BTreeSet<String>,
+    pub membership_ids: BTreeSet<String>,
+    pub edges: Vec<MosaicEdge>,
+    pub lineage: Vec<(String, String)>,
+}
+
+impl ProposalBasis {
+    /// Produce a deterministic fingerprint independent of collection order.
+    #[must_use]
+    pub fn fingerprint(&self, evidence_revision: &str, matching_settings_revision: u64) -> String {
+        let mut canonical = String::new();
+        push_canonical_field(&mut canonical, "proposal_basis_v1");
+        push_canonical_field(&mut canonical, self.kind.canonical_name());
+        push_target_scope(&mut canonical, &self.target_scope);
+        push_canonical_field(&mut canonical, "source_revisions");
+        push_sorted_strings(&mut canonical, &self.source_revision_ids);
+        push_canonical_field(&mut canonical, "subjects");
+        push_sorted_strings(&mut canonical, &self.subject_ids);
+        push_canonical_field(&mut canonical, "memberships");
+        push_sorted_strings(&mut canonical, &self.membership_ids);
+
+        let mut edges = self.edges.clone();
+        edges.sort();
+        push_canonical_field(&mut canonical, "edges");
+        push_canonical_field(&mut canonical, &edges.len().to_string());
+        for edge in edges {
+            push_canonical_field(&mut canonical, &edge.left_panel_revision_id);
+            push_canonical_field(&mut canonical, &edge.right_panel_revision_id);
+            push_canonical_field(&mut canonical, &edge.evidence_id);
+        }
+
+        let mut lineage = self.lineage.clone();
+        lineage.sort();
+        push_canonical_field(&mut canonical, "lineage");
+        push_canonical_field(&mut canonical, &lineage.len().to_string());
+        for (predecessor, successor) in lineage {
+            push_canonical_field(&mut canonical, &predecessor);
+            push_canonical_field(&mut canonical, &successor);
+        }
+        push_canonical_field(&mut canonical, evidence_revision);
+        push_canonical_field(&mut canonical, &matching_settings_revision.to_string());
+        Uuid::new_v5(&Uuid::NAMESPACE_OID, canonical.as_bytes()).to_string()
+    }
+}
+
+impl RelationKind {
+    fn canonical_name(self) -> &'static str {
+        match self {
+            Self::PanelAdd => "panel_add",
+            Self::PanelReplace => "panel_replace",
+            Self::PanelSplit => "panel_split",
+            Self::PanelMerge => "panel_merge",
+            Self::MosaicCreate => "mosaic_create",
+            Self::MosaicEdge => "mosaic_edge",
+            Self::MosaicSplit => "mosaic_split",
+            Self::MosaicMerge => "mosaic_merge",
+        }
+    }
+}
+
+fn push_target_scope(canonical: &mut String, target_scope: &TargetScope) {
+    match target_scope {
+        TargetScope::SameTarget { canonical_target_id } => {
+            push_canonical_field(canonical, "same_target");
+            push_canonical_field(canonical, canonical_target_id);
+        }
+        TargetScope::ExistingCrossTarget { association_id } => {
+            push_canonical_field(canonical, "existing_cross_target");
+            push_canonical_field(canonical, association_id);
+        }
+        TargetScope::NewReviewedCrossTarget { canonical_target_ids } => {
+            push_canonical_field(canonical, "new_reviewed_cross_target");
+            push_sorted_strings(canonical, canonical_target_ids);
+        }
+    }
+}
+
+fn push_sorted_strings(canonical: &mut String, values: &BTreeSet<String>) {
+    let _ = write!(canonical, "{}[", values.len());
+    for value in values {
+        push_canonical_field(canonical, value);
+    }
+    canonical.push(']');
+}
+
+fn push_canonical_field(canonical: &mut String, value: &str) {
+    let _ = write!(canonical, "{}:{value};", value.len());
+}
+
+/// Immutable proposal head used for optimistic acceptance and stale marking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationProposal {
+    pub revision: u64,
+    pub state: ProposalState,
+    pub basis_fingerprint: String,
+}
+
+impl RelationProposal {
+    #[must_use]
+    pub fn pending(revision: u64, basis_fingerprint: impl Into<String>) -> Self {
+        Self {
+            revision,
+            state: ProposalState::Pending,
+            basis_fingerprint: basis_fingerprint.into(),
+        }
+    }
+
+    /// Validate the optimistic revision and current material basis.
+    ///
+    /// # Errors
+    ///
+    /// Returns a state, revision, or basis-staleness error without changing
+    /// the proposal.
+    pub fn validate_pending(
+        &self,
+        expected_revision: u64,
+        current_basis_fingerprint: &str,
+    ) -> Result<(), RelationInvariantError> {
+        if self.state != ProposalState::Pending {
+            return Err(RelationInvariantError::ProposalNotPending);
+        }
+        if self.revision != expected_revision {
+            return Err(RelationInvariantError::StaleProposalRevision);
+        }
+        if self.basis_fingerprint != current_basis_fingerprint {
+            return Err(RelationInvariantError::StaleProposalBasis);
+        }
+        Ok(())
+    }
+
+    /// Mark this exact pending revision stale and advance its CAS token.
+    ///
+    /// # Errors
+    ///
+    /// Returns a state or revision error and leaves the proposal unchanged.
+    pub fn mark_stale(&mut self, expected_revision: u64) -> Result<(), RelationInvariantError> {
+        if self.state != ProposalState::Pending {
+            return Err(RelationInvariantError::ProposalNotPending);
+        }
+        if self.revision != expected_revision {
+            return Err(RelationInvariantError::StaleProposalRevision);
+        }
+        let successor_revision = self
+            .revision
+            .checked_add(1)
+            .ok_or(RelationInvariantError::ProposalRevisionExhausted)?;
+        self.state = ProposalState::Stale;
+        self.revision = successor_revision;
+        Ok(())
+    }
+}
+
 /// Complete fingerprint that suppresses only equivalent automatic proposals.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RejectionFingerprint {
     pub basis_fingerprint: String,
     pub evidence_revision: String,
     pub matching_settings_revision: u64,
+}
+
+impl RejectionFingerprint {
+    #[must_use]
+    pub fn from_basis(
+        basis: &ProposalBasis,
+        evidence_revision: impl Into<String>,
+        matching_settings_revision: u64,
+    ) -> Self {
+        let evidence_revision = evidence_revision.into();
+        Self {
+            basis_fingerprint: basis.fingerprint(&evidence_revision, matching_settings_revision),
+            evidence_revision,
+            matching_settings_revision,
+        }
+    }
 }
 
 /// In-memory domain model of remembered rejection semantics.
@@ -366,13 +601,7 @@ pub enum MosaicObjectCoverage {
     Partial,
 }
 
-/// Measure one object and exclude zero-coverage results, including gap points.
-///
-/// # Errors
-///
-/// Returns the upstream typed geometry error when the object cannot be
-/// projected or measured against the union's persisted anchor.
-pub fn measure_mosaic_object(
+fn measure_mosaic_object(
     union: &FootprintUnion,
     object: ObjectShape<'_>,
 ) -> target_match::Result<Option<MosaicObjectEvidence>> {
@@ -401,14 +630,38 @@ pub fn measure_mosaic_object(
     }))
 }
 
-/// Build the captured union once for an exact mosaic revision.
-///
-/// # Errors
-///
-/// Returns the upstream typed geometry error for an empty set, duplicate
-/// provenance, incompatible epochs, projection failure, or invalid geometry.
-pub fn captured_union(footprints: &[SkyFootprint]) -> target_match::Result<FootprintUnion> {
-    FootprintUnion::new(footprints)
+/// Captured, hole-aware geometry for one exact mosaic revision.
+#[derive(Debug, Clone)]
+pub struct CapturedMosaic(FootprintUnion);
+
+impl CapturedMosaic {
+    /// Build captured geometry while preserving gaps and disconnected regions.
+    ///
+    /// # Errors
+    ///
+    /// Returns the upstream typed geometry error for an empty set, duplicate
+    /// provenance, incompatible epochs, projection failure, or invalid geometry.
+    pub fn new(footprints: &[SkyFootprint]) -> target_match::Result<Self> {
+        FootprintUnion::new(footprints).map(Self)
+    }
+
+    #[must_use]
+    pub fn component_count(&self) -> usize {
+        self.0.component_count()
+    }
+
+    /// Measure one object and exclude zero-coverage results, including gap points.
+    ///
+    /// # Errors
+    ///
+    /// Returns the upstream typed geometry error when the object cannot be
+    /// projected or measured against the union's persisted anchor.
+    pub fn measure(
+        &self,
+        object: ObjectShape<'_>,
+    ) -> target_match::Result<Option<MosaicObjectEvidence>> {
+        measure_mosaic_object(&self.0, object)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -426,6 +679,11 @@ pub enum RelationInvariantError {
     KindShapeMismatch,
     DuplicateCurrentPanelMembership,
     PredecessorAndReplacementCoexist,
+    MosaicEdgeOutsideReviewedSubjects,
+    ProposalNotPending,
+    StaleProposalRevision,
+    StaleProposalBasis,
+    ProposalRevisionExhausted,
 }
 
 impl std::fmt::Display for RelationInvariantError {
@@ -440,7 +698,7 @@ impl std::error::Error for RelationInvariantError {}
 mod tests {
     use super::*;
     use skymath::{Angle, Equatorial};
-    use target_match::{FootprintProvenance, ImageParity};
+    use target_match::{FootprintProvenance, ImageParity, SkyEllipse};
 
     fn edge(left: &str, right: &str) -> MosaicEdge {
         MosaicEdge::new(left, right, format!("{left}-{right}"))
@@ -480,14 +738,14 @@ mod tests {
         let first = PanelGroupRevision::singleton("p1", "r1", "old", 1);
         let duplicate = PanelGroupRevision::singleton("p2", "r2", "old", 1);
         assert_eq!(
-            validate_current_panel_membership(&[first.clone(), duplicate], &[]),
+            PanelGroupRevision::validate_current(&[first.clone(), duplicate], &[]),
             Err(RelationInvariantError::DuplicateCurrentPanelMembership)
         );
 
         let mut coexist = first;
         coexist.session_ids.insert("new".into());
         assert_eq!(
-            validate_current_panel_membership(&[coexist], &[("old".into(), "new".into())]),
+            PanelGroupRevision::validate_current(&[coexist], &[("old".into(), "new".into())],),
             Err(RelationInvariantError::PredecessorAndReplacementCoexist)
         );
     }
@@ -508,11 +766,23 @@ mod tests {
     #[test]
     fn bridge_between_accepted_components_requires_merge_review() {
         let accepted = [edge("a", "b"), edge("c", "d")];
-        assert!(edge_bridges_components("b", "c", &accepted));
-        assert!(!edge_bridges_components("a", "b", &accepted));
+        let topology = MosaicTopology;
+        assert!(topology.edge_bridges("b", "c", &accepted));
+        assert!(!topology.edge_bridges("a", "b", &accepted));
         let components =
             [BTreeSet::from(["singleton".into()]), BTreeSet::from(["a".into(), "b".into()])];
-        assert!(edge_bridges_accepted_mosaics("singleton", "a", &components));
+        assert!(topology.edge_bridges_accepted("singleton", "a", &components));
+    }
+
+    #[test]
+    fn bridge_detection_handles_long_components_and_unknown_endpoints() {
+        let topology = MosaicTopology;
+        let left: BTreeSet<String> = (0..1_000).map(|index| format!("left-{index}")).collect();
+        let right: BTreeSet<String> = (0..1_000).map(|index| format!("right-{index}")).collect();
+        let components = [left, right];
+        assert!(topology.edge_bridges_accepted("left-999", "right-999", &components));
+        assert!(!topology.edge_bridges_accepted("left-0", "left-999", &components));
+        assert!(!topology.edge_bridges_accepted("left-0", "unknown", &components));
     }
 
     #[test]
@@ -523,12 +793,9 @@ mod tests {
 
     #[test]
     fn remembered_rejection_changes_with_material_evidence() {
-        let old = RejectionFingerprint {
-            basis_fingerprint: "basis".into(),
-            evidence_revision: "e1".into(),
-            matching_settings_revision: 1,
-        };
-        let changed = RejectionFingerprint { evidence_revision: "e2".into(), ..old.clone() };
+        let basis = proposal_basis();
+        let old = RejectionFingerprint::from_basis(&basis, "e1", 1);
+        let changed = RejectionFingerprint::from_basis(&basis, "e2", 1);
         let mut remembered = RememberedRejections::default();
         remembered.remember(old.clone());
         assert!(remembered.suppresses(&old));
@@ -551,21 +818,133 @@ mod tests {
         assert_eq!(relation.validate(), Err(RelationInvariantError::RelationFreeProposal));
     }
 
+    fn manual_mosaic_edge(subject_ids: BTreeSet<String>, edge: MosaicEdge) -> ManualRelation {
+        ManualRelation {
+            kind: RelationKind::MosaicEdge,
+            review_reason: "reviewed geometry".into(),
+            target_scope: TargetScope::SameTarget { canonical_target_id: "target".into() },
+            source_revision_ids: BTreeSet::from(["mosaic-r1".into()]),
+            subject_ids,
+            membership_ids: BTreeSet::new(),
+            edges: vec![edge],
+            lineage: Vec::new(),
+            missing_evidence_codes: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn manual_mosaic_edge_matches_exact_reviewed_subjects() {
+        let reviewed = BTreeSet::from(["a".into(), "b".into()]);
+        assert_eq!(manual_mosaic_edge(reviewed.clone(), edge("a", "b")).validate(), Ok(()));
+        assert_eq!(
+            manual_mosaic_edge(reviewed.clone(), edge("a", "a")).validate(),
+            Err(RelationInvariantError::InvalidMosaicEdge)
+        );
+        assert_eq!(
+            manual_mosaic_edge(reviewed, edge("a", "outside")).validate(),
+            Err(RelationInvariantError::MosaicEdgeOutsideReviewedSubjects)
+        );
+    }
+
+    fn proposal_basis() -> ProposalBasis {
+        ProposalBasis {
+            kind: RelationKind::MosaicMerge,
+            target_scope: TargetScope::SameTarget { canonical_target_id: "target".into() },
+            source_revision_ids: BTreeSet::from(["source-a".into(), "source-b".into()]),
+            subject_ids: BTreeSet::from(["a".into(), "b".into(), "c".into()]),
+            membership_ids: BTreeSet::from(["a".into(), "b".into(), "c".into()]),
+            edges: vec![edge("a", "b"), edge("b", "c")],
+            lineage: vec![("old-a".into(), "new".into()), ("old-b".into(), "new".into())],
+        }
+    }
+
+    #[test]
+    fn canonical_proposal_fingerprint_is_reorder_stable() {
+        let basis = proposal_basis();
+        let mut reordered = basis.clone();
+        reordered.edges.reverse();
+        reordered.lineage.reverse();
+        assert_eq!(basis.fingerprint("evidence-1", 7), reordered.fingerprint("evidence-1", 7));
+    }
+
+    #[test]
+    fn canonical_proposal_fingerprint_changes_with_relevant_inputs() {
+        let basis = proposal_basis();
+        let original = basis.fingerprint("evidence-1", 7);
+        assert_ne!(original, basis.fingerprint("evidence-2", 7));
+        assert_ne!(original, basis.fingerprint("evidence-1", 8));
+
+        let mut changed_membership = basis;
+        changed_membership.membership_ids.insert("d".into());
+        assert_ne!(original, changed_membership.fingerprint("evidence-1", 7));
+    }
+
+    #[test]
+    fn stale_proposal_revision_is_rejected_without_mutation() {
+        let fingerprint = proposal_basis().fingerprint("evidence-1", 7);
+        let mut proposal = RelationProposal::pending(3, fingerprint.clone());
+        assert_eq!(
+            proposal.validate_pending(2, &fingerprint),
+            Err(RelationInvariantError::StaleProposalRevision)
+        );
+        assert_eq!(
+            proposal.validate_pending(3, "changed"),
+            Err(RelationInvariantError::StaleProposalBasis)
+        );
+        assert_eq!(proposal.mark_stale(2), Err(RelationInvariantError::StaleProposalRevision));
+        assert_eq!(proposal.state, ProposalState::Pending);
+        assert_eq!(proposal.revision, 3);
+
+        assert_eq!(proposal.mark_stale(3), Ok(()));
+        assert_eq!(proposal.state, ProposalState::Stale);
+        assert_eq!(proposal.revision, 4);
+        assert_eq!(
+            proposal.validate_pending(4, &fingerprint),
+            Err(RelationInvariantError::ProposalNotPending)
+        );
+    }
+
+    #[test]
+    fn proposal_revision_overflow_fails_without_partial_state_change() {
+        let mut proposal = RelationProposal::pending(u64::MAX, "basis");
+        assert_eq!(
+            proposal.mark_stale(u64::MAX),
+            Err(RelationInvariantError::ProposalRevisionExhausted)
+        );
+        assert_eq!(proposal.state, ProposalState::Pending);
+        assert_eq!(proposal.revision, u64::MAX);
+    }
+
     #[test]
     fn point_in_uncaptured_gap_is_excluded() {
-        let union = captured_union(&[square(8.0, "left"), square(12.0, "right")])
+        let union = CapturedMosaic::new(&[square(8.0, "left"), square(12.0, "right")])
             .expect("valid disconnected union");
         assert_eq!(union.component_count(), 2);
         assert_eq!(
-            measure_mosaic_object(&union, ObjectShape::Point(coordinate(10.0, 0.0)))
-                .expect("coverage measurement"),
+            union.measure(ObjectShape::Point(coordinate(10.0, 0.0))).expect("coverage measurement"),
             None
         );
-        let captured = measure_mosaic_object(&union, ObjectShape::Point(coordinate(8.0, 0.0)))
+        let captured = union
+            .measure(ObjectShape::Point(coordinate(8.0, 0.0)))
             .expect("coverage measurement")
             .expect("captured point");
         assert_eq!(captured.state, MosaicObjectCoverage::Full);
         assert_eq!(captured.panel_evidence_ids, BTreeSet::from(["left".into()]));
+
+        let spanning = SkyEllipse::new(
+            coordinate(10.0, 0.0),
+            Angle::from_degrees(3.0),
+            Angle::from_degrees(0.25),
+            Angle::from_degrees(90.0),
+            128,
+        )
+        .expect("valid extended object");
+        let extended = union
+            .measure(ObjectShape::Ellipse(&spanning))
+            .expect("coverage measurement")
+            .expect("panels intersect extended object");
+        assert_eq!(extended.state, MosaicObjectCoverage::Partial);
+        assert_eq!(extended.panel_evidence_ids, BTreeSet::from(["left".into(), "right".into()]));
     }
 
     #[test]
