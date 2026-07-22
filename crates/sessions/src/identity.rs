@@ -137,7 +137,9 @@ impl DarkSessionDiscriminators {
     /// Compare a candidate directly with this immutable recipe representative.
     #[must_use]
     pub fn matches_recipe_candidate(&self, candidate: &Self) -> bool {
-        self.camera_id == candidate.camera_id
+        !matches!(self.temperature_mode, DarkTemperatureMode::Unknown)
+            && !matches!(candidate.temperature_mode, DarkTemperatureMode::Unknown)
+            && self.camera_id == candidate.camera_id
             && self.temperature_mode == candidate.temperature_mode
             && self.capture == candidate.capture
             && self.exposure_us.abs_diff(candidate.exposure_us)
@@ -443,6 +445,22 @@ mod tests {
         assert_eq!(dark_exposure_tolerance_us(1), 1_000);
         assert_eq!(dark_exposure_tolerance_us(20_000_000), 10_000);
         assert_eq!(dark_exposure_tolerance_us(u64::MAX), 100_000);
+    }
+
+    #[test]
+    fn unknown_dark_temperature_never_matches_a_recipe_candidate() {
+        let known = DarkSessionDiscriminators {
+            camera_id: id(40),
+            temperature_mode: DarkTemperatureMode::Regulated { cooling_setpoint_millic: -10_000 },
+            exposure_us: 2_000_000,
+            capture: capture(),
+        };
+        let mut unknown = known.clone();
+        unknown.temperature_mode = DarkTemperatureMode::Unknown;
+
+        assert!(!unknown.matches_recipe_candidate(&unknown));
+        assert!(!unknown.matches_recipe_candidate(&known));
+        assert!(!known.matches_recipe_candidate(&unknown));
     }
 
     #[test]
