@@ -12,11 +12,9 @@
  * The checklist is only mounted inside the `.pv-onb-ring` flyout (portalled to
  * `document.body`), so every test opens it first — see `openChecklist`.
  *
- * ── Mock-mode coverage limit (VC-002) ───────────────────────────────────────
- *  The AUTOMATIC-tick progress pulse cannot be exercised in mock mode: only the
- *  real bus subscriber emits `source === 'event'` ticks (research R5 / VC-002),
- *  and `useCompletionChoreography` pulses on that source alone. Documented
- *  below; covered by the backend / Layer-2 lane instead.
+ * Automatic ticks require the real event bus, so the mock cannot trigger that
+ * state transition. A browser fixture applies the production animation classes
+ * to prove the tick, progress, and spotlight shorthands all parse.
  *
  * ── No per-row dismiss ──────────────────────────────────────────────────────
  *  The per-row dismiss "X" was deliberately removed: the round checkbox is the
@@ -33,9 +31,57 @@ import {
   landOnMockRoute,
   openChecklist,
   ONB_SECTION as SECTION,
-  ONB_RING as RING,
 } from './support/harness';
 import type { Page } from '@playwright/test';
+
+interface AnimationStyle {
+  name: string;
+  duration: string;
+  timing: string;
+  iterations: string;
+}
+
+async function readChoreographyAnimations(
+  page: Page,
+): Promise<Record<'tick' | 'progress' | 'spotlight', AnimationStyle>> {
+  return page.evaluate(() => {
+    const host = document.createElement('div');
+    host.innerHTML = `
+      <div data-animation="tick" class="pv-onb-checklist__item--completing"></div>
+      <div class="pv-onb-checklist__progress--pulse">
+        <span data-animation="progress" class="pv-onb-checklist__progress-fill"></span>
+      </div>
+      <svg><rect data-animation="spotlight" class="react-joyride__spotlight"></rect></svg>
+    `;
+    document.body.append(host);
+    document.documentElement.dataset.onbSpotlightPulse = 'on';
+
+    const read = (name: string): AnimationStyle => {
+      const element = host.querySelector<HTMLElement | SVGElement>(
+        `[data-animation="${name}"]`,
+      );
+      if (!element) throw new Error(`missing ${name} animation probe`);
+      const style = getComputedStyle(element);
+      return {
+        name: style.animationName,
+        duration: style.animationDuration,
+        timing: style.animationTimingFunction,
+        iterations: style.animationIterationCount,
+      };
+    };
+
+    try {
+      return {
+        tick: read('tick'),
+        progress: read('progress'),
+        spotlight: read('spotlight'),
+      };
+    } finally {
+      delete document.documentElement.dataset.onbSpotlightPulse;
+      host.remove();
+    }
+  });
+}
 
 /** Open the checklist flyout and wait for its body (no-op when already open). */
 test.describe('onboarding completion choreography (spec 056 US3)', () => {
@@ -51,6 +97,34 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
     await expect(announcer).toHaveCount(1);
   });
 
+  test('production animation classes resolve complete shorthands', async ({
+    page,
+  }) => {
+    await landOnMockRoute(page, '/#/sessions');
+    await openChecklist(page);
+
+    await expect(readChoreographyAnimations(page)).resolves.toEqual({
+      tick: {
+        name: 'pv-onb-tick-pop',
+        duration: '0.15s',
+        timing: 'ease-out',
+        iterations: '1',
+      },
+      progress: {
+        name: 'pv-onb-progress-pulse',
+        duration: '0.6s',
+        timing: 'ease-in-out',
+        iterations: '2',
+      },
+      spotlight: {
+        name: 'pv-onb-spotlight-pulse',
+        duration: '1s',
+        timing: 'ease-in-out',
+        iterations: 'infinite',
+      },
+    });
+  });
+
   test('manual check-off plays the in-place choreography then moves the item to the completed area', async ({
     page,
   }) => {
@@ -62,22 +136,6 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
 
     // In place first: the row carries the completing marker while it animates.
     await expect(row).toHaveAttribute('data-completing', 'true');
-    await expect
-      .poll(() =>
-        row.evaluate((element) => {
-          const style = getComputedStyle(element);
-          return {
-            name: style.animationName,
-            duration: style.animationDuration,
-            timing: style.animationTimingFunction,
-          };
-        }),
-      )
-      .toEqual({
-        name: 'pv-onb-tick-pop',
-        duration: '0.15s',
-        timing: 'ease-out',
-      });
     // Then it settles into the greyed, checked completed area of its group.
     await expect(
       page.locator(
@@ -125,15 +183,17 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
       await landOnMockRoute(page, '/#/sessions');
       await openChecklist(page);
 
-      const animationName = await page.evaluate(() => {
-        const probe = document.createElement('div');
-        probe.className = 'pv-onb-checklist__item--completing';
-        document.body.append(probe);
-        const name = getComputedStyle(probe).animationName;
-        probe.remove();
-        return name;
+      const noAnimation = {
+        name: 'none',
+        duration: '1e-06s',
+        timing: 'ease',
+        iterations: '1',
+      };
+      await expect(readChoreographyAnimations(page)).resolves.toEqual({
+        tick: noAnimation,
+        progress: noAnimation,
+        spotlight: noAnimation,
       });
-      expect(animationName).toBe('none');
 
       await page.getByRole('checkbox', { name: 'Review a session' }).click();
 
@@ -146,15 +206,5 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
         ),
       ).toBeVisible();
     });
-  });
-
-  // No fixtures are destructured: an empty pattern would trip both eslint's
-  // no-empty-pattern and biome's noEmptyPattern, and the eslint-disable comment
-  // cannot suppress the biome rule.
-  test.skip('automatic tick pulses the progress line / ring (VC-002)', async () => {
-    // NOT mock-coverable: an `auto_checked` tick (`source === 'event'`) is only
-    // ever produced by the real backend bus subscriber (research R5). The mock
-    // cannot fabricate one, so the progress-line / progress-ring pulse on a
-    // side-effect tick is covered by the backend / Layer-2 lane, not here.
   });
 });

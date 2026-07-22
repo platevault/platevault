@@ -19,7 +19,7 @@
   width: 100%;
   height: var(--pv-control-h);
   padding: 0 var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: 1px solid var(--pv-control-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
 
