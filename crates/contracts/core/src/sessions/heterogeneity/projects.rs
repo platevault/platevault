@@ -13,6 +13,10 @@ use super::shared::{
     StableIdentity,
 };
 
+const fn default_true() -> bool {
+    true
+}
+
 pub const MAX_UPDATE_VIEW_SESSIONS: u64 = 500;
 pub const MAX_UPDATE_VIEW_ITEMS: u64 = 100_000;
 pub const MAX_UPDATE_VIEW_SOURCE_FRAMES: u64 = 100_000;
@@ -426,13 +430,14 @@ impl KeysetListOperation for ProjectListOperation {
             Self::Pin | Self::MaterializedSession | Self::UnmaterializedSession => {
                 &["sessionId ASC"]
             }
-            Self::ManifestEntry => &["ordinal ASC", "entryId ASC"],
-            Self::ManifestCorrectionOverlay => &["ordinal ASC", "overlayId ASC"],
-            Self::CorrectionOverlayMapping | Self::PlanOverlayMapping => {
-                &["ordinal ASC", "predecessorEntryId ASC"]
-            }
-            Self::PlanPinnedSession | Self::PlanAddedSession => &["ordinal ASC", "sessionId ASC"],
-            Self::PlanItem | Self::PlanConflict => &["ordinal ASC", "itemId ASC"],
+            Self::ManifestEntry
+            | Self::ManifestCorrectionOverlay
+            | Self::CorrectionOverlayMapping
+            | Self::PlanPinnedSession
+            | Self::PlanAddedSession
+            | Self::PlanItem
+            | Self::PlanConflict
+            | Self::PlanOverlayMapping => &["ordinal ASC"],
         }
     }
 }
@@ -443,6 +448,8 @@ pub struct RelatedSessionListRequest {
     pub project_id: CanonicalId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_kinds: Option<BoundedList<RelatedSessionKind, 100>>,
+    #[serde(default = "default_true")]
+    #[schemars(default = "default_true")]
     pub include_pinned: bool,
     pub page: PageRequest,
 }
@@ -465,7 +472,7 @@ pub struct ProjectRevisionPageRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSnapshotPageRequest {
     pub project_id: CanonicalId,
-    pub snapshot_id: CanonicalId,
+    pub materialized_snapshot_id: CanonicalId,
     pub page: PageRequest,
 }
 
@@ -523,23 +530,39 @@ pub struct UpdateViewOperationQueryRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum ProjectQuery {
+    #[serde(rename = "project.related_session.list")]
     RelatedSessionList(RelatedSessionListRequest),
+    #[serde(rename = "project.view_state.query")]
     ViewState(ProjectQueryRequest),
+    #[serde(rename = "project.view_state.pin.list")]
     PinList(ProjectRevisionPageRequest),
+    #[serde(rename = "project.view_state.materialized_session.list")]
     MaterializedSessionList(ProjectSnapshotPageRequest),
+    #[serde(rename = "project.view_state.unmaterialized_session.list")]
     UnmaterializedSessionList(UnmaterializedSessionListRequest),
+    #[serde(rename = "project.manifest.query")]
     Manifest(ManifestQueryRequest),
+    #[serde(rename = "project.manifest.entry.list")]
     ManifestEntryList(ManifestPageRequest),
+    #[serde(rename = "project.manifest.correction_overlay.list")]
     ManifestCorrectionOverlayList(ManifestPageRequest),
+    #[serde(rename = "project.correction_overlay.mapping.list")]
     CorrectionOverlayMappingList(OverlayPageRequest),
+    #[serde(rename = "project.update_view.query")]
     UpdateView(PlanQueryRequest),
+    #[serde(rename = "project.update_view.pinned_session.list")]
     UpdateViewPinnedSessionList(PlanPageRequest),
+    #[serde(rename = "project.update_view.added_session.list")]
     UpdateViewAddedSessionList(PlanPageRequest),
+    #[serde(rename = "project.update_view.item.list")]
     UpdateViewItemList(PlanPageRequest),
+    #[serde(rename = "project.update_view.conflict.list")]
     UpdateViewConflictList(PlanPageRequest),
+    #[serde(rename = "project.update_view.overlay_mapping.list")]
     UpdateViewOverlayMappingList(PlanPageRequest),
+    #[serde(rename = "project.update_view.operation.query")]
     UpdateViewOperation(UpdateViewOperationQueryRequest),
 }
 
@@ -635,14 +658,21 @@ pub struct UpdateViewCancelRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum ProjectCommand {
+    #[serde(rename = "project.session_pin.add")]
     SessionPinAdd(ProjectSessionPinAddRequest),
+    #[serde(rename = "project.session_pin.replace")]
     SessionPinReplace(ProjectSessionPinReplaceRequest),
+    #[serde(rename = "project.update_view.plan")]
     UpdateViewPlan(UpdateViewPlanRequest),
+    #[serde(rename = "project.update_view.approve")]
     UpdateViewApprove(UpdateViewApproveRequest),
+    #[serde(rename = "project.update_view.apply")]
     UpdateViewApply(UpdateViewApplyRequest),
+    #[serde(rename = "project.update_view.discard")]
     UpdateViewDiscard(UpdateViewDiscardRequest),
+    #[serde(rename = "project.update_view.cancel")]
     UpdateViewCancel(UpdateViewCancelRequest),
 }
 

@@ -463,13 +463,15 @@ impl KeysetListOperation for MetadataListOperation {
             }
             Self::PanelConsequenceSession => &["ordinal ASC", "proposedSessionId ASC"],
             Self::PanelConsequenceRetirement => &["ordinal ASC", "predecessorPanelGroupId ASC"],
-            Self::PanelConsequenceLineage | Self::ApplyPanelLineage => {
-                &["ordinal ASC", "predecessorPanelGroupId ASC", "successorPanelGroupId ASC"]
-            }
+            Self::PanelConsequenceLineage | Self::ApplyPanelLineage => &[
+                "ordinal ASC",
+                "lineage.predecessorPanelGroupId ASC",
+                "lineage.successorPanelGroupId ASC",
+            ],
             Self::StaleMosaicEdge | Self::ApplyInvalidatedEdge => &["ordinal ASC", "edgeId ASC"],
             Self::ProjectConsequence => &["projectId ASC", "unchangedPinnedSessionId ASC"],
             Self::ApplyReplacementSession => &["ordinal ASC", "replacementSessionId ASC"],
-            Self::ApplyPanelRevision => &["ordinal ASC", "revisionId ASC"],
+            Self::ApplyPanelRevision => &["ordinal ASC", "revisionRef.revisionId ASC"],
             Self::ApplyProjectProposal => &["ordinal ASC", "projectReplacementProposalId ASC"],
         }
     }
@@ -477,10 +479,18 @@ impl KeysetListOperation for MetadataListOperation {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionRevisionQueryRequest {
+pub struct MetadataEvidenceQueryRequest {
     pub session_id: CanonicalId,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub revision: Option<u64>,
+    pub evidence_revision: Option<u64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EquipmentResolutionQueryRequest {
+    pub session_id: CanonicalId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolution_revision: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
@@ -491,42 +501,95 @@ pub struct ReclassificationQueryRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ReclassificationSnapshotListRequest {
+pub struct ReclassificationResultPageRequest {
     pub plan_id: CanonicalId,
-    pub snapshot_id: CanonicalId,
+    pub plan_result_snapshot_id: CanonicalId,
     pub page: PageRequest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ReclassificationChildListRequest {
+pub struct ReplacementFrameListRequest {
     pub plan_id: CanonicalId,
-    pub snapshot_id: CanonicalId,
-    pub owner_id: SafeText,
+    pub replacement_key: SafeText,
     pub page: PageRequest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(rename_all = "camelCase")]
+pub struct PanelConsequenceSessionListRequest {
+    pub plan_id: CanonicalId,
+    pub plan_result_snapshot_id: CanonicalId,
+    pub panel_group_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelConsequenceDestinationListRequest {
+    pub plan_id: CanonicalId,
+    pub plan_result_snapshot_id: CanonicalId,
+    pub proposed_destination_panel_group_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectConsequenceReplacementListRequest {
+    pub plan_id: CanonicalId,
+    pub plan_result_snapshot_id: CanonicalId,
+    pub project_id: CanonicalId,
+    pub unchanged_pinned_session_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReclassificationApplyResultPageRequest {
+    pub plan_id: CanonicalId,
+    pub apply_result_snapshot_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(tag = "operation")]
 pub enum MetadataQuery {
-    Evidence(SessionRevisionQueryRequest),
-    EquipmentResolution(SessionRevisionQueryRequest),
+    #[serde(rename = "metadata.evidence.query")]
+    Evidence(MetadataEvidenceQueryRequest),
+    #[serde(rename = "equipment.resolution.query")]
+    EquipmentResolution(EquipmentResolutionQueryRequest),
+    #[serde(rename = "metadata.reclassification.query")]
     Reclassification(ReclassificationQueryRequest),
-    ReplacementFrameList(ReclassificationChildListRequest),
-    ReplacementSessionList(ReclassificationSnapshotListRequest),
-    PanelConsequenceList(ReclassificationSnapshotListRequest),
-    PanelConsequenceSessionList(ReclassificationChildListRequest),
-    PanelConsequenceRetirementList(ReclassificationChildListRequest),
-    PanelConsequenceLineageList(ReclassificationChildListRequest),
-    StaleMosaicEdgeList(ReclassificationSnapshotListRequest),
-    ProjectConsequenceList(ReclassificationSnapshotListRequest),
-    ProjectConsequenceReplacementList(ReclassificationChildListRequest),
-    ApplyReplacementSessionList(ReclassificationSnapshotListRequest),
-    ApplyPanelRevisionList(ReclassificationSnapshotListRequest),
-    ApplyInvalidatedEdgeList(ReclassificationSnapshotListRequest),
-    ApplyRetiredPanelGroupList(ReclassificationSnapshotListRequest),
-    ApplyPanelLineageList(ReclassificationSnapshotListRequest),
-    ApplyProjectProposalList(ReclassificationSnapshotListRequest),
+    #[serde(rename = "metadata.reclassification.replacement_frame.list")]
+    ReplacementFrameList(ReplacementFrameListRequest),
+    #[serde(rename = "metadata.reclassification.replacement_session.list")]
+    ReplacementSessionList(ReclassificationResultPageRequest),
+    #[serde(rename = "metadata.reclassification.panel_consequence.list")]
+    PanelConsequenceList(ReclassificationResultPageRequest),
+    #[serde(rename = "metadata.reclassification.panel_consequence_session.list")]
+    PanelConsequenceSessionList(PanelConsequenceSessionListRequest),
+    #[serde(rename = "metadata.reclassification.panel_consequence_retirement.list")]
+    PanelConsequenceRetirementList(PanelConsequenceDestinationListRequest),
+    #[serde(rename = "metadata.reclassification.panel_consequence_lineage.list")]
+    PanelConsequenceLineageList(PanelConsequenceDestinationListRequest),
+    #[serde(rename = "metadata.reclassification.stale_mosaic_edge.list")]
+    StaleMosaicEdgeList(ReclassificationResultPageRequest),
+    #[serde(rename = "metadata.reclassification.project_consequence.list")]
+    ProjectConsequenceList(ReclassificationResultPageRequest),
+    #[serde(rename = "metadata.reclassification.project_consequence_replacement.list")]
+    ProjectConsequenceReplacementList(ProjectConsequenceReplacementListRequest),
+    #[serde(rename = "metadata.reclassification.apply_result.replacement_session.list")]
+    ApplyReplacementSessionList(ReclassificationApplyResultPageRequest),
+    #[serde(rename = "metadata.reclassification.apply_result.panel_revision.list")]
+    ApplyPanelRevisionList(ReclassificationApplyResultPageRequest),
+    #[serde(rename = "metadata.reclassification.apply_result.invalidated_edge.list")]
+    ApplyInvalidatedEdgeList(ReclassificationApplyResultPageRequest),
+    #[serde(rename = "metadata.reclassification.apply_result.retired_panel_group.list")]
+    ApplyRetiredPanelGroupList(ReclassificationApplyResultPageRequest),
+    #[serde(rename = "metadata.reclassification.apply_result.panel_lineage.list")]
+    ApplyPanelLineageList(ReclassificationApplyResultPageRequest),
+    #[serde(rename = "metadata.reclassification.apply_result.project_proposal.list")]
+    ApplyProjectProposalList(ReclassificationApplyResultPageRequest),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
@@ -595,11 +658,15 @@ pub struct ReclassificationDiscardRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum MetadataCommand {
+    #[serde(rename = "equipment.resolution.decide")]
     EquipmentResolutionDecide(EquipmentResolutionDecideRequest),
+    #[serde(rename = "metadata.reclassification.plan")]
     ReclassificationPlan(ReclassificationPlanRequest),
+    #[serde(rename = "metadata.reclassification.apply")]
     ReclassificationApply(ReclassificationApplyRequest),
+    #[serde(rename = "metadata.reclassification.discard")]
     ReclassificationDiscard(ReclassificationDiscardRequest),
 }
 

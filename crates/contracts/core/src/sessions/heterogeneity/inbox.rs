@@ -323,18 +323,29 @@ pub struct OperationResultFrameListRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum InboxQuery {
+    #[serde(rename = "inbox.materialization_plan.query")]
     MaterializationPlan(InboxPlanQueryRequest),
+    #[serde(rename = "inbox.acquisition_site_resolution.query")]
     AcquisitionSiteResolution(SiteResolutionQueryRequest),
+    #[serde(rename = "inbox.acquisition_site_candidate.list")]
     AcquisitionSiteCandidateList(SiteCandidateListRequest),
+    #[serde(rename = "inbox.materialization_plan.proposed_session.list")]
     ProposedSessionList(PlanSnapshotListRequest),
+    #[serde(rename = "inbox.materialization_plan.proposed_frame.list")]
     ProposedFrameList(ProposedFrameListRequest),
+    #[serde(rename = "inbox.materialization_plan.blocked_frame.list")]
     PlanBlockedFrameList(PlanSnapshotListRequest),
+    #[serde(rename = "session.materialization.query")]
     Materialization(OperationQueryRequest),
+    #[serde(rename = "session.materialization.result_session.list")]
     ResultSessionList(OperationSnapshotListRequest),
+    #[serde(rename = "session.materialization.result_frame.list")]
     ResultFrameList(OperationResultFrameListRequest),
+    #[serde(rename = "session.materialization.blocked_frame.list")]
     ResultBlockedFrameList(OperationSnapshotListRequest),
+    #[serde(rename = "session.materialization.progress.query")]
     Progress(OperationQueryRequest),
 }
 
@@ -420,12 +431,17 @@ pub struct MaterializationCancelRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum InboxCommand {
+    #[serde(rename = "inbox.acquisition_site_resolution.decide")]
     AcquisitionSiteResolutionDecide(SiteResolutionDecideRequest),
+    #[serde(rename = "inbox.materialization.approve")]
     MaterializationApprove(InboxApproveRequest),
+    #[serde(rename = "inbox.materialization.apply")]
     MaterializationApply(InboxApplyRequest),
+    #[serde(rename = "inbox.materialization.discard")]
     MaterializationDiscard(InboxDiscardRequest),
+    #[serde(rename = "session.materialization.cancel")]
     MaterializationCancel(MaterializationCancelRequest),
 }
 

@@ -70,13 +70,18 @@ pub struct FlatAgeThresholds {
     pub red_after_nights: u32,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FixedMatchingRules {
+    #[schemars(range(min = 5, max = 5))]
     pub optical_profile_same_max_percent: u32,
+    #[schemars(range(min = 10, max = 10))]
     pub optical_profile_review_max_percent: u32,
+    #[schemars(range(min = 10, max = 10))]
     pub optical_profile_evidence_conflict_percent: u32,
+    #[schemars(range(min = 1, max = 1))]
     pub flat_same_night_fresh_max_nights: u32,
+    #[schemars(range(min = 2, max = 2))]
     pub flat_yellow_starts_nights: u32,
 }
 
@@ -89,6 +94,37 @@ impl Default for FixedMatchingRules {
             flat_same_night_fresh_max_nights: 1,
             flat_yellow_starts_nights: 2,
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for FixedMatchingRules {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Wire {
+            optical_profile_same_max_percent: u32,
+            optical_profile_review_max_percent: u32,
+            optical_profile_evidence_conflict_percent: u32,
+            flat_same_night_fresh_max_nights: u32,
+            flat_yellow_starts_nights: u32,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        let rules = Self {
+            optical_profile_same_max_percent: wire.optical_profile_same_max_percent,
+            optical_profile_review_max_percent: wire.optical_profile_review_max_percent,
+            optical_profile_evidence_conflict_percent: wire
+                .optical_profile_evidence_conflict_percent,
+            flat_same_night_fresh_max_nights: wire.flat_same_night_fresh_max_nights,
+            flat_yellow_starts_nights: wire.flat_yellow_starts_nights,
+        };
+        if rules != Self::default() {
+            return Err(serde::de::Error::custom("fixed matching rules cannot be changed"));
+        }
+        Ok(rules)
     }
 }
 
@@ -270,6 +306,13 @@ impl MatchingSettings {
             60.0,
             Some((50.0, true)),
         );
+        if self.mosaic.residual_sky_rotation_cap_deg.get() != 90.0 {
+            issues.push(issue(
+                "settings.fixed_rule_changed",
+                SettingsSeverity::Red,
+                "mosaic.residualSkyRotationCapDeg",
+            ));
+        }
         check_range(
             &mut issues,
             "darkThermal.moderateDeg",
@@ -336,6 +379,9 @@ impl MatchingSettings {
                     "calibrationAge",
                 ));
             }
+        }
+        if self.fixed_rules != FixedMatchingRules::default() {
+            issues.push(issue("settings.fixed_rule_changed", SettingsSeverity::Red, "fixedRules"));
         }
         cross_constraints(self, &mut issues);
         let valid = !issues.iter().any(|item| item.severity == SettingsSeverity::Red);
@@ -487,14 +533,17 @@ pub struct MatchingSettingsUpdatedEvent {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum MatchingSettingsQuery {
+    #[serde(rename = "matching_settings.get")]
     Get(MatchingSettingsGetRequest),
+    #[serde(rename = "matching_settings.validate")]
     Validate(MatchingSettingsValidateRequest),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum MatchingSettingsCommand {
+    #[serde(rename = "matching_settings.update")]
     Update(MatchingSettingsUpdateRequest),
 }

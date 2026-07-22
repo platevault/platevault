@@ -462,13 +462,19 @@ pub struct HandoffOperationQueryRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum CalibrationQuery {
+    #[serde(rename = "calibration.candidate.list")]
     CandidateList(Box<CandidateListRequest>),
+    #[serde(rename = "calibration.handoff.query")]
     Handoff(HandoffQueryRequest),
+    #[serde(rename = "calibration.handoff.requirement.list")]
     HandoffRequirementList(SnapshotPageRequest),
+    #[serde(rename = "calibration.handoff.selection.list")]
     HandoffSelectionList(SelectionListRequest),
+    #[serde(rename = "calibration.handoff.frame.list")]
     HandoffFrameList(HandoffFrameListRequest),
+    #[serde(rename = "calibration.handoff.operation.query")]
     HandoffOperation(HandoffOperationQueryRequest),
 }
 
@@ -520,11 +526,15 @@ pub struct OpenFrameResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum CalibrationCommand {
+    #[serde(rename = "calibration.handoff.create")]
     HandoffCreate(HandoffCreateRequest),
+    #[serde(rename = "calibration.handoff.reviewed_add")]
     HandoffReviewedAdd(HandoffReviewedAddRequest),
+    #[serde(rename = "calibration.handoff.cancel")]
     HandoffCancel(HandoffCancelRequest),
+    #[serde(rename = "calibration.handoff.open_frame")]
     HandoffOpenFrame(OpenFrameRequest),
 }
 

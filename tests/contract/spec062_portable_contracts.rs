@@ -5,26 +5,34 @@ use std::collections::HashSet;
 
 use contracts_core::sessions::heterogeneity::calibration::{
     AutomaticEligibility, CalibrationCandidateEvidence, CalibrationHandoffFrame, CalibrationKind,
-    CalibrationListOperation, IndexedReadableState,
+    CalibrationListOperation, CalibrationQuery, HandoffOperationQueryRequest, IndexedReadableState,
 };
-use contracts_core::sessions::heterogeneity::inbox::InboxListOperation;
-use contracts_core::sessions::heterogeneity::metadata::MetadataListOperation;
-use contracts_core::sessions::heterogeneity::projects::ProjectListOperation;
+use contracts_core::sessions::heterogeneity::inbox::{
+    InboxListOperation, InboxQuery, OperationQueryRequest,
+};
+use contracts_core::sessions::heterogeneity::metadata::{
+    MetadataEvidenceQueryRequest, MetadataListOperation, MetadataQuery,
+};
+use contracts_core::sessions::heterogeneity::projects::{
+    ProjectListOperation, ProjectQuery, ProjectQueryRequest, RelatedSessionListRequest,
+};
 use contracts_core::sessions::heterogeneity::relations::{
     EvidenceTernary, ManualRelationCreateRequest, ManualRelationKind, ManualTargetScope,
-    ParityEvidence, RelationEvidence, RelationListOperation, TargetCompatibility,
+    PanelListRequest, ParityEvidence, RelationEvidence, RelationListOperation, RelationQuery,
+    SessionQueryRequest, TargetCompatibility, TraversalStartRequest,
 };
 use contracts_core::sessions::heterogeneity::settings::{
     CalibrationAgePolicy, DarkThermalThresholds, FixedMatchingRules, FlatAgeThresholds,
-    FlatOrientationThresholds, GeometryThresholds, MatchingSettings, MosaicThresholds,
-    SettingsSeverity,
+    FlatOrientationThresholds, GeometryThresholds, MatchingSettings, MatchingSettingsGetRequest,
+    MatchingSettingsQuery, MosaicThresholds, SettingsSeverity,
 };
 use contracts_core::sessions::heterogeneity::shared::{
-    BoundedList, CanonicalId, CanonicalRelativePath, CommandFence, ContractRange, Cursor,
-    EntityRef, ErrorCode, FiniteDecimal, IdempotencyOutcome, KeysetListOperation, MutationContext,
-    NonBlankSafeText, Page, PageBasis, PageRequest, PortableContractError, ProtectedResourceState,
-    RevisionRef, Rfc3339Timestamp, SafeErrorDetails, SafeText, SupportedFrameKind,
-    MAX_CURSOR_BYTES, MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES,
+    BoundedList, CanonicalId, CanonicalRelativePath, CanonicalUuid, CommandFence, ContractRange,
+    Cursor, EntityRef, ErrorCode, FiniteDecimal, IdempotencyOutcome, KeysetListOperation,
+    MutationContext, NamedSafeValue, NonBlankSafeText, Page, PageBasis, PageRequest,
+    PortableContractError, ProtectedResourceState, RevisionRef, Rfc3339Timestamp, SafeErrorDetails,
+    SafeScalar, SafeText, SupportedFrameKind, MAX_CURSOR_BYTES, MAX_REQUEST_BYTES,
+    MAX_RESPONSE_BYTES,
 };
 use schemars::schema_for;
 use serde_json::{json, Value};
@@ -35,6 +43,10 @@ const DIGEST: &str = "sha256:000000000000000000000000000000000000000000000000000
 
 fn id(value: &str) -> CanonicalId {
     CanonicalId::try_new(value).expect("fixture id is canonical")
+}
+
+fn uuid(value: &str) -> CanonicalUuid {
+    CanonicalUuid::try_new(value).expect("fixture UUID is canonical")
 }
 
 fn safe(value: &str) -> SafeText {
@@ -58,7 +70,7 @@ where
         let order = operation.unique_order();
         assert!(!order.is_empty(), "list operation must define a total order");
         assert!(
-            order.last().is_some_and(|field| field.ends_with(" ASC")),
+            order.last().is_some_and(|field| field.ends_with(" ASC") || field.ends_with(" DESC")),
             "the final keyset tie-breaker must be deterministic"
         );
     }
@@ -102,12 +114,32 @@ fn portable_bounds_are_enforced_during_construction_and_decode() {
     assert!(serde_json::from_value::<BoundedList<u8, 2>>(json!([1, 2, 3])).is_err());
     assert!(PageRequest::try_new(None, 0).is_err());
     assert!(PageRequest::try_new(None, 501).is_err());
+    assert_eq!(serde_json::from_value::<PageRequest>(json!({})).unwrap().limit, 100);
     assert!(serde_json::from_value::<PageRequest>(json!({ "limit": 501 })).is_err());
     assert!(Cursor::try_new("x".repeat(MAX_CURSOR_BYTES + 1)).is_err());
     assert!(SafeText::try_new("contains\ncontrol").is_err());
     assert!(CanonicalRelativePath::try_new("../outside.fit").is_err());
+    assert!(CanonicalId::try_new("550e8400-e29b-41d4-a716-446655440000").is_err());
+    assert!(CanonicalUuid::try_new("550e8400-e29b-41d4-a716-446655440000").is_ok());
     assert_eq!(MAX_REQUEST_BYTES, 1_048_576);
     assert_eq!(MAX_RESPONSE_BYTES, 4_194_304);
+}
+
+#[test]
+fn runtime_bounds_and_defaults_are_present_in_json_schema() {
+    let bounded = serde_json::to_value(schema_for!(BoundedList<u8, 2>)).unwrap();
+    assert_eq!(bounded["maxItems"], 2);
+
+    let page = serde_json::to_value(schema_for!(PageRequest)).unwrap();
+    assert_eq!(page["properties"]["limit"]["default"], 100);
+    assert_eq!(page["properties"]["limit"]["minimum"], 1);
+    assert_eq!(page["properties"]["limit"]["maximum"], 500);
+    assert!(!page["required"]
+        .as_array()
+        .is_some_and(|required| { required.iter().any(|field| field == "limit") }));
+
+    let entity_id = serde_json::to_value(schema_for!(CanonicalId)).unwrap();
+    assert!(entity_id["pattern"].as_str().unwrap().contains("-7"));
 }
 
 #[test]
@@ -119,6 +151,83 @@ fn every_reviewed_list_operation_has_a_unique_name_and_total_keyset_order() {
     assert_registry(RelationListOperation::ALL, &mut names);
     assert_registry(ProjectListOperation::ALL, &mut names);
     assert_eq!(names.len(), 65);
+}
+
+#[test]
+fn published_total_order_tuples_use_exact_documented_paths() {
+    assert_eq!(
+        MetadataListOperation::PanelConsequenceLineage.unique_order(),
+        &[
+            "ordinal ASC",
+            "lineage.predecessorPanelGroupId ASC",
+            "lineage.successorPanelGroupId ASC",
+        ]
+    );
+    assert_eq!(
+        MetadataListOperation::ApplyPanelRevision.unique_order(),
+        &["ordinal ASC", "revisionRef.revisionId ASC"]
+    );
+    for operation in [
+        RelationListOperation::ProposalSourceRevision,
+        RelationListOperation::ProposalSubject,
+        RelationListOperation::ProposalMembership,
+        RelationListOperation::ProposalEdge,
+        RelationListOperation::ProposalLineage,
+        RelationListOperation::DecisionRevision,
+        RelationListOperation::DecisionRetiredGroup,
+        RelationListOperation::DecisionSessionSupersession,
+        RelationListOperation::DecisionGroupLineage,
+        RelationListOperation::TraversalNode,
+        RelationListOperation::TraversalEdge,
+    ] {
+        assert_eq!(operation.unique_order(), &["ordinal ASC"], "{}", operation.query_name());
+    }
+    assert_eq!(RelationListOperation::PanelHistory.unique_order(), &["revisionNumber DESC"]);
+    assert_eq!(RelationListOperation::MosaicHistory.unique_order(), &["revisionNumber DESC"]);
+    assert_eq!(ProjectListOperation::PlanOverlayMapping.unique_order(), &["ordinal ASC"]);
+}
+
+#[test]
+fn six_surface_wire_operations_are_dotted_flat_and_operation_specific() {
+    let samples = [
+        serde_json::to_value(InboxQuery::Materialization(OperationQueryRequest {
+            operation_id: id(ID),
+        }))
+        .unwrap(),
+        serde_json::to_value(MetadataQuery::Evidence(MetadataEvidenceQueryRequest {
+            session_id: id(ID),
+            evidence_revision: Some(3),
+        }))
+        .unwrap(),
+        serde_json::to_value(RelationQuery::Session(SessionQueryRequest { session_id: id(ID) }))
+            .unwrap(),
+        serde_json::to_value(ProjectQuery::ViewState(ProjectQueryRequest { project_id: id(ID) }))
+            .unwrap(),
+        serde_json::to_value(CalibrationQuery::HandoffOperation(HandoffOperationQueryRequest {
+            operation_id: id(ID),
+        }))
+        .unwrap(),
+        serde_json::to_value(MatchingSettingsQuery::Get(MatchingSettingsGetRequest {
+            revision: Some(7),
+        }))
+        .unwrap(),
+    ];
+    let operations = [
+        "session.materialization.query",
+        "metadata.evidence.query",
+        "session.query",
+        "project.view_state.query",
+        "calibration.handoff.operation.query",
+        "matching_settings.get",
+    ];
+    for (sample, operation) in samples.iter().zip(operations) {
+        assert_eq!(sample["operation"], operation);
+        assert!(sample.get("payload").is_none());
+    }
+    assert_eq!(samples[1]["sessionId"], ID);
+    assert_eq!(samples[1]["evidenceRevision"], 3);
+    assert!(samples[1].get("entityId").is_none());
+    assert_eq!(samples[2]["sessionId"], ID);
 }
 
 #[test]
@@ -206,9 +315,9 @@ fn stale_errors_are_typed_and_detail_shapes_are_allowlisted_on_decode() {
     let stale = PortableContractError::try_new(
         ErrorCode::RelationProposalStale,
         safe("Proposal basis is stale."),
-        Some(SafeErrorDetails::Domain {
-            code: safe("relation_proposal.stale"),
-            values: BoundedList::default(),
+        Some(SafeErrorDetails::StaleRevisions {
+            revisions: BoundedList::default(),
+            total_count: 0,
             decision_snapshot_id: Some(id(ID)),
         }),
     )
@@ -227,6 +336,21 @@ fn stale_errors_are_typed_and_detail_shapes_are_allowlisted_on_decode() {
         }
     });
     assert!(serde_json::from_value::<PortableContractError>(invalid).is_err());
+
+    let wrong_field = PortableContractError::try_new(
+        ErrorCode::SessionNotFound,
+        safe("Session was not found."),
+        Some(SafeErrorDetails::Domain {
+            code: safe("session.not_found"),
+            values: BoundedList::try_new(vec![NamedSafeValue {
+                name: safe("secretPath"),
+                value: SafeScalar::Text(safe("redacted")),
+            }])
+            .unwrap(),
+            decision_snapshot_id: None,
+        }),
+    );
+    assert!(wrong_field.is_err());
 }
 
 #[test]
@@ -241,9 +365,9 @@ fn protected_missing_and_unauthorized_resources_are_indistinguishable() {
 
 #[test]
 fn idempotency_and_fencing_have_explicit_portable_states() {
-    let current = CommandFence { command_id: id(ID), lease_generation: 7 };
-    let stale = CommandFence { command_id: id(ID), lease_generation: 6 };
-    let other = CommandFence { command_id: id(OTHER_ID), lease_generation: 7 };
+    let current = CommandFence { command_id: uuid(ID), lease_generation: 7 };
+    let stale = CommandFence { command_id: uuid(ID), lease_generation: 6 };
+    let other = CommandFence { command_id: uuid(OTHER_ID), lease_generation: 7 };
     assert!(current.is_current(&current));
     assert!(!stale.is_current(&current));
     assert!(!other.is_current(&current));
@@ -285,16 +409,66 @@ fn manual_relation_request_discloses_missing_evidence_and_required_collections()
         },
         review_reason: non_blank("Reviewed by operator"),
         mutation_context: MutationContext {
-            command_id: id(OTHER_ID),
+            command_id: uuid(OTHER_ID),
             reason: Some(safe("manual relation")),
             approval_digest: None,
         },
     };
 
     assert!(request.has_required_collections());
-    let encoded = serde_json::to_value(request).unwrap();
+    let encoded = serde_json::to_value(&request).unwrap();
     assert_eq!(encoded["relationKind"], "panel_add");
     assert_eq!(encoded["evidence"]["missingEvidenceCodes"][0], "equipment.unknown");
+    assert_eq!(
+        serde_json::from_value::<ManualRelationCreateRequest>(encoded.clone()).unwrap(),
+        request
+    );
+
+    let mut wrong_kind = encoded.clone();
+    wrong_kind["relationKind"] = json!("mosaic_edge");
+    assert!(serde_json::from_value::<ManualRelationCreateRequest>(wrong_kind).is_err());
+
+    let mut duplicate_cross_target = encoded;
+    duplicate_cross_target["targetScope"] = json!({
+        "kind": "new_reviewed_cross_target",
+        "canonicalTargetIds": [ID, ID],
+        "purpose": "Reviewed association"
+    });
+    assert!(serde_json::from_value::<ManualRelationCreateRequest>(duplicate_cross_target).is_err());
+}
+
+#[test]
+fn optional_defaults_and_relation_bounds_are_enforced_on_decode() {
+    let panel: PanelListRequest = serde_json::from_value(json!({ "page": {} })).unwrap();
+    assert!(panel.active_only);
+
+    let related: RelatedSessionListRequest = serde_json::from_value(json!({
+        "projectId": ID,
+        "page": {}
+    }))
+    .unwrap();
+    assert!(related.include_pinned);
+
+    let traversal: TraversalStartRequest = serde_json::from_value(json!({
+        "startRefs": [{ "entityType": "panel_group", "entityId": ID }],
+        "graph": "panel_lineage",
+        "direction": "both"
+    }))
+    .unwrap();
+    assert_eq!(traversal.limits.max_depth, 64);
+    assert_eq!(traversal.limits.max_nodes, 10_000);
+    assert_eq!(traversal.limits.max_edges, 50_000);
+    assert!(serde_json::from_value::<TraversalStartRequest>(json!({
+        "startRefs": [{ "entityType": "panel_group", "entityId": ID }],
+        "graph": "panel_lineage",
+        "direction": "both",
+        "limits": { "maxDepth": 0, "maxNodes": 1, "maxEdges": 1 }
+    }))
+    .is_err());
+
+    let mut fixed = serde_json::to_value(FixedMatchingRules::default()).unwrap();
+    fixed["opticalProfileSameMaxPercent"] = json!(6);
+    assert!(serde_json::from_value::<FixedMatchingRules>(fixed).is_err());
 }
 
 #[test]

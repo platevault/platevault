@@ -3,10 +3,11 @@
 
 //! Shared bounded scalars, envelopes, pagination, authorization, and command contracts.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::ops::Deref;
 
-use schemars::JsonSchema;
+use schemars::{json_schema, JsonSchema, Schema, SchemaGenerator};
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use specta::Type;
 
@@ -39,10 +40,28 @@ impl fmt::Display for ValidationError {
 
 impl std::error::Error for ValidationError {}
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
 #[serde(transparent)]
 #[specta(transparent)]
 pub struct BoundedList<T, const MAX: usize>(Vec<T>);
+
+impl<T: JsonSchema, const MAX: usize> JsonSchema for BoundedList<T, MAX> {
+    fn schema_name() -> Cow<'static, str> {
+        format!("BoundedList_{}_{}", T::schema_name(), MAX).into()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        format!("{}::BoundedList<{},{}>", module_path!(), T::schema_id(), MAX).into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "type": "array",
+            "items": generator.subschema_for::<T>(),
+            "maxItems": MAX,
+        })
+    }
+}
 
 impl<T, const MAX: usize> BoundedList<T, MAX> {
     /// # Errors
@@ -132,9 +151,7 @@ where
 
 macro_rules! validated_string {
     ($name:ident, $validator:ident) => {
-        #[derive(
-            Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type, JsonSchema,
-        )]
+        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
         #[serde(transparent)]
         #[specta(transparent)]
         pub struct $name(String);
@@ -180,6 +197,24 @@ macro_rules! validated_string {
     };
 }
 
+macro_rules! string_schema {
+    ($name:ident, $schema:expr) => {
+        impl JsonSchema for $name {
+            fn schema_name() -> Cow<'static, str> {
+                stringify!($name).into()
+            }
+
+            fn schema_id() -> Cow<'static, str> {
+                concat!(module_path!(), "::", stringify!($name)).into()
+            }
+
+            fn json_schema(_: &mut SchemaGenerator) -> Schema {
+                $schema
+            }
+        }
+    };
+}
+
 fn validate_safe_text(value: &str) -> Result<(), ValidationError> {
     if value.len() > MAX_SAFE_TEXT_BYTES || value.chars().count() > MAX_SAFE_TEXT_SCALARS {
         return Err(ValidationError::new("text", "text_too_long"));
@@ -203,6 +238,18 @@ fn validate_canonical_id(value: &str) -> Result<(), ValidationError> {
         uuid::Uuid::parse_str(value).map_err(|_| ValidationError::new("id", "uuid_invalid"))?;
     if value.len() != 36 || parsed.hyphenated().to_string() != value {
         return Err(ValidationError::new("id", "uuid_not_canonical"));
+    }
+    if parsed.get_version_num() != 7 {
+        return Err(ValidationError::new("id", "uuid_version_invalid"));
+    }
+    Ok(())
+}
+
+fn validate_canonical_uuid(value: &str) -> Result<(), ValidationError> {
+    let parsed =
+        uuid::Uuid::parse_str(value).map_err(|_| ValidationError::new("uuid", "uuid_invalid"))?;
+    if value.len() != 36 || parsed.hyphenated().to_string() != value {
+        return Err(ValidationError::new("uuid", "uuid_not_canonical"));
     }
     Ok(())
 }
@@ -280,6 +327,7 @@ fn validate_relative_path(value: &str) -> Result<(), ValidationError> {
 validated_string!(SafeText, validate_safe_text);
 validated_string!(NonBlankSafeText, validate_non_blank_safe_text);
 validated_string!(CanonicalId, validate_canonical_id);
+validated_string!(CanonicalUuid, validate_canonical_uuid);
 validated_string!(Digest, validate_digest);
 validated_string!(Cursor, validate_cursor);
 validated_string!(Rfc3339Timestamp, validate_timestamp);
@@ -287,6 +335,74 @@ validated_string!(LocalDate, validate_local_date);
 validated_string!(StableIdentity, validate_stable_identity);
 validated_string!(DestinationCollisionKey, validate_collision_key);
 validated_string!(CanonicalRelativePath, validate_relative_path);
+
+string_schema!(
+    SafeText,
+    json_schema!({
+        "type": "string",
+        "maxLength": MAX_SAFE_TEXT_SCALARS,
+        "pattern": r"^[^\u0000-\u001f\u007f-\u009f]*$",
+    })
+);
+string_schema!(
+    NonBlankSafeText,
+    json_schema!({
+        "type": "string",
+        "minLength": 1,
+        "maxLength": MAX_SAFE_TEXT_SCALARS,
+        "pattern": r"^(?=.*\S)[^\u0000-\u001f\u007f-\u009f]*$",
+    })
+);
+string_schema!(
+    CanonicalId,
+    json_schema!({
+        "type": "string",
+        "format": "uuid",
+        "pattern": r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    })
+);
+string_schema!(
+    CanonicalUuid,
+    json_schema!({
+        "type": "string",
+        "format": "uuid",
+        "pattern": r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    })
+);
+string_schema!(
+    Digest,
+    json_schema!({
+        "type": "string",
+        "pattern": r"^sha256:[0-9a-f]{64}$",
+    })
+);
+string_schema!(
+    Cursor,
+    json_schema!({
+        "type": "string",
+        "minLength": 1,
+        "maxLength": MAX_CURSOR_BYTES,
+    })
+);
+string_schema!(Rfc3339Timestamp, json_schema!({ "type": "string", "format": "date-time" }));
+string_schema!(LocalDate, json_schema!({ "type": "string", "format": "date" }));
+string_schema!(
+    StableIdentity,
+    json_schema!({ "type": "string", "minLength": 1, "maxLength": 1024 })
+);
+string_schema!(
+    DestinationCollisionKey,
+    json_schema!({ "type": "string", "minLength": 1, "maxLength": 4096 })
+);
+string_schema!(
+    CanonicalRelativePath,
+    json_schema!({
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096,
+        "pattern": r"^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\.\.?/)(?!.*\\).+$",
+    })
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Type, JsonSchema)]
 #[serde(transparent)]
@@ -369,6 +485,7 @@ fn default_page_limit() -> u32 {
 pub struct PageRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,
+    #[schemars(default = "default_page_limit", range(min = 1, max = 500))]
     pub limit: u32,
 }
 
@@ -569,7 +686,7 @@ impl ProtectedResourceState {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MutationContext {
-    pub command_id: CanonicalId,
+    pub command_id: CanonicalUuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<SafeText>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -579,7 +696,7 @@ pub struct MutationContext {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandFence {
-    pub command_id: CanonicalId,
+    pub command_id: CanonicalUuid,
     pub lease_generation: u64,
 }
 
@@ -938,6 +1055,7 @@ impl PortableContractError {
             ErrorCode::ValidationPayloadTooLarge => {
                 matches!(details, Some(SafeErrorDetails::PayloadLimit { .. }))
             }
+            ErrorCode::EntityNotFound => matches!(details, Some(SafeErrorDetails::Entity { .. })),
             ErrorCode::ConcurrencyStaleRevision => {
                 matches!(details, Some(SafeErrorDetails::StaleEntity { .. }))
             }
@@ -950,7 +1068,13 @@ impl PortableContractError {
             ErrorCode::ProjectUpdateViewPathConflict => {
                 matches!(details, Some(SafeErrorDetails::AuthorizedPath { .. }))
             }
-            _ => matches!(details, Some(SafeErrorDetails::Domain { .. })),
+            ErrorCode::RelationProposalStale => {
+                matches!(details, Some(SafeErrorDetails::StaleRevisions { .. }))
+            }
+            ErrorCode::RelationProposalInvalidMembership => {
+                matches!(details, Some(SafeErrorDetails::Violations { .. }))
+            }
+            _ => details.as_ref().is_some_and(|details| domain_details_match(code, details)),
         };
         if !valid {
             return Err(ValidationError::new("details", "error_details_not_allowlisted"));
@@ -965,6 +1089,154 @@ impl PortableContractError {
             message: SafeText("Resource unavailable.".to_owned()),
             details: None,
         }
+    }
+}
+
+fn domain_details_match(code: ErrorCode, details: &SafeErrorDetails) -> bool {
+    let SafeErrorDetails::Domain { code: detail_code, values, .. } = details else {
+        return false;
+    };
+    let Ok(serialized_code) = serde_json::to_value(code) else {
+        return false;
+    };
+    if serialized_code.as_str() != Some(detail_code.as_str()) {
+        return false;
+    }
+
+    let allowed = domain_detail_fields(code);
+    let mut seen = std::collections::HashSet::with_capacity(values.len());
+    values
+        .iter()
+        .all(|value| allowed.contains(&value.name.as_str()) && seen.insert(value.name.as_str()))
+}
+
+fn domain_detail_fields(code: ErrorCode) -> &'static [&'static str] {
+    match code {
+        ErrorCode::SessionNotFound => &["sessionId"],
+        ErrorCode::PanelGroupNotFound => &["panelGroupId"],
+        ErrorCode::PanelGroupRevisionNotFound => &["panelGroupId", "revisionId"],
+        ErrorCode::MosaicNotFound => &["mosaicId"],
+        ErrorCode::MosaicRevisionNotFound => &["mosaicId", "revisionId"],
+        ErrorCode::RelationProposalNotFound => &["proposalId"],
+        ErrorCode::RelationProposalNotPending => &["proposalId", "state"],
+        ErrorCode::RelationProposalLineageCycle => {
+            &["proposalId", "groupCount", "groupIds", "truncated"]
+        }
+        ErrorCode::RelationProposalMergeRequired => {
+            &["proposalId", "mosaicCount", "mosaicIds", "truncated"]
+        }
+        ErrorCode::RelationProposalCrossTargetReviewRequired => {
+            &["proposalId", "targetCount", "targetIds", "truncated"]
+        }
+        ErrorCode::RelationProposalEvidenceMissing => &["proposalId", "missingEvidenceCodes"],
+        ErrorCode::RelationProposalManualEvidenceDisclosureIncomplete => &["missingEvidenceCodes"],
+        ErrorCode::TraversalOperationNotFound => &["operationId"],
+        ErrorCode::TraversalResultNotReady => &["operationId", "state"],
+        ErrorCode::TraversalNodeCeilingExceeded => &["operationId", "maxNodes", "visitedNodeCount"],
+        ErrorCode::TraversalEdgeCeilingExceeded => &["operationId", "maxEdges", "visitedEdgeCount"],
+        ErrorCode::TraversalDepthCeilingExceeded => &["operationId", "maxDepth", "deepestLevel"],
+        ErrorCode::TraversalCancellationDeadlineExceeded => &["operationId", "cancelRequestedAt"],
+        ErrorCode::InboxPlanNotFound
+        | ErrorCode::InboxPlanNotOpen
+        | ErrorCode::InboxPlanNotApproved
+        | ErrorCode::InboxPlanDigestMismatch
+        | ErrorCode::InboxPlanStale => &["planId", "planRevision", "decisionSnapshotId"],
+        ErrorCode::InboxSiteResolutionNotFound => &["planId", "resolutionRevision"],
+        ErrorCode::InboxPlanResultSnapshotNotFound => &["planId", "planResultSnapshotId"],
+        ErrorCode::InboxProposedSessionNotFound => {
+            &["planId", "planResultSnapshotId", "proposedSessionKey"]
+        }
+        ErrorCode::InboxSiteSelectionRequired => &["planId", "resolutionId"],
+        ErrorCode::InboxSiteTimezoneInvalid => &["planId", "siteId"],
+        ErrorCode::InboxTimestampConflict => &["planId", "conflictCount", "decisionSnapshotId"],
+        ErrorCode::MaterializationOperationNotFound => &["operationId"],
+        ErrorCode::MaterializationResultSnapshotNotFound => &["operationId", "resultSnapshotId"],
+        ErrorCode::MetadataEvidenceNotFound => &["metadataEvidenceId"],
+        ErrorCode::MetadataIdentityBlocked => &["metadataEvidenceId", "reasonCodes"],
+        ErrorCode::MetadataObservingNightConflict => {
+            &["metadataEvidenceId", "conflictCount", "decisionSnapshotId"]
+        }
+        ErrorCode::EquipmentResolutionNotFound => &["resolutionId"],
+        ErrorCode::EquipmentNotRegistered => &["equipmentId", "equipmentKind"],
+        ErrorCode::EquipmentOpticalProfileReviewRequired => {
+            &["resolutionId", "candidateCount", "decisionSnapshotId"]
+        }
+        ErrorCode::CalibrationCoolingSetPointRequired
+        | ErrorCode::CalibrationFlatGainRequired
+        | ErrorCode::CalibrationDarkFlatUnsupported => &["frameId", "sessionId"],
+        ErrorCode::ReclassificationPlanNotFound
+        | ErrorCode::ReclassificationPlanNotOpen
+        | ErrorCode::ReclassificationPlanStale => &["planId", "planRevision"],
+        ErrorCode::ReclassificationInvalidPartition => {
+            &["planId", "violationCount", "decisionSnapshotId"]
+        }
+        ErrorCode::ReclassificationReplacementNotFound => &["planId", "replacementId"],
+        ErrorCode::ReclassificationPanelConsequenceNotFound => &["planId", "panelConsequenceId"],
+        ErrorCode::ReclassificationResultSnapshotNotFound
+        | ErrorCode::ReclassificationApplyResultSnapshotNotFound => &["planId", "resultSnapshotId"],
+        ErrorCode::MatchingSettingsRevisionNotFound => &["revision"],
+        ErrorCode::MatchingSettingsOutOfBounds
+        | ErrorCode::MatchingSettingsCrossConstraint
+        | ErrorCode::MatchingSettingsWarningUnacknowledged => {
+            &["revision", "issueCount", "decisionSnapshotId"]
+        }
+        ErrorCode::CalibrationRequirementInvalid => &["requirementId", "reasonCodes"],
+        ErrorCode::CalibrationCandidateNotFound
+        | ErrorCode::CalibrationCandidateBlocked
+        | ErrorCode::CalibrationCandidateIncompatible => &["candidateId", "reasonCodes"],
+        ErrorCode::CalibrationHandoffTooLarge => {
+            &["handoffId", "sessionId", "sourceByteCount", "maximumSourceBytes"]
+        }
+        ErrorCode::CalibrationHandoffOperationNotCancellable => {
+            &["operationId", "state", "cancelSafe"]
+        }
+        ErrorCode::CalibrationWarningUnacknowledged => &["warningCodes"],
+        ErrorCode::CalibrationSelectionDuplicate => &["selectionId", "sessionId"],
+        ErrorCode::CalibrationHandoffNotFound | ErrorCode::CalibrationHandoffStaleBasis => {
+            &["handoffId", "revision"]
+        }
+        ErrorCode::CalibrationSourceUnavailable | ErrorCode::CalibrationSourceIdentityChanged => {
+            &["selectionId", "frameId"]
+        }
+        ErrorCode::CalibrationPageInvalid | ErrorCode::CalibrationPageStale => {
+            &["handoffId", "cursor"]
+        }
+        ErrorCode::ProjectNotFound => &["projectId"],
+        ErrorCode::ProjectSessionNotFound
+        | ErrorCode::ProjectSessionAlreadyPinned
+        | ErrorCode::ProjectSessionNotPinned
+        | ErrorCode::ProjectLifecycleDisallowsSessionAdd
+        | ErrorCode::ProjectReclassificationRevisionInvalid => {
+            &["projectId", "sessionId", "revisionId", "lifecycleState"]
+        }
+        ErrorCode::ProjectUpdateViewNoAdditions => &["projectId"],
+        ErrorCode::ProjectUpdateViewPlanNotFound
+        | ErrorCode::ProjectUpdateViewPlanNotOpen
+        | ErrorCode::ProjectUpdateViewPlanNotApproved
+        | ErrorCode::ProjectUpdateViewPlanStale
+        | ErrorCode::ProjectUpdateViewPlanDigestMismatch => {
+            &["projectId", "planId", "planRevision"]
+        }
+        ErrorCode::ProjectUpdateViewSourceUnavailable
+        | ErrorCode::ProjectUpdateViewRootChanged
+        | ErrorCode::ProjectUpdateViewSessionTooLarge => {
+            &["projectId", "planId", "sessionId", "sourceByteCount", "maximumSourceBytes"]
+        }
+        ErrorCode::ProjectUpdateViewOperationNotCancellable => {
+            &["operationId", "state", "cancelSafe"]
+        }
+        ErrorCode::ValidationRequestInvalid
+        | ErrorCode::ValidationPayloadTooLarge
+        | ErrorCode::PaginationCursorInvalid
+        | ErrorCode::PaginationSnapshotUnavailable
+        | ErrorCode::EntityNotFound
+        | ErrorCode::ResourceUnavailable
+        | ErrorCode::ConcurrencyStaleRevision
+        | ErrorCode::IdempotencyPayloadMismatch
+        | ErrorCode::OperationInProgress
+        | ErrorCode::RelationProposalStale
+        | ErrorCode::RelationProposalInvalidMembership
+        | ErrorCode::ProjectUpdateViewPathConflict => &[],
     }
 }
 
@@ -983,7 +1255,7 @@ pub struct AuditRecord {
     pub audit_id: CanonicalId,
     pub occurred_at: Rfc3339Timestamp,
     pub actor_id: CanonicalId,
-    pub command_id: CanonicalId,
+    pub command_id: CanonicalUuid,
     pub operation: SafeText,
     pub outcome: AuditOutcome,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1005,7 +1277,7 @@ pub struct ContractEvent<T> {
     pub event_id: CanonicalId,
     pub occurred_at: Rfc3339Timestamp,
     pub actor_id: CanonicalId,
-    pub command_id: CanonicalId,
+    pub command_id: CanonicalUuid,
     pub entity_refs: BoundedList<EntityRef, 500>,
     pub payload: T,
 }
@@ -1016,8 +1288,8 @@ mod tests {
 
     use super::*;
 
-    fn id(value: &str) -> CanonicalId {
-        CanonicalId::try_new(value).expect("fixture id")
+    fn uuid(value: &str) -> CanonicalUuid {
+        CanonicalUuid::try_new(value).expect("fixture UUID")
     }
 
     fn digest(byte: char) -> Digest {
@@ -1066,7 +1338,7 @@ mod tests {
     #[test]
     fn mutation_context_cannot_assert_actor_or_scope() {
         let context = MutationContext {
-            command_id: id("018f22b2-7f7f-7f7f-8f7f-7f7f7f7f7f7f"),
+            command_id: uuid("018f22b2-7f7f-7f7f-8f7f-7f7f7f7f7f7f"),
             reason: None,
             approval_digest: Some(digest('a')),
         };
@@ -1077,7 +1349,7 @@ mod tests {
 
     #[test]
     fn stale_fence_never_matches_current_generation() {
-        let command_id = id("018f22b2-7f7f-7f7f-8f7f-7f7f7f7f7f7f");
+        let command_id = uuid("018f22b2-7f7f-7f7f-8f7f-7f7f7f7f7f7f");
         let stale = CommandFence { command_id: command_id.clone(), lease_generation: 3 };
         let current = CommandFence { command_id, lease_generation: 4 };
         assert!(!stale.is_current(&current));

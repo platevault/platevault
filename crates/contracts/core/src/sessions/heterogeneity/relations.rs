@@ -531,7 +531,7 @@ impl KeysetListOperation for RelationListOperation {
             Self::SessionSupersessionSuccessor => &["ordinal ASC", "successorSessionId ASC"],
             Self::SessionSupersessionPredecessor => &["ordinal ASC", "predecessorSessionId ASC"],
             Self::PanelMembership => &["ordinal ASC", "sessionId ASC"],
-            Self::PanelHistory | Self::MosaicHistory => &["revisionNumber DESC", "revisionId ASC"],
+            Self::PanelHistory | Self::MosaicHistory => &["revisionNumber DESC"],
             Self::PanelLineagePredecessor => &[
                 "acceptedAt DESC",
                 "acceptedProposalId ASC",
@@ -546,7 +546,7 @@ impl KeysetListOperation for RelationListOperation {
             ],
             Self::Panel => &["acceptedAt DESC", "panelGroupId ASC"],
             Self::MosaicPanel => &["ordinal ASC", "panelRevisionId ASC", "panelGroupId ASC"],
-            Self::MosaicEdge | Self::ProposalEdge => &["ordinal ASC", "edgeId ASC"],
+            Self::MosaicEdge => &["ordinal ASC", "edgeId ASC"],
             Self::MosaicLineagePredecessor => &[
                 "acceptedAt DESC",
                 "acceptedProposalId ASC",
@@ -561,50 +561,90 @@ impl KeysetListOperation for RelationListOperation {
             ],
             Self::MosaicObjectEvidence => &["canonicalObjectId ASC"],
             Self::Proposal => &["createdAt DESC", "proposalId ASC"],
-            Self::ProposalSourceRevision | Self::DecisionRevision => {
-                &["ordinal ASC", "entityType ASC", "entityId ASC", "revisionId ASC"]
-            }
-            Self::ProposalSubject | Self::ProposalMembership => {
-                &["ordinal ASC", "entityType ASC", "entityId ASC"]
-            }
-            Self::ProposalLineage
+            Self::ProposalSourceRevision
+            | Self::ProposalSubject
+            | Self::ProposalMembership
+            | Self::ProposalEdge
+            | Self::ProposalLineage
+            | Self::DecisionRevision
+            | Self::DecisionRetiredGroup
             | Self::DecisionSessionSupersession
-            | Self::DecisionGroupLineage => {
-                &["ordinal ASC", "predecessorId ASC", "successorId ASC"]
-            }
-            Self::DecisionRetiredGroup => &["ordinal ASC", "groupId ASC"],
-            Self::TraversalNode => &["ordinal ASC", "nodeType ASC", "nodeId ASC"],
-            Self::TraversalEdge => &["ordinal ASC", "edgeType ASC", "edgeId ASC"],
+            | Self::DecisionGroupLineage
+            | Self::TraversalNode
+            | Self::TraversalEdge => &["ordinal ASC"],
         }
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct EntityQueryRequest {
-    pub entity_id: CanonicalId,
+pub struct SessionQueryRequest {
+    pub session_id: CanonicalId,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RevisionQueryRequest {
-    pub entity_id: CanonicalId,
+pub struct SessionPageRequest {
+    pub session_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelGroupQueryRequest {
+    pub panel_group_id: CanonicalId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub revision_id: Option<CanonicalId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct EntityPageRequest {
-    pub entity_id: CanonicalId,
+pub struct PanelGroupPageRequest {
+    pub panel_group_id: CanonicalId,
     pub page: PageRequest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RevisionPageRequest {
-    pub entity_id: CanonicalId,
+pub struct PanelGroupRevisionPageRequest {
+    pub panel_group_id: CanonicalId,
     pub revision_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MosaicQueryRequest {
+    pub mosaic_id: CanonicalId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_id: Option<CanonicalId>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MosaicPageRequest {
+    pub mosaic_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MosaicRevisionPageRequest {
+    pub mosaic_id: CanonicalId,
+    pub revision_id: CanonicalId,
+    pub page: PageRequest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalQueryRequest {
+    pub proposal_id: CanonicalId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalPageRequest {
+    pub proposal_id: CanonicalId,
     pub page: PageRequest,
 }
 
@@ -645,6 +685,8 @@ pub struct PanelListRequest {
     pub target_id: Option<CanonicalId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<CanonicalId>,
+    #[serde(default = "default_true")]
+    #[schemars(default = "default_true")]
     pub active_only: bool,
     pub page: PageRequest,
 }
@@ -696,12 +738,31 @@ pub enum TraversalDirection {
     Both,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TraversalLimits {
+    #[schemars(range(min = 1, max = 4096))]
     pub max_depth: u32,
+    #[schemars(range(min = 1, max = 100000))]
     pub max_nodes: u64,
+    #[schemars(range(min = 1, max = 2000000))]
     pub max_edges: u64,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+const fn default_max_depth() -> u32 {
+    64
+}
+
+const fn default_max_nodes() -> u64 {
+    10_000
+}
+
+const fn default_max_edges() -> u64 {
+    50_000
 }
 
 impl Default for TraversalLimits {
@@ -722,12 +783,43 @@ impl TraversalLimits {
     }
 }
 
+impl<'de> Deserialize<'de> for TraversalLimits {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Wire {
+            #[serde(default = "default_max_depth")]
+            max_depth: u32,
+            #[serde(default = "default_max_nodes")]
+            max_nodes: u64,
+            #[serde(default = "default_max_edges")]
+            max_edges: u64,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        let limits = Self {
+            max_depth: wire.max_depth,
+            max_nodes: wire.max_nodes,
+            max_edges: wire.max_edges,
+        };
+        if !limits.within_contract_bounds() {
+            return Err(serde::de::Error::custom("traversal limits are outside contract bounds"));
+        }
+        Ok(limits)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TraversalStartRequest {
     pub start_refs: BoundedList<EntityRef, 500>,
     pub graph: TraversalGraph,
     pub direction: TraversalDirection,
+    #[serde(default)]
+    #[schemars(default)]
     pub limits: TraversalLimits,
 }
 
@@ -745,40 +837,73 @@ pub struct TraversalResultPageRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum RelationQuery {
-    Session(EntityQueryRequest),
+    #[serde(rename = "session.query")]
+    Session(SessionQueryRequest),
+    #[serde(rename = "session.list")]
     SessionList(SessionListRequest),
-    SessionFrameList(EntityPageRequest),
-    SessionSupersessionSuccessorList(EntityPageRequest),
-    SessionSupersessionPredecessorList(EntityPageRequest),
-    PanelGroup(RevisionQueryRequest),
-    PanelMembershipList(RevisionPageRequest),
-    PanelHistoryList(EntityPageRequest),
-    PanelLineagePredecessorList(EntityPageRequest),
-    PanelLineageSuccessorList(EntityPageRequest),
+    #[serde(rename = "session.frame.list")]
+    SessionFrameList(SessionPageRequest),
+    #[serde(rename = "session.supersession_successor.list")]
+    SessionSupersessionSuccessorList(SessionPageRequest),
+    #[serde(rename = "session.supersession_predecessor.list")]
+    SessionSupersessionPredecessorList(SessionPageRequest),
+    #[serde(rename = "panel_group.query")]
+    PanelGroup(PanelGroupQueryRequest),
+    #[serde(rename = "panel_group.membership.list")]
+    PanelMembershipList(PanelGroupRevisionPageRequest),
+    #[serde(rename = "panel_group.history.list")]
+    PanelHistoryList(PanelGroupPageRequest),
+    #[serde(rename = "panel_group.lineage_predecessor.list")]
+    PanelLineagePredecessorList(PanelGroupPageRequest),
+    #[serde(rename = "panel_group.lineage_successor.list")]
+    PanelLineageSuccessorList(PanelGroupPageRequest),
+    #[serde(rename = "panel_group.list")]
     PanelList(PanelListRequest),
-    Mosaic(RevisionQueryRequest),
-    MosaicPanelList(RevisionPageRequest),
-    MosaicEdgeList(RevisionPageRequest),
-    MosaicHistoryList(EntityPageRequest),
-    MosaicLineagePredecessorList(EntityPageRequest),
-    MosaicLineageSuccessorList(EntityPageRequest),
-    MosaicObjectEvidenceList(RevisionPageRequest),
+    #[serde(rename = "mosaic.query")]
+    Mosaic(MosaicQueryRequest),
+    #[serde(rename = "mosaic.panel.list")]
+    MosaicPanelList(MosaicRevisionPageRequest),
+    #[serde(rename = "mosaic.edge.list")]
+    MosaicEdgeList(MosaicRevisionPageRequest),
+    #[serde(rename = "mosaic.history.list")]
+    MosaicHistoryList(MosaicPageRequest),
+    #[serde(rename = "mosaic.lineage_predecessor.list")]
+    MosaicLineagePredecessorList(MosaicPageRequest),
+    #[serde(rename = "mosaic.lineage_successor.list")]
+    MosaicLineageSuccessorList(MosaicPageRequest),
+    #[serde(rename = "mosaic.object_evidence.list")]
+    MosaicObjectEvidenceList(MosaicRevisionPageRequest),
+    #[serde(rename = "relation_proposal.list")]
     ProposalList(ProposalListRequest),
-    Proposal(EntityQueryRequest),
-    ProposalSourceRevisionList(EntityPageRequest),
-    ProposalSubjectList(EntityPageRequest),
-    ProposalMembershipList(EntityPageRequest),
-    ProposalEdgeList(EntityPageRequest),
-    ProposalLineageList(EntityPageRequest),
+    #[serde(rename = "relation_proposal.query")]
+    Proposal(ProposalQueryRequest),
+    #[serde(rename = "relation_proposal.source_revision.list")]
+    ProposalSourceRevisionList(ProposalPageRequest),
+    #[serde(rename = "relation_proposal.subject.list")]
+    ProposalSubjectList(ProposalPageRequest),
+    #[serde(rename = "relation_proposal.membership.list")]
+    ProposalMembershipList(ProposalPageRequest),
+    #[serde(rename = "relation_proposal.edge.list")]
+    ProposalEdgeList(ProposalPageRequest),
+    #[serde(rename = "relation_proposal.lineage.list")]
+    ProposalLineageList(ProposalPageRequest),
+    #[serde(rename = "relation_proposal.decision_revision.list")]
     DecisionRevisionList(DecisionPageRequest),
+    #[serde(rename = "relation_proposal.decision_retired_group.list")]
     DecisionRetiredGroupList(DecisionPageRequest),
+    #[serde(rename = "relation_proposal.decision_session_supersession.list")]
     DecisionSessionSupersessionList(DecisionPageRequest),
+    #[serde(rename = "relation_proposal.decision_group_lineage.list")]
     DecisionGroupLineageList(DecisionPageRequest),
+    #[serde(rename = "relation_traversal_preview.progress.query")]
     TraversalProgress(TraversalOperationRequest),
+    #[serde(rename = "relation_traversal_preview.result.query")]
     TraversalResult(TraversalOperationRequest),
+    #[serde(rename = "relation_traversal_preview.node.list")]
     TraversalNodeList(TraversalResultPageRequest),
+    #[serde(rename = "relation_traversal_preview.edge.list")]
     TraversalEdgeList(TraversalResultPageRequest),
 }
 
@@ -789,7 +914,7 @@ pub struct ProposedLineage {
     pub successor_group_id: CanonicalId,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualRelationCreateRequest {
     pub relation_kind: ManualRelationKind,
@@ -820,6 +945,86 @@ impl ManualRelationCreateRequest {
             .into_iter()
             .sum::<usize>()
                 > 0
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the request cannot describe the selected relation kind.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if !self.has_required_collections() {
+            return Err("manual relation requires source, subject, and output collections");
+        }
+        if let ManualTargetScope::NewReviewedCrossTarget { canonical_target_ids, .. } =
+            &self.target_scope
+        {
+            let distinct = canonical_target_ids.iter().collect::<std::collections::HashSet<_>>();
+            if distinct.len() < 2 {
+                return Err("reviewed cross-target scope requires two distinct target IDs");
+            }
+        }
+
+        let membership_count = self.proposed_membership_refs.as_ref().map_or(0, BoundedList::len);
+        let edge_count = self.proposed_edges.as_ref().map_or(0, BoundedList::len);
+        let lineage_count = self.proposed_lineage.as_ref().map_or(0, BoundedList::len);
+        let valid = match self.relation_kind {
+            ManualRelationKind::PanelAdd | ManualRelationKind::PanelReplace => {
+                self.source_revision_refs.len() == 1 && membership_count > 0
+            }
+            ManualRelationKind::PanelSplit | ManualRelationKind::PanelMerge => {
+                membership_count > 0 && lineage_count > 0
+            }
+            ManualRelationKind::MosaicCreate => {
+                self.source_revision_refs.len() >= 2 && edge_count > 0
+            }
+            ManualRelationKind::MosaicEdge => {
+                self.source_revision_refs.len() == 2 && edge_count == 1
+            }
+            ManualRelationKind::MosaicSplit | ManualRelationKind::MosaicMerge => {
+                membership_count > 0 && edge_count > 0 && lineage_count > 0
+            }
+        };
+        if !valid {
+            return Err("manual relation collections do not match relation kind");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManualRelationCreateWire {
+    relation_kind: ManualRelationKind,
+    source_revision_refs: BoundedList<RevisionRef, 500>,
+    subject_refs: BoundedList<EntityRef, 500>,
+    proposed_membership_refs: Option<BoundedList<EntityRef, 500>>,
+    proposed_edges: Option<BoundedList<MosaicEdge, 500>>,
+    proposed_lineage: Option<BoundedList<ProposedLineage, 500>>,
+    target_scope: ManualTargetScope,
+    evidence: RelationEvidence,
+    review_reason: NonBlankSafeText,
+    mutation_context: MutationContext,
+}
+
+impl<'de> Deserialize<'de> for ManualRelationCreateRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = ManualRelationCreateWire::deserialize(deserializer)?;
+        let request = Self {
+            relation_kind: wire.relation_kind,
+            source_revision_refs: wire.source_revision_refs,
+            subject_refs: wire.subject_refs,
+            proposed_membership_refs: wire.proposed_membership_refs,
+            proposed_edges: wire.proposed_edges,
+            proposed_lineage: wire.proposed_lineage,
+            target_scope: wire.target_scope,
+            evidence: wire.evidence,
+            review_reason: wire.review_reason,
+            mutation_context: wire.mutation_context,
+        };
+        request.validate().map_err(serde::de::Error::custom)?;
+        Ok(request)
     }
 }
 
@@ -889,13 +1094,19 @@ pub struct TraversalCancelRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
-#[serde(tag = "operation", content = "payload", rename_all = "snake_case")]
+#[serde(tag = "operation")]
 pub enum RelationCommand {
+    #[serde(rename = "relation_proposal.manual.create")]
     ManualCreate(ManualRelationCreateRequest),
+    #[serde(rename = "relation_proposal.accept")]
     ProposalAccept(ProposalAcceptRequest),
+    #[serde(rename = "relation_proposal.reject")]
     ProposalReject(ProposalRejectRequest),
+    #[serde(rename = "relation_proposal.correct")]
     ProposalCorrect(ProposalCorrectRequest),
+    #[serde(rename = "relation_traversal_preview.start")]
     TraversalStart(TraversalStartRequest),
+    #[serde(rename = "relation_traversal_preview.cancel")]
     TraversalCancel(TraversalCancelRequest),
 }
 
