@@ -45,6 +45,21 @@ async function waitForCall(fn: ReturnType<typeof vi.fn>): Promise<void> {
   }
 }
 
+function stubOsTheme(prefersDark: boolean): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-color-scheme: dark)' && prefersDark,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 describe('applyTheme — native window theme sync (spec 051 US6)', () => {
   beforeEach(() => {
     isTauriMock.mockReset();
@@ -124,28 +139,66 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
   });
 });
 
-describe('resolveTheme — system + OS dark preference (#1181)', () => {
+describe('first-run system theme policy', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    isTauriMock.mockReset();
+    isTauriMock.mockReturnValue(false);
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
   });
 
-  it("resolves 'system' to the dark default (observatory-cool) when the OS prefers dark", async () => {
-    // Follows the matchMedia mock pattern in LogPanel.test.tsx (the only
-    // other matchMedia stub in the suite, there for prefers-reduced-motion).
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockImplementation((query: string) => ({
-        matches: query.includes('prefers-color-scheme: dark'),
-        media: query,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    );
+  const SYSTEM_CASES = [
+    { os: 'light', prefersDark: false, expected: 'warm-slate' },
+    { os: 'dark', prefersDark: true, expected: 'observatory-cool' },
+  ] as const;
 
-    const { resolveTheme } = await import('./theme');
-    expect(resolveTheme('system')).toBe('observatory-cool');
-  });
+  for (const { os, prefersDark, expected } of SYSTEM_CASES) {
+    it(`applies ${expected} synchronously on first run when the OS is ${os}`, async () => {
+      stubOsTheme(prefersDark);
+
+      const { getThemeChoice, initAppearance, resolveTheme } = await import(
+        './theme'
+      );
+
+      expect(getThemeChoice()).toBe('system');
+      expect(resolveTheme()).toBe(expected);
+
+      initAppearance();
+
+      expect(document.documentElement.getAttribute('data-theme')).toBe(
+        expected,
+      );
+      expect(localStorage.getItem('alm.theme')).toBeNull();
+    });
+  }
+
+  const EXPLICIT_CASES = [
+    { os: 'dark', prefersDark: true, choice: 'warm-slate' },
+    { os: 'light', prefersDark: false, choice: 'observatory-cool' },
+  ] as const;
+
+  for (const { os, prefersDark, choice } of EXPLICIT_CASES) {
+    it(`persists explicit ${choice} and overrides an OS ${os} preference`, async () => {
+      stubOsTheme(prefersDark);
+
+      const { getThemeChoice, resolveTheme, setThemeChoice } = await import(
+        './theme'
+      );
+
+      setThemeChoice(choice);
+
+      expect(localStorage.getItem('alm.theme')).toBe(choice);
+      expect(getThemeChoice()).toBe(choice);
+      expect(resolveTheme()).toBe(choice);
+      expect(document.documentElement.getAttribute('data-theme')).toBe(choice);
+    });
+  }
 });
