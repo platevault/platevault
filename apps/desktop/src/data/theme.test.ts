@@ -186,14 +186,17 @@ describe('first-run system theme policy', () => {
   ] as const;
 
   for (const { os, prefersDark, choice } of EXPLICIT_CASES) {
-    it(`persists explicit ${choice} and overrides an OS ${os} preference`, async () => {
+    it(`boots with persisted ${choice} instead of the OS ${os} preference`, async () => {
       stubOsTheme(prefersDark);
+      localStorage.setItem('alm.theme', choice);
+      document.documentElement.removeAttribute('data-theme');
+      vi.resetModules();
 
-      const { getThemeChoice, resolveTheme, setThemeChoice } = await import(
+      const { getThemeChoice, initAppearance, resolveTheme } = await import(
         './theme'
       );
 
-      setThemeChoice(choice);
+      initAppearance();
 
       expect(localStorage.getItem('alm.theme')).toBe(choice);
       expect(getThemeChoice()).toBe(choice);
