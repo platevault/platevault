@@ -60,6 +60,19 @@ function themeModeLabel(choice: ThemePickerChoice, resolved: ThemeId): string {
     : m.settings_theme_mode_light();
 }
 
+/** Replaces any registry-label mode suffix with the localized mode label. */
+function themeAccessibleLabel(
+  choice: ThemePickerChoice,
+  modeLabel: string,
+): string {
+  const label = choice.label();
+  const modeSuffix = ` · ${choice.mode}`;
+  const baseLabel = label.toLowerCase().endsWith(modeSuffix)
+    ? label.slice(0, -modeSuffix.length)
+    : label;
+  return `${baseLabel} · ${modeLabel}`;
+}
+
 /**
  * Shared live theme picker used by Settings and first-run setup.
  *
@@ -95,7 +108,7 @@ export function ThemePicker({
         )}
         onClick={() => setChoice(theme.id)}
         aria-pressed={isActive}
-        aria-label={`${theme.label()} · ${modeLabel}`}
+        aria-label={themeAccessibleLabel(theme, modeLabel)}
       >
         {isActive && (
           <span className="pv-theme-swatch__selected" aria-hidden="true">

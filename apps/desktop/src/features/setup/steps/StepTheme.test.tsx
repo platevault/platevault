@@ -47,9 +47,13 @@ describe('StepTheme', () => {
     ).toBeInTheDocument();
 
     for (const theme of THEMES) {
+      const accessibleName =
+        theme.id === 'observatory-cool-light'
+          ? 'Observatory Cool · light'
+          : `${theme.label} · ${theme.mode}`;
       expect(
         within(picker).getByRole('button', {
-          name: `${theme.label} · ${theme.mode}`,
+          name: accessibleName,
         }),
       ).toBeInTheDocument();
     }

@@ -108,7 +108,7 @@ describe('General — theme picker', () => {
       /^System/,
       'Warm Slate · light',
       'Observatory · dark',
-      'Observatory Cool · Light · light',
+      'Observatory Cool · light',
       'Observatory Cool · dark',
     ]) {
       expect(within(picker).getByRole('button', { name })).toBeInTheDocument();
