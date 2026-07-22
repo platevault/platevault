@@ -19,6 +19,7 @@ pub mod artifacts;
 pub mod audit;
 pub mod calibration_assignment;
 pub mod calibration_tolerances;
+pub mod command_ledger;
 pub mod equipment;
 pub mod events;
 pub mod first_run;
