@@ -1873,15 +1873,15 @@
 
 /* Individual step card — future (default) */
 .pv-wizard__steps-card {
-  flex: 0 0 auto;
-  min-width: max-content;
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--pv-sp-2) var(--pv-sp-1);
   border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   line-height: var(--pv-leading-tight);
   text-align: center;
-  white-space: nowrap;
+  white-space: normal;
   background: var(--pv-bg);
   color: var(--pv-text-muted);
   font-weight: var(--pv-weight-normal);
