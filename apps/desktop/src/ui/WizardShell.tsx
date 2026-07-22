@@ -62,6 +62,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
     const previousStepRef = useRef(currentStep);
     const progressRef = useRef<HTMLElement>(null);
     const stepContentRef = useRef<HTMLDivElement>(null);
+    const stepLabel = `${currentStep + 1}. ${steps[currentStep]?.label ?? ''}`;
 
     useEffect(() => {
       if (previousStepRef.current === currentStep) return;
@@ -82,12 +83,13 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         });
       }
 
-      const heading = stepContentRef.current?.querySelector<HTMLElement>(
-        'h1, h2, [role="heading"]',
-      );
-      if (!heading) return;
-      if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
-      heading.focus();
+      const focusTarget =
+        stepContentRef.current?.querySelector<HTMLElement>(
+          '[data-wizard-step-heading], h1, h2, [role="heading"]',
+        ) ?? stepContentRef.current;
+      if (!focusTarget) return;
+      if (!focusTarget.hasAttribute('tabindex')) focusTarget.tabIndex = -1;
+      focusTarget.focus();
     }, [currentStep]);
 
     return (
@@ -141,7 +143,14 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         {hasSidebar ? (
           /* Sidebar layout (project wizard) */
           <div className="pv-wizard__body--sidebar">
-            <div ref={stepContentRef} className="pv-wizard__content--sidebar">
+            <div
+              ref={stepContentRef}
+              className="pv-wizard__content--sidebar"
+              role="region"
+              aria-label={stepLabel}
+              tabIndex={-1}
+              data-wizard-step-focus-target
+            >
               {children}
             </div>
             <aside className="pv-wizard__summary">{summary}</aside>
@@ -149,7 +158,14 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         ) : (
           /* Centered layout (setup wizard) */
           <div className="pv-wizard__scroll">
-            <div ref={stepContentRef} className="pv-wizard__content--centered">
+            <div
+              ref={stepContentRef}
+              className="pv-wizard__content--centered"
+              role="region"
+              aria-label={stepLabel}
+              tabIndex={-1}
+              data-wizard-step-focus-target
+            >
               {/* Inline step bar for centered mode */}
               <nav
                 ref={progressRef}

@@ -635,7 +635,9 @@ export function SetupWizard() {
           <div className="pv-setup-wizard__step-label">
             {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
           </div>
-          <h1 className="pv-setup-wizard__heading">{stepMeta.heading()}</h1>
+          <h1 className="pv-setup-wizard__heading" data-wizard-step-heading>
+            {stepMeta.heading()}
+          </h1>
           {stepMeta.description && (
             <p className="pv-setup-wizard__description">
               {stepMeta.description()}
