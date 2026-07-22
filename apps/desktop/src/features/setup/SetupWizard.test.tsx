@@ -1056,6 +1056,22 @@ describe('SetupWizard restart re-confirm (issue #704)', () => {
 // ---------------------------------------------------------------------------
 
 describe('SetupWizard step-tab navigation (issue #512)', () => {
+  it('focuses the new step heading after validated Continue and Back transitions', async () => {
+    renderWizard();
+
+    fireEvent.click(getContinueButton());
+    const sourcesHeading = screen.getByRole('heading', {
+      name: /where does your data live/i,
+    });
+    await waitFor(() => expect(sourcesHeading).toHaveFocus());
+
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    const languageHeading = screen.getByRole('heading', {
+      name: /choose your language/i,
+    });
+    await waitFor(() => expect(languageHeading).toHaveFocus());
+  });
+
   it('renders step tabs as buttons and marks the current step', () => {
     renderWizard();
     const languageTab = screen.getByRole('button', { name: /1\. Language/i });
