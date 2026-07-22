@@ -116,7 +116,7 @@ impl MatchingSettings {
             "mosaic.overlap_max_percent",
             &mut issues,
         );
-        if self.mosaic.residual_sky_rotation_cap_deg != 10.0 {
+        if (self.mosaic.residual_sky_rotation_cap_deg - 10.0).abs() > f64::EPSILON {
             push_red(
                 &mut issues,
                 "settings.mosaic_rotation_cap_fixed",
@@ -257,11 +257,24 @@ pub enum AutomaticRelation {
 /// Non-geometric facts required before a relation can be automatic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RelationContext {
-    pub same_materialization: bool,
-    pub immutable_discriminators_match: bool,
-    pub target_compatible: bool,
-    pub acquisition_geometry_compatible: bool,
-    pub equipment_compatible: bool,
+    pub materialization: MaterializationRelation,
+    pub target: Compatibility,
+    pub acquisition_geometry: Compatibility,
+    pub equipment: Compatibility,
+}
+
+/// Whether the pair may form one session inside the active materialization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaterializationRelation {
+    SameWithMatchingDiscriminators,
+    DifferentOrDiscriminatorMismatch,
+}
+
+/// Compatibility of one independently reviewed relation dimension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Compatibility {
+    Compatible,
+    Incompatible,
 }
 
 /// Measured evidence and the one policy outcome it supports.
@@ -269,7 +282,24 @@ pub struct RelationContext {
 pub struct GeometryEvidence {
     pub comparison: FootprintComparison,
     pub allowed_mosaic_rotations: Vec<RotationInterval>,
+    pub threshold_snapshot: Vec<ThresholdMeasurement>,
     pub relation: Option<AutomaticRelation>,
+}
+
+/// One inclusive measurement retained with a relation proposal.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThresholdMeasurement {
+    pub key: &'static str,
+    pub measured_value: f64,
+    pub threshold_value: f64,
+    pub comparison: ThresholdComparison,
+    pub passed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThresholdComparison {
+    GreaterThanOrEqual,
+    LessThanOrEqual,
 }
 
 /// Search resolution used for the fixed +/-10 degree mosaic cap.
@@ -282,6 +312,11 @@ pub const MOSAIC_ROTATION_TOLERANCE_DEG: f64 = 0.001;
 /// Sibling is therefore never returned for a pair already classified into the
 /// same session. Mosaic overlap is evaluated only when neither same-panel class
 /// applies.
+///
+/// # Errors
+///
+/// Returns the upstream typed geometry error when the footprints cannot share
+/// a valid comparison plane or the rotation-band calculation cannot complete.
 pub fn evaluate_relation(
     left: &SkyFootprint,
     right: &SkyFootprint,
@@ -306,19 +341,25 @@ pub fn evaluate_relation(
         )?,
     )?;
 
-    let relation = if context.same_materialization
-        && context.immutable_discriminators_match
+    let (relation, threshold_snapshot) = if context.materialization
+        == MaterializationRelation::SameWithMatchingDiscriminators
         && geometry_passes(&comparison, settings.same_session)
     {
-        Some(AutomaticRelation::SameSession)
-    } else if context.target_compatible
-        && context.acquisition_geometry_compatible
-        && context.equipment_compatible
+        (
+            Some(AutomaticRelation::SameSession),
+            geometry_threshold_snapshot(&comparison, settings.same_session),
+        )
+    } else if context.target == Compatibility::Compatible
+        && context.acquisition_geometry == Compatibility::Compatible
+        && context.equipment == Compatibility::Compatible
         && geometry_passes(&comparison, settings.sibling)
     {
-        Some(AutomaticRelation::Sibling)
-    } else if context.target_compatible
-        && context.acquisition_geometry_compatible
+        (
+            Some(AutomaticRelation::Sibling),
+            geometry_threshold_snapshot(&comparison, settings.sibling),
+        )
+    } else if context.target == Compatibility::Compatible
+        && context.acquisition_geometry == Compatibility::Compatible
         && comparison.parity_match
         && mosaic_band_contains(&comparison, settings.mosaic)
         && residual_in_intervals(
@@ -326,12 +367,79 @@ pub fn evaluate_relation(
             &allowed_mosaic_rotations,
         )
     {
-        Some(AutomaticRelation::Mosaic)
+        (Some(AutomaticRelation::Mosaic), mosaic_threshold_snapshot(&comparison, settings.mosaic))
     } else {
-        None
+        (None, Vec::new())
     };
 
-    Ok(GeometryEvidence { comparison, allowed_mosaic_rotations, relation })
+    Ok(GeometryEvidence { comparison, allowed_mosaic_rotations, threshold_snapshot, relation })
+}
+
+fn geometry_threshold_snapshot(
+    comparison: &FootprintComparison,
+    thresholds: GeometryThresholds,
+) -> Vec<ThresholdMeasurement> {
+    vec![
+        minimum_measurement(
+            "coverage_percent",
+            comparison.normalized_coverage * 100.0,
+            thresholds.coverage_min_percent,
+        ),
+        maximum_measurement(
+            "center_separation_percent",
+            comparison.normalized_centre_separation * 100.0,
+            thresholds.center_separation_max_percent,
+        ),
+        maximum_measurement(
+            "residual_sky_rotation_deg",
+            comparison.residual_sky_rotation.degrees().abs(),
+            thresholds.rotation_max_deg,
+        ),
+    ]
+}
+
+fn mosaic_threshold_snapshot(
+    comparison: &FootprintComparison,
+    thresholds: MosaicThresholds,
+) -> Vec<ThresholdMeasurement> {
+    let coverage = comparison.normalized_coverage * 100.0;
+    vec![
+        minimum_measurement("coverage_percent", coverage, thresholds.overlap_min_percent),
+        maximum_measurement("coverage_percent", coverage, thresholds.overlap_max_percent),
+        maximum_measurement(
+            "residual_sky_rotation_deg",
+            comparison.residual_sky_rotation.degrees().abs(),
+            thresholds.residual_sky_rotation_cap_deg,
+        ),
+    ]
+}
+
+fn minimum_measurement(
+    key: &'static str,
+    measured_value: f64,
+    threshold_value: f64,
+) -> ThresholdMeasurement {
+    ThresholdMeasurement {
+        key,
+        measured_value,
+        threshold_value,
+        comparison: ThresholdComparison::GreaterThanOrEqual,
+        passed: measured_value >= threshold_value,
+    }
+}
+
+fn maximum_measurement(
+    key: &'static str,
+    measured_value: f64,
+    threshold_value: f64,
+) -> ThresholdMeasurement {
+    ThresholdMeasurement {
+        key,
+        measured_value,
+        threshold_value,
+        comparison: ThresholdComparison::LessThanOrEqual,
+        passed: measured_value <= threshold_value,
+    }
 }
 
 fn geometry_passes(comparison: &FootprintComparison, thresholds: GeometryThresholds) -> bool {

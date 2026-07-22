@@ -39,6 +39,11 @@ impl PanelGroupRevision {
     }
 
     /// Validate non-vacuous membership and representative stability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invariant error for empty membership or a representative
+    /// outside the immutable membership snapshot.
     pub fn validate(&self) -> Result<(), RelationInvariantError> {
         if self.session_ids.is_empty() {
             return Err(RelationInvariantError::EmptyPanelMembership);
@@ -48,6 +53,36 @@ impl PanelGroupRevision {
         }
         Ok(())
     }
+}
+
+/// Validate current panel heads as one snapshot.
+///
+/// A session belongs to at most one current group, and no current group may
+/// contain both sides of an accepted supersession relation.
+///
+/// # Errors
+///
+/// Returns an invariant error for an invalid revision, duplicate current
+/// membership, or predecessor/replacement coexistence.
+pub fn validate_current_panel_membership(
+    revisions: &[PanelGroupRevision],
+    supersessions: &[(String, String)],
+) -> Result<(), RelationInvariantError> {
+    let mut current_members = BTreeSet::new();
+    for revision in revisions {
+        revision.validate()?;
+        for session_id in &revision.session_ids {
+            if !current_members.insert(session_id) {
+                return Err(RelationInvariantError::DuplicateCurrentPanelMembership);
+            }
+        }
+        if supersessions.iter().any(|(predecessor, successor)| {
+            revision.session_ids.contains(predecessor) && revision.session_ids.contains(successor)
+        }) {
+            return Err(RelationInvariantError::PredecessorAndReplacementCoexist);
+        }
+    }
+    Ok(())
 }
 
 /// One exact accepted adjacency edge between panel revisions.
@@ -74,6 +109,12 @@ impl MosaicEdge {
 }
 
 /// Validate that exact mosaic members are connected by exact accepted edges.
+///
+/// # Errors
+///
+/// Returns an invariant error when fewer than two panels are supplied, an edge
+/// is self-referential or outside membership, or the accepted graph is not
+/// connected.
 pub fn validate_mosaic_connectivity(
     panels: &BTreeSet<String>,
     edges: &[MosaicEdge],
@@ -91,7 +132,9 @@ pub fn validate_mosaic_connectivity(
         adjacency.entry(left).or_default().push(right);
         adjacency.entry(right).or_default().push(left);
     }
-    let seed = panels.first().expect("panel count checked").as_str();
+    let Some(seed) = panels.first().map(String::as_str) else {
+        return Err(RelationInvariantError::MosaicNeedsTwoPanels);
+    };
     let mut visited = BTreeSet::from([seed]);
     let mut queue = VecDeque::from([seed]);
     while let Some(node) = queue.pop_front() {
@@ -122,6 +165,19 @@ pub fn edge_bridges_components(left: &str, right: &str, accepted_edges: &[Mosaic
         })
 }
 
+/// Detect a bridge when accepted component membership is already known.
+#[must_use]
+pub fn edge_bridges_accepted_mosaics(
+    left: &str,
+    right: &str,
+    accepted_components: &[BTreeSet<String>],
+) -> bool {
+    let left_component = accepted_components.iter().position(|component| component.contains(left));
+    let right_component =
+        accepted_components.iter().position(|component| component.contains(right));
+    matches!((left_component, right_component), (Some(left), Some(right)) if left != right)
+}
+
 fn reachable(start: &str, destination: &str, edges: &[MosaicEdge]) -> bool {
     let mut visited = BTreeSet::from([start]);
     let mut queue = VecDeque::from([start]);
@@ -148,6 +204,10 @@ fn reachable(start: &str, destination: &str, edges: &[MosaicEdge]) -> bool {
 }
 
 /// Validate a directed lineage snapshot, including proposed edges, is acyclic.
+///
+/// # Errors
+///
+/// Returns [`RelationInvariantError::LineageCycle`] for a self-edge or cycle.
 pub fn validate_acyclic_lineage(edges: &[(String, String)]) -> Result<(), RelationInvariantError> {
     let mut successors: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let mut indegree: BTreeMap<&str, usize> = BTreeMap::new();
@@ -165,10 +225,11 @@ pub fn validate_acyclic_lineage(edges: &[(String, String)]) -> Result<(), Relati
     while let Some(node) = queue.pop_front() {
         visited += 1;
         for successor in successors.get(node).into_iter().flatten().copied() {
-            let degree = indegree.get_mut(successor).expect("successor was indexed");
-            *degree -= 1;
-            if *degree == 0 {
-                queue.push_back(successor);
+            if let Some(degree) = indegree.get_mut(successor) {
+                *degree -= 1;
+                if *degree == 0 {
+                    queue.push_back(successor);
+                }
             }
         }
     }
@@ -215,6 +276,11 @@ pub struct ManualRelation {
 
 impl ManualRelation {
     /// Enforce the non-vacuous and kind-specific contract before persistence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invariant error when inputs or outputs are empty, target
+    /// scope is invalid, or the kind-specific membership/topology shape fails.
     pub fn validate(&self) -> Result<(), RelationInvariantError> {
         if self.review_reason.trim().is_empty() {
             return Err(RelationInvariantError::MissingReviewReason);
@@ -224,9 +290,6 @@ impl ManualRelation {
         }
         if self.membership_ids.is_empty() && self.edges.is_empty() && self.lineage.is_empty() {
             return Err(RelationInvariantError::RelationFreeProposal);
-        }
-        if self.missing_evidence_codes.is_empty() {
-            return Err(RelationInvariantError::MissingEvidenceDisclosure);
         }
         if let TargetScope::NewReviewedCrossTarget { canonical_target_ids } = &self.target_scope {
             if canonical_target_ids.len() < 2 {
@@ -304,6 +367,11 @@ pub enum MosaicObjectCoverage {
 }
 
 /// Measure one object and exclude zero-coverage results, including gap points.
+///
+/// # Errors
+///
+/// Returns the upstream typed geometry error when the object cannot be
+/// projected or measured against the union's persisted anchor.
 pub fn measure_mosaic_object(
     union: &FootprintUnion,
     object: ObjectShape<'_>,
@@ -334,6 +402,11 @@ pub fn measure_mosaic_object(
 }
 
 /// Build the captured union once for an exact mosaic revision.
+///
+/// # Errors
+///
+/// Returns the upstream typed geometry error for an empty set, duplicate
+/// provenance, incompatible epochs, projection failure, or invalid geometry.
 pub fn captured_union(footprints: &[SkyFootprint]) -> target_match::Result<FootprintUnion> {
     FootprintUnion::new(footprints)
 }
@@ -349,9 +422,10 @@ pub enum RelationInvariantError {
     MissingReviewReason,
     EmptyProposalInputs,
     RelationFreeProposal,
-    MissingEvidenceDisclosure,
     CrossTargetNeedsTwoTargets,
     KindShapeMismatch,
+    DuplicateCurrentPanelMembership,
+    PredecessorAndReplacementCoexist,
 }
 
 impl std::fmt::Display for RelationInvariantError {
@@ -402,6 +476,23 @@ mod tests {
     }
 
     #[test]
+    fn current_panel_membership_excludes_duplicates_and_replacements() {
+        let first = PanelGroupRevision::singleton("p1", "r1", "old", 1);
+        let duplicate = PanelGroupRevision::singleton("p2", "r2", "old", 1);
+        assert_eq!(
+            validate_current_panel_membership(&[first.clone(), duplicate], &[]),
+            Err(RelationInvariantError::DuplicateCurrentPanelMembership)
+        );
+
+        let mut coexist = first;
+        coexist.session_ids.insert("new".into());
+        assert_eq!(
+            validate_current_panel_membership(&[coexist], &[("old".into(), "new".into())]),
+            Err(RelationInvariantError::PredecessorAndReplacementCoexist)
+        );
+    }
+
+    #[test]
     fn mosaic_requires_connected_exact_members() {
         let panels = BTreeSet::from(["a".into(), "b".into(), "c".into()]);
         assert_eq!(
@@ -419,6 +510,9 @@ mod tests {
         let accepted = [edge("a", "b"), edge("c", "d")];
         assert!(edge_bridges_components("b", "c", &accepted));
         assert!(!edge_bridges_components("a", "b", &accepted));
+        let components =
+            [BTreeSet::from(["singleton".into()]), BTreeSet::from(["a".into(), "b".into()])];
+        assert!(edge_bridges_accepted_mosaics("singleton", "a", &components));
     }
 
     #[test]
