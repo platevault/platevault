@@ -147,6 +147,25 @@ describe('WizardShell accessible step navigation', () => {
     expect(before).toHaveFocus();
   });
 
+  it('focuses the labelled step body when consumer content has no heading', async () => {
+    const steps = LABELS.map((label) => ({ label }));
+    const { rerender } = render(
+      <WizardShell steps={steps} currentStep={0} summary={<p>Summary</p>}>
+        <p>No heading</p>
+      </WizardShell>,
+    );
+
+    rerender(
+      <WizardShell steps={steps} currentStep={1} summary={<p>Summary</p>}>
+        <p>No heading</p>
+      </WizardShell>,
+    );
+
+    const target = screen.getByRole('region', { name: '2. Sources' });
+    await waitFor(() => expect(target).toHaveFocus());
+    expect(target).toHaveAttribute('data-wizard-step-focus-target');
+  });
+
   it('scrolls the active progress control without animation when reduced motion is requested', async () => {
     vi.stubGlobal('matchMedia', matchMedia(true));
     render(<Harness />);
