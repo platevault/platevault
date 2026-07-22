@@ -4,7 +4,7 @@ description: APM project for Astro Library Manager.
 author: Sjors Robroek
 dependencies:
   apm:
-  - srobroek/agentic-packages/packages/core#>=8.0.0 <9.0.0
+  - srobroek/agentic-packages/packages/core#>=10.0.0 <11.0.0
   - srobroek/agentic-packages/packages/steering-pragmatic#main
   - srobroek/agentic-packages/packages/orchestrate#main
   - srobroek/agentic-packages/packages/release-please#main
@@ -22,7 +22,8 @@ dependencies:
   - srobroek/agentic-packages/packages/mcp-1mcp#>=1.0.0 <2.0.0
   - srobroek/agentic-packages/packages/mcp-tauri#>=2.0.0 <3.0.0
   - wshobson/agents/plugins/database-design
-  - srobroek/agentic-packages/packages/user-journeys#main
+  - srobroek/agentic-packages/packages/pr-shepherd#>=0.11.0 <1.0.0
+  - srobroek/agentic-packages/packages/user-journeys#>=0.4.0 <1.0.0
 includes: auto
 targets:
   - claude

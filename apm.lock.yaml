@@ -1,25 +1,25 @@
 lockfile_version: '2'
-generated_at: '2026-07-21T16:49:47.635079+00:00'
+generated_at: '2026-07-22T16:00:08.738212+00:00'
 apm_version: 0.26.0
 dependencies:
 - repo_url: srobroek/agentic-packages
   name: core
   host: github.com
-  resolved_commit: 99c7cd5bb9ec09bae8a62427cd567540aa56e205
-  resolved_ref: core--v8.0.0
-  version: 8.0.0
+  resolved_commit: 22047259c0d0c74c304683a3bfbb0fa5d38f2670
+  resolved_ref: core--v10.2.1
+  version: 10.2.1
   virtual_path: packages/core
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:881cc95ec3d073724e5206eb3380162cbe50c2d2b512f3850f9885fb1006bf0d
-  constraint: '>=8.0.0 <9.0.0'
-  resolved_tag: core--v8.0.0
-  resolved_at: '2026-07-21T12:28:44+00:00'
+  content_hash: sha256:16d1a49007f9e6944df51affe0956b10570063662a1c6cb1d2bc7dda2e5b1cef
+  constraint: '>=10.0.0 <11.0.0'
+  resolved_tag: core--v10.2.1
+  resolved_at: '2026-07-22T15:59:30+00:00'
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: docs-architecture
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 2.1.0
   virtual_path: packages/docs-architecture
@@ -30,63 +30,63 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: frontend
   host: github.com
-  resolved_commit: 99c7cd5bb9ec09bae8a62427cd567540aa56e205
-  resolved_ref: frontend--v4.0.0
-  version: 4.0.0
+  resolved_commit: 4100769ef10075d7d6b25dfc7bc9b2ed32cf3328
+  resolved_ref: frontend--v4.0.1
+  version: 4.0.1
   virtual_path: packages/frontend
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:0da7377c25b8a45bdfa562a79eec8c8ee17674149e79e0ab76830dd3b6758795
+  content_hash: sha256:5ca8d49d1745e27c170fc61b97f4c4091ddb8f0321df4a8034ec572240372100
   constraint: '>=4.0.0 <5.0.0'
-  resolved_tag: frontend--v4.0.0
-  resolved_at: '2026-07-21T12:28:46+00:00'
+  resolved_tag: frontend--v4.0.1
+  resolved_at: '2026-07-22T15:55:15+00:00'
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-rust
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
-  version: 3.2.0
+  version: 3.2.1
   virtual_path: packages/language-rust
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:b925322292296252b496ca35cb5bda3818379935db51e18080659c3af8a3d3f7
+  content_hash: sha256:95fdc59919d59821698e5d0d01e554ecb4c175a78993850b251847f29dd35ae9
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-shell
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
-  version: 2.2.0
+  version: 2.2.1
   virtual_path: packages/language-shell
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:1ca9108f968dc9783ec5a53b947f23818e1324f0027fca371b04801e28895b87
+  content_hash: sha256:de9b1b95beb7105190cabdeb2a83ca71fcdde9d3ad32e6ebeba5666455cd0174
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-typescript
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
-  version: 3.2.0
+  version: 3.2.1
   virtual_path: packages/language-typescript
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:ec748955ed7725c4f824d8536e9d8cd0bca1d0ad7676688538f0f4dc56bbe041
+  content_hash: sha256:4c84df7cdac5a221c2a7d23689fa687e2cdcfae83f5a25e3dc95e7da6a6ea798
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: mcp-1mcp
   host: github.com
-  resolved_commit: f794b800468cf26cdfdc7c1aaffb049bc9dfbe66
-  resolved_ref: mcp-1mcp--v1.0.2
-  version: 1.0.2
+  resolved_commit: 46628ba2fdf6343424f24f9e85d83491e71eb357
+  resolved_ref: mcp-1mcp--v1.0.4
+  version: 1.0.4
   virtual_path: packages/mcp-1mcp
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:ede28e6ec75becc9fea3f480a05d972dc349faaac12b996a16a180361e1b2162
+  content_hash: sha256:407240cca1c0e94e9a466ce7d33491fef7373b9f2453496d7d527b80ea8093c8
   constraint: '>=1.0.0 <2.0.0'
-  resolved_tag: mcp-1mcp--v1.0.2
-  resolved_at: '2026-07-21T16:48:47+00:00'
+  resolved_tag: mcp-1mcp--v1.0.4
+  resolved_at: '2026-07-22T15:55:15+00:00'
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: mcp-tauri
@@ -104,14 +104,14 @@ dependencies:
   content_hash: sha256:0f291b92c0dd7ec03957902e9e8aee0cab80ee6f296638168794a427ae4abf8d
   constraint: '>=2.0.0 <3.0.0'
   resolved_tag: mcp-tauri--v2.0.0
-  resolved_at: '2026-07-21T12:28:48+00:00'
+  resolved_at: '2026-07-22T15:55:15+00:00'
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: orchestrate
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
-  version: 3.0.0
+  version: 3.9.0
   virtual_path: packages/orchestrate
   is_virtual: true
   package_type: marketplace_plugin
@@ -123,22 +123,35 @@ dependencies:
   - .agents/skills/orchestrate/references/lifecycle.md
   - .agents/skills/orchestrate/references/message-grammar.md
   - .agents/skills/orchestrate/references/planning.md
+  - .agents/skills/orchestrate/references/queue-watcher.md
   - .agents/skills/orchestrate/references/roles.md
   - .agents/skills/orchestrate/references/spawn-brief.md
   - .agents/skills/orchestrate/references/teams.md
+  - .agents/skills/orchestrate/scripts/_test_conflict_probe.py
+  - .agents/skills/orchestrate/scripts/_test_decision_policy.py
+  - .agents/skills/orchestrate/scripts/_test_discover_agents.py
   - .agents/skills/orchestrate/scripts/_test_msg_lint.py
+  - .agents/skills/orchestrate/scripts/_test_pull_worker.py
+  - .agents/skills/orchestrate/scripts/_test_resolve_queue_dispatch.py
   - .agents/skills/orchestrate/scripts/_test_scope_check.py
+  - .agents/skills/orchestrate/scripts/_test_thread_message.py
   - .agents/skills/orchestrate/scripts/conflict-probe.sh
   - .agents/skills/orchestrate/scripts/discover-agents.py
   - .agents/skills/orchestrate/scripts/inject-comms.sh
   - .agents/skills/orchestrate/scripts/msg-lint.py
+  - .agents/skills/orchestrate/scripts/pull-worker.py
+  - .agents/skills/orchestrate/scripts/resolve-queue-dispatch.py
   - .agents/skills/orchestrate/scripts/scope-check.py
+  - .agents/skills/orchestrate/scripts/thread-message.py
   - .agents/skills/orchestrate/scripts/worktree-sweep.sh
   - .claude/agents/integration-gatekeeper.md
   - .claude/agents/ledger-scribe.md
   - .claude/agents/workflow-advisor.md
   - .claude/agents/workflow-coder.md
+  - .claude/agents/workflow-pull-worker.md
+  - .claude/agents/workflow-researcher.md
   - .claude/agents/workflow-reviewer.md
+  - .claude/agents/workflow-worker.md
   - .claude/skills/orchestrate
   - .claude/skills/orchestrate/SKILL.md
   - .claude/skills/orchestrate/references/beads-store.md
@@ -146,73 +159,188 @@ dependencies:
   - .claude/skills/orchestrate/references/lifecycle.md
   - .claude/skills/orchestrate/references/message-grammar.md
   - .claude/skills/orchestrate/references/planning.md
+  - .claude/skills/orchestrate/references/queue-watcher.md
   - .claude/skills/orchestrate/references/roles.md
   - .claude/skills/orchestrate/references/spawn-brief.md
   - .claude/skills/orchestrate/references/teams.md
+  - .claude/skills/orchestrate/scripts/_test_conflict_probe.py
+  - .claude/skills/orchestrate/scripts/_test_decision_policy.py
+  - .claude/skills/orchestrate/scripts/_test_discover_agents.py
   - .claude/skills/orchestrate/scripts/_test_msg_lint.py
+  - .claude/skills/orchestrate/scripts/_test_pull_worker.py
+  - .claude/skills/orchestrate/scripts/_test_resolve_queue_dispatch.py
   - .claude/skills/orchestrate/scripts/_test_scope_check.py
+  - .claude/skills/orchestrate/scripts/_test_thread_message.py
   - .claude/skills/orchestrate/scripts/conflict-probe.sh
   - .claude/skills/orchestrate/scripts/discover-agents.py
   - .claude/skills/orchestrate/scripts/inject-comms.sh
   - .claude/skills/orchestrate/scripts/msg-lint.py
+  - .claude/skills/orchestrate/scripts/pull-worker.py
+  - .claude/skills/orchestrate/scripts/resolve-queue-dispatch.py
   - .claude/skills/orchestrate/scripts/scope-check.py
+  - .claude/skills/orchestrate/scripts/thread-message.py
   - .claude/skills/orchestrate/scripts/worktree-sweep.sh
   - .codex/agents/integration-gatekeeper.toml
   - .codex/agents/ledger-scribe.toml
   - .codex/agents/workflow-advisor.toml
   - .codex/agents/workflow-coder.toml
+  - .codex/agents/workflow-pull-worker.toml
+  - .codex/agents/workflow-researcher.toml
   - .codex/agents/workflow-reviewer.toml
+  - .codex/agents/workflow-worker.toml
   deployed_file_hashes:
-    .agents/skills/orchestrate/SKILL.md: sha256:b6571f17476bac45be86dcb6229d560b2b9f8b7c18cd08b31b3ad95408ebfcfa
-    .agents/skills/orchestrate/references/beads-store.md: sha256:24ced448faf2ea0a864f3849badc4c74ec1b4a7f0748cfb530db8ad188ff9e94
-    .agents/skills/orchestrate/references/comms-block.md: sha256:3d07f82878ce8a386f4c683fad7ca75de38b4042de4e9be3c53f535017086d28
-    .agents/skills/orchestrate/references/lifecycle.md: sha256:7137bf61028385fcc36c0d7351641b90de5105e80790cb23e6af97fd5bf150bd
-    .agents/skills/orchestrate/references/message-grammar.md: sha256:a9a17770ca28aa74faa0294ac50ae84278aece0d2e5280584d2916fec11ca45f
-    .agents/skills/orchestrate/references/planning.md: sha256:cfd405c173a5f5da0ffa325daf46893a2993f3e3ee440e1b4bdfef3f1990ff4e
-    .agents/skills/orchestrate/references/roles.md: sha256:ea79d333369e0f674b33dc56ab0953873f46aeea1caefabc5dea3a281e9c6d71
-    .agents/skills/orchestrate/references/spawn-brief.md: sha256:ac3d469ad96daa382c45b46696c881e25557b3944cb17505d8961c35626c4080
+    .agents/skills/orchestrate/SKILL.md: sha256:c461892a76bc29676f180d7f336f54ba993b2312580f22c31cfb53595d4c3571
+    .agents/skills/orchestrate/references/beads-store.md: sha256:50ee8ac953cfce9eb1e4d3d5c99397d9f0d31b86b1152bdbb5b3c400bc118dd8
+    .agents/skills/orchestrate/references/comms-block.md: sha256:cc474e40294e032710a7017db01a4086e066c95a666d7e3f6e82018e84fe40e2
+    .agents/skills/orchestrate/references/lifecycle.md: sha256:90cbaad5e51ae6a2d0c21bb182d0bb368685563948e74b0ca5af858b98aeb34e
+    .agents/skills/orchestrate/references/message-grammar.md: sha256:e104610a726f0266c40600b97099e2980d623645a031ccb8691058555ea05a36
+    .agents/skills/orchestrate/references/planning.md: sha256:6c7a3ecda0f1be037722af7231a0eb0d27de9b51b990d1a971c0b27252da2411
+    .agents/skills/orchestrate/references/queue-watcher.md: sha256:c328dd6846d07953ab641848ac2d451fc50ea43fc1b73fb8e8edf1dbbd990bb7
+    .agents/skills/orchestrate/references/roles.md: sha256:682b54d4ee36204acb4a8412b36de4f90f3911fde477e5662b4159bb7ebddf57
+    .agents/skills/orchestrate/references/spawn-brief.md: sha256:ce52562624d6c40ded64a9e568af2302e62f15819acacb181e181643bdf175f7
     .agents/skills/orchestrate/references/teams.md: sha256:6b33b2413073b8b1c5378080807f62278c583eca40fef389e68d50e64acc3115
-    .agents/skills/orchestrate/scripts/_test_msg_lint.py: sha256:d4715c94c0f8e03307dbe2f7c21441a2490bfa5053201e2f7516605afc7af67d
-    .agents/skills/orchestrate/scripts/_test_scope_check.py: sha256:432ebb52ebc7c09d7fcf03d7d78b3b3ec9506ed007c37347d70d1bfc32536373
-    .agents/skills/orchestrate/scripts/conflict-probe.sh: sha256:600eda626019b4645418bf986050fee8c5d46796ae78f46ab6c82e31ba35f15f
-    .agents/skills/orchestrate/scripts/discover-agents.py: sha256:0f2f8145c8d1d978f18206a7d567c96b5aab52f2d850270949e1d6af54b16e68
+    .agents/skills/orchestrate/scripts/_test_conflict_probe.py: sha256:80e2e5643e75a046432c6d3b872108d6d661bea5de5e0f9e1ee6a45bf4b2c45a
+    .agents/skills/orchestrate/scripts/_test_decision_policy.py: sha256:04f303232291613bcbd6dc8415006bdafcc0736a3f85815293ab7aea7bd8a3ea
+    .agents/skills/orchestrate/scripts/_test_discover_agents.py: sha256:c0a93ccf9ac83bfa772fa89f89fee313b2dc126553dca7cbddc638ae193300bd
+    .agents/skills/orchestrate/scripts/_test_msg_lint.py: sha256:a8b278669394a7a340ec503315a937341e73210f324d4b3a8c4e6ec25a674b89
+    .agents/skills/orchestrate/scripts/_test_pull_worker.py: sha256:bf4aab16e55ab0a178ae0003934e744f8241df2b5562f0e702c905178b4cd10b
+    .agents/skills/orchestrate/scripts/_test_resolve_queue_dispatch.py: sha256:954db04e8d23573bc675d62e7926f0bdcc53febcc85b762e355690455d7e7c8d
+    .agents/skills/orchestrate/scripts/_test_scope_check.py: sha256:bfee733058cc02c1e65daf3269f17aff01902dccc55c428f9370c2b64d2a308d
+    .agents/skills/orchestrate/scripts/_test_thread_message.py: sha256:5d07a74058f841a197302561a42885252555507b0e4f95658c5d7c015e83e2e1
+    .agents/skills/orchestrate/scripts/conflict-probe.sh: sha256:6af94ebc6bcb2d0730e386048103d89648581773141dde49f775680b04de49de
+    .agents/skills/orchestrate/scripts/discover-agents.py: sha256:69d56c4754559b9d0c2c0ac76100d1dd87d778d6e884d5181c62841c8a00e920
     .agents/skills/orchestrate/scripts/inject-comms.sh: sha256:a5a4515061bcd67b2dfecc68aed34a41df0efd8938b678a67d69513aced091e0
-    .agents/skills/orchestrate/scripts/msg-lint.py: sha256:23995a6acb36edd788dbfdd69d08b207d54bd3aae4625eec8cfd805843919b82
-    .agents/skills/orchestrate/scripts/scope-check.py: sha256:9420690b0f42dc94fd15d9853a41eadfcf91fbba1ef4e108680019bc6038b635
+    .agents/skills/orchestrate/scripts/msg-lint.py: sha256:091579a79b4da65ed12c71b87c41d5ab722f0784959a266b932c3e1c814559dc
+    .agents/skills/orchestrate/scripts/pull-worker.py: sha256:7788dd0b670ca71b5e952cb9583d9eb505b4a1efdc807eb2559ca6115e6654fe
+    .agents/skills/orchestrate/scripts/resolve-queue-dispatch.py: sha256:d1c80e4ed27906f7493053bebe9167d8add4eaeb5e3760fed575fab1c7e60aa4
+    .agents/skills/orchestrate/scripts/scope-check.py: sha256:dc5862568d8a626be7970d9a9bca7e5ac817abdea341d19d166152cc42b05d95
+    .agents/skills/orchestrate/scripts/thread-message.py: sha256:26341203c12beca62a3c9923a04ce9113806738e5e14dc796f4dbb5abe14185a
     .agents/skills/orchestrate/scripts/worktree-sweep.sh: sha256:a91978e74bec9f946bb7a5ab14c56e7f3f335beff47698d3f918a98ad9621742
-    .claude/agents/integration-gatekeeper.md: sha256:c373a5c722e590568c420716f043a042536262cf2926be15744914eba4cc077c
-    .claude/agents/ledger-scribe.md: sha256:1d5da6d2a512fadd6efc75d730cd26fe16662a30922aece566e785421fd44d3d
-    .claude/agents/workflow-advisor.md: sha256:b39264dcb88414fdf462aaab8bacacd4c98276428552f742913561407c923d36
-    .claude/agents/workflow-coder.md: sha256:938b58ac34bb2bb94f65ebf5a6ee82aea3cd8a2fa390d77e1b7d1ced272fa38c
-    .claude/agents/workflow-reviewer.md: sha256:0a52b79041a99ad66a517b13ced0b847c674f0ac1fed24cdc5485f8f617b3e99
-    .claude/skills/orchestrate/SKILL.md: sha256:b6571f17476bac45be86dcb6229d560b2b9f8b7c18cd08b31b3ad95408ebfcfa
-    .claude/skills/orchestrate/references/beads-store.md: sha256:24ced448faf2ea0a864f3849badc4c74ec1b4a7f0748cfb530db8ad188ff9e94
-    .claude/skills/orchestrate/references/comms-block.md: sha256:3d07f82878ce8a386f4c683fad7ca75de38b4042de4e9be3c53f535017086d28
-    .claude/skills/orchestrate/references/lifecycle.md: sha256:7137bf61028385fcc36c0d7351641b90de5105e80790cb23e6af97fd5bf150bd
-    .claude/skills/orchestrate/references/message-grammar.md: sha256:a9a17770ca28aa74faa0294ac50ae84278aece0d2e5280584d2916fec11ca45f
-    .claude/skills/orchestrate/references/planning.md: sha256:cfd405c173a5f5da0ffa325daf46893a2993f3e3ee440e1b4bdfef3f1990ff4e
-    .claude/skills/orchestrate/references/roles.md: sha256:ea79d333369e0f674b33dc56ab0953873f46aeea1caefabc5dea3a281e9c6d71
-    .claude/skills/orchestrate/references/spawn-brief.md: sha256:ac3d469ad96daa382c45b46696c881e25557b3944cb17505d8961c35626c4080
+    .claude/agents/integration-gatekeeper.md: sha256:2926ace91c87bb3e11e9e9557eae587d78b5c46030d667f8cda3717bb6c9bd16
+    .claude/agents/ledger-scribe.md: sha256:d75e57469f7b9b1f284b8dc0e93a249ab3a0de8831bb35335e40f5d0772d4d07
+    .claude/agents/workflow-advisor.md: sha256:da316e0191cbdeb1fafe2b807b1de8e1ee9e06617b1a8c08439bd25d57e8c8ef
+    .claude/agents/workflow-coder.md: sha256:d3463e2229a49e86233f2e0f22c9fe881ee0783efb98129ee3c885db9032a265
+    .claude/agents/workflow-pull-worker.md: sha256:1a415a94c22924b94b8c53cd1f13e620cb7a48678f30f11d1e3532ea4f7459ca
+    .claude/agents/workflow-researcher.md: sha256:77c5bda525bfdec34746c3569c97d901bca421fded8212a365bd919418ed8661
+    .claude/agents/workflow-reviewer.md: sha256:aa079162b2ef8f1484005dcea951149dd90648e958d984b41022e2e19ff0777c
+    .claude/agents/workflow-worker.md: sha256:df2411bc8eee7337d194117d782a45b990c280c2b137e1c69f2c0f973bff0c35
+    .claude/skills/orchestrate/SKILL.md: sha256:c461892a76bc29676f180d7f336f54ba993b2312580f22c31cfb53595d4c3571
+    .claude/skills/orchestrate/references/beads-store.md: sha256:50ee8ac953cfce9eb1e4d3d5c99397d9f0d31b86b1152bdbb5b3c400bc118dd8
+    .claude/skills/orchestrate/references/comms-block.md: sha256:cc474e40294e032710a7017db01a4086e066c95a666d7e3f6e82018e84fe40e2
+    .claude/skills/orchestrate/references/lifecycle.md: sha256:90cbaad5e51ae6a2d0c21bb182d0bb368685563948e74b0ca5af858b98aeb34e
+    .claude/skills/orchestrate/references/message-grammar.md: sha256:e104610a726f0266c40600b97099e2980d623645a031ccb8691058555ea05a36
+    .claude/skills/orchestrate/references/planning.md: sha256:6c7a3ecda0f1be037722af7231a0eb0d27de9b51b990d1a971c0b27252da2411
+    .claude/skills/orchestrate/references/queue-watcher.md: sha256:c328dd6846d07953ab641848ac2d451fc50ea43fc1b73fb8e8edf1dbbd990bb7
+    .claude/skills/orchestrate/references/roles.md: sha256:682b54d4ee36204acb4a8412b36de4f90f3911fde477e5662b4159bb7ebddf57
+    .claude/skills/orchestrate/references/spawn-brief.md: sha256:ce52562624d6c40ded64a9e568af2302e62f15819acacb181e181643bdf175f7
     .claude/skills/orchestrate/references/teams.md: sha256:6b33b2413073b8b1c5378080807f62278c583eca40fef389e68d50e64acc3115
-    .claude/skills/orchestrate/scripts/_test_msg_lint.py: sha256:d4715c94c0f8e03307dbe2f7c21441a2490bfa5053201e2f7516605afc7af67d
-    .claude/skills/orchestrate/scripts/_test_scope_check.py: sha256:432ebb52ebc7c09d7fcf03d7d78b3b3ec9506ed007c37347d70d1bfc32536373
-    .claude/skills/orchestrate/scripts/conflict-probe.sh: sha256:600eda626019b4645418bf986050fee8c5d46796ae78f46ab6c82e31ba35f15f
-    .claude/skills/orchestrate/scripts/discover-agents.py: sha256:0f2f8145c8d1d978f18206a7d567c96b5aab52f2d850270949e1d6af54b16e68
+    .claude/skills/orchestrate/scripts/_test_conflict_probe.py: sha256:80e2e5643e75a046432c6d3b872108d6d661bea5de5e0f9e1ee6a45bf4b2c45a
+    .claude/skills/orchestrate/scripts/_test_decision_policy.py: sha256:04f303232291613bcbd6dc8415006bdafcc0736a3f85815293ab7aea7bd8a3ea
+    .claude/skills/orchestrate/scripts/_test_discover_agents.py: sha256:c0a93ccf9ac83bfa772fa89f89fee313b2dc126553dca7cbddc638ae193300bd
+    .claude/skills/orchestrate/scripts/_test_msg_lint.py: sha256:a8b278669394a7a340ec503315a937341e73210f324d4b3a8c4e6ec25a674b89
+    .claude/skills/orchestrate/scripts/_test_pull_worker.py: sha256:bf4aab16e55ab0a178ae0003934e744f8241df2b5562f0e702c905178b4cd10b
+    .claude/skills/orchestrate/scripts/_test_resolve_queue_dispatch.py: sha256:954db04e8d23573bc675d62e7926f0bdcc53febcc85b762e355690455d7e7c8d
+    .claude/skills/orchestrate/scripts/_test_scope_check.py: sha256:bfee733058cc02c1e65daf3269f17aff01902dccc55c428f9370c2b64d2a308d
+    .claude/skills/orchestrate/scripts/_test_thread_message.py: sha256:5d07a74058f841a197302561a42885252555507b0e4f95658c5d7c015e83e2e1
+    .claude/skills/orchestrate/scripts/conflict-probe.sh: sha256:6af94ebc6bcb2d0730e386048103d89648581773141dde49f775680b04de49de
+    .claude/skills/orchestrate/scripts/discover-agents.py: sha256:69d56c4754559b9d0c2c0ac76100d1dd87d778d6e884d5181c62841c8a00e920
     .claude/skills/orchestrate/scripts/inject-comms.sh: sha256:a5a4515061bcd67b2dfecc68aed34a41df0efd8938b678a67d69513aced091e0
-    .claude/skills/orchestrate/scripts/msg-lint.py: sha256:23995a6acb36edd788dbfdd69d08b207d54bd3aae4625eec8cfd805843919b82
-    .claude/skills/orchestrate/scripts/scope-check.py: sha256:9420690b0f42dc94fd15d9853a41eadfcf91fbba1ef4e108680019bc6038b635
+    .claude/skills/orchestrate/scripts/msg-lint.py: sha256:091579a79b4da65ed12c71b87c41d5ab722f0784959a266b932c3e1c814559dc
+    .claude/skills/orchestrate/scripts/pull-worker.py: sha256:7788dd0b670ca71b5e952cb9583d9eb505b4a1efdc807eb2559ca6115e6654fe
+    .claude/skills/orchestrate/scripts/resolve-queue-dispatch.py: sha256:d1c80e4ed27906f7493053bebe9167d8add4eaeb5e3760fed575fab1c7e60aa4
+    .claude/skills/orchestrate/scripts/scope-check.py: sha256:dc5862568d8a626be7970d9a9bca7e5ac817abdea341d19d166152cc42b05d95
+    .claude/skills/orchestrate/scripts/thread-message.py: sha256:26341203c12beca62a3c9923a04ce9113806738e5e14dc796f4dbb5abe14185a
     .claude/skills/orchestrate/scripts/worktree-sweep.sh: sha256:a91978e74bec9f946bb7a5ab14c56e7f3f335beff47698d3f918a98ad9621742
-    .codex/agents/integration-gatekeeper.toml: sha256:82042b1ccdaea45ca32f44bcf68049b385c0dbc5e4f7c9824124b1c6d2581ad2
+    .codex/agents/integration-gatekeeper.toml: sha256:e5a3107c94356f8e42ebf996904bd419521dff25ec4d4c0f5d9e579d1422ea55
     .codex/agents/ledger-scribe.toml: sha256:99b5e75038978092ebb6d69604b7962790d968e095508b7279190fd684aebd26
     .codex/agents/workflow-advisor.toml: sha256:a7965fbbdaf37345871506f7b44dbab2884583472f5ac965c700fbfc3acb59ce
-    .codex/agents/workflow-coder.toml: sha256:9dfb945706cbacb93a6a3af2c25ac48e45cfdee5f5db4a3437251228f6efc211
-    .codex/agents/workflow-reviewer.toml: sha256:010724586df43c2ce2694ead05633ecd13458dae0fa4ebf2dab2aac9c5e8944e
-  content_hash: sha256:f28cc265a526bc8212f5afb115734856ebe91dcb3586f841881551a7abc43e2f
+    .codex/agents/workflow-coder.toml: sha256:8058c162d433c7ee7363e7240b2d784676730dd9fc453cba1014e85555e334d7
+    .codex/agents/workflow-pull-worker.toml: sha256:c79eaf8d249defe6fa94603b12afeb5e13a96ec825ed6326cf4e8bd23d6b7d9b
+    .codex/agents/workflow-researcher.toml: sha256:694cebbd3d2e4099d55e088efdb0b49f9b754835057dbcf6d0fc2641b512cd8a
+    .codex/agents/workflow-reviewer.toml: sha256:d8a9c04f9013e8ec2143be16c0185b076fb2f8dd7938b67c9ad6b1793c3bccce
+    .codex/agents/workflow-worker.toml: sha256:2139c8b0b2066438fea7437de0ee727a3f3ec8985f9e01bdbdff78e6540e368a
+  content_hash: sha256:c6a5254e0e228882e56485e76b42d5cbeee39bcc12e588adec7cf7adbd914925
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  name: pr-shepherd
+  host: github.com
+  resolved_commit: ccc61ef6bbabf061b98a7c225011a5259e01c8a1
+  resolved_ref: pr-shepherd--v0.11.1
+  version: 0.11.1
+  virtual_path: packages/pr-shepherd
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/pr-shepherd
+  - .agents/skills/pr-shepherd/SKILL.md
+  - .agents/skills/pr-shepherd/references/bounce-back.md
+  - .agents/skills/pr-shepherd/references/landing-contract.md
+  - .agents/skills/pr-shepherd/references/queue-watcher.md
+  - .agents/skills/pr-shepherd/scripts/_test_landing_contract.sh
+  - .agents/skills/pr-shepherd/scripts/_test_resolve_queue_event.py
+  - .agents/skills/pr-shepherd/scripts/_test_waiter_real_db.sh
+  - .agents/skills/pr-shepherd/scripts/landing-contract.sh
+  - .agents/skills/pr-shepherd/scripts/merge-probe.sh
+  - .agents/skills/pr-shepherd/scripts/resolve-queue-event.py
+  - .agents/skills/pr-shepherd/scripts/test-fixtures/bin/bd
+  - .agents/skills/pr-shepherd/scripts/test-fixtures/bin/gh
+  - .agents/skills/pr-shepherd/scripts/test-fixtures/bin/git
+  - .claude/agents/pr-shepherd.md
+  - .claude/rules/45-pr-shepherd.md
+  - .claude/skills/pr-shepherd
+  - .claude/skills/pr-shepherd/SKILL.md
+  - .claude/skills/pr-shepherd/references/bounce-back.md
+  - .claude/skills/pr-shepherd/references/landing-contract.md
+  - .claude/skills/pr-shepherd/references/queue-watcher.md
+  - .claude/skills/pr-shepherd/scripts/_test_landing_contract.sh
+  - .claude/skills/pr-shepherd/scripts/_test_resolve_queue_event.py
+  - .claude/skills/pr-shepherd/scripts/_test_waiter_real_db.sh
+  - .claude/skills/pr-shepherd/scripts/landing-contract.sh
+  - .claude/skills/pr-shepherd/scripts/merge-probe.sh
+  - .claude/skills/pr-shepherd/scripts/resolve-queue-event.py
+  - .claude/skills/pr-shepherd/scripts/test-fixtures/bin/bd
+  - .claude/skills/pr-shepherd/scripts/test-fixtures/bin/gh
+  - .claude/skills/pr-shepherd/scripts/test-fixtures/bin/git
+  - .codex/agents/pr-shepherd.toml
+  deployed_file_hashes:
+    .agents/skills/pr-shepherd/SKILL.md: sha256:898b7b31ce3fdbfb51ea62414f991d6697a130b0ae059ca7d3141788247c7626
+    .agents/skills/pr-shepherd/references/bounce-back.md: sha256:04a1a805a0caa4c616e896eb6719f4196c1a706ae7227ec30c3d990a15a2491c
+    .agents/skills/pr-shepherd/references/landing-contract.md: sha256:7ee8ba262e86f749607800fa64ece7efd8aff240a9ed1df2ca1866b163ea09d4
+    .agents/skills/pr-shepherd/references/queue-watcher.md: sha256:95c7e923b9de76fa54fbe8c209892c3f51bcc9b6741a71da9df107981efe925c
+    .agents/skills/pr-shepherd/scripts/_test_landing_contract.sh: sha256:48d2d8d38acb0a4b071cc7e7865e4f6a5b5c55735c84a08a9c48d9c27bf7d541
+    .agents/skills/pr-shepherd/scripts/_test_resolve_queue_event.py: sha256:d92106edb5e1a977907d9a5cee5ea72bb0923139e2d2d0db9d39f8ad8e822778
+    .agents/skills/pr-shepherd/scripts/_test_waiter_real_db.sh: sha256:4fa05e6a71a820d9481b8ba405feae401f5cfc975d2b5b817b2fca37ea47db3c
+    .agents/skills/pr-shepherd/scripts/landing-contract.sh: sha256:d0bf4ba6eb4f37183fd7ce0f73a3a86c89803267702e0b63374d5abb1c208cef
+    .agents/skills/pr-shepherd/scripts/merge-probe.sh: sha256:4c77f47f8199725ac7ced0d32aa1202ff8888b952d1fca2db29aa7d945970450
+    .agents/skills/pr-shepherd/scripts/resolve-queue-event.py: sha256:8b6e89dcbb94cc3a066ba7a66495e55a3ce8b3a361d4c28f15c00fbedb43ccd0
+    .agents/skills/pr-shepherd/scripts/test-fixtures/bin/bd: sha256:046b86331551d4322f75f5342b65e3f755f7c3e2134f029103af77bf641755f0
+    .agents/skills/pr-shepherd/scripts/test-fixtures/bin/gh: sha256:d3374b124bed0d8cd5507d45a61837dfcb459196146f25ea78e81b89eba7c32a
+    .agents/skills/pr-shepherd/scripts/test-fixtures/bin/git: sha256:78d5dad211d1b847f593715972222db829a8fe145337a23ba8a69983d91c00bc
+    .claude/agents/pr-shepherd.md: sha256:66b76cd4796a736257b4bd7ccc9462397deeeac8efc387c0a0b31989b581218e
+    .claude/rules/45-pr-shepherd.md: sha256:e24db1ef68af825ece187a1e6279581b231ed34b8f7f045db5a09a70ddc534dc
+    .claude/skills/pr-shepherd/SKILL.md: sha256:898b7b31ce3fdbfb51ea62414f991d6697a130b0ae059ca7d3141788247c7626
+    .claude/skills/pr-shepherd/references/bounce-back.md: sha256:04a1a805a0caa4c616e896eb6719f4196c1a706ae7227ec30c3d990a15a2491c
+    .claude/skills/pr-shepherd/references/landing-contract.md: sha256:7ee8ba262e86f749607800fa64ece7efd8aff240a9ed1df2ca1866b163ea09d4
+    .claude/skills/pr-shepherd/references/queue-watcher.md: sha256:95c7e923b9de76fa54fbe8c209892c3f51bcc9b6741a71da9df107981efe925c
+    .claude/skills/pr-shepherd/scripts/_test_landing_contract.sh: sha256:48d2d8d38acb0a4b071cc7e7865e4f6a5b5c55735c84a08a9c48d9c27bf7d541
+    .claude/skills/pr-shepherd/scripts/_test_resolve_queue_event.py: sha256:d92106edb5e1a977907d9a5cee5ea72bb0923139e2d2d0db9d39f8ad8e822778
+    .claude/skills/pr-shepherd/scripts/_test_waiter_real_db.sh: sha256:4fa05e6a71a820d9481b8ba405feae401f5cfc975d2b5b817b2fca37ea47db3c
+    .claude/skills/pr-shepherd/scripts/landing-contract.sh: sha256:d0bf4ba6eb4f37183fd7ce0f73a3a86c89803267702e0b63374d5abb1c208cef
+    .claude/skills/pr-shepherd/scripts/merge-probe.sh: sha256:4c77f47f8199725ac7ced0d32aa1202ff8888b952d1fca2db29aa7d945970450
+    .claude/skills/pr-shepherd/scripts/resolve-queue-event.py: sha256:8b6e89dcbb94cc3a066ba7a66495e55a3ce8b3a361d4c28f15c00fbedb43ccd0
+    .claude/skills/pr-shepherd/scripts/test-fixtures/bin/bd: sha256:046b86331551d4322f75f5342b65e3f755f7c3e2134f029103af77bf641755f0
+    .claude/skills/pr-shepherd/scripts/test-fixtures/bin/gh: sha256:d3374b124bed0d8cd5507d45a61837dfcb459196146f25ea78e81b89eba7c32a
+    .claude/skills/pr-shepherd/scripts/test-fixtures/bin/git: sha256:78d5dad211d1b847f593715972222db829a8fe145337a23ba8a69983d91c00bc
+    .codex/agents/pr-shepherd.toml: sha256:60381225aae9d4353fff469a69f884d90040e50e62c0f96733bf7223df613069
+  content_hash: sha256:a2fc9b5c3362e0c11b062343724378ad13e641bea33e2682073984efd2e44074
+  constraint: '>=0.11.0 <1.0.0'
+  resolved_tag: pr-shepherd--v0.11.1
+  resolved_at: '2026-07-22T15:55:17+00:00'
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: release-please
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/release-please
@@ -267,9 +395,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: speckit
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
-  version: 8.0.0
+  version: 8.1.1
   virtual_path: packages/speckit
   is_virtual: true
   package_type: marketplace_plugin
@@ -311,10 +439,10 @@ dependencies:
     .agents/skills/speckit-setup/scripts/workflows/speckit-full/workflow.yml: sha256:019f20d28431a170ae0d7abb35c7c5dfc03a911ead3166ca0381f58edef6f040
     .agents/skills/speckit-setup/scripts/workflows/speckit-quality/workflow.yml: sha256:a623bcdd2a4588874eb9389fc9dc0a20f6b23a844d054a86375158080c73eb83
     .agents/skills/speckit-setup/scripts/workflows/speckit/workflow.yml: sha256:77751b314bf29415c91d08e0a570c55ab3c66cff63fbfca7cafb80e37c86f3a3
-    .claude/agents/speckit-implement-task.md: sha256:5a7387573bcef9d0fef9367a55d4202379d5cef9842d554b43a2f644ea06471c
-    .claude/agents/speckit-research.md: sha256:ca3ed4f28484f9a38dda5522f0569a409160b570fb0c9bc2f318834c5aa493e1
-    .claude/agents/speckit-sync.md: sha256:cd70d308fb7569455bb0f359de9677bbcd263acf4f98d3d0db159309539cf0b6
-    .claude/agents/speckit-verify.md: sha256:f30714e801948dff3adcb0d5bbb7d0e170e1470b9abfad9bc27c544de38b5d24
+    .claude/agents/speckit-implement-task.md: sha256:68dd838065e0271ff96e8977d3e52a3915ae63a3501e17b1b0f12dd349a12db2
+    .claude/agents/speckit-research.md: sha256:1585ec7522b263bd2f758b604ea32e496e40c10ec4ae194a5219058edabca77b
+    .claude/agents/speckit-sync.md: sha256:bd593b40cfc8ee13454c398f9e51e2a70a593cccaa91ed86d161e151acdba662
+    .claude/agents/speckit-verify.md: sha256:da0237867d821ed1ab0ef02702684b1e056d3a648e2127fcafdae0ad57c02dc7
     .claude/hooks/speckit/scripts/speckit-pr-title.sh: sha256:830627403ba5cb25e8629694c81f828695b89b4a6a6b8d3a8bcb162f77d37b60
     .claude/hooks/speckit/scripts/test_validate_dag.py: sha256:4ad1b3996bbcf8c2b4f5da4289c09ea8f87885bd3cd93f315ae05623948681dc
     .claude/hooks/speckit/scripts/validate-dag.py: sha256:0de4fcced8e7edde6782475921a15810fb90ecc8040860589c43ddd08d5c4edb
@@ -324,19 +452,19 @@ dependencies:
     .claude/skills/speckit-setup/scripts/workflows/speckit-full/workflow.yml: sha256:019f20d28431a170ae0d7abb35c7c5dfc03a911ead3166ca0381f58edef6f040
     .claude/skills/speckit-setup/scripts/workflows/speckit-quality/workflow.yml: sha256:a623bcdd2a4588874eb9389fc9dc0a20f6b23a844d054a86375158080c73eb83
     .claude/skills/speckit-setup/scripts/workflows/speckit/workflow.yml: sha256:77751b314bf29415c91d08e0a570c55ab3c66cff63fbfca7cafb80e37c86f3a3
-    .codex/agents/speckit-implement-task.toml: sha256:30018ea607cde97419c45627839e56a7a1f6822e101ff64112714dff9ef818f3
-    .codex/agents/speckit-research.toml: sha256:f6baf80301e56c0b0c5f2d82596fae3656075fab8a412b6b2026249868de9a76
-    .codex/agents/speckit-sync.toml: sha256:7a1aa4e736f17ac20c71deb1bf887919c892024675dc153dbb6385577f845770
-    .codex/agents/speckit-verify.toml: sha256:2db3a000a60870080e7b31a2709eabda7266a66df748083e22fe05e93dad937c
+    .codex/agents/speckit-implement-task.toml: sha256:aa8ad1382e5554e4b5e1af8ab580570cb5bd7d4fb22f2fe06d844dd890638381
+    .codex/agents/speckit-research.toml: sha256:d5a21d554b888e1f7976c194acef3a12085d34d5adb4fa9b31a47ad7164b548e
+    .codex/agents/speckit-sync.toml: sha256:dde5ccdc5742c8142486815a3be35a487f6f4cc77fe7ee04c31453ed2afa2ff9
+    .codex/agents/speckit-verify.toml: sha256:c66949175a3474cdb0e85a82e929289501fa0919a56375e07df0beae4208c366
     .codex/hooks/speckit/scripts/speckit-pr-title.sh: sha256:830627403ba5cb25e8629694c81f828695b89b4a6a6b8d3a8bcb162f77d37b60
     .codex/hooks/speckit/scripts/test_validate_dag.py: sha256:4ad1b3996bbcf8c2b4f5da4289c09ea8f87885bd3cd93f315ae05623948681dc
     .codex/hooks/speckit/scripts/validate-dag.py: sha256:0de4fcced8e7edde6782475921a15810fb90ecc8040860589c43ddd08d5c4edb
-  content_hash: sha256:52b7cbaa22ffb2d2d058a968bc770842a1cd0a23b4f95347a93e712cd9fde674
+  content_hash: sha256:53e810ef18a673daf53a14d8e8708492d4ff4e0b69f7b13b8cda9a2d01aed270
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: steering-data
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/steering-data
@@ -351,7 +479,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-docs-specs
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 3.1.0
   virtual_path: packages/steering-docs-specs
@@ -366,7 +494,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-infrastructure
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 2.1.0
   virtual_path: packages/steering-infrastructure
@@ -381,7 +509,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-pragmatic
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 4.3.0
   virtual_path: packages/steering-pragmatic
@@ -400,7 +528,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-speckit
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 3.2.0
   virtual_path: packages/steering-speckit
@@ -415,7 +543,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-tools-scripts
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/steering-tools-scripts
@@ -430,9 +558,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: user-journeys
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  resolved_ref: main
-  version: 0.3.1
+  resolved_commit: aaecd59e6095deba82eb05a6a6197b8a57465b59
+  resolved_ref: user-journeys--v0.4.0
+  version: 0.4.0
   virtual_path: packages/user-journeys
   is_virtual: true
   package_type: marketplace_plugin
@@ -506,7 +634,10 @@ dependencies:
     .claude/skills/journey-write/SKILL.md: sha256:a82aca760281612ae40cabee990d8b1869dd2a1f533c5de70c3c9801f008bc2f
     .codex/agents/journey-scribe.toml: sha256:fdb8d720900d67aa91edd4d9cc076bc3a5b2a851c9fe4fbdea6d36d98db3ec52
     .codex/agents/journey-validator.toml: sha256:3ba8746661c250a471c08ebbad6a241af50eceda7d5fd04e80e5bdaee8d64706
-  content_hash: sha256:13126df11f921904fe81dd1f647581169ef20eaa76d6d220dd9ca14aaa4c59c8
+  content_hash: sha256:5d922d4b22afcfc088a1b9016d8741a8193bdf77e5c566c2da112acdaf1a965d
+  constraint: '>=0.4.0 <1.0.0'
+  resolved_tag: user-journeys--v0.4.0
+  resolved_at: '2026-07-22T15:55:17+00:00'
   declared_license: Apache-2.0
 - repo_url: wshobson/agents
   name: database-design
@@ -1124,20 +1255,20 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agentic-maintenance
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  version: 5.0.0
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 6.1.1
   virtual_path: packages/agentic-maintenance
   is_virtual: true
   depth: 2
   resolved_by: srobroek/agentic-packages
   package_type: marketplace_plugin
-  content_hash: sha256:38b9b15a026cd29b43b2b7fa7dd1266b6006fbf50d92e1deb6e86d5864736828
+  content_hash: sha256:02d432a2072bd3c2969be88e01cd79645407560dbbdb495d1b3a0974b75f5511
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: beads
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  version: 0.4.1
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 0.5.1
   virtual_path: packages/beads
   is_virtual: true
   depth: 2
@@ -1155,13 +1286,13 @@ dependencies:
     .claude/rules/40-beads.md: sha256:c8bd01a2aab5346795681d9bc34169dcb3aa704df5b02cabf94266cecbaa454a
     .codex/hooks/beads/scripts/beads-gh-issue-guard.sh: sha256:9e8fc358f5d71f77899f0d6a102fa914758669430f5f403f198022a4f2304715
     .codex/hooks/beads/scripts/beads-subagent-reminder.sh: sha256:8834883359e99cfa7fbd883c07030d1e84273f19da6adb36ad322ce3b994def4
-  content_hash: sha256:ec3112dca9cf770afd4fc4b35b178998f66138ef4d50244752941e4328cb289a
+  content_hash: sha256:6362b0e53da28d6b95c375b3961de59fa102ef63c00bf9f76fad10e99a929c4a
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: code-intelligence
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  version: 8.0.0
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 8.1.0
   virtual_path: packages/code-intelligence
   is_virtual: true
   depth: 2
@@ -1173,12 +1304,12 @@ dependencies:
   deployed_file_hashes:
     .claude/hooks/code-intelligence/scripts/subagent-context-inject.sh: sha256:0d2668659b786ed9c58186b263f5e5b9882216c6e67cbe04c12edbf9155aaa97
     .codex/hooks/code-intelligence/scripts/subagent-context-inject.sh: sha256:0d2668659b786ed9c58186b263f5e5b9882216c6e67cbe04c12edbf9155aaa97
-  content_hash: sha256:464580c59f7da8fc8d5f6d5d087529efb8a442310327a0956d885f3320503209
+  content_hash: sha256:c25e266e699009e4cd1dc0bedc9eceae912c179572f808e4eac255978ca4f43f
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: language-steering-rust
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/language-steering-rust
   is_virtual: true
@@ -1190,7 +1321,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-steering-typescript
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/language-steering-typescript
   is_virtual: true
@@ -1202,7 +1333,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-rust
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 0.3.0
   virtual_path: packages/lsp-rust
   is_virtual: true
@@ -1214,7 +1345,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-shell
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 0.3.0
   virtual_path: packages/lsp-shell
   is_virtual: true
@@ -1226,7 +1357,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-typescript
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 0.3.0
   virtual_path: packages/lsp-typescript
   is_virtual: true
@@ -1238,7 +1369,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: playwright
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 4.0.0
   virtual_path: packages/playwright
   is_virtual: true
@@ -1258,19 +1389,131 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: project-lifecycle
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  version: 4.0.0
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 4.1.0
   virtual_path: packages/project-lifecycle
   is_virtual: true
   depth: 2
   resolved_by: srobroek/agentic-packages
   package_type: marketplace_plugin
-  content_hash: sha256:d2588e685f2aa8d8781874061254cac7373c6292e318a8e168527488a98577b3
+  content_hash: sha256:bb6c8da6fb8d9de830191028a52e9b0b6b663d84edf35c6e2bcf4697097c7481
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  name: release-queue-watch
+  host: github.com
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 0.6.1
+  virtual_path: packages/release-queue-watch
+  is_virtual: true
+  depth: 2
+  resolved_by: srobroek/agentic-packages
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/release-queue-watch
+  - .agents/skills/release-queue-watch/SKILL.md
+  - .agents/skills/release-queue-watch/references/runtime.md
+  - .agents/skills/release-queue-watch/scripts/webhook/.gitignore
+  - .agents/skills/release-queue-watch/scripts/webhook/bin/release-queue-watch.js
+  - .agents/skills/release-queue-watch/scripts/webhook/package.json
+  - .agents/skills/release-queue-watch/scripts/webhook/pnpm-lock.yaml
+  - .agents/skills/release-queue-watch/scripts/webhook/src/error-message.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/event-gate.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/gh-webhook.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/queue-state.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/reconciler.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/rest-adapter.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/runtime.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/secret-store.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/wake-dispatcher.js
+  - .agents/skills/release-queue-watch/scripts/webhook/src/webhook-receiver.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/gh-webhook.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/queue-state.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/reconciler.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/rest-adapter.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/runtime.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/secret-store.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/wake-dispatcher.test.js
+  - .agents/skills/release-queue-watch/scripts/webhook/test/webhook-receiver.test.js
+  - .claude/skills/release-queue-watch
+  - .claude/skills/release-queue-watch/SKILL.md
+  - .claude/skills/release-queue-watch/references/runtime.md
+  - .claude/skills/release-queue-watch/scripts/webhook/.gitignore
+  - .claude/skills/release-queue-watch/scripts/webhook/bin/release-queue-watch.js
+  - .claude/skills/release-queue-watch/scripts/webhook/package.json
+  - .claude/skills/release-queue-watch/scripts/webhook/pnpm-lock.yaml
+  - .claude/skills/release-queue-watch/scripts/webhook/src/error-message.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/event-gate.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/gh-webhook.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/queue-state.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/reconciler.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/rest-adapter.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/runtime.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/secret-store.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/wake-dispatcher.js
+  - .claude/skills/release-queue-watch/scripts/webhook/src/webhook-receiver.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/gh-webhook.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/queue-state.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/reconciler.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/rest-adapter.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/runtime.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/secret-store.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/wake-dispatcher.test.js
+  - .claude/skills/release-queue-watch/scripts/webhook/test/webhook-receiver.test.js
+  deployed_file_hashes:
+    .agents/skills/release-queue-watch/SKILL.md: sha256:08393376d587cb73c8c048d514013191f6b809742c7cedb0da70712935f7b80d
+    .agents/skills/release-queue-watch/references/runtime.md: sha256:fe25c112626d68f79044a5eda4f40b19f67158e0b8ccbe56c7b13644118deee5
+    .agents/skills/release-queue-watch/scripts/webhook/.gitignore: sha256:4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97
+    .agents/skills/release-queue-watch/scripts/webhook/bin/release-queue-watch.js: sha256:71b838d0be1f0bc7d4abf8a349955b4a6e220638c33c9b4aada0de2cec75632a
+    .agents/skills/release-queue-watch/scripts/webhook/package.json: sha256:f3e7e52021de3629d16728d070131a9b5be4d590ebfaccb899d6ed450c0de707
+    .agents/skills/release-queue-watch/scripts/webhook/pnpm-lock.yaml: sha256:ccf33b43851d64252305ed677d17cfa9956ae9eb752daef1da25383d377a1d9b
+    .agents/skills/release-queue-watch/scripts/webhook/src/error-message.js: sha256:1263b2108e275406040425e3a88c3ace9807929a119c44b4e69354a5fe26d8cd
+    .agents/skills/release-queue-watch/scripts/webhook/src/event-gate.js: sha256:82f0bba42a90219389db99a9f8bc11c370a3bb74da61c63f838ddad8fed4e63d
+    .agents/skills/release-queue-watch/scripts/webhook/src/gh-webhook.js: sha256:42748725c650df7cfd969e6383c46d00f9016ea0866a8f51ac7d39d5045c5e43
+    .agents/skills/release-queue-watch/scripts/webhook/src/queue-state.js: sha256:1b514e9da7be711b7e7333d5dc7437796b1fbb9956e709adfc32a634e48bf851
+    .agents/skills/release-queue-watch/scripts/webhook/src/reconciler.js: sha256:5d49286cb4dd257fef83b94a89b4928ab81d64cf3cdfc35dc130d79866bc79ad
+    .agents/skills/release-queue-watch/scripts/webhook/src/rest-adapter.js: sha256:d82d570e76b627dfc5476e810a322080e56a8a3026f974fc13d20f3b8ae9bf26
+    .agents/skills/release-queue-watch/scripts/webhook/src/runtime.js: sha256:5f1903d2981f38a29e050f6527f31ff984f929ace5501255a0b7b9c058c6a5ef
+    .agents/skills/release-queue-watch/scripts/webhook/src/secret-store.js: sha256:2bb20a447ef10008fbde252455afcb6889ed8ce16026efcf7f0d325a9cd54a05
+    .agents/skills/release-queue-watch/scripts/webhook/src/wake-dispatcher.js: sha256:6096f1cc0970c1e44175a2d5eef87d4bf086f0b301a0ff92ed59f2770c94d89d
+    .agents/skills/release-queue-watch/scripts/webhook/src/webhook-receiver.js: sha256:70aec8a595e25cd678caf84e8a64f1375bcedc6841d357686c9b012240c81771
+    .agents/skills/release-queue-watch/scripts/webhook/test/gh-webhook.test.js: sha256:ab18d25b69c272146d0cffd923bfe4a336bc241495143c2d4d6923e02e0a4e1f
+    .agents/skills/release-queue-watch/scripts/webhook/test/queue-state.test.js: sha256:e47f77075d7412abbbea2215135ee100bb8b6df812d88ed66edf62bd882ff797
+    .agents/skills/release-queue-watch/scripts/webhook/test/reconciler.test.js: sha256:594fd1af7852593db01dd4f47adda35af938442093d625f874270ed1ed26202b
+    .agents/skills/release-queue-watch/scripts/webhook/test/rest-adapter.test.js: sha256:c39605f15a5a5280d749e863e8ab73c4a318d479fcc40d93862912d6a9b3a90c
+    .agents/skills/release-queue-watch/scripts/webhook/test/runtime.test.js: sha256:f321632da7894ae8da0b60d7e2bd44fff6c932e2ee3be5f8182930982c0a7732
+    .agents/skills/release-queue-watch/scripts/webhook/test/secret-store.test.js: sha256:a2f2d378787187a58daed7bdcc3e2186d4000879fe289e2d99dfc8cdd089d6a8
+    .agents/skills/release-queue-watch/scripts/webhook/test/wake-dispatcher.test.js: sha256:03d48349c0b08b0131ae4fe57112b51ad8f490ad375a970328d428b72f316030
+    .agents/skills/release-queue-watch/scripts/webhook/test/webhook-receiver.test.js: sha256:90a7080c6e300f2d0497e94ca4df73a1f6e03dd16f4db9ba5e7c660948727a45
+    .claude/skills/release-queue-watch/SKILL.md: sha256:08393376d587cb73c8c048d514013191f6b809742c7cedb0da70712935f7b80d
+    .claude/skills/release-queue-watch/references/runtime.md: sha256:fe25c112626d68f79044a5eda4f40b19f67158e0b8ccbe56c7b13644118deee5
+    .claude/skills/release-queue-watch/scripts/webhook/.gitignore: sha256:4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97
+    .claude/skills/release-queue-watch/scripts/webhook/bin/release-queue-watch.js: sha256:71b838d0be1f0bc7d4abf8a349955b4a6e220638c33c9b4aada0de2cec75632a
+    .claude/skills/release-queue-watch/scripts/webhook/package.json: sha256:f3e7e52021de3629d16728d070131a9b5be4d590ebfaccb899d6ed450c0de707
+    .claude/skills/release-queue-watch/scripts/webhook/pnpm-lock.yaml: sha256:ccf33b43851d64252305ed677d17cfa9956ae9eb752daef1da25383d377a1d9b
+    .claude/skills/release-queue-watch/scripts/webhook/src/error-message.js: sha256:1263b2108e275406040425e3a88c3ace9807929a119c44b4e69354a5fe26d8cd
+    .claude/skills/release-queue-watch/scripts/webhook/src/event-gate.js: sha256:82f0bba42a90219389db99a9f8bc11c370a3bb74da61c63f838ddad8fed4e63d
+    .claude/skills/release-queue-watch/scripts/webhook/src/gh-webhook.js: sha256:42748725c650df7cfd969e6383c46d00f9016ea0866a8f51ac7d39d5045c5e43
+    .claude/skills/release-queue-watch/scripts/webhook/src/queue-state.js: sha256:1b514e9da7be711b7e7333d5dc7437796b1fbb9956e709adfc32a634e48bf851
+    .claude/skills/release-queue-watch/scripts/webhook/src/reconciler.js: sha256:5d49286cb4dd257fef83b94a89b4928ab81d64cf3cdfc35dc130d79866bc79ad
+    .claude/skills/release-queue-watch/scripts/webhook/src/rest-adapter.js: sha256:d82d570e76b627dfc5476e810a322080e56a8a3026f974fc13d20f3b8ae9bf26
+    .claude/skills/release-queue-watch/scripts/webhook/src/runtime.js: sha256:5f1903d2981f38a29e050f6527f31ff984f929ace5501255a0b7b9c058c6a5ef
+    .claude/skills/release-queue-watch/scripts/webhook/src/secret-store.js: sha256:2bb20a447ef10008fbde252455afcb6889ed8ce16026efcf7f0d325a9cd54a05
+    .claude/skills/release-queue-watch/scripts/webhook/src/wake-dispatcher.js: sha256:6096f1cc0970c1e44175a2d5eef87d4bf086f0b301a0ff92ed59f2770c94d89d
+    .claude/skills/release-queue-watch/scripts/webhook/src/webhook-receiver.js: sha256:70aec8a595e25cd678caf84e8a64f1375bcedc6841d357686c9b012240c81771
+    .claude/skills/release-queue-watch/scripts/webhook/test/gh-webhook.test.js: sha256:ab18d25b69c272146d0cffd923bfe4a336bc241495143c2d4d6923e02e0a4e1f
+    .claude/skills/release-queue-watch/scripts/webhook/test/queue-state.test.js: sha256:e47f77075d7412abbbea2215135ee100bb8b6df812d88ed66edf62bd882ff797
+    .claude/skills/release-queue-watch/scripts/webhook/test/reconciler.test.js: sha256:594fd1af7852593db01dd4f47adda35af938442093d625f874270ed1ed26202b
+    .claude/skills/release-queue-watch/scripts/webhook/test/rest-adapter.test.js: sha256:c39605f15a5a5280d749e863e8ab73c4a318d479fcc40d93862912d6a9b3a90c
+    .claude/skills/release-queue-watch/scripts/webhook/test/runtime.test.js: sha256:f321632da7894ae8da0b60d7e2bd44fff6c932e2ee3be5f8182930982c0a7732
+    .claude/skills/release-queue-watch/scripts/webhook/test/secret-store.test.js: sha256:a2f2d378787187a58daed7bdcc3e2186d4000879fe289e2d99dfc8cdd089d6a8
+    .claude/skills/release-queue-watch/scripts/webhook/test/wake-dispatcher.test.js: sha256:03d48349c0b08b0131ae4fe57112b51ad8f490ad375a970328d428b72f316030
+    .claude/skills/release-queue-watch/scripts/webhook/test/webhook-receiver.test.js: sha256:90a7080c6e300f2d0497e94ca4df73a1f6e03dd16f4db9ba5e7c660948727a45
+  content_hash: sha256:e5fed915369fa29ab74bbd2421d9967684e1c3ae63df326312800c9c8b3914af
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: resume-session
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/resume-session
   is_virtual: true
@@ -1310,7 +1553,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: rust-quality
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/rust-quality
   is_virtual: true
@@ -1342,7 +1585,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-delivery
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 1.1.0
   virtual_path: packages/steering-delivery
   is_virtual: true
@@ -1358,7 +1601,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-frontend
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/steering-frontend
   is_virtual: true
@@ -1376,7 +1619,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: typescript-quality
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/typescript-quality
   is_virtual: true
@@ -2014,8 +2257,8 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agent-coder
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  version: 6.0.0
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 6.1.1
   virtual_path: packages/agent-coder
   is_virtual: true
   depth: 3
@@ -2027,17 +2270,17 @@ dependencies:
   - .codex/agents/coder.toml
   - .codex/agents/parallel-coder.toml
   deployed_file_hashes:
-    .claude/agents/coder.md: sha256:a75e77c3755c9c73d3e18c3e07f4ba51775d4d4fcc451f5da9a9a2dbc381129b
-    .claude/agents/parallel-coder.md: sha256:d082b53f745b24e582ca26d17784b1a9c03f1248f200bc544b3ece3683d80d77
-    .codex/agents/coder.toml: sha256:e4b0e646177f002d3fa6dd6300738950bac68262050075fc9927b0d05f81efec
-    .codex/agents/parallel-coder.toml: sha256:08f5cea9e7151f5bc7bfb3e0f3c8800f11ff3d0e08190e8b5059ade156746782
-  content_hash: sha256:25f4cf0dd21cfef852ba85f3b7ec36d380bb265e8e27b5dea0120dcddcc180fc
+    .claude/agents/coder.md: sha256:fb78e1a035c9812b956e09eecf3968d7a7f86d7a7bcc3e57739bf553b3fa1e30
+    .claude/agents/parallel-coder.md: sha256:ee382bac35c5f5cbdff94f462d89c83c62aca0029390f16cd8835f3a2eafdc6e
+    .codex/agents/coder.toml: sha256:28736b32543f8d2e055602358352518e113ffc5f737ea4dbda1cdcd3ad36870b
+    .codex/agents/parallel-coder.toml: sha256:b0178101e1c3169d72b048e3d2277fdeeea9bf98c258fda1919ffd2eff1ea3ed
+  content_hash: sha256:fe2f1a51ec4c11960ba4218e14a60e7e82224b93c761eb6f9a5063e7d1680bbe
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: agent-pr-reviewer
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
-  version: 3.0.0
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
+  version: 3.1.1
   virtual_path: packages/agent-pr-reviewer
   is_virtual: true
   depth: 3
@@ -2047,14 +2290,14 @@ dependencies:
   - .claude/agents/pr-reviewer.md
   - .codex/agents/pr-reviewer.toml
   deployed_file_hashes:
-    .claude/agents/pr-reviewer.md: sha256:ea53aabc25ca9881fc5efc7f45ce75956dc4cf8e734112b967dac0b714daabd3
-    .codex/agents/pr-reviewer.toml: sha256:7a65bd59bd98f52b19695190aee106ff04bc510840f3eec0195596fe4abd257e
-  content_hash: sha256:2aab04c6d75a4ec1a09ef4a7f211e5ed57f6a67b281c3ed6da3fb72ea7faa364
+    .claude/agents/pr-reviewer.md: sha256:c9697d1cb2b14cbfd8293816759486103bc7f7424bf9f11ca040aa43e4408fc2
+    .codex/agents/pr-reviewer.toml: sha256:e12576c2bcda3aa0550bbaa882a63831fe7d636742d9419863d7f6cd8fa54968
+  content_hash: sha256:03e75ccf460b22e57d043d985449cb065fbdf2d6053dd3238b767ae502f02551
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: audit-steering
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/audit-steering
   is_virtual: true
@@ -2090,7 +2333,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: catchup
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.2.0
   virtual_path: packages/catchup
   is_virtual: true
@@ -2114,7 +2357,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: handover
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.2.0
   virtual_path: packages/handover
   is_virtual: true
@@ -2146,7 +2389,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-git-workflow
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.2.0
   virtual_path: packages/steering-git-workflow
   is_virtual: true
@@ -2162,7 +2405,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-project-structure
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 1.1.0
   virtual_path: packages/steering-project-structure
   is_virtual: true
@@ -2178,7 +2421,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: verify
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/verify
   is_virtual: true
@@ -2202,7 +2445,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: web-fetch
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 2.1.0
   virtual_path: packages/web-fetch
   is_virtual: true
@@ -2226,7 +2469,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: write-agentic
   host: github.com
-  resolved_commit: 8fa1e374e9cd10dfbf7b0bcc4142d6997620e0fb
+  resolved_commit: d9c360b3ee94e51cc59d997a7baa30e6abeb4d51
   version: 3.2.0
   virtual_path: packages/write-agentic
   is_virtual: true
@@ -2341,7 +2584,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/agent-coder
   active_owner: srobroek/agentic-packages/packages/agent-coder
-  content_hash: sha256:a75e77c3755c9c73d3e18c3e07f4ba51775d4d4fcc451f5da9a9a2dbc381129b
+  content_hash: sha256:fb78e1a035c9812b956e09eecf3968d7a7f86d7a7bcc3e57739bf553b3fa1e30
 - kind: project-relative
   target: claude
   value: .claude/agents/context-manager.md
@@ -2422,7 +2665,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:c373a5c722e590568c420716f043a042536262cf2926be15744914eba4cc077c
+  content_hash: sha256:2926ace91c87bb3e11e9e9557eae587d78b5c46030d667f8cda3717bb6c9bd16
 - kind: project-relative
   target: claude
   value: .claude/agents/javascript-pro.md
@@ -2458,7 +2701,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:1d5da6d2a512fadd6efc75d730cd26fe16662a30922aece566e785421fd44d3d
+  content_hash: sha256:d75e57469f7b9b1f284b8dc0e93a249ab3a0de8831bb35335e40f5d0772d4d07
 - kind: project-relative
   target: claude
   value: .claude/agents/mobile-developer.md
@@ -2476,7 +2719,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/agent-coder
   active_owner: srobroek/agentic-packages/packages/agent-coder
-  content_hash: sha256:d082b53f745b24e582ca26d17784b1a9c03f1248f200bc544b3ece3683d80d77
+  content_hash: sha256:ee382bac35c5f5cbdff94f462d89c83c62aca0029390f16cd8835f3a2eafdc6e
 - kind: project-relative
   target: claude
   value: .claude/agents/posix-shell-pro.md
@@ -2494,7 +2737,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/agent-pr-reviewer
   active_owner: srobroek/agentic-packages/packages/agent-pr-reviewer
-  content_hash: sha256:ea53aabc25ca9881fc5efc7f45ce75956dc4cf8e734112b967dac0b714daabd3
+  content_hash: sha256:c9697d1cb2b14cbfd8293816759486103bc7f7424bf9f11ca040aa43e4408fc2
+- kind: project-relative
+  target: claude
+  value: .claude/agents/pr-shepherd.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:66b76cd4796a736257b4bd7ccc9462397deeeac8efc387c0a0b31989b581218e
 - kind: project-relative
   target: claude
   value: .claude/agents/rust-pro.md
@@ -2512,7 +2764,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:5a7387573bcef9d0fef9367a55d4202379d5cef9842d554b43a2f644ea06471c
+  content_hash: sha256:68dd838065e0271ff96e8977d3e52a3915ae63a3501e17b1b0f12dd349a12db2
 - kind: project-relative
   target: claude
   value: .claude/agents/speckit-research.md
@@ -2521,7 +2773,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:ca3ed4f28484f9a38dda5522f0569a409160b570fb0c9bc2f318834c5aa493e1
+  content_hash: sha256:1585ec7522b263bd2f758b604ea32e496e40c10ec4ae194a5219058edabca77b
 - kind: project-relative
   target: claude
   value: .claude/agents/speckit-sync.md
@@ -2530,7 +2782,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:cd70d308fb7569455bb0f359de9677bbcd263acf4f98d3d0db159309539cf0b6
+  content_hash: sha256:bd593b40cfc8ee13454c398f9e51e2a70a593cccaa91ed86d161e151acdba662
 - kind: project-relative
   target: claude
   value: .claude/agents/speckit-verify.md
@@ -2539,7 +2791,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:f30714e801948dff3adcb0d5bbb7d0e170e1470b9abfad9bc27c544de38b5d24
+  content_hash: sha256:da0237867d821ed1ab0ef02702684b1e056d3a648e2127fcafdae0ad57c02dc7
 - kind: project-relative
   target: claude
   value: .claude/agents/sql-pro.md
@@ -2584,7 +2836,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:b39264dcb88414fdf462aaab8bacacd4c98276428552f742913561407c923d36
+  content_hash: sha256:da316e0191cbdeb1fafe2b807b1de8e1ee9e06617b1a8c08439bd25d57e8c8ef
 - kind: project-relative
   target: claude
   value: .claude/agents/workflow-coder.md
@@ -2593,7 +2845,25 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:938b58ac34bb2bb94f65ebf5a6ee82aea3cd8a2fa390d77e1b7d1ced272fa38c
+  content_hash: sha256:d3463e2229a49e86233f2e0f22c9fe881ee0783efb98129ee3c885db9032a265
+- kind: project-relative
+  target: claude
+  value: .claude/agents/workflow-pull-worker.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:1a415a94c22924b94b8c53cd1f13e620cb7a48678f30f11d1e3532ea4f7459ca
+- kind: project-relative
+  target: claude
+  value: .claude/agents/workflow-researcher.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:77c5bda525bfdec34746c3569c97d901bca421fded8212a365bd919418ed8661
 - kind: project-relative
   target: claude
   value: .claude/agents/workflow-reviewer.md
@@ -2602,7 +2872,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:0a52b79041a99ad66a517b13ced0b847c674f0ac1fed24cdc5485f8f617b3e99
+  content_hash: sha256:aa079162b2ef8f1484005dcea951149dd90648e958d984b41022e2e19ff0777c
+- kind: project-relative
+  target: claude
+  value: .claude/agents/workflow-worker.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:df2411bc8eee7337d194117d782a45b990c280c2b137e1c69f2c0f973bff0c35
 - kind: project-relative
   target: claude
   value: .claude/commands/accessibility-audit.md
@@ -2864,6 +3143,15 @@ deployments:
   - srobroek/agentic-packages/packages/steering-git-workflow
   active_owner: srobroek/agentic-packages/packages/steering-git-workflow
   content_hash: sha256:3275bfed7fe5f00b1c198b58836ceb40f30dbca07d5672fcdef69e21b9ec5750
+- kind: project-relative
+  target: claude
+  value: .claude/rules/45-pr-shepherd.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:e24db1ef68af825ece187a1e6279581b231ed34b8f7f045db5a09a70ddc534dc
 - kind: project-relative
   target: claude
   value: .claude/rules/50-data.md
@@ -4978,7 +5266,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:b6571f17476bac45be86dcb6229d560b2b9f8b7c18cd08b31b3ad95408ebfcfa
+  content_hash: sha256:c461892a76bc29676f180d7f336f54ba993b2312580f22c31cfb53595d4c3571
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/beads-store.md
@@ -4987,7 +5275,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:24ced448faf2ea0a864f3849badc4c74ec1b4a7f0748cfb530db8ad188ff9e94
+  content_hash: sha256:50ee8ac953cfce9eb1e4d3d5c99397d9f0d31b86b1152bdbb5b3c400bc118dd8
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/comms-block.md
@@ -4996,7 +5284,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:3d07f82878ce8a386f4c683fad7ca75de38b4042de4e9be3c53f535017086d28
+  content_hash: sha256:cc474e40294e032710a7017db01a4086e066c95a666d7e3f6e82018e84fe40e2
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/lifecycle.md
@@ -5005,7 +5293,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:7137bf61028385fcc36c0d7351641b90de5105e80790cb23e6af97fd5bf150bd
+  content_hash: sha256:90cbaad5e51ae6a2d0c21bb182d0bb368685563948e74b0ca5af858b98aeb34e
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/message-grammar.md
@@ -5014,7 +5302,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:a9a17770ca28aa74faa0294ac50ae84278aece0d2e5280584d2916fec11ca45f
+  content_hash: sha256:e104610a726f0266c40600b97099e2980d623645a031ccb8691058555ea05a36
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/planning.md
@@ -5023,7 +5311,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:cfd405c173a5f5da0ffa325daf46893a2993f3e3ee440e1b4bdfef3f1990ff4e
+  content_hash: sha256:6c7a3ecda0f1be037722af7231a0eb0d27de9b51b990d1a971c0b27252da2411
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/references/queue-watcher.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:c328dd6846d07953ab641848ac2d451fc50ea43fc1b73fb8e8edf1dbbd990bb7
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/roles.md
@@ -5032,7 +5329,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:ea79d333369e0f674b33dc56ab0953873f46aeea1caefabc5dea3a281e9c6d71
+  content_hash: sha256:682b54d4ee36204acb4a8412b36de4f90f3911fde477e5662b4159bb7ebddf57
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/spawn-brief.md
@@ -5041,7 +5338,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:ac3d469ad96daa382c45b46696c881e25557b3944cb17505d8961c35626c4080
+  content_hash: sha256:ce52562624d6c40ded64a9e568af2302e62f15819acacb181e181643bdf175f7
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/references/teams.md
@@ -5053,13 +5350,58 @@ deployments:
   content_hash: sha256:6b33b2413073b8b1c5378080807f62278c583eca40fef389e68d50e64acc3115
 - kind: project-relative
   target: claude
+  value: .claude/skills/orchestrate/scripts/_test_conflict_probe.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:80e2e5643e75a046432c6d3b872108d6d661bea5de5e0f9e1ee6a45bf4b2c45a
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/_test_decision_policy.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:04f303232291613bcbd6dc8415006bdafcc0736a3f85815293ab7aea7bd8a3ea
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/_test_discover_agents.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:c0a93ccf9ac83bfa772fa89f89fee313b2dc126553dca7cbddc638ae193300bd
+- kind: project-relative
+  target: claude
   value: .claude/skills/orchestrate/scripts/_test_msg_lint.py
   runtime: null
   scope: project
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:d4715c94c0f8e03307dbe2f7c21441a2490bfa5053201e2f7516605afc7af67d
+  content_hash: sha256:a8b278669394a7a340ec503315a937341e73210f324d4b3a8c4e6ec25a674b89
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/_test_pull_worker.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:bf4aab16e55ab0a178ae0003934e744f8241df2b5562f0e702c905178b4cd10b
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/_test_resolve_queue_dispatch.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:954db04e8d23573bc675d62e7926f0bdcc53febcc85b762e355690455d7e7c8d
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/scripts/_test_scope_check.py
@@ -5068,7 +5410,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:432ebb52ebc7c09d7fcf03d7d78b3b3ec9506ed007c37347d70d1bfc32536373
+  content_hash: sha256:bfee733058cc02c1e65daf3269f17aff01902dccc55c428f9370c2b64d2a308d
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/_test_thread_message.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:5d07a74058f841a197302561a42885252555507b0e4f95658c5d7c015e83e2e1
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/scripts/conflict-probe.sh
@@ -5077,7 +5428,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:600eda626019b4645418bf986050fee8c5d46796ae78f46ab6c82e31ba35f15f
+  content_hash: sha256:6af94ebc6bcb2d0730e386048103d89648581773141dde49f775680b04de49de
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/scripts/discover-agents.py
@@ -5086,7 +5437,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:0f2f8145c8d1d978f18206a7d567c96b5aab52f2d850270949e1d6af54b16e68
+  content_hash: sha256:69d56c4754559b9d0c2c0ac76100d1dd87d778d6e884d5181c62841c8a00e920
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/scripts/inject-comms.sh
@@ -5104,7 +5455,25 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:23995a6acb36edd788dbfdd69d08b207d54bd3aae4625eec8cfd805843919b82
+  content_hash: sha256:091579a79b4da65ed12c71b87c41d5ab722f0784959a266b932c3e1c814559dc
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/pull-worker.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:7788dd0b670ca71b5e952cb9583d9eb505b4a1efdc807eb2559ca6115e6654fe
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/resolve-queue-dispatch.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:d1c80e4ed27906f7493053bebe9167d8add4eaeb5e3760fed575fab1c7e60aa4
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/scripts/scope-check.py
@@ -5113,7 +5482,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:9420690b0f42dc94fd15d9853a41eadfcf91fbba1ef4e108680019bc6038b635
+  content_hash: sha256:dc5862568d8a626be7970d9a9bca7e5ac817abdea341d19d166152cc42b05d95
+- kind: project-relative
+  target: claude
+  value: .claude/skills/orchestrate/scripts/thread-message.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:26341203c12beca62a3c9923a04ce9113806738e5e14dc796f4dbb5abe14185a
 - kind: project-relative
   target: claude
   value: .claude/skills/orchestrate/scripts/worktree-sweep.sh
@@ -5159,6 +5537,132 @@ deployments:
   - wshobson/agents/plugins/database-design
   active_owner: wshobson/agents/plugins/database-design
   content_hash: sha256:3170aed913a522ca10e0f94bcfbef61e4284dd7c9e6aabb5ffaed2dbfb3173b4
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:898b7b31ce3fdbfb51ea62414f991d6697a130b0ae059ca7d3141788247c7626
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/references/bounce-back.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:04a1a805a0caa4c616e896eb6719f4196c1a706ae7227ec30c3d990a15a2491c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/references/landing-contract.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:7ee8ba262e86f749607800fa64ece7efd8aff240a9ed1df2ca1866b163ea09d4
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/references/queue-watcher.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:95c7e923b9de76fa54fbe8c209892c3f51bcc9b6741a71da9df107981efe925c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/_test_landing_contract.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:48d2d8d38acb0a4b071cc7e7865e4f6a5b5c55735c84a08a9c48d9c27bf7d541
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/_test_resolve_queue_event.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:d92106edb5e1a977907d9a5cee5ea72bb0923139e2d2d0db9d39f8ad8e822778
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/_test_waiter_real_db.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:4fa05e6a71a820d9481b8ba405feae401f5cfc975d2b5b817b2fca37ea47db3c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/landing-contract.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:d0bf4ba6eb4f37183fd7ce0f73a3a86c89803267702e0b63374d5abb1c208cef
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/merge-probe.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:4c77f47f8199725ac7ced0d32aa1202ff8888b952d1fca2db29aa7d945970450
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/resolve-queue-event.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:8b6e89dcbb94cc3a066ba7a66495e55a3ce8b3a361d4c28f15c00fbedb43ccd0
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/test-fixtures/bin/bd
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:046b86331551d4322f75f5342b65e3f755f7c3e2134f029103af77bf641755f0
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/test-fixtures/bin/gh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:d3374b124bed0d8cd5507d45a61837dfcb459196146f25ea78e81b89eba7c32a
+- kind: project-relative
+  target: claude
+  value: .claude/skills/pr-shepherd/scripts/test-fixtures/bin/git
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:78d5dad211d1b847f593715972222db829a8fe145337a23ba8a69983d91c00bc
 - kind: project-relative
   target: claude
   value: .claude/skills/react-native-architecture
@@ -5357,6 +5861,231 @@ deployments:
   - srobroek/agentic-packages/packages/release-please
   active_owner: srobroek/agentic-packages/packages/release-please
   content_hash: sha256:bd96a8a79458b8d0cc9bf5e2bd0dd99e02f58662c673bc5b410cfaae1acf8de3
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:08393376d587cb73c8c048d514013191f6b809742c7cedb0da70712935f7b80d
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/references/runtime.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:fe25c112626d68f79044a5eda4f40b19f67158e0b8ccbe56c7b13644118deee5
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/.gitignore
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/bin/release-queue-watch.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:71b838d0be1f0bc7d4abf8a349955b4a6e220638c33c9b4aada0de2cec75632a
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/package.json
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:f3e7e52021de3629d16728d070131a9b5be4d590ebfaccb899d6ed450c0de707
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/pnpm-lock.yaml
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:ccf33b43851d64252305ed677d17cfa9956ae9eb752daef1da25383d377a1d9b
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/error-message.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:1263b2108e275406040425e3a88c3ace9807929a119c44b4e69354a5fe26d8cd
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/event-gate.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:82f0bba42a90219389db99a9f8bc11c370a3bb74da61c63f838ddad8fed4e63d
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/gh-webhook.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:42748725c650df7cfd969e6383c46d00f9016ea0866a8f51ac7d39d5045c5e43
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/queue-state.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:1b514e9da7be711b7e7333d5dc7437796b1fbb9956e709adfc32a634e48bf851
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/reconciler.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:5d49286cb4dd257fef83b94a89b4928ab81d64cf3cdfc35dc130d79866bc79ad
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/rest-adapter.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:d82d570e76b627dfc5476e810a322080e56a8a3026f974fc13d20f3b8ae9bf26
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/runtime.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:5f1903d2981f38a29e050f6527f31ff984f929ace5501255a0b7b9c058c6a5ef
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/secret-store.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:2bb20a447ef10008fbde252455afcb6889ed8ce16026efcf7f0d325a9cd54a05
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/wake-dispatcher.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:6096f1cc0970c1e44175a2d5eef87d4bf086f0b301a0ff92ed59f2770c94d89d
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/src/webhook-receiver.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:70aec8a595e25cd678caf84e8a64f1375bcedc6841d357686c9b012240c81771
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/gh-webhook.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:ab18d25b69c272146d0cffd923bfe4a336bc241495143c2d4d6923e02e0a4e1f
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/queue-state.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:e47f77075d7412abbbea2215135ee100bb8b6df812d88ed66edf62bd882ff797
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/reconciler.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:594fd1af7852593db01dd4f47adda35af938442093d625f874270ed1ed26202b
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/rest-adapter.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:c39605f15a5a5280d749e863e8ab73c4a318d479fcc40d93862912d6a9b3a90c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/runtime.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:f321632da7894ae8da0b60d7e2bd44fff6c932e2ee3be5f8182930982c0a7732
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/secret-store.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:a2f2d378787187a58daed7bdcc3e2186d4000879fe289e2d99dfc8cdd089d6a8
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/wake-dispatcher.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:03d48349c0b08b0131ae4fe57112b51ad8f490ad375a970328d428b72f316030
+- kind: project-relative
+  target: claude
+  value: .claude/skills/release-queue-watch/scripts/webhook/test/webhook-receiver.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:90a7080c6e300f2d0497e94ca4df73a1f6e03dd16f4db9ba5e7c660948727a45
 - kind: project-relative
   target: claude
   value: .claude/skills/responsive-design
@@ -8101,7 +8830,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:b6571f17476bac45be86dcb6229d560b2b9f8b7c18cd08b31b3ad95408ebfcfa
+  content_hash: sha256:c461892a76bc29676f180d7f336f54ba993b2312580f22c31cfb53595d4c3571
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/beads-store.md
@@ -8110,7 +8839,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:24ced448faf2ea0a864f3849badc4c74ec1b4a7f0748cfb530db8ad188ff9e94
+  content_hash: sha256:50ee8ac953cfce9eb1e4d3d5c99397d9f0d31b86b1152bdbb5b3c400bc118dd8
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/comms-block.md
@@ -8119,7 +8848,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:3d07f82878ce8a386f4c683fad7ca75de38b4042de4e9be3c53f535017086d28
+  content_hash: sha256:cc474e40294e032710a7017db01a4086e066c95a666d7e3f6e82018e84fe40e2
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/lifecycle.md
@@ -8128,7 +8857,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:7137bf61028385fcc36c0d7351641b90de5105e80790cb23e6af97fd5bf150bd
+  content_hash: sha256:90cbaad5e51ae6a2d0c21bb182d0bb368685563948e74b0ca5af858b98aeb34e
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/message-grammar.md
@@ -8137,7 +8866,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:a9a17770ca28aa74faa0294ac50ae84278aece0d2e5280584d2916fec11ca45f
+  content_hash: sha256:e104610a726f0266c40600b97099e2980d623645a031ccb8691058555ea05a36
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/planning.md
@@ -8146,7 +8875,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:cfd405c173a5f5da0ffa325daf46893a2993f3e3ee440e1b4bdfef3f1990ff4e
+  content_hash: sha256:6c7a3ecda0f1be037722af7231a0eb0d27de9b51b990d1a971c0b27252da2411
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/references/queue-watcher.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:c328dd6846d07953ab641848ac2d451fc50ea43fc1b73fb8e8edf1dbbd990bb7
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/roles.md
@@ -8155,7 +8893,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:ea79d333369e0f674b33dc56ab0953873f46aeea1caefabc5dea3a281e9c6d71
+  content_hash: sha256:682b54d4ee36204acb4a8412b36de4f90f3911fde477e5662b4159bb7ebddf57
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/spawn-brief.md
@@ -8164,7 +8902,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:ac3d469ad96daa382c45b46696c881e25557b3944cb17505d8961c35626c4080
+  content_hash: sha256:ce52562624d6c40ded64a9e568af2302e62f15819acacb181e181643bdf175f7
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/references/teams.md
@@ -8176,13 +8914,58 @@ deployments:
   content_hash: sha256:6b33b2413073b8b1c5378080807f62278c583eca40fef389e68d50e64acc3115
 - kind: project-relative
   target: codex
+  value: .agents/skills/orchestrate/scripts/_test_conflict_probe.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:80e2e5643e75a046432c6d3b872108d6d661bea5de5e0f9e1ee6a45bf4b2c45a
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/_test_decision_policy.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:04f303232291613bcbd6dc8415006bdafcc0736a3f85815293ab7aea7bd8a3ea
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/_test_discover_agents.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:c0a93ccf9ac83bfa772fa89f89fee313b2dc126553dca7cbddc638ae193300bd
+- kind: project-relative
+  target: codex
   value: .agents/skills/orchestrate/scripts/_test_msg_lint.py
   runtime: null
   scope: project
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:d4715c94c0f8e03307dbe2f7c21441a2490bfa5053201e2f7516605afc7af67d
+  content_hash: sha256:a8b278669394a7a340ec503315a937341e73210f324d4b3a8c4e6ec25a674b89
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/_test_pull_worker.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:bf4aab16e55ab0a178ae0003934e744f8241df2b5562f0e702c905178b4cd10b
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/_test_resolve_queue_dispatch.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:954db04e8d23573bc675d62e7926f0bdcc53febcc85b762e355690455d7e7c8d
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/scripts/_test_scope_check.py
@@ -8191,7 +8974,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:432ebb52ebc7c09d7fcf03d7d78b3b3ec9506ed007c37347d70d1bfc32536373
+  content_hash: sha256:bfee733058cc02c1e65daf3269f17aff01902dccc55c428f9370c2b64d2a308d
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/_test_thread_message.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:5d07a74058f841a197302561a42885252555507b0e4f95658c5d7c015e83e2e1
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/scripts/conflict-probe.sh
@@ -8200,7 +8992,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:600eda626019b4645418bf986050fee8c5d46796ae78f46ab6c82e31ba35f15f
+  content_hash: sha256:6af94ebc6bcb2d0730e386048103d89648581773141dde49f775680b04de49de
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/scripts/discover-agents.py
@@ -8209,7 +9001,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:0f2f8145c8d1d978f18206a7d567c96b5aab52f2d850270949e1d6af54b16e68
+  content_hash: sha256:69d56c4754559b9d0c2c0ac76100d1dd87d778d6e884d5181c62841c8a00e920
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/scripts/inject-comms.sh
@@ -8227,7 +9019,25 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:23995a6acb36edd788dbfdd69d08b207d54bd3aae4625eec8cfd805843919b82
+  content_hash: sha256:091579a79b4da65ed12c71b87c41d5ab722f0784959a266b932c3e1c814559dc
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/pull-worker.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:7788dd0b670ca71b5e952cb9583d9eb505b4a1efdc807eb2559ca6115e6654fe
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/resolve-queue-dispatch.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:d1c80e4ed27906f7493053bebe9167d8add4eaeb5e3760fed575fab1c7e60aa4
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/scripts/scope-check.py
@@ -8236,7 +9046,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:9420690b0f42dc94fd15d9853a41eadfcf91fbba1ef4e108680019bc6038b635
+  content_hash: sha256:dc5862568d8a626be7970d9a9bca7e5ac817abdea341d19d166152cc42b05d95
+- kind: project-relative
+  target: codex
+  value: .agents/skills/orchestrate/scripts/thread-message.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:26341203c12beca62a3c9923a04ce9113806738e5e14dc796f4dbb5abe14185a
 - kind: project-relative
   target: codex
   value: .agents/skills/orchestrate/scripts/worktree-sweep.sh
@@ -8282,6 +9101,132 @@ deployments:
   - wshobson/agents/plugins/database-design
   active_owner: wshobson/agents/plugins/database-design
   content_hash: sha256:3170aed913a522ca10e0f94bcfbef61e4284dd7c9e6aabb5ffaed2dbfb3173b4
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: null
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:898b7b31ce3fdbfb51ea62414f991d6697a130b0ae059ca7d3141788247c7626
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/references/bounce-back.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:04a1a805a0caa4c616e896eb6719f4196c1a706ae7227ec30c3d990a15a2491c
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/references/landing-contract.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:7ee8ba262e86f749607800fa64ece7efd8aff240a9ed1df2ca1866b163ea09d4
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/references/queue-watcher.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:95c7e923b9de76fa54fbe8c209892c3f51bcc9b6741a71da9df107981efe925c
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/_test_landing_contract.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:48d2d8d38acb0a4b071cc7e7865e4f6a5b5c55735c84a08a9c48d9c27bf7d541
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/_test_resolve_queue_event.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:d92106edb5e1a977907d9a5cee5ea72bb0923139e2d2d0db9d39f8ad8e822778
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/_test_waiter_real_db.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:4fa05e6a71a820d9481b8ba405feae401f5cfc975d2b5b817b2fca37ea47db3c
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/landing-contract.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:d0bf4ba6eb4f37183fd7ce0f73a3a86c89803267702e0b63374d5abb1c208cef
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/merge-probe.sh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:4c77f47f8199725ac7ced0d32aa1202ff8888b952d1fca2db29aa7d945970450
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/resolve-queue-event.py
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:8b6e89dcbb94cc3a066ba7a66495e55a3ce8b3a361d4c28f15c00fbedb43ccd0
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/test-fixtures/bin/bd
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:046b86331551d4322f75f5342b65e3f755f7c3e2134f029103af77bf641755f0
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/test-fixtures/bin/gh
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:d3374b124bed0d8cd5507d45a61837dfcb459196146f25ea78e81b89eba7c32a
+- kind: project-relative
+  target: codex
+  value: .agents/skills/pr-shepherd/scripts/test-fixtures/bin/git
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:78d5dad211d1b847f593715972222db829a8fe145337a23ba8a69983d91c00bc
 - kind: project-relative
   target: codex
   value: .agents/skills/react-native-architecture
@@ -8480,6 +9425,231 @@ deployments:
   - srobroek/agentic-packages/packages/release-please
   active_owner: srobroek/agentic-packages/packages/release-please
   content_hash: sha256:bd96a8a79458b8d0cc9bf5e2bd0dd99e02f58662c673bc5b410cfaae1acf8de3
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: null
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:08393376d587cb73c8c048d514013191f6b809742c7cedb0da70712935f7b80d
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/references/runtime.md
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:fe25c112626d68f79044a5eda4f40b19f67158e0b8ccbe56c7b13644118deee5
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/.gitignore
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/bin/release-queue-watch.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:71b838d0be1f0bc7d4abf8a349955b4a6e220638c33c9b4aada0de2cec75632a
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/package.json
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:f3e7e52021de3629d16728d070131a9b5be4d590ebfaccb899d6ed450c0de707
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/pnpm-lock.yaml
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:ccf33b43851d64252305ed677d17cfa9956ae9eb752daef1da25383d377a1d9b
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/error-message.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:1263b2108e275406040425e3a88c3ace9807929a119c44b4e69354a5fe26d8cd
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/event-gate.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:82f0bba42a90219389db99a9f8bc11c370a3bb74da61c63f838ddad8fed4e63d
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/gh-webhook.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:42748725c650df7cfd969e6383c46d00f9016ea0866a8f51ac7d39d5045c5e43
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/queue-state.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:1b514e9da7be711b7e7333d5dc7437796b1fbb9956e709adfc32a634e48bf851
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/reconciler.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:5d49286cb4dd257fef83b94a89b4928ab81d64cf3cdfc35dc130d79866bc79ad
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/rest-adapter.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:d82d570e76b627dfc5476e810a322080e56a8a3026f974fc13d20f3b8ae9bf26
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/runtime.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:5f1903d2981f38a29e050f6527f31ff984f929ace5501255a0b7b9c058c6a5ef
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/secret-store.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:2bb20a447ef10008fbde252455afcb6889ed8ce16026efcf7f0d325a9cd54a05
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/wake-dispatcher.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:6096f1cc0970c1e44175a2d5eef87d4bf086f0b301a0ff92ed59f2770c94d89d
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/src/webhook-receiver.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:70aec8a595e25cd678caf84e8a64f1375bcedc6841d357686c9b012240c81771
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/gh-webhook.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:ab18d25b69c272146d0cffd923bfe4a336bc241495143c2d4d6923e02e0a4e1f
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/queue-state.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:e47f77075d7412abbbea2215135ee100bb8b6df812d88ed66edf62bd882ff797
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/reconciler.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:594fd1af7852593db01dd4f47adda35af938442093d625f874270ed1ed26202b
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/rest-adapter.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:c39605f15a5a5280d749e863e8ab73c4a318d479fcc40d93862912d6a9b3a90c
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/runtime.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:f321632da7894ae8da0b60d7e2bd44fff6c932e2ee3be5f8182930982c0a7732
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/secret-store.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:a2f2d378787187a58daed7bdcc3e2186d4000879fe289e2d99dfc8cdd089d6a8
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/wake-dispatcher.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:03d48349c0b08b0131ae4fe57112b51ad8f490ad375a970328d428b72f316030
+- kind: project-relative
+  target: codex
+  value: .agents/skills/release-queue-watch/scripts/webhook/test/webhook-receiver.test.js
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/release-queue-watch
+  active_owner: srobroek/agentic-packages/packages/release-queue-watch
+  content_hash: sha256:90a7080c6e300f2d0497e94ca4df73a1f6e03dd16f4db9ba5e7c660948727a45
 - kind: project-relative
   target: codex
   value: .agents/skills/responsive-design
@@ -9199,7 +10369,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/agent-coder
   active_owner: srobroek/agentic-packages/packages/agent-coder
-  content_hash: sha256:e4b0e646177f002d3fa6dd6300738950bac68262050075fc9927b0d05f81efec
+  content_hash: sha256:28736b32543f8d2e055602358352518e113ffc5f737ea4dbda1cdcd3ad36870b
 - kind: project-relative
   target: codex
   value: .codex/agents/context-manager.toml
@@ -9280,7 +10450,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:82042b1ccdaea45ca32f44bcf68049b385c0dbc5e4f7c9824124b1c6d2581ad2
+  content_hash: sha256:e5a3107c94356f8e42ebf996904bd419521dff25ec4d4c0f5d9e579d1422ea55
 - kind: project-relative
   target: codex
   value: .codex/agents/javascript-pro.toml
@@ -9334,7 +10504,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/agent-coder
   active_owner: srobroek/agentic-packages/packages/agent-coder
-  content_hash: sha256:08f5cea9e7151f5bc7bfb3e0f3c8800f11ff3d0e08190e8b5059ade156746782
+  content_hash: sha256:b0178101e1c3169d72b048e3d2277fdeeea9bf98c258fda1919ffd2eff1ea3ed
 - kind: project-relative
   target: codex
   value: .codex/agents/posix-shell-pro.toml
@@ -9352,7 +10522,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/agent-pr-reviewer
   active_owner: srobroek/agentic-packages/packages/agent-pr-reviewer
-  content_hash: sha256:7a65bd59bd98f52b19695190aee106ff04bc510840f3eec0195596fe4abd257e
+  content_hash: sha256:e12576c2bcda3aa0550bbaa882a63831fe7d636742d9419863d7f6cd8fa54968
+- kind: project-relative
+  target: codex
+  value: .codex/agents/pr-shepherd.toml
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/pr-shepherd
+  active_owner: srobroek/agentic-packages/packages/pr-shepherd
+  content_hash: sha256:60381225aae9d4353fff469a69f884d90040e50e62c0f96733bf7223df613069
 - kind: project-relative
   target: codex
   value: .codex/agents/rust-pro.toml
@@ -9370,7 +10549,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:30018ea607cde97419c45627839e56a7a1f6822e101ff64112714dff9ef818f3
+  content_hash: sha256:aa8ad1382e5554e4b5e1af8ab580570cb5bd7d4fb22f2fe06d844dd890638381
 - kind: project-relative
   target: codex
   value: .codex/agents/speckit-research.toml
@@ -9379,7 +10558,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:f6baf80301e56c0b0c5f2d82596fae3656075fab8a412b6b2026249868de9a76
+  content_hash: sha256:d5a21d554b888e1f7976c194acef3a12085d34d5adb4fa9b31a47ad7164b548e
 - kind: project-relative
   target: codex
   value: .codex/agents/speckit-sync.toml
@@ -9388,7 +10567,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:7a1aa4e736f17ac20c71deb1bf887919c892024675dc153dbb6385577f845770
+  content_hash: sha256:dde5ccdc5742c8142486815a3be35a487f6f4cc77fe7ee04c31453ed2afa2ff9
 - kind: project-relative
   target: codex
   value: .codex/agents/speckit-verify.toml
@@ -9397,7 +10576,7 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/speckit
   active_owner: srobroek/agentic-packages/packages/speckit
-  content_hash: sha256:2db3a000a60870080e7b31a2709eabda7266a66df748083e22fe05e93dad937c
+  content_hash: sha256:c66949175a3474cdb0e85a82e929289501fa0919a56375e07df0beae4208c366
 - kind: project-relative
   target: codex
   value: .codex/agents/sql-pro.toml
@@ -9451,7 +10630,25 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:9dfb945706cbacb93a6a3af2c25ac48e45cfdee5f5db4a3437251228f6efc211
+  content_hash: sha256:8058c162d433c7ee7363e7240b2d784676730dd9fc453cba1014e85555e334d7
+- kind: project-relative
+  target: codex
+  value: .codex/agents/workflow-pull-worker.toml
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:c79eaf8d249defe6fa94603b12afeb5e13a96ec825ed6326cf4e8bd23d6b7d9b
+- kind: project-relative
+  target: codex
+  value: .codex/agents/workflow-researcher.toml
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:694cebbd3d2e4099d55e088efdb0b49f9b754835057dbcf6d0fc2641b512cd8a
 - kind: project-relative
   target: codex
   value: .codex/agents/workflow-reviewer.toml
@@ -9460,7 +10657,16 @@ deployments:
   owners:
   - srobroek/agentic-packages/packages/orchestrate
   active_owner: srobroek/agentic-packages/packages/orchestrate
-  content_hash: sha256:010724586df43c2ce2694ead05633ecd13458dae0fa4ebf2dab2aac9c5e8944e
+  content_hash: sha256:d8a9c04f9013e8ec2143be16c0185b076fb2f8dd7938b67c9ad6b1793c3bccce
+- kind: project-relative
+  target: codex
+  value: .codex/agents/workflow-worker.toml
+  runtime: null
+  scope: project
+  owners:
+  - srobroek/agentic-packages/packages/orchestrate
+  active_owner: srobroek/agentic-packages/packages/orchestrate
+  content_hash: sha256:2139c8b0b2066438fea7437de0ee727a3f3ec8985f9e01bdbdff78e6540e368a
 - kind: project-relative
   target: codex
   value: .codex/hooks/beads/scripts/beads-gh-issue-guard.sh
@@ -9559,120 +10765,11 @@ mcp_configs:
     transport: stdio
     args:
     - -lc
-    - 'command -v 1mcp >/dev/null 2>&1 || { echo 1mcp-not-installed-install-agent-0.34.1-or-later
-      >&2; exit 127; }; runtime_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/1mcp"; pid_file="$runtime_dir/server.pid";
-      lock_dir="$runtime_dir/launcher.lock.d"; wait_seconds="${ONE_MCP_LAUNCHER_WAIT_SECONDS:-10}";
-      case "$wait_seconds" in ''''|*[!0-9]*) wait_seconds=10 ;; esac; owner_grace="${ONE_MCP_LAUNCHER_OWNER_GRACE_SECONDS:-2}";
-      case "$owner_grace" in ''''|*[!0-9]*) owner_grace=2 ;; esac; kill_grace="${ONE_MCP_LAUNCHER_KILL_GRACE_SECONDS:-1}";
-      case "$kill_grace" in ''''|*[!0-9]*) kill_grace=1 ;; esac; mkdir -p "$runtime_dir"
-      || exit 1; deadline=$(($(date +%s) + wait_seconds)); remaining() { remaining_seconds=$((deadline
-      - $(date +%s))); [ "$remaining_seconds" -gt 0 ]; }; cancel_bounded() { [ -z
-      "${bounded_timer:-}" ] || kill -KILL "$bounded_timer" 2>/dev/null || :; [ -z
-      "${bounded_target:-}" ] || kill -TERM "$bounded_target" 2>/dev/null || :; [
-      -z "${bounded_target:-}" ] || kill -KILL "$bounded_target" 2>/dev/null || :;
-      [ -z "${bounded_timer:-}" ] || wait "$bounded_timer" 2>/dev/null || :; [ -z
-      "${bounded_child:-}" ] || wait "$bounded_child" 2>/dev/null || :; bounded_timer=;
-      bounded_child=; bounded_target=; }; run_bounded() { remaining || return 124;
-      if command -v timeout >/dev/null 2>&1; then timeout -k "$kill_grace" "$remaining_seconds"
-      "$@"; return $?; elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k
-      "$kill_grace" "$remaining_seconds" "$@"; return $?; fi; if command -v setsid
-      >/dev/null 2>&1; then setsid "$@" & bounded_child=$!; bounded_target=-$bounded_child;
-      else set -m; "$@" & bounded_child=$!; set +m; bounded_target=-$bounded_child;
-      fi; (sleep "$remaining_seconds"; kill -TERM "$bounded_target" 2>/dev/null; sleep
-      "$kill_grace"; kill -KILL "$bounded_target" 2>/dev/null) & bounded_timer=$!;
-      wait "$bounded_child"; bounded_status=$?; kill -TERM "$bounded_timer" 2>/dev/null
-      || :; wait "$bounded_timer" 2>/dev/null || :; bounded_child=; bounded_timer=;
-      bounded_target=; return "$bounded_status"; }; ready() { run_bounded 1mcp serve
-      --status >/dev/null 2>&1; }; wait_ready() { while remaining; do ready && return
-      0; sleep 1; done; return 1; }; process_start() { target_pid=$1; if [ -r "/proc/$target_pid/stat"
-      ]; then start=$(sed ''s/.*) //'' "/proc/$target_pid/stat" | awk ''{print $20}'');
-      [ -n "$start" ] && { printf ''linux:%s\n'' "$start"; return 0; }; fi; start=$(ps
-      -p "$target_pid" -o lstart= 2>/dev/null | sed ''s/^[[:space:]]*//;s/[[:space:]]*$//'');
-      [ -n "$start" ] && printf ''ps:%s\n'' "$start"; }; read_owner() { owner_pid=$(sed
-      -n ''s/^pid=//p'' "$lock_dir/owner" 2>/dev/null | sed -n ''1p''); owner_start=$(sed
-      -n ''s/^start=//p'' "$lock_dir/owner" 2>/dev/null | sed -n ''1p''); [ -n "$owner_pid"
-      ] && [ -n "$owner_start" ]; }; claim_is_live() { claim_path=$1; claim_name=${claim_path##*/};
-      claim_rest=${claim_name#.*.}; claim_pid=${claim_rest%%.*}; claim_start=$(sed
-      -n ''1p'' "$claim_path/start" 2>/dev/null); [ -n "$claim_start" ] && [ "$(process_start
-      "$claim_pid")" = "$claim_start" ]; }; has_live_claim() { claim_kind=$1; for
-      claim_path in "$lock_dir/.$claim_kind."*; do [ -d "$claim_path" ] && claim_is_live
-      "$claim_path" && return 0; done; return 1; }; remove_claim() { claim_path=$1;
-      rm -f "$claim_path/start"; rmdir "$claim_path" 2>/dev/null || :; }; create_claim()
-      { claim_kind=$1; claim_token=$(printf ''%s\n'' "$own_start" | cksum) || return
-      1; claim_token=${claim_token%% *}; claim_sequence=0; while :; do claim_path="$lock_dir/.$claim_kind.$$.$claim_token.$claim_sequence";
-      mkdir "$claim_path" 2>/dev/null && break; [ -e "$claim_path" ] || return 1;
-      claim_sequence=$((claim_sequence + 1)); done; claim_tmp="$claim_path/start.$$";
-      printf ''%s\n'' "$own_start" >"$claim_tmp" && mv "$claim_tmp" "$claim_path/start"
-      || { rm -f "$claim_tmp"; rmdir "$claim_path" 2>/dev/null || :; return 1; };
-      }; write_owner() { own_start=$(process_start $$); [ -n "$own_start" ] || return
-      1; create_claim publish || return 1; publish_claim=$claim_path; if has_live_claim
-      takeover; then remove_claim "$publish_claim"; return 2; fi; owner_tmp="$lock_dir/owner.$$";
-      printf ''pid=%s\nstart=%s\n'' $$ "$own_start" >"$owner_tmp" && mv "$owner_tmp"
-      "$lock_dir/owner"; owner_status=$?; rm -f "$owner_tmp"; remove_claim "$publish_claim";
-      return "$owner_status"; }; establish_owner() { write_owner; owner_status=$?;
-      [ "$owner_status" -eq 0 ] && return 0; if [ "$owner_status" -eq 2 ]; then lock_kind=;
-      wait_ready && exec 1mcp proxy; echo 1mcp-launcher-lock-timeout >&2; exit 1;
-      fi; rm -f "$lock_dir/owner.$$"; rmdir "$lock_dir" 2>/dev/null || :; exit 1;
-      }; owns_lock() { read_owner && [ "$owner_pid" = $$ ] && [ "$owner_start" = "$own_start"
-      ]; }; lock_snapshot() { if [ -d "$lock_dir" ]; then dir_id=$(stat -c ''%d:%i''
-      "$lock_dir" 2>/dev/null || stat -f ''%d:%i'' "$lock_dir" 2>/dev/null) || return
-      1; if [ -f "$lock_dir/owner" ]; then owner_record=$(<"$lock_dir/owner"); else
-      owner_record=''<missing>''; fi; printf ''%s|%s\n'' "$dir_id" "$owner_record";
-      fi; }; takeover_lock() { observed_snapshot=$1; own_start=$(process_start $$);
-      [ -n "$own_start" ] || return 1; create_claim takeover || return 1; takeover_claim=$claim_path;
-      if has_live_claim publish; then remove_claim "$takeover_claim"; return 1; fi;
-      takeover_winner=; for claim_path in "$lock_dir/.takeover."*; do if [ -d "$claim_path"
-      ] && claim_is_live "$claim_path"; then claim_name=${claim_path##*/}; claim_rest=${claim_name#.*.};
-      claim_pid=${claim_rest%%.*}; [ -z "$takeover_winner" ] || [ "$claim_pid" -ge
-      "$takeover_winner" ] || takeover_winner=$claim_pid; [ -n "$takeover_winner"
-      ] || takeover_winner=$claim_pid; fi; done; if [ "$takeover_winner" != $$ ] ||
-      has_live_claim publish || [ "$(lock_snapshot)" != "$observed_snapshot" ]; then
-      remove_claim "$takeover_claim"; return 1; fi; stale_lock="$lock_dir.stale.$(date
-      +%s).$$"; mv "$lock_dir" "$stale_lock" 2>/dev/null || { remove_claim "$takeover_claim";
-      return 1; }; retry_lock=1; echo "quarantined stale 1mcp launcher lock: $stale_lock"
-      >&2; }; release_lock() { if [ "${lock_kind:-}" = flock ]; then flock -u 9; elif
-      [ "${lock_kind:-}" = mkdir ] && owns_lock; then rm -f "$lock_dir/owner"; rmdir
-      "$lock_dir" 2>/dev/null || :; fi; lock_kind=; }; on_signal() { signal_status=$1;
-      cancel_bounded; release_lock; trap - EXIT INT TERM; exit "$signal_status"; };
-      finish_proxy() { release_lock; trap - EXIT INT TERM; exec 1mcp proxy; }; ready
-      && exec 1mcp proxy; remaining || { echo 1mcp-launcher-timeout >&2; exit 1; };
-      if command -v flock >/dev/null 2>&1; then exec 9>"$runtime_dir/launcher.lock";
-      flock -w "$remaining_seconds" 9 || { ready && exec 1mcp proxy; echo 1mcp-launcher-lock-timeout
-      >&2; exit 1; }; lock_kind=flock; else if mkdir "$lock_dir" 2>/dev/null; then
-      lock_kind=mkdir; establish_owner; else retried=0; while remaining; do ready
-      && exec 1mcp proxy; now=$(date +%s); if [ ! -d "$lock_dir" ]; then retry_lock=1;
-      break; fi; if read_owner; then incomplete_snapshot=; current_start=$(process_start
-      "$owner_pid"); if [ "$current_start" != "$owner_start" ]; then observed=$(lock_snapshot);
-      if [ -n "$observed" ] && [ "$(lock_snapshot)" = "$observed" ] && read_owner
-      && [ "$current_start" != "$owner_start" ] && takeover_lock "$observed"; then
-      break; fi; fi; else observed=$(lock_snapshot); if [ "$observed" != "${incomplete_snapshot:-}"
-      ]; then incomplete_snapshot=$observed; incomplete_since=$now; elif [ $((now
-      - incomplete_since)) -ge "$owner_grace" ] && [ "$(lock_snapshot)" = "$observed"
-      ] && ! read_owner && takeover_lock "$observed"; then break; fi; fi; sleep 1;
-      done; if [ "${retry_lock:-0}" -eq 1 ] && [ "$retried" -eq 0 ]; then retried=1;
-      mkdir "$lock_dir" 2>/dev/null && { lock_kind=mkdir; establish_owner; }; fi;
-      [ "${lock_kind:-}" = mkdir ] || { ready && exec 1mcp proxy; echo 1mcp-launcher-lock-timeout
-      >&2; exit 1; }; fi; fi; trap release_lock EXIT; trap ''on_signal 130'' INT;
-      trap ''on_signal 143'' TERM; ready && finish_proxy; if [ -f "$pid_file" ]; then
-      pid=$(sed -n ''s/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p'' "$pid_file"
-      | sed -n ''1p''); is_runtime=1; case "$pid" in ''''|*[!0-9]*|"$$") ;; *) if
-      [ -r "/proc/$pid/cmdline" ]; then runtime_binary=0; runtime_serve=0; runtime_bootstrap=0;
-      while IFS= read -r arg; do case "$arg" in 1mcp|*/1mcp|*/1mcp/*|*@1mcp/agent/*)
-      runtime_binary=1 ;; serve) runtime_serve=1 ;; --background-bootstrap) runtime_bootstrap=1
-      ;; esac; done < <(tr ''\0'' ''\n'' <"/proc/$pid/cmdline"); [ "$runtime_binary"
-      -eq 1 ] && [ "$runtime_serve" -eq 1 ] && [ "$runtime_bootstrap" -eq 1 ] && is_runtime=0;
-      else process_comm=$(ps -p "$pid" -o comm= 2>/dev/null | sed ''s/^[[:space:]]*//;s/[[:space:]]*$//'');
-      case "${process_comm##*/}" in sh|bash|zsh|fish) ;; *) process_args=$(ps -ww
-      -p "$pid" -o args= 2>/dev/null || :); case " $process_args " in *1mcp*'' serve
-      ''*--background-bootstrap*) is_runtime=0 ;; esac ;; esac; fi ;; esac; if [ "$is_runtime"
-      -eq 0 ]; then wait_ready && finish_proxy; echo ''1mcp runtime is alive but unhealthy;
-      operator intervention required'' >&2; run_bounded 1mcp serve --status >&2; exit
-      1; else stale="$pid_file.stale.$(date +%s).$$"; mv "$pid_file" "$stale" || exit
-      1; echo "quarantined stale 1mcp PID state: $stale" >&2; fi; fi; run_bounded
-      1mcp serve --background || { wait_ready && finish_proxy; echo ''1mcp startup
-      failed; serve --status follows'' >&2; run_bounded 1mcp serve --status >&2; exit
-      1; }; wait_ready || { echo ''1mcp startup timed out; serve --status follows''
-      >&2; run_bounded 1mcp serve --status >&2; exit 1; }; finish_proxy'
+    - launcher_rel="apm_modules/srobroek/agentic-packages/packages/mcp-1mcp/scripts/launcher.sh";
+      for apm_root in "${APM_HOME:-}" "${HOME}/.apm" "$PWD/.apm"; do [ -n "$apm_root"
+      ] || continue; launcher="$apm_root/$launcher_rel"; [ -r "$launcher" ] && exec
+      bash "$launcher"; done; echo 1mcp-apm-launcher-not-found-run-apm-install >&2;
+      exit 1
     registry: false
     command: bash
 mcp_target_servers:
