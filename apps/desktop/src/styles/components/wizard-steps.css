@@ -1731,15 +1731,16 @@ button.pv-wizard__steps-card:disabled {
   opacity: 0.55;
 }
 
-/* Pinned navigation footer */
+/* Centered navigation footer in the setup wizard's scroll flow */
 .pv-wizard__footer {
+  margin-top: var(--pv-sp-5);
   border-top: 1px solid var(--pv-border);
   padding: var(--pv-sp-4) var(--pv-sp-5);
-  flex-shrink: 0;
   background: var(--pv-surface);
 }
 
 .pv-wizard__footer-inner {
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
   display: flex;
