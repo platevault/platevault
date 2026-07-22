@@ -5,16 +5,8 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 //!
 //! Production backend: sqlx 0.9 + SQLite (ratified stack, wired T003).
-//! All migrations live in `./migrations/` and are consumed via `sqlx::migrate!()`.
-//! Migration 0048 added `canonical_target.notes` (spec 023 US4).
-//! Migration 0053 added `projects.archived_via_plan_id` + re-added `'archive'`
-//! to the `plans.origin` CHECK (spec 017 C5).
-//! Migration 0061 added `target_favourite` (spec 051 US2).
-//! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
-//! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
-//! Migration 0080 added `onboarding_state`/`onboarding_flags` (spec 056).
-//! Migration 0081 dropped the legacy spec-010 `guided_flow_state` table
-//! (spec 056 deletion lane, T010).
+//! The migrations directory contains one frozen `0001_initial_schema.sql`
+//! baseline. Future schema changes use append-only `0002+` migrations.
 
 use std::str::FromStr;
 
@@ -124,85 +116,27 @@ impl Database {
         Self::connect("sqlite::memory:").await
     }
 
-    /// Run all pending migrations from `./migrations/`.
+    /// Run all pending migrations from the frozen baseline and future append-only files.
     ///
     /// # Errors
     ///
     /// Returns [`DbError::Migration`] if any migration script fails.
-    // Touched for #773 (migration 0066), again for spec 008 Q27's migration
-    // 0067 (renumbered from a 0066 collision with #773's own
-    // 0066_session_notes.sql), again for its renumber to 0068 (a second
-    // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
-    // main independently), and again for spec 056's onboarding migrations —
-    // first as 0069/0070, then renumbered again (0069/0070 -> 0071/0072 -> 0072/0073) as main landed its
-    // own 0069_fix_processing_artifact_project_fk and 0070_protection_two_level
-    // while this branch was open (a third independent collision), then to
-    // 0080/0081 after main reached 0079 — to force `sqlx::migrate!` re-embed
-    // each time (project memory: stale-embed guard).
-    //
-    // #745 (spec 049 CL-2): this used to also run the spec 026 T006a
-    // `kind_diverged` reconciliation scan on every start, force-flipping any
-    // view whose items carried more than one recorded kind. CL-2 amended
-    // FR-008 to make that state VALID (per-item kind authoritative — exactly
-    // what a cross-drive project's drive-scope resolution legitimately
-    // produces), so the scan's only remaining effect was auto-corrupting
-    // real cross-drive projects into the dead-end `kind_diverged` state on
-    // every reopen. Removed along with `reconcile_kind_diverged_views`.
-    //
-    // #1230: this now prefers a cross-process snapshot of the migrated
-    // database (see `schema_cache`). The snapshot is keyed on the embedded
-    // migrator's content, is only ever applied to an empty database, and falls
-    // back to the real chain on any failure, so `migrate()` stays
-    // observationally identical -- it just stops paying for 66 migrations in
-    // each of ~1069 test processes. Tests that exist to cover the chain itself
-    // call `migrate_uncached`.
     pub async fn migrate(&self) -> DbResult<()> {
-        if schema_cache::try_apply(&self.pool).await {
-            return Ok(());
-        }
         self.migrate_uncached().await
     }
 
-    /// Run the real migration chain, bypassing the snapshot cache.
-    ///
-    /// Migration tests must use this: replaying a snapshot would mean the
-    /// chain they exist to cover never actually executes (#1230).
+    /// Run the embedded migration set directly.
     ///
     /// # Errors
     ///
     /// Returns [`DbError::Migration`] if any migration script fails.
-    //
-    // #1307: 15 migrations rebuild a table that has children under `ON DELETE
-    // CASCADE` (e.g. `plans` -> `plan_items`) and open with `PRAGMA
-    // foreign_keys = OFF` to make their `DROP TABLE` safe. sqlx runs every
-    // migration inside its own transaction, and SQLite treats that pragma as
-    // a no-op once a transaction is open (sqlite.org/pragma.html#pragma_foreign_keys),
-    // so the in-file pragma never took effect and `DROP TABLE plans` cascaded
-    // through `plan_items.plan_id ON DELETE CASCADE`, silently deleting every
-    // plan item on each of those 15 migrations. The already-applied migration
-    // files can't be edited (their checksums are recorded in every deployed
-    // database and validated by sqlx), so the fix runs the whole chain over a
-    // single connection with FK enforcement disabled *before* any transaction
-    // opens on it — that setting isn't scoped to a transaction, so it survives
-    // every migration's own `BEGIN`/`COMMIT`, regardless of what that
-    // migration's own pragma lines attempt. This protects every rebuild in
-    // the chain, past and future, without touching the migration files.
     pub async fn migrate_uncached(&self) -> DbResult<()> {
         let mut conn = self.pool.acquire().await?;
-        sqlx::query("PRAGMA foreign_keys = OFF;").execute(&mut *conn).await?;
-        let migrate_result = schema_cache::MIGRATOR.run(&mut *conn).await;
-        // Always restore enforcement before the connection returns to the pool:
-        // ordinary repository queries and legitimate runtime deletes rely on
-        // FK cascade behaviour being active outside of migrations.
-        sqlx::query("PRAGMA foreign_keys = ON;").execute(&mut *conn).await?;
-        migrate_result?;
+        schema_cache::MIGRATOR.run(&mut *conn).await?;
         Ok(())
     }
 
-    /// The embedded migration chain, for tests that drive it directly.
-    ///
-    /// Exposed so a populated-database harness can run a prefix of the chain,
-    /// seed rows at that point, then apply the migration under test (#1231).
+    /// The embedded migration set, for tests that inspect migration metadata.
     #[must_use]
     pub fn migrator() -> &'static sqlx::migrate::Migrator {
         &schema_cache::MIGRATOR
