@@ -449,43 +449,46 @@ describe('StepScan', () => {
       ['en-GB', 3, '3 unknown frame types (science)'],
       ['pt-BR', 1, '1 quadro de tipo desconhecido (science)'],
       ['pt-BR', 3, '3 quadros de tipo desconhecido (science)'],
-    ] as const)('renders unknown-kind count labels in %s for count %i', async (locale, count, expected) => {
-      overwriteGetLocale(() => locale);
-      mockInboxScanFolder.mockResolvedValue({
-        status: 'ok',
-        data: {
-          ...SCAN_RESPONSE_WITH_ITEMS,
-          items: [{ ...SCAN_RESPONSE_WITH_ITEMS.items[0], fileCount: count }],
-        },
-      });
-      mockInboxClassify.mockResolvedValue({
-        status: 'ok',
-        data: {
-          ...CLASSIFY_RESPONSE,
-          breakdown: [
-            {
-              kind: 'science',
-              count,
-              destinationPreview: 'NGC7000/science/',
-              sampleFiles: [],
-            },
-          ],
-        },
-      });
+    ] as const)(
+      'renders unknown-kind count labels in %s for count %i',
+      async (locale, count, expected) => {
+        overwriteGetLocale(() => locale);
+        mockInboxScanFolder.mockResolvedValue({
+          status: 'ok',
+          data: {
+            ...SCAN_RESPONSE_WITH_ITEMS,
+            items: [{ ...SCAN_RESPONSE_WITH_ITEMS.items[0], fileCount: count }],
+          },
+        });
+        mockInboxClassify.mockResolvedValue({
+          status: 'ok',
+          data: {
+            ...CLASSIFY_RESPONSE,
+            breakdown: [
+              {
+                kind: 'science',
+                count,
+                destinationPreview: 'NGC7000/science/',
+                sampleFiles: [],
+              },
+            ],
+          },
+        });
 
-      renderStep({ sources: [SOURCES[0]] });
+        renderStep({ sources: [SOURCES[0]] });
 
-      await waitFor(() =>
-        expect(
-          within(screen.getByTestId('scan-source-/astro/lights')).getByText(
-            /1 (folder|pasta)/,
-          ),
-        ).toBeInTheDocument(),
-      );
-      expandSource('/astro/lights');
+        await waitFor(() =>
+          expect(
+            within(screen.getByTestId('scan-source-/astro/lights')).getByText(
+              /1 (folder|pasta)/,
+            ),
+          ).toBeInTheDocument(),
+        );
+        expandSource('/astro/lights');
 
-      expect(screen.getAllByText(expected)).toHaveLength(2);
-    });
+        expect(screen.getAllByText(expected)).toHaveLength(2);
+      },
+    );
 
     it('shows detected items and frame-type breakdown when scan completes (after expanding)', async () => {
       mockInboxScanFolder.mockResolvedValue({
