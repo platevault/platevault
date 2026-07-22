@@ -51,13 +51,26 @@ function themesForFamily(
 
 function themeModeLabel(choice: ThemePickerChoice, resolved: ThemeId): string {
   if (choice.id === 'system') {
-    return resolved.includes('dark')
+    return THEMES.find((theme) => theme.id === resolved)?.mode === 'dark'
       ? m.settings_theme_mode_auto_dark()
       : m.settings_theme_mode_auto_light();
   }
   return choice.mode === 'dark'
     ? m.settings_theme_mode_dark()
     : m.settings_theme_mode_light();
+}
+
+/** Replaces any registry-label mode suffix with the localized mode label. */
+function themeAccessibleLabel(
+  choice: ThemePickerChoice,
+  modeLabel: string,
+): string {
+  const label = choice.label();
+  const modeSuffix = ` · ${choice.mode}`;
+  const baseLabel = label.toLowerCase().endsWith(modeSuffix)
+    ? label.slice(0, -modeSuffix.length)
+    : label;
+  return `${baseLabel} · ${modeLabel}`;
 }
 
 /**
@@ -95,7 +108,7 @@ export function ThemePicker({
         )}
         onClick={() => setChoice(theme.id)}
         aria-pressed={isActive}
-        aria-label={`${theme.label()} · ${modeLabel}`}
+        aria-label={themeAccessibleLabel(theme, modeLabel)}
       >
         {isActive && (
           <span className="pv-theme-swatch__selected" aria-hidden="true">
