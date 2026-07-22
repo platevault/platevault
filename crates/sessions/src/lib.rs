@@ -4,7 +4,9 @@
 //! Acquisition and calibration session modeling boundaries.
 
 pub mod clustering;
+pub mod identity;
 pub mod key;
+pub mod observing_night;
 pub mod optic_train;
 
 pub use clustering::{
@@ -12,9 +14,17 @@ pub use clustering::{
     rotation_circular_distance_deg, Assignment, ClusteringResult, ExistingFraming, NewFramingGroup,
     SessionGeometry, ToleranceParams, UnassignedReason,
 };
+pub use identity::{
+    dark_exposure_tolerance_us, BiasSessionDiscriminators, CameraGeometryIdentity,
+    CaptureDiscriminators, DarkSessionDiscriminators, DarkTemperatureMode, FlatOrientationIdentity,
+    FlatSessionDiscriminators, IdentityValue, ImageParity, LightGeometryIdentity,
+    LightSessionDiscriminators, RasterDimensions, SessionDiscriminators, SessionIdentity,
+    SessionKind,
+};
 pub use key::{
     observing_night, parse_session_key, session_key, KeyError, ObserverContext, SessionKeyParts,
 };
+pub use observing_night::{ObservingNight, ObservingNightDerivation, ObservingNightError};
 pub use optic_train::optic_train_key;
 
 pub const CRATE_NAME: &str = "sessions";
