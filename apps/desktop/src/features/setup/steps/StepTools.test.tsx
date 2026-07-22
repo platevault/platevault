@@ -177,7 +177,7 @@ describe('StepTools', () => {
     expect(button).toHaveFocus();
   });
 
-  it('announces a failed redetection even when an existing path remains configured', async () => {
+  it('clears failed redetection feedback after a valid executable is selected manually', async () => {
     const tools: ToolsState = {
       ...DEFAULT_TOOLS_STATE,
       pixinsight: {
@@ -185,7 +185,7 @@ describe('StepTools', () => {
         path: 'C:\\Program Files\\PixInsight\\bin\\PixInsight.exe',
       },
     };
-    renderStep(tools);
+    const { onToolsChange, rerender } = renderStep(tools);
     await waitFor(() => expect(mockToolsDiscover).toHaveBeenCalled());
 
     mockToolsDiscover.mockReset();
@@ -207,5 +207,26 @@ describe('StepTools', () => {
       ),
     );
     expect(within(card).getByText('No installation found')).toBeVisible();
+
+    mockPick.mockResolvedValue({
+      path: 'D:\\Tools\\PixInsight.exe',
+      selectedFilter: null,
+      cancelled: false,
+    });
+    fireEvent.click(
+      within(card).getByRole('button', {
+        name: 'Select PixInsight binary',
+      }),
+    );
+
+    await waitFor(() => expect(onToolsChange).toHaveBeenCalled());
+    const next = onToolsChange.mock.calls.at(-1)?.[0] as ToolsState;
+    rerender(<StepTools tools={next} onToolsChange={onToolsChange} />);
+
+    expect(within(card).queryByText('No installation found')).toBeNull();
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      'PixInsightDetected',
+    );
+    expect(within(card).getByText('D:\\Tools\\PixInsight.exe')).toBeVisible();
   });
 });
