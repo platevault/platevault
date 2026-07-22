@@ -51,7 +51,7 @@ function themesForFamily(
 
 function themeModeLabel(choice: ThemePickerChoice, resolved: ThemeId): string {
   if (choice.id === 'system') {
-    return resolved.includes('dark')
+    return THEMES.find((theme) => theme.id === resolved)?.mode === 'dark'
       ? m.settings_theme_mode_auto_dark()
       : m.settings_theme_mode_auto_light();
   }

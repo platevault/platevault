@@ -95,31 +95,30 @@ describe('General — font size', () => {
   });
 });
 
-describe('General — theme picker (handoff 03: canonical themes, grouped)', () => {
-  it('shows the four canonical themes grouped Warm/Cool, and hides the two disabled variants', () => {
+describe('General — theme picker', () => {
+  it('shows System and the four canonical themes grouped Warm/Cool', () => {
     renderGeneral();
 
     expect(screen.getByText('Warm')).toBeInTheDocument();
     expect(screen.getByText('Cool')).toBeInTheDocument();
 
-    expect(
-      screen.getByRole('button', { name: /^Warm Slate/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /^Observatorydark$/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /^Observatory Cool · Light/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /^Observatory Cooldark$/i }),
-    ).toBeInTheDocument();
+    const picker = screen.getByRole('group', { name: 'Theme' });
+    expect(within(picker).getAllByRole('button')).toHaveLength(5);
+    for (const name of [
+      /^System/,
+      'Warm Slate · light',
+      'Observatory · dark',
+      'Observatory Cool · Light · light',
+      'Observatory Cool · dark',
+    ]) {
+      expect(within(picker).getByRole('button', { name })).toBeInTheDocument();
+    }
 
     expect(
-      screen.queryByRole('button', { name: /warm clay/i }),
+      within(picker).queryByRole('button', { name: /warm clay/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /espresso/i }),
+      within(picker).queryByRole('button', { name: /espresso/i }),
     ).not.toBeInTheDocument();
   });
 });
@@ -144,13 +143,8 @@ describe('General — restore defaults (#802)', () => {
       .closest('.pv-settings__row') as HTMLElement;
     const densitySelect = within(densityRow).getByRole('combobox');
 
-    // Espresso Dark is a disabled (registry-only) variant as of handoff 03 —
-    // it no longer renders in the picker, so this exercises a canonical
-    // theme instead. The exact-anchored name avoids matching the
-    // "Observatory Cool · Light" card, whose accessible name also starts
-    // with "Observatory Cool".
     fireEvent.click(
-      screen.getByRole('button', { name: /^Observatory Cooldark$/i }),
+      screen.getByRole('button', { name: 'Observatory Cool · dark' }),
     );
     fireEvent.change(screen.getByDisplayValue('Default (14px)'), {
       target: { value: 'large' },
