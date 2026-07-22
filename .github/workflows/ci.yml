@@ -282,12 +282,12 @@ jobs:
           shared-key: "rust-${{ matrix.os }}-v2"
 
       - uses: pnpm/action-setup@v4
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         with:
           node-version: 20
           cache: pnpm
@@ -300,7 +300,7 @@ jobs:
           tool: just,nextest
 
       - name: Install JS deps
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
       # Vite's dependency-optimizer output. Restored AFTER `pnpm install`
