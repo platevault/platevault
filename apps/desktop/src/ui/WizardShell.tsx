@@ -210,6 +210,12 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                   );
                 })}
               </nav>
+              <span
+                className="pv-wizard__steps-overflow-hint"
+                aria-hidden="true"
+              >
+                ↔
+              </span>
 
               {children}
 

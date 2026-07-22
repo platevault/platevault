@@ -16,11 +16,39 @@ const PROJECT_NEXT_LABELS = [
   'Next: naming →',
 ];
 const PROJECT_REVIEW_LABEL = 'Next: review →';
+const SETUP_LOCALES = {
+  'en-GB': {
+    heading: 'Choose your language',
+    labels: [
+      '1. Language',
+      '2. Source Folders',
+      '3. Processing Tools',
+      '4. Configuration',
+      '5. Observing Site',
+      '6. Confirm',
+      '7. Scan',
+    ],
+  },
+  'pt-BR': {
+    heading: 'Escolha seu idioma',
+    labels: [
+      '1. Idioma',
+      '2. Pastas de origem',
+      '3. Ferramentas de processamento',
+      '4. Configuração',
+      '5. Local de observação',
+      '6. Confirmar',
+      '7. Escaneamento',
+    ],
+  },
+} as const;
+type SetupLocale = keyof typeof SETUP_LOCALES;
 
 function seedSetupWizard(page: Page): void {
   page.addInitScript(() => {
     window.localStorage.removeItem('alm-preferences');
     window.localStorage.removeItem('alm-setup-wizard-state');
+    window.localStorage.setItem('alm.locale', 'en-GB');
   });
 }
 
@@ -46,11 +74,85 @@ async function openSetupWizard(page: Page): Promise<void> {
   seedSetupWizard(page);
   await page.goto('/#/setup');
   await expect(
-    page.getByRole('heading', { name: 'Choose your language' }),
+    page.getByRole('heading', { name: SETUP_LOCALES['en-GB'].heading }),
   ).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('wizard navigation accessibility', () => {
+  test('desktop progress labels fit without truncation in English and Portuguese', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    await openSetupWizard(page);
+    for (const locale of Object.keys(SETUP_LOCALES) as SetupLocale[]) {
+      if (locale === 'pt-BR') {
+        await page.getByRole('button', { name: 'Português (Brasil)' }).click();
+        await page.getByRole('button', { name: /^Continue to/i }).click();
+        await expect(
+          page.getByRole('heading', { name: 'Onde seus dados residem?' }),
+        ).toBeVisible();
+        await page.getByRole('button', { name: /Voltar/i }).click();
+        await expect(
+          page.getByRole('heading', { name: SETUP_LOCALES[locale].heading }),
+        ).toBeVisible();
+      }
+
+      const bar = page.locator('.pv-wizard__steps-bar');
+      const cards = bar.locator('.pv-wizard__steps-card');
+      await expect(cards).toHaveText([...SETUP_LOCALES[locale].labels]);
+
+      const geometry = await bar.evaluate((element) => {
+        const barRect = element.getBoundingClientRect();
+        const cardGeometry = Array.from(
+          element.querySelectorAll<HTMLElement>('.pv-wizard__steps-card'),
+        ).map((card) => {
+          const rect = card.getBoundingClientRect();
+          const style = getComputedStyle(card);
+          return {
+            horizontallyContained:
+              rect.left >= barRect.left && rect.right <= barRect.right,
+            contentFits:
+              card.scrollWidth <= card.clientWidth + 1 &&
+              card.scrollHeight <= card.clientHeight + 1,
+            textOverflow: style.textOverflow,
+            whiteSpace: style.whiteSpace,
+          };
+        });
+        return {
+          documentOverflow:
+            document.documentElement.scrollWidth >
+            document.documentElement.clientWidth,
+          horizontalOverflow: element.scrollWidth > element.clientWidth + 1,
+          overflowHintDisplay: getComputedStyle(
+            element.parentElement?.querySelector(
+              '.pv-wizard__steps-overflow-hint',
+            ) ?? element,
+          ).display,
+          cards: cardGeometry,
+        };
+      });
+
+      expect(geometry.documentOverflow).toBe(false);
+      expect(geometry.horizontalOverflow).toBe(false);
+      expect(geometry.overflowHintDisplay).toBe('none');
+      expect(geometry.cards).toHaveLength(7);
+      for (const card of geometry.cards) {
+        expect(card).toEqual({
+          horizontallyContained: true,
+          contentFits: true,
+          textOverflow: 'clip',
+          whiteSpace: 'normal',
+        });
+      }
+
+      await page.screenshot({
+        path: testInfo.outputPath(`${locale}-desktop-step-1.png`),
+        fullPage: true,
+      });
+    }
+  });
+
   test('initial mount and same-step pointer activation do not steal focus', async ({
     page,
   }) => {
@@ -81,11 +183,38 @@ test.describe('wizard navigation accessibility', () => {
     await expect(heading).toHaveAttribute('tabindex', '-1');
   });
 
-  test('320px layout isolates horizontal progress overflow and keeps the active item visible', async ({
+  test('320px layout exposes horizontal overflow and keeps the active item visible', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize({ width: 320, height: 720 });
     await openSetupWizard(page);
+
+    const bar = page.locator('.pv-wizard__steps-bar');
+    const overflowAffordance = await bar.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const hint = element.parentElement?.querySelector<HTMLElement>(
+        '.pv-wizard__steps-overflow-hint',
+      );
+      const hintRect = hint?.getBoundingClientRect();
+      return {
+        horizontalOverflow: element.scrollWidth > element.clientWidth,
+        scrollbarColor: style.scrollbarColor,
+        hintVisible:
+          getComputedStyle(hint ?? element).display === 'grid' &&
+          (hintRect?.width ?? 0) > 0 &&
+          (hintRect?.height ?? 0) > 0,
+      };
+    });
+    expect(overflowAffordance.horizontalOverflow).toBe(true);
+    expect(overflowAffordance.scrollbarColor).not.toBe('auto');
+    expect(overflowAffordance.hintVisible).toBe(true);
+    await expect(page.locator('.pv-wizard__steps-overflow-hint')).toHaveText(
+      '↔',
+    );
+    await page.screenshot({
+      path: testInfo.outputPath('en-GB-reflow-320-step-1.png'),
+      fullPage: true,
+    });
 
     const confirm = page.getByRole('button', { name: '6. Confirm' });
     await confirm.focus();
@@ -116,6 +245,9 @@ test.describe('wizard navigation accessibility', () => {
       const barStyle = getComputedStyle(bar);
       const itemRect = element.getBoundingClientRect();
       const barRect = bar.getBoundingClientRect();
+      const hintRect = bar.parentElement
+        ?.querySelector('.pv-wizard__steps-overflow-hint')
+        ?.getBoundingClientRect();
       return {
         documentOverflow:
           document.documentElement.scrollWidth >
@@ -126,7 +258,7 @@ test.describe('wizard navigation accessibility', () => {
         focusRing: getComputedStyle(element).boxShadow,
         focusRingInside:
           itemRect.left - 2 >= barRect.left &&
-          itemRect.right + 2 <= barRect.right,
+          itemRect.right + 2 <= Math.min(barRect.right, hintRect?.left ?? 0),
       };
     });
     expect(geometry).toEqual({
@@ -136,6 +268,10 @@ test.describe('wizard navigation accessibility', () => {
       overflowY: 'hidden',
       focusRing: expect.not.stringMatching(/^none$/),
       focusRingInside: true,
+    });
+    await page.screenshot({
+      path: testInfo.outputPath('en-GB-reflow-320-step-6.png'),
+      fullPage: true,
     });
 
     const footerOrder = await page
