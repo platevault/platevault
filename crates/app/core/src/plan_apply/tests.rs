@@ -1,5 +1,7 @@
 use super::*;
 use audit::EventBus;
+use fs_executor::failure::{FailureCode, PlanItemFailure};
+use fs_executor::RollbackOutcome;
 use persistence_db::repositories::audit::{
     count_audit_entries, list_audit_entries, AuditLogFilter,
 };
@@ -63,6 +65,83 @@ async fn insert_approved_plan_with_items(db: &Database, plan_id: &str, item_coun
 
     repo::update_plan_state(db.pool(), plan_id, "ready_for_review").await.unwrap();
     repo::set_approved(db.pool(), plan_id, "2026-06-01T00:00:00Z", "test-token").await.unwrap();
+}
+
+#[tokio::test]
+async fn plan_apply_callbacks_persist_every_producible_failure_code() {
+    const PRODUCIBLE_CODES: [FailureCode; 19] = [
+        FailureCode::PermissionDenied,
+        FailureCode::ConflictDestinationExists,
+        FailureCode::SourceMissing,
+        FailureCode::SourceLocked,
+        FailureCode::VolumeUnavailable,
+        FailureCode::DiskFull,
+        FailureCode::PathInvalid,
+        FailureCode::RootEscape,
+        FailureCode::SymlinkComponent,
+        FailureCode::DestructiveUnconfirmed,
+        FailureCode::ProtectedSource,
+        FailureCode::TrashUnavailable,
+        FailureCode::CopySucceededDeleteFailed,
+        FailureCode::CopySucceededDeleteFailedRollbackFailed,
+        FailureCode::ItemStale,
+        FailureCode::OsTrashFull,
+        FailureCode::OsTrashPermissionDenied,
+        FailureCode::MaterializationUnsupported,
+        FailureCode::Unknown,
+    ];
+
+    let (db, bus) = setup().await;
+    let plan_id = "p-all-failure-codes";
+    let run_id = "run-all-failure-codes";
+    insert_approved_plan_with_items(&db, plan_id, PRODUCIBLE_CODES.len()).await;
+    let item_count = i64::try_from(PRODUCIBLE_CODES.len()).unwrap();
+    apply_repo::cas_approved_to_applying(
+        db.pool(),
+        plan_id,
+        run_id,
+        "test-token",
+        item_count,
+        item_count,
+    )
+    .await
+    .unwrap();
+
+    let callbacks = PlanApplyCallbacks {
+        pool: db.pool().clone(),
+        bus,
+        plan_id: plan_id.to_owned(),
+        run_id: run_id.to_owned(),
+        op_emitter: None,
+    };
+
+    for (index, code) in PRODUCIBLE_CODES.into_iter().enumerate() {
+        let item_id = format!("{plan_id}-item-{index}");
+        callbacks.on_item_start(&item_id).await;
+        callbacks
+            .on_item_progress(ItemProgressEvent {
+                item_id: item_id.clone(),
+                prior_state: "applying".to_owned(),
+                new_state: "failed".to_owned(),
+                at: Timestamp::now_iso(),
+                failure: Some(PlanItemFailure::with_code(code, "natural-seam failure")),
+                rollback_attempted: false,
+                rollback_outcome: RollbackOutcome::NotApplicable,
+                rollback_message: None,
+                audit_reason: None,
+            })
+            .await;
+
+        let persisted: Option<String> = sqlx::query_scalar(
+            "SELECT failure_code FROM plan_apply_events WHERE plan_id = ? AND item_id = ?",
+        )
+        .bind(plan_id)
+        .bind(&item_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(persisted.as_deref(), Some(code.as_str()), "failed for {code:?}");
+    }
 }
 
 /// Regression (FIX review, priority-check #2): `resolve_root_path`'s
