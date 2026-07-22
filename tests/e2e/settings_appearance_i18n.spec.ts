@@ -200,7 +200,131 @@ const THEME_CASES: { name: RegExp; dataTheme: string }[] = [
   { name: /^Observatory Cool\s*dark$/i, dataTheme: 'observatory-cool' },
 ];
 
+const THEME_TOKEN_CASES = [
+  {
+    dataTheme: 'espresso-dark',
+    ink: '#ece7df',
+    background: '#161412',
+    controlBorder: '#726f6a',
+  },
+  {
+    dataTheme: 'observatory-cool-light',
+    ink: '#191d24',
+    background: '#f2f4f8',
+    controlBorder: '#7b7f86',
+  },
+  {
+    dataTheme: 'observatory-cool',
+    ink: '#eef2f7',
+    background: '#12151b',
+    controlBorder: '#6f7379',
+  },
+  {
+    dataTheme: 'observatory-dark',
+    ink: '#f0ebe2',
+    background: '#1b1916',
+    controlBorder: '#76736b',
+  },
+  {
+    dataTheme: 'warm-clay',
+    ink: '#221f1a',
+    background: '#f6f4ef',
+    controlBorder: '#817d77',
+  },
+  {
+    dataTheme: 'warm-slate',
+    ink: '#20211f',
+    background: '#f5f4f1',
+    controlBorder: '#7d7d7a',
+  },
+] as const;
+
 test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
+  test('each named theme and the no-attribute fallback resolve their own palette in Chromium', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto('/#/settings/general');
+
+    const actual = await page.evaluate(
+      (themeIds) => {
+        const root = document.documentElement;
+        const semanticProbe = document.createElement('div');
+        semanticProbe.style.color = 'var(--pv-text)';
+        semanticProbe.style.backgroundColor = 'var(--pv-bg)';
+        semanticProbe.style.border = '1px solid var(--pv-control-border)';
+
+        const rawProbe = document.createElement('div');
+        document.body.append(semanticProbe, rawProbe);
+
+        const readPalette = () => {
+          const rootStyle = getComputedStyle(root);
+          const raw = {
+            ink: rootStyle.getPropertyValue('--pv-ink').trim(),
+            background: rootStyle.getPropertyValue('--pv-bg').trim(),
+            controlBorder: rootStyle
+              .getPropertyValue('--pv-control-border')
+              .trim(),
+          };
+          rawProbe.style.color = raw.ink;
+          rawProbe.style.backgroundColor = raw.background;
+          rawProbe.style.border = `1px solid ${raw.controlBorder}`;
+
+          const semanticStyle = getComputedStyle(semanticProbe);
+          const rawStyle = getComputedStyle(rawProbe);
+          return {
+            raw,
+            semantic: {
+              ink: semanticStyle.color,
+              background: semanticStyle.backgroundColor,
+              controlBorder: semanticStyle.borderTopColor,
+            },
+            resolvedRaw: {
+              ink: rawStyle.color,
+              background: rawStyle.backgroundColor,
+              controlBorder: rawStyle.borderTopColor,
+            },
+          };
+        };
+
+        const named = themeIds.map((dataTheme) => {
+          root.setAttribute('data-theme', dataTheme);
+          return { dataTheme, ...readPalette() };
+        });
+        root.removeAttribute('data-theme');
+        const fallback = readPalette();
+        semanticProbe.remove();
+        rawProbe.remove();
+        return { named, fallback };
+      },
+      THEME_TOKEN_CASES.map(({ dataTheme }) => dataTheme),
+    );
+
+    for (const expected of THEME_TOKEN_CASES) {
+      const theme = assertDefined(
+        actual.named.find(({ dataTheme }) => dataTheme === expected.dataTheme),
+        `${expected.dataTheme} computed palette`,
+      );
+      expect(theme.raw).toEqual({
+        ink: expected.ink,
+        background: expected.background,
+        controlBorder: expected.controlBorder,
+      });
+      expect(theme.semantic).toEqual(theme.resolvedRaw);
+    }
+
+    const warmSlate = assertDefined(
+      THEME_TOKEN_CASES.find(({ dataTheme }) => dataTheme === 'warm-slate'),
+      'warm-slate token case',
+    );
+    expect(actual.fallback.raw).toEqual({
+      ink: warmSlate.ink,
+      background: warmSlate.background,
+      controlBorder: warmSlate.controlBorder,
+    });
+    expect(actual.fallback.semantic).toEqual(actual.fallback.resolvedRaw);
+  });
+
   test('switching among the 4 themes updates data-theme on <html> and persists', async ({
     page,
   }) => {
