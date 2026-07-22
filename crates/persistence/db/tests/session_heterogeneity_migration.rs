@@ -186,8 +186,21 @@ async fn footprint_rtree_preserves_outward_i32_bounds() {
 
     // Exact bounds straddle quantization cells. The writer's floor(min*1e9) and
     // ceil(max*1e9) produce these conservative integers.
-    let min_x = (-0.100_000_000_1_f64 * 1_000_000_000.0).floor() as i64;
-    let max_x = (0.100_000_000_1_f64 * 1_000_000_000.0).ceil() as i64;
+    let (min_x, max_x): (i64, i64) = sqlx::query_as(
+        "SELECT CAST(? * 1000000000.0 AS INTEGER)
+                    - (? * 1000000000.0 < CAST(? * 1000000000.0 AS INTEGER)),
+                CAST(? * 1000000000.0 AS INTEGER)
+                    + (? * 1000000000.0 > CAST(? * 1000000000.0 AS INTEGER))",
+    )
+    .bind(-0.100_000_000_1_f64)
+    .bind(-0.100_000_000_1_f64)
+    .bind(-0.100_000_000_1_f64)
+    .bind(0.100_000_000_1_f64)
+    .bind(0.100_000_000_1_f64)
+    .bind(0.100_000_000_1_f64)
+    .fetch_one(db.pool())
+    .await
+    .expect("quantize exact bounds outwards");
     assert_eq!((min_x, max_x), (-100_000_001, 100_000_001));
 
     sqlx::query(
