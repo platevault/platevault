@@ -184,20 +184,17 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
 // themes (2 warm + 2 cool families) — Warm Clay/Espresso Dark are disabled
 // (registry-only) variants, hidden from the picker DOM entirely
 // (apps/desktop/src/features/settings/General.tsx WARM_CHOICES/COOL_CHOICES).
-// Swatch buttons' accessible name concatenates the theme-name span and the
-// mode span with no guaranteed literal space between them (differs slightly
-// between jsdom/testing-library and a real Chromium AX tree) — every case
-// below is a RegExp with an optional `\s*` at the join point so it matches
-// either rendering, anchored so e.g. "Observatory" (warm, dark) can't
-// accidentally match "Observatory Cool" (cool, dark/light).
+// Swatch buttons expose the shared ThemePicker's explicit
+// `<theme> · <mode>` accessible-name contract. Keep every case anchored so
+// e.g. "Observatory" cannot accidentally match "Observatory Cool".
 const THEME_CASES: { name: RegExp; dataTheme: string }[] = [
-  { name: /^Warm Slate\s*light$/i, dataTheme: 'warm-slate' },
-  { name: /^Observatory\s*dark$/i, dataTheme: 'observatory-dark' },
+  { name: /^Warm Slate · light$/i, dataTheme: 'warm-slate' },
+  { name: /^Observatory · dark$/i, dataTheme: 'observatory-dark' },
   {
-    name: /^Observatory Cool · Light\s*light$/i,
+    name: /^Observatory Cool · light$/i,
     dataTheme: 'observatory-cool-light',
   },
-  { name: /^Observatory Cool\s*dark$/i, dataTheme: 'observatory-cool' },
+  { name: /^Observatory Cool · dark$/i, dataTheme: 'observatory-cool' },
 ];
 
 const THEME_TOKEN_CASES = [
@@ -362,7 +359,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     // Observatory Cool (canonical, cool/dark) exercises the same non-default
     // explicit-choice path.
     await page
-      .getByRole('button', { name: /^Observatory Cool\s*dark$/i })
+      .getByRole('button', { name: /^Observatory Cool · dark$/i })
       .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
@@ -775,7 +772,7 @@ test.describe('Journey 10 · Appearance Restore defaults (#802)', () => {
     // Observatory Cool (canonical, cool/dark) exercises the same
     // restore-to-System path.
     await page
-      .getByRole('button', { name: /^Observatory Cool\s*dark$/i })
+      .getByRole('button', { name: /^Observatory Cool · dark$/i })
       .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
