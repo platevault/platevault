@@ -224,6 +224,11 @@ function ToolCard({
     if (!found) setNotFound(true);
   };
 
+  const handlePathChange = (path: string | null) => {
+    setNotFound(false);
+    onPathChange(path);
+  };
+
   return (
     <div className="pv-step-tools__card" data-testid={`tool-card-${def.key}`}>
       {/* Header row: name + status pill + description + enable toggle */}
@@ -280,7 +285,7 @@ function ToolCard({
             <ToolPathPicker
               toolName={def.name()}
               path={config.path}
-              onPathChange={onPathChange}
+              onPathChange={handlePathChange}
             />
           </div>
           {config.path !== null && !pathValid && (
