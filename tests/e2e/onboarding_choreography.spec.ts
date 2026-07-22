@@ -62,6 +62,22 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
 
     // In place first: the row carries the completing marker while it animates.
     await expect(row).toHaveAttribute('data-completing', 'true');
+    await expect
+      .poll(() =>
+        row.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            name: style.animationName,
+            duration: style.animationDuration,
+            timing: style.animationTimingFunction,
+          };
+        }),
+      )
+      .toEqual({
+        name: 'pv-onb-tick-pop',
+        duration: '0.15s',
+        timing: 'ease-out',
+      });
     // Then it settles into the greyed, checked completed area of its group.
     await expect(
       page.locator(
@@ -108,6 +124,16 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
     }) => {
       await landOnMockRoute(page, '/#/sessions');
       await openChecklist(page);
+
+      const animationName = await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.className = 'pv-onb-checklist__item--completing';
+        document.body.append(probe);
+        const name = getComputedStyle(probe).animationName;
+        probe.remove();
+        return name;
+      });
+      expect(animationName).toBe('none');
 
       await page.getByRole('checkbox', { name: 'Review a session' }).click();
 

@@ -460,12 +460,12 @@
 .pv-onb-checklist__item--completing {
   color: var(--pv-accent);
   font-weight: var(--pv-weight-medium);
-  animation: pv-onb-tick-pop var(--pv-transition-base) ease-out;
+  animation: pv-onb-tick-pop var(--pv-onb-motion-tick);
 }
 
 .pv-onb-checklist__progress--pulse .pv-onb-checklist__progress-fill,
 .pv-onb-ring--pulse .pv-onb-ring__fill {
-  animation: pv-onb-progress-pulse 0.6s ease-in-out 2;
+  animation: pv-onb-progress-pulse var(--pv-onb-motion-progress-pulse) 2;
 }
 
 @keyframes pv-onb-tick-pop {
@@ -503,7 +503,7 @@
 }
 
 html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
-  animation: pv-onb-spotlight-pulse 1s ease-in-out infinite;
+  animation: pv-onb-spotlight-pulse var(--pv-onb-motion-spotlight-pulse) infinite;
 }
 
 @keyframes pv-onb-spotlight-pulse {
