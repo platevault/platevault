@@ -172,6 +172,46 @@ impl TerminalState {
     }
 }
 
+/// The audit vocabulary is intentionally wider than the command state
+/// vocabulary.  A rejected review decision is a refused command at the
+/// transport boundary, but must remain `rejected` in the immutable audit log.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuditOutcome {
+    Applied,
+    Rejected,
+    Refused,
+    Failed,
+}
+
+impl AuditOutcome {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Rejected => "rejected",
+            Self::Refused => "refused",
+            Self::Failed => "failed",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "applied" => Some(Self::Applied),
+            "rejected" => Some(Self::Rejected),
+            "refused" => Some(Self::Refused),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+
+    fn command_state(self) -> TerminalState {
+        match self {
+            Self::Applied => TerminalState::Applied,
+            Self::Rejected | Self::Refused => TerminalState::Refused,
+            Self::Failed => TerminalState::Failed,
+        }
+    }
+}
+
 /// One of the typed physical aggregate references required by the normalized
 /// audit and outbox tables.  Exactly one reference is written per row.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -219,6 +259,10 @@ pub struct AuditInput {
     pub aggregate: AggregateRef,
     pub reason_code: String,
     pub payload: Option<Value>,
+    /// Optional audit-only outcome.  When absent it follows the terminal
+    /// command state (`refused` remains the default for rejected transport
+    /// decisions); callers may set `Rejected` for review decisions.
+    pub outcome: Option<AuditOutcome>,
 }
 
 impl AuditInput {
@@ -228,7 +272,19 @@ impl AuditInput {
         aggregate: AggregateRef,
         reason_code: impl Into<String>,
     ) -> Self {
-        Self { action: action.into(), aggregate, reason_code: reason_code.into(), payload: None }
+        Self {
+            action: action.into(),
+            aggregate,
+            reason_code: reason_code.into(),
+            payload: None,
+            outcome: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_outcome(mut self, outcome: AuditOutcome) -> Self {
+        self.outcome = Some(outcome);
+        self
     }
 }
 
@@ -458,7 +514,14 @@ impl CommandLedger {
     ) -> Result<CommandTerminal> {
         validate_terminal(input)?;
         let response_json = input.response.as_ref().map(canonical_json).transpose()?;
-        let audit_payload = input.audit.payload.as_ref().map(redacted_json).transpose()?;
+        let audit_payload = input.audit.payload.as_ref().map(safe_payload_json).transpose()?;
+        let outbox_payloads: Vec<String> = input
+            .outbox
+            .iter()
+            .map(|event| safe_payload_json(&event.payload))
+            .collect::<Result<_>>()?;
+        let audit_outcome =
+            input.audit.outcome.unwrap_or_else(|| default_audit_outcome(input.state));
         let mut connection = self.pool.acquire().await?;
         begin_immediate(&mut connection).await?;
         let Some(row) = load_command(&mut connection, &lease.fence.command_id).await? else {
@@ -476,6 +539,23 @@ impl CommandLedger {
         }
         if row.lease_expires_at.as_deref().is_none_or(|expiry| expiry <= now) {
             return rollback_error(&mut connection, CommandLedgerError::LeaseExpired).await;
+        }
+
+        // A live execution may only create its terminal evidence once.  Any
+        // pre-existing audit/outbox row indicates a discovered partial commit;
+        // recovery, not a worker retry, must reconcile it fail-closed.
+        let audit_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM audit_event WHERE command_row_id = ?")
+                .bind(row.row_id)
+                .fetch_one(&mut *connection)
+                .await?;
+        let outbox_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM outbox_event WHERE command_row_id = ?")
+                .bind(row.row_id)
+                .fetch_one(&mut *connection)
+                .await?;
+        if audit_count.0 != 0 || outbox_count.0 != 0 {
+            return rollback_error(&mut connection, CommandLedgerError::AmbiguousRecovery).await;
         }
 
         let change_sequence = append_repository_change(&mut connection, row.row_id, now).await?;
@@ -499,7 +579,7 @@ impl CommandLedger {
         .bind(values[6])
         .bind(row.actor_row_id)
         .bind(&input.audit.action)
-        .bind(input.state.as_str())
+        .bind(audit_outcome.as_str())
         .bind(&input.audit.reason_code)
         .bind(audit_payload)
         .bind(change_sequence)
@@ -516,8 +596,7 @@ impl CommandLedger {
             )
             .await;
         }
-        for (ordinal, event) in input.outbox.iter().enumerate() {
-            let payload = redacted_json(&event.payload)?;
+        for (ordinal, (event, payload)) in input.outbox.iter().zip(outbox_payloads).enumerate() {
             let values = event.aggregate.values();
             sqlx::query(
                 "INSERT INTO outbox_event
@@ -753,42 +832,53 @@ async fn recover_expired_row(
     expiry: &str,
     now: &str,
 ) -> Result<ClaimOutcome> {
-    let audit_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM audit_event WHERE command_row_id = ?")
+    let audit_rows: Vec<(String,)> =
+        sqlx::query_as("SELECT outcome FROM audit_event WHERE command_row_id = ? ORDER BY row_id")
             .bind(row.row_id)
-            .fetch_one(&mut **connection)
+            .fetch_all(&mut **connection)
             .await?;
-    let outbox_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM outbox_event WHERE command_row_id = ?")
-            .bind(row.row_id)
-            .fetch_one(&mut **connection)
-            .await?;
-    if audit_count.0 > 1 || (audit_count.0 == 0 && outbox_count.0 > 0) {
+    let outbox_ordinals: Vec<(i64,)> = sqlx::query_as(
+        "SELECT event_ordinal FROM outbox_event WHERE command_row_id = ? ORDER BY event_ordinal",
+    )
+    .bind(row.row_id)
+    .fetch_all(&mut **connection)
+    .await?;
+
+    // The only recoverable shapes are an untouched execution (no evidence) or
+    // one complete audit row plus a contiguous, bounded outbox sequence.  Any
+    // other shape is a discovered partial commit and must not be guessed at.
+    if audit_rows.len() > 1
+        || outbox_ordinals.len() > MAX_OUTBOX_EVENTS
+        || (audit_rows.is_empty() && !outbox_ordinals.is_empty())
+        || outbox_ordinals
+            .iter()
+            .enumerate()
+            .any(|(ordinal, (recorded,))| *recorded != i64::try_from(ordinal).unwrap_or(i64::MAX))
+    {
         return Err(CommandLedgerError::AmbiguousRecovery);
     }
-    if audit_count.0 == 1 {
-        let audit: (String, String, Option<String>) = sqlx::query_as(
-            "SELECT outcome, reason_code, payload_json FROM audit_event WHERE command_row_id = ?",
-        )
-        .bind(row.row_id)
-        .fetch_one(&mut **connection)
-        .await?;
-        let state = TerminalState::parse(&audit.0).ok_or_else(|| {
-            CommandLedgerError::InvalidInput("audit outcome is not terminal".to_owned())
-        })?;
-        let response_json = audit.2.or_else(|| Some("{}".to_owned()));
+    if let Some((recorded_outcome,)) = audit_rows.first() {
+        let audit_outcome =
+            AuditOutcome::parse(recorded_outcome).ok_or(CommandLedgerError::AmbiguousRecovery)?;
+        let state = audit_outcome.command_state();
+        let response_json = row.response_json.clone();
+        let error_code = row.error_code.clone();
+        if (matches!(state, TerminalState::Applied) && error_code.is_some())
+            || (!matches!(state, TerminalState::Applied) && error_code.is_none())
+        {
+            return Err(CommandLedgerError::AmbiguousRecovery);
+        }
         let update = sqlx::query(
             "UPDATE command_execution
              SET state = ?, state_version = state_version + 1, lease_owner = NULL,
                  lease_expires_at = NULL, heartbeat_at = NULL, response_json = ?,
-                 error_code = CASE WHEN ? IN ('refused','failed') THEN ? ELSE NULL END,
+                 error_code = ?,
                  finished_at = ?
              WHERE row_id = ? AND state_version = ? AND lease_generation = ?",
         )
         .bind(state.as_str())
         .bind(&response_json)
-        .bind(state.as_str())
-        .bind(&audit.1)
+        .bind(&error_code)
         .bind(now)
         .bind(row.row_id)
         .bind(row.state_version)
@@ -802,7 +892,7 @@ async fn recover_expired_row(
             command_id: row.public_id.clone(),
             state,
             response_json,
-            error_code: if matches!(state, TerminalState::Applied) { None } else { Some(audit.1) },
+            error_code,
             finished_at: now.to_owned(),
         }));
     }
@@ -857,6 +947,16 @@ fn validate_terminal(input: &TerminalInput) -> Result<()> {
             "audit action and reason are required".to_owned(),
         ));
     }
+    let audit_outcome = input.audit.outcome.unwrap_or_else(|| default_audit_outcome(input.state));
+    let expected_outcome = default_audit_outcome(input.state);
+    if !audit_outcome_matches_state(audit_outcome, input.state)
+        || (matches!(input.state, TerminalState::Applied | TerminalState::Failed)
+            && audit_outcome != expected_outcome)
+    {
+        return Err(CommandLedgerError::InvalidInput(
+            "audit outcome does not match terminal command state".to_owned(),
+        ));
+    }
     input.audit.aggregate.validate()?;
     for event in &input.outbox {
         if event.event_type.is_empty() {
@@ -875,7 +975,26 @@ fn validate_terminal(input: &TerminalInput) -> Result<()> {
             ));
         }
     }
+    if let Some(payload) = &input.audit.payload {
+        let _ = safe_payload_json(payload)?;
+    }
     Ok(())
+}
+
+fn default_audit_outcome(state: TerminalState) -> AuditOutcome {
+    match state {
+        TerminalState::Applied => AuditOutcome::Applied,
+        TerminalState::Refused => AuditOutcome::Refused,
+        TerminalState::Failed => AuditOutcome::Failed,
+    }
+}
+
+fn audit_outcome_matches_state(outcome: AuditOutcome, state: TerminalState) -> bool {
+    match state {
+        TerminalState::Applied => matches!(outcome, AuditOutcome::Applied),
+        TerminalState::Refused => matches!(outcome, AuditOutcome::Rejected | AuditOutcome::Refused),
+        TerminalState::Failed => matches!(outcome, AuditOutcome::Failed),
+    }
 }
 
 /// Compute the actor-bound SHA-256 identity used by `command_execution`.
@@ -919,40 +1038,78 @@ fn canonicalize(value: &Value) -> Value {
     }
 }
 
-fn redacted_json(value: &Value) -> Result<String> {
-    let redacted = redact_value(value);
-    let serialized = canonical_json(&redacted)?;
+fn safe_payload_json(value: &Value) -> Result<String> {
+    if !value.is_object() {
+        return Err(CommandLedgerError::InvalidInput("event payload must be an object".to_owned()));
+    }
+    let bounded = validate_payload_value(value, None)?;
+    let serialized = canonical_json(&bounded)?;
     if serialized.len() > MAX_OUTBOX_PAYLOAD_BYTES {
-        return Err(CommandLedgerError::InvalidInput("outbox payload is too large".to_owned()));
+        return Err(CommandLedgerError::InvalidInput("event payload is too large".to_owned()));
     }
     Ok(serialized)
 }
 
-fn redact_value(value: &Value) -> Value {
+/// Serialize only the fields that are part of the reviewed event DTO union.
+/// Unknown fields are rejected rather than copied and redacted heuristically;
+/// this makes adding a new event payload an explicit code review boundary.
+fn validate_payload_value(value: &Value, key: Option<&str>) -> Result<Value> {
+    if let Some(key) = key {
+        if is_sensitive_key(key) {
+            return Err(CommandLedgerError::InvalidInput(
+                "event payload contains a sensitive field".to_owned(),
+            ));
+        }
+        if !is_allowed_payload_key(key) {
+            return Err(CommandLedgerError::InvalidInput(format!(
+                "event payload field is not allowlisted: {key}"
+            )));
+        }
+    }
     match value {
         Value::Object(map) => {
-            let mut output = Map::new();
-            for (key, value) in map {
-                if is_sensitive_key(key) {
-                    output.insert(key.clone(), Value::String("[redacted]".to_owned()));
-                } else {
-                    output.insert(key.clone(), redact_value(value));
-                }
+            if map.len() > 64 {
+                return Err(CommandLedgerError::InvalidInput(
+                    "event payload has too many fields".to_owned(),
+                ));
             }
-            Value::Object(output)
+            let mut output = Map::new();
+            for (field, value) in map {
+                output.insert(field.clone(), validate_payload_value(value, Some(field))?);
+            }
+            Ok(Value::Object(output))
         }
-        Value::Array(values) => Value::Array(values.iter().map(redact_value).collect()),
-        Value::String(value) if value.len() > MAX_SAFE_STRING_BYTES => {
-            let truncated: String = value.chars().take(MAX_SAFE_STRING_BYTES).collect();
-            Value::String(format!("{truncated}…"))
+        Value::Array(values) => {
+            if values.len() > 500 {
+                return Err(CommandLedgerError::InvalidInput(
+                    "event payload array is too large".to_owned(),
+                ));
+            }
+            values
+                .iter()
+                .map(|value| validate_payload_value(value, None))
+                .collect::<Result<Vec<_>>>()
+                .map(Value::Array)
         }
-        other => other.clone(),
+        Value::String(value) => {
+            if value.len() > MAX_SAFE_STRING_BYTES || value.chars().any(char::is_control) {
+                return Err(CommandLedgerError::InvalidInput(
+                    "event payload string is not bounded".to_owned(),
+                ));
+            }
+            Ok(Value::String(value.clone()))
+        }
+        other => Ok(other.clone()),
     }
 }
 
 fn is_sensitive_key(key: &str) -> bool {
     let key = key.to_ascii_lowercase();
     [
+        "api_key",
+        "apikey",
+        "authorization",
+        "cookie",
         "path",
         "secret",
         "token",
@@ -966,6 +1123,60 @@ fn is_sensitive_key(key: &str) -> bool {
     ]
     .iter()
     .any(|needle| key.contains(needle))
+}
+
+fn is_allowed_payload_key(key: &str) -> bool {
+    [
+        "eventId",
+        "occurredAt",
+        "actorId",
+        "commandId",
+        "entityRefs",
+        "entityType",
+        "entityId",
+        "operationId",
+        "proposalId",
+        "sessionId",
+        "panelGroupId",
+        "mosaicId",
+        "projectId",
+        "handoffId",
+        "planId",
+        "resolutionId",
+        "revision",
+        "selectedSiteId",
+        "selectedTimezone",
+        "decision",
+        "derivedObservingNight",
+        "planRevision",
+        "approvedPlanDigest",
+        "processedSessionCount",
+        "totalSessionCount",
+        "processedFrameCount",
+        "totalFrameCount",
+        "sourcePlanId",
+        "kind",
+        "resultSnapshotId",
+        "sessionCount",
+        "frameMembershipCount",
+        "singletonPanelGroupCount",
+        "blockedFrameCount",
+        "failureCode",
+        "state",
+        "status",
+        "count",
+        "total",
+        "ok",
+        "reason",
+        "errorCode",
+        "evidenceRef",
+        "beforeRevisionCount",
+        "afterRevisionCount",
+        "expectedRevision",
+        "actualRevision",
+        "value",
+    ]
+    .contains(&key)
 }
 
 fn bounded_safe_string(value: &str) -> Result<String> {
@@ -1076,6 +1287,224 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn independent_connections_cover_reclaim_reconciliation_and_cardinality() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("command-ledger-concurrency.db");
+        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let first_db = Database::connect(&url).await.unwrap();
+        first_db.migrate_uncached().await.unwrap();
+        seed_session(&first_db).await;
+        let second_db = Database::connect(&url).await.unwrap();
+        second_db.migrate().await.unwrap();
+        let first = CommandLedger::with_lease_ttl(first_db.pool().clone(), Duration::from_secs(1));
+        let second =
+            CommandLedger::with_lease_ttl(second_db.pool().clone(), Duration::from_secs(1));
+
+        let command = request("worker-a");
+        let lease_a = match first.claim_at(&command, "2026-01-01T00:00:00Z").await.unwrap() {
+            ClaimOutcome::Claimed(lease) => lease,
+            outcome => panic!("expected first claim, got {outcome:?}"),
+        };
+        let mut mismatch = command.clone();
+        mismatch.payload = json!({ "a": 9 });
+        assert!(matches!(
+            second.claim_at(&mismatch, "2026-01-01T00:00:00Z").await.unwrap(),
+            ClaimOutcome::PayloadMismatch
+        ));
+        assert!(matches!(
+            second.claim_at(&command, "2026-01-01T00:00:00.500Z").await.unwrap(),
+            ClaimOutcome::InProgress { .. }
+        ));
+        let lease_b = match second.claim_at(&command, "2026-01-01T00:00:02Z").await.unwrap() {
+            ClaimOutcome::Claimed(lease) => lease,
+            outcome => panic!("expected reclaim, got {outcome:?}"),
+        };
+        assert_eq!(lease_b.lease_generation(), lease_a.lease_generation() + 1);
+
+        let applied = TerminalInput {
+            state: TerminalState::Applied,
+            response: Some(json!({ "status": "applied" })),
+            error_code: None,
+            audit: AuditInput::new("session.apply", AggregateRef::Project(1), "applied"),
+            outbox: vec![
+                OutboxInput::new(
+                    AggregateRef::Project(1),
+                    "session.applied",
+                    json!({ "status": "applied", "count": 1 }),
+                ),
+                OutboxInput::new(
+                    AggregateRef::Project(1),
+                    "session.applied.summary",
+                    json!({ "status": "applied", "count": 2 }),
+                ),
+            ],
+        };
+        assert!(matches!(
+            first.finish_at(&lease_a, &applied, "2026-01-01T00:00:02Z").await,
+            Err(CommandLedgerError::StaleFence)
+        ));
+        let finished = second.finish_at(&lease_b, &applied, "2026-01-01T00:00:02Z").await.unwrap();
+        assert_eq!(finished.response_json.as_deref(), Some(r#"{"status":"applied"}"#));
+        assert!(matches!(
+            first.claim_at(&command, "2026-01-01T00:00:03Z").await.unwrap(),
+            ClaimOutcome::Replayed(_)
+        ));
+        // A worker retry returns the terminal row and cannot append a second
+        // audit or event sequence.
+        let retry = second.finish_at(&lease_b, &applied, "2026-01-01T00:00:03Z").await.unwrap();
+        assert_eq!(retry, finished);
+        let (audit_count, outbox_count): (i64, i64) = sqlx::query_as(
+            "SELECT
+                 (SELECT COUNT(*) FROM audit_event WHERE command_row_id = c.row_id),
+                 (SELECT COUNT(*) FROM outbox_event WHERE command_row_id = c.row_id)
+             FROM command_execution c WHERE c.public_id = ?",
+        )
+        .bind(&command.command_id)
+        .fetch_one(first.pool())
+        .await
+        .unwrap();
+        assert_eq!((audit_count, outbox_count), (1, 2));
+        let ordinals: Vec<(i64,)> = sqlx::query_as(
+            "SELECT event_ordinal FROM outbox_event
+             WHERE command_row_id = (SELECT row_id FROM command_execution WHERE public_id = ?)
+             ORDER BY event_ordinal",
+        )
+        .bind(&command.command_id)
+        .fetch_all(first.pool())
+        .await
+        .unwrap();
+        assert_eq!(ordinals, vec![(0,), (1,)]);
+
+        let too_many_request = CommandRequest::new(
+            "00000000-0000-7000-8000-000000000103",
+            command.actor_id.clone(),
+            command.operation.clone(),
+            command.payload.clone(),
+            "worker-a",
+        );
+        let too_many_lease =
+            match first.claim_at(&too_many_request, "2026-01-01T00:00:04Z").await.unwrap() {
+                ClaimOutcome::Claimed(lease) => lease,
+                outcome => panic!("expected bounded-sequence claim, got {outcome:?}"),
+            };
+        let too_many = TerminalInput {
+            state: TerminalState::Applied,
+            response: None,
+            error_code: None,
+            audit: AuditInput::new("session.apply", AggregateRef::Project(1), "applied"),
+            outbox: (0..=MAX_OUTBOX_EVENTS)
+                .map(|ordinal| {
+                    OutboxInput::new(
+                        AggregateRef::Project(1),
+                        format!("session.event.{ordinal}"),
+                        json!({ "count": ordinal }),
+                    )
+                })
+                .collect(),
+        };
+        assert!(matches!(
+            second.finish_at(&too_many_lease, &too_many, "2026-01-01T00:00:04Z").await,
+            Err(CommandLedgerError::InvalidInput(_))
+        ));
+        let evidence_counts: (i64, i64) = sqlx::query_as(
+            "SELECT
+                 (SELECT COUNT(*) FROM audit_event WHERE command_row_id = c.row_id),
+                 (SELECT COUNT(*) FROM outbox_event WHERE command_row_id = c.row_id)
+             FROM command_execution c WHERE c.public_id = ?",
+        )
+        .bind(&too_many_request.command_id)
+        .fetch_one(first.pool())
+        .await
+        .unwrap();
+        assert_eq!(evidence_counts, (0, 0));
+
+        let rejected_request = CommandRequest::new(
+            "00000000-0000-7000-8000-000000000104",
+            command.actor_id.clone(),
+            command.operation.clone(),
+            command.payload.clone(),
+            "worker-a",
+        );
+        let rejected_lease =
+            match first.claim_at(&rejected_request, "2026-01-01T00:00:05Z").await.unwrap() {
+                ClaimOutcome::Claimed(lease) => lease,
+                outcome => panic!("expected rejected claim, got {outcome:?}"),
+            };
+        let rejected = TerminalInput {
+            state: TerminalState::Refused,
+            response: Some(json!({ "status": "rejected" })),
+            error_code: Some("review.rejected".to_owned()),
+            audit: AuditInput::new("session.review", AggregateRef::Project(1), "not_approved")
+                .with_outcome(AuditOutcome::Rejected),
+            outbox: Vec::new(),
+        };
+        second.finish_at(&rejected_lease, &rejected, "2026-01-01T00:00:05Z").await.unwrap();
+        let rejected_replay =
+            first.claim_at(&rejected_request, "2026-01-01T00:00:06Z").await.unwrap();
+        assert!(matches!(
+            rejected_replay,
+            ClaimOutcome::Replayed(CommandTerminal {
+                state: TerminalState::Refused,
+                error_code: Some(ref code),
+                ..
+            }) if code == "review.rejected"
+        ));
+        let outcome: (String,) = sqlx::query_as(
+            "SELECT outcome FROM audit_event
+             WHERE command_row_id = (SELECT row_id FROM command_execution WHERE public_id = ?)",
+        )
+        .bind(&rejected_request.command_id)
+        .fetch_one(first.pool())
+        .await
+        .unwrap();
+        assert_eq!(outcome.0, "rejected");
+
+        let recovery_request = CommandRequest::new(
+            "00000000-0000-7000-8000-000000000105",
+            command.actor_id,
+            command.operation,
+            command.payload,
+            "worker-a",
+        );
+        let _ = first.claim_at(&recovery_request, "2026-01-01T00:00:00Z").await.unwrap();
+        let recovery_row: (i64, i64) = sqlx::query_as(
+            "SELECT row_id, actor_row_id FROM command_execution WHERE public_id = ?",
+        )
+        .bind(&recovery_request.command_id)
+        .fetch_one(first.pool())
+        .await
+        .unwrap();
+        sqlx::query("UPDATE command_execution SET response_json = ? WHERE row_id = ?")
+            .bind(r#"{"status":"authoritative"}"#)
+            .bind(recovery_row.0)
+            .execute(first.pool())
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO audit_event
+             (public_id, command_row_id, project_row_id, actor_row_id, action, outcome,
+              reason_code, payload_json, created_sequence, occurred_at)
+             VALUES (?, ?, 1, ?, 'session.recover', 'applied', 'reconciled',
+                     '{\"status\":\"audit-only\"}', 1, '2026-01-01T00:00:02Z')",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(recovery_row.0)
+        .bind(recovery_row.1)
+        .execute(first.pool())
+        .await
+        .unwrap();
+        let recovered = second.claim_at(&recovery_request, "2026-01-01T00:00:02Z").await.unwrap();
+        assert!(matches!(
+            recovered,
+            ClaimOutcome::Replayed(CommandTerminal {
+                response_json: Some(ref response),
+                ..
+            }) if response == r#"{"status":"authoritative"}"#
+        ));
+    }
+
+    #[tokio::test]
     async fn finish_is_atomic_and_stale_fence_cannot_duplicate_effects() {
         let db = database().await;
         seed_session(&db).await;
@@ -1094,7 +1523,7 @@ mod tests {
             outbox: vec![OutboxInput::new(
                 AggregateRef::Project(1),
                 "session.applied",
-                json!({ "path": "/secret/path", "ok": true }),
+                json!({ "status": "applied", "ok": true }),
             )],
         };
         let terminal = ledger.finish_at(&lease, &input, "2026-01-01T00:00:01Z").await.unwrap();
@@ -1103,13 +1532,65 @@ mod tests {
         assert!(matches!(replay, ClaimOutcome::Replayed(_)));
         let rows = ledger.poll_outbox(100).await.unwrap();
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].payload_json.contains("[redacted]"));
+        assert_eq!(rows[0].payload_json, r#"{"ok":true,"status":"applied"}"#);
         let audit_count: (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM audit_event WHERE command_row_id = 1")
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
         assert_eq!(audit_count.0, 1);
+    }
+
+    #[tokio::test]
+    async fn outbox_payload_boundary_rejects_sensitive_and_unknown_fields() {
+        let db = database().await;
+        seed_session(&db).await;
+        let ledger = CommandLedger::new(db.pool().clone());
+        for (command_id, payload) in [
+            ("00000000-0000-7000-8000-000000000106", json!({ "apiKey": "do-not-persist" })),
+            (
+                "00000000-0000-7000-8000-000000000107",
+                json!({ "unreviewedField": "do-not-persist" }),
+            ),
+        ] {
+            let command = CommandRequest::new(
+                command_id,
+                "00000000-0000-7000-8000-000000000102",
+                "session.test.apply",
+                json!({ "id": command_id }),
+                "worker-a",
+            );
+            let lease = match ledger.claim_at(&command, "2026-01-01T00:00:00Z").await.unwrap() {
+                ClaimOutcome::Claimed(lease) => lease,
+                outcome => panic!("expected claim, got {outcome:?}"),
+            };
+            let input = TerminalInput {
+                state: TerminalState::Applied,
+                response: None,
+                error_code: None,
+                audit: AuditInput::new("session.apply", AggregateRef::Project(1), "applied"),
+                outbox: vec![OutboxInput::new(
+                    AggregateRef::Project(1),
+                    "session.applied",
+                    payload,
+                )],
+            };
+            assert!(matches!(
+                ledger.finish_at(&lease, &input, "2026-01-01T00:00:01Z").await,
+                Err(CommandLedgerError::InvalidInput(_))
+            ));
+            let counts: (i64, i64) = sqlx::query_as(
+                "SELECT
+                     (SELECT COUNT(*) FROM audit_event WHERE command_row_id = c.row_id),
+                     (SELECT COUNT(*) FROM outbox_event WHERE command_row_id = c.row_id)
+                 FROM command_execution c WHERE c.public_id = ?",
+            )
+            .bind(command_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+            assert_eq!(counts, (0, 0));
+        }
     }
 
     #[tokio::test]
