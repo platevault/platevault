@@ -327,6 +327,13 @@ jobs:
             vite-${{ runner.os }}-
 
       # --- Fast checks first (FR-012) ---
+      # Keep locale parity as a named CI gate, independent of the broader lint
+      # summary. The check is fast and its failure tells a catalogue author
+      # exactly which missing or orphaned keys must be corrected.
+      - name: Locale catalogue parity
+        if: needs.changes.outputs.frontend == 'true' && matrix.os == 'ubuntu-latest'
+        run: pnpm --filter @astro-plan/desktop run lint:i18n-drift
+
       # Frontend lint gate: Biome (format check + syntactic rules) first, then
       # the slimmed ESLint layer Biome cannot replicate — the spec-046
       # `alm/no-user-string` i18n rule (fails the build on any NEW hardcoded
@@ -341,13 +348,6 @@ jobs:
       - name: Frontend lint (Biome + ESLint gates + tokens)
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint
-
-      # Keep locale parity as a named CI gate, independent of the broader lint
-      # summary. The check is fast and its failure tells a catalogue author
-      # exactly which missing or orphaned keys must be corrected.
-      - name: Locale catalogue parity
-        if: needs.changes.outputs.frontend == 'true' && matrix.os == 'ubuntu-latest'
-        run: pnpm --filter @astro-plan/desktop run lint:i18n-drift
 
       # `tests/` is outside the pnpm workspace globs (`apps/*`, `packages/*`),
       # so `pnpm -r lint` never reaches it and `apps/desktop/biome.json` scopes
