@@ -1,6 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use std::io::Write;
+use std::process::{Command, Stdio};
+
 use contracts_core::sessions::heterogeneity::calibration::{
     AutomaticEligibility, CalibrationCandidateEvidence, CalibrationEvent, CalibrationHandoffFrame,
     CalibrationKind, CalibrationListOperation, CalibrationQuery, HandoffOperationQueryRequest,
@@ -168,6 +171,54 @@ fn relative_path_runtime_matches_every_published_schema_boundary() {
         &too_many_bytes,
     ] {
         assert!(CanonicalRelativePath::try_new(rejected).is_err(), "rejected path: {rejected}");
+    }
+}
+
+#[test]
+fn relative_path_schema_and_serde_share_utf8_byte_boundaries() {
+    let segment_255 = format!("{}a", "é".repeat(127));
+    let segment_256 = "é".repeat(128);
+    let total_4096 = std::iter::repeat_n("é".repeat(120), 17).collect::<Vec<_>>().join("/");
+    let mut total_4097 = total_4096.clone();
+    total_4097.push('a');
+    let corpus =
+        [(segment_255, true), (segment_256, false), (total_4096, true), (total_4097, false)];
+    assert_eq!(corpus[0].0.len(), 255);
+    assert_eq!(corpus[1].0.len(), 256);
+    assert_eq!(corpus[2].0.len(), 4096);
+    assert_eq!(corpus[3].0.len(), 4097);
+
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir.parent().and_then(std::path::Path::parent).unwrap();
+    let validator = repo_root.join("packages/contracts/tests/utf8-byte-keywords.test.mjs");
+    let mut child = Command::new("node")
+        .arg(validator)
+        .arg("--stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("project AJV validator should start");
+    let schema = serde_json::to_value(schema_for!(CanonicalRelativePath)).unwrap();
+    let request = json!({
+        "schema": schema,
+        "cases": corpus.iter().map(|(value, _)| json!({ "value": value })).collect::<Vec<_>>(),
+    });
+    serde_json::to_writer(child.stdin.as_mut().unwrap(), &request).unwrap();
+    child.stdin.take().unwrap().flush().unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "AJV validator failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let schema_results: Vec<bool> = serde_json::from_slice(&output.stdout).unwrap();
+
+    for ((value, expected), schema_valid) in corpus.iter().zip(schema_results) {
+        let serde_valid = serde_json::from_value::<CanonicalRelativePath>(json!(value)).is_ok();
+        assert_eq!(schema_valid, *expected, "schema byte boundary for {} bytes", value.len());
+        assert_eq!(serde_valid, *expected, "Serde byte boundary for {} bytes", value.len());
+        assert_eq!(schema_valid, serde_valid, "schema/Serde parity for {} bytes", value.len());
     }
 }
 
