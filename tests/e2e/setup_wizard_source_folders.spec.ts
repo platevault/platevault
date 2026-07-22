@@ -18,7 +18,7 @@ const LOCALES = [
     locale: 'pt-BR',
     required: 'Obrigatório',
     optional: 'Opcional',
-    lightFrames: 'Quadros de light',
+    lightFrames: 'Quadros de luz',
     calibration: 'Quadros de calibração',
     requiredStatus: 'obrigatório ✓',
     optionalStatus: 'opcional',

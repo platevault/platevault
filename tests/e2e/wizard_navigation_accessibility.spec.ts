@@ -88,7 +88,7 @@ test.describe('wizard navigation accessibility', () => {
     for (const locale of Object.keys(SETUP_LOCALES) as SetupLocale[]) {
       if (locale === 'pt-BR') {
         await page.getByRole('button', { name: 'Português (Brasil)' }).click();
-        await page.getByRole('button', { name: /^Continue to/i }).click();
+        await page.getByRole('button', { name: /^Continuar para/i }).click();
         await expect(
           page.getByRole('heading', { name: 'Onde seus dados residem?' }),
         ).toBeVisible();
