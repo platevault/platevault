@@ -176,4 +176,36 @@ describe('StepTools', () => {
     );
     expect(button).toHaveFocus();
   });
+
+  it('announces a failed redetection even when an existing path remains configured', async () => {
+    const tools: ToolsState = {
+      ...DEFAULT_TOOLS_STATE,
+      pixinsight: {
+        enabled: true,
+        path: 'C:\\Program Files\\PixInsight\\bin\\PixInsight.exe',
+      },
+    };
+    renderStep(tools);
+    await waitFor(() => expect(mockToolsDiscover).toHaveBeenCalled());
+
+    mockToolsDiscover.mockReset();
+    mockToolsDiscover.mockResolvedValue({
+      status: 'ok',
+      data: { entries: [] },
+    });
+
+    const card = screen.getByTestId('tool-card-pixinsight');
+    fireEvent.click(
+      within(card).getByRole('button', {
+        name: 'Redetect PixInsight binary',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(within(card).getByRole('status')).toHaveTextContent(
+        'PixInsightNo installation found',
+      ),
+    );
+    expect(within(card).getByText('No installation found')).toBeVisible();
+  });
 });

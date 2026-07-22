@@ -679,7 +679,11 @@ describe('StepScan', () => {
       renderStep({ sources: [SOURCES[0]] });
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent(/disk read error/i);
+        const alert = within(
+          screen.getByTestId('scan-source-/astro/lights'),
+        ).getByRole('alert');
+        expect(alert).toHaveTextContent('/astro/lights');
+        expect(alert).toHaveTextContent(/disk read error/i);
       });
     });
 

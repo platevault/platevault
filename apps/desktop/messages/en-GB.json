@@ -1079,7 +1079,22 @@
       }
     }
   ],
-  "setup_scan_frame_count_unknown": "{count} unknown frame type ({value})",
+  "setup_scan_frame_count_unknown": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} unknown frame type ({value})",
+        "pp=other": "{count} unknown frame types ({value})"
+      }
+    }
+  ],
   "setup_scan_frame_type_bias": "Bias",
   "setup_scan_frame_type_dark": "Dark",
   "setup_scan_frame_type_flat": "Flat",
@@ -1111,6 +1126,7 @@
   "setup_scan_phase_pending": "Pending",
   "setup_scan_scanning": "Scanning…",
   "setup_scan_source_unknown": "Unknown source ({value})",
+  "setup_scan_source_error": "{path}: {error}",
   "setup_scan_source_status": "{path}: {status}",
   "setup_scan_summary_empty": "No folders detected. You can add more sources in Settings.",
   "setup_scan_summary_found": [
