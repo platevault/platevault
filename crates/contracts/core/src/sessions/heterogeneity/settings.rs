@@ -306,7 +306,7 @@ impl MatchingSettings {
             60.0,
             Some((50.0, true)),
         );
-        if self.mosaic.residual_sky_rotation_cap_deg.get() != 90.0 {
+        if (self.mosaic.residual_sky_rotation_cap_deg.get() - 90.0).abs() > f64::EPSILON {
             issues.push(issue(
                 "settings.fixed_rule_changed",
                 SettingsSeverity::Red,

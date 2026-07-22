@@ -743,9 +743,9 @@ pub enum TraversalDirection {
 pub struct TraversalLimits {
     #[schemars(range(min = 1, max = 4096))]
     pub max_depth: u32,
-    #[schemars(range(min = 1, max = 100000))]
+    #[schemars(range(min = 1, max = 100_000))]
     pub max_nodes: u64,
-    #[schemars(range(min = 1, max = 2000000))]
+    #[schemars(range(min = 1, max = 2_000_000))]
     pub max_edges: u64,
 }
 
@@ -789,6 +789,7 @@ impl<'de> Deserialize<'de> for TraversalLimits {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
+        #[allow(clippy::struct_field_names)]
         #[serde(rename_all = "camelCase")]
         struct Wire {
             #[serde(default = "default_max_depth")]

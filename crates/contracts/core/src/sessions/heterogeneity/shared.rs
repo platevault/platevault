@@ -1110,6 +1110,7 @@ fn domain_details_match(code: ErrorCode, details: &SafeErrorDetails) -> bool {
         .all(|value| allowed.contains(&value.name.as_str()) && seen.insert(value.name.as_str()))
 }
 
+#[allow(clippy::match_same_arms, clippy::too_many_lines)]
 fn domain_detail_fields(code: ErrorCode) -> &'static [&'static str] {
     match code {
         ErrorCode::SessionNotFound => &["sessionId"],
