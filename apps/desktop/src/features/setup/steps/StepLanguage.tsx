@@ -16,7 +16,8 @@
 
 import { clsx } from 'clsx';
 import { useLocale, SHIPPED_LOCALES } from '@/data/locale';
-import { LOCALE_META } from '@/data/locale-meta';
+import { LOCALE_META, needsReviewNotice } from '@/data/locale-meta';
+import { m } from '@/lib/i18n';
 
 export function StepLanguage() {
   const { locale, changeLocale } = useLocale();
@@ -27,16 +28,20 @@ export function StepLanguage() {
         {SHIPPED_LOCALES.map((id) => {
           const meta = LOCALE_META[id];
           const isActive = locale === id;
+          const reviewNoticeId = `setup-language-${id}-review-notice`;
+          const showReviewNotice = needsReviewNotice(id);
           return (
             <button
               key={id}
               type="button"
+              lang={meta.id}
               className={clsx(
                 'pv-theme-swatch',
                 isActive && 'pv-theme-swatch--active',
               )}
               onClick={() => changeLocale(id)}
               aria-pressed={isActive}
+              aria-describedby={showReviewNotice ? reviewNoticeId : undefined}
               // Accessible name comes from the native name only, never the
               // flag (research D6) — a screen reader announcing "flag of
               // Brazil" would be noise on top of the visible label below.
@@ -45,6 +50,15 @@ export function StepLanguage() {
               <span className="pv-theme-swatch__name">
                 <span aria-hidden="true">{meta.flag}</span> {meta.nativeName}
               </span>
+              {showReviewNotice && (
+                <span
+                  id={reviewNoticeId}
+                  className="pv-text-xs pv-text-muted"
+                  lang={locale}
+                >
+                  {m.setup_language_review_notice()}
+                </span>
+              )}
             </button>
           );
         })}
