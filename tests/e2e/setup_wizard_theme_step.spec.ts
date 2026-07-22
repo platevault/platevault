@@ -34,6 +34,19 @@ const LOCALES = {
   },
 } as const;
 
+const SYSTEM_RESOLUTION_CASES = [
+  {
+    colorScheme: 'light',
+    accessibleName: 'System · auto · light',
+    resolvedTheme: 'warm-slate',
+  },
+  {
+    colorScheme: 'dark',
+    accessibleName: 'System · auto · dark',
+    resolvedTheme: 'observatory-cool',
+  },
+] as const;
+
 function seedThemeStep(page: Page, locale: keyof typeof LOCALES): void {
   page.addInitScript((selectedLocale) => {
     window.localStorage.removeItem('alm-preferences');
@@ -131,6 +144,38 @@ test.describe('setup wizard · Theme step', () => {
       await expect(page.locator('html')).toHaveAttribute(
         'data-theme',
         'observatory-cool',
+      );
+      await expect
+        .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+        .toBe('system');
+    });
+  }
+
+  for (const systemCase of SYSTEM_RESOLUTION_CASES) {
+    test(`System follows the ${systemCase.colorScheme} OS theme and persists the System choice`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: systemCase.colorScheme });
+      await openThemeStep(page);
+
+      const explicitTheme = page.getByRole('button', {
+        name: 'Espresso · dark',
+      });
+      await explicitTheme.click();
+      await expect(page.locator('html')).toHaveAttribute(
+        'data-theme',
+        'espresso-dark',
+      );
+
+      const system = page.getByRole('button', {
+        name: /^System · auto ·/,
+      });
+      await system.click();
+      await expect(system).toHaveAttribute('aria-pressed', 'true');
+      await expect(system).toHaveAccessibleName(systemCase.accessibleName);
+      await expect(page.locator('html')).toHaveAttribute(
+        'data-theme',
+        systemCase.resolvedTheme,
       );
       await expect
         .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
