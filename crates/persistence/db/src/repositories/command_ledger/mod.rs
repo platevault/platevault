@@ -864,6 +864,7 @@ fn validate_terminal(input: &TerminalInput) -> Result<()> {
                 "outbox event type is required".to_owned(),
             ));
         }
+        bounded_safe_string(&event.event_type)?;
         event.aggregate.validate()?;
     }
     if let Some(response) = &input.response {
