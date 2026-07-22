@@ -41,19 +41,46 @@ merged_in_window() {
   [ "$merged_epoch" -ge "$SINCE_EPOCH" ] && [ "$merged_epoch" -le "$NOW_EPOCH" ]
 }
 
-# Print PR numbers merged during the window. REST pagination is intentional:
-# the GraphQL files field is capped at 100 entries, while this sweep must see
-# every file in a large PR.
+# Load one validated pull-request snapshot. Keeping every stacked child in the
+# snapshot makes deferrals durable without repeated metadata API calls.
+load_pull_snapshot() {
+  local pages
+  pages=$(gh api --paginate --method GET \
+    "/repos/${REPO}/pulls" \
+    -f state=all \
+    -f sort=updated \
+    -f direction=desc \
+    -f per_page=100) || return 1
+  PULL_SNAPSHOT=$(jq -s -c '
+    if all(.[];
+      type == "array"
+      and all(.[];
+        (.number | type == "number" and floor == .)
+        and (.state | type == "string")
+        and (.base.ref | type == "string" and length > 0)
+        and (.head.ref | type == "string" and length > 0)
+        and (.merged_at == null or (.merged_at | type == "string" and length > 0))
+      )
+    ) then add else error("invalid pull-request snapshot") end
+  ' <<<"$pages") || return 1
+}
+
+# Print recently merged main PRs plus every merged stacked PR. Old stacked PRs
+# are cheap metadata-only candidates until their eligibility reaches the sweep
+# window; this prevents a deferred child from aging out before its root lands.
 merged_pr_numbers() {
-  gh api --paginate \
-    "/repos/${REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=100" \
-    | jq -r --argjson since "$SINCE_EPOCH" --argjson until "$NOW_EPOCH" '
+  jq -r --argjson since "$SINCE_EPOCH" --argjson until "$NOW_EPOCH" '
       .[]
       | select(.merged_at != null)
-      | select((.merged_at | fromdateiso8601) >= $since)
-      | select((.merged_at | fromdateiso8601) <= $until)
+      | select(
+          .base.ref != "main"
+          or (
+            (.merged_at | fromdateiso8601) >= $since
+            and (.merged_at | fromdateiso8601) <= $until
+          )
+        )
       | .number
-    '
+    ' <<<"$PULL_SNAPSHOT"
 }
 
 # Print selected paths as a NUL-delimited stream. GitHub REST calls these
@@ -80,6 +107,16 @@ added_paths_for_pr() {
 # fields. An empty timestamp means the pull request has not merged.
 pull_metadata() {
   local pr="$1" response
+  if [ -n "${PULL_SNAPSHOT:-}" ]; then
+    jq -r --argjson pr "$pr" '
+      [.[] | select(.number == $pr)]
+      | if length == 1
+        then [.[0].base.ref, (.[0].merged_at // "")] | @tsv
+        else error("pull request absent or duplicated in snapshot")
+        end
+    ' <<<"$PULL_SNAPSHOT"
+    return
+  fi
   response=$(gh api "/repos/${REPO}/pulls/${pr}") || return 1
   jq -e '
     type == "object"
@@ -94,6 +131,21 @@ pull_metadata() {
 # deliberately treated as ambiguous instead of guessing at chronology.
 forwarding_pr_for_branch() {
   local branch="$1" owner response
+  if [ -n "${PULL_SNAPSHOT:-}" ]; then
+    jq -r --arg branch "$branch" '
+      [
+        .[]
+        | select(.head.ref == $branch)
+        | select(.state == "open" or .merged_at != null)
+        | .number
+      ]
+      | if length == 1 then .[0]
+        elif length == 0 then "none"
+        else "ambiguous"
+        end
+    ' <<<"$PULL_SNAPSHOT"
+    return
+  fi
   owner=${REPO%%/*}
   response=$(gh api --paginate --method GET \
     "/repos/${REPO}/pulls" \
@@ -125,7 +177,8 @@ forwarding_pr_for_branch() {
   ' <<<"$response"
 }
 
-# Print whether a merged PR is ready for path checks. A child that merged
+# Print whether a merged PR is ready for path checks and the timestamp when it
+# became eligible. A child that merged
 # before its base branch was forwarded follows that forwarding PR toward main;
 # it is deferred while any forwarding PR remains open. A child that merged
 # after its base was forwarded is checked immediately because that forwarding
@@ -150,7 +203,7 @@ stack_disposition() {
     return 1
   fi
   if [ "$base" = "main" ]; then
-    echo check
+    echo "check:${merged_at}"
     return 0
   fi
 
@@ -160,12 +213,12 @@ stack_disposition() {
   }
   case "$parent" in
     none)
-      echo "defer:no forwarding PR uniquely identifies base '${base}'"
+      echo "defer:no forwarding PR identifies base '${base}'"
       return 0
       ;;
     ambiguous)
-      echo "defer:multiple forwarding PRs match base '${base}'"
-      return 0
+      echo "ERROR PR #${pr}: multiple forwarding PRs match base '${base}'" >&2
+      return 1
       ;;
   esac
 
@@ -182,7 +235,7 @@ stack_disposition() {
   merged_epoch=$(iso_epoch "$merged_at") || return 1
   parent_epoch=$(iso_epoch "$parent_merged_at") || return 1
   if [ "$merged_epoch" -gt "$parent_epoch" ]; then
-    echo check
+    echo "check:${merged_at}"
     return 0
   fi
   stack_disposition "$parent" "$trail"
@@ -204,17 +257,30 @@ path_state() {
 }
 
 check_pr() {
-  local pr="$1" path state disposition missing=0 count=0 path_file
+  local pr="$1" path state disposition eligible_at eligible_epoch missing=0 count=0 path_file
   local -a paths=()
   if ! disposition=$(stack_disposition "$pr"); then
     echo "ERROR PR #${pr}: could not establish stacked-PR chronology" >&2
     return 1
   fi
   case "$disposition" in
-    check) ;;
+    check:*)
+      eligible_at=${disposition#check:}
+      eligible_epoch=$(iso_epoch "$eligible_at") || {
+        echo "ERROR PR #${pr}: invalid eligibility timestamp '${eligible_at}'" >&2
+        return 1
+      }
+      if [ "$eligible_epoch" -gt "$NOW_EPOCH" ]; then
+        echo "ERROR PR #${pr}: eligibility timestamp is after the sweep time" >&2
+        return 1
+      fi
+      if [ "$eligible_epoch" -lt "$SINCE_EPOCH" ]; then
+        return 3
+      fi
+      ;;
     defer:*)
       echo "DEFER PR #${pr}: ${disposition#defer:}"
-      return 0
+      return 2
       ;;
     *)
       echo "ERROR PR #${pr}: unknown stack disposition '${disposition}'" >&2
@@ -351,7 +417,11 @@ main() {
   echo "Checking merged PRs from $(date -u -d "@${SINCE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ) through $(date -u -d "@${NOW_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
 
   git fetch --no-tags origin main --quiet
-  local prs overall=0 pr
+  if ! load_pull_snapshot; then
+    echo "ERROR: could not read or validate pull-request metadata" >&2
+    return 1
+  fi
+  local prs overall=0 deferred=0 settled=0 pr status
   if ! prs=$(merged_pr_numbers); then
     echo "ERROR: could not list recently merged PRs" >&2
     return 1
@@ -362,12 +432,21 @@ main() {
   fi
   while IFS= read -r pr; do
     [ -n "$pr" ] || continue
-    check_pr "$pr" || overall=1
+    if check_pr "$pr"; then
+      continue
+    else
+      status=$?
+    fi
+    case "$status" in
+      2) deferred=$((deferred + 1)) ;;
+      3) settled=$((settled + 1)) ;;
+      *) overall=1 ;;
+    esac
   done <<<"$prs"
   if [ "$overall" -eq 0 ]; then
-    echo "PASS: every added path is present on main or has main history"
+    echo "PASS: every eligible added path is present on main or has main history; deferred=${deferred}; settled_outside_window=${settled}"
   else
-    echo "FAIL: one or more added paths were never present on main" >&2
+    echo "FAIL: one or more eligible paths or PR classifications failed" >&2
   fi
   return "$overall"
 }
