@@ -997,6 +997,7 @@
   "setup_language_desc": "Escolha seu idioma preferido",
   "setup_language_heading": "Escolha seu idioma",
   "setup_language_label": "Idioma",
+  "setup_language_review_notice": "Esta tradução foi gerada automaticamente e aguarda a revisão de uma pessoa fluente.",
   "setup_scan_classify_failed": "Não foi possível ler os tipos",
   "setup_scan_col_files": "Arquivos",
   "setup_scan_col_folder": "Pasta / Arquivo",

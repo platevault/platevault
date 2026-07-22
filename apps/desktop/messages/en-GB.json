@@ -999,6 +999,7 @@
   "setup_language_desc": "Pick your preferred language",
   "setup_language_heading": "Choose your language",
   "setup_language_label": "Language",
+  "setup_language_review_notice": "This translation was generated automatically and awaits review by a fluent speaker.",
   "setup_scan_classify_failed": "Could not read types",
   "setup_scan_col_files": "Files",
   "setup_scan_col_folder": "Folder / File",
