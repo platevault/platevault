@@ -780,6 +780,11 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // render, so the table keeps full width and barely overflows at all.
     app.goto_route(&format!("/targets?selected={target_id}")).await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.find_waiting(
+        By::Css(".pv-targets-table__scroll"),
+        "the loaded Targets table scroll container",
+    )
+    .await?;
 
     let before = measure_pinned_columns(&app).await?;
     let overflow = px(&before, "scrollWidth")? - px(&before, "clientWidth")?;
