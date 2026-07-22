@@ -153,6 +153,20 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     await expect(startScan).toBeVisible({ timeout: 10_000 });
     await startScan.click();
 
+    const lightSource = page.getByTestId('scan-source-/astro/lights');
+    await expect(lightSource.getByRole('status')).toContainText('Concluído', {
+      timeout: 10_000,
+    });
+    await expect(lightSource).toContainText('Quadros de luz');
+    await lightSource.getByRole('button').click();
+    await expect(lightSource).toContainText('16 quadros de luz');
+    await expect(lightSource).toContainText('2 quadros escuros');
+    await expect(lightSource).toContainText('Mestre Escuro · Ha · 300 s');
+    await expect(page.getByTestId('scan-summary')).toHaveAttribute(
+      'role',
+      'status',
+    );
+
     const finishBtn = page.getByTestId('finish-button');
     await expect(finishBtn).toBeEnabled({ timeout: 10_000 });
     await finishBtn.click();
