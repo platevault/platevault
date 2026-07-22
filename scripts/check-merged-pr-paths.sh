@@ -76,6 +76,118 @@ added_paths_for_pr() {
   ' <<<"$files"
 }
 
+# Print a pull request's base branch and merge timestamp as tab-separated
+# fields. An empty timestamp means the pull request has not merged.
+pull_metadata() {
+  local pr="$1" response
+  response=$(gh api "/repos/${REPO}/pulls/${pr}") || return 1
+  jq -e '
+    type == "object"
+    and (.base.ref | type == "string" and length > 0)
+    and (.merged_at == null or (.merged_at | type == "string" and length > 0))
+  ' >/dev/null <<<"$response" || return 1
+  jq -r '[.base.ref, (.merged_at // "")] | @tsv' <<<"$response"
+}
+
+# Identify the one active or merged PR that forwards a branch. Closed,
+# unmerged attempts cannot carry the branch toward main. Branch reuse is
+# deliberately treated as ambiguous instead of guessing at chronology.
+forwarding_pr_for_branch() {
+  local branch="$1" owner response
+  owner=${REPO%%/*}
+  response=$(gh api --paginate --method GET \
+    "/repos/${REPO}/pulls" \
+    -f state=all \
+    -f head="${owner}:${branch}" \
+    -f per_page=100) || return 1
+  jq -s -e '
+    all(.[];
+      type == "array"
+      and all(.[];
+        (.number | type == "number" and floor == .)
+        and (.state | type == "string")
+        and (.head.ref | type == "string" and length > 0)
+        and (.merged_at == null or (.merged_at | type == "string" and length > 0))
+      )
+    )
+  ' >/dev/null <<<"$response" || return 1
+  jq -s -r --arg branch "$branch" '
+    [
+      .[][]
+      | select(.head.ref == $branch)
+      | select(.state == "open" or .merged_at != null)
+      | .number
+    ]
+    | if length == 1 then .[0]
+      elif length == 0 then "none"
+      else "ambiguous"
+      end
+  ' <<<"$response"
+}
+
+# Print whether a merged PR is ready for path checks. A child that merged
+# before its base branch was forwarded follows that forwarding PR toward main;
+# it is deferred while any forwarding PR remains open. A child that merged
+# after its base was forwarded is checked immediately because that forwarding
+# could not have included the child (the lost-merge chronology from PR #1304).
+stack_disposition() {
+  local pr="$1" trail="${2:-:}" metadata base merged_at parent parent_metadata
+  local parent_base parent_merged_at merged_epoch parent_epoch
+
+  if [[ "$trail" == *":${pr}:"* ]]; then
+    echo "ERROR PR #${pr}: cycle in stacked-PR forwarding chain" >&2
+    return 1
+  fi
+  trail="${trail}${pr}:"
+
+  metadata=$(pull_metadata "$pr") || {
+    echo "ERROR PR #${pr}: could not read or validate pull-request metadata" >&2
+    return 1
+  }
+  IFS=$'\t' read -r base merged_at <<<"$metadata"
+  if [ -z "$merged_at" ]; then
+    echo "ERROR PR #${pr}: sweep selected a pull request without a merge timestamp" >&2
+    return 1
+  fi
+  if [ "$base" = "main" ]; then
+    echo check
+    return 0
+  fi
+
+  parent=$(forwarding_pr_for_branch "$base") || {
+    echo "ERROR PR #${pr}: could not resolve forwarding PR for base '${base}'" >&2
+    return 1
+  }
+  case "$parent" in
+    none)
+      echo "defer:no forwarding PR uniquely identifies base '${base}'"
+      return 0
+      ;;
+    ambiguous)
+      echo "defer:multiple forwarding PRs match base '${base}'"
+      return 0
+      ;;
+  esac
+
+  parent_metadata=$(pull_metadata "$parent") || {
+    echo "ERROR PR #${pr}: could not read forwarding PR #${parent}" >&2
+    return 1
+  }
+  IFS=$'\t' read -r parent_base parent_merged_at <<<"$parent_metadata"
+  if [ -z "$parent_merged_at" ]; then
+    echo "defer:base '${base}' is awaiting PR #${parent} into '${parent_base}'"
+    return 0
+  fi
+
+  merged_epoch=$(iso_epoch "$merged_at") || return 1
+  parent_epoch=$(iso_epoch "$parent_merged_at") || return 1
+  if [ "$merged_epoch" -gt "$parent_epoch" ]; then
+    echo check
+    return 0
+  fi
+  stack_disposition "$parent" "$trail"
+}
+
 # Classify one repo-relative path against main:
 #   present    — currently exists on main
 #   historical — absent now, but appeared in main's history
@@ -92,8 +204,23 @@ path_state() {
 }
 
 check_pr() {
-  local pr="$1" path state missing=0 count=0 path_file
+  local pr="$1" path state disposition missing=0 count=0 path_file
   local -a paths=()
+  if ! disposition=$(stack_disposition "$pr"); then
+    echo "ERROR PR #${pr}: could not establish stacked-PR chronology" >&2
+    return 1
+  fi
+  case "$disposition" in
+    check) ;;
+    defer:*)
+      echo "DEFER PR #${pr}: ${disposition#defer:}"
+      return 0
+      ;;
+    *)
+      echo "ERROR PR #${pr}: unknown stack disposition '${disposition}'" >&2
+      return 1
+      ;;
+  esac
   # Capture through a file because process substitution hides producer errors.
   path_file=$(mktemp)
   if ! added_paths_for_pr "$pr" >"$path_file"; then
@@ -175,21 +302,33 @@ self_test() {
   MAIN_REF=HEAD
   local got
   got=$(cd "$repo" && path_state present.txt)
-  [ "$got" = "present" ] \
-    && echo "ok: path_state detects a path currently present on main" \
-    || { echo "FAIL: path_state present got '$got'"; fail=1; }
+  if [ "$got" = "present" ]; then
+    echo "ok: path_state detects a path currently present on main"
+  else
+    echo "FAIL: path_state present got '$got'"
+    fail=1
+  fi
   got=$(git -C "$repo" rev-parse HEAD >/dev/null 2>&1; (cd "$repo" && path_state removed.txt))
-  [ "$got" = "historical" ] \
-    && echo "ok: path_state ignores a later deletion" \
-    || { echo "FAIL: path_state deletion got '$got'"; fail=1; }
+  if [ "$got" = "historical" ]; then
+    echo "ok: path_state ignores a later deletion"
+  else
+    echo "FAIL: path_state deletion got '$got'"
+    fail=1
+  fi
   got=$(cd "$repo" && path_state old.txt)
-  [ "$got" = "historical" ] \
-    && echo "ok: path_state ignores a later rename" \
-    || { echo "FAIL: path_state rename got '$got'"; fail=1; }
+  if [ "$got" = "historical" ]; then
+    echo "ok: path_state ignores a later rename"
+  else
+    echo "FAIL: path_state rename got '$got'"
+    fail=1
+  fi
   got=$(cd "$repo" && path_state never.txt)
-  [ "$got" = "never" ] \
-    && echo "ok: path_state distinguishes a never-on-main path" \
-    || { echo "FAIL: path_state never got '$got'"; fail=1; }
+  if [ "$got" = "never" ]; then
+    echo "ok: path_state distinguishes a never-on-main path"
+  else
+    echo "FAIL: path_state never got '$got'"
+    fail=1
+  fi
 
   if [ "$fail" -eq 0 ]; then
     echo "check-merged-pr-paths self-test: PASS"
