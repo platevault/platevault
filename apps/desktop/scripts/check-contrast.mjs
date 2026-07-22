@@ -132,11 +132,11 @@ for (const [theme, tokens] of themeTokens) {
   }
 
   const control = tokens.get('--pv-control-border');
-  const divider = tokens.get('--pv-rule2');
-  if (!control || !divider) {
+  const dividers = ['rule', 'rule2'].map((name) => [name, tokens.get(`--pv-${name}`)]);
+  if (!control || dividers.some(([, value]) => !value)) {
     ok = false;
     console.error(
-      `FAIL: [data-theme="${theme}"] missing --pv-control-border or --pv-rule2`,
+      `FAIL: [data-theme="${theme}"] missing --pv-control-border, --pv-rule, or --pv-rule2`,
     );
     continue;
   }
@@ -148,13 +148,15 @@ for (const [theme, tokens] of themeTokens) {
       continue;
     }
     const controlRatio = contrastRatio(control, surface);
-    const dividerRatio = contrastRatio(divider, surface);
-    if (dividerRatio >= controlRatio) {
-      ok = false;
-      console.error(
-        `FAIL: [data-theme="${theme}"] decorative --pv-rule2 (${divider}) on --pv-${surfaceName} ` +
-          `is not subtler than --pv-control-border (${control})`,
-      );
+    for (const [dividerName, divider] of dividers) {
+      const dividerRatio = contrastRatio(divider, surface);
+      if (dividerRatio >= controlRatio) {
+        ok = false;
+        console.error(
+          `FAIL: [data-theme="${theme}"] decorative --pv-${dividerName} (${divider}) on ` +
+            `--pv-${surfaceName} is not subtler than --pv-control-border (${control})`,
+        );
+      }
     }
   }
 }

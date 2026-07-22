@@ -20,7 +20,8 @@
     "$type": "color"
   },
   "rule": {
-    "$value": "{control-border}"
+    "$value": "#d5d3cb",
+    "$type": "color"
   },
   "rule2": {
     "$value": "#e6e4dd",
