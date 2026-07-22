@@ -293,3 +293,494 @@ async fn normalized_result_counts_and_visibility_history_are_enforced() {
     .unwrap();
     assert_eq!(history_tables.0, 4, "every mutable domain head needs watermark history");
 }
+
+#[tokio::test]
+async fn every_approved_data_model_family_has_normalized_storage() {
+    let (_dir, db) = fresh_database().await;
+    let expected = [
+        "acquisition_site_resolution_revision",
+        "inbox_materialization_plan_result_snapshot",
+        "inbox_plan_result_proposed_session_frame",
+        "session_materialization_operation",
+        "session_materialization_result_snapshot",
+        "frame_metadata_evidence",
+        "session_metadata_resolution",
+        "session_frame",
+        "camera_regulation_decision",
+        "equipment_alias_evidence",
+        "session_equipment_resolution",
+        "capture_profile_version",
+        "capture_field_mapping",
+        "calibration_family",
+        "dark_recipe_identity",
+        "bias_recipe_identity",
+        "flat_family_identity",
+        "spec062_calibration_session",
+        "dark_thermal_evidence",
+        "calibration_reuse_decision",
+        "calibration_handoff_snapshot",
+        "calibration_handoff_candidate_evidence",
+        "calibration_handoff_selection",
+        "calibration_handoff_frame",
+        "reclassification_plan_revision",
+        "reclassification_plan_input",
+        "reclassification_plan_output_frame",
+        "reclassification_plan_result_snapshot",
+        "reclassification_apply_result_snapshot",
+        "session_supersession",
+        "cross_target_association_target",
+        "panel_group_revision",
+        "panel_revision_session",
+        "panel_group_lineage",
+        "mosaic_edge_evidence",
+        "mosaic_edge_invalidation",
+        "mosaic_revision_panel",
+        "mosaic_revision_edge",
+        "mosaic_lineage",
+        "mosaic_object_evidence",
+        "proposal_session_input",
+        "proposal_panel_revision_input",
+        "proposal_mosaic_revision_input",
+        "proposal_project_revision_input",
+        "proposal_panel_membership",
+        "proposal_mosaic_membership",
+        "proposal_mosaic_edge",
+        "proposal_panel_lineage",
+        "proposal_mosaic_lineage",
+        "proposal_measurement",
+        "relation_decision_snapshot",
+        "relation_decision_panel_revision",
+        "relation_decision_mosaic_revision",
+        "relation_rejection",
+        "project_membership_revision",
+        "project_membership_revision_session",
+        "group_action_session_snapshot",
+        "project_materialization_snapshot",
+        "project_materialization_snapshot_session",
+        "materialized_entry",
+        "project_manifest",
+        "project_manifest_entry",
+        "project_manifest_overlay",
+        "correction_overlay",
+        "correction_overlay_mapping",
+        "materialization_update_plan",
+        "materialization_update_plan_session",
+        "materialization_plan_entry",
+        "materialization_install_intent",
+        "materialization_item_journal",
+        "source_availability_rollup",
+        "matching_settings_revision",
+        "matching_settings_camera_policy",
+        "audit_event",
+        "outbox_event",
+    ];
+
+    for table in expected {
+        let exists: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
+        )
+        .bind(table)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(exists.0, 1, "missing normalized Spec 062 family table `{table}`");
+    }
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn owner_scoped_heads_and_parent_chains_reject_cross_owner_references() {
+    let (_dir, db) = fresh_database().await;
+    seed_session(db.pool()).await;
+
+    sqlx::query("INSERT INTO spec062_target VALUES (1, '00000000-0000-7000-8000-000000000010', '2026-07-22T00:00:00.000000Z')")
+        .execute(db.pool()).await.unwrap();
+    sqlx::query(
+        "INSERT INTO session
+         (row_id, public_id, materialization_operation_row_id, kind,
+          ordinal_in_operation, identity_digest, observing_night_date,
+          night_derivation, canonical_target_row_id, created_sequence, created_at)
+         VALUES (2, '00000000-0000-7000-8000-000000000013', 1, 'light', 1,
+                 'light-session', '2026-07-21', 'reviewed_local_fallback', 1, 1,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    for (id, public_id) in [
+        (1_i64, "00000000-0000-7000-8000-000000000011"),
+        (2_i64, "00000000-0000-7000-8000-000000000012"),
+    ] {
+        sqlx::query(
+            "INSERT INTO panel_group
+             (row_id, public_id, canonical_target_row_id, status, created_sequence, created_at)
+             VALUES (?, ?, 1, 'active', 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(id)
+        .bind(public_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO panel_group_revision
+             (row_id, public_id, panel_group_row_id, revision_number,
+              representative_session_row_id, config_revision_row_id, actor_row_id,
+              reason_code, created_sequence, created_at)
+             VALUES (?, ?, ?, 1, 2, 1, 1, 'initial', 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(id)
+        .bind(format!("00000000-0000-7000-8000-00000000002{id}"))
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+    assert!(sqlx::query("UPDATE panel_group SET head_revision_row_id = 2 WHERE row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
+    assert!(sqlx::query(
+        "INSERT INTO panel_revision_session
+         (panel_revision_row_id, session_row_id, ordinal) VALUES (1, 1, 0)",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    assert!(sqlx::query(
+        "INSERT INTO panel_group_revision
+         (row_id, public_id, panel_group_row_id, revision_number, parent_revision_row_id,
+          representative_session_row_id, config_revision_row_id, actor_row_id,
+          reason_code, created_sequence, created_at)
+         VALUES (3, '00000000-0000-7000-8000-000000000023', 1, 2, 2, 2, 1, 1,
+                 'cross-owner', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+
+    sqlx::query(
+        "INSERT INTO relation_proposal
+         (row_id, public_id, proposal_revision, kind, basis_digest, evidence_digest,
+          config_revision_row_id, state, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000030', 1, 'mosaic_create',
+                 'basis', 'evidence', 1, 'pending', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    for id in [1_i64, 2] {
+        sqlx::query(
+            "INSERT INTO mosaic
+             (row_id, public_id, canonical_target_row_id, status, created_sequence, created_at)
+             VALUES (?, ?, 1, 'active', 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(id)
+        .bind(format!("00000000-0000-7000-8000-00000000003{id}"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO mosaic_revision
+             (row_id, public_id, mosaic_row_id, revision_number, proposal_row_id,
+              config_revision_row_id, actor_row_id, reason_code, created_sequence, created_at)
+             VALUES (?, ?, ?, 1, 1, 1, 1, 'initial', 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(id)
+        .bind(format!("00000000-0000-7000-8000-00000000004{id}"))
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+    assert!(sqlx::query("UPDATE mosaic SET head_revision_row_id = 2 WHERE row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
+    assert!(sqlx::query(
+        "INSERT INTO mosaic_revision
+         (row_id, public_id, mosaic_row_id, revision_number, parent_revision_row_id,
+          proposal_row_id, config_revision_row_id, actor_row_id, reason_code,
+          created_sequence, created_at)
+         VALUES (3, '00000000-0000-7000-8000-000000000043', 1, 2, 2, 1, 1, 1,
+                 'cross-owner', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+
+    for id in [1_i64, 2] {
+        sqlx::query("INSERT INTO spec062_project (row_id, public_id, created_at) VALUES (?, ?, '2026-07-22T00:00:00.000000Z')")
+            .bind(id).bind(format!("00000000-0000-7000-8000-00000000005{id}"))
+            .execute(db.pool()).await.unwrap();
+        sqlx::query(
+            "INSERT INTO project_membership_revision
+             (row_id, public_id, project_row_id, revision_number, actor_row_id,
+              created_sequence, created_at)
+             VALUES (?, ?, ?, 1, 1, 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(id)
+        .bind(format!("00000000-0000-7000-8000-00000000006{id}"))
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+    assert!(sqlx::query(
+        "UPDATE spec062_project SET membership_head_revision_row_id = 2 WHERE row_id = 1"
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    assert!(sqlx::query(
+        "INSERT INTO project_membership_revision
+         (row_id, public_id, project_row_id, revision_number, parent_revision_row_id,
+          actor_row_id, created_sequence, created_at)
+         VALUES (3, '00000000-0000-7000-8000-000000000063', 1, 2, 2, 1, 1,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+
+    sqlx::query("INSERT INTO spec062_file_identity VALUES (2, '00000000-0000-7000-8000-000000000070', NULL, '2026-07-22T00:00:00.000000Z')")
+        .execute(db.pool()).await.unwrap();
+    sqlx::query("INSERT INTO frame_record (row_id, public_id, file_row_id, byte_size, captured_metadata_digest, created_sequence, created_at) VALUES (2, '00000000-0000-7000-8000-000000000071', 2, 1, 'f2', 1, '2026-07-22T00:00:00.000000Z')")
+        .execute(db.pool()).await.unwrap();
+    sqlx::query("INSERT INTO frame_metadata_evidence (row_id, public_id, frame_row_id, revision_number, detected_kind, offset_state, binning_state, readout_state, actor_row_id, command_row_id, created_sequence, recorded_at) VALUES (2, '00000000-0000-7000-8000-000000000072', 2, 1, 'dark', 'absent', 'absent', 'absent', 1, 1, 1, '2026-07-22T00:00:00.000000Z')")
+        .execute(db.pool()).await.unwrap();
+    assert!(sqlx::query("INSERT INTO frame_metadata_evidence_head VALUES (1, 2, 0)")
+        .execute(db.pool())
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn typed_references_idempotency_and_fencing_fail_closed() {
+    let (_dir, db) = fresh_database().await;
+    seed_session(db.pool()).await;
+
+    for removed in [
+        "relation_decision_revision",
+        "relation_decision_retired_group",
+        "relation_decision_lineage",
+    ] {
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sqlite_master WHERE name = ?")
+            .bind(removed)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(exists.0, 0, "unbound polymorphic table `{removed}` must not exist");
+    }
+
+    sqlx::query(
+        "INSERT INTO relation_proposal
+         (row_id, public_id, proposal_revision, kind, basis_digest, evidence_digest,
+          config_revision_row_id, state, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000080', 1, 'panel_add',
+                 'b', 'e', 1, 'pending', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query("INSERT INTO proposal_panel_revision_input VALUES (1, 999, 'source', 0)")
+        .execute(db.pool())
+        .await
+        .is_err());
+
+    sqlx::query(
+        "INSERT INTO spec062_project (row_id, public_id, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000083',
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO project_membership_revision
+         (row_id, public_id, project_row_id, revision_number, actor_row_id,
+          created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000084', 1, 1, 1, 1,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO spec062_destination_root
+         VALUES (1, '00000000-0000-7000-8000-000000000085', 1,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO materialization_update_plan
+         (row_id, public_id, project_row_id, target_membership_revision_row_id,
+          state, content_digest, session_count, item_count, source_frame_count,
+          source_byte_count, remaining_session_count, actor_row_id, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000086', 1, 1, 'approved',
+                 'plan', 1, 1, 1, 4096, 0, 1, 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO project_materialization_snapshot
+         (row_id, public_id, project_row_id, membership_revision_row_id,
+          applied_plan_row_id, entry_count, session_count, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000087', 1, 1, 1, 1, 1,
+                 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO materialized_entry
+         (row_id, public_id, project_row_id, first_snapshot_row_id,
+          source_session_row_id, source_frame_row_id, destination_root_row_id,
+          relative_path, content_fingerprint, created_by_plan_row_id,
+          created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000088', 1, 1, 1, 1, 1,
+                 'dark/frame.fit', 'sha256:abc', 1, 1,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO materialization_plan_entry
+         (row_id, public_id, plan_row_id, session_row_id, frame_row_id,
+          destination_root_row_id, relative_path, approved_fingerprint,
+          collision_state, ordinal)
+         VALUES (1, '00000000-0000-7000-8000-000000000089', 1, 1, 1, 1,
+                 'dark/frame.fit', 'sha256:abc', 'clear', 0)",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO materialization_install_intent
+         (plan_item_row_id, plan_row_id, collision_key, canonical_destination,
+          approved_fingerprint, ownership_token, command_row_id, lease_owner,
+          lease_generation, state, updated_at)
+         VALUES (1, 1, 'root:dark/frame.fit', '/project/dark/frame.fit',
+                 'sha256:abc', 'owner-token', 1, 'worker-a', 7, 'installed',
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query(
+        "INSERT INTO materialization_item_journal
+         (plan_item_row_id, plan_row_id, operation_command_row_id,
+          resulting_entry_row_id, destination_root_row_id, relative_path,
+          content_fingerprint, lease_owner, lease_generation, completed_at)
+         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 8,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    sqlx::query(
+        "INSERT INTO materialization_item_journal
+         (plan_item_row_id, plan_row_id, operation_command_row_id,
+          resulting_entry_row_id, destination_root_row_id, relative_path,
+          content_fingerprint, lease_owner, lease_generation, completed_at)
+         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 7,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query(
+        "INSERT INTO materialization_item_journal
+         (plan_item_row_id, plan_row_id, operation_command_row_id,
+          resulting_entry_row_id, destination_root_row_id, relative_path,
+          content_fingerprint, lease_owner, lease_generation, completed_at)
+         VALUES (1, 1, 1, 1, 1, 'dark/frame.fit', 'sha256:abc', 'worker-a', 7,
+                 '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+
+    sqlx::query(
+        "INSERT INTO outbox_event
+         (row_id, public_id, command_row_id, event_ordinal, session_row_id, event_type,
+          payload_json, created_sequence, occurred_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000081', 1, 0, 1,
+                 'session.created', '{}', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(sqlx::query(
+        "INSERT INTO outbox_event
+         (row_id, public_id, command_row_id, event_ordinal, session_row_id, event_type,
+          payload_json, created_sequence, occurred_at)
+         VALUES (2, '00000000-0000-7000-8000-000000000082', 1, 0, 1,
+                 'session.created', '{}', 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    assert!(sqlx::query("UPDATE outbox_event SET event_type = 'tampered' WHERE row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
+    assert!(sqlx::query("DELETE FROM outbox_event WHERE row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn accepted_snapshots_and_visibility_records_reject_update_and_delete() {
+    let (_dir, db) = fresh_database().await;
+    seed_session(db.pool()).await;
+
+    sqlx::query(
+        "INSERT INTO session_materialization_result_snapshot
+         (row_id, public_id, operation_row_id, session_count, membership_count,
+          singleton_group_count, blocked_frame_count, canonical_digest, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-8000-000000000090', 1, 0, 0, 0, 0,
+                 'snapshot', 1, '2026-07-22T00:00:00.000000Z')",
+    ).execute(db.pool()).await.unwrap();
+    assert!(sqlx::query("UPDATE session_materialization_result_snapshot SET canonical_digest = 'changed' WHERE row_id = 1")
+        .execute(db.pool()).await.is_err());
+    assert!(sqlx::query("DELETE FROM session_materialization_result_snapshot WHERE row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
+
+    sqlx::query("INSERT INTO session_visibility_history VALUES (1, 1, NULL, 'created')")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(sqlx::query(
+        "UPDATE session_visibility_history SET reason_code = 'changed' WHERE session_row_id = 1"
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+    assert!(sqlx::query("DELETE FROM session_visibility_history WHERE session_row_id = 1")
+        .execute(db.pool())
+        .await
+        .is_err());
+
+    assert!(sqlx::query(
+        "INSERT INTO frame_metadata_evidence
+         (row_id, public_id, frame_row_id, revision_number, detected_kind, offset_state,
+          binning_state, readout_state, footprint_wkb, footprint_digest,
+          bbox_min_x_ppb, bbox_max_x_ppb, bbox_min_y_ppb, bbox_max_y_ppb,
+          bbox_min_z_ppb, bbox_max_z_ppb, actor_row_id, command_row_id,
+          created_sequence, recorded_at)
+         VALUES (2, '00000000-0000-7000-8000-000000000091', 1, 2, 'dark',
+                 'absent', 'absent', 'absent', X'01', 'outside', -1000000001,
+                 1000000000, -1, 1, -1, 1, 1, 1, 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .is_err());
+}
