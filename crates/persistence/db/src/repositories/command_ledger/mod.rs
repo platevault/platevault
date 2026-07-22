@@ -186,6 +186,16 @@ pub enum AggregateRef {
 }
 
 impl AggregateRef {
+    fn validate(self) -> Result<()> {
+        let values = self.values();
+        if values.into_iter().flatten().any(|id| id <= 0) {
+            return Err(CommandLedgerError::InvalidInput(
+                "aggregate row ID must be positive".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
     fn values(self) -> [Option<i64>; 7] {
         let mut values = [None; 7];
         match self {
@@ -847,6 +857,15 @@ fn validate_terminal(input: &TerminalInput) -> Result<()> {
             "audit action and reason are required".to_owned(),
         ));
     }
+    input.audit.aggregate.validate()?;
+    for event in &input.outbox {
+        if event.event_type.is_empty() {
+            return Err(CommandLedgerError::InvalidInput(
+                "outbox event type is required".to_owned(),
+            ));
+        }
+        event.aggregate.validate()?;
+    }
     if let Some(response) = &input.response {
         let serialized = canonical_json(response)?;
         if serialized.len() > MAX_RESPONSE_BYTES {
@@ -923,7 +942,8 @@ fn redact_value(value: &Value) -> Value {
         }
         Value::Array(values) => Value::Array(values.iter().map(redact_value).collect()),
         Value::String(value) if value.len() > MAX_SAFE_STRING_BYTES => {
-            Value::String(format!("{}…", &value[..MAX_SAFE_STRING_BYTES]))
+            let truncated: String = value.chars().take(MAX_SAFE_STRING_BYTES).collect();
+            Value::String(format!("{truncated}…"))
         }
         other => other.clone(),
     }
@@ -953,7 +973,11 @@ fn bounded_safe_string(value: &str) -> Result<String> {
             "delivery error code is not bounded".to_owned(),
         ));
     }
-    if value.chars().any(char::is_control) {
+    if value.chars().any(char::is_control)
+        || value
+            .chars()
+            .any(|character| !(character.is_ascii_alphanumeric() || ".-_".contains(character)))
+    {
         return Err(CommandLedgerError::InvalidInput(
             "delivery error code contains control text".to_owned(),
         ));
