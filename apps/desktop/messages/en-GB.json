@@ -1001,12 +1001,108 @@
   "setup_language_label": "Language",
   "setup_language_review_notice": "This translation was generated automatically and awaits review by a fluent speaker.",
   "setup_scan_classify_failed": "Could not read types",
+  "setup_scan_classify_failed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file with an unreadable type",
+        "pp=other": "{count} files with unreadable types"
+      }
+    }
+  ],
   "setup_scan_col_files": "Files",
   "setup_scan_col_folder": "Folder / File",
   "setup_scan_col_format": "Format",
   "setup_scan_col_types": "Detected types",
+  "setup_scan_frame_count_bias": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} bias frame",
+        "pp=other": "{count} bias frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_dark": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} dark frame",
+        "pp=other": "{count} dark frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_flat": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} flat frame",
+        "pp=other": "{count} flat frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_light": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} light frame",
+        "pp=other": "{count} light frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_unknown": "{count} unknown frame type ({value})",
+  "setup_scan_frame_type_bias": "Bias",
+  "setup_scan_frame_type_dark": "Dark",
+  "setup_scan_frame_type_flat": "Flat",
+  "setup_scan_frame_type_light": "Light",
+  "setup_scan_frame_type_unknown": "Unknown type ({value})",
   "setup_scan_master": "Master",
   "setup_scan_master_kind": "Master {kind}",
+  "setup_scan_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} master",
+        "pp=other": "{count} masters"
+      }
+    }
+  ],
   "setup_scan_no_sources": "No sources registered yet. Go back and add at least one folder.",
   "setup_scan_nothing_detected": "Nothing detected in this folder.",
   "setup_scan_resolution_failed": "Could not verify whether this source was already scanned. Go back to Confirm and try again.",
@@ -1015,6 +1111,8 @@
   "setup_scan_phase_done": "Done",
   "setup_scan_phase_pending": "Pending",
   "setup_scan_scanning": "Scanning…",
+  "setup_scan_source_unknown": "Unknown source ({value})",
+  "setup_scan_source_status": "{path}: {status}",
   "setup_scan_summary_empty": "No folders detected. You can add more sources in Settings.",
   "setup_scan_summary_found": [
     {
@@ -1070,6 +1168,7 @@
   "setup_step_tools_heading": "Processing tools",
   "setup_step_tools_label": "Processing Tools",
   "setup_tools_detected": "Detected",
+  "setup_tools_detecting": "Detecting {name}…",
   "setup_tools_executable_label": "Executable",
   "setup_tools_intro": "Configure your processing tools so the app can prepare project inputs and suggest workflow profiles. Installed tools are detected automatically; you can override or set a path manually.",
   "setup_tools_invalid": "Invalid",
