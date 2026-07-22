@@ -994,7 +994,7 @@
   "setup_kind_light_frames": "Quadros de light",
   "setup_kind_light_frames_help": "Quadros de light brutos das suas sessões de imageamento (FITS/XISF). O PlateVault lê os cabeçalhos dos arquivos para montar seu histórico de aquisição — esses arquivos nunca são movidos ou copiados sem sua aprovação.",
   "setup_kind_project_help": "Pastas onde ficam seus projetos do PixInsight/WBPP e as saídas de processamento. Você criará projetos individuais a partir dessas pastas depois, em um fluxo guiado — adicionar a pasta agora apenas registra onde o PlateVault deve procurar.",
-  "setup_language_desc": "Escolha o idioma que você lê. Você pode alterá-lo depois em Configurações.",
+  "setup_language_desc": "Escolha seu idioma preferido",
   "setup_language_heading": "Escolha seu idioma",
   "setup_language_label": "Idioma",
   "setup_scan_classify_failed": "Não foi possível ler os tipos",

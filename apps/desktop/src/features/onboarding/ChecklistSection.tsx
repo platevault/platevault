@@ -98,7 +98,7 @@ export const ONBOARDING_PAGE_PATHS = Object.fromEntries(
 ) as Record<OnboardingPage, string>;
 
 /** Dynamic catalog access for registry-keyed item/prerequisite strings. The
- * keys are all present in `messages/en.json` (seeded T011); the itemId → key
+ * keys are all present in `messages/en-GB.json` (seeded T011); the itemId → key
  * mapping is `onboarding_item_<id-with-underscores>_<label|tooltip>`. */
 const catalog = m as unknown as Record<
   string,
