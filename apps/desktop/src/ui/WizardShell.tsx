@@ -20,7 +20,7 @@ export interface WizardShellProps extends HTMLAttributes<HTMLDivElement> {
   steps: WizardStep[];
   currentStep: number;
   children: ReactNode;
-  /** Optional navigation footer pinned to the bottom (setup wizard style). */
+  /** Optional navigation footer after the centered content (setup wizard style). */
   footer?: ReactNode;
   /** Optional summary sidebar on the right (project wizard style). */
   summary?: ReactNode;
@@ -38,7 +38,7 @@ export interface WizardShellProps extends HTMLAttributes<HTMLDivElement> {
  *
  * Two layout modes:
  * - **Centered** (setup wizard): when `footer` is provided and `summary` is not,
- *   content is centered at max-width 720px with a pinned navigation footer.
+ *   content and its navigation footer share a centered, scrollable flow.
  * - **Sidebar** (project wizard): when `summary` is provided, content fills the
  *   left column with a 240px summary rail on the right.
  */
@@ -148,68 +148,62 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
           </div>
         ) : (
           /* Centered layout (setup wizard) */
-          <>
-            <div className="pv-wizard__scroll">
-              <div
-                ref={stepContentRef}
-                className="pv-wizard__content--centered"
+          <div className="pv-wizard__scroll">
+            <div ref={stepContentRef} className="pv-wizard__content--centered">
+              {/* Inline step bar for centered mode */}
+              <nav
+                ref={progressRef}
+                className="pv-wizard__steps-bar"
+                aria-label={m.ui_wizard_setup_progress_aria()}
               >
-                {/* Inline step bar for centered mode */}
-                <nav
-                  ref={progressRef}
-                  className="pv-wizard__steps-bar"
-                  aria-label={m.ui_wizard_setup_progress_aria()}
-                >
-                  {steps.map((step, i) => {
-                    const isActive = i === currentStep;
-                    const isPast = i < currentStep;
-                    const cardClass =
-                      'pv-wizard__steps-card' +
-                      (isActive
-                        ? ' pv-wizard__steps-card--active'
-                        : isPast
-                          ? ' pv-wizard__steps-card--past'
-                          : '');
-                    const label = `${i + 1}. ${step.label}`;
-                    // Issue #512: when navigation is wired, render each step as
-                    // a real focusable button so completed/reachable steps can
-                    // be jumped to via mouse or keyboard; unreachable steps are
-                    // disabled. Falls back to an inert div otherwise (e.g. the
-                    // project wizard, which navigates only via Back/Continue).
-                    return onStepSelect ? (
-                      <button
-                        key={step.label}
-                        type="button"
-                        className={cardClass}
-                        aria-current={isActive ? 'step' : undefined}
-                        disabled={step.disabled}
-                        onClick={() => onStepSelect(i)}
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <div
-                        key={step.label}
-                        className={cardClass}
-                        aria-current={isActive ? 'step' : undefined}
-                      >
-                        {label}
-                      </div>
-                    );
-                  })}
-                </nav>
+                {steps.map((step, i) => {
+                  const isActive = i === currentStep;
+                  const isPast = i < currentStep;
+                  const cardClass =
+                    'pv-wizard__steps-card' +
+                    (isActive
+                      ? ' pv-wizard__steps-card--active'
+                      : isPast
+                        ? ' pv-wizard__steps-card--past'
+                        : '');
+                  const label = `${i + 1}. ${step.label}`;
+                  // Issue #512: when navigation is wired, render each step as
+                  // a real focusable button so completed/reachable steps can
+                  // be jumped to via mouse or keyboard; unreachable steps are
+                  // disabled. Falls back to an inert div otherwise (e.g. the
+                  // project wizard, which navigates only via Back/Continue).
+                  return onStepSelect ? (
+                    <button
+                      key={step.label}
+                      type="button"
+                      className={cardClass}
+                      aria-current={isActive ? 'step' : undefined}
+                      disabled={step.disabled}
+                      onClick={() => onStepSelect(i)}
+                    >
+                      {label}
+                    </button>
+                  ) : (
+                    <div
+                      key={step.label}
+                      className={cardClass}
+                      aria-current={isActive ? 'step' : undefined}
+                    >
+                      {label}
+                    </div>
+                  );
+                })}
+              </nav>
 
-                {children}
-              </div>
+              {children}
+
+              {hasCenteredFooter && (
+                <div className="pv-wizard__footer">
+                  <div className="pv-wizard__footer-inner">{footer}</div>
+                </div>
+              )}
             </div>
-
-            {/* Pinned navigation footer */}
-            {hasCenteredFooter && (
-              <div className="pv-wizard__footer">
-                <div className="pv-wizard__footer-inner">{footer}</div>
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
     );
