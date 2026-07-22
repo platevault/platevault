@@ -75,8 +75,17 @@ describe('localized frame and master labels', () => {
     expect(frameTypeLabel('science', { locale: 'en-GB' })).toBe(
       'Unknown type (science)',
     );
+    expect(frameTypeCountLabel('science', 1, { locale: 'en-GB' })).toBe(
+      '1 unknown frame type (science)',
+    );
     expect(frameTypeCountLabel('science', 3, { locale: 'en-GB' })).toBe(
-      '3 unknown frame type (science)',
+      '3 unknown frame types (science)',
+    );
+    expect(frameTypeCountLabel('science', 1, { locale: 'pt-BR' })).toBe(
+      '1 quadro de tipo desconhecido (science)',
+    );
+    expect(frameTypeCountLabel('science', 3, { locale: 'pt-BR' })).toBe(
+      '3 quadros de tipo desconhecido (science)',
     );
   });
 

@@ -196,7 +196,7 @@ function ToolCard({
   const pathValid = config.path !== null && looksExecutable(config.path);
   const [redetecting, setRedetecting] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  const noInstallationFound = notFound && config.path === null;
+  const noInstallationFound = notFound;
   const statusLabel = redetecting
     ? m.setup_tools_detecting({ name: def.name() })
     : noInstallationFound

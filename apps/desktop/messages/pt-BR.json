@@ -1078,7 +1078,22 @@
       }
     }
   ],
-  "setup_scan_frame_count_unknown": "{count} quadro de tipo desconhecido ({value})",
+  "setup_scan_frame_count_unknown": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de tipo desconhecido ({value})",
+        "pp=other": "{count} quadros de tipo desconhecido ({value})"
+      }
+    }
+  ],
   "setup_scan_frame_type_bias": "Viés",
   "setup_scan_frame_type_dark": "Escuro",
   "setup_scan_frame_type_flat": "Plano",
@@ -1110,6 +1125,7 @@
   "setup_scan_phase_pending": "Pendente",
   "setup_scan_scanning": "Escaneando…",
   "setup_scan_source_unknown": "Origem desconhecida ({value})",
+  "setup_scan_source_error": "{path}: {error}",
   "setup_scan_source_status": "{path}: {status}",
   "setup_scan_summary_empty": "Nenhuma pasta detectada. Você pode adicionar mais origens em Configurações.",
   "setup_scan_summary_found": [

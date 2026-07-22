@@ -327,7 +327,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
           className="pv-setup-scan__msg pv-setup-scan__msg--error"
           role="alert"
         >
-          {error}
+          {m.setup_scan_source_error({ path: source.path, error })}
         </p>
       )}
 
