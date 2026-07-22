@@ -3,7 +3,7 @@
 
 /**
  * Playwright mock-mode: first-run wizard's Language step (spec 061 US1,
- * T017-T022) — the wizard's new first step (FR-005), ahead of Source
+ * T017-T022) — the wizard's first step (FR-005), ahead of Theme/Source
  * Folders/Tools/Configuration/Observing Site/Confirm/Scan.
  *
  * The pt-BR catalog (`061-us3-ptbr-catalog`) is at full key parity with
@@ -30,6 +30,7 @@ function seedFreshWizardWithSources(
     window.localStorage.setItem(
       'alm-setup-wizard-state',
       JSON.stringify({
+        version: 2,
         currentStep: 0, // Language step (spec 061 US1) — always first (FR-005).
         sources: [
           {
@@ -50,7 +51,7 @@ function seedFreshWizardWithSources(
 }
 
 test.describe('setup wizard · Language step (spec 061 US1)', () => {
-  test('is the first step, ahead of Source Folders, with both shipped locales', async ({
+  test('is the first step, ahead of Theme and Source Folders, with both shipped locales', async ({
     page,
   }) => {
     page.addInitScript(() => {
@@ -62,7 +63,7 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     await expect(
       page.getByRole('heading', { name: 'Choose your language' }),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Setup · Step 1 of 7')).toBeVisible();
+    await expect(page.getByText('Setup · Step 1 of 8')).toBeVisible();
 
     const english = page.getByRole('button', { name: 'English (UK)' });
     const portuguese = page.getByRole('button', {
@@ -111,7 +112,7 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     );
     await expect(page.getByText('Escolha seu idioma preferido')).toBeVisible();
 
-    // Advance through the rest of setup. pt-BR is at full key parity with
+    // Advance through Theme to Source Folders. pt-BR is at full key parity with
     // en-GB, so every step heading and navigation action renders in Portuguese.
     const continueButton = page.getByRole('button', {
       name: /^Continuar para/i,
@@ -119,9 +120,11 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     await expect(continueButton).toBeVisible();
     await continueButton.click();
     await expect(
-      page.getByRole('heading', { name: 'Onde seus dados residem?' }),
+      page.getByRole('heading', {
+        name: 'Escolha a aparência do PlateVault',
+      }),
     ).toBeVisible();
-    await expect(page.getByText(/^setup_/)).toHaveCount(0);
+    await expect(page.getByText('Configuração · Etapa 2 de 8')).toBeVisible();
 
     // T020: Back-navigation returns to the Language step, and the earlier
     // choice is still there — a mistaken pick is recoverable.
@@ -131,11 +134,20 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     ).toBeVisible();
     await expect(portuguese).toHaveAttribute('aria-pressed', 'true');
 
-    // Forward again, then through the rest of the flow to Finish.
+    // Forward again through Theme to Source Folders.
+    await continueButton.click();
+    await expect(
+      page.getByRole('heading', {
+        name: 'Escolha a aparência do PlateVault',
+      }),
+    ).toBeVisible();
     await continueButton.click();
     await expect(
       page.getByRole('heading', { name: 'Onde seus dados residem?' }),
     ).toBeVisible();
+    await expect(page.getByText(/^setup_/)).toHaveCount(0);
+
+    // Continue through the rest of the flow to Finish.
     await continueButton.click(); // -> Processing Tools
     await continueButton.click(); // -> Configuration
     await continueButton.click(); // -> Observing Site (optional)

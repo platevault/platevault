@@ -32,7 +32,8 @@ function seedWizardAtSources(page: Page, locale: string): void {
     window.localStorage.setItem(
       'alm-setup-wizard-state',
       JSON.stringify({
-        currentStep: 1,
+        version: 2,
+        currentStep: 2,
         sources: [
           {
             kind: 'light_frames',

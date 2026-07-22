@@ -21,24 +21,26 @@ const SETUP_LOCALES = {
     heading: 'Choose your language',
     labels: [
       '1. Language',
-      '2. Source Folders',
-      '3. Processing Tools',
-      '4. Configuration',
-      '5. Observing Site',
-      '6. Confirm',
-      '7. Scan',
+      '2. Theme',
+      '3. Source Folders',
+      '4. Processing Tools',
+      '5. Configuration',
+      '6. Observing Site',
+      '7. Confirm',
+      '8. Scan',
     ],
   },
   'pt-BR': {
     heading: 'Escolha seu idioma',
     labels: [
       '1. Idioma',
-      '2. Pastas de origem',
-      '3. Ferramentas de processamento',
-      '4. Configuração',
-      '5. Local de observação',
-      '6. Confirmar',
-      '7. Escaneamento',
+      '2. Tem\u0061',
+      '3. Pastas de origem',
+      '4. Ferramentas de processamento',
+      '5. Configuração',
+      '6. Local de observação',
+      '7. Confirmar',
+      '8. Escaneamento',
     ],
   },
 } as const;
@@ -90,7 +92,9 @@ test.describe('wizard navigation accessibility', () => {
         await page.getByRole('button', { name: 'Português (Brasil)' }).click();
         await page.getByRole('button', { name: /^Continuar para/i }).click();
         await expect(
-          page.getByRole('heading', { name: 'Onde seus dados residem?' }),
+          page.getByRole('heading', {
+            name: 'Escolha a aparência do PlateVault',
+          }),
         ).toBeVisible();
         await page.getByRole('button', { name: /Voltar/i }).click();
         await expect(
@@ -136,7 +140,7 @@ test.describe('wizard navigation accessibility', () => {
       expect(geometry.documentOverflow).toBe(false);
       expect(geometry.horizontalOverflow).toBe(false);
       expect(geometry.overflowHintDisplay).toBe('none');
-      expect(geometry.cards).toHaveLength(7);
+      expect(geometry.cards).toHaveLength(8);
       for (const card of geometry.cards) {
         expect(card).toEqual({
           horizontallyContained: true,
@@ -172,7 +176,7 @@ test.describe('wizard navigation accessibility', () => {
   test('keyboard step activation focuses the new heading', async ({ page }) => {
     await openSetupWizard(page);
 
-    const sources = page.getByRole('button', { name: '2. Source Folders' });
+    const sources = page.getByRole('button', { name: '3. Source Folders' });
     await sources.focus();
     await sources.press('Enter');
 
@@ -216,14 +220,14 @@ test.describe('wizard navigation accessibility', () => {
       fullPage: true,
     });
 
-    const confirm = page.getByRole('button', { name: '6. Confirm' });
+    const confirm = page.getByRole('button', { name: '7. Confirm' });
     await confirm.focus();
     await confirm.press('Enter');
     await expect(
       page.getByRole('heading', { name: 'Ready to go' }),
     ).toBeFocused();
 
-    const active = page.getByRole('button', { name: '6. Confirm' });
+    const active = page.getByRole('button', { name: '7. Confirm' });
     await expect
       .poll(() =>
         active.evaluate((element) => {
@@ -324,7 +328,7 @@ test.describe('wizard navigation reduced motion', () => {
     recordScrollIntoView(page);
     await openSetupWizard(page);
 
-    const confirm = page.getByRole('button', { name: '6. Confirm' });
+    const confirm = page.getByRole('button', { name: '7. Confirm' });
     await confirm.focus();
     await confirm.press('Enter');
 
