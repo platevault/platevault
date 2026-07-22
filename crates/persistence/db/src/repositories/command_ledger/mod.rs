@@ -1054,6 +1054,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn independent_connections_share_global_command_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("command-ledger.db");
+        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let first_db = Database::connect(&url).await.unwrap();
+        first_db.migrate_uncached().await.unwrap();
+        let second_db = Database::connect(&url).await.unwrap();
+        second_db.migrate().await.unwrap();
+        let first_ledger = CommandLedger::new(first_db.pool().clone());
+        let second_ledger = CommandLedger::new(second_db.pool().clone());
+        assert!(matches!(
+            first_ledger.claim_at(&request("worker-a"), "2026-01-01T00:00:00Z").await.unwrap(),
+            ClaimOutcome::Claimed(_)
+        ));
+        assert!(matches!(
+            second_ledger.claim_at(&request("worker-b"), "2026-01-01T00:00:01Z").await.unwrap(),
+            ClaimOutcome::InProgress { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn finish_is_atomic_and_stale_fence_cannot_duplicate_effects() {
         let db = database().await;
         seed_session(&db).await;
