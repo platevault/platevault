@@ -14,16 +14,27 @@
  * lifecycle stepper). CSS: `.pv-status-tag` in styles/components.
  */
 
+import type { HTMLAttributes } from 'react';
 import type { PillVariant } from '@/ui';
 
-export interface StatusTagProps {
+export interface StatusTagProps extends HTMLAttributes<HTMLSpanElement> {
   variant: PillVariant;
   children: string;
 }
 
-export function StatusTag({ variant, children }: StatusTagProps) {
+export function StatusTag({
+  variant,
+  children,
+  className,
+  ...rest
+}: StatusTagProps) {
   return (
-    <span className={`pv-status-tag pv-status-tag--${variant}`}>
+    <span
+      className={['pv-status-tag', `pv-status-tag--${variant}`, className]
+        .filter(Boolean)
+        .join(' ')}
+      {...rest}
+    >
       <span className="pv-status-tag__dot" aria-hidden="true" />
       {children}
     </span>

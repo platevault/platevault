@@ -1173,6 +1173,166 @@
   color: var(--pv-text-muted);
 }
 
+/* === SETUP STEP THEME === */
+
+.pv-locale-choices {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(var(--pv-control-h) * 5)), 1fr)
+  );
+  gap: var(--pv-sp-2);
+}
+
+.pv-locale-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--pv-sp-1);
+  min-width: 0;
+  padding: var(--pv-sp-3);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  color: var(--pv-text);
+  cursor: pointer;
+  text-align: start;
+  transition:
+    border-color var(--pv-transition-fast),
+    box-shadow var(--pv-transition-fast);
+}
+
+.pv-locale-choice:hover,
+.pv-locale-choice--active {
+  border-color: var(--pv-accent);
+}
+
+.pv-locale-choice--active {
+  box-shadow: 0 0 0 1px var(--pv-accent);
+}
+
+.pv-locale-choice:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}
+
+.pv-locale-choice__name {
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-semibold);
+}
+
+.pv-step-theme {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-5);
+}
+
+.pv-theme-specimen {
+  padding: var(--pv-sp-4);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface);
+  box-shadow: var(--pv-shadow-sm);
+}
+
+.pv-theme-specimen__heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pv-sp-3);
+}
+
+.pv-theme-specimen__eyebrow {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-wide);
+  text-transform: uppercase;
+}
+
+.pv-theme-specimen__heading {
+  margin: var(--pv-sp-1) 0 0;
+  color: var(--pv-text);
+  font-size: var(--pv-text-lg);
+  font-weight: var(--pv-weight-semibold);
+  line-height: var(--pv-leading-tight);
+  text-wrap: balance;
+}
+
+.pv-theme-specimen__description {
+  margin: var(--pv-sp-2) 0 var(--pv-sp-4);
+  color: var(--pv-text-secondary);
+  font-size: var(--pv-text-sm);
+  line-height: var(--pv-leading-normal);
+  text-wrap: pretty;
+}
+
+.pv-theme-specimen__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-3);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-bg);
+}
+
+.pv-theme-specimen__source-row,
+.pv-theme-specimen__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+}
+
+.pv-theme-specimen__source-row {
+  justify-content: space-between;
+}
+
+.pv-theme-specimen__source-title {
+  color: var(--pv-text);
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-semibold);
+}
+
+.pv-theme-specimen__source-meta {
+  margin-top: var(--pv-sp-0);
+  color: var(--pv-text-muted);
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+}
+
+.pv-theme-specimen__input {
+  display: inline-flex;
+  flex: 1 1 calc(var(--pv-control-h) * 5);
+  align-items: center;
+  min-width: 0;
+  color: var(--pv-text-muted);
+  box-shadow: var(--pv-focus-ring);
+}
+
+.pv-theme-specimen__controls .pv-btn {
+  cursor: default;
+  pointer-events: none;
+}
+
+.pv-theme-specimen__feedback {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border: 1px solid var(--pv-ok-border);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-ok-bg);
+  color: var(--pv-ok);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+}
+
+.pv-theme-specimen__feedback-mark {
+  font-weight: var(--pv-weight-semibold);
+}
+
 /* === SETUP STEP SOURCE FOLDERS === */
 
 /*
@@ -1713,15 +1873,15 @@
 
 /* Individual step card — future (default) */
 .pv-wizard__steps-card {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: var(--pv-sp-2) var(--pv-sp-1);
+  flex: 0 0 auto;
+  min-width: max-content;
+  padding: var(--pv-sp-2) var(--pv-sp-3);
   border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
   line-height: var(--pv-leading-tight);
   text-align: center;
-  white-space: normal;
+  white-space: nowrap;
   background: var(--pv-bg);
   color: var(--pv-text-muted);
   font-weight: var(--pv-weight-normal);
