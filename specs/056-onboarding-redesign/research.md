@@ -25,16 +25,15 @@ the 056 disqualification is on merit alone.
 **Alternatives considered**:
 - Shepherd 15.x — disqualified on merit (above).
 - Headless build on `@floating-ui/react` — **pre-approved fallback** if
-  joyride regresses (currently only a transitive dep via
-  `@base-ui-components/react 1.0.0-rc.0`; adopting it would add one direct
-  dep). The thin adapter (R3) exists precisely so this swap stays cheap.
+  joyride regresses. It is a transitive dependency through
+  `@base-ui-components/react 1.0.0-rc.0`; adopting it adds one direct
+  dependency. The thin adapter (R3) confines the swap.
 
 ## R2 — Joyride risk register (a11y spike executed: verdict GO)
 
-The screen-reader spike planned as an early implementation task was executed
-during this trail (evidence: a11y-spike `findings.txt`, file/line citations +
-DOM dumps, relayed 2026-07-18). Verdict: **GO** — react-joyride v3 confirmed
-viable. The following are binding adapter requirements, not provisional risks:
+The screen-reader spike evidence is in a11y-spike `findings.txt`, with file and
+line citations plus DOM dumps. React-joyride v3 passed the spike. The following
+adapter requirements are binding:
 
 1. **No modal ARIA from the library**: joyride's `role="alertdialog"` /
    `aria-modal="true"` exist ONLY in `DefaultTooltip`'s `tooltipProps` spread.
@@ -108,16 +107,15 @@ subscriber → persisted tick end-to-end (VC-003).
 
 ## R6 — Persistence and migration
 
-**Decision**: new migration **0069** (next free after
-`crates/persistence/db/migrations/0068_framing_attribution.sql`) creating
-`onboarding_state` (per-item rows) and `onboarding_flags` (singleton), and
-dropping the legacy table via `DROP TABLE IF EXISTS guided_flow_state`.
-Migration `0030_guided_flow.sql` is shipped and untouchable; it stays as-is.
+**Decision**: migration **0080** creates `onboarding_state` (per-item rows) and
+`onboarding_flags` (singleton). Migration **0081** drops the legacy table via
+`DROP TABLE IF EXISTS guided_flow_state`. Migration `0030_guided_flow.sql` is
+shipped and untouched.
 
-**Cautions (project memory)**: parallel merges grabbing the same migration
-number abort fresh-DB migrate — renumber at merge time if 0069 is taken; on
-Windows dev, touch `crates/persistence/db/src/lib.rs` to force sqlx re-embed
-of the new migration.
+**Cautions (project memory)**: parallel merges claiming the same migration
+number abort fresh-DB migrate. On Windows, touch
+`crates/persistence/db/src/lib.rs` to force sqlx re-embedding of a new
+migration.
 
 ## R7 — Deletion inventory (old machinery, verified paths)
 

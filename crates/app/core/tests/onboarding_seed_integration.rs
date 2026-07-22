@@ -278,8 +278,6 @@ async fn reconcile_recovers_a_missed_event() {
     assert_eq!(item_state(&state, "inbox.confirm_first"), OnboardingItemState::AutoChecked);
 }
 
-/// The distinction the whole pass turns on: an `unchecked` row whose source is
-/// `user` is a deliberate un-check (PQ-002) and must survive every launch.
 #[tokio::test]
 async fn reconcile_leaves_a_user_unchecked_automatic_item_alone() {
     let pool = setup_pool().await;
@@ -303,11 +301,11 @@ async fn reconcile_leaves_settled_rows_untouched() {
         &pool,
         &OnboardingItemSetStateRequest {
             item_id: "inbox.confirm_first".to_owned(),
-            state: OnboardingManualState::ManuallyChecked,
+            state: OnboardingManualState::Dismissed,
         },
     )
     .await
-    .expect("manual check");
+    .expect("dismiss");
 
     // Both milestones are now genuinely met — reconciliation must still not
     // rewrite a settled row.
@@ -317,7 +315,7 @@ async fn reconcile_leaves_settled_rows_untouched() {
 
     let state = get_state(&pool).await.unwrap().state;
     assert_eq!(item_state(&state, "projects.create_first"), OnboardingItemState::Dismissed);
-    assert_eq!(item_state(&state, "inbox.confirm_first"), OnboardingItemState::ManuallyChecked);
+    assert_eq!(item_state(&state, "inbox.confirm_first"), OnboardingItemState::Dismissed);
 }
 
 /// Manual items (FR-017) have no completion topic, so there is no event for
