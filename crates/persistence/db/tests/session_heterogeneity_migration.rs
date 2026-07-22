@@ -180,6 +180,7 @@ async fn accepted_session_membership_is_append_only_and_exact_cardinality_is_que
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn footprint_rtree_preserves_outward_i32_bounds() {
     let (_dir, db) = fresh_database().await;
     seed_session(db.pool()).await;
@@ -207,12 +208,13 @@ async fn footprint_rtree_preserves_outward_i32_bounds() {
         "INSERT INTO frame_metadata_evidence (
             row_id, public_id, frame_row_id, revision_number, detected_kind,
             offset_state, binning_state, readout_state, footprint_wkb, footprint_digest,
+            centre_ra_udeg, centre_dec_udeg,
             bbox_min_x_ppb, bbox_max_x_ppb, bbox_min_y_ppb, bbox_max_y_ppb,
             bbox_min_z_ppb, bbox_max_z_ppb, geometry_solver_version, actor_row_id,
             command_row_id, created_sequence, recorded_at
          ) VALUES (
             1, '00000000-0000-7000-8000-000000000008', 1, 1, 'dark',
-            'absent', 'absent', 'absent', X'01', 'footprint-digest', ?, ?,
+            'absent', 'absent', 'absent', X'01', 'footprint-digest', 0, 90000000, ?, ?,
             -1, 1, -1000000000, 1000000000, 'solver-v1', 1, 1, 1,
             '2026-07-22T00:00:00.000000Z'
          )",
@@ -231,6 +233,134 @@ async fn footprint_rtree_preserves_outward_i32_bounds() {
     .await
     .expect("rtree row inserted atomically with evidence");
     assert_eq!(bounds, (min_x, max_x, -1, 1, -1_000_000_000, 1_000_000_000));
+
+    // Exercise all axes and spherical extrema, including RA zero and both poles.
+    for (offset, (min_x, max_x, min_y, max_y, min_z, max_z, ra, dec)) in [
+        (2_i64, (-1_000_000_000, -999_999_999, -20, 20, -30, 30, 0, -90_000_000)),
+        (3, (-400, 400, -1_000_000_000, -999_999_999, -50, 50, 180_000_000, 0)),
+        (4, (-600, 600, -70, 70, 999_999_999, 1_000_000_000, 359_999_999, 90_000_000)),
+        (5, (-800, 800, -90, 90, -100, 100, 12_345_678, 45_000_000)),
+    ] {
+        sqlx::query(
+            "INSERT INTO spec062_file_identity VALUES (?, ?, NULL, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(offset)
+        .bind(format!("file-{offset}"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO frame_record
+             (row_id, public_id, file_row_id, byte_size, captured_metadata_digest,
+              created_sequence, created_at)
+             VALUES (?, ?, ?, 1, ?, 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(offset)
+        .bind(format!("frame-{offset}"))
+        .bind(offset)
+        .bind(format!("digest-{offset}"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO frame_metadata_evidence
+             (row_id, public_id, frame_row_id, revision_number, detected_kind,
+              offset_state, binning_state, readout_state, footprint_wkb, footprint_digest,
+              centre_ra_udeg, centre_dec_udeg,
+              bbox_min_x_ppb, bbox_max_x_ppb, bbox_min_y_ppb, bbox_max_y_ppb,
+              bbox_min_z_ppb, bbox_max_z_ppb, geometry_solver_version,
+              actor_row_id, command_row_id, created_sequence, recorded_at)
+             VALUES (?, ?, ?, 1, 'dark', 'absent', 'absent', 'absent', X'01', ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                     'solver-v1', 1, 1, 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(offset)
+        .bind(format!("evidence-{offset}"))
+        .bind(offset)
+        .bind(format!("footprint-{offset}"))
+        .bind(ra)
+        .bind(dec)
+        .bind(min_x)
+        .bind(max_x)
+        .bind(min_y)
+        .bind(max_y)
+        .bind(min_z)
+        .bind(max_z)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+    let mut seed = 0x9e37_79b9_u64;
+    for offset in 6_i64..=21 {
+        // A deterministic pseudo-random corpus keeps this regression test stable
+        // while exercising quantization cells across all three axes.
+        let next = |state: &mut u64| {
+            *state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            (*state >> 16).cast_signed()
+        };
+        let min_x = next(&mut seed) % 1_000_000_000;
+        let min_y = next(&mut seed) % 1_000_000_000;
+        let min_z = next(&mut seed) % 1_000_000_000;
+        let max_x = min_x + (next(&mut seed) % (1_000_000_000 - min_x));
+        let max_y = min_y + (next(&mut seed) % (1_000_000_000 - min_y));
+        let max_z = min_z + (next(&mut seed) % (1_000_000_000 - min_z));
+        sqlx::query(
+            "INSERT INTO spec062_file_identity VALUES (?, ?, NULL, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(offset)
+        .bind(format!("random-file-{offset}"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO frame_record
+             (row_id, public_id, file_row_id, byte_size, captured_metadata_digest,
+              created_sequence, created_at)
+             VALUES (?, ?, ?, 1, ?, 1, '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(offset)
+        .bind(format!("random-frame-{offset}"))
+        .bind(offset)
+        .bind(format!("random-digest-{offset}"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO frame_metadata_evidence
+             (row_id, public_id, frame_row_id, revision_number, detected_kind,
+              offset_state, binning_state, readout_state, footprint_wkb, footprint_digest,
+              bbox_min_x_ppb, bbox_max_x_ppb, bbox_min_y_ppb, bbox_max_y_ppb,
+              bbox_min_z_ppb, bbox_max_z_ppb, actor_row_id, command_row_id,
+              created_sequence, recorded_at)
+             VALUES (?, ?, ?, 1, 'dark', 'absent', 'absent', 'absent', X'01', ?, ?, ?, ?, ?, ?, ?, 1, 1, 1,
+                     '2026-07-22T00:00:00.000000Z')",
+        )
+        .bind(offset)
+        .bind(format!("random-evidence-{offset}"))
+        .bind(offset)
+        .bind(format!("random-footprint-{offset}"))
+        .bind(min_x)
+        .bind(max_x)
+        .bind(min_y)
+        .bind(max_y)
+        .bind(min_z)
+        .bind(max_z)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+    let corpus_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM frame_footprint_rtree")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(corpus_count.0, 21);
+    let extrema: (i64, i64, i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT min_x_ppb, max_x_ppb, min_y_ppb, max_y_ppb, min_z_ppb, max_z_ppb
+         FROM frame_footprint_rtree WHERE evidence_row_id = 4",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(extrema, (-600, 600, -70, 70, 999_999_999, 1_000_000_000));
 
     assert!(sqlx::query("UPDATE frame_metadata_evidence SET bbox_min_x_ppb = 0 WHERE row_id = 1")
         .execute(db.pool())
@@ -295,6 +425,7 @@ async fn normalized_result_counts_and_visibility_history_are_enforced() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn every_approved_data_model_family_has_normalized_storage() {
     let (_dir, db) = fresh_database().await;
     let expected = [
@@ -384,6 +515,46 @@ async fn every_approved_data_model_family_has_normalized_storage() {
         .await
         .unwrap();
         assert_eq!(exists.0, 1, "missing normalized Spec 062 family table `{table}`");
+    }
+
+    let frame_columns: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM pragma_table_info('frame_metadata_evidence') ORDER BY cid",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    for column in [
+        "classification_source",
+        "classification_confidence",
+        "canonical_time_source",
+        "local_exposure_text",
+        "local_time_parse_state",
+        "gain_text",
+        "crop_state",
+        "crop_payload",
+        "cooling_setpoint_state",
+        "cooling_setpoint_millic",
+        "sensor_temperature_state",
+        "sensor_temperature_millic",
+        "camera_reported",
+        "telescope_reported",
+        "focal_length_reported_um",
+        "focal_length_calculated_um",
+        "filter_state",
+        "filter_reported",
+        "physical_rotator_state",
+        "physical_rotator_udeg",
+        "physical_rotator_field_id",
+        "sky_orientation_state",
+        "sky_orientation_udeg",
+        "centre_ra_udeg",
+        "centre_dec_udeg",
+        "capture_profile_version_row_id",
+    ] {
+        assert!(
+            frame_columns.iter().any(|actual| actual == column),
+            "missing typed frame field `{column}`"
+        );
     }
 }
 
@@ -625,6 +796,20 @@ async fn typed_references_idempotency_and_fencing_fail_closed() {
     .execute(db.pool())
     .await
     .unwrap();
+
+    // The journal fence must match the live command lease, not merely repeat
+    // the ownership values stored in the install intent.
+    sqlx::query(
+        "UPDATE command_execution
+         SET state = 'executing', state_version = 1, lease_owner = 'worker-a',
+             lease_generation = 7, lease_expires_at = '2026-07-22T00:05:00.000000Z',
+             heartbeat_at = '2026-07-22T00:00:00.000000Z', finished_at = NULL
+         WHERE row_id = 1",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+
     sqlx::query(
         "INSERT INTO project_materialization_snapshot
          (row_id, public_id, project_row_id, membership_revision_row_id,
@@ -758,6 +943,35 @@ async fn accepted_snapshots_and_visibility_records_reject_update_and_delete() {
         .execute(db.pool())
         .await
         .unwrap();
+    sqlx::query("INSERT INTO repository_change(command_row_id, created_at) VALUES (1, '2026-07-22T00:00:02.000000Z')")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE session_visibility_history SET hidden_sequence = 2
+         WHERE session_row_id = 1 AND visible_sequence = 1",
+    )
+    .execute(db.pool())
+    .await
+    .expect("the one documented visibility closure transition is allowed");
+    let visible_at_one: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM session_visibility_history
+         WHERE session_row_id = 1 AND visible_sequence <= 1
+           AND (hidden_sequence IS NULL OR hidden_sequence > 1)",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    let visible_at_two: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM session_visibility_history
+         WHERE session_row_id = 1 AND visible_sequence <= 2
+           AND (hidden_sequence IS NULL OR hidden_sequence > 2)",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(visible_at_one.0, 1);
+    assert_eq!(visible_at_two.0, 0);
     assert!(sqlx::query(
         "UPDATE session_visibility_history SET reason_code = 'changed' WHERE session_row_id = 1"
     )

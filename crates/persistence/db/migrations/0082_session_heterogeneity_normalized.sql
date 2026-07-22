@@ -86,8 +86,16 @@ CREATE TABLE frame_metadata_evidence (
     revision_number INTEGER NOT NULL CHECK (revision_number >= 1),
     predecessor_evidence_row_id INTEGER,
     detected_kind TEXT NOT NULL CHECK (detected_kind IN ('light','dark','bias','flat')),
+    classification_source TEXT NOT NULL DEFAULT 'rule'
+        CHECK (classification_source IN ('rule','manual_override','fallback')),
+    classification_confidence REAL NOT NULL DEFAULT 1.0
+        CHECK (classification_confidence BETWEEN 0.0 AND 1.0),
     canonical_exposure_at_utc TEXT,
+    canonical_time_source TEXT,
+    local_exposure_text TEXT,
+    local_time_parse_state TEXT,
     exposure_us INTEGER CHECK (exposure_us IS NULL OR exposure_us >= 0),
+    gain_text TEXT,
     offset_state TEXT NOT NULL CHECK (offset_state IN ('present','absent','invalid','contradictory')),
     offset_value INTEGER,
     binning_state TEXT NOT NULL CHECK (binning_state IN ('present','absent','invalid','contradictory')),
@@ -97,9 +105,34 @@ CREATE TABLE frame_metadata_evidence (
     readout_mode TEXT,
     raster_width INTEGER CHECK (raster_width IS NULL OR raster_width > 0),
     raster_height INTEGER CHECK (raster_height IS NULL OR raster_height > 0),
+    crop_state TEXT NOT NULL DEFAULT 'absent'
+        CHECK (crop_state IN ('reported_full','reported_crop','reported_subframe','absent','invalid','contradictory')),
+    crop_payload TEXT,
     parity TEXT CHECK (parity IS NULL OR parity IN ('normal','mirrored')),
+    cooling_setpoint_state TEXT NOT NULL DEFAULT 'absent'
+        CHECK (cooling_setpoint_state IN ('present','absent','invalid','contradictory')),
+    cooling_setpoint_millic INTEGER,
+    sensor_temperature_state TEXT NOT NULL DEFAULT 'absent'
+        CHECK (sensor_temperature_state IN ('present','absent','invalid','contradictory')),
+    sensor_temperature_millic INTEGER,
+    camera_reported TEXT,
+    telescope_reported TEXT,
+    focal_length_reported_um INTEGER CHECK (focal_length_reported_um IS NULL OR focal_length_reported_um > 0),
+    focal_length_calculated_um INTEGER CHECK (focal_length_calculated_um IS NULL OR focal_length_calculated_um > 0),
+    filter_state TEXT NOT NULL DEFAULT 'absent'
+        CHECK (filter_state IN ('present','absent','invalid','contradictory')),
+    filter_reported TEXT,
+    physical_rotator_state TEXT NOT NULL DEFAULT 'absent'
+        CHECK (physical_rotator_state IN ('verified','absent','unverified','invalid','contradictory')),
+    physical_rotator_udeg INTEGER,
+    physical_rotator_field_id TEXT,
+    sky_orientation_state TEXT NOT NULL DEFAULT 'absent'
+        CHECK (sky_orientation_state IN ('present','absent','invalid','contradictory')),
+    sky_orientation_udeg INTEGER,
     footprint_wkb BLOB,
     footprint_digest TEXT,
+    centre_ra_udeg INTEGER CHECK (centre_ra_udeg IS NULL OR centre_ra_udeg BETWEEN 0 AND 360000000),
+    centre_dec_udeg INTEGER CHECK (centre_dec_udeg IS NULL OR centre_dec_udeg BETWEEN -90000000 AND 90000000),
     bbox_min_x_ppb INTEGER CHECK (bbox_min_x_ppb BETWEEN -1000000000 AND 1000000000),
     bbox_max_x_ppb INTEGER CHECK (bbox_max_x_ppb BETWEEN -1000000000 AND 1000000000),
     bbox_min_y_ppb INTEGER CHECK (bbox_min_y_ppb BETWEEN -1000000000 AND 1000000000),
@@ -107,6 +140,7 @@ CREATE TABLE frame_metadata_evidence (
     bbox_min_z_ppb INTEGER CHECK (bbox_min_z_ppb BETWEEN -1000000000 AND 1000000000),
     bbox_max_z_ppb INTEGER CHECK (bbox_max_z_ppb BETWEEN -1000000000 AND 1000000000),
     geometry_solver_version TEXT,
+    capture_profile_version_row_id INTEGER REFERENCES capture_profile_version(row_id),
     source_payload_json TEXT,
     actor_row_id INTEGER NOT NULL REFERENCES spec062_actor(row_id),
     command_row_id INTEGER NOT NULL REFERENCES command_execution(row_id),
@@ -118,10 +152,17 @@ CREATE TABLE frame_metadata_evidence (
     FOREIGN KEY (predecessor_evidence_row_id, frame_row_id)
         REFERENCES frame_metadata_evidence(row_id, frame_row_id),
     CHECK ((offset_state = 'present') = (offset_value IS NOT NULL)),
+    CHECK ((cooling_setpoint_state = 'present') = (cooling_setpoint_millic IS NOT NULL)),
+    CHECK ((sensor_temperature_state = 'present') = (sensor_temperature_millic IS NOT NULL)),
+    CHECK ((filter_state = 'present') = (filter_reported IS NOT NULL)),
+    CHECK ((physical_rotator_state = 'verified') = (physical_rotator_udeg IS NOT NULL)),
+    CHECK ((physical_rotator_state = 'verified') = (physical_rotator_field_id IS NOT NULL)),
+    CHECK ((sky_orientation_state = 'present') = (sky_orientation_udeg IS NOT NULL)),
     CHECK ((binning_state = 'present') = (bin_x IS NOT NULL AND bin_y IS NOT NULL)),
     CHECK (bin_x IS NULL OR bin_x > 0),
     CHECK (bin_y IS NULL OR bin_y > 0),
     CHECK ((readout_state = 'present') = (readout_mode IS NOT NULL)),
+    CHECK ((crop_state IN ('reported_crop','reported_subframe')) = (crop_payload IS NOT NULL)),
     CHECK ((footprint_wkb IS NULL) = (footprint_digest IS NULL)),
     CHECK ((footprint_wkb IS NULL) = (bbox_min_x_ppb IS NULL)),
     CHECK ((footprint_wkb IS NULL) = (bbox_max_x_ppb IS NULL)),
@@ -2281,6 +2322,13 @@ LEFT JOIN inbox_plan_result_proposed_session AS child ON child.snapshot_row_id =
 GROUP BY p.row_id
 HAVING COUNT(child.row_id) <> p.proposed_session_count
 UNION ALL
+SELECT 'inbox_proposed_session_frame_count', p.row_id
+FROM inbox_plan_result_proposed_session AS p
+LEFT JOIN inbox_plan_result_proposed_session_frame AS child
+    ON child.proposed_session_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.frame_row_id) <> p.frame_count
+UNION ALL
 SELECT 'inbox_blocked_frame_count', p.row_id
 FROM inbox_materialization_plan_result_snapshot AS p
 LEFT JOIN inbox_plan_result_blocked_frame AS child ON child.snapshot_row_id = p.row_id
@@ -2312,6 +2360,12 @@ LEFT JOIN calibration_handoff_frame AS child ON child.selection_row_id = ss.sele
 GROUP BY p.row_id
 HAVING COUNT(child.frame_row_id) <> p.frame_count
 UNION ALL
+SELECT 'reclassification_output_frame_count', p.row_id
+FROM reclassification_plan_output AS p
+LEFT JOIN reclassification_plan_output_frame AS child ON child.output_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.frame_row_id) <> p.frame_count
+UNION ALL
 SELECT 'reclassification_replacement_count', p.row_id
 FROM reclassification_plan_result_snapshot AS p
 LEFT JOIN reclassification_plan_result_session AS child ON child.snapshot_row_id = p.row_id
@@ -2324,11 +2378,71 @@ LEFT JOIN reclassification_plan_result_frame AS child ON child.snapshot_row_id =
 GROUP BY p.row_id
 HAVING COUNT(child.frame_row_id) <> p.frame_count
 UNION ALL
+SELECT 'reclassification_panel_consequence_count', p.row_id
+FROM reclassification_plan_result_snapshot AS p
+LEFT JOIN reclassification_plan_result_panel_consequence AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.source_panel_revision_row_id) <> p.panel_consequence_count
+UNION ALL
+SELECT 'reclassification_retirement_count', p.row_id
+FROM reclassification_plan_result_snapshot AS p
+LEFT JOIN reclassification_plan_result_retirement AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.predecessor_panel_group_row_id) <> p.retirement_count
+UNION ALL
+SELECT 'reclassification_lineage_count', p.row_id
+FROM reclassification_plan_result_snapshot AS p
+LEFT JOIN reclassification_plan_result_lineage AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.predecessor_panel_group_row_id) <> p.lineage_count
+UNION ALL
 SELECT 'reclassification_stale_edge_count', p.row_id
 FROM reclassification_plan_result_snapshot AS p
 LEFT JOIN reclassification_plan_result_stale_edge AS child ON child.snapshot_row_id = p.row_id
 GROUP BY p.row_id
 HAVING COUNT(child.edge_evidence_row_id) <> p.stale_edge_count
+UNION ALL
+SELECT 'reclassification_project_consequence_count', p.row_id
+FROM reclassification_plan_result_snapshot AS p
+LEFT JOIN reclassification_plan_result_project_consequence AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.project_membership_revision_row_id) <> p.project_consequence_count
+UNION ALL
+SELECT 'reclassification_apply_created_session_count', p.row_id
+FROM reclassification_apply_result_snapshot AS p
+LEFT JOIN reclassification_apply_created_session AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.session_row_id) <> p.created_session_count
+UNION ALL
+SELECT 'reclassification_apply_accepted_panel_count', p.row_id
+FROM reclassification_apply_result_snapshot AS p
+LEFT JOIN reclassification_apply_panel_revision AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.panel_revision_row_id) <> p.accepted_panel_count
+UNION ALL
+SELECT 'reclassification_apply_retirement_count', p.row_id
+FROM reclassification_apply_result_snapshot AS p
+LEFT JOIN reclassification_apply_retired_panel_group AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.panel_group_row_id) <> p.retirement_count
+UNION ALL
+SELECT 'reclassification_apply_lineage_count', p.row_id
+FROM reclassification_apply_result_snapshot AS p
+LEFT JOIN reclassification_apply_panel_lineage AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.predecessor_group_row_id) <> p.lineage_count
+UNION ALL
+SELECT 'reclassification_apply_invalidated_edge_count', p.row_id
+FROM reclassification_apply_result_snapshot AS p
+LEFT JOIN reclassification_apply_invalidated_edge AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.edge_evidence_row_id) <> p.invalidated_edge_count
+UNION ALL
+SELECT 'reclassification_apply_project_proposal_count', p.row_id
+FROM reclassification_apply_result_snapshot AS p
+LEFT JOIN reclassification_apply_project_proposal AS child ON child.snapshot_row_id = p.row_id
+GROUP BY p.row_id
+HAVING COUNT(child.proposal_row_id) <> p.project_proposal_count
 UNION ALL
 SELECT 'correction_overlay_mapping_count', p.row_id
 FROM correction_overlay AS p
@@ -2484,9 +2598,30 @@ CREATE TRIGGER imm_u_materialization_item_journal BEFORE UPDATE ON materializati
 CREATE TRIGGER imm_d_materialization_item_journal BEFORE DELETE ON materialization_item_journal BEGIN SELECT RAISE(ABORT, 'item journal is append-only'); END;
 CREATE TRIGGER imm_u_matching_settings_revision BEFORE UPDATE ON matching_settings_revision BEGIN SELECT RAISE(ABORT, 'settings revision is append-only'); END;
 CREATE TRIGGER imm_d_matching_settings_revision BEFORE DELETE ON matching_settings_revision BEGIN SELECT RAISE(ABORT, 'settings revision is append-only'); END;
-CREATE TRIGGER imm_u_session_visibility_history BEFORE UPDATE ON session_visibility_history BEGIN SELECT RAISE(ABORT, 'visibility history is append-only'); END;
+CREATE TRIGGER imm_u_session_visibility_history BEFORE UPDATE ON session_visibility_history
+WHEN NEW.session_row_id <> OLD.session_row_id
+  OR NEW.visible_sequence <> OLD.visible_sequence
+  OR NEW.reason_code <> OLD.reason_code
+  OR (OLD.hidden_sequence IS NOT NULL AND NEW.hidden_sequence IS NULL)
+  OR (OLD.hidden_sequence IS NOT NULL AND NEW.hidden_sequence IS NOT OLD.hidden_sequence)
+  OR (OLD.hidden_sequence IS NULL AND NEW.hidden_sequence IS NULL)
+BEGIN SELECT RAISE(ABORT, 'visibility history permits only one closure'); END;
+CREATE TRIGGER chk_u_session_visibility_history BEFORE UPDATE OF hidden_sequence ON session_visibility_history
+WHEN OLD.hidden_sequence IS NOT NULL OR NEW.hidden_sequence IS NULL OR NEW.hidden_sequence <= NEW.visible_sequence
+BEGIN SELECT RAISE(ABORT, 'visibility closure must advance the watermark exactly once'); END;
 CREATE TRIGGER imm_d_session_visibility_history BEFORE DELETE ON session_visibility_history BEGIN SELECT RAISE(ABORT, 'visibility history is append-only'); END;
-CREATE TRIGGER imm_u_relation_proposal_visibility_history BEFORE UPDATE ON relation_proposal_visibility_history BEGIN SELECT RAISE(ABORT, 'visibility history is append-only'); END;
+CREATE TRIGGER imm_u_relation_proposal_visibility_history BEFORE UPDATE ON relation_proposal_visibility_history
+WHEN NEW.proposal_row_id <> OLD.proposal_row_id
+  OR NEW.proposal_revision <> OLD.proposal_revision
+  OR NEW.state <> OLD.state
+  OR NEW.visible_sequence <> OLD.visible_sequence
+  OR (OLD.hidden_sequence IS NOT NULL AND NEW.hidden_sequence IS NULL)
+  OR (OLD.hidden_sequence IS NOT NULL AND NEW.hidden_sequence IS NOT OLD.hidden_sequence)
+  OR (OLD.hidden_sequence IS NULL AND NEW.hidden_sequence IS NULL)
+BEGIN SELECT RAISE(ABORT, 'visibility history permits only one closure'); END;
+CREATE TRIGGER chk_u_relation_proposal_visibility_history BEFORE UPDATE OF hidden_sequence ON relation_proposal_visibility_history
+WHEN OLD.hidden_sequence IS NOT NULL OR NEW.hidden_sequence IS NULL OR NEW.hidden_sequence <= NEW.visible_sequence
+BEGIN SELECT RAISE(ABORT, 'visibility closure must advance the watermark exactly once'); END;
 CREATE TRIGGER imm_d_relation_proposal_visibility_history BEFORE DELETE ON relation_proposal_visibility_history BEGIN SELECT RAISE(ABORT, 'visibility history is append-only'); END;
 CREATE TRIGGER imm_u_relation_decision_panel_revision BEFORE UPDATE ON relation_decision_panel_revision BEGIN SELECT RAISE(ABORT, 'decision child is append-only'); END;
 CREATE TRIGGER imm_d_relation_decision_panel_revision BEFORE DELETE ON relation_decision_panel_revision BEGIN SELECT RAISE(ABORT, 'decision child is append-only'); END;
@@ -2520,3 +2655,137 @@ CREATE TRIGGER imm_u_inbox_plan_result_blocked_frame BEFORE UPDATE ON inbox_plan
 CREATE TRIGGER imm_d_inbox_plan_result_blocked_frame BEFORE DELETE ON inbox_plan_result_blocked_frame BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
 CREATE TRIGGER imm_u_session_materialization_result_blocked_frame BEFORE UPDATE ON session_materialization_result_blocked_frame BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
 CREATE TRIGGER imm_d_session_materialization_result_blocked_frame BEFORE DELETE ON session_materialization_result_blocked_frame BEGIN SELECT RAISE(ABORT, 'snapshot child is append-only'); END;
+
+-- Stable identities, accepted configuration, and every normalized snapshot child
+-- are append-only. Their corresponding head/CAS or delivery records are guarded
+-- separately above and remain the only mutable transition points.
+CREATE TRIGGER guard_u_spec062_actor BEFORE UPDATE ON spec062_actor BEGIN SELECT RAISE(ABORT, 'actor identity is append-only'); END;
+CREATE TRIGGER guard_d_spec062_actor BEFORE DELETE ON spec062_actor BEGIN SELECT RAISE(ABORT, 'actor identity is append-only'); END;
+CREATE TRIGGER guard_u_spec062_config_revision BEFORE UPDATE ON spec062_config_revision BEGIN SELECT RAISE(ABORT, 'configuration revision is append-only'); END;
+CREATE TRIGGER guard_d_spec062_config_revision BEFORE DELETE ON spec062_config_revision BEGIN SELECT RAISE(ABORT, 'configuration revision is append-only'); END;
+CREATE TRIGGER guard_u_repository_change BEFORE UPDATE ON repository_change BEGIN SELECT RAISE(ABORT, 'repository change is append-only'); END;
+CREATE TRIGGER guard_d_repository_change BEFORE DELETE ON repository_change BEGIN SELECT RAISE(ABORT, 'repository change is append-only'); END;
+CREATE TRIGGER guard_u_spec062_file_identity BEFORE UPDATE ON spec062_file_identity BEGIN SELECT RAISE(ABORT, 'file identity is append-only'); END;
+CREATE TRIGGER guard_d_spec062_file_identity BEFORE DELETE ON spec062_file_identity BEGIN SELECT RAISE(ABORT, 'file identity is append-only'); END;
+CREATE TRIGGER guard_u_frame_record BEFORE UPDATE ON frame_record BEGIN SELECT RAISE(ABORT, 'frame record is append-only'); END;
+CREATE TRIGGER guard_d_frame_record BEFORE DELETE ON frame_record BEGIN SELECT RAISE(ABORT, 'frame record is append-only'); END;
+CREATE TRIGGER guard_u_acquisition_site BEFORE UPDATE ON acquisition_site BEGIN SELECT RAISE(ABORT, 'acquisition site is append-only'); END;
+CREATE TRIGGER guard_d_acquisition_site BEFORE DELETE ON acquisition_site BEGIN SELECT RAISE(ABORT, 'acquisition site is append-only'); END;
+CREATE TRIGGER guard_u_acquisition_site_resolution_candidate BEFORE UPDATE ON acquisition_site_resolution_candidate BEGIN SELECT RAISE(ABORT, 'site candidate is append-only'); END;
+CREATE TRIGGER guard_d_acquisition_site_resolution_candidate BEFORE DELETE ON acquisition_site_resolution_candidate BEGIN SELECT RAISE(ABORT, 'site candidate is append-only'); END;
+CREATE TRIGGER guard_u_acquisition_site_resolution_conflict BEFORE UPDATE ON acquisition_site_resolution_conflict BEGIN SELECT RAISE(ABORT, 'site conflict is append-only'); END;
+CREATE TRIGGER guard_d_acquisition_site_resolution_conflict BEFORE DELETE ON acquisition_site_resolution_conflict BEGIN SELECT RAISE(ABORT, 'site conflict is append-only'); END;
+CREATE TRIGGER guard_u_spec062_inbox_materialization_plan BEFORE UPDATE ON spec062_inbox_materialization_plan BEGIN SELECT RAISE(ABORT, 'inbox plan is append-only'); END;
+CREATE TRIGGER guard_d_spec062_inbox_materialization_plan BEFORE DELETE ON spec062_inbox_materialization_plan BEGIN SELECT RAISE(ABORT, 'inbox plan is append-only'); END;
+CREATE TRIGGER guard_u_capture_profile BEFORE UPDATE OF public_id, display_name, created_at ON capture_profile BEGIN SELECT RAISE(ABORT, 'capture profile identity is append-only'); END;
+CREATE TRIGGER guard_d_capture_profile BEFORE DELETE ON capture_profile BEGIN SELECT RAISE(ABORT, 'capture profile identity is append-only'); END;
+CREATE TRIGGER guard_u_capture_profile_version BEFORE UPDATE ON capture_profile_version BEGIN SELECT RAISE(ABORT, 'capture profile version is append-only'); END;
+CREATE TRIGGER guard_d_capture_profile_version BEFORE DELETE ON capture_profile_version BEGIN SELECT RAISE(ABORT, 'capture profile version is append-only'); END;
+CREATE TRIGGER guard_u_capture_field_mapping BEFORE UPDATE ON capture_field_mapping BEGIN SELECT RAISE(ABORT, 'capture field mapping is append-only'); END;
+CREATE TRIGGER guard_d_capture_field_mapping BEFORE DELETE ON capture_field_mapping BEGIN SELECT RAISE(ABORT, 'capture field mapping is append-only'); END;
+CREATE TRIGGER guard_u_optical_profile BEFORE UPDATE ON optical_profile BEGIN SELECT RAISE(ABORT, 'optical profile is append-only'); END;
+CREATE TRIGGER guard_d_optical_profile BEFORE DELETE ON optical_profile BEGIN SELECT RAISE(ABORT, 'optical profile is append-only'); END;
+CREATE TRIGGER guard_u_filter_label BEFORE UPDATE ON filter_label BEGIN SELECT RAISE(ABORT, 'filter label is append-only'); END;
+CREATE TRIGGER guard_d_filter_label BEFORE DELETE ON filter_label BEGIN SELECT RAISE(ABORT, 'filter label is append-only'); END;
+CREATE TRIGGER guard_u_equipment_alias_evidence_identity BEFORE UPDATE OF public_id, created_at ON equipment_alias_evidence_identity BEGIN SELECT RAISE(ABORT, 'equipment evidence identity is append-only'); END;
+CREATE TRIGGER guard_d_equipment_alias_evidence_identity BEFORE DELETE ON equipment_alias_evidence_identity BEGIN SELECT RAISE(ABORT, 'equipment evidence identity is append-only'); END;
+CREATE TRIGGER guard_u_light_session_identity BEFORE UPDATE ON light_session_identity BEGIN SELECT RAISE(ABORT, 'light identity is append-only'); END;
+CREATE TRIGGER guard_d_light_session_identity BEFORE DELETE ON light_session_identity BEGIN SELECT RAISE(ABORT, 'light identity is append-only'); END;
+CREATE TRIGGER guard_u_calibration_family BEFORE UPDATE ON calibration_family BEGIN SELECT RAISE(ABORT, 'calibration family is append-only'); END;
+CREATE TRIGGER guard_d_calibration_family BEFORE DELETE ON calibration_family BEGIN SELECT RAISE(ABORT, 'calibration family is append-only'); END;
+CREATE TRIGGER guard_u_dark_recipe_identity BEFORE UPDATE ON dark_recipe_identity BEGIN SELECT RAISE(ABORT, 'dark recipe identity is append-only'); END;
+CREATE TRIGGER guard_d_dark_recipe_identity BEFORE DELETE ON dark_recipe_identity BEGIN SELECT RAISE(ABORT, 'dark recipe identity is append-only'); END;
+CREATE TRIGGER guard_u_bias_recipe_identity BEFORE UPDATE ON bias_recipe_identity BEGIN SELECT RAISE(ABORT, 'bias recipe identity is append-only'); END;
+CREATE TRIGGER guard_d_bias_recipe_identity BEFORE DELETE ON bias_recipe_identity BEGIN SELECT RAISE(ABORT, 'bias recipe identity is append-only'); END;
+CREATE TRIGGER guard_u_flat_family_identity BEFORE UPDATE ON flat_family_identity BEGIN SELECT RAISE(ABORT, 'flat family identity is append-only'); END;
+CREATE TRIGGER guard_d_flat_family_identity BEFORE DELETE ON flat_family_identity BEGIN SELECT RAISE(ABORT, 'flat family identity is append-only'); END;
+CREATE TRIGGER guard_u_spec062_calibration_session BEFORE UPDATE ON spec062_calibration_session BEGIN SELECT RAISE(ABORT, 'calibration session is append-only'); END;
+CREATE TRIGGER guard_d_spec062_calibration_session BEFORE DELETE ON spec062_calibration_session BEGIN SELECT RAISE(ABORT, 'calibration session is append-only'); END;
+CREATE TRIGGER guard_u_dark_thermal_evidence BEFORE UPDATE ON dark_thermal_evidence BEGIN SELECT RAISE(ABORT, 'thermal evidence is append-only'); END;
+CREATE TRIGGER guard_d_dark_thermal_evidence BEFORE DELETE ON dark_thermal_evidence BEGIN SELECT RAISE(ABORT, 'thermal evidence is append-only'); END;
+CREATE TRIGGER guard_u_cross_target_association BEFORE UPDATE ON cross_target_association BEGIN SELECT RAISE(ABORT, 'cross-target association is append-only'); END;
+CREATE TRIGGER guard_d_cross_target_association BEFORE DELETE ON cross_target_association BEGIN SELECT RAISE(ABORT, 'cross-target association is append-only'); END;
+CREATE TRIGGER guard_u_cross_target_association_target BEFORE UPDATE ON cross_target_association_target BEGIN SELECT RAISE(ABORT, 'cross-target membership is append-only'); END;
+CREATE TRIGGER guard_d_cross_target_association_target BEFORE DELETE ON cross_target_association_target BEGIN SELECT RAISE(ABORT, 'cross-target membership is append-only'); END;
+CREATE TRIGGER guard_u_spec062_target BEFORE UPDATE ON spec062_target BEGIN SELECT RAISE(ABORT, 'target identity is append-only'); END;
+CREATE TRIGGER guard_d_spec062_target BEFORE DELETE ON spec062_target BEGIN SELECT RAISE(ABORT, 'target identity is append-only'); END;
+CREATE TRIGGER guard_u_relation_proposal BEFORE UPDATE ON relation_proposal BEGIN SELECT RAISE(ABORT, 'relation proposal is append-only'); END;
+CREATE TRIGGER guard_d_relation_proposal BEFORE DELETE ON relation_proposal BEGIN SELECT RAISE(ABORT, 'relation proposal is append-only'); END;
+CREATE TRIGGER guard_u_proposal_session_input BEFORE UPDATE ON proposal_session_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_d_proposal_session_input BEFORE DELETE ON proposal_session_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_u_proposal_panel_revision_input BEFORE UPDATE ON proposal_panel_revision_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_d_proposal_panel_revision_input BEFORE DELETE ON proposal_panel_revision_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_u_proposal_mosaic_revision_input BEFORE UPDATE ON proposal_mosaic_revision_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_d_proposal_mosaic_revision_input BEFORE DELETE ON proposal_mosaic_revision_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_u_proposal_project_revision_input BEFORE UPDATE ON proposal_project_revision_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_d_proposal_project_revision_input BEFORE DELETE ON proposal_project_revision_input BEGIN SELECT RAISE(ABORT, 'proposal input is append-only'); END;
+CREATE TRIGGER guard_u_proposal_panel_membership BEFORE UPDATE ON proposal_panel_membership BEGIN SELECT RAISE(ABORT, 'proposal membership is append-only'); END;
+CREATE TRIGGER guard_d_proposal_panel_membership BEFORE DELETE ON proposal_panel_membership BEGIN SELECT RAISE(ABORT, 'proposal membership is append-only'); END;
+CREATE TRIGGER guard_u_proposal_mosaic_membership BEFORE UPDATE ON proposal_mosaic_membership BEGIN SELECT RAISE(ABORT, 'proposal membership is append-only'); END;
+CREATE TRIGGER guard_d_proposal_mosaic_membership BEFORE DELETE ON proposal_mosaic_membership BEGIN SELECT RAISE(ABORT, 'proposal membership is append-only'); END;
+CREATE TRIGGER guard_u_proposal_mosaic_edge BEFORE UPDATE ON proposal_mosaic_edge BEGIN SELECT RAISE(ABORT, 'proposal edge is append-only'); END;
+CREATE TRIGGER guard_d_proposal_mosaic_edge BEFORE DELETE ON proposal_mosaic_edge BEGIN SELECT RAISE(ABORT, 'proposal edge is append-only'); END;
+CREATE TRIGGER guard_u_proposal_panel_lineage BEFORE UPDATE ON proposal_panel_lineage BEGIN SELECT RAISE(ABORT, 'proposal lineage is append-only'); END;
+CREATE TRIGGER guard_d_proposal_panel_lineage BEFORE DELETE ON proposal_panel_lineage BEGIN SELECT RAISE(ABORT, 'proposal lineage is append-only'); END;
+CREATE TRIGGER guard_u_proposal_mosaic_lineage BEFORE UPDATE ON proposal_mosaic_lineage BEGIN SELECT RAISE(ABORT, 'proposal lineage is append-only'); END;
+CREATE TRIGGER guard_d_proposal_mosaic_lineage BEFORE DELETE ON proposal_mosaic_lineage BEGIN SELECT RAISE(ABORT, 'proposal lineage is append-only'); END;
+CREATE TRIGGER guard_u_proposal_target_scope BEFORE UPDATE ON proposal_target_scope BEGIN SELECT RAISE(ABORT, 'proposal scope is append-only'); END;
+CREATE TRIGGER guard_d_proposal_target_scope BEFORE DELETE ON proposal_target_scope BEGIN SELECT RAISE(ABORT, 'proposal scope is append-only'); END;
+CREATE TRIGGER guard_u_proposal_measurement BEFORE UPDATE ON proposal_measurement BEGIN SELECT RAISE(ABORT, 'proposal measurement is append-only'); END;
+CREATE TRIGGER guard_d_proposal_measurement BEFORE DELETE ON proposal_measurement BEGIN SELECT RAISE(ABORT, 'proposal measurement is append-only'); END;
+CREATE TRIGGER guard_u_matching_settings_camera_policy BEFORE UPDATE ON matching_settings_camera_policy BEGIN SELECT RAISE(ABORT, 'settings policy is append-only'); END;
+CREATE TRIGGER guard_d_matching_settings_camera_policy BEFORE DELETE ON matching_settings_camera_policy BEGIN SELECT RAISE(ABORT, 'settings policy is append-only'); END;
+CREATE TRIGGER guard_u_inbox_ingestion_operation BEFORE UPDATE ON inbox_ingestion_operation BEGIN SELECT RAISE(ABORT, 'inbox operation binding is append-only'); END;
+CREATE TRIGGER guard_d_inbox_ingestion_operation BEFORE DELETE ON inbox_ingestion_operation BEGIN SELECT RAISE(ABORT, 'inbox operation binding is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_revision BEFORE UPDATE ON reclassification_plan_revision BEGIN SELECT RAISE(ABORT, 'reclassification revision is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_revision BEFORE DELETE ON reclassification_plan_revision BEGIN SELECT RAISE(ABORT, 'reclassification revision is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_input BEFORE UPDATE ON reclassification_plan_input BEGIN SELECT RAISE(ABORT, 'reclassification input is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_input BEFORE DELETE ON reclassification_plan_input BEGIN SELECT RAISE(ABORT, 'reclassification input is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_output BEFORE UPDATE ON reclassification_plan_output BEGIN SELECT RAISE(ABORT, 'reclassification output is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_output BEFORE DELETE ON reclassification_plan_output BEGIN SELECT RAISE(ABORT, 'reclassification output is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_output_frame BEFORE UPDATE ON reclassification_plan_output_frame BEGIN SELECT RAISE(ABORT, 'reclassification output frame is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_output_frame BEFORE DELETE ON reclassification_plan_output_frame BEGIN SELECT RAISE(ABORT, 'reclassification output frame is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_panel_consequence BEFORE UPDATE ON reclassification_plan_panel_consequence BEGIN SELECT RAISE(ABORT, 'reclassification panel consequence is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_panel_consequence BEFORE DELETE ON reclassification_plan_panel_consequence BEGIN SELECT RAISE(ABORT, 'reclassification panel consequence is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_project_consequence BEFORE UPDATE ON reclassification_plan_project_consequence BEGIN SELECT RAISE(ABORT, 'reclassification project consequence is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_project_consequence BEFORE DELETE ON reclassification_plan_project_consequence BEGIN SELECT RAISE(ABORT, 'reclassification project consequence is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_edge_consequence BEFORE UPDATE ON reclassification_plan_edge_consequence BEGIN SELECT RAISE(ABORT, 'reclassification edge consequence is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_edge_consequence BEFORE DELETE ON reclassification_plan_edge_consequence BEGIN SELECT RAISE(ABORT, 'reclassification edge consequence is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_result_panel_consequence BEFORE UPDATE ON reclassification_plan_result_panel_consequence BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_result_panel_consequence BEFORE DELETE ON reclassification_plan_result_panel_consequence BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_result_retirement BEFORE UPDATE ON reclassification_plan_result_retirement BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_result_retirement BEFORE DELETE ON reclassification_plan_result_retirement BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_result_lineage BEFORE UPDATE ON reclassification_plan_result_lineage BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_result_lineage BEFORE DELETE ON reclassification_plan_result_lineage BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_result_stale_edge BEFORE UPDATE ON reclassification_plan_result_stale_edge BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_result_stale_edge BEFORE DELETE ON reclassification_plan_result_stale_edge BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_result_project_consequence BEFORE UPDATE ON reclassification_plan_result_project_consequence BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_result_project_consequence BEFORE DELETE ON reclassification_plan_result_project_consequence BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_plan_result_project_replacement BEFORE UPDATE ON reclassification_plan_result_project_replacement BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_plan_result_project_replacement BEFORE DELETE ON reclassification_plan_result_project_replacement BEGIN SELECT RAISE(ABORT, 'reclassification result child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_apply_created_session BEFORE UPDATE ON reclassification_apply_created_session BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_apply_created_session BEFORE DELETE ON reclassification_apply_created_session BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_apply_panel_revision BEFORE UPDATE ON reclassification_apply_panel_revision BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_apply_panel_revision BEFORE DELETE ON reclassification_apply_panel_revision BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_apply_retired_panel_group BEFORE UPDATE ON reclassification_apply_retired_panel_group BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_apply_retired_panel_group BEFORE DELETE ON reclassification_apply_retired_panel_group BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_apply_panel_lineage BEFORE UPDATE ON reclassification_apply_panel_lineage BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_apply_panel_lineage BEFORE DELETE ON reclassification_apply_panel_lineage BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_apply_invalidated_edge BEFORE UPDATE ON reclassification_apply_invalidated_edge BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_apply_invalidated_edge BEFORE DELETE ON reclassification_apply_invalidated_edge BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_u_reclassification_apply_project_proposal BEFORE UPDATE ON reclassification_apply_project_proposal BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_d_reclassification_apply_project_proposal BEFORE DELETE ON reclassification_apply_project_proposal BEGIN SELECT RAISE(ABORT, 'reclassification apply child is append-only'); END;
+CREATE TRIGGER guard_u_project_membership_revision BEFORE UPDATE ON project_membership_revision BEGIN SELECT RAISE(ABORT, 'project membership revision is append-only'); END;
+CREATE TRIGGER guard_d_project_membership_revision BEFORE DELETE ON project_membership_revision BEGIN SELECT RAISE(ABORT, 'project membership revision is append-only'); END;
+CREATE TRIGGER guard_u_project_manifest_entry BEFORE UPDATE ON project_manifest_entry BEGIN SELECT RAISE(ABORT, 'manifest entry is append-only'); END;
+CREATE TRIGGER guard_d_project_manifest_entry BEFORE DELETE ON project_manifest_entry BEGIN SELECT RAISE(ABORT, 'manifest entry is append-only'); END;
+CREATE TRIGGER guard_u_project_manifest_overlay BEFORE UPDATE ON project_manifest_overlay BEGIN SELECT RAISE(ABORT, 'manifest overlay is append-only'); END;
+CREATE TRIGGER guard_d_project_manifest_overlay BEFORE DELETE ON project_manifest_overlay BEGIN SELECT RAISE(ABORT, 'manifest overlay is append-only'); END;
+CREATE TRIGGER guard_u_correction_overlay_mapping BEFORE UPDATE ON correction_overlay_mapping BEGIN SELECT RAISE(ABORT, 'correction overlay mapping is append-only'); END;
+CREATE TRIGGER guard_d_correction_overlay_mapping BEFORE DELETE ON correction_overlay_mapping BEGIN SELECT RAISE(ABORT, 'correction overlay mapping is append-only'); END;
+CREATE TRIGGER guard_u_materialization_update_plan_session BEFORE UPDATE ON materialization_update_plan_session BEGIN SELECT RAISE(ABORT, 'update plan session is append-only'); END;
+CREATE TRIGGER guard_d_materialization_update_plan_session BEFORE DELETE ON materialization_update_plan_session BEGIN SELECT RAISE(ABORT, 'update plan session is append-only'); END;
+CREATE TRIGGER guard_u_materialization_plan_entry BEFORE UPDATE ON materialization_plan_entry BEGIN SELECT RAISE(ABORT, 'materialization plan entry is append-only'); END;
+CREATE TRIGGER guard_d_materialization_plan_entry BEFORE DELETE ON materialization_plan_entry BEGIN SELECT RAISE(ABORT, 'materialization plan entry is append-only'); END;
+CREATE TRIGGER guard_u_materialization_plan_overlay_mapping BEFORE UPDATE ON materialization_plan_overlay_mapping BEGIN SELECT RAISE(ABORT, 'materialization overlay mapping is append-only'); END;
+CREATE TRIGGER guard_d_materialization_plan_overlay_mapping BEFORE DELETE ON materialization_plan_overlay_mapping BEGIN SELECT RAISE(ABORT, 'materialization overlay mapping is append-only'); END;
