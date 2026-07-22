@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
+import { registerUtf8ByteKeywords } from "./utf8-byte-keywords.test.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../../..");
 
@@ -36,7 +38,7 @@ function loadSchema(relPath) {
 // ── AJV instance ─────────────────────────────────────────────────────────────
 
 // strict:false so unknown formats (date-time, uuid) produce warnings, not errors.
-const ajv = new Ajv2020({ strict: false, allErrors: true });
+const ajv = registerUtf8ByteKeywords(new Ajv2020({ strict: false, allErrors: true }));
 
 // ── Test runner ───────────────────────────────────────────────────────────────
 
