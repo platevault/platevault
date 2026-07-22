@@ -1,6 +1,6 @@
--- Migration 0076: drop the legacy spec-010 guided-coach table (spec 056, T010).
+-- Migration 0081: drop the legacy spec-010 guided-coach table (spec 056, T010).
 --
--- Deferred from 0069 (see that migration's header and the persistence
+-- Deferred from 0080 (see that migration's header and the persistence
 -- lib.rs comment): the drop ships here, atomically with the spec 056
 -- deletion lane that removes the code reading/writing this table
 -- (`crates/app/core/src/guided_flow.rs`,
