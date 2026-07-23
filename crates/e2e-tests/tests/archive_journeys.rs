@@ -259,9 +259,15 @@ async fn setup_archived_project(
 /// `blockPermanentDelete` gate + real permanent delete. Running both
 /// commands sequentially against the SAME plan would have nothing left for
 /// the second call once the first really removes the files.
+///
+/// Prefixed `slow_`: two separate `setup_archived_project` fixture sequences
+/// (each involving a real app launch) plus real filesystem operations on
+/// disk. Measured 14-36s across 2 post-fix runs (avg 25.5s), above the
+/// >3× median (~21s) threshold. The `e2e.yml` shard filters pin each
+/// `slow_` test to a separate shard; see the timing table in that file.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> {
+async fn slow_archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
 

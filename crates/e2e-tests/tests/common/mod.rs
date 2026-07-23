@@ -9,6 +9,25 @@
 //! --workspace` job (ci.yml). The dedicated e2e.yml workflow runs them with
 //! `--run-ignored all` after standing that environment up.
 //!
+//! # `slow_` test naming convention
+//!
+//! **Threshold**: prefix a test with `slow_` when its average wall time on
+//! Windows CI exceeds 3× the suite median, measured on post-fix runs only.
+//! With a current median of ~7s, the threshold is ~21s. Pre-fix timings are
+//! invalid — they measure a bug, not the test. Re-evaluate the prefix after
+//! any fix that materially changes a test's runtime.
+//!
+//! `e2e.yml`'s Windows shards use LPT (longest-processing-time first)
+//! assignment: each `slow_` test is pinned to a separate shard, non-slow
+//! tests fill the remaining slots by greedy LPT. The shard filter expressions
+//! use `test(=slow_<name>)` with no `--partition` flag — nextest ANDs
+//! `--partition` and `-E filterset`, which would exclude an explicitly named
+//! test that doesn't hash to that bucket.
+//!
+//! Adding a new slow test: rename the function with `slow_`, measure its
+//! average over 2+ post-fix CI runs, add a row to the timing table in
+//! e2e.yml, re-run LPT, and update the shard `-E` expressions there.
+//!
 //! Mechanism (mirrors `.github/workflows/e2e.yml`, research D10):
 //! - `desktop_shell` is built with `cargo build -p desktop_shell --features
 //!   e2e`, which compiles in `tauri-plugin-webdriver` (Choochmeque) — an
