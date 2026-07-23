@@ -80,12 +80,15 @@ pub async fn detect(
     let tool_launch_id =
         arrival_dt.and_then(|dt| attribute(tool, dt, &launches, DEFAULT_ATTRIBUTION_WINDOW));
 
-    // Step 3c: insert.
+    // Step 3c: insert — races a concurrent reconcile for the same (project_id,
+    // path). INSERT OR IGNORE returns None when the UNIQUE constraint fires
+    // (the racer won); skip event emission in that case so the bus sees exactly
+    // one artifact.detected + artifact.classified pair per path.
     let id = new_id();
     let kind_str = classification.kind.as_str();
     let source_str = classification.source.as_str();
 
-    repo::insert_artifact(
+    let inserted_id = repo::insert_artifact_if_absent(
         pool,
         InsertArtifact {
             id: &id,
@@ -105,6 +108,13 @@ pub async fn detect(
     )
     .await
     .map_err(|e| format!("DB insert failed: {e}"))?;
+
+    let Some(id) = inserted_id else {
+        // Concurrent reconcile already inserted this path; the first-writer's
+        // events are authoritative.  Return Ok so the caller treats this path
+        // as handled.
+        return Ok(id);
+    };
 
     let _ = bus
         .publish(

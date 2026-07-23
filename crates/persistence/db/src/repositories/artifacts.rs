@@ -64,6 +64,51 @@ pub struct InsertArtifact<'a> {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
+/// Insert a new `processing_artifacts` row, returning `None` if the
+/// `(project_id, path)` UNIQUE constraint fires (concurrent racer already
+/// inserted the same path).
+///
+/// Callers that must detect the duplicate case (e.g. `detect` to avoid
+/// emitting a double `artifact.detected` bus event) should use this variant.
+/// All other callers can use [`insert_artifact`] and let the DB error surface.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on any failure other than a UNIQUE
+/// conflict on `(project_id, path)`.
+pub async fn insert_artifact_if_absent(
+    pool: &SqlitePool,
+    data: InsertArtifact<'_>,
+) -> DbResult<Option<String>> {
+    let now = data.detected_at.to_owned();
+    let result = sqlx::query(
+        "\
+        INSERT OR IGNORE INTO processing_artifacts
+            (id, project_id, tool_launch_id, path, kind, tool,
+             detected_at, last_seen_at, state,
+             classification_confidence, classification_source,
+             size_bytes, file_mtime, content_hash)
+        VALUES (?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?)
+        ",
+    )
+    .bind(data.id)
+    .bind(data.project_id)
+    .bind(data.tool_launch_id)
+    .bind(data.path)
+    .bind(data.kind)
+    .bind(data.tool)
+    .bind(&now)
+    .bind(&now)
+    .bind(data.state)
+    .bind(data.classification_confidence)
+    .bind(data.classification_source)
+    .bind(data.size_bytes)
+    .bind(data.file_mtime)
+    .bind(data.content_hash)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 { Ok(None) } else { Ok(Some(data.id.to_owned())) }
+}
+
 /// Insert a new `processing_artifacts` row.
 ///
 /// # Errors
