@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// check-contrast.mjs — CI guard that text-on-surface token pairs meet WCAG AA
-// contrast (4.5:1) in every [data-theme] block.
+// check-contrast.mjs — CI guard that text and control-boundary token pairs meet
+// WCAG AA contrast in every [data-theme] block.
 //
 // This is a regression gate for the a11y retune (handoff 02): ink3/ink4 scrape
 // past AA on the lightest surface (--pv-bg) but were failing on the darkest
@@ -77,12 +77,18 @@ const PAIRS = [
   // land at 4.44/3.75, below 4.5 but clear of 3.0).
   ['destructive', 'destructive-bg', 'destructive button text/border/icon on its default fill', AA_UI],
   ['destructive', 'destructive-bg-hover', 'destructive button text/border/icon on its hover fill', AA_UI],
+  ['control-border', 'bg', 'inputs and selects on the default app background', AA_UI],
+  ['control-border', 'surface', 'inputs, selects, and toggles on panel surfaces', AA_UI],
+  ['control-border', 'bg3', 'controls on inset surfaces', AA_UI],
+  ['control-border', 'surface-raised', 'controls on cards and popovers', AA_UI],
 ];
+
+const CONTROL_SURFACES = ['bg', 'surface', 'bg3', 'surface-raised'];
 
 const css = readFileSync(SRC, 'utf8');
 
 // Collect raw hex token values per theme, merging blocks that share a selector
-// (":root, [data-theme=\"warm-slate\"]") — same approach as
+// (":root:not([data-theme]), [data-theme=\"warm-slate\"]") — same approach as
 // check-theme-completeness.mjs.
 const blockRe = /([^{}]*)\{([^{}]*)\}/g;
 const themeTokens = new Map(); // theme id -> Map<token name -> hex value>
@@ -122,6 +128,35 @@ for (const [theme, tokens] of themeTokens) {
         `FAIL: [data-theme="${theme}"] --pv-${textName} (${fg}) on --pv-${surfaceName} (${bg}) = ` +
           `${ratio.toFixed(2)}:1, below AA ${threshold}:1 (${note})`,
       );
+    }
+  }
+
+  const control = tokens.get('--pv-control-border');
+  const dividers = ['rule', 'rule2'].map((name) => [name, tokens.get(`--pv-${name}`)]);
+  if (!control || dividers.some(([, value]) => !value)) {
+    ok = false;
+    console.error(
+      `FAIL: [data-theme="${theme}"] missing --pv-control-border, --pv-rule, or --pv-rule2`,
+    );
+    continue;
+  }
+  for (const surfaceName of CONTROL_SURFACES) {
+    const surface = tokens.get(`--pv-${surfaceName}`);
+    if (!surface) {
+      ok = false;
+      console.error(`FAIL: [data-theme="${theme}"] missing --pv-${surfaceName}`);
+      continue;
+    }
+    const controlRatio = contrastRatio(control, surface);
+    for (const [dividerName, divider] of dividers) {
+      const dividerRatio = contrastRatio(divider, surface);
+      if (dividerRatio >= controlRatio) {
+        ok = false;
+        console.error(
+          `FAIL: [data-theme="${theme}"] decorative --pv-${dividerName} (${divider}) on ` +
+            `--pv-${surfaceName} is not subtler than --pv-control-border (${control})`,
+        );
+      }
     }
   }
 }

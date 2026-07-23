@@ -1,7 +1,7 @@
 {
   "text": {
     "$value": "{ink}",
-    "$description": "Semantic aliases \u2014 resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root, [data-theme=\"warm-slate\"]` block below, so there is a single source of truth for the default light palette."
+    "$description": "Semantic aliases \u2014 resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root:not([data-theme]), [data-theme=\"warm-slate\"]` block below, so there is a single source of truth for the default light palette without overriding a named theme."
   },
   "text-secondary": {
     "$value": "{ink2}"

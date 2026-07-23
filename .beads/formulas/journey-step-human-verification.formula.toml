@@ -1,0 +1,82 @@
+formula = "journey-step-human-verification"
+description = "Reusable human-gated verification workflow for one user-journey step. Pour one molecule per step and attach it to the journey molecule."
+version = 1
+type = "workflow"
+
+[vars.journey_id]
+description = "Journey identifier, for example J01"
+required = true
+pattern = "^J[0-9]+$"
+
+[vars.step_id]
+description = "Journey step identifier, for example S1 or S3a"
+required = true
+pattern = "^S[0-9]+[a-z]?$"
+
+[vars.step_title]
+description = "Short human-readable title for the step"
+required = true
+
+[vars.journey_path]
+description = "Repository path to the journey definition"
+required = true
+
+[vars.validated_sha]
+description = "Exact pushed commit or Windows checkout SHA used for validation"
+required = true
+pattern = "^[0-9a-f]{40}$"
+
+[vars.profile]
+description = "Validation profile used by the step"
+default = "desktop-ui"
+
+[[steps]]
+id = "preflight"
+title = "Preflight {{journey_id}}/{{step_id}}: {{step_title}}"
+type = "task"
+description = "Confirm the journey definition, validation profile, exact pushed SHA, runtime prerequisites, and disposable-state policy before driving the step."
+
+[[steps]]
+id = "drive-step"
+title = "Agent-drive {{journey_id}}/{{step_id}}: {{step_title}}"
+type = "task"
+needs = ["preflight"]
+description = "Execute the journey step at the declared fidelity, using the serialized Tauri lane when required, and capture reproducible runtime evidence for a human reviewer."
+
+[[steps]]
+id = "inspect-definition"
+title = "Inspect {{journey_id}}/{{step_id}} journey definition"
+type = "task"
+needs = ["preflight"]
+description = "Check the journey's stated intent, expected result, step ordering, and required evidence without starting another runtime session."
+
+[[steps]]
+id = "inspect-acceptance"
+title = "Inspect {{journey_id}}/{{step_id}} acceptance and tracking"
+type = "task"
+needs = ["preflight"]
+description = "Check the acceptance criteria, related Beads, residual-work caveats, and exact-SHA evidence requirements for this step."
+
+[[steps]]
+id = "triage"
+title = "Fan-in and triage {{journey_id}}/{{step_id}} verification"
+type = "task"
+needs = ["drive-step", "inspect-definition", "inspect-acceptance"]
+description = "Fan in the independent runtime, definition, and acceptance checks; prepare a concise pass, finding, or blocked decision for human review."
+
+[[steps]]
+id = "human-review"
+title = "Human review {{journey_id}}/{{step_id}}: {{step_title}}"
+type = "task"
+needs = ["triage"]
+description = "Inspect the agent evidence and decide whether this step passes, needs a finding, or is blocked. Resolve this gate explicitly with bd gate resolve."
+
+[steps.gate]
+type = "human"
+
+[[steps]]
+id = "record"
+title = "Record {{journey_id}}/{{step_id}} verification"
+type = "task"
+needs = ["human-review"]
+description = "Append the evidence and human decision to the relevant Beads, link findings, and close only the step work whose acceptance criteria are actually met."

@@ -38,6 +38,11 @@ function Probe() {
     <div>
       <span data-testid="locale">{locale}</span>
       <button onClick={() => changeLocale('pt-BR')}>switch</button>
+      <button
+        onClick={() => changeLocale('not-a-shipped-locale' as typeof locale)}
+      >
+        invalid
+      </button>
     </div>
   );
 }
@@ -56,6 +61,7 @@ describe('LocaleProvider / useLocale', () => {
     settingsUpdateMock.mockReset();
     settingsUpdateMock.mockResolvedValue({ status: 'ok', data: null });
     localStorage.clear();
+    document.documentElement.lang = 'en';
 
     const mod = await import('./locale');
     mod.registerLocaleStrategy();
@@ -78,12 +84,43 @@ describe('LocaleProvider / useLocale', () => {
       expect(screen.getByTestId('locale').textContent).toBe('en-GB');
     });
 
-    await act(async () => {
+    act(() => {
       screen.getByRole('button', { name: 'switch' }).click();
     });
 
     expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
     expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(document.documentElement.lang).toBe('pt-BR');
+  });
+
+  it('sets the canonical saved locale on the document during startup', () => {
+    localStorage.setItem('alm.locale', 'pt-BR');
+
+    render(
+      <LocaleProviderUnderTest>
+        <Probe />
+      </LocaleProviderUnderTest>,
+    );
+
+    expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
+    expect(document.documentElement.lang).toBe('pt-BR');
+  });
+
+  it('falls back safely when a caller supplies an unshipped locale', () => {
+    render(
+      <LocaleProviderUnderTest>
+        <Probe />
+      </LocaleProviderUnderTest>,
+    );
+
+    act(() => {
+      screen.getByRole('button', { name: 'switch' }).click();
+      screen.getByRole('button', { name: 'invalid' }).click();
+    });
+
+    expect(screen.getByTestId('locale').textContent).toBe('en-GB');
+    expect(localStorage.getItem('alm.locale')).toBe('en-GB');
+    expect(document.documentElement.lang).toBe('en-GB');
   });
 
   it('adopts a DB-corrected locale discovered during mount hydration', async () => {
@@ -105,5 +142,6 @@ describe('LocaleProvider / useLocale', () => {
     await waitFor(() => {
       expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
     });
+    expect(document.documentElement.lang).toBe('pt-BR');
   });
 });
