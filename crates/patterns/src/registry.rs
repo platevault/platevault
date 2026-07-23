@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Token registry (data-model.md §TokenRegistry v1, spec 015 T3.2).
 //!
 //! Defines the v1 token vocabulary: name, source_field, fallback, and
@@ -160,6 +163,8 @@ mod tests {
         assert_eq!(V1_REGISTRY.get("date").unwrap().fallback, "undated");
         assert_eq!(V1_REGISTRY.get("frame_type").unwrap().fallback, "unknown");
         assert_eq!(V1_REGISTRY.get("camera").unwrap().fallback, "unknown-camera");
+        assert_eq!(V1_REGISTRY.get("exposure").unwrap().fallback, "unknown-exposure");
+        assert_eq!(V1_REGISTRY.get("gain").unwrap().fallback, "unknown-gain");
         assert_eq!(V1_REGISTRY.get("binning").unwrap().fallback, "1x1");
         assert_eq!(V1_REGISTRY.get("set_temp").unwrap().fallback, "untempered");
     }

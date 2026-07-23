@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Modal — shared, parameterised dialog/overlay for the whole app.
  *
@@ -24,7 +27,7 @@
  * is the canonical replacement for the ad-hoc per-feature dialog wrappers.
  */
 
-import { type ReactNode } from 'react';
+import { useState, type ReactNode, type RefObject } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { m } from '@/lib/i18n';
 
@@ -39,6 +42,15 @@ export interface ModalProps {
   title?: ReactNode;
   /** Secondary line beside the title (e.g. a count summary). */
   subtitle?: ReactNode;
+  /**
+   * Element to focus when the dialog opens (Base UI `Dialog.Popup`
+   * `initialFocus`). DEFAULT (omitted): Base UI's own default — the first
+   * tabbable element, which in this chrome is the header ✕ (#841: a bare
+   * `autoFocus` on a body field races that default and can lose). Pass a ref
+   * to the field that should actually receive focus instead of relying on
+   * `autoFocus` inside `children`.
+   */
+  initialFocus?: RefObject<HTMLElement | null> | boolean;
   /** Modal body — scrolls within the height cap. */
   children: ReactNode;
   /** Optional pinned footer (e.g. action buttons). */
@@ -66,6 +78,7 @@ export function Modal({
   subtitle,
   children,
   footer,
+  initialFocus,
   size = 'md',
   ariaLabel,
   closeOnBackdrop = true,
@@ -74,8 +87,29 @@ export function Modal({
   bodyClassName,
   'data-testid': testId,
 }: ModalProps) {
-  const label =
-    ariaLabel ?? (typeof title === 'string' ? title : undefined);
+  const label = ariaLabel ?? (typeof title === 'string' ? title : undefined);
+
+  // Captures whichever element invoked the dialog, so Dialog.Popup's
+  // `finalFocus` (base-ui's own return-focus mechanism) has somewhere to
+  // send focus back to on close (#844). This component is used without a
+  // registered `Dialog.Trigger` (controlled `open`/`onClose`), so base-ui
+  // has no trigger to fall back to on its own. Uses React's documented
+  // "adjust state during render when a prop changes" pattern (not an
+  // effect, and not a ref mutation — react-hooks/refs forbids reading/
+  // writing ref.current in the render body): base-ui's own initial-focus
+  // effect fires before any effect Modal could register on `open`, so by
+  // the time an effect ran here the invoker would already have lost focus
+  // to the dialog's first tabbable element. Reading `document.activeElement`
+  // synchronously during this render, on the exact render where `open`
+  // flips true, still sees the pre-dialog focus.
+  const [invoker, setInvoker] = useState<HTMLElement | null>(null);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open && typeof document !== 'undefined') {
+      setInvoker(document.activeElement as HTMLElement | null);
+    }
+  }
 
   return (
     <Dialog.Root
@@ -92,36 +126,43 @@ export function Modal({
     >
       <Dialog.Portal>
         <Dialog.Backdrop
-          className="alm-modal__backdrop"
+          className="pv-modal__backdrop"
           onClick={closeOnBackdrop ? onClose : undefined}
         />
         <Dialog.Popup
-          className={`alm-modal alm-modal--${size}${className ? ` ${className}` : ''}`}
+          className={`pv-modal pv-modal--${size}${className ? ` ${className}` : ''}`}
           aria-label={label}
           data-testid={testId}
+          initialFocus={initialFocus}
+          finalFocus={() => invoker}
         >
-          <div className="alm-modal__header">
+          <div className="pv-modal__header">
             {title != null ? (
-              <Dialog.Title className="alm-modal__title">{title}</Dialog.Title>
+              <Dialog.Title className="pv-modal__title">{title}</Dialog.Title>
             ) : (
               // Keep the close button right-aligned even without a title.
-              <span className="alm-modal__title-spacer" />
+              <span className="pv-modal__title-spacer" />
             )}
             {subtitle != null && (
-              <span className="alm-modal__subtitle">{subtitle}</span>
+              <span className="pv-modal__subtitle">{subtitle}</span>
             )}
             {!hideClose && (
-              <Dialog.Close className="alm-modal__close" aria-label={m.common_close()}>
+              <Dialog.Close
+                className="pv-modal__close"
+                aria-label={m.common_close()}
+              >
                 ✕
               </Dialog.Close>
             )}
           </div>
 
-          <div className={`alm-modal__body${bodyClassName ? ` ${bodyClassName}` : ''}`}>
+          <div
+            className={`pv-modal__body${bodyClassName ? ` ${bodyClassName}` : ''}`}
+          >
             {children}
           </div>
 
-          {footer != null && <div className="alm-modal__footer">{footer}</div>}
+          {footer != null && <div className="pv-modal__footer">{footer}</div>}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

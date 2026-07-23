@@ -1,9 +1,21 @@
-import type { ReactNode } from 'react';
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import { Tooltip } from './Tooltip';
 import { m } from '@/lib/i18n';
 
 export interface InfoTipProps {
-  /** Help text revealed on hover/focus. */
-  tip: ReactNode;
+  /**
+   * Help text revealed on hover/focus.
+   *
+   * `string`, not `ReactNode`, because the tip is mirrored into `aria-label`
+   * and only a string can be. A node-valued tip leaves the accessible name as
+   * the bare "More information" prefix while the real text stays unreachable:
+   * base-ui portals the popup and mounts it only once open, and the closed
+   * trigger carries no `aria-describedby`. Rich tooltip content has no
+   * accessible equivalent here — it needs visible text, not a wider type.
+   */
+  tip: string;
   /** Accessible label prefix; defaults to "More information". */
   label?: string;
   className?: string;
@@ -12,25 +24,33 @@ export interface InfoTipProps {
 /**
  * Small ⓘ affordance that reveals help text on hover/focus — the de-vibe
  * replacement for always-on help prose under form rows (settings mock).
- * Token-only styling lives in components.css under `.alm-info-tip`.
+ * Token-only styling lives in components/primitives.css under `.pv-info-tip`,
+ * alongside `.pv-lock`, with which it shares one `:focus-visible` rule.
  *
- * The visible tooltip is CSS-only (`::after` reads `data-tip`); the same text
- * is mirrored into `aria-label` so screen readers get it without a hover.
+ * Uses the shared base-ui `Tooltip`; the tip text is also mirrored into
+ * `aria-label` so screen readers get it without a hover. The trigger is
+ * focusable (`tabIndex={0}`) so keyboard users can reveal it too.
+ *
+ * Distinct from `Lock`, which marks protected state rather than supplying help
+ * text and therefore has a decorative mode this component must not gain. See
+ * `docs/adr/0002-lock-and-infotip-stay-separate.md`.
  */
-export function InfoTip({ tip, label = m.infotip_more_information(), className }: InfoTipProps) {
-  const text = typeof tip === 'string' ? tip : undefined;
-  const cls = ['alm-info-tip', className].filter(Boolean).join(' ');
+export function InfoTip({
+  tip,
+  label = m.infotip_more_information(),
+  className,
+}: InfoTipProps) {
+  const cls = ['pv-info-tip', className].filter(Boolean).join(' ');
   return (
-    <span
+    <Tooltip
+      content={tip}
       className={cls}
       role="note"
-      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- intentionally focusable so keyboard users can reveal the CSS :focus tooltip
       tabIndex={0}
-      aria-label={text ? `${label}: ${text}` : label}
-      data-tip={text}
+      aria-label={`${label}: ${tip}`}
     >
       {/* eslint-disable-next-line alm/no-user-string -- decorative icon glyph, not user prose */}
       {'i'}
-    </span>
+    </Tooltip>
   );
 }

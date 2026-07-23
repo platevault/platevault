@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * `calibration.match.suggest.batch` IPC helper (spec 037 caller migration).
  *
@@ -14,7 +17,10 @@
 
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { CalibrationMatchBatchResponse, CalibrationType } from '@/bindings/index';
+import type {
+  CalibrationMatchBatchResponse,
+  CalibrationType,
+} from '@/bindings/index';
 
 export type CalibrationMatchType = CalibrationType;
 

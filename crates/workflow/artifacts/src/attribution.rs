@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Tool-launch attribution logic (spec 012 T022/T022b, data-model §Tool Launch Attribution).
 //!
 //! Attributes a detected artifact to the nearest preceding `ToolLaunch` row

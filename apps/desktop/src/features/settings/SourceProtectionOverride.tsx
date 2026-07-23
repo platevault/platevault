@@ -1,18 +1,25 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 016 US2 — per-source protection override control (T015).
 //
-// Renders a protection badge + override control for a specific source UUID.
-// When `sourceId` is provided, loads the current effective protection and
-// allows the user to change the level. When no per-source override exists the
-// component shows "Inherits global default" as an inheritance badge.
+// Renders a compact protection pill for a specific source UUID plus, when
+// `open` is true, the level-select editor. The caller (a kebab "Edit
+// protection…" item) fully controls when the editor is shown — this
+// component owns no trigger button of its own (issue #562: the standalone
+// "Override" button + duplicate "Inherits global default" pill + repeated
+// hint sentence were decluttered into a single pill; hovering it still
+// surfaces the hint via `title`).
 //
-// Used wherever a source UUID is available — wired into the DataSources
-// settings pane (one control per registered root, keyed by root.id) and
-// available for project detail source rows.
+// Used wherever a source UUID is available — currently only the DataSources
+// settings pane (one control per registered root, keyed by root.id).
 
 import { useEffect, useState, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Pill, Btn } from '@/ui';
 import { sourceProtectionGet, sourceProtectionSet } from './settingsIpc';
 import type { ProtectionLevel } from './settingsIpc';
+import { protectionLabel } from '@/lib/protection-label';
 import { m } from '@/lib/i18n';
 
 interface SourceProtectionOverrideProps {
@@ -20,19 +27,22 @@ interface SourceProtectionOverrideProps {
   sourceId: string;
   /** Optional callback after a successful override save. */
   onSaved?: (newLevel: ProtectionLevel) => void;
+  /** Whether the level-select editor is shown (controlled by the caller). */
+  open: boolean;
+  /** Invoked with `false` after Save/Cancel to close the editor. */
+  onOpenChange: (open: boolean) => void;
 }
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
 
-const LEVEL_LABEL: Record<ProtectionLevel, () => string> = {
-  protected: m.settings_cleanup_protection_protected,
-  normal: m.settings_cleanup_protection_normal,
-  unprotected: m.settings_cleanup_protection_unprotected,
-};
-
-const LEVEL_VARIANT: Record<ProtectionLevel, 'ok' | 'info' | 'warn' | 'danger' | 'neutral'> = {
+// 2-level model (issue #506): the third "normal" level is retired — absence
+// of a per-source override already means inherit-global, so a distinct
+// explicit "normal" state added confusion without capability.
+const LEVEL_VARIANT: Record<
+  ProtectionLevel,
+  'ok' | 'info' | 'warn' | 'danger' | 'neutral'
+> = {
   protected: 'ok',
-  normal: 'info',
   unprotected: 'warn',
 };
 
@@ -42,38 +52,53 @@ function levelHint(level: ProtectionLevel, inherits: boolean): string {
   switch (level) {
     case 'protected':
       return m.settings_source_protect_hint_protected({ prefix });
-    case 'normal':
-      return m.settings_source_protect_hint_normal({ prefix });
     case 'unprotected':
       return m.settings_source_protect_hint_unprotected({ prefix });
   }
 }
 
-export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtectionOverrideProps) {
+export function SourceProtectionOverride({
+  sourceId,
+  onSaved,
+  open,
+  onOpenChange,
+}: SourceProtectionOverrideProps) {
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [level, setLevel] = useState<ProtectionLevel>('protected');
   const [inheritsDefault, setInheritsDefault] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [pendingLevel, setPendingLevel] = useState<ProtectionLevel>('protected');
+  const [pendingLevel, setPendingLevel] =
+    useState<ProtectionLevel>('protected');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // `load` runs on mount and on retry, so the guard lives in the callback
+  // rather than in a per-effect `cancelled` flag.
+  const mountedRef = useMountedRef();
 
   const load = useCallback(() => {
     setLoadState('loading');
     sourceProtectionGet(sourceId)
       .then((resp) => {
+        if (!mountedRef.current) return;
         setLevel(resp.level);
         setInheritsDefault(resp.inheritsDefault);
         setPendingLevel(resp.level);
         setLoadState('ready');
       })
       .catch(() => {
-        setLoadState('error');
+        if (mountedRef.current) setLoadState('error');
       });
   }, [sourceId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Re-sync the pending selection to the current level each time the editor
+  // opens, so a prior cancel never leaks a stale selection into the next
+  // edit session.
+  useEffect(() => {
+    if (open) setPendingLevel(level);
+  }, [open, level]);
 
   const handleSave = () => {
     setLoadState('saving');
@@ -84,9 +109,9 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
       .then(() => {
         setLevel(pendingLevel);
         setInheritsDefault(false);
-        setEditing(false);
         setLoadState('ready');
         onSaved?.(pendingLevel);
+        onOpenChange(false);
       })
       .catch((err: unknown) => {
         setErrorMsg(typeof err === 'string' ? err : m.common_save_failed());
@@ -96,78 +121,75 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
 
   const handleCancel = () => {
     setPendingLevel(level);
-    setEditing(false);
     setErrorMsg('');
+    onOpenChange(false);
   };
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <span className="alm-source-protect__status">
-        {m.common_loading()}
-      </span>
+      <span className="pv-source-protect__status">{m.common_loading()}</span>
     );
   }
 
-  if (loadState === 'error' && !editing) {
+  if (loadState === 'error' && !open) {
     return (
-      <span className="alm-source-protect__status">
+      <span className="pv-source-protect__status">
         {errorMsg || m.settings_protection_load_error()}
       </span>
     );
   }
 
   return (
-    <div className="alm-source-protect__root">
-      {!editing ? (
-        <div className="alm-source-protect__view-row">
-          <Pill variant={LEVEL_VARIANT[level]}>{LEVEL_LABEL[level]()}</Pill>
-          {inheritsDefault && (
-            <Pill variant="neutral">{m.settings_source_protect_inherits()}</Pill>
-          )}
-          <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-            {m.common_override()}
-          </Btn>
-          <div className="alm-source-protect__hint">
-            {levelHint(level, inheritsDefault)}
-          </div>
-        </div>
-      ) : (
-        <div className="alm-source-protect__edit-col">
-          <div className="alm-source-protect__edit-row">
-            { }
+    <div className="pv-source-protect__root">
+      <Pill
+        variant={LEVEL_VARIANT[level]}
+        title={levelHint(level, inheritsDefault)}
+      >
+        {protectionLabel(level)}
+      </Pill>
+
+      {open && (
+        <div className="pv-source-protect__edit-col">
+          <div className="pv-source-protect__edit-row">
+            {}
             <label
               htmlFor={`protection-level-${sourceId}`}
-              className="alm-source-protect__label"
+              className="pv-source-protect__label"
             >
               {m.settings_source_protect_level_label()}
             </label>
             <select
               id={`protection-level-${sourceId}`}
-              className="alm-select alm-source-protect__select"
+              className="pv-select pv-source-protect__select"
               value={pendingLevel}
-              onChange={(e) => setPendingLevel(e.target.value as ProtectionLevel)}
+              onChange={(e) =>
+                setPendingLevel(e.target.value as ProtectionLevel)
+              }
               aria-label={m.settings_source_protect_level_aria()}
             >
-              <option value="protected">{m.settings_cleanup_protection_protected()}</option>
-              <option value="normal">{m.settings_cleanup_protection_normal()}</option>
-              <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
+              <option value="protected">
+                {m.settings_cleanup_protection_protected()}
+              </option>
+              <option value="unprotected">
+                {m.settings_cleanup_protection_unprotected()}
+              </option>
             </select>
-            <div className="alm-source-protect__hint">
+            <div className="pv-source-protect__hint">
               {levelHint(pendingLevel, false)}
             </div>
           </div>
           {errorMsg && (
-            <div className="alm-source-protect__error">
-              {errorMsg}
-            </div>
+            <div className="pv-source-protect__error">{errorMsg}</div>
           )}
-          <div className="alm-source-protect__actions">
+          <div className="pv-source-protect__actions">
             <Btn
               size="sm"
               onClick={handleSave}
               disabled={loadState === 'saving'}
             >
-              {loadState === 'saving' ? m.common_saving() : m.settings_source_protect_save_btn()}
+              {loadState === 'saving'
+                ? m.common_saving()
+                : m.settings_source_protect_save_btn()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={handleCancel}>
               {m.common_cancel()}

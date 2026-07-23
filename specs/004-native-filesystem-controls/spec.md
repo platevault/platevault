@@ -7,10 +7,21 @@
 **Feature Branch**: `004-native-filesystem-controls`  
 **Created**: 2026-05-09  
 **Last Updated**: 2026-05-20  
-**Status**: Draft  
+**Status**: Implemented (reconciled 2026-07-19, issue #764 — see note below)  
 **Input**: User description: "Replace prototype file/folder workarounds with native Tauri controls for choosing directories, choosing master files, revealing locations, and validating selected paths."
 
-## Implementation Status: NOT YET IMPLEMENTED
+## Implementation Status
+
+> **Reconciliation note (2026-07-19, issue #764)**: this section previously
+> read "NOT YET IMPLEMENTED" and described only spec 003's ad-hoc
+> `window.prompt` fallback. That is stale — `@tauri-apps/plugin-dialog` is a
+> real `package.json` dependency, `apps/desktop/src/shared/native/reveal.ts`
+> provides a real Reveal-in-OS action wired into multiple pages (Projects,
+> Inbox, Archive), and native pickers are used throughout setup/settings.
+> `AddFolderButton`/`StepRaw.tsx` referenced below no longer exist under
+> those names (the wizard's source-folder step is now `StepSourceFolders`,
+> spec 038). Original text kept below for history; do not treat it as
+> current.
 
 Spec 003 added an ad-hoc dynamic import of `@tauri-apps/plugin-dialog`
 in `AddFolderButton` (`apps/desktop/src/features/setup/steps/StepRaw.tsx`)
@@ -169,10 +180,13 @@ supported by the desktop environment.
   be opened with `directory: true` and `multiple: false`.
 - **FR-003**: Master calibration selection MUST use the OS-native file
   picker exposed through `@tauri-apps/plugin-dialog`.
-- **FR-004**: Master calibration file selection MUST offer filters for
-  FITS (`fit`, `fits`), XISF (`xisf`), TIFF (`tif`, `tiff`), an `All
-  supported` combined filter (default), and an `All files` escape
-  hatch.
+- **FR-004**: Master calibration file selection MUST offer, in order: an
+  `All supported` combined filter (default-selected first row, covering
+  `xisf`/`fits`/`fit`/`fts`/`tif`/`tiff`), then per-format filters for FITS
+  (`fit`, `fits`, `fts`), XISF (`xisf`), TIFF (`tif`, `tiff`), and finally
+  an `All files` escape hatch (R-AllSupported, ratified 2026-05-22 — the
+  original FR-004 draft listed `All supported` after the per-format rows,
+  contradicting the ratified ordering).
 - **FR-005**: `Reveal in OS` MUST use a native OS reveal/open-location
   action via `tauri-plugin-opener` (preferred) or `@tauri-apps/api/shell`
   with the per-platform commands specified in `research.md`.

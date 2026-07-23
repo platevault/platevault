@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * TargetSearch — spec 035 (SIMBAD Target Resolution), User Stories 1 + 3.
  *
@@ -9,17 +12,39 @@
  *      secondary line, and badges for object type and source / catalogue.
  *
  *   2. Long-tail (US3, T022): after the same debounce and a minimum query
- *      length (≥3 chars), ALSO call `target.resolve` (the SIMBAD long-tail).
+ *      length (≥3 chars), ALSO call `target.resolve` (the SIMBAD long-tail,
+ *      TAP + cache only — never the Sesame fallback, spec 052 P2 FR-009).
  *      Any `status = "resolved"` target is merged into the suggestion list,
  *      de-duped against the local hits, so objects not in the seed/cache still
  *      appear. `unresolved` (incl. the offline / resolver-disabled case,
  *      FR-015) is treated as a normal, non-fatal outcome — no error is shown.
+ *
+ * "Search more catalogues" (spec 052 P2/P2UX, FR-008/FR-009): when both phases
+ * above still leave zero suggestions, the miss is framed as a next step, not
+ * an error — inline text + a button that calls `target.resolve_explicit`
+ * (TAP-first, SIMBAD Sesame/NED/VizieR fallback on a miss), plus a
+ * "Searching more catalogues…" status while it runs. Enter is a keyboard
+ * accelerator for that same button ONLY when it's the sole actionable thing
+ * on screen (zero typeahead suggestions); with any suggestion present, Enter
+ * still selects the highlighted one. Never fired automatically or per
+ * keystroke otherwise.
  *
  * Cancel-in-flight (US3 acceptance scenario #2): every query change bumps a
  * monotonic generation counter. Both phases check their captured generation
  * before committing state, so a stale (superseded) response can never overwrite
  * the current query's results. (Tauri `invoke` exposes no AbortSignal, so this
  * generation guard is the cancel mechanism — no AbortController is involved.)
+ *
+ * Empty-while-warming retry (spec 052 P4/#818): the shared resolve cache's
+ * background seed/durable-row re-warm (startup, or after a cache clear) is
+ * one write transaction per phase, so nothing in it is visible to a reader
+ * until that whole phase commits. A Phase-1 query landing in that window can
+ * come back with zero suggestions for an object the seed does contain,
+ * simply because it hasn't committed yet — `target.search`'s `cacheWarming`
+ * flag says so, and Phase 1 retries on a short interval (bounded budget)
+ * until either a suggestion appears or the backend reports the warm has
+ * settled. An ordinary (non-warming) miss never enters this loop, so it pays
+ * no extra latency.
  *
  * Selecting a suggestion (mouse or keyboard) invokes `onSelect(suggestion)`,
  * exposing the canonical `targetId` so the caller can associate it.
@@ -39,15 +64,14 @@
  * item list is exactly the array we pass, so the virtualizer and the combobox
  * stay in lockstep without the (RC-internal) `useFilteredItems` hook. This keeps
  * long-list performance from US3 while gaining Base UI's accessibility.
+ *
+ * State/logic lives in `useTargetSearch` (refactor sweep #996); this file is
+ * the render only.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useId, type Ref } from 'react';
 import { Combobox } from '@base-ui-components/react/combobox';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { useDebouncedCallback } from 'use-debounce';
-import { commands } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
-import type { TargetSuggestion, ResolvedTarget } from '@/bindings/aliases';
+import type { TargetSuggestion } from '@/bindings/aliases';
 import type { TargetCatalogId, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -57,21 +81,8 @@ import {
   OBJECT_TYPES,
   CATALOG_IDS,
 } from './objectType';
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-/**
- * Contract version for the target.search / target.resolve requests. Moved here
- * off the retired @/api/commands wrapper (spec 037 FR-004: move, not drop).
- */
-const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
-
-const DEBOUNCE_MS = 300;
-const DEFAULT_LIMIT = 20;
-/** Minimum query length before the SIMBAD long-tail phase fires (US3, T022). */
-const MIN_RESOLVE_LEN = 3;
-/** Estimated suggestion-row height (px) for the virtualizer. */
-const OPTION_ESTIMATE = 44;
+import { DEFAULT_LIMIT, MIN_RESOLVE_LEN } from './helpers';
+import { useTargetSearch } from './useTargetSearch';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -95,6 +106,12 @@ export interface TargetSearchProps {
   /** Forwarded to the input for autofocus. */
   autoFocus?: boolean;
   /**
+   * Ref to the search `<input>` DOM node. Lets a caller point a Base UI
+   * `Dialog.Popup`'s `initialFocus` at this field instead of using `autoFocus`
+   * (#841: a bare `autoFocus` races the dialog's own initial-focus management).
+   */
+  inputRef?: Ref<HTMLInputElement>;
+  /**
    * Show the optional catalogue/type filter control (T029, US5). Default off.
    * The control seeds from `catalogFilter`/`typeFilter` and overrides them.
    */
@@ -111,38 +128,6 @@ export interface TargetSearchProps {
   onOverride?: (suggestion: TargetSuggestion) => void;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/** Project a SIMBAD `ResolvedTarget` into the suggestion row shape. */
-function resolvedToSuggestion(t: ResolvedTarget): TargetSuggestion {
-  return {
-    targetId: t.targetId,
-    primaryDesignation: t.primaryDesignation,
-    commonName: t.commonName ?? null,
-    objectType: t.objectType,
-    matchedAlias: null,
-    source: t.source,
-  };
-}
-
-/**
- * Merge a long-tail resolved suggestion into the local hits, de-duped.
- *
- * Dedupe keys: canonical `targetId` (primary), and — to catch the case where
- * the same physical object is already present from the seed/cache under a
- * different row id — a case-insensitive `primaryDesignation` match. Local hits
- * always win (they are kept; the resolved row is dropped when it collides).
- */
-function mergeDedupe(local: TargetSuggestion[], resolved: TargetSuggestion): TargetSuggestion[] {
-  const designation = resolved.primaryDesignation.trim().toLowerCase();
-  const isDuplicate = local.some(
-    (s) =>
-      s.targetId === resolved.targetId ||
-      s.primaryDesignation.trim().toLowerCase() === designation,
-  );
-  return isDuplicate ? local : [...local, resolved];
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function TargetSearch({
@@ -155,6 +140,7 @@ export function TargetSearch({
   hideLabel = false,
   inputId,
   autoFocus = false,
+  inputRef,
   showFilters = false,
   enableOverride = false,
   onOverride,
@@ -164,215 +150,44 @@ export function TargetSearch({
   const typeFilterId = `${id}-type-filter`;
   const catalogFilterId = `${id}-catalog-filter`;
 
-  // Optional filter state (T029). Seeds from props; "all" = no filter.
-  const [typeSel, setTypeSel] = useState<TargetObjectType | ''>(
-    typeFilter && typeFilter.length === 1 ? typeFilter[0] : '',
-  );
-  const [catalogSel, setCatalogSel] = useState<TargetCatalogId | ''>(
-    catalogFilter && catalogFilter.length === 1 ? catalogFilter[0] : '',
-  );
-  // Effective filters sent to the backend (internal control wins when shown).
-  const effectiveTypeFilter = showFilters
-    ? typeSel
-      ? [typeSel]
-      : undefined
-    : typeFilter;
-  const effectiveCatalogFilter = showFilters
-    ? catalogSel
-      ? [catalogSel]
-      : undefined
-    : catalogFilter;
-  // Stable string keys so the search callback only re-creates on real changes.
-  const typeFilterKey = (effectiveTypeFilter ?? []).join(',');
-  const catalogFilterKey = (effectiveCatalogFilter ?? []).join(',');
-
-  const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<TargetSuggestion[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [resolving, setResolving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-
-  // Cancel-in-flight: a monotonic generation counter. Each query bumps `gen`;
-  // only the latest generation may commit results, so a slow response from a
-  // superseded query is dropped. (Tauri `invoke` has no AbortSignal, so this
-  // generation guard — not an AbortController — is the actual cancel mechanism.)
-  const genRef = useRef(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Virtualize the suggestion options. Because Base UI internal filtering is
-  // disabled (`filter={null}`), the combobox's filtered list equals our own
-  // `suggestions` array, so the virtualizer can be driven directly from it.
-  const virtualizer = useVirtualizer({
-    count: suggestions.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => OPTION_ESTIMATE,
-    overscan: 6,
+  const {
+    typeSel,
+    setTypeSel,
+    catalogSel,
+    setCatalogSel,
+    query,
+    setQuery,
+    suggestions,
+    loading,
+    resolving,
+    error,
+    setOpen,
+    harderState,
+    scrollRef,
+    virtualizer,
+    handleSearchHarder,
+    handleSelect,
+    handleOverride,
+    overriding,
+    harderOffered,
+    offlineNoticeOffered,
+    showList,
+    handleItemHighlighted,
+    itemToStringLabel,
+  } = useTargetSearch({
+    onSelect,
+    catalogFilter,
+    typeFilter,
+    limit,
+    showFilters,
+    onOverride,
   });
-
-  const runSearch = useCallback(
-    async (raw: string) => {
-      const trimmed = raw.trim();
-
-      // Supersede any in-flight pipeline by bumping the generation.
-      const gen = ++genRef.current;
-      const isCurrent = () => gen === genRef.current;
-
-      if (!trimmed) {
-        setSuggestions([]);
-        setLoading(false);
-        setResolving(false);
-        setError(null);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      // ── Phase 1: local seed + cache (instant) ──────────────────────────────
-      try {
-        const res = unwrap(
-          await commands.targetSearch({
-            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-            requestId: crypto.randomUUID(),
-            query: trimmed,
-            catalogFilter: effectiveCatalogFilter,
-            typeFilter: effectiveTypeFilter,
-            limit,
-          }),
-        );
-        if (!isCurrent()) return; // superseded — drop stale result
-        setSuggestions(res.suggestions);
-      } catch {
-        if (!isCurrent()) return;
-        setError(m.targetsearch_search_failed());
-        setSuggestions([]);
-        setLoading(false);
-        return;
-      } finally {
-        if (isCurrent()) setLoading(false);
-      }
-
-      // ── Phase 2: SIMBAD long-tail (debounced, min length) ──────────────────
-      if (trimmed.length < MIN_RESOLVE_LEN) return;
-
-      setResolving(true);
-      try {
-        const res = unwrap(
-          await commands.targetResolve({
-            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-            requestId: crypto.randomUUID(),
-            query: trimmed,
-            override: null,
-          }),
-        );
-        // Cancel-in-flight guard: a newer query must not be overwritten.
-        if (!isCurrent()) return;
-        if (res.status === 'resolved' && res.target) {
-          // Merge against the current list (the Phase-1 local hits for this
-          // generation) so the long-tail row is appended, never duplicated.
-          const resolved = res.target;
-          setSuggestions((prev) => mergeDedupe(prev, resolvedToSuggestion(resolved)));
-        }
-        // `unresolved` (unknown / offline / resolver-disabled) is non-fatal:
-        // leave the local hits untouched and surface no error (FR-011/FR-015).
-      } catch {
-        // Network/internal resolve failure is non-fatal for the typeahead;
-        // the local hits already render. Swallow to avoid error spam.
-        if (!isCurrent()) return;
-      } finally {
-        if (isCurrent()) setResolving(false);
-      }
-    },
-    // Re-create when the effective filters change. `*FilterKey` are stable
-    // string keys derived from the filter arrays; the arrays themselves are
-    // read inside the callback (intentionally not listed).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [catalogFilterKey, typeFilterKey, limit],
-  );
-
-  // Debounce query changes. `useDebouncedCallback` cancels any pending call on
-  // unmount and whenever a new invocation is scheduled, preserving the prior
-  // hand-rolled setTimeout/clearTimeout semantics at the same DEBOUNCE_MS.
-  const debouncedSearch = useDebouncedCallback(
-    (q: string) => void runSearch(q),
-    DEBOUNCE_MS,
-  );
-  useEffect(() => {
-    debouncedSearch(query);
-    return () => debouncedSearch.cancel();
-  }, [query, debouncedSearch]);
-
-  const handleSelect = useCallback(
-    (s: TargetSuggestion | null) => {
-      if (!s) return;
-      onSelect(s);
-      setOpen(false);
-    },
-    [onSelect],
-  );
-
-  // Manual override (T032, FR-014): bind the current query to the chosen target
-  // as `source=user-override`. Persisted server-side and wins over future
-  // SIMBAD/seed resolutions for that query.
-  const [overriding, setOverriding] = useState<string | null>(null);
-  const handleOverride = useCallback(
-    async (s: TargetSuggestion) => {
-      const trimmed = query.trim();
-      if (!trimmed) return;
-      setOverriding(s.targetId);
-      setError(null);
-      try {
-        const res = unwrap(
-          await commands.targetResolve({
-            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-            requestId: crypto.randomUUID(),
-            query: trimmed,
-            override: { targetId: s.targetId },
-          }),
-        );
-        const result: TargetSuggestion =
-          res.status === 'resolved' && res.target
-            ? resolvedToSuggestion(res.target)
-            : { ...s, source: 'user-override' };
-        (onOverride ?? onSelect)(result);
-        setOpen(false);
-      } catch {
-        setError(m.targetsearch_set_failed());
-      } finally {
-        setOverriding(null);
-      }
-    },
-    [query, onOverride, onSelect],
-  );
-
-  const showList = open && query.trim().length > 0;
-
-  // Keep the highlighted option mounted + visible during keyboard navigation.
-  // The virtualizer only mounts the visible window, so an off-screen highlighted
-  // option must be scrolled into view as Base UI moves the active index.
-  const handleItemHighlighted = useCallback(
-    (_value: TargetSuggestion | undefined, details: { index: number }) => {
-      if (details.index >= 0 && details.index < suggestions.length) {
-        virtualizer.scrollToIndex(details.index, { align: 'auto' });
-      }
-    },
-    [suggestions.length, virtualizer],
-  );
 
   const totalSize = virtualizer.getTotalSize();
   const virtualItems = virtualizer.getVirtualItems();
 
-  // Base UI uses `value` for selection. We keep the input independent of
-  // selection (selecting a target should not stuff its label into the box), so
-  // `value` stays null and we react via `onValueChange`.
-  const itemToStringLabel = useMemo(
-    () => (s: TargetSuggestion) => s.primaryDesignation,
-    [],
-  );
-
   return (
-    <div className="alm-target-search">
+    <div className="pv-target-search">
       <Combobox.Root<TargetSuggestion>
         items={suggestions}
         // Selection stays uncontrolled: we react via `onValueChange` and keep
@@ -398,16 +213,19 @@ export function TargetSearch({
         itemToStringLabel={itemToStringLabel}
         onItemHighlighted={handleItemHighlighted}
       >
-        { }
+        {}
         <label
-          className={hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'}
+          className={
+            hideLabel ? 'pv-target-search__label--sr' : 'pv-field-label'
+          }
           htmlFor={id}
         >
           {label}
         </label>
         <Combobox.Input
+          ref={inputRef}
           id={id}
-          className="alm-input alm-target-search__input"
+          className="pv-input pv-target-search__input"
           autoComplete="off"
           spellCheck={false}
           aria-label={label}
@@ -418,17 +236,46 @@ export function TargetSearch({
           onFocus={() => {
             if (query.trim().length > 0) setOpen(true);
           }}
+          onKeyDown={(e) => {
+            // Enter-as-accelerator (spec 052 P2UX): fires the explicit
+            // "search more catalogues" fallback ONLY when it's the sole
+            // actionable thing on screen (zero typeahead suggestions). With
+            // any suggestion present, Enter falls through to Base UI's own
+            // select-the-highlighted-option handling — never both.
+            if (e.key === 'Enter' && harderOffered) {
+              e.preventDefault();
+              // #697: our `onKeyDown` and Base UI's own internal Enter
+              // handling are composed onto the SAME input element (Base UI's
+              // `mergeProps`), which — with zero suggestions, so no
+              // highlighted option — closes the popup ("allow form
+              // submission when no item is highlighted") after ours runs.
+              // `preventDefault()`/`stopPropagation()` can't stop a sibling
+              // handler composed this way; Base UI's merge utility exposes
+              // `preventBaseUIHandler()` on the event for exactly this.
+              e.preventBaseUIHandler();
+              void handleSearchHarder();
+            }
+          }}
         />
 
         {showFilters && (
-          <div className="alm-target-search__filters" role="group" aria-label={m.cmp_target_search_filters_aria()}>
-            <label className="alm-target-search__filter-label" htmlFor={typeFilterId}>
+          <div
+            className="pv-target-search__filters"
+            role="group"
+            aria-label={m.cmp_target_search_filters_aria()}
+          >
+            <label
+              className="pv-target-search__filter-label"
+              htmlFor={typeFilterId}
+            >
               {m.cmp_target_search_type_label()}
               <select
                 id={typeFilterId}
-                className="alm-select alm-target-search__filter-select"
+                className="pv-select pv-target-search__filter-select"
                 value={typeSel}
-                onChange={(e) => setTypeSel(e.target.value as TargetObjectType | '')}
+                onChange={(e) =>
+                  setTypeSel(e.target.value as TargetObjectType | '')
+                }
               >
                 <option value="">{m.cmp_target_search_all_types()}</option>
                 {OBJECT_TYPES.map((t) => (
@@ -438,13 +285,18 @@ export function TargetSearch({
                 ))}
               </select>
             </label>
-            <label className="alm-target-search__filter-label" htmlFor={catalogFilterId}>
+            <label
+              className="pv-target-search__filter-label"
+              htmlFor={catalogFilterId}
+            >
               {m.cmp_target_search_catalogue_label()}
               <select
                 id={catalogFilterId}
-                className="alm-select alm-target-search__filter-select"
+                className="pv-select pv-target-search__filter-select"
                 value={catalogSel}
-                onChange={(e) => setCatalogSel(e.target.value as TargetCatalogId | '')}
+                onChange={(e) =>
+                  setCatalogSel(e.target.value as TargetCatalogId | '')
+                }
               >
                 <option value="">{m.cmp_target_search_all_catalogues()}</option>
                 {CATALOG_IDS.map((c) => (
@@ -458,7 +310,7 @@ export function TargetSearch({
         )}
 
         {error && (
-          <span id={`${id}-error`} role="alert" className="alm-field-error">
+          <span id={`${id}-error`} role="alert" className="pv-field-error">
             {error}
           </span>
         )}
@@ -489,30 +341,92 @@ export function TargetSearch({
          */}
         <Combobox.Portal keepMounted>
           <Combobox.Positioner
-            className="alm-target-search__positioner"
+            className="pv-target-search__positioner"
             sideOffset={4}
             align="start"
           >
-            <Combobox.Popup className="alm-target-search__popup">
+            <Combobox.Popup className="pv-target-search__popup">
               <Combobox.List
                 ref={scrollRef}
-                className="alm-target-search__list alm-virtual-scroll"
+                className="pv-target-search__list pv-virtual-scroll"
                 data-virtual-scroll="true"
                 aria-label={m.cmp_target_search_suggestions_aria()}
               >
                 {loading && suggestions.length === 0 && (
-                  <Combobox.Status className="alm-target-search__status">
+                  <Combobox.Status className="pv-target-search__status">
                     {m.cmp_target_search_searching()}
                   </Combobox.Status>
                 )}
-                {!loading && !error && suggestions.length === 0 && !resolving && (
-                  <Combobox.Status className="alm-target-search__status">
-                    {m.cmp_target_search_no_results()}
+                {/*
+                 * Below the minimum resolve length, Phase 2 (SIMBAD) hasn't
+                 * run at all — "No matching targets." would falsely claim a
+                 * search happened and missed (#843). Say so honestly instead.
+                 */}
+                {!loading &&
+                  !error &&
+                  !resolving &&
+                  suggestions.length === 0 &&
+                  query.trim().length < MIN_RESOLVE_LEN && (
+                    <Combobox.Status className="pv-target-search__status">
+                      {m.cmp_target_search_type_more()}
+                    </Combobox.Status>
+                  )}
+                {/*
+                 * "Search more catalogues" (spec 052 P2/P2UX, FR-008/FR-009):
+                 * once both prior phases (local cache + TAP long-tail) have
+                 * come up empty, frame it as a next step rather than a dead
+                 * end — the miss message and the fallback button read as one
+                 * inline sentence, not a separate error. Never fired
+                 * automatically or per keystroke; only this explicit button
+                 * click or the Enter accelerator below invokes it.
+                 */}
+                {harderOffered && (
+                  <div className="pv-target-search__status pv-target-search__no-match">
+                    <Combobox.Status>
+                      {m.cmp_target_search_no_results_hint()}
+                    </Combobox.Status>
+                    <button
+                      type="button"
+                      className="pv-target-search__override"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleSearchHarder();
+                      }}
+                    >
+                      {m.cmp_target_search_search_harder()}
+                    </button>
+                  </div>
+                )}
+                {/*
+                 * Offline/disabled empty state (#694): the long-tail phase
+                 * couldn't even try (network down or the "Online SIMBAD
+                 * resolution" setting is off), so offering the (also online)
+                 * "search more catalogues" fallback would just fail again —
+                 * say so instead of rendering nothing.
+                 */}
+                {offlineNoticeOffered && (
+                  <Combobox.Status className="pv-target-search__status">
+                    {m.settings_resolver_online_off_info()}
+                  </Combobox.Status>
+                )}
+                {harderState === 'searching' && (
+                  <Combobox.Status className="pv-target-search__status pv-target-search__status--resolving">
+                    {m.cmp_target_search_search_harder_searching()}
+                  </Combobox.Status>
+                )}
+                {harderState === 'no-results' && (
+                  <Combobox.Status className="pv-target-search__status">
+                    {m.cmp_target_search_search_harder_no_results()}
                   </Combobox.Status>
                 )}
                 {suggestions.length > 0 && (
                   <div
-                    className="alm-virtual-inner"
+                    className="pv-virtual-inner"
                     // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (totalSize)
                     style={{ height: `${totalSize}px`, position: 'relative' }}
                   >
@@ -527,7 +441,7 @@ export function TargetSearch({
                           value={s}
                           ref={virtualizer.measureElement}
                           data-index={i}
-                          className="alm-target-search__option"
+                          className="pv-target-search__option"
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per suggestion row
                           style={{
                             position: 'absolute',
@@ -537,23 +451,41 @@ export function TargetSearch({
                             transform: `translateY(${virtualRow.start}px)`,
                           }}
                         >
-                          <span className="alm-target-search__primary">
+                          <span className="pv-target-search__primary">
                             {s.primaryDesignation}
                           </span>
                           {secondary && secondary !== s.primaryDesignation && (
-                            <span className="alm-target-search__secondary">{secondary}</span>
+                            <span className="pv-target-search__secondary">
+                              {secondary}
+                            </span>
                           )}
-                          <span className="alm-target-search__badges">
-                            <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
-                            <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
+                          <span className="pv-target-search__badges">
+                            <Pill variant="info">
+                              {objectTypeLabel(s.objectType)}
+                            </Pill>
+                            <Pill
+                              variant={
+                                s.source === 'user-override'
+                                  ? 'accent'
+                                  : 'ghost'
+                              }
+                            >
                               {s.source}
                             </Pill>
                             {enableOverride && (
                               <button
                                 type="button"
-                                className="alm-target-search__override"
-                                aria-label={m.cmp_target_search_set_primary_aria({ query: query.trim(), designation: s.primaryDesignation })}
-                                disabled={overriding != null || query.trim().length === 0}
+                                className="pv-target-search__override"
+                                aria-label={m.cmp_target_search_set_primary_aria(
+                                  {
+                                    query: query.trim(),
+                                    designation: s.primaryDesignation,
+                                  },
+                                )}
+                                disabled={
+                                  overriding != null ||
+                                  query.trim().length === 0
+                                }
                                 onPointerDown={(e) => {
                                   // Don't trigger the row's select-on-press.
                                   e.preventDefault();
@@ -577,7 +509,7 @@ export function TargetSearch({
                   </div>
                 )}
                 {resolving && (
-                  <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
+                  <Combobox.Status className="pv-target-search__status pv-target-search__status--resolving">
                     {m.cmp_target_search_searching_simbad()}
                   </Combobox.Status>
                 )}

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * /dev/settings — hidden developer-mode toggle (spec 021, T032).
  *
@@ -65,12 +68,16 @@ export function DevSettingsPage() {
     <PageShell>
       {/* Reuses the dev/ContractsPage body/title/error/loading classes (shared
           component / no cloned CSS — see dev.css "DEV CONTRACTS PAGE"). */}
-      <div className="alm-page__scroll alm-dev-contracts-page__body">
-        <h1 className="alm-dev-contracts-page__title">{m.dev_settings_title()}</h1>
-        <p className="alm-dev-contracts-page__export-result">{m.dev_settings_intro()}</p>
+      <div className="pv-page__scroll pv-dev-contracts-page__body">
+        <h1 className="pv-dev-contracts-page__title">
+          {m.dev_settings_title()}
+        </h1>
+        <p className="pv-dev-contracts-page__export-result">
+          {m.dev_settings_intro()}
+        </p>
 
         {error && (
-          <div role="alert" className="alm-dev-contracts-page__error">
+          <div role="alert" className="pv-dev-contracts-page__error">
             {m.dev_settings_error({ message: error })}
           </div>
         )}
@@ -81,7 +88,9 @@ export function DevSettingsPage() {
             info={m.dev_settings_toggle_info()}
           >
             {devMode === null ? (
-              <span className="alm-dev-contracts-page__loading">{m.common_loading()}</span>
+              <span className="pv-dev-contracts-page__loading">
+                {m.common_loading()}
+              </span>
             ) : (
               <Toggle
                 aria-label={m.dev_settings_toggle_label()}
@@ -92,13 +101,17 @@ export function DevSettingsPage() {
             )}
           </SettingsRow>
           {devMode === true && (
-            <p className="alm-dev-contracts-page__export-result">
+            <p className="pv-dev-contracts-page__export-result">
               {m.dev_settings_restart_hint()}
             </p>
           )}
         </SettingsSection>
 
-        {saving && <p className="alm-dev-contracts-page__export-result">{m.dev_settings_saving()}</p>}
+        {saving && (
+          <p className="pv-dev-contracts-page__export-result">
+            {m.common_saving()}
+          </p>
+        )}
       </div>
     </PageShell>
   );

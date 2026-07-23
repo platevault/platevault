@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Stable identifier and timestamp primitives.
 
 use schemars::JsonSchema;
@@ -121,10 +124,16 @@ impl ContentHash {
 }
 
 /// RFC 3339 UTC timestamp wrapper.
+///
+/// The explicit `time::serde::rfc3339` is load-bearing: `OffsetDateTime`'s
+/// default serde impl is a 9-element integer component array, which contradicts
+/// this type's `JsonSchema` (`string` / `date-time`), its `now_iso()` helper,
+/// and the RFC 3339 string written to the durable `events.emitted_at` column
+/// (issue #1093).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(transparent)]
 #[specta(transparent)]
-pub struct Timestamp(OffsetDateTime);
+pub struct Timestamp(#[serde(with = "time::serde::rfc3339")] OffsetDateTime);
 
 impl Timestamp {
     #[must_use]
@@ -203,6 +212,22 @@ mod tests {
         // Must parse back without error (time Rfc3339 round-trip).
         time::OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339)
             .unwrap_or_else(|e| panic!("now_iso() produced non-RFC3339 output {s:?}: {e}"));
+    }
+
+    /// Pins the wire form against `OffsetDateTime`'s default 9-int component
+    /// array (issue #1093) and against the type's own `JsonSchema`.
+    #[test]
+    fn timestamp_serializes_as_an_rfc3339_string_and_round_trips() {
+        let ts = Timestamp::from_offset_date_time(
+            time::OffsetDateTime::from_unix_timestamp(1_752_000_000)
+                .expect("fixed unix timestamp is in range"),
+        );
+
+        let json = serde_json::to_string(&ts).expect("Timestamp should serialize");
+        assert_eq!(json, r#""2025-07-08T18:40:00Z""#);
+
+        let back: Timestamp = serde_json::from_str(&json).expect("Timestamp should deserialize");
+        assert_eq!(back, ts, "serialize/deserialize must round-trip");
     }
 
     #[test]

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProjectNotesSection — spec 024 T4.2.
  *
@@ -15,7 +18,13 @@ import { useDebouncedCallback } from 'use-debounce';
 import { Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { addToast } from '@/shared/toast';
-import { saveNote, getProjectNote, noteByteLength, MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS } from './manifests';
+import {
+  saveNote,
+  getProjectNote,
+  noteByteLength,
+  MAX_NOTE_BYTES,
+  NOTE_DEBOUNCE_MS,
+} from './manifests';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -58,7 +67,7 @@ export function ProjectNotesSection({
     void (async () => {
       try {
         const res = await getProjectNote({ projectId });
-        if (!cancelled) setDraft((prev) => (prev ? prev : res.content ?? ''));
+        if (!cancelled) setDraft((prev) => (prev ? prev : (res.content ?? '')));
       } catch {
         // Backend unavailable — leave the placeholder; saving still works.
       }
@@ -77,29 +86,36 @@ export function ProjectNotesSection({
   // Debounced autosave. `useDebouncedCallback` cancels the pending save on
   // unmount and replaces it on each keystroke, preserving the prior
   // setTimeout/clearTimeout semantics at the same NOTE_DEBOUNCE_MS interval.
-  const triggerSave = useDebouncedCallback(
-    (content: string) => {
-      // Keep the debounced callback void-returning (matching the prior
-      // `setTimeout(async …)`); the async work runs in a fire-and-forget IIFE.
-      void (async () => {
-        if (noteByteLength(content) > MAX_NOTE_BYTES) return;
-        setSaving(true);
-        const { updatedAt, error } = await saveNote(projectId, content);
-        setSaving(false);
-        if (error === 'note.content_too_large') {
-          setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
-        } else if (error === 'project.read_only') {
-          addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
-        } else if (error) {
-          addToast({ message: m.projects_toast_save_notes_failed({ error: String(error) }), variant: 'error' });
-        } else if (updatedAt) {
-          setLastSaved(updatedAt);
-          setFieldError(null);
-        }
-      })();
-    },
-    NOTE_DEBOUNCE_MS,
-  );
+  const triggerSave = useDebouncedCallback((content: string) => {
+    // Keep the debounced callback void-returning (matching the prior
+    // `setTimeout(async …)`); the async work runs in a fire-and-forget IIFE.
+    void (async () => {
+      if (noteByteLength(content) > MAX_NOTE_BYTES) return;
+      setSaving(true);
+      const { updatedAt, error } = await saveNote(projectId, content);
+      setSaving(false);
+      if (error === 'note.content_too_large') {
+        setFieldError(
+          m.projects_notes_byte_limit_exceeded({
+            max: MAX_NOTE_BYTES.toLocaleString(),
+          }),
+        );
+      } else if (error === 'project.read_only') {
+        addToast({
+          message: m.projects_toast_archived_readonly(),
+          variant: 'error',
+        });
+      } else if (error) {
+        addToast({
+          message: m.projects_toast_save_notes_failed({ error: String(error) }),
+          variant: 'error',
+        });
+      } else if (updatedAt) {
+        setLastSaved(updatedAt);
+        setFieldError(null);
+      }
+    })();
+  }, NOTE_DEBOUNCE_MS);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
@@ -110,7 +126,11 @@ export function ProjectNotesSection({
 
   const handleSave = async () => {
     if (overLimit) {
-      setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
+      setFieldError(
+        m.projects_notes_byte_limit_exceeded({
+          max: MAX_NOTE_BYTES.toLocaleString(),
+        }),
+      );
       return;
     }
     triggerSave.cancel();
@@ -118,12 +138,22 @@ export function ProjectNotesSection({
     const { updatedAt, error } = await saveNote(projectId, draft);
     setSaving(false);
     if (error === 'note.content_too_large') {
-      setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
+      setFieldError(
+        m.projects_notes_byte_limit_exceeded({
+          max: MAX_NOTE_BYTES.toLocaleString(),
+        }),
+      );
     } else if (error === 'project.read_only') {
-      addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
+      addToast({
+        message: m.projects_toast_archived_readonly(),
+        variant: 'error',
+      });
       setEditing(false);
     } else if (error) {
-      addToast({ message: m.projects_toast_save_notes_failed({ error: String(error) }), variant: 'error' });
+      addToast({
+        message: m.projects_toast_save_notes_failed({ error: String(error) }),
+        variant: 'error',
+      });
     } else if (updatedAt) {
       setLastSaved(updatedAt);
       setFieldError(null);
@@ -142,33 +172,27 @@ export function ProjectNotesSection({
 
   if (!editing) {
     return (
-      <div className="alm-project-notes__root">
+      <div className="pv-project-notes__root">
         {draft ? (
-          <div
-            data-testid="notes-body"
-            className="alm-project-notes__body"
-          >
+          <div data-testid="notes-body" className="pv-project-notes__body">
             {draft}
           </div>
         ) : (
-          <span
-            data-testid="notes-empty"
-            className="alm-project-notes__empty"
-          >
+          <span data-testid="notes-empty" className="pv-project-notes__empty">
             {m.projects_notes_empty()}
           </span>
         )}
         {!readOnly && (
           <div>
             <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              {m.projects_detail_edit_btn()}
+              {m.common_edit()}
             </Btn>
           </div>
         )}
         {lastSaved && (
           <span
             data-testid="notes-saved-indicator"
-            className="alm-project-notes__saved"
+            className="pv-project-notes__saved"
           >
             {m.projects_notes_saved()}
           </span>
@@ -178,10 +202,10 @@ export function ProjectNotesSection({
   }
 
   return (
-    <div className="alm-project-notes__root">
+    <div className="pv-project-notes__root">
       <textarea
         data-testid="notes-textarea"
-        className="alm-input alm-project-notes__textarea"
+        className="pv-input pv-project-notes__textarea"
         aria-label={m.projects_notes_label()}
         value={draft}
         onChange={handleChange}
@@ -190,21 +214,27 @@ export function ProjectNotesSection({
         aria-invalid={Boolean(fieldError || overLimit)}
         aria-describedby={fieldError ? 'notes-field-error' : undefined}
       />
-      <div className="alm-project-notes__toolbar">
+      <div className="pv-project-notes__toolbar">
         <span
           data-testid="notes-byte-counter"
           className={
             overLimit
-              ? 'alm-project-notes__byte-counter--over'
+              ? 'pv-project-notes__byte-counter--over'
               : nearLimit
-                ? 'alm-project-notes__byte-counter--near'
-                : 'alm-project-notes__byte-counter'
+                ? 'pv-project-notes__byte-counter--near'
+                : 'pv-project-notes__byte-counter'
           }
         >
-          {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} {m.projects_notes_bytes_unit()}
+          {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()}{' '}
+          {m.projects_notes_bytes_unit()}
         </span>
-        <div className="alm-project-notes__actions">
-          <Btn size="sm" variant="ghost" onClick={handleCancel} disabled={saving}>
+        <div className="pv-project-notes__actions">
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={handleCancel}
+            disabled={saving}
+          >
             {m.common_cancel()}
           </Btn>
           <Btn
@@ -222,7 +252,7 @@ export function ProjectNotesSection({
           id="notes-field-error"
           role="alert"
           data-testid="notes-field-error"
-          className="alm-field-error"
+          className="pv-field-error"
         >
           {fieldError}
         </span>

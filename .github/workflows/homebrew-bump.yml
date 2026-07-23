@@ -1,0 +1,112 @@
+name: Bump Homebrew cask
+
+# Opens a PR against platevault/homebrew-tap bumping Casks/platevault.rb's
+# version + sha256 after a release publishes its macOS artifact. Triggered on
+# workflow_run completion of Release Please rather than `release: published`
+# because the macOS .dmg is uploaded by that workflow's downstream `build`
+# job (tauri-action), which finishes well after the release object itself is
+# created — workflow_run only fires once every job in the triggering
+# workflow (including `build`) has finished.
+#
+# Not every Release Please run cuts a release (most main pushes are just
+# release-please bookkeeping with release_created == false), so this is
+# idempotent: it diffs the latest published release's tag/sha256 against
+# what's already committed in the tap and no-ops if they already match.
+on:
+  workflow_run:
+    workflows: ["Release Please"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  bump-cask:
+    name: Bump platevault/homebrew-tap cask
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Look up the latest release's macOS artifact
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          release_json=$(gh api "repos/${{ github.repository }}/releases/latest")
+          tag_name=$(jq -r '.tag_name' <<<"$release_json")
+          version="${tag_name#v}"
+          dmg_name="PlateVault_${version}_aarch64.dmg"
+          sha256=$(jq -r --arg name "$dmg_name" \
+            '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' \
+            <<<"$release_json")
+          if [ -z "$sha256" ]; then
+            echo "No $dmg_name asset on release $tag_name — nothing to bump." >&2
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "version=$version"
+            echo "sha256=$sha256"
+          } >> "$GITHUB_OUTPUT"
+
+      # Same GitHub App identity release-please.yml already uses
+      # (RELEASE_APP_CLIENT_ID/RELEASE_APP_PRIVATE_KEY), minted here for the
+      # tap repo specifically: the app is installed org-wide
+      # (repository_selection: all) with contents:write + pull-requests:write,
+      # so no separate tap-repo secret is needed.
+      - name: Mint app token for platevault/homebrew-tap
+        if: steps.release.outputs.found == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: platevault
+          repositories: homebrew-tap
+
+      - name: Checkout platevault/homebrew-tap
+        if: steps.release.outputs.found == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: platevault/homebrew-tap
+          token: ${{ steps.app-token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Update Casks/platevault.rb
+        if: steps.release.outputs.found == 'true'
+        id: update
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          SHA256: ${{ steps.release.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s/^(  version \").*(\")$/\1${VERSION}\2/" Casks/platevault.rb
+          sed -i -E "s/^(  sha256 \").*(\")$/\1${SHA256}\2/" Casks/platevault.rb
+          if git diff --quiet; then
+            echo "Cask already at ${VERSION} — nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open bump PR
+        if: steps.release.outputs.found == 'true' && steps.update.outputs.changed == 'true'
+        working-directory: homebrew-tap
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BRANCH: bump-platevault-${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "sjorsr-release-bot[bot]"
+          git config user.email "sjorsr-release-bot[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add Casks/platevault.rb
+          git commit -m "chore: bump platevault to ${VERSION}"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --repo platevault/homebrew-tap \
+            --title "chore: bump platevault to ${VERSION}" \
+            --body "Automated bump from platevault/platevault release v${VERSION}. CI (install-test.yml) verifies the cask installs before this is safe to merge."

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Canonical dynamic-query pattern for the centralized persistence layer.
 //!
 //! This module is **not** wired into any real repository. It exists as the

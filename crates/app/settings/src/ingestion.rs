@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Ingestion settings use cases (spec 030, package P12 — real persistence).
 //!
 //! `IngestionSettings` / `UpdateIngestionSettings` (`contracts_core::ingestion`)

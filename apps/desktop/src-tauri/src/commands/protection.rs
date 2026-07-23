@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Source protection Tauri commands (spec 016 US2–US4).
 //!
 //! Implements the three JSON-Schema contracts:

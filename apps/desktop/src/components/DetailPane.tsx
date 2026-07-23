@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ReactNode } from 'react';
 
 export interface DetailPaneProps {
@@ -11,5 +14,9 @@ export interface DetailPaneProps {
 }
 
 export function DetailPane({ children, fill }: DetailPaneProps) {
-  return <div className={`alm-detail${fill ? ' alm-detail--fill' : ''}`}>{children}</div>;
+  return (
+    <div className={`pv-detail${fill ? ' pv-detail--fill' : ''}`}>
+      {children}
+    </div>
+  );
 }

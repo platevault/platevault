@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for prepared source views (spec 026).
 //!
 //! Operates on the `prepared_source_views` and `prepared_source_view_items`
@@ -371,5 +374,49 @@ mod tests {
 
         let views = list_views_for_project(db.pool(), "proj-4").await.unwrap();
         assert_eq!(views.len(), 2);
+    }
+
+    /// #745 (spec 049 CL-2): re-running `Database::migrate()` must NOT
+    /// force-flip a view whose items carry more than one recorded kind —
+    /// that used to be `reconcile_kind_diverged_views`'s job on every app
+    /// start, auto-corrupting real cross-drive projects (whose drive-scope
+    /// resolution legitimately produces per-item kind diversity) into the
+    /// dead-end `kind_diverged` state on every reopen.
+    #[tokio::test]
+    async fn migrate_does_not_flip_mixed_kind_views_to_kind_diverged() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
+             VALUES ('proj-5', 'Test5', 'PixInsight', 'ready', 'projects/test5', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // A cross-drive project's view: kind='symlink' (dominant), one item
+        // resolved to 'copy' (drive-scope fallback) — VALID per CL-2.
+        insert_view(
+            db.pool(),
+            &InsertPreparedSourceView { id: "v-mixed", project_id: "proj-5", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        insert_view_item(
+            db.pool(),
+            &InsertPreparedSourceViewItem {
+                id: "item-mixed",
+                view_id: "v-mixed",
+                inventory_item_id: "inv-mixed",
+                view_relative_path: "Sources/mixed.fit",
+                materialization: "copy",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Re-running migrate() (as every app start does) must leave it alone.
+        db.migrate().await.unwrap();
+
+        assert_eq!(get_view(db.pool(), "v-mixed").await.unwrap().state, "current");
     }
 }

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Target contract DTOs for the Tauri IPC surface.
 //!
 //! ## Spec 029 legacy types (kept for spec-029 stub commands `targets.list`/`targets.get`)
@@ -15,6 +18,12 @@
 //!
 //! Search/resolve/settings DTOs for `target.search`, `target.resolve`,
 //! `target.resolution.settings`.
+//!
+//! ## `target.astro_format.batch` (adopt target-match)
+//!
+//! [`TargetAstroFormatItem`], [`TargetAstroFormatBatchRequest`],
+//! [`TargetAstroFormat`], [`TargetAstroFormatBatchResponse`] — batched
+//! sexagesimal RA/Dec formatting for N targets in one IPC call.
 
 use crate::lifecycle::ProjectState;
 use crate::sessions::AcquisitionSession;
@@ -111,17 +120,6 @@ pub struct TargetDetail {
 //
 // Contracts per `specs/036-retire-legacy-targets/contracts/target-management.md`.
 
-/// Generic error envelope for target operations (gen-3).
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct TargetOpError {
-    /// Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`).
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<crate::JsonAny>,
-}
-
 /// Kind of a target alias (gen-3).
 ///
 /// - `"designation"` — a SIMBAD catalog designation (read-only, not removable).
@@ -207,6 +205,11 @@ pub struct TargetListItem {
     /// that ignore unknown keys are unaffected.
     #[serde(default)]
     pub aliases: Vec<String>,
+    /// Count of `acquisition_session` rows linked to this target (#877, planner
+    /// Sessions column). `0` when no session has resolved to this target yet —
+    /// additive field, older clients ignoring unknown keys are unaffected.
+    #[serde(default)]
+    pub session_count: u32,
 }
 
 // ── Gen-3 request / response types ────────────────────────────────────────────
@@ -273,11 +276,14 @@ pub struct TargetDisplayAliasClearRequest {
 ///
 /// Only columns reliably present in `acquisition_session` are surfaced:
 /// - `id` — row UUID.
-/// - `session_key` — raw JSON string (matches the `session_key` column, which
-///   stores the composite key as a JSON object — caller can parse it if needed).
+/// - `session_key` — the composite grouping key (pipe-delimited
+///   `target|filter|binning|gain|night`, per `sessions::session_key`) —
+///   caller can parse it further if needed.
 /// - `created_at` — RFC 3339 UTC timestamp the row was created.
 /// - `frame_count` — length of the `frame_ids` JSON array (computed via
 ///   `json_array_length`; 0 for legacy rows with the default `'[]'`).
+/// - `filter` — the filter segment of `session_key` (FR-003/US2-AC1, #739);
+///   `""` when the session has no filter (e.g. an unfiltered OSC capture).
 ///
 /// Spec 041 FR-051 (T076): no `state` field — sessions are derived,
 /// already-confirmed inventory with no review lifecycle.
@@ -285,12 +291,14 @@ pub struct TargetDisplayAliasClearRequest {
 #[serde(rename_all = "camelCase")]
 pub struct TargetSessionItem {
     pub id: String,
-    /// Raw JSON object stored in `acquisition_session.session_key`.
+    /// The composite `session_key` grouping key (see struct docs for shape).
     pub session_key: String,
     /// RFC 3339 UTC creation timestamp.
     pub created_at: String,
     /// Number of frames in `frame_ids` JSON array.
     pub frame_count: i64,
+    /// Filter segment of `session_key`; `""` when the session has no filter.
+    pub filter: String,
 }
 
 /// A linked project returned by `target.projects.list` (spec 023 US3).
@@ -507,6 +515,17 @@ pub struct TargetSearchResponse {
     pub contract_version: String,
     pub request_id: String,
     pub suggestions: Vec<TargetSuggestion>,
+    /// Whether the shared resolve cache is still running its background
+    /// seed/durable-row re-warm (startup, or after `target.cache.clear`) —
+    /// issue #818: a query that lands mid-warm can get a legitimate-looking
+    /// empty result for an object the seed does contain, simply because it
+    /// hasn't committed yet. `true` tells the caller a retry may still find
+    /// it; `false` means whatever `suggestions` holds is the settled answer.
+    /// Always `false` from this pure use case directly (its own unit tests
+    /// exercise no `AppState`) — the `target.search` Tauri command sets the
+    /// real value from the live warm flag after calling `search`.
+    #[serde(default)]
+    pub cache_warming: bool,
 }
 
 // ── target.resolve ────────────────────────────────────────────────────────────
@@ -652,4 +671,82 @@ pub struct ResolverSettingsResponse {
     pub contract_version: String,
     pub request_id: String,
     pub settings: ResolverSettings,
+}
+
+// ── target.astro_format.batch (adopt target-match) ───────────────────────────
+
+/// One target's RA/Dec to format, for `target.astro_format.batch`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormatItem {
+    /// Caller-supplied id echoed back on the matching [`TargetAstroFormat`]
+    /// (opaque to this command — a `canonical_target.id` in practice).
+    pub id: String,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+}
+
+/// Request for `target.astro_format.batch`: sexagesimal RA/Dec formatting for
+/// N targets in a single call, never per-row round trips.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormatBatchRequest {
+    pub targets: Vec<TargetAstroFormatItem>,
+}
+
+/// One target's sexagesimal-formatted RA/Dec.
+///
+/// Absent from the response when its input RA/Dec was non-finite — never a
+/// fabricated string (callers key on `id` to look up a result and fall back
+/// to an explicit "unknown" display for ids with no match).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormat {
+    pub id: String,
+    /// `HH:MM:SS` (0 fractional-second digits, carry-safe rounding).
+    pub ra_sexagesimal: String,
+    /// `±DD:MM:SS` (0 fractional-second digits, carry-safe rounding).
+    pub dec_sexagesimal: String,
+}
+
+/// Response for `target.astro_format.batch`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormatBatchResponse {
+    pub formatted: Vec<TargetAstroFormat>,
+}
+
+// ── Spec 052 P1: in-use promotion + resolve-cache clear ─────────────────────
+
+/// Request for `target.adopt` — promote a redb-cache-only target (a `target_id`
+/// a prior `target.search`/`target.resolve` response returned) into the
+/// durable `canonical_target` table. The explicit in-use commit for UI flows
+/// with no other natural commit point (e.g. the Targets-page "Add Target"
+/// dialog; favouriting/project-create/session-link promote inline as part of
+/// their own commands).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAdoptRequest {
+    pub request_id: String,
+    pub target_id: String,
+}
+
+/// Response for `target.adopt`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAdoptResponse {
+    pub target_id: String,
+    /// `false` when `target_id` is unknown to both the redb cache and
+    /// `canonical_target` — never fabricated.
+    pub adopted: bool,
+}
+
+/// Response for `target.cache.clear` (FR-002): the redb resolve cache is
+/// wiped and re-warmed from the bundled seed + existing durable
+/// `canonical_target` rows. Never touches `canonical_target` itself.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetCacheClearResponse {
+    /// Number of entries the cache was re-warmed with after clearing.
+    pub rewarmed_count: u32,
 }

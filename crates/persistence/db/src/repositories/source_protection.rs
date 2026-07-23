@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository for per-source protection overrides (spec 016 US2–US4, migration 0026).
 //!
 //! The `source_protection_state` table stores an explicit level override and
@@ -6,6 +9,7 @@
 
 use domain_core::ids::Timestamp;
 use serde_json::Value;
+use sqlx::types::Json;
 use sqlx::SqlitePool;
 
 use crate::{DbError, DbResult};
@@ -13,6 +17,12 @@ use crate::{DbError, DbResult};
 // ── Row type ──────────────────────────────────────────────────────────────
 
 /// Raw DB row for `source_protection_state`.
+///
+/// `categories` stays raw `String` (not `sqlx::types::Json`, unlike the other
+/// columns in this file): `crates/app/core::protection::set_source_protection`
+/// reads this field directly with its own lenient `serde_json::from_str`
+/// fallback, so this row's shape is a cross-crate contract this file cannot
+/// unilaterally change.
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct SourceProtectionRow {
     pub source_id: String,
@@ -59,10 +69,6 @@ fn parse_categories(json: Option<&str>) -> DbResult<Vec<String>> {
     }
 }
 
-fn encode_categories(cats: &[String]) -> DbResult<String> {
-    serde_json::to_string(cats).map_err(DbError::Serialise)
-}
-
 // ── CRUD ──────────────────────────────────────────────────────────────────
 
 /// Upsert a per-source protection override.
@@ -84,10 +90,7 @@ pub async fn upsert_source_protection(
 ) -> DbResult<()> {
     let now = Timestamp::now_iso();
     let bpd: Option<i64> = block_permanent_delete.map(i64::from);
-    let cats_json: Option<String> = match categories {
-        None => None,
-        Some(c) => Some(encode_categories(c)?),
-    };
+    let cats_json = categories.map(Json);
 
     sqlx::query(
         "INSERT INTO source_protection_state \
@@ -223,20 +226,14 @@ pub async fn get_protection_default(
     scope: &str,
     key: &str,
 ) -> DbResult<Option<serde_json::Value>> {
-    let row: Option<(String,)> =
+    let row: Option<(Json<Value>,)> =
         sqlx::query_as("SELECT value FROM protection_defaults WHERE scope = ? AND key = ?")
             .bind(scope)
             .bind(key)
             .fetch_optional(pool)
             .await?;
 
-    match row {
-        None => Ok(None),
-        Some((json,)) => {
-            let v = serde_json::from_str(&json).map_err(DbError::Serialise)?;
-            Ok(Some(v))
-        }
-    }
+    Ok(row.map(|(Json(v),)| v))
 }
 
 /// Upsert a (scope, key, value) protection default row.
@@ -251,7 +248,6 @@ pub async fn set_protection_default(
     key: &str,
     value: &serde_json::Value,
 ) -> DbResult<()> {
-    let json = serde_json::to_string(value).map_err(DbError::Serialise)?;
     let now = Timestamp::now_iso();
 
     sqlx::query(
@@ -260,7 +256,7 @@ pub async fn set_protection_default(
     )
     .bind(scope)
     .bind(key)
-    .bind(&json)
+    .bind(Json(value))
     .bind(&now)
     .execute(pool)
     .await?;
@@ -329,7 +325,7 @@ mod tests {
         let db = setup().await;
         let source_id = "src-001";
 
-        upsert_source_protection(db.pool(), source_id, "normal", Some(false), None, "user")
+        upsert_source_protection(db.pool(), source_id, "unprotected", Some(false), None, "user")
             .await
             .unwrap();
 
@@ -338,7 +334,7 @@ mod tests {
             .unwrap()
             .expect("row should exist");
 
-        assert_eq!(row.level, "normal");
+        assert_eq!(row.level, "unprotected");
         assert_eq!(row.block_permanent_delete, Some(0));
         assert!(row.categories.is_none());
     }
@@ -369,7 +365,9 @@ mod tests {
         let db = setup().await;
         let source_id = "src-003";
 
-        upsert_source_protection(db.pool(), source_id, "normal", None, None, "user").await.unwrap();
+        upsert_source_protection(db.pool(), source_id, "unprotected", None, None, "user")
+            .await
+            .unwrap();
         delete_source_protection(db.pool(), source_id).await.unwrap();
 
         let row = get_source_protection_row(db.pool(), source_id).await.unwrap();
@@ -382,7 +380,7 @@ mod tests {
         let source_id = "src-004";
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
 
-        upsert_source_protection(db.pool(), source_id, "normal", Some(false), None, "user")
+        upsert_source_protection(db.pool(), source_id, "unprotected", Some(false), None, "user")
             .await
             .unwrap();
 
@@ -397,8 +395,8 @@ mod tests {
         .await
         .unwrap();
 
-        // Override wins — level is "normal" even though "lights" is in protected categories.
-        assert_eq!(resolved.level, "normal");
+        // Override wins — level is "unprotected" even though "lights" is in protected categories.
+        assert_eq!(resolved.level, "unprotected");
         assert!(!resolved.block_permanent_delete);
         assert!(!resolved.inherits_default);
     }
@@ -410,10 +408,16 @@ mod tests {
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
 
         // No override row.
-        let resolved =
-            resolve_protection(db.pool(), source_id, Some("lights"), "normal", true, &global_cats)
-                .await
-                .unwrap();
+        let resolved = resolve_protection(
+            db.pool(),
+            source_id,
+            Some("lights"),
+            "unprotected",
+            true,
+            &global_cats,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(resolved.level, "protected");
         assert!(resolved.inherits_default);
@@ -426,11 +430,11 @@ mod tests {
         let global_cats: Vec<String> = vec![];
 
         let resolved =
-            resolve_protection(db.pool(), source_id, None, "normal", false, &global_cats)
+            resolve_protection(db.pool(), source_id, None, "unprotected", false, &global_cats)
                 .await
                 .unwrap();
 
-        assert_eq!(resolved.level, "normal");
+        assert_eq!(resolved.level, "unprotected");
         assert!(!resolved.block_permanent_delete);
         assert!(resolved.inherits_default);
     }
@@ -453,9 +457,10 @@ mod tests {
         .unwrap();
 
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
-        let resolved = resolve_protection(db.pool(), source_id, None, "normal", true, &global_cats)
-            .await
-            .unwrap();
+        let resolved =
+            resolve_protection(db.pool(), source_id, None, "unprotected", true, &global_cats)
+                .await
+                .unwrap();
 
         assert_eq!(resolved.categories, vec!["finals".to_owned()]);
         assert!(!resolved.inherits_default);

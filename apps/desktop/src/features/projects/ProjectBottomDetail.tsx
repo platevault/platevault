@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProjectBottomDetail — spec 043 task #104.
  *
@@ -10,6 +13,7 @@
  *   Notes          — project notes (editable unless archived)
  *   Manifests      — manifest files accordion
  *   Calibration    — calibration match panel for project sources
+ *   Tool Launches  — observed processing artifacts grouped by launch (spec 012)
  *   Source views   — generated source view removal / regenerate (spec 026)
  *   Outputs        — accepted outputs verification (stub; spec 043 §4)
  *   Cleanup        — cleanup preview (stub; spec 043 §4)
@@ -23,12 +27,13 @@
  * through ProjectsPage, which only has the lightweight ProjectSummaryDto.
  */
 
-import { Banner } from '@/ui';
+import { Banner, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useProjectDetail } from './store';
 import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
+import { ToolLaunchesAccordion } from './ToolLaunchesAccordion';
 import { SourceViewsSection } from './SourceViewsSection';
 import { OutputsSection, CleanupSection } from './OutputsCleanupSections';
 
@@ -45,29 +50,31 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
 
   if (loading && !project) {
     return (
-      <div className="alm-project-bottom__loading">
-        {m.common_loading()}
+      <div className="pv-project-bottom__loading">
+        <Skeleton count={4} label={m.common_loading()} />
       </div>
     );
   }
 
   if (error || !project) {
     return (
-      <div className="alm-project-bottom__error">
+      <div className="pv-project-bottom__error">
         <Banner variant="danger">{m.projects_bottom_load_error()}</Banner>
       </div>
     );
   }
 
   const lifecycle =
-    typeof project.lifecycle === 'string' ? project.lifecycle : 'setup_incomplete';
+    typeof project.lifecycle === 'string'
+      ? project.lifecycle
+      : 'setup_incomplete';
   const sourceIds = project.sources.map((s) => s.inventoryId);
 
   return (
-    <div className="alm-project-bottom">
-      <div className="alm-project-bottom__grid">
+    <div className="pv-project-bottom">
+      <div className="pv-project-bottom__grid">
         {/* ── Notes — widest: spans two columns on wider displays ───────── */}
-        <div className="alm-project-bottom__cell alm-project-bottom__cell--notes">
+        <div className="pv-project-bottom__cell pv-project-bottom__cell--notes">
           <ProjectNotesSection
             projectId={projectId}
             readOnly={lifecycle === 'archived'}
@@ -76,28 +83,34 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
 
         {/* ── Calibration match panel ───────────────────────────────────── */}
         {sourceIds.length > 0 && (
-          <div className="alm-project-bottom__cell">
+          <div className="pv-project-bottom__cell">
             <CalibrationMatchPanel sessionIds={sourceIds} defaultOpen={true} />
           </div>
         )}
 
         {/* ── Manifests accordion ───────────────────────────────────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <ManifestsAccordion projectId={projectId} defaultOpen={true} />
         </div>
 
+        {/* ── Tool Launches — observed processing artifacts (spec 012 FR-009,
+            #728: previously built and tested but never mounted) ──────────── */}
+        <div className="pv-project-bottom__cell">
+          <ToolLaunchesAccordion projectId={projectId} defaultOpen={true} />
+        </div>
+
         {/* ── Generated source views (spec 026) ────────────────────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <SourceViewsSection projectId={projectId} defaultOpen={true} />
         </div>
 
         {/* ── Outputs — stub; no backend data yet ──────────────────────── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <OutputsSection defaultOpen={true} />
         </div>
 
         {/* ── Cleanup — live two-step scan → plan → review flow (017 WP-E) ── */}
-        <div className="alm-project-bottom__cell">
+        <div className="pv-project-bottom__cell">
           <CleanupSection projectId={projectId} defaultOpen={true} />
         </div>
       </div>

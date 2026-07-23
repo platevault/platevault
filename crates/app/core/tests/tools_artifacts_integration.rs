@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 real-backend integration tests for processing tool registration/listing
 //! and processing artifact observation (spec 011/012, feature 037 T010/T011).
 //!

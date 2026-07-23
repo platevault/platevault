@@ -1,0 +1,10 @@
+{
+  "toolbar-height": {
+    "$value": "40px",
+    "$type": "dimension"
+  },
+  "statusbar-height": {
+    "$value": "26px",
+    "$type": "dimension"
+  }
+}

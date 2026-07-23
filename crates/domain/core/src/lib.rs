@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared domain primitives for Astro Library Manager.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
@@ -167,7 +170,9 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "domain_core");
+        // Source of truth is Cargo.toml's package name, not a second hand-typed
+        // literal in this file — catches CRATE_NAME drifting from the manifest.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 
     #[test]

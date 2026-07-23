@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Log stream and export Tauri commands (spec 019).
 //!
 //! ## Commands
@@ -168,11 +171,7 @@ pub fn start_log_forwarder(
         let mut diag_seq: u64 = 0;
 
         // Initialise cursor to the current max event_id so we only emit new events.
-        if let Ok((max_id,)) =
-            sqlx::query_as::<_, (i64,)>("SELECT COALESCE(MAX(event_id), 0) FROM events")
-                .fetch_one(&pool)
-                .await
-        {
+        if let Ok(max_id) = persistence_db::repositories::events::max_event_id(&pool).await {
             cursor = max_id;
         }
 
@@ -180,24 +179,18 @@ pub fn start_log_forwarder(
             match rx.recv().await {
                 Ok(_envelope) => {
                     // Query all new rows since cursor.
-                    let rows: Result<Vec<(i64, String, String, String)>, _> =
-                        sqlx::query_as::<_, (i64, String, String, String)>(
-                            "SELECT event_id, topic, emitted_at, payload \
-                             FROM events WHERE event_id > ? ORDER BY event_id ASC",
-                        )
-                        .bind(cursor)
-                        .fetch_all(&pool)
-                        .await;
+                    let rows =
+                        persistence_db::repositories::events::list_since(&pool, cursor).await;
 
                     match rows {
                         Ok(rows) => {
-                            for (event_id, topic, emitted_at, payload_json) in rows {
-                                cursor = cursor.max(event_id);
+                            for row in rows {
+                                cursor = cursor.max(row.event_id);
                                 let entry = app_core::log_stream::project_event(
-                                    event_id,
-                                    &topic,
-                                    &emitted_at,
-                                    &payload_json,
+                                    row.event_id,
+                                    &row.topic,
+                                    &row.emitted_at,
+                                    &row.payload,
                                 );
 
                                 // Gate on configured log level.

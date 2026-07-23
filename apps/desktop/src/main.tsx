@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import './styles/reset.css';
 import './styles/tokens.css';
 import './styles/components.css';
@@ -8,11 +11,28 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { router } from './app/router';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { queryClient } from './data/queryClient';
-import { initAppearance } from './data/theme';
+import { initAppearance, hydrateThemeFromSettings } from './data/theme';
+import { registerLocaleStrategy, LocaleProvider } from './data/locale';
+
+// Register the `custom-almSettings` strategy before the first render, so the
+// very first `getLocale()` already consults the stored choice. Without this
+// the chain falls through to `preferredLanguage`/`baseLocale` and a saved
+// language is ignored on a cold start. Mirrors `initAppearance()` below;
+// `LocaleProvider` (wrapped around the router) then reconciles against the
+// settings DB, which is the durable source of truth.
+registerLocaleStrategy();
 
 // Apply the persisted theme + density to <html> before first paint, and wire
-// OS light/dark changes for the `system` choice.
+// OS light/dark changes for the `system` choice. Synchronous and driven off
+// the localStorage boot cache so there is no flash of the wrong theme.
 initAppearance();
+
+// Reconcile that boot cache against the settings DB (spec 018, source of
+// truth — theme-settings-db) once IPC is available. Deliberately NOT awaited
+// before the initial render: the DB is only consulted after the fast,
+// synchronous cache has already painted, and this at most swaps the theme
+// once if the two disagree (e.g. localStorage lost to a WebView2 force-kill).
+void hydrateThemeFromSettings();
 
 // T075 / SC-002: Install the recording proxy at boot in dev-tools builds.
 // VITE_DEV_TOOLS is statically "false" in release builds, so this branch and
@@ -66,13 +86,37 @@ if (import.meta.env.VITE_E2E) {
   });
 }
 
-const root = document.getElementById('root')!;
+// Handoff 07: tell the splash window it can close. `onRendered` fires once
+// the first route has actually rendered — for the common path that's after
+// `checkFirstRunComplete()`'s real IPC round-trip in the index route's
+// `beforeLoad` (router.tsx), so this is closer to "the app responded" than a
+// bare paint signal. It is still a boot-paint proxy, not a true
+// migration-complete signal — no such IPC surface exists yet (open item,
+// see handoff 07 report). No-ops outside a Tauri window (browser dev
+// preview, vitest): `emit` rejects there and the splash window doesn't
+// exist to listen anyway.
+let bootReadySent = false;
+const unsubscribeBootReady = router.subscribe('onRendered', () => {
+  if (bootReadySent) return;
+  bootReadySent = true;
+  unsubscribeBootReady();
+  void import('@tauri-apps/api/event').then(({ emit }) =>
+    emit('app:boot-ready').catch(() => {}),
+  );
+});
+
+const root = document.getElementById('root');
+if (!root) {
+  throw new Error('Root element #root is missing from index.html');
+}
 
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AppErrorBoundary>
-        <RouterProvider router={router} />
+        <LocaleProvider>
+          <RouterProvider router={router} />
+        </LocaleProvider>
       </AppErrorBoundary>
     </QueryClientProvider>
   </StrictMode>,

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Filesystem watcher abstraction (spec 012 T003/T004).
 //!
 //! The real OS-level watcher is injected via the `FsWatcher` trait so that
@@ -89,6 +92,11 @@ where
 /// Default watch extensions per R-ExtAllow.
 pub const DEFAULT_WATCH_EXTENSIONS: &[&str] =
     &[".xisf", ".fits", ".fit", ".tif", ".tiff", ".png", ".jpg", ".jpeg", ".ser", ".avi"];
+
+/// Default stable-size debounce window (spec 012 edge case: "bounded debounce
+/// window (default 2s)"). Consumers call [`check_stability`] on a timer no
+/// coarser than this to detect the "no further events" quiet period.
+pub const DEFAULT_STABILITY_DEBOUNCE: Duration = Duration::from_secs(2);
 
 /// Returns `true` when the file name's extension is in the watch-extensions
 /// list (case-insensitive comparison).

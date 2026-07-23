@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CalendarScroll -- vertical timeline using @tanstack/react-virtual
  * with sticky month headers. Each row is one night with session badges.
@@ -68,12 +71,12 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
   return (
     <div
       ref={parentRef}
-      className="alm-calendar-scroll"
+      className="pv-calendar-scroll"
       role="list"
       aria-label={m.sessions_calendar_aria()}
     >
       <div
-        className="alm-calendar-scroll__inner"
+        className="pv-calendar-scroll__inner"
         // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
         style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
@@ -83,7 +86,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
             return (
               <div
                 key={virtualRow.key}
-                className="alm-calendar-scroll__month-header"
+                className="pv-calendar-scroll__month-header"
                 // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY + height for month header row
                 style={{
                   transform: `translateY(${virtualRow.start}px)`,
@@ -97,11 +100,14 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
             );
           }
 
-          const night = row.night!;
+          const night = row.night;
+          if (!night) {
+            return null;
+          }
           return (
             <div
               key={virtualRow.key}
-              className="alm-calendar-scroll__night"
+              className="pv-calendar-scroll__night"
               // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY + height for night row
               style={{
                 transform: `translateY(${virtualRow.start}px)`,
@@ -117,16 +123,19 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
                 }
               }}
             >
-              <span className="alm-calendar-scroll__date alm-mono">{night.date}</span>
-              <span className="alm-calendar-scroll__badges">
+              <span className="pv-calendar-scroll__date pv-mono">
+                {night.date}
+              </span>
+              <span className="pv-calendar-scroll__badges">
                 {night.sessions.map((s) => (
                   <Pill key={s.id} variant="ghost">
                     {`${s.target} ${s.filter}`}
                   </Pill>
                 ))}
               </span>
-              <span className="alm-calendar-scroll__frame-count alm-mono">
-                {night.sessions.reduce((sum, s) => sum + s.frames, 0)} {m.sessions_calendar_frames_suffix()}
+              <span className="pv-calendar-scroll__frame-count pv-mono">
+                {night.sessions.reduce((sum, s) => sum + s.frames, 0)}{' '}
+                {m.sessions_calendar_frames_suffix()}
               </span>
             </div>
           );

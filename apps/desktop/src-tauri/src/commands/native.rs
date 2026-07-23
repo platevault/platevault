@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Native filesystem control commands exposed to the Tauri webview (spec 004).
 //!
 //! `native.directory.pick` and `native.file.pick` delegate to
@@ -110,16 +113,37 @@ pub async fn native_reveal(
     request: RevealRequest,
 ) -> Result<RevealResponse, ContractError> {
     tracing::debug!("native.reveal request_id={} path={}", request.request_id, request.path);
+    let selection = reveal_with_audit(&app, &state, &request).await?;
+    Ok(native::reveal_success(selection))
+}
 
+/// Shared reveal core: validates the path exists, attempts the OS reveal
+/// (+ Linux `xdg-open` fallback), and emits `native.reveal.failed` on any
+/// failure path (path-not-exists via `validate_reveal_path`, OS command
+/// failure here).
+///
+/// #716: `manifest_reveal_in_os` (spec 024) used to reimplement this
+/// independently — same opener/xdg-open logic, no audit on failure. Both
+/// commands now share this single reveal-with-audit path so they can never
+/// drift again.
+///
+/// # Errors
+/// Returns `ContractError` (`path.not_exists` or `os.command_failed`) on
+/// failure.
+pub(crate) async fn reveal_with_audit(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    request: &RevealRequest,
+) -> Result<RevealSelection, ContractError> {
     // Check path existence and emit audit event on failure.
-    native::validate_reveal_path(&state.bus, &request).await?;
+    native::validate_reveal_path(&state.bus, request).await?;
 
     // Attempt the platform reveal.
     match app.opener().reveal_item_in_dir(&request.path) {
         Ok(()) => {
             // macOS and Windows select the item; Linux freedesktop ShowItems
             // also selects. Return `target`.
-            Ok(native::reveal_success(RevealSelection::Target))
+            Ok(RevealSelection::Target)
         }
         Err(opener_err) => {
             // On Linux, fall back to xdg-open on the parent directory.
@@ -130,10 +154,10 @@ pub async fn native_reveal(
 
                 match std::process::Command::new("xdg-open").arg(parent).spawn() {
                     Ok(_) => {
-                        return Ok(native::reveal_success(RevealSelection::DirectoryOnly));
+                        return Ok(RevealSelection::DirectoryOnly);
                     }
                     Err(xdg_err) => {
-                        tracing::warn!("native.reveal: xdg-open fallback also failed: {xdg_err}");
+                        tracing::warn!("reveal: xdg-open fallback also failed: {xdg_err}");
                     }
                 }
             }

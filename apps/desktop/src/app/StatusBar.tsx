@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
 import { useLogPanel } from './LogPanelContext';
@@ -8,7 +11,8 @@ import { useStatusSummary } from './useStatusSummary';
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
@@ -38,16 +42,16 @@ export function StatusBar() {
   const isActive = opStatus !== 'idle';
 
   return (
-    <div className="alm-frame__statusbar">
+    <div className="pv-frame__statusbar">
       {/* LEFT — current operation */}
-      <div className="alm-statusbar__op">
+      <div className="pv-statusbar__op">
         {isActive ? (
           <>
-            <span className="alm-statusbar__spinner" />
+            <span className="pv-statusbar__spinner" />
             <span>{statusLabel}</span>
           </>
         ) : (
-          <span className="alm-statusbar__idle">{m.status_ready()}</span>
+          <span className="pv-statusbar__idle">{m.status_ready()}</span>
         )}
       </div>
 
@@ -55,7 +59,7 @@ export function StatusBar() {
           (currently: Inbox folder/master count + per-frame-type breakdown).
           Sits left-of-center and is cleared automatically on route change. */}
       {pageStatus != null && (
-        <div className="alm-statusbar__page" data-testid="statusbar-page-status">
+        <div className="pv-statusbar__page" data-testid="statusbar-page-status">
           {pageStatus}
         </div>
       )}
@@ -65,35 +69,54 @@ export function StatusBar() {
           from the status_summary contract. No images/file total is shown here —
           there is no library-wide count in the contract yet, and a fabricated
           or dev-status placeholder was deliberately removed (fix ef364dfc). */}
-      <div className="alm-statusbar__lib" data-testid="statusbar-library-stats">
+      <div className="pv-statusbar__lib" data-testid="statusbar-library-stats">
         <span title={m.status_sessions_title()}>
-          {formatCount(status.sessionCount)} {m.status_sessions_label()}
+          {formatCount(status.sessionCount)}{' '}
+          {m.status_sessions_label({ count: status.sessionCount })}
         </span>
-        <span className="alm-statusbar__sep">·</span>
-        <span title={m.status_projects_title()}>{formatCount(status.projectCount)} {m.status_projects_label()}</span>
-        <span className="alm-statusbar__sep">·</span>
+        <span className="pv-statusbar__sep">·</span>
+        <span title={m.status_projects_title()}>
+          {formatCount(status.projectCount)}{' '}
+          {m.status_projects_label({ count: status.projectCount })}
+        </span>
+        <span className="pv-statusbar__sep">·</span>
         <span title={m.status_masters_title()}>
-          {formatCount(status.calibrationCount)} {m.status_masters_label()}
+          {formatCount(status.calibrationCount)}{' '}
+          {m.status_masters_label({ count: status.calibrationCount })}
         </span>
       </div>
 
       {/* RIGHT — persistent storage / cleanup health + log */}
-      <div className="alm-statusbar__right">
+      <div className="pv-statusbar__right">
         {status.cleanupReclaimableBytes > 0 && (
-          <span>{formatBytes(status.cleanupReclaimableBytes)} {m.status_reclaimable()}</span>
+          <span>
+            {formatBytes(status.cleanupReclaimableBytes)}{' '}
+            {m.status_reclaimable()}
+          </span>
         )}
         {status.volumes.map((vol) => {
           const usedPct =
-            vol.totalBytes > 0 ? Math.round(((vol.totalBytes - vol.freeBytes) / vol.totalBytes) * 100) : 0;
+            vol.totalBytes > 0
+              ? Math.round(
+                  ((vol.totalBytes - vol.freeBytes) / vol.totalBytes) * 100,
+                )
+              : 0;
           const label = vol.path.split(/[\\/]/).pop() || vol.path;
           return (
             <span
               key={vol.path}
-              className={clsx('alm-statusbar__vol', vol.warning && 'alm-statusbar__vol--warn')}
-              title={m.statusbar_vol_title({ path: vol.path, free: formatBytes(vol.freeBytes), total: formatBytes(vol.totalBytes) })}
+              className={clsx(
+                'pv-statusbar__vol',
+                vol.warning && 'pv-statusbar__vol--warn',
+              )}
+              title={m.statusbar_vol_title({
+                path: vol.path,
+                free: formatBytes(vol.freeBytes),
+                total: formatBytes(vol.totalBytes),
+              })}
             >
               <span>{label}</span>
-              <span className="alm-statusbar__meter">
+              <span className="pv-statusbar__meter">
                 {/* eslint-disable-next-line no-restricted-syntax -- dynamic: disk usage meter width % */}
                 <i style={{ width: `${usedPct}%` }} />
               </span>
@@ -103,7 +126,7 @@ export function StatusBar() {
         })}
         <button
           type="button"
-          className="alm-statusbar__log-toggle"
+          className="pv-statusbar__log-toggle"
           onClick={toggle}
           aria-label={m.status_log_toggle_aria()}
         >

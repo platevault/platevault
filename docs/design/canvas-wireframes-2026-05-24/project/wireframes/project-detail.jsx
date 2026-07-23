@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Project Detail — 3 variations, all using sidebar nav, with view-toggle between them.
 // A: Command center (kit-grid source map + summary panels)
 // B: Pipeline view (sources → views → processing → outputs)

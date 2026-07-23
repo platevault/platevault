@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Search contract DTOs for the Tauri IPC surface.
 //!
 //! These types mirror the hand-written TypeScript `SearchResult` in

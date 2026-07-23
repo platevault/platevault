@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * Equipment pane tests — spec 030 T018 wiring.
@@ -16,14 +19,16 @@
  *      reject it too, but with a generic `internal.database` error).
  */
 
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type {
-  Camera,
-  Telescope,
-  OpticalTrain,
-  Filter,
-} from './settingsIpc';
+import type { Camera, Telescope, OpticalTrain, Filter } from './settingsIpc';
 
 const {
   mockCamerasList,
@@ -99,6 +104,8 @@ const CAMERA: Camera = {
   name: 'ASI2600MM Pro',
   aliases: ['ZWO 2600'],
   autoDetected: false,
+  sensorType: null,
+  passband: null,
 };
 
 const TELESCOPE: Telescope = {
@@ -148,7 +155,9 @@ describe('Equipment', () => {
 
     // "ASI2600MM Pro" and "FSQ-106EDX4" each render twice: once in their own
     // section's table, and once resolved by id in the optical trains table.
-    await waitFor(() => expect(screen.getAllByText('ASI2600MM Pro').length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByText('ASI2600MM Pro').length).toBeGreaterThan(0),
+    );
     expect(screen.getAllByText('FSQ-106EDX4').length).toBeGreaterThan(0);
     expect(screen.getByText('Main imaging train')).toBeInTheDocument();
     expect(screen.getByText('Ha')).toBeInTheDocument();
@@ -156,8 +165,12 @@ describe('Equipment', () => {
 
   it('creates a camera via the add form', async () => {
     mockCamerasList.mockResolvedValueOnce(ok([]));
-    mockCamerasCreate.mockResolvedValue(ok({ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }));
-    mockCamerasList.mockResolvedValueOnce(ok([{ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }]));
+    mockCamerasCreate.mockResolvedValue(
+      ok({ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }),
+    );
+    mockCamerasList.mockResolvedValueOnce(
+      ok([{ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }]),
+    );
 
     render(<Equipment save={vi.fn()} />);
     await waitFor(() => expect(mockCamerasList).toHaveBeenCalledTimes(1));
@@ -172,20 +185,128 @@ describe('Equipment', () => {
       await Promise.resolve();
     });
 
-    expect(mockCamerasCreate).toHaveBeenCalledWith({ name: 'ASI533MC Pro', aliases: [] });
-    await waitFor(() => expect(screen.getByText('ASI533MC Pro')).toBeInTheDocument());
+    expect(mockCamerasCreate).toHaveBeenCalledWith({
+      name: 'ASI533MC Pro',
+      aliases: [],
+      // FR-035: sensor type defaults to unknown (null) until chosen.
+      sensorType: null,
+      passband: null,
+      // Migration 0079: blank geometry persists as absent, never as 0.
+      pixelSizeUm: null,
+      sensorWidthPx: null,
+      sensorHeightPx: null,
+    });
+    await waitFor(() =>
+      expect(screen.getByText('ASI533MC Pro')).toBeInTheDocument(),
+    );
+  });
+
+  // ── Sensor geometry (migration 0079) ──────────────────────────────────────
+
+  /** Fills the camera add-form with a name plus the given geometry text. */
+  async function submitCameraWithGeometry(geometry: {
+    pixelSize: string;
+    width: string;
+    height: string;
+  }) {
+    mockCamerasList.mockResolvedValue(ok([]));
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() => expect(mockCamerasList).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Geometry cam' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_pixel_size()),
+      { target: { value: geometry.pixelSize } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_sensor_width()),
+      { target: { value: geometry.width } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_sensor_height()),
+      { target: { value: geometry.height } },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText(m.common_save()));
+      await Promise.resolve();
+    });
+  }
+
+  it('submits sensor geometry entered in the camera form', async () => {
+    mockCamerasCreate.mockResolvedValue(ok(CAMERA));
+    await submitCameraWithGeometry({
+      pixelSize: '3.76',
+      width: '6248',
+      height: '4176',
+    });
+
+    expect(mockCamerasCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pixelSizeUm: 3.76,
+        sensorWidthPx: 6248,
+        sensorHeightPx: 4176,
+      }),
+    );
+  });
+
+  it('rejects non-positive geometry instead of sending it to the backend', async () => {
+    await submitCameraWithGeometry({
+      pixelSize: '0',
+      width: '6248',
+      height: '4176',
+    });
+
+    expect(mockCamerasCreate).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(m.settings_equipment_geometry_invalid()),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a train field of view only when the backend supplies one', async () => {
+    mockTrainsList.mockResolvedValueOnce(
+      ok([
+        { ...TRAIN, id: 'train-fov', name: 'With FOV', fovDiagonalDeg: 3.054 },
+        { ...TRAIN, id: 'train-none', name: 'No FOV', fovDiagonalDeg: null },
+      ]),
+    );
+    render(<Equipment save={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByText('With FOV')).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(m.settings_equipment_fov_value({ degrees: '3.05' })),
+    ).toBeInTheDocument();
+    // Absent geometry reads as "not known" — never a fabricated 0°.
+    expect(
+      screen.getByText(m.settings_equipment_fov_unknown()),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(m.settings_equipment_fov_value({ degrees: '0.00' })),
+    ).not.toBeInTheDocument();
   });
 
   it('edits a telescope via the edit action', async () => {
     mockTelescopesList.mockResolvedValueOnce(ok([TELESCOPE]));
-    mockTelescopesUpdate.mockResolvedValue(ok({ ...TELESCOPE, focalLengthMm: 600 }));
-    mockTelescopesList.mockResolvedValueOnce(ok([{ ...TELESCOPE, focalLengthMm: 600 }]));
+    mockTelescopesUpdate.mockResolvedValue(
+      ok({ ...TELESCOPE, focalLengthMm: 600 }),
+    );
+    mockTelescopesList.mockResolvedValueOnce(
+      ok([{ ...TELESCOPE, focalLengthMm: 600 }]),
+    );
 
     render(<Equipment save={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText('FSQ-106EDX4')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('FSQ-106EDX4')).toBeInTheDocument(),
+    );
 
     fireEvent.click(screen.getByText(m.common_edit()));
-    const focalInput = screen.getByLabelText(m.settings_equipment_field_focal_length());
+    const focalInput = screen.getByLabelText(
+      m.settings_equipment_field_focal_length(),
+    );
     fireEvent.change(focalInput, { target: { value: '600' } });
 
     await act(async () => {
@@ -218,12 +339,19 @@ describe('Equipment', () => {
     });
 
     expect(mockFiltersDelete).toHaveBeenCalledWith('filt-1');
-    await waitFor(() => expect(screen.queryByText('Ha')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('Ha')).not.toBeInTheDocument(),
+    );
   });
 
   it('shows a load error when a list command fails', async () => {
     mockCamerasList.mockResolvedValue(
-      err({ code: 'internal.database', message: 'db down', severity: 'blocking', retryable: true }),
+      err({
+        code: 'internal.database',
+        message: 'db down',
+        severity: 'blocking',
+        retryable: true,
+      }),
     );
 
     render(<Equipment save={vi.fn()} />);
@@ -277,7 +405,9 @@ describe('Equipment', () => {
     mockTrainsList.mockReturnValue(new Promise(() => {}));
 
     render(<Equipment save={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
 
     const removeBtn = screen.getByText(m.common_remove()).closest('button');
     expect(removeBtn).toBeDisabled();
@@ -291,7 +421,9 @@ describe('Equipment', () => {
     mockTrainsList.mockResolvedValue(ok([TRAIN]));
 
     render(<Equipment save={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByText('FSQ-106EDX4').length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByText('FSQ-106EDX4').length).toBeGreaterThan(0),
+    );
 
     // Two "Remove" buttons render: one for the train row, one for the
     // telescope row. The telescope row's is last in document order (Optical
@@ -300,6 +432,116 @@ describe('Equipment', () => {
     fireEvent.click(removeButtons[removeButtons.length - 1]);
 
     expect(mockTelescopesDelete).not.toHaveBeenCalled();
-    expect(screen.getByText(m.settings_equipment_delete_in_use())).toBeInTheDocument();
+    expect(
+      screen.getByText(m.settings_equipment_delete_in_use()),
+    ).toBeInTheDocument();
+  });
+
+  // #659: duplicate name/alias flagged client-side (aliases are the FITS
+  // INSTRUME/TELESCOP join key).
+  it('rejects a camera name that duplicates an existing camera', async () => {
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'ASI2600MM Pro' },
+    });
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    expect(
+      screen.getByText(m.settings_equipment_name_duplicate()),
+    ).toBeInTheDocument();
+    expect(mockCamerasCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a camera alias that duplicates an existing camera alias', async () => {
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'A different camera' },
+    });
+    fireEvent.change(screen.getByLabelText(m.common_aliases()), {
+      // CAMERA already carries alias 'ZWO 2600' — case/whitespace-insensitive.
+      target: { value: ' zwo 2600 ' },
+    });
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    expect(
+      screen.getByText(m.settings_equipment_alias_duplicate()),
+    ).toBeInTheDocument();
+    expect(mockCamerasCreate).not.toHaveBeenCalled();
+  });
+
+  // #661: dedicated sentence-form error, not the bare field label.
+  it('shows a dedicated message for a missing train focal length', async () => {
+    mockTrainsList.mockResolvedValue(ok([]));
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+    mockTelescopesList.mockResolvedValue(ok([TELESCOPE]));
+
+    render(<Equipment save={vi.fn()} />);
+    // Wait for cameras/telescopes to load their options before the train
+    // form's selects are populated.
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByText(m.settings_equipment_trains_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Main Imaging Train' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_camera()),
+      { target: { value: CAMERA.id } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_telescope()),
+      { target: { value: TELESCOPE.id } },
+    );
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    const errorEl = screen.getByText(
+      m.settings_equipment_focal_length_required(),
+    );
+    expect(errorEl).toBeInTheDocument();
+    // The bare field label is not reused as the error text (#661) — the
+    // error carries its own sentence-form message, distinct from the label.
+    expect(errorEl.textContent).not.toBe(
+      m.settings_equipment_field_focal_length(),
+    );
+    expect(mockTrainsCreate).not.toHaveBeenCalled();
+  });
+
+  // #835: a train requires both a camera and a telescope selected.
+  it('rejects an optical train saved with no camera and no telescope', () => {
+    mockTrainsList.mockResolvedValue(ok([]));
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+    mockTelescopesList.mockResolvedValue(ok([TELESCOPE]));
+
+    render(<Equipment save={vi.fn()} />);
+    fireEvent.click(screen.getByText(m.settings_equipment_trains_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Main Imaging Train' },
+    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_equipment_field_focal_length()),
+      { target: { value: '2350' } },
+    );
+    fireEvent.click(screen.getByText(m.common_save()));
+
+    expect(
+      screen.getByText(m.settings_equipment_train_parts_required()),
+    ).toBeInTheDocument();
+    expect(mockTrainsCreate).not.toHaveBeenCalled();
   });
 });

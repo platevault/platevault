@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `ArtifactRule` shape for the artifact classifier (spec 012 T011).
 //!
 //! Rules are loaded from workflow-profile seeds. Each rule maps a file

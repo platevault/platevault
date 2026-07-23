@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * T047 — BlockedBanner shows the typed `kind` from project_health DTO,
@@ -23,14 +26,41 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    // ProjectLifecycleStepper's History section (#833) falls back to this
+    // route search param when its (optional) projectId prop isn't wired;
+    // unrelated to this file's assertions, so a static empty selection is
+    // enough.
+    useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+    // #735: the tool-launch toast's "Configure path" action now navigates
+    // through the router instead of assigning window.location.hash, and the
+    // tool-not-configured hint is a real `Link` — neither works against the
+    // spread-in real implementations without a router context.
+    useNavigate: () => vi.fn(),
+    Link: (await import('@/test/router-link-stub')).LinkStub,
+  };
+});
+
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {
     ...original,
     useProjectDetail: vi.fn(),
+    useSessionNames: vi.fn(() => new Map()),
     callTransitionLifecycle: vi.fn(),
     callReinferChannels: vi.fn(),
     callDismissChannelDrift: vi.fn(),
+    // Avoids requiring a QueryClientProvider for this file's real-useQuery
+    // History query (#833) — same reasoning as useProjectDetail above.
+    useProjectHistory: vi.fn(() => ({
+      data: [],
+      loading: false,
+      error: undefined,
+    })),
   };
 });
 
@@ -90,7 +120,9 @@ describe('T047: BlockedBanner typed reason from project_health DTO (FR-020)', ()
     const msg = screen.getByTestId('blocked-reason-message');
     expect(msg).toHaveTextContent('Source missing: inv-abc-999');
     // Must NOT show the old hardcoded message
-    expect(msg).not.toHaveTextContent('Project is blocked. Resolve to continue.');
+    expect(msg).not.toHaveTextContent(
+      'Project is blocked. Resolve to continue.',
+    );
   });
 
   it('shows tool_unconfigured message when blockedReasonKind=tool_unconfigured', () => {
@@ -116,7 +148,9 @@ describe('T047: BlockedBanner typed reason from project_health DTO (FR-020)', ()
     const msg = screen.getByTestId('blocked-reason-message');
     expect(msg).toHaveTextContent('Manual block by user');
     // Must NOT show the hardcoded fallback
-    expect(msg).not.toHaveTextContent('Project is blocked. Resolve to continue.');
+    expect(msg).not.toHaveTextContent(
+      'Project is blocked. Resolve to continue.',
+    );
   });
 
   it('falls back to a generic message when blockedReasonKind is absent', () => {

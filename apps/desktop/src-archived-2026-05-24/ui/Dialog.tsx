@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import type { ReactNode } from "react";
 

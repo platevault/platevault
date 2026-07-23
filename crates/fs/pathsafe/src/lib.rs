@@ -1,0 +1,302 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Reparse-aware link/junction detection + safe directory/file walking,
+//! shared by `fs_inventory` and `fs_executor` (duplication-and-abstraction
+//! audit T1-a).
+//!
+//! Constitution product constraint: "The product MUST avoid following
+//! symlinks or junctions during scans unless the user explicitly enables that
+//! behavior for a root". This crate is the single place that decides whether
+//! a filesystem entry is a link that should be skipped, and provides
+//! link-aware directory/file walkers plus a reparse-aware `create_symlink`
+//! dispatch.
+//!
+//! Detection combines `symlink_metadata().file_type().is_symlink()` with an
+//! explicit Windows `FILE_ATTRIBUTE_REPARSE_POINT` check. Modern Rust
+//! reports NTFS junctions as symlinks via `is_symlink()` because both are
+//! surfaced as reparse points, but the explicit attribute check is defence
+//! in depth for reparse-point kinds `is_symlink()` might not classify as a
+//! symlink — callers should treat any doubt as "skip".
+
+use std::fs::{self, Metadata};
+use std::io;
+use std::path::{Path, PathBuf};
+
+/// Returns `true` when `path` is a symlink or (on Windows) a junction /
+/// reparse-point entry, as reported by `symlink_metadata`.
+///
+/// Uses `symlink_metadata` (not `metadata`) so the check inspects the entry
+/// itself rather than following it — inspecting a link's target would defeat
+/// the purpose of the gate. A path that cannot be stat'd (missing,
+/// permission denied, race) is reported as "not a link" — callers that need
+/// to distinguish a stat failure from "not a link" should stat the path
+/// themselves and call [`is_link_or_junction_metadata`] instead.
+#[must_use]
+pub fn is_link_or_junction(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|m| is_link_or_junction_metadata(&m))
+}
+
+/// Classify already-fetched [`Metadata`] (from `symlink_metadata`, never
+/// `metadata`) as a symlink or junction/reparse-point.
+///
+/// Split out from [`is_link_or_junction`] so callers that already hold a
+/// `symlink_metadata()` result (e.g. a per-component path walk that also
+/// needs to distinguish "not found" from "other stat error") can classify it
+/// without a second stat syscall.
+#[must_use]
+pub fn is_link_or_junction_metadata(meta: &Metadata) -> bool {
+    if meta.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Recursively collect every real (non-link) directory under `root`,
+/// including `root` itself when it is not a link.
+///
+/// When `follow_symlinks` is `true`, this simply returns `[root]` — the
+/// caller is expected to use a recursive watch/walk from there instead
+/// (matching the pre-gate behaviour). When `false` (the default), the
+/// returned list never includes a symlinked/junction directory or descends
+/// through one, satisfying the constitution's "MUST NOT follow symlinks or
+/// junctions ... unless explicitly enabled" requirement.
+///
+/// Unreadable directories are skipped rather than failing the whole walk —
+/// a single permission-denied subtree should not abort discovery of the rest
+/// of the root.
+#[must_use]
+pub fn real_dirs_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
+    if follow_symlinks {
+        return vec![root.to_path_buf()];
+    }
+    if is_link_or_junction(root) {
+        return Vec::new();
+    }
+
+    let mut dirs = vec![root.to_path_buf()];
+    let mut stack = vec![root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if is_link_or_junction(&path) {
+                continue;
+            }
+            if path.is_dir() {
+                dirs.push(path.clone());
+                stack.push(path);
+            }
+        }
+    }
+
+    dirs
+}
+
+/// Recursively collect every real (non-link) **file** under `root`.
+///
+/// Mirrors [`real_dirs_under`]'s gating: a symlinked/junction directory is
+/// never descended into, and a symlinked file is never yielded, unless
+/// `follow_symlinks` is `true`. Used by the raw-frame reconcile walker to
+/// enumerate on-disk frames without ever following a link (spec 048 R6).
+#[must_use]
+pub fn real_files_under(root: &Path, follow_symlinks: bool) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+
+    if !follow_symlinks && is_link_or_junction(root) {
+        return files;
+    }
+
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !follow_symlinks && is_link_or_junction(&path) {
+                continue;
+            }
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.is_file() {
+                files.push(path);
+            }
+        }
+    }
+
+    files
+}
+
+/// Create a symlink from `source` to `destination`, pointing at a **file**
+/// (`std::os::windows::fs::symlink_file` on Windows — this crate does not
+/// yet materialize directory junctions; see `Materialization::Junction`
+/// callers).
+///
+/// # Errors
+///
+/// Returns the underlying `io::Error` from the platform symlink call, or an
+/// "unsupported platform" error on targets that are neither unix nor
+/// windows.
+pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(source, destination)
+    }
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(source, destination)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (source, destination);
+        Err(io::Error::other("symlink not supported on this platform"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_directory_is_not_a_link() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_link_or_junction(dir.path()));
+    }
+
+    #[test]
+    fn real_dirs_under_includes_nested_real_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let dirs = real_dirs_under(dir.path(), false);
+        assert!(dirs.contains(&dir.path().to_path_buf()));
+        assert!(dirs.contains(&dir.path().join("a")));
+        assert!(dirs.contains(&nested));
+    }
+
+    #[test]
+    fn real_files_under_finds_nested_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("sub");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("frame.fits"), b"data").unwrap();
+        std::fs::write(dir.path().join("top.fits"), b"data").unwrap();
+
+        let mut files = real_files_under(dir.path(), false);
+        files.sort();
+        assert_eq!(files.len(), 2);
+        assert!(files.contains(&nested.join("frame.fits")));
+        assert!(files.contains(&dir.path().join("top.fits")));
+    }
+
+    #[test]
+    fn create_symlink_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target.fits");
+        let link = dir.path().join("link.fits");
+        std::fs::write(&target, b"data").unwrap();
+
+        create_symlink(&target, &link).unwrap();
+
+        assert!(is_link_or_junction(&link));
+        assert_eq!(std::fs::read(&link).unwrap(), b"data");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_directory_is_detected_and_skipped() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let real_target = dir.path().join("real_target");
+        std::fs::create_dir_all(&real_target).unwrap();
+        std::fs::write(real_target.join("hidden.fits"), b"data").unwrap();
+
+        let scan_root = dir.path().join("scan_root");
+        std::fs::create_dir_all(&scan_root).unwrap();
+        let link_path = scan_root.join("link_to_target");
+        symlink(&real_target, &link_path).unwrap();
+
+        assert!(is_link_or_junction(&link_path));
+
+        // The linked subdirectory must not be descended into.
+        let dirs = real_dirs_under(&scan_root, false);
+        assert!(!dirs.contains(&link_path));
+
+        let files = real_files_under(&scan_root, false);
+        assert!(files.is_empty(), "must not see files behind an un-enabled symlink");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn follow_symlinks_true_traverses_link() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let real_target = dir.path().join("real_target");
+        std::fs::create_dir_all(&real_target).unwrap();
+        std::fs::write(real_target.join("visible.fits"), b"data").unwrap();
+
+        let scan_root = dir.path().join("scan_root");
+        std::fs::create_dir_all(&scan_root).unwrap();
+        symlink(&real_target, scan_root.join("link_to_target")).unwrap();
+
+        // With follow_symlinks true, real_dirs_under intentionally just
+        // returns the root (caller does a recursive OS-level watch/walk that
+        // will itself follow links) — verify that contract explicitly.
+        let dirs = real_dirs_under(&scan_root, true);
+        assert_eq!(dirs, vec![scan_root.clone()]);
+    }
+
+    /// Windows-only: a directory junction (`mklink /J`) is a reparse point
+    /// that is NOT reported by `is_symlink()` on some toolchains — this is
+    /// exactly the gap the explicit `FILE_ATTRIBUTE_REPARSE_POINT` check in
+    /// [`is_link_or_junction_metadata`] closes. Creates the junction via the
+    /// `mklink` shell builtin (no admin privilege required for junctions,
+    /// unlike symlinks) rather than adding a dependency for one test.
+    #[cfg(windows)]
+    #[test]
+    fn junction_directory_is_detected_and_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let real_target = dir.path().join("real_target");
+        std::fs::create_dir_all(&real_target).unwrap();
+        std::fs::write(real_target.join("hidden.fits"), b"data").unwrap();
+
+        let scan_root = dir.path().join("scan_root");
+        std::fs::create_dir_all(&scan_root).unwrap();
+        let junction_path = scan_root.join("junction_to_target");
+
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                junction_path.to_str().unwrap(),
+                real_target.to_str().unwrap(),
+            ])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+
+        assert!(is_link_or_junction(&junction_path));
+
+        let dirs = real_dirs_under(&scan_root, false);
+        assert!(!dirs.contains(&junction_path));
+
+        let files = real_files_under(&scan_root, false);
+        assert!(files.is_empty(), "must not see files behind an un-enabled junction");
+    }
+}

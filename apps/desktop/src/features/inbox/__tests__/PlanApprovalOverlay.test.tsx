@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * PlanApprovalOverlay tests — spec 043 Stage B.
@@ -179,5 +182,77 @@ describe('PlanApprovalOverlay', () => {
       );
     });
     expect(onClose).toHaveBeenCalled();
+    // Issue #767: the dialog itself must not remain visible over an empty
+    // body even in this same render, regardless of whether the CALLER has
+    // yet reacted to `onClose` by flipping its own `open` prop back to
+    // false — `open` is deliberately left `true` above to reproduce that
+    // exact stuck window.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  // Issue #767: a caller passing a STATIC `open=true` with empty content
+  // (the precise "stuck open, empty body" report — Escape/✕/backdrop all
+  // re-invoke an `onClose` the caller never acts on in time) must never
+  // render a visible dialog. This is deliberately NOT a rerender: it checks
+  // the very first render, before any effect has a chance to run, so it
+  // cannot be masked by React/act() batching an effect-driven close into the
+  // same flush (which is what let a passing-but-vacuous mock-e2e test
+  // through previously).
+  it('issue #767: never shows a visible dialog when open=true but there is no content', () => {
+    renderOverlay({ plans: [], open: true, onClose });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Review plans')).toBeNull();
+  });
+
+  // A pending destination-root pick is real content (the picker itself) even
+  // though `plans` is still empty — the dialog must stay visible for it.
+  it('issue #767: stays visible for a pending root pick even with empty plans', () => {
+    renderOverlay({
+      plans: [],
+      open: true,
+      onClose,
+      pendingRootPick: {
+        category: 'light_frames',
+        candidates: [{ rootId: 'root-1', path: '/lights', kind: 'library' }],
+      },
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-root-picker')).toBeInTheDocument();
+  });
+
+  // #606 (Constitution II — every filesystem mutation must be reviewable):
+  // the Inbox overlay used to render the destination only; the source was
+  // reachable solely by hovering the file-name cell's `title` tooltip, so a
+  // reviewer could not see what a move was actually moving. Both sides must
+  // render as visible text on the SAME row, so neither can regress
+  // independently. Mirrors the equivalent assertion for the Projects/Archive
+  // consumer in PlanReviewOverlay.test.tsx.
+  it('#606: renders both the source and the destination path for a move item', () => {
+    renderOverlay({
+      plans: [
+        makePlan({
+          inboxItemId: 'item-1',
+          actions: [
+            makeAction({
+              action: 'move',
+              fromPath: '/root/lights/img001.fits',
+              toPath: '/dest/lights/img001.fits',
+              destinationPreview: '/dest/lights/img001.fits',
+            }),
+          ],
+        }),
+      ],
+    });
+    // Per-file rows are collapsed until the group is expanded.
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
+
+    const source = screen.getByTestId('inbox-source-absolute-0');
+    const dest = screen.getByTestId('inbox-dest-absolute-0');
+    expect(source).toHaveTextContent('/root/lights/img001.fits');
+    expect(dest).toHaveTextContent('/dest/lights/img001.fits');
+    // Both sides belong to one action's row, not merely somewhere in the panel.
+    const row = source.closest('.pv-plan-panel__file-row');
+    expect(row).not.toBeNull();
+    expect(row).toContainElement(dest);
   });
 });

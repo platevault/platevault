@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * bootRecorder — installs the recording proxy at app boot (spec 021 / T075 / SC-002).
  *
@@ -18,7 +21,11 @@ import { setInvokeOverride, unwrap } from '@/api/ipc';
  * Queries devMode from backend settings and installs the proxy if enabled.
  */
 export async function installRecorder(
-  wrap: (dispatch: DispatchFn, devMode: boolean, contracts?: import('@/bindings/index').ContractMeta[]) => DispatchFn,
+  wrap: (
+    dispatch: DispatchFn,
+    devMode: boolean,
+    contracts?: import('@/bindings/index').ContractMeta[],
+  ) => DispatchFn,
 ): Promise<void> {
   try {
     const settings = unwrap(await commands.settingsGet('advanced'));

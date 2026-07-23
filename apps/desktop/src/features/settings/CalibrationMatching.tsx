@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 007 — Calibration Matching settings pane.
 //
 // Authoritative design: platevault-settings-menu.html § [data-pane="calmatch"]
@@ -38,18 +41,35 @@ const DEFAULTS = {
   requireSameOffset: true,
   temperatureToleranceC: 5,
   agingLimitDays: 365,
+  // Not surfaced in this pane's UI, but exposureToleranceS is a non-optional
+  // f64 on the backend DTO (crates/contracts/core/calibration_tolerances.rs)
+  // — matches migration 0008's column default. #639.
+  exposureToleranceS: 2.0,
 };
 
 export function CalibrationMatching(_props: CalibrationMatchingProps) {
   // ── Hard-required field toggles ────────────────────────────────────────────
-  const [requireCamera, setRequireCamera] = useState(DEFAULTS.requireSameCamera);
-  const [requireBinning, setRequireBinning] = useState(DEFAULTS.requireSameBinning);
+  const [requireCamera, setRequireCamera] = useState(
+    DEFAULTS.requireSameCamera,
+  );
+  const [requireBinning, setRequireBinning] = useState(
+    DEFAULTS.requireSameBinning,
+  );
   const [requireGain, setRequireGain] = useState(DEFAULTS.requireSameGain);
-  const [requireOffset, setRequireOffset] = useState(DEFAULTS.requireSameOffset);
+  const [requireOffset, setRequireOffset] = useState(
+    DEFAULTS.requireSameOffset,
+  );
 
   // ── Soft-tolerance inputs ──────────────────────────────────────────────────
-  const [tempTolerance, setTempTolerance] = useState<number>(DEFAULTS.temperatureToleranceC);
+  const [tempTolerance, setTempTolerance] = useState<number>(
+    DEFAULTS.temperatureToleranceC,
+  );
   const [agingLimit, setAgingLimit] = useState<number>(DEFAULTS.agingLimitDays);
+  // Round-tripped but not editable in this pane (#639) — persist() must echo
+  // back the real value; the backend rejects null for this non-optional field.
+  const [exposureTolerance, setExposureTolerance] = useState<number>(
+    DEFAULTS.exposureToleranceS,
+  );
 
   // Guards against the initial calibrationTolerancesGet() fetch resolving
   // *after* the user has already edited a control — a real race (not just
@@ -62,9 +82,13 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
 
   // ── Load persisted values from backend on mount ────────────────────────────
   useEffect(() => {
+    // `cancelled` is a separate concern from `editedRef`: that guard protects a
+    // user edit from being clobbered by a late fetch, this one stops the fetch
+    // touching React state at all once the pane has unmounted.
+    let cancelled = false;
     calibrationTolerancesGet()
       .then((tol) => {
-        if (editedRef.current) return;
+        if (cancelled || editedRef.current) return;
         setRequireCamera(tol.requireSameCamera);
         setRequireBinning(tol.requireSameBinning);
         setRequireGain(tol.requireSameGain);
@@ -73,10 +97,16 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
           setTempTolerance(tol.temperatureToleranceC);
         }
         setAgingLimit(tol.agingLimitDays);
+        if (tol.exposureToleranceS !== null) {
+          setExposureTolerance(tol.exposureToleranceS);
+        }
       })
       .catch(() => {
         // Backend unavailable in mock / dev mode — stay with in-code defaults.
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ── Persist a partial update; callers pass only the changed field ──────────
@@ -89,7 +119,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       requireSameOffset: requireOffset,
       temperatureToleranceC: tempTolerance,
       agingLimitDays: agingLimit,
-      exposureToleranceS: null, // not surfaced in this pane
+      // Backend field is non-optional f64 — sending null fails deserialization
+      // and every update in this pane was silently rejected (#639).
+      exposureToleranceS: exposureTolerance,
       ...patch,
     };
     calibrationTolerancesUpdate(req).catch(() => {
@@ -141,6 +173,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     setRequireOffset(DEFAULTS.requireSameOffset);
     setTempTolerance(DEFAULTS.temperatureToleranceC);
     setAgingLimit(DEFAULTS.agingLimitDays);
+    setExposureTolerance(DEFAULTS.exposureToleranceS);
     await calibrationTolerancesUpdate({
       requireSameCamera: DEFAULTS.requireSameCamera,
       requireSameBinning: DEFAULTS.requireSameBinning,
@@ -148,7 +181,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       requireSameOffset: DEFAULTS.requireSameOffset,
       temperatureToleranceC: DEFAULTS.temperatureToleranceC,
       agingLimitDays: DEFAULTS.agingLimitDays,
-      exposureToleranceS: null, // not surfaced in this pane
+      exposureToleranceS: DEFAULTS.exposureToleranceS,
     });
   };
 
@@ -156,15 +189,22 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     <SettingsSection
       title={m.settings_calmatch_title()}
       action={
-        <RestoreDefaultsBtn onRestore={handleRestoreCalibration} />
+        <RestoreDefaultsBtn
+          onRestore={handleRestoreCalibration}
+          scopeLabel={m.settings_calmatch_restore_scope()}
+        />
       }
     >
-      <table className="alm-table alm-calmatch__table">
+      <table className="pv-table pv-calmatch__table">
         <thead>
           <tr>
             <th>{m.settings_calmatch_field()}</th>
-            <th className="alm-calmatch__col-required">{m.settings_calmatch_required()}</th>
-            <th className="alm-calmatch__col-tolerance">{m.settings_calmatch_tolerance()}</th>
+            <th className="pv-calmatch__col-required">
+              {m.settings_calmatch_required()}
+            </th>
+            <th className="pv-calmatch__col-tolerance">
+              {m.settings_calmatch_tolerance()}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -174,7 +214,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireCamera} onChange={handleCameraToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Binning — hard toggle, persists to requireSameBinning */}
@@ -183,7 +223,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireBinning} onChange={handleBinningToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Gain — hard toggle, persists to requireSameGain */}
@@ -192,7 +232,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireGain} onChange={handleGainToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Offset — hard toggle, persists to requireSameOffset and feeds
@@ -202,7 +242,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Sensor temp — soft field: pill label + number input */}
@@ -212,17 +252,19 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
               <Pill variant="neutral">{m.settings_calmatch_soft()}</Pill>
             </td>
             <td>
-              <span className="alm-calmatch__tol-input-row">
+              <span className="pv-calmatch__tol-input-row">
                 <input
                   type="number"
-                  className="alm-input alm-calmatch__num-input"
+                  className="pv-input pv-calmatch__num-input"
                   value={tempTolerance}
                   min={0}
                   step={0.5}
                   onChange={handleTempChange}
                   aria-label={m.settings_calmatch_sensor_temp_aria()}
                 />
-                <span className="alm-calmatch__unit">{m.settings_calmatch_unit_c()}</span>
+                <span className="pv-calmatch__unit">
+                  {m.settings_calmatch_unit_c()}
+                </span>
               </span>
             </td>
           </tr>
@@ -234,26 +276,26 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
               <Pill variant="warn">{m.settings_calmatch_warn()}</Pill>
             </td>
             <td>
-              <span className="alm-calmatch__tol-input-row">
+              <span className="pv-calmatch__tol-input-row">
                 <input
                   type="number"
-                  className="alm-input alm-calmatch__num-input"
+                  className="pv-input pv-calmatch__num-input"
                   value={agingLimit}
                   min={1}
                   max={3650}
                   onChange={handleAgingChange}
                   aria-label={m.settings_calmatch_dark_bias_age_aria()}
                 />
-                <span className="alm-calmatch__unit">{m.settings_calmatch_unit_d()}</span>
+                <span className="pv-calmatch__unit">
+                  {m.settings_calmatch_unit_d()}
+                </span>
               </span>
             </td>
           </tr>
         </tbody>
       </table>
 
-      <p className="alm-calmatch__help">
-        {m.settings_calmatch_help()}
-      </p>
+      <p className="pv-calmatch__help">{m.settings_calmatch_help()}</p>
     </SettingsSection>
   );
 }

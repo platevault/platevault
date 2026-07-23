@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest';
 import {
   formatDateTime,
@@ -34,7 +37,11 @@ describe('datetime formatters', () => {
   });
 
   it('compareDateDesc orders most-recent first', () => {
-    const items = ['2026-01-01T00:00:00Z', '2026-03-01T00:00:00Z', '2026-02-01T00:00:00Z'];
+    const items = [
+      '2026-01-01T00:00:00Z',
+      '2026-03-01T00:00:00Z',
+      '2026-02-01T00:00:00Z',
+    ];
     expect([...items].sort(compareDateDesc)).toEqual([
       '2026-03-01T00:00:00Z',
       '2026-02-01T00:00:00Z',

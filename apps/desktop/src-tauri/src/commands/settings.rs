@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Settings Tauri commands (spec 018, T014/T015).
 //!
 //! ## Stable transport (T015)
@@ -11,16 +14,25 @@
 //!
 //! The scope groups keys by workflow area:
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
-//! - `"general"`  → (empty; rowDensity removed T032)
-//! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`, `protectedCategories`
+//! - `"general"`  → `theme`, `locale` (durable sources of truth for UI
+//!   appearance and language; the frontend keeps synchronous localStorage
+//!   boot mirrors, reconciled from this scope at startup)
+//! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`,
+//!   `protectedCategories`, `cleanupTypeOverrides`
 //! - `"naming"`   → `pattern`, `autoApplyPattern`, `patternsByType`
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
 //! - `"calibration"` → `darkMatchTolerance`, `flatMatching`, `suggestCalibration`,
 //!   `calibrationDarkTempTolerance`, `calibrationPrefillSuggestion`
 //! - `"sourceViews"` → `sourceViewLinkKindIntraDrive`, `sourceViewLinkKindCrossDrive`
 //!   (spec 049 US2 T029 — read-only display in the generation dialog; the
-//!   editable Settings pane for these two keys is spec 049 T030, deferred)
-//! - `""` (empty) → reads the full settings bag (all known keys).
+//!   editable Settings pane for these two keys is spec 049 T030,
+//!   `apps/desktop/src/features/settings/SourceViews.tsx`)
+//! - `"framing"` → `framingPointingFractionOfFov`, `framingPointingFallbackDeg`,
+//!   `framingRotationToleranceDeg`, `framingMosaicEnvelopeFractionOfFov`
+//!   (spec 008 Q27 F-Framing-11, R11a clustering tolerance tunables)
+//! - `"catalogues"` → `enabled` (#645, default-enabled Planner catalogues)
+//! - `""` (empty) → reads the full settings bag (every descriptor key, derived
+//!   from the descriptor table so it cannot drift, plus `enabled`).
 //!
 //! Unknown `values` keys from the frontend that are not valid settings keys are
 //! silently skipped (best-effort write) so fixture-driven panes can call
@@ -34,6 +46,7 @@
 //! - `settings.source-override.set`
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use contracts_core::settings::{
     RestoreDefaultsRequest, RestoreDefaultsResponse, SetSourceOverrideRequest,
@@ -53,8 +66,13 @@ use contracts_core::ContractError;
 fn scope_keys(scope: &str) -> &'static [&'static str] {
     match scope {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
-        "general" => &[],
-        "cleanup" => &["blockPermanentDelete", "defaultProtection", "protectedCategories"],
+        "general" => &["theme", "locale"],
+        "cleanup" => &[
+            "blockPermanentDelete",
+            "defaultProtection",
+            "protectedCategories",
+            "cleanupTypeOverrides",
+        ],
         "naming" => &["pattern", "autoApplyPattern", "patternsByType"],
         "sources" => &["followSymlinks", "hashOnScan", "alwaysPreviewBeforePlan"],
         "calibration" => &[
@@ -68,7 +86,6 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationBiasOverridePenalty",
             "calibrationAgingThresholdDays",
         ],
-        "plans" => &["plansListDefaultAgeCutoffDays"],
         "sourceViews" => &["sourceViewLinkKindIntraDrive", "sourceViewLinkKindCrossDrive"],
         "observing" => &[
             "observingSites",
@@ -77,41 +94,34 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "usableAltitudeDeg",
         ],
         "planner" => &["plannerMoonAvoidance"],
-        // Empty scope or "global" returns every stable key.
-        _ => &[
-            "logLevel",
-            "rememberFollowLogs",
-            "devMode",
-            "blockPermanentDelete",
-            "defaultProtection",
-            "protectedCategories",
-            "pattern",
-            "autoApplyPattern",
-            "patternsByType",
-            "followSymlinks",
-            "hashOnScan",
-            "alwaysPreviewBeforePlan",
-            "darkMatchTolerance",
-            "flatMatching",
-            "suggestCalibration",
-            "calibrationDarkTempTolerance",
-            "calibrationPrefillSuggestion",
-            "calibrationDarkOverridePenalty",
-            "calibrationFlatOverridePenalty",
-            "calibrationBiasOverridePenalty",
-            "calibrationAgingThresholdDays",
-            "plansListDefaultAgeCutoffDays",
-            "currentLibraryId",
-            "sourceViewLinkKindIntraDrive",
-            "sourceViewLinkKindCrossDrive",
-            "observingSites",
-            "observingDefaultSiteId",
-            "observingActiveSiteId",
-            "usableAltitudeDeg",
-            "plannerMoonAvoidance",
+        // Default-enabled planner catalogues (#645); key name `enabled` is
+        // dictated by the frontend contract (`catalogue-settings.ts`), which
+        // reads `settingsGet('catalogues').values.enabled` directly.
+        "catalogues" => &["enabled"],
+        "framing" => &[
+            "framingPointingFractionOfFov",
+            "framingPointingFallbackDeg",
+            "framingRotationToleranceDeg",
+            "framingMosaicEnvelopeFractionOfFov",
         ],
+        // Empty scope or "global" returns every stable key.
+        _ => &ALL_KEYS,
     }
 }
+
+/// Every key the catch-all scope resolves: the descriptor table plus the
+/// structured-path keys that have no descriptor.
+///
+/// Derived rather than hand-listed because the hand-maintained list drifted
+/// from the descriptor table and left four writable keys permanently
+/// unreadable (#641).
+static ALL_KEYS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    let mut keys = app_core::settings::stable_keys();
+    // `enabled` (#645) is validated via `is_catalogues_enabled_key`, not a
+    // descriptor, so it is not covered by `stable_keys()`.
+    keys.push("enabled");
+    keys
+});
 
 // ── Stable transport commands ────────────────────────────────────────────────
 
@@ -222,7 +232,7 @@ pub async fn settings_source_override_set(
         request.source_id,
         request.key
     );
-    app_core::settings::set_source_override(state.repo.pool(), &request).await
+    app_core::settings::set_source_override(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `settings.overridable-keys` — return the list of stable settings keys that
@@ -239,4 +249,62 @@ pub async fn settings_overridable_keys(
     _state: State<'_, AppState>,
 ) -> Result<Vec<String>, ContractError> {
     Ok(app_core::settings::overridable_keys())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A writable key that no scope resolves is silently unreadable: the write
+    /// succeeds, the pane re-reads defaults, and the user's choice vanishes
+    /// with no error (#641).
+    #[test]
+    fn every_descriptor_key_is_reachable_via_the_catch_all_scope() {
+        let reachable = scope_keys("");
+        let missing: Vec<_> = app_core::settings::stable_keys()
+            .into_iter()
+            .filter(|k| !reachable.contains(k))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "keys writable but unreadable via settings_get(''): {missing:?}"
+        );
+    }
+
+    #[test]
+    fn cleanup_scope_resolves_the_per_type_action_overrides() {
+        assert!(scope_keys("cleanup").contains(&"cleanupTypeOverrides"));
+    }
+
+    #[test]
+    fn general_scope_resolves_theme_and_locale() {
+        assert_eq!(scope_keys("general"), &["theme", "locale"]);
+    }
+
+    /// Guards the other direction: a typo or a key deleted from the descriptor
+    /// table leaves a scope entry that `settings_update` would reject.
+    #[test]
+    fn every_scope_key_is_a_valid_settings_key() {
+        for scope in [
+            "advanced",
+            "general",
+            "cleanup",
+            "naming",
+            "sources",
+            "calibration",
+            "sourceViews",
+            "observing",
+            "planner",
+            "catalogues",
+            "framing",
+            "",
+        ] {
+            for key in scope_keys(scope) {
+                assert!(
+                    app_core::settings::is_valid_key(key),
+                    "scope {scope:?} lists unknown key {key:?}"
+                );
+            }
+        }
+    }
 }

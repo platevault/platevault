@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! PreparedSource lifecycle state model (spec 002 data-model.md).
 //! PreparedSourceView model extended for spec 026 (removal/regeneration).
 
@@ -259,8 +262,17 @@ pub struct PreparedSourceView026 {
 }
 
 impl PreparedSourceView026 {
-    /// Returns true if the view's `kind` mismatches any item's `materialization`
-    /// (FR-008 / A2 mixed-kind check).
+    /// Returns true if the view's `kind` (its dominant/creation-time
+    /// materialization) mismatches any item's own `materialization`.
+    ///
+    /// This is a descriptive predicate only — NOT an error condition. Spec
+    /// 049 CL-2 (2026-07-04) amended FR-008: a cross-drive project's
+    /// drive-scope resolution can legitimately produce a view whose items
+    /// carry more than one kind (per-item kind is authoritative); such a
+    /// view must remain fully usable (removable/regeneratable), see #745.
+    /// The genuinely-error state is the distinct `ViewState::KindDiverged`
+    /// (a pre-existing record repaired to have a kind inconsistency that
+    /// needs manual resolution), not this predicate.
     #[must_use]
     pub fn has_mixed_kind(&self) -> bool {
         self.items.iter().any(|item| item.materialization != self.kind)

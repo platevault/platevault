@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Link-creation primitive for `link` plan items (spec 049 — source view
 //! generation first-materialization).
 //!
@@ -55,8 +58,10 @@ pub fn create_link(
     }
 
     match kind {
-        Materialization::Symlink => create_symlink(source, destination)
-            .map_err(|e| PlanItemFailure::from_io(&e, "create symlink")),
+        Materialization::Symlink => {
+            fs_pathsafe::create_symlink(source.as_std_path(), destination.as_std_path())
+                .map_err(|e| PlanItemFailure::from_io(&e, "create symlink"))
+        }
         Materialization::Hardlink => std::fs::hard_link(source, destination)
             .map_err(|e| PlanItemFailure::from_io(&e, "create hardlink")),
         Materialization::Copy => std::fs::copy(source, destination)
@@ -67,21 +72,6 @@ pub fn create_link(
             "junction materialization is not yet implemented by this executor",
         )),
     }
-}
-
-#[cfg(unix)]
-fn create_symlink(source: &Utf8Path, destination: &Utf8Path) -> std::io::Result<()> {
-    std::os::unix::fs::symlink(source, destination)
-}
-
-#[cfg(windows)]
-fn create_symlink(source: &Utf8Path, destination: &Utf8Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_file(source, destination)
-}
-
-#[cfg(not(any(unix, windows)))]
-fn create_symlink(_source: &Utf8Path, _destination: &Utf8Path) -> std::io::Result<()> {
-    Err(std::io::Error::other("symlink not supported on this platform"))
 }
 
 #[cfg(test)]

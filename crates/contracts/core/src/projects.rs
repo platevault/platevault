@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project contract DTOs for the Tauri IPC surface (spec 029 read surface).
 //!
 //! These types back the legacy stub commands (`projects.list`, `projects.get`)

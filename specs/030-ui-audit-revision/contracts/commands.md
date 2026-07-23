@@ -134,3 +134,37 @@ After:  setup | ready | processing | completed | archived
 ```
 
 Existing projects in `prepared` state need migration to `processing`.
+
+## Audit Semantics (iteration 2026-07-14, Q15 / #647)
+
+No new commands are required by this iteration, but the contract of existing
+ones tightens:
+
+- Any mutation command that returns an `auditId` MUST return one that
+  resolves to a durable `audit_log_entry` row (previously some ids pointed
+  at bus-only events — a topic stream no audit read resolves — e.g.
+  protection set/acknowledge).
+- Audit read/list commands keep their shape; their coverage expands to all
+  durable-state mutations (settings changes, protection overrides, equipment
+  CRUD, source enable/disable/register/delete, rescans/root ops), each with
+  outcome `applied | refused | failed` plus a reason/code.
+- Reads, navigation, UI state, and transient internal/periodic events are
+  not durably audited and MUST NOT appear in audit read results.
+
+## Missing-Value Semantics (iteration 2026-07-14, Q16 / #620)
+
+No new commands are required by this iteration. DTO shapes loosen —
+fields that could never be null become nullable (a compatible, widening
+change for consumers):
+
+- Any DTO field whose value can be absent at extraction MUST be declared
+  nullable. First fixes: `CalibrationFingerprint.exposureS` / `gain` and
+  `CalibrationMaster.sizeBytes` / `MasterDetail.sizeBytes` (currently
+  non-optional `number`, forcing the backend to substitute 0 for missing
+  metadata — the size zero originates in the SQL view, see
+  data-model.md).
+- Returning a sentinel value (0, empty string) in place of a missing value
+  is prohibited — missing crosses the boundary as `null`.
+- UIs distinguish unresolved from not-applicable from the model
+  (entity/frame-type field applicability), never by inspecting rendered
+  strings.

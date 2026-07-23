@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Integration tests for OrderService.place_order — T043."""
 from services.order_service import OrderService
 

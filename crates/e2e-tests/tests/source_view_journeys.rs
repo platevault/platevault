@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journey: source-view generation (spec 049).
 //!
 //! Real backend REAL: `roots.register`, `inbox.scan.folder`,
@@ -20,20 +23,27 @@
 //! original path — real, but simpler to reason about than the move variant
 //! the existing `plan_review_apply_with_audit` journey already covers.
 //!
-//! FINDING (documented, not silently worked around): `projects.source.add`
-//! and `projects.create`'s `initialSources` path
-//! (`crates/app/projects/src/project_setup.rs`) have hardcoded
-//! `filter_snapshot`/`exposure_snapshot` to `""` since spec 003
-//! ("Snapshot fields will be empty until spec 003 Inventory is wired") and
-//! this was never revisited even though the real per-session filter/exposure
-//! has been available via `sessions.get`/`sessions.list` since spec 048. As a
-//! result, `sourceview.generate`'s WBPP `{date}/{filter}/{exposure}` layout
-//! (`crates/app/projects/src/source_view_generate.rs`) always lands every
-//! real project-linked session in the pattern's documented `nofilter`/
-//! `unknown-exposure` fallback buckets, never the frame's real filter. This
-//! journey asserts the REAL (fallback) destination shape, not an aspirational
-//! one, and calls the gap out explicitly below rather than masking it with a
-//! looser assertion.
+//! RESOLVED FINDING (#1218): `projects.source.add` and `projects.create`'s
+//! `initialSources` path (`crates/app/projects/src/project_setup.rs`) used to
+//! hardcode `filter_snapshot`/`exposure_snapshot` to `""`, so
+//! `sourceview.generate`'s WBPP `{date}/{filter}/{exposure}` layout
+//! (`crates/app/projects/src/source_view_generate.rs`) landed EVERY real
+//! project-linked session in the pattern's `nofilter`/`unknown-exposure`
+//! fallback buckets. Both fields are now snapshotted from the session, so
+//! this journey asserts the frame's real filter below.
+//!
+//! Exposure resolves to the frame's real `300s`. It used to be
+//! `unknown-exposure` here, because the fixture wrote no `EXPTIME` card — but
+//! spec 058 made that combination unreachable end to end: an ordinary folder
+//! now yields real item rows only through classification, and a light frame
+//! without `EXPTIME` fails the mandatory-attribute gate before any plan
+//! exists. The fixture therefore supplies `EXPTIME`, and the assertion below
+//! expects the token that produces.
+//!
+//! No coverage is lost: `crates/app/core/tests/project_source_snapshots.rs`
+//! still pins the missing-exposure combination at Layer 1
+//! (`missing_exposure_metadata_keeps_the_real_filter`), which is the right
+//! layer for it now that Layer 3 cannot construct it.
 //!
 //! KNOWN GAP (documented, not faked — mirrors `cleanup_plan_review` in
 //! `journeys.rs`): materializing the real symlink/junction on disk requires
@@ -64,7 +74,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -116,13 +126,14 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     // ── 1. Real ingest precondition: one real, catalogued-in-place light frame ──
     let root_dir = tempfile::tempdir()?;
     let file_name = "light_m33_001.fits";
-    let light_path = write_minimal_fits(
+    let light_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         file_name,
         "Light Frame",
         Some("M 33"),
         Some("Ha"),
         Some("2026-01-12T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(light_path.exists(), "fixture FITS file was not written");
 
@@ -141,22 +152,15 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
         .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
         .to_owned();
 
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -273,7 +277,7 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     app.wait_testid("generate-source-view-dialog", Duration::from_secs(10)).await?;
 
     // Round 4/5 (#470) root cause: the dialog's own diagnostics dump showed
-    // a real `alm-banner--danger` reading "No usable link method is
+    // a real `pv-banner--danger` reading "No usable link method is
     // available on this filesystem. Allow copying to proceed instead." —
     // the CI runner's tempdir filesystem cannot symlink OR hardlink at all,
     // `sourceview.generate` correctly refuses with `no_link_kind`
@@ -422,9 +426,9 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     //
     // The WBPP/PixInsight default profile groups lights 3 levels deep
     // (night / filter / exposure) under `<project>/source-views/<plan_id>/`.
-    // Per the FINDING documented in the module docs, filter/exposure resolve
-    // to their registry fallback names here ("nofilter"/"unknown-exposure"),
-    // not the frame's real "Ha" filter — this asserts that REAL behavior.
+    // Filter is the fixture frame's real "Ha" (#1218); exposure is the frame's
+    // real "300s" — see the module docs for why this is no longer the
+    // "unknown-exposure" fallback.
     let detail: serde_json::Value = app.invoke("plans_get", json!({ "id": plan_id })).await?;
     let link_item = detail["items"]
         .as_array()
@@ -450,10 +454,15 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
          frame's basename, got: {layout_tail} (from {to_path})"
     );
     anyhow::ensure!(
-        layout_segments[1] == "nofilter" && layout_segments[2] == "unknown-exposure",
-        "the filter/exposure fallback bucket names changed (or `projects.source.add` now \
-         snapshots real filter/exposure) — re-verify the empty-snapshot FINDING documented in \
-         this file's module docs before updating this assertion: {layout_tail}"
+        layout_segments[1] == "Ha",
+        "the linked session's real filter must reach the layout (#1218 regression — a \
+         `nofilter` here means the project source snapshot went empty again): {layout_tail}"
+    );
+    anyhow::ensure!(
+        layout_segments[2] == "300s",
+        "the fixture's real EXPTIME must reach the layout; `unknown-exposure` here means the \
+         exposure stopped being snapshotted from the session, the same class of regression \
+         #1218 fixed for filter: {layout_tail}"
     );
 
     // Document which materialization path this run actually exercised

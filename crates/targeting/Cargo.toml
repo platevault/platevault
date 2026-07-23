@@ -7,15 +7,31 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
-# spec 042 (T250): this is now the PURE catalog crate — query normalization
-# (`normalize`) and deterministic UUIDv5 identity (`identity`). The SIMBAD
-# on-demand resolver, SQLite resolution cache, and bundled-seed loader (the
-# sqlx + reqwest + tokio + async-trait surface) were split into the
-# `targeting_resolver` crate so pure consumers no longer pull that weight.
+# spec 042 (T250): this crate holds query normalization (`normalize`) and
+# deterministic UUIDv5 identity (`identity`). The SIMBAD on-demand resolver,
+# SQLite resolution cache, and bundled-seed loader (the sqlx + reqwest + tokio
+# + async-trait surface) were split into the `targeting_resolver` crate so
+# pure consumers no longer pull that weight.
+#
+# spec 052 D6/T004 (#701): `normalize` used to carry its own copy of the
+# normalization pipeline, independent of the published `simbad-resolver`
+# crate's identical copy (used by `targeting_resolver` for cache writes/
+# dedup) — two copies that could silently drift and split alias lookups for
+# the same physical object. `normalize` now delegates to
+# `simbad_resolver::normalize`, the single choke-point, which reintroduces
+# this crate's own dependency on `simbad-resolver` (and therefore its
+# reqwest/tokio/redb surface). Every current consumer of `targeting` already
+# depends on `targeting_resolver`/`simbad-resolver` transitively (see
+# `crates/targeting/resolver/Cargo.toml`), so this costs no new weight at the
+# workspace level today — only `cargo build/test -p targeting` in isolation
+# gets heavier. Correctness of the single normalization choke-point wins that
+# trade.
 
 [dependencies]
+target-match = "0.5.1"
+skymath = "0.6.0"
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
-unicode-normalization.workspace = true
+simbad-resolver = "0.4.0"
 
 [lints]
 workspace = true

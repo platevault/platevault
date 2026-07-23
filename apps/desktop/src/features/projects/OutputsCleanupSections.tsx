@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * OutputsCleanupSections — spec 043 §4 Projects detail (task #44) +
  * spec 017 WP-E cleanup review flow.
@@ -17,10 +20,21 @@
  */
 
 import { useState } from 'react';
-import { Section, Pill, Banner, Table, EmptyState, KV, Lock, RadioGroup, Btn } from '@/ui';
+import {
+  Section,
+  Pill,
+  Banner,
+  Table,
+  EmptyState,
+  KV,
+  Lock,
+  RadioGroup,
+  Btn,
+} from '@/ui';
 import type { PillVariant } from '@/ui';
 import { m } from '@/lib/i18n';
 import { formatBytes } from '@/lib/format';
+import { isProtectedLevel, protectionLabel } from '@/lib/protection-label';
 import { addToast } from '@/shared/toast';
 import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 import { useCleanupScan, useGenerateCleanupPlan } from './cleanupStore';
@@ -57,7 +71,10 @@ export interface OutputsSectionProps {
   defaultOpen?: boolean;
 }
 
-export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSectionProps) {
+export function OutputsSection({
+  outputs = [],
+  defaultOpen = true,
+}: OutputsSectionProps) {
   const columns = [
     { key: 'name', label: m.projects_col_output() },
     { key: 'format', label: m.projects_col_format() },
@@ -65,8 +82,10 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
   ];
 
   const rows = outputs.map((o) => ({
-    name: <span className="alm-project-detail__output-name">{o.name}</span>,
-    format: <span className="alm-project-detail__output-format">{o.format}</span>,
+    name: <span className="pv-project-detail__output-name">{o.name}</span>,
+    format: (
+      <span className="pv-project-detail__output-format">{o.format}</span>
+    ),
     verified: (
       <Pill variant={verifiedPillVariant(o.verified)}>
         {o.verified ? m.projects_verified() : m.projects_unverified()}
@@ -75,14 +94,17 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
   }));
 
   return (
-    <Section title={m.projects_outputs_title()} count={outputs.length || undefined} defaultOpen={defaultOpen} data-testid="project-outputs">
+    <Section
+      title={m.projects_outputs_title()}
+      count={outputs.length || undefined}
+      defaultOpen={defaultOpen}
+      data-testid="project-outputs"
+    >
       {outputs.length === 0 ? (
         // STUB: no accepted-output backend model yet — teaching empty state.
-        <EmptyState
-          title={m.projects_outputs_empty_title()}
-        />
+        <EmptyState title={m.projects_outputs_empty_title()} />
       ) : (
-        <div className="alm-project-detail__outputs">
+        <div className="pv-project-detail__outputs">
           <Table columns={columns} rows={rows} />
         </div>
       )}
@@ -138,12 +160,12 @@ function candidateColumns() {
  */
 function candidateRow(candidate: CleanupCandidate, index: number) {
   const parsed = parseCandidateReason(candidate.reason);
-  const isProtected = parsed?.protection === 'protected';
+  const isProtected = isProtectedLevel(parsed?.protection);
   return {
     _testid: `cleanup-candidate-${index}`,
-    _rowClassName: isProtected ? 'alm-cleanup-scan__row--protected' : undefined,
+    _rowClassName: isProtected ? 'pv-cleanup-scan__row--protected' : undefined,
     file: (
-      <span className="alm-mono" title={candidate.reason}>
+      <span className="pv-mono" title={candidate.reason}>
         {candidate.filePath}
       </span>
     ),
@@ -154,12 +176,15 @@ function candidateRow(candidate: CleanupCandidate, index: number) {
       ? m.projects_cleanup_confidence_pct({ pct: parsed.confidencePct })
       : candidate.reason,
     protection: isProtected ? (
-      <span className="alm-cleanup-scan__protected-cell">
-        <Lock reason={m.projects_cleanup_row_protected_hint()} />
-        <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
+      <span className="pv-cleanup-scan__protected-cell">
+        {/* Decorative: the hint is one static sentence, identical on every
+            protected row, and is stated once above the table. Giving each row
+            its own tab stop would repeat that same announcement N times. */}
+        <Lock decorative />
+        <Pill variant="warn">{protectionLabel('protected')}</Pill>
       </span>
     ) : parsed ? (
-      <Pill variant="ghost">{parsed.protection}</Pill>
+      <Pill variant="ghost">{protectionLabel(parsed.protection)}</Pill>
     ) : null,
   };
 }
@@ -171,15 +196,25 @@ export interface CleanupSectionProps {
   defaultOpen?: boolean;
 }
 
-export function CleanupSection({ projectId, defaultOpen = true }: CleanupSectionProps) {
+export function CleanupSection({
+  projectId,
+  defaultOpen = true,
+}: CleanupSectionProps) {
   const scan = useCleanupScan();
   const generate = useGenerateCleanupPlan();
-  const [destination, setDestination] = useState<DestructiveDestinationChoice>('archive');
+  const [destination, setDestination] =
+    useState<DestructiveDestinationChoice>('archive');
   const [reviewPlanId, setReviewPlanId] = useState<string | null>(null);
 
   const result = scan.data;
   const groups = result ? groupCandidates(result.candidates) : [];
   const hasCandidates = (result?.candidates.length ?? 0) > 0;
+  // Whether any candidate is protected. The acknowledgement rule is stated once
+  // here rather than N times behind identical per-row padlock tooltips, so it
+  // is visible without hovering and costs one tab stop instead of one per row.
+  const hasProtected = (result?.candidates ?? []).some(
+    (c) => parseCandidateReason(c.reason)?.protection === 'protected',
+  );
 
   const handleGenerate = () => {
     generate.mutate(
@@ -187,7 +222,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
       {
         onSuccess: (res) => {
           addToast({
-            message: m.projects_cleanup_plan_created_toast({ count: res.itemCount }),
+            message: m.projects_cleanup_plan_created_toast({
+              count: res.itemCount,
+            }),
             variant: 'info',
           });
           setReviewPlanId(res.planId);
@@ -205,17 +242,19 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
     >
       {/* Themed alert: cleanup is reviewable + reversible, never silent. */}
       <Banner variant="warn" role="status" aria-live="polite">
-        <div className="alm-project-detail__cleanup-preview">
-          <span className="alm-project-detail__cleanup-note">
+        <div className="pv-project-detail__cleanup-preview">
+          <span className="pv-project-detail__cleanup-note">
             {result
-              ? m.projects_cleanup_candidate_count({ count: result.candidates.length })
+              ? m.projects_cleanup_candidate_count({
+                  count: result.candidates.length,
+                })
               : m.projects_cleanup_scan_prompt()}
           </span>
         </div>
       </Banner>
 
       {/* Scan is on-demand and read-only (D11 step 1). */}
-      <div className="alm-cleanup-scan__controls">
+      <div className="pv-cleanup-scan__controls">
         <Btn
           size="sm"
           onClick={() => scan.mutate(projectId)}
@@ -227,7 +266,10 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
             : m.projects_cleanup_scan_btn()}
         </Btn>
         {hasCandidates && (
-          <span className="alm-cleanup-scan__reclaimable" data-testid="cleanup-reclaimable">
+          <span
+            className="pv-cleanup-scan__reclaimable"
+            data-testid="cleanup-reclaimable"
+          >
             {m.projects_cleanup_reclaimable({
               size: formatBytes(result?.totalReclaimableBytes ?? 0),
             })}
@@ -246,16 +288,25 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
         />
       )}
 
+      {/* The protection rule, stated once for every protected row below. */}
+      {hasProtected && (
+        <p className="pv-text-muted" data-testid="cleanup-protected-note">
+          {m.projects_cleanup_row_protected_hint()}
+        </p>
+      )}
+
       {/* Candidates grouped by classification (intermediate → master → final). */}
       {groups.map((group) => (
         <div
           key={group.dataType}
-          className="alm-cleanup-scan__group"
+          className="pv-cleanup-scan__group"
           data-testid={`cleanup-group-${group.dataType}`}
         >
-          <div className="alm-cleanup-scan__group-head">
-            <span className="alm-cleanup-scan__group-title">{dataTypeLabel(group.dataType)}</span>
-            <span className="alm-cleanup-scan__group-meta">
+          <div className="pv-cleanup-scan__group-head">
+            <span className="pv-cleanup-scan__group-title">
+              {dataTypeLabel(group.dataType)}
+            </span>
+            <span className="pv-cleanup-scan__group-meta">
               {m.projects_cleanup_group_meta({
                 count: group.candidates.length,
                 size: formatBytes(group.totalBytes),
@@ -264,16 +315,18 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
           </div>
           <Table
             columns={candidateColumns()}
-            rows={group.candidates.map((candidate, index) => candidateRow(candidate, index))}
+            rows={group.candidates.map((candidate, index) =>
+              candidateRow(candidate, index),
+            )}
           />
         </div>
       ))}
 
       {/* Generate the reviewable plan (D11 step 2) — never applies anything. */}
       {hasCandidates && (
-        <div className="alm-cleanup-scan__generate">
-          <div className="alm-stack-1">
-            <span className="alm-cleanup-scan__dest-label">
+        <div className="pv-cleanup-scan__generate">
+          <div className="pv-stack-1">
+            <span className="pv-cleanup-scan__dest-label">
               {m.projects_cleanup_dest_label()}
             </span>
             <RadioGroup
@@ -291,7 +344,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
                 },
               ]}
               value={destination}
-              onChange={(v) => setDestination(v as DestructiveDestinationChoice)}
+              onChange={(v) =>
+                setDestination(v as DestructiveDestinationChoice)
+              }
             />
           </div>
           <Btn
@@ -306,22 +361,33 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
               : m.projects_cleanup_generate_btn()}
           </Btn>
           {generate.isError && (
-            <Banner variant="danger">{m.projects_cleanup_generate_failed()}</Banner>
+            <Banner variant="danger">
+              {m.projects_cleanup_generate_failed()}
+            </Banner>
           )}
         </div>
       )}
 
       {/* Protected categories — always shown LOCKED (never proposed for cleanup). */}
-      <div className="alm-project-detail__cleanup-protected" data-testid="cleanup-protected">
-        <div className="alm-project-detail__cleanup-protected-head">
+      <div
+        className="pv-project-detail__cleanup-protected"
+        data-testid="cleanup-protected"
+      >
+        <div className="pv-project-detail__cleanup-protected-head">
           {m.projects_cleanup_protected_label()}
         </div>
-        <div className="alm-project-detail__cleanup-protected-list">
+        <div className="pv-project-detail__cleanup-protected-list">
           {protectedCategories().map((cat) => (
             <KV
               key={cat}
               label={cat}
-              value={<Lock reason={m.projects_cleanup_category_protected_reason({ category: cat })} />}
+              value={
+                <Lock
+                  reason={m.projects_cleanup_category_protected_reason({
+                    category: cat,
+                  })}
+                />
+              }
             />
           ))}
         </div>
@@ -336,6 +402,7 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
         onClose={() => setReviewPlanId(null)}
         title={m.projects_cleanup_review_title()}
         onApplied={() => scan.mutate(projectId)}
+        onRetryCreated={setReviewPlanId}
       />
     </Section>
   );

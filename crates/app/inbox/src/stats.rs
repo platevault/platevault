@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.stats` use case (spec 041 US6/FR-021, T038).
 //!
 //! Returns aggregate per-frame-type counts across all unacknowledged inbox

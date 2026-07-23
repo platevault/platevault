@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Spec 020 — Router & URL State (desktop rescope), US4 multi-window.
 //
 // Open the current route + search in a NEW, independent desktop window. A fully
@@ -29,7 +32,7 @@ export async function openInNewWindow(path: string): Promise<void> {
   }
 
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-  const label = `alm-win-${Date.now()}-${windowSeq++}`;
+  const label = `pv-win-${Date.now()}-${windowSeq++}`;
   new WebviewWindow(label, {
     url: fullUrl,
     // eslint-disable-next-line alm/no-user-string -- product/brand name, not translatable

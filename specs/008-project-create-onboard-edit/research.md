@@ -364,3 +364,130 @@ use-case-side only.
 - Downstream features (calibration matching, channel inference, manifests) all
   assume source metadata is reviewed; an unreviewed session would produce
   silent inference errors.
+
+## R11. Framing Layer, Mosaics, And Incremental Attribution (Q27)
+
+### Question
+
+How does a project relate to its light sessions across filters, nights, and
+mosaic panels, and how are new sessions attributed to the right integration
+unit — without relying on unreliable `OBJECT`/panel-name strings?
+
+### Decision
+
+**Introduce a framing layer**: `project → framing → session → frames`. A
+**framing** is the set of light sessions sharing target + optic-train +
+pointing + rotation within a tunable **tolerance** — the co-registerable
+integration unit spanning all filters and nights of one pointing. Clustering is
+**suggested and user-adjustable** (merge/split/reassign), never authoritative.
+One target per project holds; a normal project is usually one framing.
+
+**Mosaic mode is a minimal project flag**, not a panel entity: a mosaic project
+holds multiple framings that all inherit the project's declared target, and
+per-frame OBJECT/coordinate resolution is suppressed. **No OBJECT/panel-name
+string parsing anywhere** — panels are detected by the same physical
+pointing+rotation clustering.
+
+**Incremental ingestion attribution** runs at the Inbox confirm gate in the
+**same pre-ingest pass Q22 will share** (one pass ultimately does duplicate
+detection *and* framing/project attribution; attribution ships first, the Q22
+sweep joins when its iterate lands), suggesting add-to-framing / new-framing /
+flag-optic-difference / new-project — ranked by framing match, user picks,
+suggest-never-auto-merge. A completed-project match offers add + reopen (Q25
+revoke/warn).
+
+### Rationale
+
+- **Physical, not textual.** NINA's mosaic mode names each panel its own Target
+  `[Base] Panel [N]` → the `OBJECT` keyword, with a different offset pointing
+  AND rotation per panel, and it is user-overridable and vendor-specific
+  (ASIAIR/SGP/APT/Ekos differ). So OBJECT strings, per-panel coordinates, and
+  rotation are all unreliable for attribution — only the physical acquisition
+  geometry (target + optic-train + pointing + rotation) is dependable.
+  Reference: NINA Framing Assistant docs
+  (`https://nighttime-imaging.eu/docs/master/site/tabs/framing/`).
+- **Tolerance, not exact key.** Rotation drifts a few degrees night to night and
+  pointing is FOV-relative; an exact match key would fragment one real framing
+  into many. A tunable tolerance (sensible default) is the honest grouping key.
+- **Suggest-never-auto-merge.** Mirrors the Q22 (duplicate) and Q26
+  (calibration) postures: the app assists, the user decides. Every merge is a
+  reviewable, user-driven action (§II).
+- **§III boundary.** The app groups and prepares framings — a Q20 source view
+  and a Q10 manifest per framing — but never stitches, registers, or integrates.
+  Integration is PixInsight/WBPP's job.
+
+### Alternatives considered
+
+- **Per-panel entity + OBJECT parsing**: rejected — vendor-variant, user-
+  overridable, and brittle; reintroduces exactly the ambiguity the physical
+  model removes.
+- **Exact pointing/rotation key**: rejected — fragments a single framing across
+  nights.
+- **Auto-merge on match**: rejected — violates reviewable mutation (§II);
+  attribution is a ranked suggestion only.
+- **Framing as a project-per-panel**: rejected — breaks the one-target-per-
+  project rule for mosaics and multiplies project bookkeeping; the flag +
+  multiple framings is the minimal model.
+
+## R11a. Clustering Semantics And Defaults (Q27 gate addendum, 2026-07-14)
+
+### Question
+
+R11 fixed the model; an implementer of the clustering still had to make four
+product-adjacent decisions (linkage rule, representative definition, FOV
+source, tolerance values). This addendum pins them so no coder re-decides
+product intent. All values are **tunable** (stored in Settings — F-Framing-11);
+the numbers below are the shipped defaults.
+
+### Decisions
+
+- **Linkage rule — single-link against the framing's representative.**
+  A session joins a framing iff its pointing/rotation are within tolerance of
+  the framing's **representative**, not of any single member. This avoids
+  transitive chaining (A~B, B~C, A≁C smearing one framing across the sky):
+  the framing cannot drift further than the tolerance from its own center.
+- **Representative — circular mean of members, recomputed on membership
+  change.** Representative pointing = the circular mean of member session
+  pointings (RA averaged circularly, Dec arithmetically); representative
+  rotation = circular mean of member rotation angles. Recompute whenever
+  membership changes (confirm-time add, merge/split/reassign).
+- **FOV source — optic-train focal length + sensor dimensions** (the Q17
+  equipment identity provides both; FOV diagonal follows from sensor diagonal /
+  focal length). **Fallback when equipment data is missing**: use a fixed
+  absolute default of **0.2° pointing tolerance** (no FOV-relative math) and
+  flag the framing's tolerance snapshot as `fallback` so the UI can hint that
+  equipment data would improve grouping.
+- **Default tolerances**:
+  - **Pointing: 10% of the FOV diagonal** (FOV-relative — the R11 premise;
+    dithering and night-to-night re-centering sit well inside this, adjacent
+    mosaic panels at the NINA-typical 10–20% overlap sit well outside it).
+  - **Rotation: 3°** (grilling Q27 "a few degrees rotation"; meridian-flip
+    camera-angle drift stays inside, a deliberately re-framed composition does
+    not).
+  - **Mosaic candidate envelope (FR-019 relaxation): pointing within 1.0×FOV
+    diagonal of any existing framing's representative** for `isMosaic`
+    projects — adjacent panels at 10–20% overlap land at ~0.8–0.9×FOV spacing,
+    inside the envelope; unrelated targets fall far outside it.
+- **Storage**: the four tunables (pointing fraction, rotation degrees, mosaic
+  envelope factor, no-FOV fallback angle) live in Settings (F-Framing-11) —
+  FR-014's "tunable" now has a home.
+
+### Rationale
+
+Single-link-to-representative is the cheapest rule that is stable under
+incremental confirm-time attribution (no re-partition of old members when one
+session arrives) and honest about what a framing *is* — a neighborhood around
+one composition, not a transitive closure. The circular mean handles the RA
+wrap and rotation wrap correctly with stdlib math. The defaults derive from the
+R11 NINA research (panel spacing/overlap) and the grilling doc's stated scale
+("FOV-relative pointing, a few degrees rotation").
+
+### Alternatives considered
+
+- **Full pairwise/transitive clustering (union-find over all pairs)**: rejected
+  — permits chaining drift and requires re-partitioning on every ingest.
+- **First-member representative**: rejected — makes grouping order-dependent.
+- **Hard-coded absolute pointing tolerance for everyone**: rejected — a 10%
+  criterion on a 0.5° FOV and a 5° FOV differ by an order of magnitude;
+  FOV-relative is the only scale-free default. The absolute value survives only
+  as the no-equipment fallback.

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * spec 039 — cross-root Inbox list tests.
@@ -15,7 +18,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 function makeWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
@@ -42,6 +47,7 @@ const itemRoot1a: InboxListItem = {
   inboxItemId: 'item-r1-a',
   groupId: 'item-r1-a',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-001',
   rootAbsolutePath: '/astro/raw',
   relativePath: '2025-10-10/NGC7000',
@@ -61,6 +67,7 @@ const itemRoot1b: InboxListItem = {
   inboxItemId: 'item-r1-b',
   groupId: 'item-r1-b',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-001',
   rootAbsolutePath: '/astro/raw',
   relativePath: '2025-10-10/darks',
@@ -80,6 +87,7 @@ const itemRoot2a: InboxListItem = {
   inboxItemId: 'item-r2-a',
   groupId: 'item-r2-a',
   groupKey: '',
+  needsReview: false,
   rootId: 'root-002',
   rootAbsolutePath: '/astro/inbox',
   relativePath: '2025-11-01/Jupiter',
@@ -97,6 +105,7 @@ const itemRoot2a: InboxListItem = {
 
 const multiRootResponse: InboxListResponse = {
   items: [itemRoot1a, itemRoot1b, itemRoot2a],
+  sourceGroups: [],
   capped: false,
   limit: 500,
 };
@@ -108,7 +117,7 @@ describe('T039-1: InboxList cross-root rendering (SC-001)', () => {
     render(
       <InboxList
         items={multiRootResponse.items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
@@ -119,10 +128,15 @@ describe('T039-1: InboxList cross-root rendering (SC-001)', () => {
     expect(screen.getByText('2025-11-01/Jupiter')).toBeInTheDocument();
   });
 
-  it('items span two distinct root ids', () => {
-    const rootIds = new Set(multiRootResponse.items.map((i) => i.rootId));
-    expect(rootIds.size).toBe(2);
-  });
+  // The former "items span two distinct root ids" test only checked
+  // `Set(multiRootResponse.items.map(i => i.rootId)).size === 2` — a
+  // property of the fixture literal above, not of InboxList. It couldn't
+  // fail unless the fixture itself changed, and the test above already
+  // renders InboxList with this exact fixture. No production logic in
+  // InboxList currently branches on `rootId` distinctness for rows that
+  // carry a `relativePath` (see `detectionLabel` in InboxList.tsx, which
+  // only falls back to the root's basename when `relativePath` is empty),
+  // so there's no additional real behavior here to assert against.
 });
 
 // ── T039-2: empty list ────────────────────────────────────────────────────────
@@ -132,7 +146,7 @@ describe('T039-2: confirmed items absent — empty list (FR-003)', () => {
     render(
       <InboxList
         items={[]}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
@@ -211,7 +225,9 @@ describe('T039-4: useInboxRescan (FR-005)', () => {
       await result.current.rescan();
     });
 
-    expect((commands.inboxScanFolder as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+    expect(
+      (commands.inboxScanFolder as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBe(2);
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
@@ -231,5 +247,45 @@ describe('T039-4: useInboxRescan (FR-005)', () => {
     });
 
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+});
+
+// ── mergeRescanRoots (bugfix: registered root with zero items) ─────────────────
+
+describe('mergeRescanRoots (FR-005 — registered root with no items)', () => {
+  it('includes a registered root that has no items yet', async () => {
+    const { mergeRescanRoots } = await import('../store');
+
+    const registeredRoots = [
+      { rootId: 'root-empty', rootAbsolutePath: '/astro/new-root' },
+    ];
+    const itemRoots: Array<{ rootId: string; rootAbsolutePath: string }> = [];
+
+    expect(mergeRescanRoots(registeredRoots, itemRoots)).toEqual([
+      { rootId: 'root-empty', rootAbsolutePath: '/astro/new-root' },
+    ]);
+  });
+
+  it('dedupes by rootId, preferring the registered-root entry', async () => {
+    const { mergeRescanRoots } = await import('../store');
+
+    const registeredRoots = [
+      { rootId: 'root-001', rootAbsolutePath: '/astro/raw' },
+    ];
+    const itemRoots = [
+      { rootId: 'root-001', rootAbsolutePath: '/astro/raw' },
+      { rootId: 'root-002', rootAbsolutePath: '/astro/legacy' },
+    ];
+
+    expect(mergeRescanRoots(registeredRoots, itemRoots)).toEqual([
+      { rootId: 'root-001', rootAbsolutePath: '/astro/raw' },
+      { rootId: 'root-002', rootAbsolutePath: '/astro/legacy' },
+    ]);
+  });
+
+  it('returns an empty list when nothing is registered and no items exist', async () => {
+    const { mergeRescanRoots } = await import('../store');
+
+    expect(mergeRescanRoots([], [])).toEqual([]);
   });
 });

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProjectsTable — spec 043 shared-layout adoption (tasks #73 / #43).
  *
@@ -20,11 +23,11 @@
 import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { m } from '@/lib/i18n';
-import { Table } from '@/ui';
-import { SortHeader, ariaSortFor } from '@/components';
+import { Table, tableIndent, Skeleton } from '@/ui';
+import { SortHeader, ariaSortFor, StatusTag } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
-import { ProjectStatusTag } from './ProjectStatusTag';
+import { blockedReasonMessage, deriveBlockedReason } from './BlockedBanner';
 import { compareDateDesc, formatDateTime } from '@/lib/datetime';
 import type { ProjectSummaryDto } from '@/bindings/index';
 import {
@@ -44,13 +47,23 @@ export interface ProjectSort {
   dir: SortDir;
 }
 
-export const DEFAULT_PROJECT_SORT: ProjectSort = { col: 'updated', dir: 'desc' };
+export const DEFAULT_PROJECT_SORT: ProjectSort = {
+  col: 'updated',
+  dir: 'desc',
+};
 
-function compareStr(a: string | null | undefined, b: string | null | undefined): number {
+function compareStr(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
   return (a ?? '').localeCompare(b ?? '');
 }
 
-function compareProjects(a: ProjectSummaryDto, b: ProjectSummaryDto, sort: ProjectSort): number {
+function compareProjects(
+  a: ProjectSummaryDto,
+  b: ProjectSummaryDto,
+  sort: ProjectSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'name':
@@ -76,7 +89,9 @@ function compareProjects(a: ProjectSummaryDto, b: ProjectSummaryDto, sort: Proje
 
 // ── Multi-level grouping accessors ────────────────────────────────────────────
 
-export const PROJECT_ACCESSORS: Readonly<Record<string, DimensionAccessor<ProjectSummaryDto>>> = {
+export const PROJECT_ACCESSORS: Readonly<
+  Record<string, DimensionAccessor<ProjectSummaryDto>>
+> = {
   state: (p) => p.lifecycle,
   tool: (p) => p.tool,
   target: (_p) => null, // STUB: target linkage blocked on task #54
@@ -85,13 +100,37 @@ export const PROJECT_ACCESSORS: Readonly<Record<string, DimensionAccessor<Projec
 // ── Column model ────────────────────────────────────────────────────────────────
 
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
-const COLUMNS: Array<{ key: string; label: () => string; sort?: ProjectSortCol; className?: string }> = [
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort?: ProjectSortCol;
+  className?: string;
+}> = [
   { key: 'name', label: () => m.projects_col_name(), sort: 'name' },
-  { key: 'tool', label: () => m.projects_col_tool(), sort: 'tool', className: 'alm-projects-table__cell--muted' },
-  { key: 'target', label: () => m.projects_create_target_label(), className: 'alm-projects-table__cell--muted' },
+  {
+    key: 'tool',
+    label: () => m.projects_col_tool(),
+    sort: 'tool',
+    className: 'pv-projects-table__cell--muted',
+  },
+  {
+    key: 'target',
+    label: () => m.projects_create_target_label(),
+    className: 'pv-projects-table__cell--muted',
+  },
   { key: 'state', label: () => m.sessions_col_state(), sort: 'state' },
-  { key: 'sources', label: () => m.common_sources(), sort: 'sources', className: 'alm-projects-table__cell--num' },
-  { key: 'updated', label: () => m.projects_stepper_updated(), sort: 'updated', className: 'alm-projects-table__cell--mono' },
+  {
+    key: 'sources',
+    label: () => m.common_sources(),
+    sort: 'sources',
+    className: 'pv-projects-table__cell--num',
+  },
+  {
+    key: 'updated',
+    label: () => m.projects_stepper_updated(),
+    sort: 'updated',
+    className: 'pv-projects-table__cell--mono',
+  },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -108,11 +147,15 @@ export interface ProjectsTableProps {
    * When empty the table renders a flat sorted list.
    */
   dims?: string[];
+  /**
+   * True when a search/lifecycle filter is active, so an empty `projects`
+   * list means "no matches" rather than "no projects exist yet" — the two
+   * cases need different empty-state copy (empty-state canon).
+   */
+  isFiltered?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-
-const INDENT_PER_DEPTH = 12;
 
 export function ProjectsTable({
   projects,
@@ -122,6 +165,7 @@ export function ProjectsTable({
   sort,
   onSort,
   dims = [],
+  isFiltered = false,
 }: ProjectsTableProps) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
@@ -133,7 +177,8 @@ export function ProjectsTable({
   const useMultiGroup = dims.length > 0;
 
   const tree = useMemo(
-    () => (useMultiGroup ? groupByDimensions(sorted, dims, PROJECT_ACCESSORS) : []),
+    () =>
+      useMultiGroup ? groupByDimensions(sorted, dims, PROJECT_ACCESSORS) : [],
     [sorted, dims, useMultiGroup],
   );
 
@@ -153,7 +198,7 @@ export function ProjectsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        ariaLabel={m.projects_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ) : (
       c.label()
@@ -171,57 +216,89 @@ export function ProjectsTable({
   function projectItemRow(project: ProjectSummaryDto, indentPx = 0): TableRow {
     return {
       _rowClassName:
-        'alm-projects-table__row' +
-        (project.id === selectedId ? ' alm-projects-table__row--selected' : ''),
+        'pv-projects-table__row' +
+        (project.id === selectedId ? ' pv-projects-table__row--selected' : ''),
       _onClick: () => onSelect(project.id),
+      _selected: project.id === selectedId,
+      _indent: indentPx || undefined,
       _testid: `project-row-${project.id}`,
       name: (
-        <span
-          className="alm-projects-table__name"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-          style={indentPx ? { paddingLeft: indentPx } : undefined}
-        >
-          {project.lifecycle === 'blocked' && (
-            <AlertTriangle
-              size={13}
-              role="img"
-              aria-label={m.projects_table_blocked_aria()}
-              className="alm-projects-table__blocked-icon"
-            />
-          )}
+        <span className="pv-projects-table__name">
+          {project.lifecycle === 'blocked' &&
+            (() => {
+              const reason = deriveBlockedReason(
+                project.blockedReasonKind,
+                project.blockedReasonNote,
+              );
+              const reasonText = blockedReasonMessage(reason);
+              return (
+                <span title={reasonText}>
+                  <AlertTriangle
+                    size={13}
+                    role="img"
+                    aria-label={m.projects_table_blocked_aria({
+                      reason: reasonText,
+                    })}
+                    className="pv-projects-table__blocked-icon"
+                  />
+                </span>
+              );
+            })()}
           {project.name}
           {project.channelDrift && (
-            <span className="alm-projects-table__drift-badge" title={m.projects_table_channel_drift_title()}>
-              <AlertTriangle size={11} aria-hidden="true" /> {m.projects_table_channel_drift_label()}
+            <span
+              className="pv-projects-table__drift-badge"
+              title={m.projects_table_channel_drift_title()}
+            >
+              <AlertTriangle size={11} aria-hidden="true" />{' '}
+              {m.projects_table_channel_drift_label()}
             </span>
           )}
         </span>
       ),
-      tool: <span className="alm-projects-table__cell--muted">{project.tool}</span>,
+      tool: (
+        <span className="pv-projects-table__cell--muted">{project.tool}</span>
+      ),
       // STUB: target — omitted until FITS OBJECT → target_id linkage lands (#54).
-      target: <span className="alm-projects-table__dash">—</span>,
+      target: <span className="pv-projects-table__dash">—</span>,
       state: (
-        <ProjectStatusTag variant={projectStateVariant(project.lifecycle)}>
+        <StatusTag variant={projectStateVariant(project.lifecycle)}>
           {projectStateLabel(project.lifecycle)}
-        </ProjectStatusTag>
+        </StatusTag>
       ),
       sources: (
-        <span className="alm-projects-table__cell--num">
+        <span className="pv-projects-table__cell--num">
           {project.sourceCount > 0 ? project.sourceCount : '—'}
         </span>
       ),
       updated: (
-        <span className="alm-projects-table__cell--mono">{formatDateTime(project.updatedAt)}</span>
+        <span className="pv-projects-table__cell--mono">
+          {formatDateTime(project.updatedAt)}
+        </span>
       ),
     };
   }
 
   if (loading && projects.length === 0) {
-    return <div className="alm-projects-table__empty">{m.projects_table_loading()}</div>;
+    return (
+      <div className="pv-projects-table__empty">
+        <Skeleton
+          variant="block"
+          count={6}
+          label={m.projects_table_loading()}
+        />
+      </div>
+    );
   }
 
   if (projects.length === 0) {
-    return <div className="alm-projects-table__empty">{m.projects_table_empty()}</div>;
+    return (
+      <div className="pv-projects-table__empty">
+        {isFiltered
+          ? m.projects_table_empty_filtered()
+          : m.projects_table_empty()}
+      </div>
+    );
   }
 
   // Build rows: multi-level grouping path or flat sorted path.
@@ -232,29 +309,27 @@ export function ProjectsTable({
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
-          _rowClassName: 'alm-listgroup',
+          _rowClassName: 'pv-listgroup',
+          _indent: tableIndent(depth),
           name: (
             <button
               type="button"
-              className="alm-listgroup__cell"
+              className="pv-listgroup__cell"
               data-testid={`projects-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-              style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
             >
-              <span className="alm-listgroup__caret" aria-hidden="true">
+              <span className="pv-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
               </span>
-              <span className="alm-listgroup__label">{node.label}</span>
-              <span className="alm-listgroup__count">{node.count}</span>
+              <span className="pv-listgroup__label">{node.label}</span>
+              <span className="pv-listgroup__count">{node.count}</span>
             </button>
           ),
           ...EMPTY_PROJECT_CELLS,
         });
       } else {
-        const indentPx = 8 + vrow.depth * INDENT_PER_DEPTH;
-        rows.push(projectItemRow(vrow.item, indentPx));
+        rows.push(projectItemRow(vrow.item, tableIndent(vrow.depth)));
       }
     }
   } else {
@@ -265,5 +340,5 @@ export function ProjectsTable({
 
   // The project count moved to the bottom status bar (top-bar convention,
   // task #80) — no in-table footer count line.
-  return <Table className="alm-projects-table" columns={columns} rows={rows} />;
+  return <Table className="pv-projects-table" columns={columns} rows={rows} />;
 }

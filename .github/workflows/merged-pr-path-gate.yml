@@ -1,0 +1,35 @@
+name: Merged PR path gate
+
+# A scheduled sweep is required because a child PR can merge into a feature
+# branch after that branch was forwarded to main. A per-PR check cannot see
+# whether the eventual main history retained the child PR's files.
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merged-pr-path-gate
+  cancel-in-progress: false
+
+jobs:
+  path-presence:
+    name: Check merged PR paths on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out main history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check recently merged PR paths
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          WINDOW_DAYS: "14"
+        run: scripts/check-merged-pr-paths.sh

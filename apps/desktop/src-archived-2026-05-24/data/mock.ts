@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Mock data fixtures for the Astro Library Manager UI mockup.
  * Designed to mirror the realistic M101 / NGC7000 / Andromeda scenarios

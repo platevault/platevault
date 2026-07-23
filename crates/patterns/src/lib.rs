@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Token-pattern resolver and validator for Astro Library Manager (spec 015).
 //!
 //! # Responsibilities
@@ -17,7 +20,6 @@
 pub mod per_type;
 pub mod registry;
 pub mod resolver;
-pub mod sanitize;
 pub mod validator;
 
 pub use per_type::{

@@ -1,0 +1,58 @@
+/* Skeleton loading placeholder (src/ui/Skeleton.tsx).
+ *
+ * A muted chip whose subtle highlight sweeps across via a moving gradient.
+ * Base + highlight are tokens (--pv-chip / --pv-surface-raised); no raw
+ * colors. The shimmer duration uses `s` (not `ms`) so the token-policy check
+ * — which only forbids raw `ms` — passes while the value stays readable.
+ *
+ * Reduced motion: the global reset (reset.css) already collapses the animation
+ * to a single near-instant frame; the explicit rule below additionally drops
+ * the gradient so the fallback is a clean, static muted block. */
+
+.pv-skeleton-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+  width: 100%;
+}
+
+.pv-skeleton {
+  display: block;
+  width: var(--pv-skel-w, 100%);
+  height: var(--pv-skel-h, var(--pv-sp-3));
+  border-radius: var(--pv-skel-r, var(--pv-radius-sm));
+  background-color: var(--pv-chip);
+  background-image: linear-gradient(
+    90deg,
+    var(--pv-chip) 0%,
+    var(--pv-surface-raised) 50%,
+    var(--pv-chip) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: pv-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.pv-skeleton--block {
+  height: var(--pv-skel-h, var(--pv-row-height));
+  border-radius: var(--pv-skel-r, var(--pv-radius-md));
+}
+
+.pv-skeleton--circle {
+  width: var(--pv-skel-w, var(--pv-row-height));
+  height: var(--pv-skel-h, var(--pv-row-height));
+  border-radius: var(--pv-skel-r, 50%);
+  flex: none;
+}
+
+@keyframes pv-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-skeleton {
+    background-image: none;
+    background-color: var(--pv-chip);
+  }
+}

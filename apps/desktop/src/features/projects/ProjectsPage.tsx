@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProjectsPage — spec 008 wired; spec 043 shared-layout adoption (tasks #73/#74/#104).
  *
@@ -18,13 +21,19 @@
  * project is selected — so they are, by construction, shown only on selection
  * and carry the canonical `transition-btn-*` / `lifecycle-actions` testids.
  *
- * Dual-panel layout (task #104): the Projects page uses `detailPlacement=
- * "side-and-bottom"`. The SIDE panel (ProjectDetailContent) shows the primary
- * project identity — header, actions, metrics, stepper, target, Sources table,
- * and Channels palette. The BOTTOM panel (ProjectBottomDetail) shows the
- * secondary/operational sections that benefit from full-width horizontal room:
- * Notes, Manifests, Calibration, Source views, Outputs, and Cleanup preview.
- * Both panels mount when a project is selected and close together.
+ * Single adaptive detail panel. This page once used the task #104 dual
+ * `detailPlacement="side-and-bottom"` layout, with project identity in a side
+ * panel and the operational sections in a separate bottom strip. It no longer
+ * does: `be2ecedf` dropped the right side panel, and the page now passes no
+ * `detailPlacement` at all, so it takes `ListPageLayout`'s `'adaptive'`
+ * default (spec 054 / #936) — the detail docks to the side on a wide window
+ * and to the bottom on a narrow one, and the user can pin that per page.
+ *
+ * Both content blocks still render, stacked inside that ONE panel:
+ * `ProjectDetailContent` (header, actions, metrics, stepper, target, Sources
+ * table, Channels palette) above `ProjectBottomDetail` (Notes, Manifests,
+ * Calibration, Source views, Outputs, Cleanup preview). They mount and close
+ * together with the selection.
  *
  * URL state:
  *   - `selected`: project UUID string (spec 023 caveat fix — was numeric index).
@@ -63,7 +72,10 @@ const LIFECYCLE_OPTIONS: FilterOption[] = [
 ].map((value) => ({ value, label: projectStateLabel(value) }));
 
 /** Client-side text search over name + tool. */
-function filterBySearch(projects: ProjectSummaryDto[], query: string): ProjectSummaryDto[] {
+function filterBySearch(
+  projects: ProjectSummaryDto[],
+  query: string,
+): ProjectSummaryDto[] {
   const q = query.trim().toLowerCase();
   if (!q) return projects;
   return projects.filter(
@@ -101,8 +113,19 @@ export function ProjectsPage() {
   // no longer exist. (Supersedes redesign's index-based selectedIdx.)
   const project: ProjectSummaryDto | undefined =
     selected != null ? projects.find((p) => p.id === selected) : undefined;
-  useStaleSelectionCleanup(selected, project !== undefined || selected == null, () =>
-    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  // #735: `loading` must gate the cleanup — on a cold reload the list cache is
+  // empty, so an unguarded `project === undefined` misreads a perfectly valid
+  // `?selected=` as stale and wipes it before the list IPC resolves (breaks
+  // spec 020 SC-002 "app reloads → same project selected"). Bounded: `loading`
+  // settles, at which point a genuinely absent id is still cleared.
+  useStaleSelectionCleanup(
+    selected,
+    loading || project !== undefined || selected == null,
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
   );
 
   const onSelect = (id: string) => {
@@ -110,19 +133,24 @@ export function ProjectsPage() {
   };
 
   const clearSelection = useCallback(
-    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
 
   type ProjectLifecycleFilter = NonNullable<typeof lifecycle>;
-  // The top-bar State filter is single-select; map it onto the CSV `lifecycle`
-  // URL param (an empty value clears it).
-  const lifecycleValue = lifecycle?.length === 1 ? lifecycle[0] : '';
-  const onLifecycleChange = (value: string) =>
+  // #721 (009 SC-004 / 033 FR-022): multiselect state filter, backed by the
+  // shared MultiFilterField — the URL's `lifecycle` param is already CSV-shaped.
+  const lifecycleValues = lifecycle ?? [];
+  const onLifecycleChange = (values: string[]) =>
     navigate({
       search: (prev) => ({
         ...prev,
-        lifecycle: value ? ([value] as ProjectLifecycleFilter) : undefined,
+        lifecycle:
+          values.length > 0 ? (values as ProjectLifecycleFilter) : undefined,
       }),
     });
 
@@ -132,7 +160,9 @@ export function ProjectsPage() {
 
   const handleHeaderSort = useCallback((col: ProjectSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 
@@ -143,6 +173,7 @@ export function ProjectsPage() {
       : projects;
     return filterBySearch(byState, search);
   }, [projects, lifecycle, search]);
+  const isFiltered = (lifecycle?.length ?? 0) > 0 || search.trim().length > 0;
 
   // Per the top-bar convention (user feedback): OMIT title + summary (the left
   // nav names the page; per-page counts live in the bottom status bar), and do
@@ -160,13 +191,12 @@ export function ProjectsPage() {
             placeholder: m.projects_search_placeholder(),
             ariaLabel: m.projects_search_aria(),
           }}
-          fields={[
+          multiFields={[
             {
               key: 'state',
               label: m.sessions_col_state(),
-              value: lifecycleValue,
+              value: lifecycleValues,
               options: LIFECYCLE_OPTIONS,
-              allLabel: m.projects_filter_all_states(),
               onChange: onLifecycleChange,
             },
           ]}
@@ -193,13 +223,15 @@ export function ProjectsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
-      // Standardised bottom-docked detail (Sessions/Calibration convention): the
-      // project identity (ProjectDetailContent) stacks above the operational
-      // sections (ProjectBottomDetail) in ONE full-width bottom panel — no right
-      // side panel. Keeps the projects table full-width and column layout stable.
+      dockId="projects"
+      // ONE detail panel, not the old side+bottom pair: project identity
+      // (ProjectDetailContent) stacks above the operational sections
+      // (ProjectBottomDetail). Placement itself is NOT fixed to the bottom —
+      // no `detailPlacement` is passed, so this takes the `'adaptive'` default
+      // and docks to the side on a wide window (spec 054 / #936).
       detail={
         project ? (
-          <div className="alm-project-detail-stack">
+          <div className="pv-project-detail-stack">
             <ProjectDetailContent projectId={project.id} />
             <ProjectBottomDetail projectId={project.id} />
           </div>
@@ -216,6 +248,7 @@ export function ProjectsPage() {
         sort={sort}
         onSort={handleHeaderSort}
         dims={dims}
+        isFiltered={isFiltered}
       />
     </ListPageLayout>
   );

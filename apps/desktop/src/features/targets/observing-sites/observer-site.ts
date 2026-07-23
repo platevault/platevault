@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * observer-site.ts — the ObserverSite value type + coercion (spec 044 Track B).
  *
@@ -32,7 +35,12 @@ export interface ObserverSite {
   minHorizonAltDeg: number;
 }
 
-function clampNum(n: unknown, lo: number, hi: number, fallback: number): number {
+function clampNum(
+  n: unknown,
+  lo: number,
+  hi: number,
+  fallback: number,
+): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.max(lo, Math.min(hi, v));
@@ -51,17 +59,21 @@ export function coerceSite(value: unknown): ObserverSite | null {
   if (id === '' || name === '') return null;
   const elevationRaw = src['elevationM'];
   const elevationM =
-    elevationRaw === null || elevationRaw === undefined || !Number.isFinite(Number(elevationRaw))
+    elevationRaw === null ||
+    elevationRaw === undefined ||
+    !Number.isFinite(Number(elevationRaw))
       ? null
       : Number(elevationRaw);
-  const twilight: Twilight = src['twilight'] === 'nautical' ? 'nautical' : 'astronomical';
+  const twilight: Twilight =
+    src['twilight'] === 'nautical' ? 'nautical' : 'astronomical';
   return {
     id,
     name,
     latitudeDeg: clampNum(src['latitudeDeg'], -90, 90, 0),
     longitudeDeg: clampNum(src['longitudeDeg'], -180, 180, 0),
     elevationM,
-    timezone: typeof src['timezone'] === 'string' ? (src['timezone'] as string) : 'UTC',
+    timezone:
+      typeof src['timezone'] === 'string' ? (src['timezone'] as string) : 'UTC',
     twilight,
     minHorizonAltDeg: clampNum(src['minHorizonAltDeg'], 0, 90, 0),
   };

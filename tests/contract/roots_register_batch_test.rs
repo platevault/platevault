@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use contracts_core::first_run::{
     BatchItem, BatchStatus, ItemStatus, OrganizationState, RegisterSourceBatchRequest,
     RegisterSourceBatchResponse, RegisterSourceRequest, ScanDepth, SourceKind,

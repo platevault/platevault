@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * spec 018 T009 — desktop layer settings tests.
@@ -15,12 +18,15 @@ import { renderHook, act } from '@testing-library/react';
 
 // ── Mock the generated bindings surface before any module imports it ─────────
 
-const { mockUpdateSettings, mockSettingsRestoreDefaults, mockSettingsSourceOverrideSet } =
-  vi.hoisted(() => ({
-    mockUpdateSettings: vi.fn(),
-    mockSettingsRestoreDefaults: vi.fn(),
-    mockSettingsSourceOverrideSet: vi.fn(),
-  }));
+const {
+  mockUpdateSettings,
+  mockSettingsRestoreDefaults,
+  mockSettingsSourceOverrideSet,
+} = vi.hoisted(() => ({
+  mockUpdateSettings: vi.fn(),
+  mockSettingsRestoreDefaults: vi.fn(),
+  mockSettingsSourceOverrideSet: vi.fn(),
+}));
 
 vi.mock('@/bindings/index', () => ({
   commands: {
@@ -31,7 +37,10 @@ vi.mock('@/bindings/index', () => ({
 }));
 
 import { useAutoSave } from './useAutoSave';
-import { settingsRestoreDefaults, settingsSourceOverrideSet } from './settingsIpc';
+import {
+  settingsRestoreDefaults,
+  settingsSourceOverrideSet,
+} from './settingsIpc';
 
 // ── useAutoSave ───────────────────────────────────────────────────────────────
 
@@ -67,7 +76,9 @@ describe('useAutoSave', () => {
 
     // Only one call — the last value in the burst.
     expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
-    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', { logLevel: 'warn' });
+    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', {
+      logLevel: 'warn',
+    });
   });
 
   it('does not fire updateSettings before the 300ms window elapses', () => {
@@ -107,7 +118,10 @@ describe('useAutoSave', () => {
 
   it('passes scope and values to updateSettings with correct shape', async () => {
     const { result } = renderHook(() => useAutoSave());
-    const values = { blockPermanentDelete: false, defaultProtection: 'normal' };
+    const values = {
+      blockPermanentDelete: false,
+      defaultProtection: 'unprotected',
+    };
 
     act(() => {
       result.current.save('cleanup', values);

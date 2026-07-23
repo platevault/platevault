@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vitest tests for tool-launch helpers (spec 011 T013/T018/T021).
  *
@@ -64,7 +67,9 @@ describe('toolIdFromProjectTool', () => {
 
 // ── toolLaunchDisabledReason ──────────────────────────────────────────────────
 
-function makeProfile(overrides: Partial<ToolProfileSummary> = {}): ToolProfileSummary {
+function makeProfile(
+  overrides: Partial<ToolProfileSummary> = {},
+): ToolProfileSummary {
   return {
     id: 'pixinsight',
     name: 'PixInsight',
@@ -89,16 +94,22 @@ describe('toolLaunchDisabledReason', () => {
   });
 
   it('returns not_configured when enabled=false', () => {
-    expect(toolLaunchDisabledReason(makeProfile({ enabled: false }))).toBe('not_configured');
+    expect(toolLaunchDisabledReason(makeProfile({ enabled: false }))).toBe(
+      'not_configured',
+    );
   });
 
   it('returns not_configured when configured=false', () => {
-    expect(toolLaunchDisabledReason(makeProfile({ configured: false }))).toBe('not_configured');
+    expect(toolLaunchDisabledReason(makeProfile({ configured: false }))).toBe(
+      'not_configured',
+    );
   });
 
   it('returns not_available when configured but not available', () => {
     expect(
-      toolLaunchDisabledReason(makeProfile({ configured: true, available: false })),
+      toolLaunchDisabledReason(
+        makeProfile({ configured: true, available: false }),
+      ),
     ).toBe('not_available');
   });
 });
@@ -155,7 +166,9 @@ describe('useToolLaunch — one-time cwd-anchored hint', () => {
   });
 
   it('shows the hint toast on the first successful launch of a no-folder-chooser tool', async () => {
-    const { result } = renderHook(() => useToolLaunch('project-1', 'siril', 'Siril', false));
+    const { result } = renderHook(() =>
+      useToolLaunch('project-1', 'siril', 'Siril', false),
+    );
 
     await act(async () => {
       await result.current.launch();
@@ -170,7 +183,9 @@ describe('useToolLaunch — one-time cwd-anchored hint', () => {
   });
 
   it('does not show the hint again on a second launch of the same tool', async () => {
-    const { result } = renderHook(() => useToolLaunch('project-1', 'siril', 'Siril', false));
+    const { result } = renderHook(() =>
+      useToolLaunch('project-1', 'siril', 'Siril', false),
+    );
 
     await act(async () => {
       await result.current.launch();
@@ -188,7 +203,9 @@ describe('useToolLaunch — one-time cwd-anchored hint', () => {
   });
 
   it('never shows the hint for a tool that supports opening a folder', async () => {
-    const { result } = renderHook(() => useToolLaunch('project-1', 'pixinsight', 'PixInsight', true));
+    const { result } = renderHook(() =>
+      useToolLaunch('project-1', 'pixinsight', 'PixInsight', true),
+    );
 
     await act(async () => {
       await result.current.launch();

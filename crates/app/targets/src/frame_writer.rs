@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared per-frame `file_record` writer (spec 048 T002).
 //!
 //! Light-frame ingest ([`crate::ingest_sessions`]) and calibration-frame apply
@@ -14,10 +17,11 @@ use std::path::Path;
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
 use time::OffsetDateTime;
-use uuid::Uuid;
 
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
+
+use persistence_db::repositories::q_targets_ingest as repo;
 
 fn db_err(e: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
@@ -61,50 +65,9 @@ pub async fn upsert_frame_record(
     mtime: &str,
     state: &str,
 ) -> Result<String, ContractError> {
-    if let Some((id,)) = sqlx::query_as::<_, (String,)>(
-        "SELECT id FROM file_record WHERE root_id = ? AND relative_path = ?",
-    )
-    .bind(root_id)
-    .bind(relative_path)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?
-    {
-        sqlx::query(
-            "UPDATE file_record
-             SET state = ?, size_bytes = ?, mtime = ?, last_seen_at = ?
-             WHERE id = ?",
-        )
-        .bind(state)
-        .bind(size_bytes)
-        .bind(mtime)
-        .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
-        .bind(&id)
-        .execute(pool)
+    repo::upsert_file_record(pool, root_id, relative_path, size_bytes, mtime, state)
         .await
-        .map_err(db_err)?;
-        return Ok(id);
-    }
-
-    let id = Uuid::new_v4().to_string();
-    let now = OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default();
-    sqlx::query(
-        "INSERT INTO file_record
-            (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(root_id)
-    .bind(relative_path)
-    .bind(size_bytes)
-    .bind(mtime)
-    .bind(state)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
-    Ok(id)
+        .map_err(db_err)
 }
 
 #[cfg(test)]

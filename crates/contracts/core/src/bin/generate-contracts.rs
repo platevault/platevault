@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `generate-contracts` — regenerate JSON Schemas from canonical Rust DTOs.
 //!
 //! Usage: `cargo run -p contracts_core --bin generate-contracts`

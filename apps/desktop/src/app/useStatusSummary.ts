@@ -1,4 +1,10 @@
-import { useState, useEffect } from 'react';
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { StatusSummary as StatusSummaryDto } from '@/bindings/index';
 
 export interface StatusSummary {
@@ -8,7 +14,12 @@ export interface StatusSummary {
   targetCount: number;
   projectCount: number;
   cleanupReclaimableBytes: number;
-  volumes: { path: string; freeBytes: number; totalBytes: number; warning: boolean }[];
+  volumes: {
+    path: string;
+    freeBytes: number;
+    totalBytes: number;
+    warning: boolean;
+  }[];
   roots: { id: string; path: string; kind: string; online: boolean }[];
 }
 
@@ -23,60 +34,43 @@ const DEFAULT_SUMMARY: StatusSummary = {
   roots: [],
 };
 
+async function fetchStatusSummary(): Promise<StatusSummary> {
+  // `result.data` is the generated `StatusSummary` DTO: `library`, `volumes`,
+  // and `roots` are concretely typed and always present, so no loose
+  // `Record<string, unknown>` coercion or `?? 0` fallbacks are needed
+  // (spec 042 US7 T191).
+  const d: StatusSummaryDto = unwrap(await commands.statusSummary());
+  return {
+    inboxCount: d.inboxCount,
+    sessionCount: d.library.sessions,
+    calibrationCount: d.library.calibrationSets,
+    targetCount: d.library.targets,
+    projectCount: d.library.projects,
+    cleanupReclaimableBytes: d.cleanupReclaimableBytes,
+    volumes: d.volumes.map((v) => ({
+      path: v.path,
+      freeBytes: v.freeBytes,
+      totalBytes: v.totalBytes,
+      warning: v.warning,
+    })),
+    roots: d.roots.map((r) => ({
+      id: r.id,
+      path: r.path,
+      kind: r.kind,
+      online: r.online,
+    })),
+  };
+}
+
 export function useStatusSummary(): StatusSummary {
-  const [summary, setSummary] = useState<StatusSummary>(DEFAULT_SUMMARY);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetch() {
-      try {
-        const { commands } = await import('@/bindings/index');
-        const result = await commands.statusSummary();
-        if (cancelled) return;
-        if (result.status === 'ok') {
-          // `result.data` is the generated `StatusSummary` DTO: `library`,
-          // `volumes`, and `roots` are concretely typed and always present, so
-          // no loose `Record<string, unknown>` coercion or `?? 0` fallbacks are
-          // needed (spec 042 US7 T191).
-          const d: StatusSummaryDto = result.data;
-          setSummary({
-            inboxCount: d.inboxCount,
-            sessionCount: d.library.sessions,
-            calibrationCount: d.library.calibrationSets,
-            targetCount: d.library.targets,
-            projectCount: d.library.projects,
-            cleanupReclaimableBytes: d.cleanupReclaimableBytes,
-            volumes: d.volumes.map((v) => ({
-              path: v.path,
-              freeBytes: v.freeBytes,
-              totalBytes: v.totalBytes,
-              warning: v.warning,
-            })),
-            roots: d.roots.map((r) => ({
-              id: r.id,
-              path: r.path,
-              kind: r.kind,
-              online: r.online,
-            })),
-          });
-        }
-      } catch (err) {
-        // Backend unavailable (e.g. mock mode, or status_summary not yet wired
-        // on this platform) — keep the default zeroed summary. Intentionally
-        // swallowed: this poller runs every 30s and a transient failure must not
-        // surface as an error to the user.
-        void err;
-      }
-    }
-
-    void fetch();
-    const interval = setInterval(fetch, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
-  return summary;
+  const { data } = useQuery({
+    queryKey: queryKeys.status.summary(),
+    queryFn: fetchStatusSummary,
+    refetchInterval: 30_000,
+    // Backend unavailable (mock mode, or status_summary not yet wired on this
+    // platform) is common/expected — swallow via `retry: false` and keep the
+    // default/last-known summary rather than retry-storming every poll tick.
+    retry: false,
+  });
+  return data ?? DEFAULT_SUMMARY;
 }
