@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Calibration matching and equipment use cases.
 //!
 //! Extracted from `app_core` (spec 042 / T253 O3b) as the cleanest leaf domain:
@@ -7,6 +10,12 @@
 //! surface stays byte-identical for `desktop_shell` and every other consumer.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+/// Process-global in-memory cache statics for calibration config + masters
+/// snapshots (in-memory caching layer, F0 foundation). See each accessor's
+/// doc comment for its owning write-site invalidation calls.
+pub mod caches;
+
+mod audit_ids;
 pub mod equipment;
 mod matching;
 mod tolerances;

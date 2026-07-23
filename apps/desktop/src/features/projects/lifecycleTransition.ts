@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Project lifecycle transition IPC helper (spec 037 caller migration).
  *
@@ -16,6 +19,7 @@
 
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
 import type { ProjectState, TransitionActor } from '@/bindings/index';
 
 export type ProjectLifecycleState = ProjectState;
@@ -77,7 +81,7 @@ export async function applyProjectLifecycleTransition(
   // spec-037 `lifecycle_integrity` E2E journey.
   return unwrap(
     await commands.lifecycleTransitionApply(
-      req as unknown as Parameters<typeof commands.lifecycleTransitionApply>[0],
+      ipcArgs<typeof commands.lifecycleTransitionApply>(req),
     ),
   ) as LifecycleTransitionResponse;
 }

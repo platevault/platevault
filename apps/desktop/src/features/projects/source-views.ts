@@ -1,13 +1,20 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 026 — Generated project source view helpers.
  * Spec 049 — source view generation (first-materialization) helper.
  *
  * Provides typed wrappers over `preparedview.list`, `preparedview.remove`,
- * `preparedview.regenerate`, and `sourceview.generate` Tauri commands.
+ * `preparedview.regenerate`, `sourceview.generate`, and `sourceview.verify`
+ * Tauri commands.
  *
  * All write operations return a `planId` that must be routed through the
  * standard `plans.approve` → `plan.apply` pipeline (spec 017/025).
  * Destructive destination is always `archive` (R-026-Dest-Archive).
+ *
+ * `sourceview.verify` (spec 049 US4) is read-only: it never mutates the
+ * filesystem and never auto-repairs (FR-014/FR-015).
  */
 
 import { m } from '@/lib/i18n';
@@ -105,6 +112,32 @@ export interface SourceViewGenerateResponse {
   /** Id of the generation plan. Route through spec 017/025 pipeline. */
   planId: string;
   warnings?: GenerationWarning[];
+  /** True when at least one item materialized via copy fallback (FR-003/FR-004b). */
+  usedCopyFallback?: boolean;
+}
+
+// ── Spec 049 US4: verify before processing ─────────────────────────────────────
+
+/** Why a single item failed verification (spec 049 US4). */
+export type BrokenItemState =
+  | 'missing'
+  | 'moved'
+  | 'unresolved_link'
+  | 'changed_kind'
+  | 'hash_diverged';
+
+/** One broken/missing/stale item reported by `sourceview.verify`. */
+export interface BrokenItem {
+  inventoryItemId: string;
+  viewRelativePath: string;
+  state: BrokenItemState;
+}
+
+/** Response from `sourceview.verify`. Read-only — no mutation, no auto-repair. */
+export interface SourceViewVerifyResponse {
+  /** True when every item resolved to a present canonical source (SC-006). */
+  clean: boolean;
+  brokenItems?: BrokenItem[];
 }
 
 // ── Command wrappers ──────────────────────────────────────────────────────────
@@ -118,7 +151,9 @@ export interface SourceViewGenerateResponse {
 export async function listPreparedViews(
   projectId: string,
 ): Promise<PreparedViewListResponse> {
-  return unwrap(await commands.preparedviewList(projectId)) as PreparedViewListResponse;
+  return unwrap(
+    await commands.preparedviewList(projectId),
+  ) as PreparedViewListResponse;
 }
 
 /**
@@ -130,7 +165,9 @@ export async function listPreparedViews(
 export async function removePreparedView(
   viewId: string,
 ): Promise<PreparedViewRemoveResponse> {
-  return unwrap(await commands.preparedviewRemove(viewId)) as PreparedViewRemoveResponse;
+  return unwrap(
+    await commands.preparedviewRemove(viewId),
+  ) as PreparedViewRemoveResponse;
 }
 
 /**
@@ -142,7 +179,9 @@ export async function removePreparedView(
 export async function regeneratePreparedView(
   viewId: string,
 ): Promise<PreparedViewRegenerateResponse> {
-  return unwrap(await commands.preparedviewRegenerate(viewId)) as PreparedViewRegenerateResponse;
+  return unwrap(
+    await commands.preparedviewRegenerate(viewId),
+  ) as PreparedViewRegenerateResponse;
 }
 
 /**
@@ -155,7 +194,56 @@ export async function regeneratePreparedView(
 export async function generateSourceView(
   req: SourceViewGenerateRequest,
 ): Promise<SourceViewGenerateResponse> {
-  return unwrap(await commands.sourceviewGenerate(req)) as SourceViewGenerateResponse;
+  return unwrap(
+    await commands.sourceviewGenerate(req),
+  ) as SourceViewGenerateResponse;
+}
+
+/**
+ * `sourceview.verify` (spec 049 US4) — read-only pre-processing check that
+ * every link in a generated view still resolves to a present source.
+ *
+ * Never mutates the filesystem and never auto-repairs (FR-014/FR-015);
+ * repair is via `regeneratePreparedView`.
+ */
+export async function verifySourceView(
+  viewId: string,
+): Promise<SourceViewVerifyResponse> {
+  return unwrap(
+    await commands.sourceviewVerify(viewId),
+  ) as SourceViewVerifyResponse;
+}
+
+// ── Spec 049 T041: per-project destination override ────────────────────────────
+
+/** Response from `sourceview.destination.get`. `undefined`/`null` = no override persisted. */
+export interface SourceViewDestinationGetResponse {
+  destination?: string;
+}
+
+/**
+ * `sourceview.destination.get` (spec 049 T041) — read the persisted
+ * per-project destination override, if any (FR-021b).
+ */
+export async function getSourceViewDestinationOverride(
+  projectId: string,
+): Promise<SourceViewDestinationGetResponse> {
+  return unwrap(
+    await commands.sourceviewDestinationGet(projectId),
+  ) as SourceViewDestinationGetResponse;
+}
+
+/**
+ * `sourceview.destination.set` (spec 049 T041) — persist (or clear, passing
+ * `undefined`) the per-project destination override (FR-021b). Applies at
+ * the next generation unless a per-generation `destinationOverride` is also
+ * given (per-generation wins).
+ */
+export async function setSourceViewDestinationOverride(
+  projectId: string,
+  destination: string | undefined,
+): Promise<void> {
+  unwrap(await commands.sourceviewDestinationSet({ projectId, destination }));
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -207,5 +295,62 @@ export function canRemoveView(state: ViewState): boolean {
 
 /** True when the regenerate action is available for this view state. */
 export function canRegenerateView(state: ViewState): boolean {
-  return state === 'removed' || state === 'stale';
+  // `missing` (T014 sweep: every item's destination itself is absent — "the
+  // whole view folder is gone") is just as regeneratable as `stale` — the
+  // canonical inventory sources are untouched, only the generated view
+  // needs recreating. Without this, a sweep-observed `missing` view would
+  // have no path back to `current`.
+  return state === 'removed' || state === 'stale' || state === 'missing';
+}
+
+/**
+ * True when verify-before-processing is available for this view state
+ * (spec 049 US4) — a materialized view (`current` or `stale`) has a real
+ * destination tree on disk to check.
+ */
+export function canVerifyView(state: ViewState): boolean {
+  return state === 'current' || state === 'stale';
+}
+
+/** Human-readable reason for a broken verification item (spec 049 US4). */
+export function brokenItemStateLabel(state: BrokenItemState): string {
+  switch (state) {
+    case 'missing':
+      return m.projects_source_views_verify_state_missing();
+    case 'moved':
+      return m.projects_source_views_verify_state_moved();
+    case 'unresolved_link':
+      return m.projects_source_views_verify_state_unresolved_link();
+    case 'changed_kind':
+      return m.projects_source_views_verify_state_changed_kind();
+    case 'hash_diverged':
+      return m.projects_source_views_verify_state_hash_diverged();
+    default:
+      return state;
+  }
+}
+
+/**
+ * Human-readable reason for a non-`present` `lastObservedState` (spec 026
+ * T014/T015/T016 stale-detection sweep). Distinct from `brokenItemStateLabel`
+ * (spec 049 US4 on-demand verify): the sweep's `ItemObservedState` vocabulary
+ * (`domain_core::lifecycle::prepared_source`) is coarser — `moved` and
+ * `unresolved_link` both collapse to `diverged` server-side — since it's
+ * persisted background bookkeeping, not a one-shot detailed report.
+ */
+export function observedStateLabel(state: string): string {
+  switch (state) {
+    case 'present':
+      return m.projects_source_views_observed_state_present();
+    case 'missing':
+      return m.projects_source_views_observed_state_missing();
+    case 'changed_kind':
+      return m.projects_source_views_observed_state_changed_kind();
+    case 'diverged':
+      return m.projects_source_views_observed_state_diverged();
+    case 'hash_diverged':
+      return m.projects_source_views_observed_state_hash_diverged();
+    default:
+      return state;
+  }
 }

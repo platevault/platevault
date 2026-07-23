@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Tauri command surface.
 //!
 //! `lifecycle` exposes the spec 002 surface as native Tauri 2 commands wired
@@ -23,7 +26,6 @@ pub mod dev;
 pub mod envelope;
 pub mod equipment;
 pub mod firstrun;
-pub mod guided;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
@@ -32,6 +34,7 @@ pub mod lifecycle;
 pub mod log;
 pub mod manifests;
 pub mod native;
+pub mod onboarding;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
@@ -50,4 +53,3 @@ pub mod target_lookup;
 pub mod target_management;
 pub mod targets;
 pub mod tools;
-pub mod tour;

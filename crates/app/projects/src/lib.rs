@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project create/update, health, manifests, notes, and prepared-view use cases.
 //!
 //! Groups the project-domain use-case modules (spec 008 / 009 / 024 / 026).
@@ -17,5 +20,6 @@ pub mod project_manifests;
 pub mod project_notes;
 pub mod project_setup;
 pub mod source_view_generate;
+pub mod source_view_verify;
 #[cfg(test)]
 pub(crate) mod test_support;

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Recursive inbox folder scan (spec 005, T-RecursiveScanImpl).
 //! Each leaf directory containing at least one FITS or XISF file becomes one
 //! `ScannedInboxItem`. Intermediate folders containing only sub-folders are
@@ -17,12 +20,10 @@
 
 use std::path::{Path, PathBuf};
 
+use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput, MasterDetection};
 use camino::Utf8Path;
-use metadata_core::MetadataExtractor;
-use metadata_fits::FitsExtractor;
 use metadata_video::is_video_extension;
-use metadata_xisf::XisfExtractor;
 
 use super::signature::compute_content_signature;
 
@@ -136,6 +137,25 @@ pub struct ScannedInboxItem {
     pub masters: Vec<ScannedMasterFile>,
 }
 
+impl ScannedInboxItem {
+    /// Files in this folder that classification still has to split, i.e. every
+    /// file except the detected calibration masters, which become their own
+    /// `inbox_items` rows.
+    ///
+    /// Carries the spec 058 FR-015 master carve-out: a masters-only folder must
+    /// score 0 so `list_unclassified_source_groups` does not surface it as a
+    /// scanned-but-unclassified row *in addition to* its master rows. The
+    /// subtraction is sound only because `masters` is built by filtering
+    /// `fits_files ∪ xisf_files` (see [`scan_dir`]); it is saturating so a
+    /// future violation of that subset relation degrades to 0 rather than
+    /// panicking.
+    #[must_use]
+    pub fn sub_frame_count(&self) -> usize {
+        (self.fits_files.len() + self.xisf_files.len()).saturating_sub(self.masters.len())
+            + self.video_files.len()
+    }
+}
+
 /// Whether this item should be classified as FITS or routed to the video lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lane {
@@ -183,14 +203,9 @@ fn is_xisf_extension(ext: &str) -> bool {
 /// Returns `Some(ScannedMasterFile)` when the file is identified as a master.
 /// Returns `None` when not a master or metadata is unreadable.
 fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<ScannedMasterFile> {
-    // Extract metadata — same extractors used by classify.rs.
-    let bundle = if XisfExtractor.supports_extension(ext) {
-        XisfExtractor.extract(abs_path).ok().flatten()?
-    } else if FitsExtractor.supports_extension(ext) {
-        FitsExtractor.extract(abs_path).ok().flatten()?
-    } else {
-        return None;
-    };
+    // Cached extract (F0): memoized by (path, mtime, size); unsupported
+    // extensions and unparseable files both surface as `Err` here.
+    let bundle = cached_extract(abs_path).ok()?;
 
     let image_typ_raw = bundle.image_typ.as_deref();
     let stack_count = bundle.stack_count;
@@ -287,17 +302,19 @@ fn scan_dir(
         }
 
         let Ok(file_type) = entry.file_type() else { continue };
+        // Reparse-aware check (symlink + Windows junction) shared with
+        // fs_inventory/fs_executor — see `fs_pathsafe` (duplication-and-
+        // abstraction audit T1-a).
+        let is_link = fs_pathsafe::is_link_or_junction(&path);
 
-        if file_type.is_symlink() && !options.follow_symlinks {
-            // Constitution §I: skip symlinks unless explicitly enabled.
+        if is_link && !options.follow_symlinks {
+            // Constitution §I: skip symlinks/junctions unless explicitly enabled.
             continue;
         }
 
-        if file_type.is_dir()
-            || (file_type.is_symlink() && options.follow_symlinks && path.is_dir())
-        {
+        if file_type.is_dir() || (is_link && options.follow_symlinks && path.is_dir()) {
             subdirs.push(path);
-        } else if file_type.is_file() || (file_type.is_symlink() && options.follow_symlinks) {
+        } else if file_type.is_file() || (is_link && options.follow_symlinks) {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
 
             if is_fits_extension(&ext) {
@@ -370,6 +387,7 @@ fn scan_dir(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use metadata_core::{v1_normalization_table, FrameType};
     use std::fs;
     use std::io::Write;
 
@@ -381,6 +399,217 @@ mod tests {
         let path = dir.join(name);
         let mut f = fs::File::create(path).unwrap();
         f.write_all(content).unwrap();
+    }
+
+    fn write_realistic_fits(
+        dir: &Path,
+        name: &str,
+        imagetyp: Option<&str>,
+        stack_count: Option<(&str, u32)>,
+    ) {
+        let mut cards = vec![
+            "SIMPLE  =                    T".to_owned(),
+            "BITPIX  =                    8".to_owned(),
+            "NAXIS   =                    2".to_owned(),
+            "NAXIS1  =                    1".to_owned(),
+            "NAXIS2  =                    1".to_owned(),
+            "INSTRUME= 'ZWO ASI2600MM Pro'".to_owned(),
+            "TELESCOP= 'Esprit 100ED'".to_owned(),
+            "DATE-OBS= '2026-07-09T22:14:31.125'".to_owned(),
+            "EXPTIME =                300.0".to_owned(),
+            "GAIN    =                  100".to_owned(),
+            "OFFSET  =                   50".to_owned(),
+            "FILTER  = 'Ha'".to_owned(),
+            "OBJECT  = 'M42'".to_owned(),
+            "XBINNING=                    1".to_owned(),
+            "YBINNING=                    1".to_owned(),
+        ];
+        if let Some(value) = imagetyp {
+            cards.push(format!("IMAGETYP= '{value}'"));
+        }
+        if let Some((key, value)) = stack_count {
+            cards.push(format!("{key:<8}= {value:>20}"));
+        }
+
+        let mut block = vec![b' '; 2880];
+        for (idx, card) in cards.iter().enumerate() {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+        }
+        let end = cards.len() * 80;
+        block[end..end + 3].copy_from_slice(b"END");
+        block.extend_from_slice(&[0; 2880]);
+        write_file(dir, name, &block);
+    }
+
+    struct PipelineCase {
+        name: String,
+        imagetyp: Option<&'static str>,
+        stack_count: Option<(&'static str, u32)>,
+        expected_type: Option<FrameType>,
+        expected_master: bool,
+        expected_detector: Option<&'static str>,
+    }
+
+    #[allow(clippy::too_many_lines)] // Keep each type's precedence cases adjacent for review.
+    fn master_pipeline_cases() -> Vec<PipelineCase> {
+        let types = [
+            ("light", "LIGHT", "Master Light", FrameType::Light, "flat"),
+            ("dark", "DARK", "Master Dark", FrameType::Dark, "flat"),
+            ("flat", "FLAT", "Master Flat", FrameType::Flat, "dark"),
+            ("bias", "BIAS", "Master Bias", FrameType::Bias, "light"),
+            ("darkflat", "DARKFLAT", "Master DarkFlat", FrameType::DarkFlat, "bias"),
+        ];
+        let mut cases = Vec::with_capacity(types.len() * 8 + 4);
+
+        for (idx, (token, imagetyp, master_imagetyp, frame_type, conflicting_token)) in
+            types.into_iter().enumerate()
+        {
+            cases.push(PipelineCase {
+                name: format!("capture_{token}_001.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: false,
+                expected_detector: None,
+            });
+            cases.push(PipelineCase {
+                name: format!("integration_{token}_030.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: Some((if idx % 2 == 0 { "STACKCNT" } else { "NCOMBINE" }, 30)),
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("siril"),
+            });
+            cases.push(PipelineCase {
+                name: format!("master_{token}.fits"),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+            cases.push(PipelineCase {
+                name: format!("master_{conflicting_token}_header_{token}.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+            cases.push(PipelineCase {
+                name: format!("{token}_sub_0001.fits"),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            });
+            cases.push(PipelineCase {
+                name: format!("master_{token}_stackcnt_one.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: Some(("STACKCNT", 1)),
+                expected_type: Some(frame_type),
+                expected_master: false,
+                expected_detector: Some("siril"),
+            });
+            cases.push(PipelineCase {
+                name: format!("combined_header_{token}.fits"),
+                imagetyp: Some(master_imagetyp),
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+            cases.push(PipelineCase {
+                name: format!("{token}_LUM_stacked.fits"),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+        }
+
+        cases.extend([
+            PipelineCase {
+                name: "integration_stackcnt_only.fits".to_owned(),
+                imagetyp: None,
+                stack_count: Some(("STACKCNT", 30)),
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+            PipelineCase {
+                name: "integration_ncombine_only.fits".to_owned(),
+                imagetyp: None,
+                stack_count: Some(("NCOMBINE", 30)),
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+            PipelineCase {
+                name: "unknown_header_neutral_name.fits".to_owned(),
+                imagetyp: Some("JUNKTYPE"),
+                stack_count: None,
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+            PipelineCase {
+                name: "neutral_no_header.fits".to_owned(),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+        ]);
+
+        cases
+    }
+
+    #[test]
+    fn realistic_headers_cover_master_permutations_through_scan_and_classify() {
+        let cases = master_pipeline_cases();
+        assert_eq!(
+            cases.len(),
+            44,
+            "five frame types must exercise eight evidence paths plus four global negatives"
+        );
+
+        for case in cases {
+            let tmp = tmpdir();
+            write_realistic_fits(tmp.path(), &case.name, case.imagetyp, case.stack_count);
+            let path = tmp.path().join(&case.name);
+
+            let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+            assert_eq!(items.len(), 1, "{}: scan must return its FITS folder", case.name);
+            assert_eq!(
+                items[0].masters.len(),
+                usize::from(case.expected_master),
+                "{}: scan-time master result",
+                case.name
+            );
+            if let Some(master) = items[0].masters.first() {
+                assert_eq!(Some(master.detection.frame_type), case.expected_type, "{}", case.name);
+                assert_eq!(
+                    master.detection.detector,
+                    case.expected_detector.unwrap(),
+                    "{}",
+                    case.name
+                );
+            }
+
+            let classified =
+                crate::classify::classify_one_file(&path, tmp.path(), &v1_normalization_table());
+            assert_eq!(classified.frame_type, case.expected_type, "{}", case.name);
+            assert_eq!(classified.is_master, case.expected_master, "{}", case.name);
+            if let Some(detector) = case.expected_detector {
+                assert_eq!(classified.master_detector, Some(detector), "{}", case.name);
+            }
+        }
     }
 
     #[test]
@@ -507,5 +736,97 @@ mod tests {
         let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
         assert_eq!(items.len(), 1);
         assert!(items[0].masters.is_empty(), "dummy file cannot be a master");
+    }
+
+    /// Constitution §I regression: a symlinked subdirectory reachable from the
+    /// scan root must not be traversed unless `follow_symlinks` is enabled.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_subdir_not_traversed_by_default() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "hidden.fits", b"hidden");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        symlink(&real_target, scan_root_dir.join("linked")).unwrap();
+
+        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap();
+        assert!(items.is_empty(), "must not see files behind an un-enabled symlink");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_subdir_traversed_when_follow_symlinks_enabled() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "visible.fits", b"visible");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        symlink(&real_target, scan_root_dir.join("linked")).unwrap();
+
+        let options = ScanOptions { follow_symlinks: true };
+        let items = scan_root(&scan_root_dir, &options).unwrap();
+        assert_eq!(items.len(), 1, "symlinked subdir is traversed when explicitly enabled");
+    }
+
+    /// Create a directory junction, the reparse-point kind `is_symlink()` does
+    /// **not** report. Uses the `mklink /J` shell builtin (junctions need no
+    /// admin privilege, unlike symlinks) rather than adding a dependency for
+    /// two tests — the same approach as `fs_pathsafe`'s junction test.
+    #[cfg(windows)]
+    fn make_junction(link: &std::path::Path, target: &std::path::Path) {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J", link.to_str().unwrap(), target.to_str().unwrap()])
+            .status()
+            .expect("mklink invocation failed");
+        assert!(status.success(), "mklink /J failed to create the test junction");
+    }
+
+    /// Windows-only counterpart to the two `cfg(unix)` symlink tests above.
+    ///
+    /// The Unix tests give no evidence about Windows: a followed junction can
+    /// walk the scan into a loop or onto an unrelated drive and produce inbox
+    /// items the user never pointed at (constitution product constraints).
+    #[cfg(windows)]
+    #[test]
+    fn junction_subdir_not_traversed_by_default() {
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "hidden.fits", b"hidden");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
+
+        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap();
+        assert!(items.is_empty(), "must not see files behind an un-enabled junction");
+    }
+
+    /// The opt-in direction, mirroring
+    /// `symlinked_subdir_traversed_when_follow_symlinks_enabled`.
+    #[cfg(windows)]
+    #[test]
+    fn junction_subdir_traversed_when_follow_symlinks_enabled() {
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "visible.fits", b"visible");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
+
+        let options = ScanOptions { follow_symlinks: true };
+        let items = scan_root(&scan_root_dir, &options).unwrap();
+        assert_eq!(items.len(), 1, "junction is traversed when explicitly enabled");
     }
 }

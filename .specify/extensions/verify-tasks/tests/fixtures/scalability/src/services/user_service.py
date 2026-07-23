@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """User service — T011."""
 import uuid
 from models.user import User

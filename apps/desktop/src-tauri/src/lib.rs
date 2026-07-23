@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Desktop shell crate boundary.
 //!
 //! Owns the Tauri 2 runtime, the shared `AppState`, and the typed command
@@ -5,721 +8,40 @@
 //! are emitted at test time by `tests/bindings.rs` via tauri-specta.
 
 pub mod commands;
+pub mod data_dir;
+pub mod resolve_cache;
 pub mod watcher;
+
+mod bootstrap;
 
 use std::sync::Arc;
 
 use audit::bus::EventBus;
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter, Manager};
-use tauri_specta::{collect_commands, Builder};
+use persistence_db::Database;
+use tauri::utils::config::WindowConfig;
+use tauri::webview::WebviewWindowBuilder;
+use tauri::{Emitter, Manager};
 
-use crate::commands::artifacts::{
-    artifact_classify, artifact_list, artifact_mark_resolved, artifact_watcher_attach,
-    artifact_watcher_detach,
+use crate::bootstrap::background::{
+    spawn_ingest_resolution_drain, spawn_stale_dependent_propagator,
 };
-use crate::commands::audit::{audit_export, audit_list};
-use crate::commands::calibration::{
-    calibration_masters_get, calibration_masters_list, calibration_match_assign,
-    calibration_match_suggest, calibration_match_suggest_batch, calibration_matches,
-};
-use crate::commands::calibration_tolerances::{
-    calibration_tolerances_get, calibration_tolerances_update,
-};
-use crate::commands::cleanup::{
-    cleanup_plan_generate, cleanup_policy_get, cleanup_policy_update, cleanup_scan,
-};
+use crate::bootstrap::menu::{build_native_menu, MENU_ID_SETTINGS};
+use crate::bootstrap::window::{enforce_min_window_size, recenter_if_offscreen};
 #[cfg(feature = "dev-tools")]
-use crate::commands::dev::{
-    dev_calls_list, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
-};
-use crate::commands::equipment::{
-    equipment_cameras_create, equipment_cameras_delete, equipment_cameras_list,
-    equipment_cameras_update, equipment_filters_create, equipment_filters_delete,
-    equipment_filters_list, equipment_filters_update, equipment_telescopes_create,
-    equipment_telescopes_delete, equipment_telescopes_list, equipment_telescopes_update,
-    equipment_trains_create, equipment_trains_delete, equipment_trains_list,
-    equipment_trains_update,
-};
-use crate::commands::firstrun::{
-    firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
-};
-use crate::commands::guided::{
-    guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
-};
-use crate::commands::inbox::{
-    inbox_classify, inbox_confirm, inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply,
-    inbox_plan_apply_all, inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open,
-    inbox_property_registry, inbox_reclassify, inbox_reclassify_v2, inbox_scan, inbox_scan_folder,
-    inbox_stats, inbox_target_recommendations,
-};
-use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
-use crate::commands::inventory::inventory_list;
-use crate::commands::inventory_frame::{
-    inventory_frame_list, inventory_frame_relink, inventory_reconcile_run,
-    inventory_root_config_get, inventory_root_config_set,
-};
-use crate::commands::lifecycle::{
-    lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
-    provenance_read, AppState,
-};
-use crate::commands::log::{log_export, log_recent};
-use crate::commands::manifests::{
-    manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
-};
-use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
-use crate::commands::patterns::{
-    pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
-};
-use crate::commands::plan_apply::{
-    plans_apply_direct, plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry,
-    plans_item_skip, plans_resume,
-};
-use crate::commands::plans::{
-    archive_list, archive_permanently_delete, archive_plan_generate, archive_send_to_trash,
-    plans_approve, plans_discard, plans_get, plans_list, plans_retry,
-};
-use crate::commands::preferences::{preferences_get, preferences_set};
-use crate::commands::prepared_views::{
-    preparedview_list, preparedview_regenerate, preparedview_remove, sourceview_generate,
-};
-use crate::commands::projects::{
-    projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
-    projects_create_plan, projects_get, projects_list, projects_source_add, projects_source_remove,
-    projects_update,
-};
-use crate::commands::protection::{
-    plan_protection_check_cmd, protection_plan_acknowledged, source_protection_get,
-    source_protection_set,
-};
-use crate::commands::review::review_queue;
-use crate::commands::roots::{
-    equipment_list, roots_delete, roots_list, roots_register, roots_remap, roots_remap_apply,
-    scan_start, sources_set_active, sources_set_organization_state,
-};
-use crate::commands::search::search_global;
-use crate::commands::sessions::{
-    sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
-};
-use crate::commands::settings::{
-    settings_get, settings_overridable_keys, settings_restore_defaults,
-    settings_source_override_set, settings_update,
-};
-use crate::commands::status::status_summary;
-use crate::commands::target_favourites::{
-    target_favourites_add, target_favourites_list, target_favourites_remove,
-};
-use crate::commands::target_lookup::{
-    target_resolution_settings, target_resolution_settings_update, target_resolve, target_search,
-};
-use crate::commands::target_management as target_mgmt_cmds;
-use crate::commands::targets::{targets_get, targets_list};
-use crate::commands::tools::{
-    tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
-};
-use crate::commands::tour::tour_complete_step;
+use crate::commands::dev::CallBuffer;
+use crate::commands::lifecycle::AppState;
 
 pub const CRATE_NAME: &str = "desktop_shell";
 
-/// Shared base for specta builder — chain common config and all production
-/// commands.  Returns the builder before any feature-gated commands are added.
-///
-/// # Panics / Design Note
-/// `collect_commands!` does not accept `cfg` attributes inside its token list,
-/// so feature-gated commands must be added in a *separate* `.commands()` call
-/// on a different `Builder` value.  Because `.commands()` **replaces** the
-/// command set, we handle this by having two cfg-gated public `specta_builder`
-/// functions that each call `.commands()` exactly once with the full command
-/// list for that build variant.
-fn base_builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new()
-        // Several contract DTOs carry `serde_json::Value` "details" payloads;
-        // their `Number` inner type erases width info, so specta would block
-        // export by default. Casting BigInts to JS `number` is acceptable for
-        // these debug payloads (no numeric precision is required here).
-        .dangerously_cast_bigints_to_number()
-        // Register `serde_json::Value` as a named (recursive) type so specta
-        // emits it once instead of inlining its self-referential shape, which
-        // would otherwise fail with "infinitely recursive inline reference".
-        .typ::<serde_json::Value>()
-        // Spec 042 T011 — ErrorCode enum scaffold. Registered here so the
-        // TypeScript union is emitted immediately without waiting for the
-        // ContractError.code type change (US2).
-        .typ::<contracts_core::error_code::ErrorCode>()
-        // Spec 035 — SIMBAD target resolution DTOs (T007). These are pure
-        // contract types whose commands land in later tasks (US1–5); register
-        // them explicitly so the TypeScript surface exists ahead of the
-        // commands that will reference them. Request/response roots pull in all
-        // nested structs and enums transitively.
-        .typ::<contracts_core::targets::TargetSearchRequest>()
-        .typ::<contracts_core::targets::TargetSearchResponse>()
-        .typ::<contracts_core::targets::TargetResolveSimbadRequest>()
-        .typ::<contracts_core::targets::TargetResolveSimbadResponse>()
-        .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
-        .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
-        .typ::<contracts_core::targets::ResolverSettingsResponse>()
-}
+/// Label of the primary application window (`tauri.conf.json`).
+pub const MAIN_WINDOW_LABEL: &str = "main";
 
-/// Build the tauri-specta [`Builder`] populated with every typed command.
-///
-/// Reused by `run` (production) and `tests/bindings.rs` (TS emission).
-///
-/// When the `dev-tools` feature is enabled this function includes the
-/// `dev.contracts.list`, `dev.calls.list`, and `dev.export` commands.
-/// Without the feature those commands are absent from the binary entirely.
-#[must_use]
-#[allow(clippy::too_many_lines)]
-#[cfg(not(feature = "dev-tools"))]
-pub fn specta_builder() -> Builder<tauri::Wry> {
-    base_builder().commands(collect_commands![
-        // lifecycle (spec 002)
-        provenance_read,
-        lifecycle_transition_apply,
-        lifecycle_transition_preview,
-        lifecycle_ledger_list,
-        // sessions
-        sessions_list,
-        sessions_get,
-        sessions_calendar,
-        sessions_split,
-        sessions_merge,
-        // calibration (spec 029 stubs)
-        calibration_masters_list,
-        calibration_masters_get,
-        calibration_matches,
-        // calibration matching (spec 007)
-        calibration_match_suggest,
-        calibration_match_assign,
-        calibration_match_suggest_batch,
-        // targets (spec 029 stubs — legacy list/get)
-        targets_list,
-        targets_get,
-        // target management (spec 036 — gen-3, canonical_target model)
-        target_mgmt_cmds::target_get,
-        target_mgmt_cmds::target_list,
-        target_mgmt_cmds::target_alias_add,
-        target_mgmt_cmds::target_alias_remove,
-        target_mgmt_cmds::target_display_alias_set,
-        target_mgmt_cmds::target_display_alias_clear,
-        // target history + notes (spec 023 US2/US3/US4)
-        target_mgmt_cmds::target_sessions_list,
-        target_mgmt_cmds::target_projects_list,
-        target_mgmt_cmds::target_note_get,
-        target_mgmt_cmds::target_note_update,
-        // target favourites (spec 051 US2)
-        target_favourites_list,
-        target_favourites_add,
-        target_favourites_remove,
-        // target resolve (spec 035 — SIMBAD cache-first resolution)
-        target_resolve,
-        // target search (spec 035, US1)
-        target_search,
-        // resolver settings (spec 035, US5)
-        target_resolution_settings,
-        target_resolution_settings_update,
-        // projects (spec 008)
-        projects_list,
-        projects_get,
-        projects_create,
-        projects_update,
-        projects_source_add,
-        projects_source_remove,
-        projects_channels_reinfer,
-        projects_channels_dismiss_drift,
-        projects_create_plan,
-        // plans (spec 017)
-        plans_list,
-        plans_get,
-        plans_approve,
-        plans_discard,
-        plans_retry,
-        archive_send_to_trash,
-        archive_permanently_delete,
-        archive_list,
-        archive_plan_generate,
-        // plan apply (spec 025)
-        plans_apply_real,
-        // channel-free plan apply variant (spec 037)
-        plans_apply_direct,
-        plans_cancel,
-        plans_resume,
-        plans_item_skip,
-        plans_item_retry,
-        plans_apply_status,
-        // audit
-        audit_list,
-        audit_export,
-        // log stream (spec 019)
-        log_recent,
-        log_export,
-        // review
-        review_queue,
-        // roots & scan & equipment
-        roots_list,
-        roots_register,
-        roots_register_batch,
-        roots_remap,
-        roots_remap_apply,
-        roots_delete,
-        scan_start,
-        equipment_list,
-        sources_set_organization_state,
-        sources_set_active,
-        // first-run wizard (spec 003)
-        firstrun_state,
-        firstrun_complete,
-        firstrun_restart,
-        // pattern resolver (spec 015)
-        pattern_validate,
-        pattern_resolve,
-        pattern_preview,
-        pattern_path_preview,
-        // source protection (spec 016 US2–US4)
-        source_protection_get,
-        source_protection_set,
-        plan_protection_check_cmd,
-        protection_plan_acknowledged,
-        // settings (spec 018)
-        settings_get,
-        settings_update,
-        settings_restore_defaults,
-        settings_source_override_set,
-        settings_overridable_keys,
-        // preferences
-        preferences_get,
-        preferences_set,
-        // search
-        search_global,
-        // tour
-        tour_complete_step,
-        // guided first-project-flow (spec 010)
-        guided_state_get,
-        guided_step_complete,
-        guided_dismiss,
-        guided_restart,
-        guided_activate,
-        // native filesystem controls (spec 004)
-        native_directory_pick,
-        native_file_pick,
-        native_reveal,
-        // equipment CRUD (spec 030)
-        equipment_cameras_list,
-        equipment_cameras_create,
-        equipment_cameras_update,
-        equipment_cameras_delete,
-        equipment_telescopes_list,
-        equipment_telescopes_create,
-        equipment_telescopes_update,
-        equipment_telescopes_delete,
-        equipment_trains_list,
-        equipment_trains_create,
-        equipment_trains_update,
-        equipment_trains_delete,
-        equipment_filters_list,
-        equipment_filters_create,
-        equipment_filters_update,
-        equipment_filters_delete,
-        // status (spec 030)
-        status_summary,
-        // cleanup policy & scan (spec 030)
-        cleanup_policy_get,
-        cleanup_policy_update,
-        cleanup_scan,
-        cleanup_plan_generate,
-        // calibration tolerances (spec 030)
-        calibration_tolerances_get,
-        calibration_tolerances_update,
-        // inbox (spec 005 + 030 + 039 + 041)
-        inbox_scan,
-        inbox_scan_folder,
-        inbox_classify,
-        inbox_confirm,
-        inbox_reclassify,
-        inbox_reclassify_v2,
-        inbox_item_metadata,
-        inbox_list,
-        inbox_plan,
-        inbox_plan_apply,
-        inbox_plan_apply_all,
-        inbox_plan_apply_selected,
-        inbox_plan_cancel,
-        inbox_stats,
-        inbox_plan_list_open,
-        inbox_property_registry,
-        inbox_target_recommendations,
-        // inventory (spec 006)
-        inventory_list,
-        // per-frame inventory (spec 048)
-        inventory_frame_list,
-        inventory_reconcile_run,
-        inventory_frame_relink,
-        inventory_root_config_get,
-        inventory_root_config_set,
-        // ingestion settings (spec 030)
-        ingestion_settings_get,
-        ingestion_settings_update,
-        // tools (spec 011/030)
-        tools_launch,
-        tools_list,
-        tools_update,
-        tools_validate_path,
-        tools_discover,
-        // artifacts (spec 012)
-        artifact_list,
-        artifact_classify,
-        artifact_mark_resolved,
-        artifact_watcher_attach,
-        artifact_watcher_detach,
-        // manifests + notes (spec 024)
-        manifest_list,
-        manifest_get,
-        note_get,
-        note_update,
-        manifest_reveal_in_os,
-        // prepared source views (spec 026)
-        preparedview_list,
-        preparedview_remove,
-        preparedview_regenerate,
-        // source view generation (spec 049)
-        sourceview_generate,
-    ])
-}
-
-/// `dev-tools` variant: identical to the production builder plus the three
-/// developer-diagnostics commands (spec 021).
-///
-/// Release binaries MUST NOT be compiled with the `dev-tools` feature.
-#[must_use]
-#[allow(clippy::too_many_lines)]
-#[cfg(feature = "dev-tools")]
-pub fn specta_builder() -> Builder<tauri::Wry> {
-    base_builder().commands(collect_commands![
-        // lifecycle (spec 002)
-        provenance_read,
-        lifecycle_transition_apply,
-        lifecycle_transition_preview,
-        lifecycle_ledger_list,
-        // sessions
-        sessions_list,
-        sessions_get,
-        sessions_calendar,
-        sessions_split,
-        sessions_merge,
-        // calibration (spec 029 stubs)
-        calibration_masters_list,
-        calibration_masters_get,
-        calibration_matches,
-        // calibration matching (spec 007)
-        calibration_match_suggest,
-        calibration_match_assign,
-        calibration_match_suggest_batch,
-        // targets (spec 029 stubs — legacy list/get)
-        targets_list,
-        targets_get,
-        // target management (spec 036 — gen-3, canonical_target model)
-        target_mgmt_cmds::target_get,
-        target_mgmt_cmds::target_list,
-        target_mgmt_cmds::target_alias_add,
-        target_mgmt_cmds::target_alias_remove,
-        target_mgmt_cmds::target_display_alias_set,
-        target_mgmt_cmds::target_display_alias_clear,
-        // target history + notes (spec 023 US2/US3/US4)
-        target_mgmt_cmds::target_sessions_list,
-        target_mgmt_cmds::target_projects_list,
-        target_mgmt_cmds::target_note_get,
-        target_mgmt_cmds::target_note_update,
-        // target favourites (spec 051 US2)
-        target_favourites_list,
-        target_favourites_add,
-        target_favourites_remove,
-        // target resolve (spec 035 — SIMBAD cache-first resolution)
-        target_resolve,
-        // target search (spec 035, US1)
-        target_search,
-        // resolver settings (spec 035, US5)
-        target_resolution_settings,
-        target_resolution_settings_update,
-        // projects (spec 008)
-        projects_list,
-        projects_get,
-        projects_create,
-        projects_update,
-        projects_source_add,
-        projects_source_remove,
-        projects_channels_reinfer,
-        projects_channels_dismiss_drift,
-        projects_create_plan,
-        // plans (spec 017)
-        plans_list,
-        plans_get,
-        plans_approve,
-        plans_discard,
-        plans_retry,
-        archive_send_to_trash,
-        archive_permanently_delete,
-        archive_list,
-        archive_plan_generate,
-        // plan apply (spec 025)
-        plans_apply_real,
-        // channel-free plan apply variant (spec 037)
-        plans_apply_direct,
-        plans_cancel,
-        plans_resume,
-        plans_item_skip,
-        plans_item_retry,
-        plans_apply_status,
-        // audit
-        audit_list,
-        audit_export,
-        // log stream (spec 019)
-        log_recent,
-        log_export,
-        // review
-        review_queue,
-        // roots & scan & equipment
-        roots_list,
-        roots_register,
-        roots_register_batch,
-        roots_remap,
-        roots_remap_apply,
-        roots_delete,
-        scan_start,
-        equipment_list,
-        sources_set_organization_state,
-        sources_set_active,
-        // first-run wizard (spec 003)
-        firstrun_state,
-        firstrun_complete,
-        firstrun_restart,
-        // pattern resolver (spec 015)
-        pattern_validate,
-        pattern_resolve,
-        pattern_preview,
-        pattern_path_preview,
-        // source protection (spec 016 US2–US4)
-        source_protection_get,
-        source_protection_set,
-        plan_protection_check_cmd,
-        protection_plan_acknowledged,
-        // settings (spec 018)
-        settings_get,
-        settings_update,
-        settings_restore_defaults,
-        settings_source_override_set,
-        settings_overridable_keys,
-        // preferences
-        preferences_get,
-        preferences_set,
-        // search
-        search_global,
-        // tour
-        tour_complete_step,
-        // guided first-project-flow (spec 010)
-        guided_state_get,
-        guided_step_complete,
-        guided_dismiss,
-        guided_restart,
-        guided_activate,
-        // native filesystem controls (spec 004)
-        native_directory_pick,
-        native_file_pick,
-        native_reveal,
-        // equipment CRUD (spec 030)
-        equipment_cameras_list,
-        equipment_cameras_create,
-        equipment_cameras_update,
-        equipment_cameras_delete,
-        equipment_telescopes_list,
-        equipment_telescopes_create,
-        equipment_telescopes_update,
-        equipment_telescopes_delete,
-        equipment_trains_list,
-        equipment_trains_create,
-        equipment_trains_update,
-        equipment_trains_delete,
-        equipment_filters_list,
-        equipment_filters_create,
-        equipment_filters_update,
-        equipment_filters_delete,
-        // status (spec 030)
-        status_summary,
-        // cleanup policy & scan (spec 030)
-        cleanup_policy_get,
-        cleanup_policy_update,
-        cleanup_scan,
-        cleanup_plan_generate,
-        // calibration tolerances (spec 030)
-        calibration_tolerances_get,
-        calibration_tolerances_update,
-        // inbox (spec 005 + 030 + 039 + 041)
-        inbox_scan,
-        inbox_scan_folder,
-        inbox_classify,
-        inbox_confirm,
-        inbox_reclassify,
-        inbox_reclassify_v2,
-        inbox_item_metadata,
-        inbox_list,
-        inbox_plan,
-        inbox_plan_apply,
-        inbox_plan_apply_all,
-        inbox_plan_apply_selected,
-        inbox_plan_cancel,
-        inbox_stats,
-        inbox_plan_list_open,
-        inbox_property_registry,
-        inbox_target_recommendations,
-        // inventory (spec 006)
-        inventory_list,
-        // per-frame inventory (spec 048)
-        inventory_frame_list,
-        inventory_reconcile_run,
-        inventory_frame_relink,
-        inventory_root_config_get,
-        inventory_root_config_set,
-        // ingestion settings (spec 030)
-        ingestion_settings_get,
-        ingestion_settings_update,
-        // tools (spec 011/030)
-        tools_launch,
-        tools_list,
-        tools_update,
-        tools_validate_path,
-        tools_discover,
-        // artifacts (spec 012)
-        artifact_list,
-        artifact_classify,
-        artifact_mark_resolved,
-        artifact_watcher_attach,
-        artifact_watcher_detach,
-        // manifests + notes (spec 024)
-        manifest_list,
-        manifest_get,
-        note_get,
-        note_update,
-        manifest_reveal_in_os,
-        // prepared source views (spec 026)
-        preparedview_list,
-        preparedview_remove,
-        preparedview_regenerate,
-        // source view generation (spec 049)
-        sourceview_generate,
-        // developer diagnostics (spec 021) — dev-tools build only
-        dev_contracts_list,
-        dev_calls_list,
-        dev_export,
-        dev_schema_get,
-    ])
-}
-
-/// Menu id for the native "Settings…" application-menu item (spec 051 US5).
-const MENU_ID_SETTINGS: &str = "menu-settings";
-
-/// Enforce the min-size floor (spec 051 US4, T029) after
-/// `tauri-plugin-window-state` restores a persisted size, in case a prior
-/// app version persisted a smaller size than the current `tauri.conf.json`
-/// `minWidth`/`minHeight` (1100x720) — mirrors the `astro-up` reference's own
-/// explicit post-restore clamp (research.md's cited `lib.rs` excerpt).
-fn enforce_min_window_size(window: &tauri::WebviewWindow) {
-    const MIN_WIDTH: u32 = 1100;
-    const MIN_HEIGHT: u32 = 720;
-
-    if let Ok(size) = window.inner_size() {
-        let w = size.width.max(MIN_WIDTH);
-        let h = size.height.max(MIN_HEIGHT);
-        if w != size.width || h != size.height {
-            if let Err(e) = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h))) {
-                tracing::warn!("failed to enforce minimum window size: {e:?}");
-            } else {
-                tracing::info!(width = w, height = h, "enforced minimum window size");
-            }
-        }
-    }
-}
-
-/// Off-screen-position fallback (spec 051 US4, T030/FR-013): if the restored
-/// position has no overlap with any currently-connected display (e.g. a
-/// second monitor the window was on has since been disconnected), recenter
-/// the window instead of leaving it stranded off-screen.
-fn recenter_if_offscreen(window: &tauri::WebviewWindow) {
-    let (Ok(pos), Ok(size), Ok(monitors)) =
-        (window.outer_position(), window.outer_size(), window.available_monitors())
-    else {
-        return;
-    };
-
-    let win_right = pos.x + i32::try_from(size.width).unwrap_or(i32::MAX);
-    let win_bottom = pos.y + i32::try_from(size.height).unwrap_or(i32::MAX);
-
-    let on_screen = monitors.iter().any(|m| {
-        let mp = m.position();
-        let ms = m.size();
-        let mon_right = mp.x + i32::try_from(ms.width).unwrap_or(i32::MAX);
-        let mon_bottom = mp.y + i32::try_from(ms.height).unwrap_or(i32::MAX);
-        // Any overlap between the window rect and this monitor's rect.
-        pos.x < mon_right && win_right > mp.x && pos.y < mon_bottom && win_bottom > mp.y
-    });
-
-    if !on_screen {
-        if let Err(e) = window.center() {
-            tracing::warn!("failed to recenter off-screen window: {e:?}");
-        } else {
-            tracing::info!("restored window position was off-screen; recentered");
-        }
-    }
-}
-
-/// Build the native application menu (spec 051 US5, T032): an App submenu
-/// (About, Settings, Quit), a Window submenu, and a standard Edit submenu
-/// (copy/cut/paste/select-all/undo/redo). The "Settings…" item has no native
-/// dialog of its own — its click is handled by `on_menu_event` in
-/// `build_app()`, which emits a frontend event for the existing Settings
-/// route to handle (T033: reuse existing UI, no new native dialog).
-fn build_native_menu(app: &tauri::App<tauri::Wry>) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-
-    let about = PredefinedMenuItem::about(app, Some("About PlateVault"), None)?;
-    let settings =
-        MenuItem::with_id(app, MENU_ID_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
-    let quit = PredefinedMenuItem::quit(app, None)?;
-    let app_menu = Submenu::with_items(
-        app,
-        "PlateVault",
-        true,
-        &[
-            &about,
-            &PredefinedMenuItem::separator(app)?,
-            &settings,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )?;
-
-    let edit_menu = Submenu::with_items(
-        app,
-        "Edit",
-        true,
-        &[
-            &PredefinedMenuItem::undo(app, None)?,
-            &PredefinedMenuItem::redo(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::cut(app, None)?,
-            &PredefinedMenuItem::copy(app, None)?,
-            &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
-        ],
-    )?;
-
-    let window_menu = Submenu::with_items(
-        app,
-        "Window",
-        true,
-        &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::close_window(app, None)?],
-    )?;
-
-    Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu])
-}
+// `include!`d, not `mod`-declared — see bootstrap/specta.rs's header comment
+// for why `collect_commands!`'s hidden macro hygiene requires this file's
+// `specta_builder()`/`base_builder()` to live in the crate-root textual
+// scope. `tests/bindings.rs` depends on `desktop_shell::specta_builder`.
+include!("bootstrap/specta.rs");
 
 /// Build the Tauri [`App`] **without** starting the event loop.
 ///
@@ -733,51 +55,87 @@ fn build_native_menu(app: &tauri::App<tauri::Wry>) -> tauri::Result<tauri::menu:
 pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
-    #[allow(unused_mut)]
-    let mut tb = tauri::Builder::default()
-        // Spec 051 US1: single-instance guard MUST be the first plugin
-        // registered so a redirected second launch is intercepted during
-        // `.build()` below — before any other plugin/state/window setup, and
-        // therefore before `main()` ever reaches `Database::connect`/
-        // `db.migrate()` (FR-003: the second launch performs no database
-        // migration, seed, or write of its own).
-        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-            tracing::info!(
-                ?argv,
-                %cwd,
-                "second launch attempt redirected to existing instance"
-            );
-            // FR-002: focus/foreground the existing main window, restoring it
-            // if minimized, instead of opening a new window or connection.
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(e) = window.unminimize() {
-                    tracing::warn!("failed to unminimize main window: {e:?}");
-                }
-                if let Err(e) = window.show() {
-                    tracing::warn!("failed to show main window: {e:?}");
-                }
-                if let Err(e) = window.set_focus() {
-                    tracing::warn!("failed to focus main window: {e:?}");
-                }
-            } else {
-                tracing::warn!("single-instance redirect: no `main` window found to focus");
-            }
-        }))
+    let mut tb = tauri::Builder::default();
+
+    // Spec 051 US1: the single-instance guard MUST be the first plugin
+    // registered so a redirected second launch is intercepted during
+    // `.build()` — before any other plugin/state/window setup, and therefore
+    // before `main()` ever reaches `Database::connect` / `db.migrate()`
+    // (FR-003: the second launch performs no migration, seed, or write).
+    //
+    // E2E escape hatch (crates/e2e-tests): the harness sets
+    // `ALM_E2E_INSTANCE_ID` (unique per test process) and launches several
+    // `desktop_shell` instances concurrently (`test-threads > 1`). The plugin
+    // enforces ONE well-known identity derived from the app identifier, and a
+    // per-instance override exists only on Linux (`dbus_id`) — NOT on Windows
+    // (named mutex) or macOS. So concurrent instances collide and the loser is
+    // silently redirected/exited without ever opening a window, timing out the
+    // WebDriver session (observed on the Windows shard). No journey exercises
+    // single-instance behaviour, so when the var is set we skip the plugin
+    // entirely on every platform. The bypass additionally requires the `e2e`
+    // feature at compile time, so release binaries ignore the variable — see
+    // `bootstrap::single_instance_guard_enabled`.
+    if crate::bootstrap::single_instance_guard_enabled(
+        std::env::var_os("ALM_E2E_INSTANCE_ID").is_some(),
+    ) {
+        tb = tb.plugin(
+            tauri_plugin_single_instance::Builder::new()
+                .callback(|app, argv, cwd| {
+                    tracing::info!(
+                        ?argv,
+                        %cwd,
+                        "second launch attempt redirected to existing instance"
+                    );
+                    // FR-002: focus/foreground the existing main window,
+                    // restoring it if minimized, instead of opening a new
+                    // window or connection.
+                    if let Some(window) = app.get_webview_window("main") {
+                        if let Err(e) = window.unminimize() {
+                            tracing::warn!("failed to unminimize main window: {e:?}");
+                        }
+                        if let Err(e) = window.show() {
+                            tracing::warn!("failed to show main window: {e:?}");
+                        }
+                        if let Err(e) = window.set_focus() {
+                            tracing::warn!("failed to focus main window: {e:?}");
+                        }
+                    } else {
+                        tracing::warn!("single-instance redirect: no `main` window found to focus");
+                    }
+                })
+                .build(),
+        );
+    }
+
+    tb = tb
         // Spec 051 US4 (T027): window-state persistence. Registered right
         // after single-instance so a redirected second launch (which never
         // creates a window of its own) never touches this plugin's store
         // file. `window-state:default` is granted in
         // `capabilities/default.json` (T028).
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        //
+        // Handoff 07: VISIBLE excluded from the restored flags. The `main`
+        // window starts `"visible": false` in tauri.conf.json (splash owns
+        // first paint) — restoring a persisted `visible: true` from the
+        // previous session would fight that gate and show `main` before the
+        // splash's minimum-display/boot-ready handshake completes.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::VISIBLE,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Spec 051 US10 (T056): signed auto-update plugin. `updater:default` +
         // `process:default` (for the relaunch-to-apply step) are granted in
-        // `capabilities/default.json`. The `plugins.updater.pubkey` in
-        // `tauri.conf.json` is a documented placeholder until the real
-        // minisign keypair/release pipeline land (T060 follow-up) — until
-        // then `check_for_app_update` will only ever see "updater
-        // unavailable" or a verification failure, never a real update.
+        // `capabilities/default.json`. `plugins.updater.pubkey` in
+        // `tauri.conf.json` is the real minisign key (spec 051 SC-009/T059/
+        // T060, #762) — the check/download/verify/relaunch flow itself is
+        // frontend-driven (`updateSubscription.ts`, #888 staged flow), not
+        // triggered from this Rust process.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
@@ -841,15 +199,6 @@ pub fn build_app() -> tauri::App {
         .setup(move |app| {
             builder.mount_events(app);
 
-            // Spec 051 US4 (T029/T030): enforce the min-size floor and
-            // off-screen fallback after tauri-plugin-window-state restores a
-            // persisted size/position — it may restore geometry from a prior
-            // app version or a since-disconnected monitor.
-            if let Some(window) = app.get_webview_window("main") {
-                enforce_min_window_size(&window);
-                recenter_if_offscreen(&window);
-            }
-
             // Spec 051 US5 (T032): native application menu — App submenu
             // (About/Settings/Quit), Window submenu, and a standard Edit
             // submenu (copy/cut/paste/select-all/undo/redo). Does not touch
@@ -866,133 +215,179 @@ pub fn build_app() -> tauri::App {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(instance_context())
         .expect("error while building tauri application")
 }
 
-/// Check for a signed app update and, if one is available, emit an
-/// `update-available` event the frontend can surface (spec 051 US10, T057).
+/// Builds the compiled-in Tauri context and defers the main window's
+/// creation (see [`defer_main_window`]).
 ///
-/// Mirrors the reference `astro-up` `check_for_app_update` pattern: an
-/// `Err` from `app.updater()` (plugin unavailable, e.g. non-bundled dev
-/// builds) or from `.check()` (network/verification failure, or — until the
-/// T060 follow-up replaces the placeholder `pubkey` — every real call) is
-/// logged at `debug`/`warn` and treated as non-fatal (FR-031); it never
-/// blocks or interrupts app startup.
-pub(crate) async fn check_for_app_update(app: &AppHandle) {
-    use tauri_plugin_updater::UpdaterExt;
+/// Per-instance webview isolation for the E2E harness (#1204) does **not**
+/// go through this context any more: it used to point each config-declared
+/// window at a per-instance `data_directory`, but that must be relative —
+/// `WebviewBuilder::from_config` joins it onto `dirs::data_local_dir()`, the
+/// very Known Folder that ignores `LOCALAPPDATA` overrides on Windows — so
+/// it could isolate by *name* but never by *location*, and CI evidence
+/// (`WindowsError(0x80070057)` surviving to TRY-1) showed it did not
+/// reliably work. The harness now sets `WEBVIEW2_USER_DATA_FOLDER` instead
+/// (`crates/e2e-tests/tests/common/mod.rs`) — `WebView2`'s own documented
+/// loader override, read inside the app process — so this function needs no
+/// Windows-specific branch at all.
+/// Clear `create` on the [`MAIN_WINDOW_LABEL`] entry so Tauri's own `setup()`
+/// — which runs on `RunEvent::Ready`, i.e. *inside* `app.run()`, not during
+/// `.build()` (`tauri-2.11.5/src/app.rs:1424` + `:2524`) — creates the splash
+/// window only.
+///
+/// This is the migration gate. The main webview is the sole surface that loads
+/// the React app and issues IPC, so while it does not exist no route can
+/// render and no command can observe an unmigrated database or an unmanaged
+/// `AppState`. [`run_app`] rebuilds it from this same (retained) config entry
+/// once migration has finished, which is what lets the event loop — and
+/// therefore the splash's first frame — start *before* migration instead of
+/// after it.
+///
+/// Returns `false` if no such entry exists, so a config rename fails loudly
+/// rather than silently reverting to eager creation.
+fn defer_main_window(windows: &mut [WindowConfig]) -> bool {
+    let Some(main) = windows.iter_mut().find(|w| w.label == MAIN_WINDOW_LABEL) else {
+        return false;
+    };
+    main.create = false;
+    true
+}
 
-    let updater = match app.updater() {
-        Ok(u) => u,
-        Err(e) => {
-            tracing::debug!("Updater not available: {e}");
-            return;
-        }
+fn instance_context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+
+    assert!(
+        defer_main_window(&mut context.config_mut().app.windows),
+        "tauri.conf.json declares no `{MAIN_WINDOW_LABEL}` window; \
+         run_app has nothing to create after migration"
+    );
+
+    // The webview's per-instance isolation (#1204) no longer goes through
+    // config: a config-declared window's `data_directory` must be relative,
+    // and Tauri joins it onto `dirs::data_local_dir()` — the very Known
+    // Folder that ignores `LOCALAPPDATA` overrides on Windows, so that route
+    // could isolate by *name* but never by *location*, and CI evidence (TRY-1
+    // `WindowsError(0x80070057)`) showed it did not reliably work at all. The
+    // E2E harness now sets `WEBVIEW2_USER_DATA_FOLDER` instead — WebView2's
+    // own documented loader override, read inside the app process and immune
+    // to the Known Folder lookup — so no product-side window config is
+    // needed here any more (`crates/e2e-tests/tests/common/mod.rs`, refs
+    // #1204).
+
+    context
+}
+
+/// Start the event loop first, then finish database startup behind the splash.
+///
+/// The splash is the only window Tauri creates for itself (see
+/// [`defer_main_window`]), so it paints as soon as `app.run()` begins pumping.
+/// Connecting, migrating, and wiring shared state all happen on a background
+/// task from there, and the main window is built only once that task has
+/// finished — so a long migration is visible instead of being a windowless
+/// pause, and the UI still cannot reach an unmigrated database.
+pub fn run_app(app: tauri::App, db_url: String, data_dir: std::path::PathBuf) {
+    // Developer diagnostics call buffer (spec 021).
+    // Always managed so the type is available; only populated when dev-tools
+    // feature is compiled in and devMode is on at runtime. No database
+    // dependency, so it does not wait for `boot`.
+    #[cfg(feature = "dev-tools")]
+    app.manage(CallBuffer::new());
+
+    // Driven from a dedicated OS thread via the ambient runtime handle rather
+    // than `tokio::spawn`, because `boot` is not provably `Send`: holding a
+    // `&Database` across `migrate()`'s await trips a higher-ranked-lifetime
+    // limitation ("implementation of `sqlx::Acquire` is not general enough").
+    // `Handle::block_on` has no `Send` bound and still enters the runtime
+    // context, so `boot`'s own `tokio::spawn` calls land on the same
+    // multi-threaded runtime they always have. The alternative — reshaping
+    // `Database::migrate` — would disturb #1307's single-connection,
+    // FK-disabled migration chain.
+    let runtime = tokio::runtime::Handle::current();
+    let handle = app.handle().clone();
+    std::thread::spawn(move || runtime.block_on(boot(handle, db_url, data_dir)));
+
+    app.run(|_handle, _event| {});
+}
+
+/// Report an unrecoverable startup failure and terminate.
+///
+/// These were `.expect()` calls on the main thread while startup ran before
+/// `app.run()`. From a spawned task a panic would only kill the task, leaving
+/// the user in front of a splash that never resolves.
+fn fatal(handle: &tauri::AppHandle, message: &str) {
+    tracing::error!("{message}");
+    handle.exit(1);
+}
+
+/// Build the main window from its (retained, `create: false`) config entry.
+///
+/// Call only after every `State` a command can ask for is managed: this is the
+/// moment the React app becomes loadable and IPC becomes reachable.
+fn create_main_window(handle: &tauri::AppHandle) {
+    let config = handle.config().app.windows.iter().find(|w| w.label == MAIN_WINDOW_LABEL).cloned();
+    let Some(config) = config else {
+        fatal(handle, &format!("no `{MAIN_WINDOW_LABEL}` window config to build"));
+        return;
     };
 
-    match updater.check().await {
-        Ok(Some(update)) => {
-            tracing::info!(version = update.version.as_str(), "App update available");
-            let _ = app.emit(
-                "update-available",
-                serde_json::json!({
-                    "version": update.version,
-                    "body": update.body,
-                }),
-            );
+    let window =
+        WebviewWindowBuilder::from_config(handle, &config).and_then(WebviewWindowBuilder::build);
+    match window {
+        // Spec 051 US4 (T029/T030): enforce the min-size floor and off-screen
+        // fallback after tauri-plugin-window-state restores a persisted
+        // size/position — it may restore geometry from a prior app version or
+        // a since-disconnected monitor.
+        Ok(window) => {
+            enforce_min_window_size(&window);
+            recenter_if_offscreen(&window);
         }
-        Ok(None) => {
-            tracing::debug!("App is up to date");
-        }
-        Err(e) => {
-            tracing::warn!("Update check failed: {e}");
-        }
+        Err(e) => fatal(handle, &format!("failed to create the `{MAIN_WINDOW_LABEL}` window: {e}")),
     }
 }
 
-/// Spawn the spec-035 US4/T043 background ingest-resolution drain.
-///
-/// Every interval the task rebuilds the resolver from the persisted
-/// `resolver_settings`, drains the pending `ingest_resolution` queue
-/// (cache-first → SIMBAD when online; cache-only when offline), then back-fills
-/// `acquisition_session.canonical_target_id` for sessions whose frames resolved
-/// this pass. Failures are logged, never fatal — the next pass retries.
-fn spawn_ingest_resolution_drain(pool: SqlitePool, bus: EventBus) {
-    use targeting_resolver::simbad::{
-        OfflineResolver, SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT,
+// Sequential startup/subscriber-wiring assembly, not complex logic — same
+// shape as `bootstrap::specta::specta_builder`, which carries the same allow.
+#[allow(clippy::too_many_lines)]
+async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBuf) {
+    let db = match Database::connect(&db_url).await {
+        Ok(db) => db,
+        Err(e) => return fatal(&app, &format!("failed to connect to SQLite at {db_url}: {e}")),
     };
-    tokio::spawn(async move {
-        let interval = std::time::Duration::from_secs(30);
-        loop {
-            tokio::time::sleep(interval).await;
-
-            // Read resolver settings (online toggle + endpoint + timeout).
-            let settings: Option<(i64, String, i64)> = sqlx::query_as(
-                "SELECT online_enabled, simbad_endpoint, request_timeout_secs \
-                 FROM resolver_settings WHERE id = 1",
-            )
-            .fetch_optional(&pool)
-            .await
-            .unwrap_or(None);
-            let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
-                || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
-                |(o, e, t)| (o != 0, e, t),
+    if let Err(error) = db.migrate().await {
+        // A raw `fatal()` here produced `Migration(VersionMismatch(71))` and
+        // nothing else — technically true, actionable by nobody. Translate
+        // the recognised "this file predates this build" cases into a named
+        // failure that says which migration diverged and what to do about
+        // it.
+        if let Some(detail) = persistence_db::migration_divergence_detail(&error) {
+            let message = format!(
+                "Database schema does not match this build: {detail}.\n\
+                 \n\
+                 This database was created by a different revision of PlateVault. \
+                 It is a development-only condition — switching between branches \
+                 that each added migrations leaves a file whose migration history \
+                 no longer matches the running binary.\n\
+                 \n\
+                 To recover, delete the database and let it be recreated:\n\
+                 \x20 {db_url}\n\
+                 \n\
+                 Set ALM_DB_URL to point at a different file if you need to keep this one."
             );
-
-            // When online, build a SimbadResolver (falling back to offline if the
-            // client fails to build, mirroring target.resolve FIX-3); otherwise
-            // drain cache-only.
-            let drain = if online_enabled {
-                let config = SimbadConfig::from_settings(
-                    endpoint,
-                    u64::try_from(timeout_secs.max(1)).unwrap_or(10),
-                );
-                match SimbadResolver::new(&config) {
-                    Ok(resolver) => {
-                        app_core::ingest_resolution::resolve_pending(
-                            &pool,
-                            &resolver,
-                            Some(&bus),
-                            true,
-                            50,
-                        )
-                        .await
-                    }
-                    Err(_) => {
-                        app_core::ingest_resolution::resolve_pending(
-                            &pool,
-                            &OfflineResolver,
-                            Some(&bus),
-                            false,
-                            50,
-                        )
-                        .await
-                    }
-                }
-            } else {
-                app_core::ingest_resolution::resolve_pending(
-                    &pool,
-                    &OfflineResolver,
-                    Some(&bus),
-                    false,
-                    50,
-                )
-                .await
-            };
-            if let Err(e) = drain {
-                tracing::warn!("ingest_resolution drain failed: {e:?}");
-                continue;
-            }
-
-            // Back-fill sessions whose frames just resolved.
-            if let Err(e) = app_core::ingest_sessions::backfill_session_targets(&pool).await {
-                tracing::warn!("acquisition_session target back-fill failed: {e:?}");
-            }
+            return fatal(&app, &message);
         }
-    });
-}
+        return fatal(&app, &format!("failed to run migrations on {db_url}: {error}"));
+    }
+    let pool = db.pool().clone();
 
-pub fn run_app(app: tauri::App, pool: SqlitePool) {
+    // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
+    // cache. Opening is fast (no warm yet — the warm below is backgrounded so
+    // a large seed never blocks startup).
+    let resolve_cache_path = data_dir.join("simbad-cache.redb");
+    let resolve_cache = crate::resolve_cache::open_or_in_memory(&resolve_cache_path);
+
     let bus = EventBus::with_pool(pool.clone());
 
     // Live event-bus subscribers. Start these *before* `bus`/`pool` are moved
@@ -1003,13 +398,38 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        resolve_cache.clone(),
+    );
     crate::commands::log::start_log_forwarder(
-        app.handle().clone(),
+        app.clone(),
         &bus,
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
+    drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
+    // spec 056 (R5): backend-authoritative onboarding tick subscriber →
+    // persists auto-ticks from domain-completion topics and emits
+    // `onboarding:state-changed`. Started here, before the webview can invoke,
+    // so no tick can be lost to a UI race (PQ-005 ordering).
+    crate::commands::onboarding::start_onboarding_subscriber(app.clone(), pool.clone(), &bus);
+    // spec 056 (PQ-005): recover ticks whose live event was missed — published
+    // before the subscriber subscribed, or lost to a kill between the action
+    // and the tick write. Started AFTER the subscriber so the two can only
+    // agree, and never fatally: a failure leaves the checklist exactly as it
+    // behaves today, still repairable via the Settings restore.
+    {
+        let reconcile_pool = pool.clone();
+        drop(tokio::spawn(async move {
+            match app_core::onboarding::reconcile_missed_events(&reconcile_pool).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("onboarding reconciliation recovered {n} missed tick(s)"),
+                Err(e) => tracing::warn!("onboarding reconciliation failed: {e:?}"),
+            }
+        }));
+    }
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
@@ -1041,6 +461,21 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         });
     }
 
+    // spec 018 T018/T019: hydrate defaults for missing settings rows and repair
+    // invalid stored values (delete the bad row, fall back to the in-code
+    // default, emit a settings.repair audit event), then prime the settings-bag
+    // read cache. Runs once per app start, before the snapshot pass below reads
+    // noisy-key values and before any settings.get call.
+    {
+        let repair_pool = pool.clone();
+        let repair_bus = bus.clone();
+        tokio::spawn(async move {
+            if let Err(e) = app_core::settings::get_settings(&repair_pool, &repair_bus).await {
+                tracing::warn!("settings repair pass failed: {e:?}");
+            }
+        });
+    }
+
     // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
     // This gives the audit log a durable record of the active configuration even when
     // noisy keys (pattern, protectedCategories, …) haven't changed individually.
@@ -1048,9 +483,13 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         let snap_pool = pool.clone();
         let snap_bus = bus.clone();
         tokio::spawn(async move {
+            // #668 suppression state, scoped to this loop — the only emitter
+            // of settings.snapshot.
+            let dedupe = app_core::settings::SnapshotDedupe::new();
             // Session-start snapshot.
             if let Err(e) =
-                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start").await
+                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start", &dedupe)
+                    .await
             {
                 tracing::warn!("settings.snapshot (session_start) failed: {e:?}");
             }
@@ -1058,8 +497,13 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
             let interval = std::time::Duration::from_mins(5);
             loop {
                 tokio::time::sleep(interval).await;
-                if let Err(e) =
-                    app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "debounce_5min").await
+                if let Err(e) = app_core::settings::emit_snapshot(
+                    &snap_pool,
+                    &snap_bus,
+                    "debounce_5min",
+                    &dedupe,
+                )
+                .await
                 {
                     tracing::warn!("settings.snapshot (debounce_5min) failed: {e:?}");
                 }
@@ -1067,19 +511,81 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         });
     }
 
+    // spec 052 P1 (D2/T012): warm the shared redb resolve cache from the
+    // bundled seed + existing durable canonical_target rows, in the
+    // background — each phase is one `Cache::upsert_batch` write transaction
+    // (spec 052 P4/#695), so warming the full ~13k-object popular seed
+    // synchronously would still freeze startup for a noticeable moment.
+    // First-run-guarded (`warm_bundled_on_first_run` no-ops once already
+    // warmed); failure degrades to seed+cache typeahead simply being emptier
+    // until the next launch, never blocks the UI.
+    //
+    // `cache_warming` (shared with the managed `AppState` below) is set true
+    // for the duration via a `CacheWarmingGuard` (not a bare sequential
+    // store — a panic mid-warm must still clear it, see its doc comment):
+    // batching a whole phase into one transaction means no row is visible to
+    // a reader until that phase commits, so a `target.search` query landing
+    // in this window can get a legitimate-looking empty result for a seed
+    // object that just hasn't committed yet — the flag lets `target.search`
+    // tell the frontend to retry instead of freezing on that stale answer
+    // (issue #818).
+    let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        // Cloned (cheap — an `Arc` handle, see `ResolveCache`'s doc comment),
+        // not moved: `resolve_cache` itself is still needed below to build
+        // `AppState`. `warm_handle` keeps the CONCRETE type so `.flush()` is
+        // reachable after the warm; `warm_cache` (its `.cache()`) is the
+        // erased `Cache` trait object the warm functions themselves take.
+        let warm_handle = resolve_cache.clone();
+        let warm_cache = resolve_cache.cache();
+        let warm_pool = pool.clone();
+        let warm_guard =
+            crate::commands::lifecycle::CacheWarmingGuard::start(cache_warming.clone());
+        tokio::spawn(async move {
+            let _warm_guard = warm_guard;
+            let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
+            match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await
+            {
+                Ok(Some(count)) => tracing::info!("warmed {count} bundled target seed entries"),
+                Ok(None) => tracing::debug!("resolve cache already warmed; skipping bundled seed"),
+                Err(e) => tracing::warn!("failed to warm bundled target seed: {e}"),
+            }
+            match targeting_resolver::seed::warm_from_canonical_target(
+                &warm_cache,
+                &warm_pool,
+                &namespace,
+            )
+            .await
+            {
+                Ok(count) if count > 0 => {
+                    tracing::info!(
+                        "warmed {count} durable canonical_target rows into resolve cache"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!("failed to warm resolve cache from canonical_target: {e}"),
+            }
+            // #818 follow-up: both phases above write `Eventual` (fsync-free)
+            // chunks; this is the one fsync that persists all of them (redb
+            // commits are cumulative) — the bundled-seed phase's own warm-
+            // complete sentinel write is ALSO durable on its own (single-item
+            // upsert), but the canonical_target phase has no such capstone,
+            // so this explicit flush is what actually protects it.
+            if let Err(e) = warm_handle.flush().await {
+                tracing::warn!("failed to flush resolve cache after startup warm: {e}");
+            }
+        });
+    }
+
     // spec 035 US4/T043: background ingest-resolution drain + session target
     // back-fill on an interval. Non-blocking; transient/offline outcomes leave
     // rows pending for the next pass.
-    spawn_ingest_resolution_drain(pool.clone(), bus.clone());
+    spawn_ingest_resolution_drain(pool.clone(), bus.clone(), resolve_cache.clone());
 
-    // spec 051 US10 (T057): startup self-update check. Non-blocking, non-fatal
-    // (FR-031) — failures/unavailability are logged and otherwise ignored.
-    {
-        let handle = app.handle().clone();
-        tokio::spawn(async move {
-            check_for_app_update(&handle).await;
-        });
-    }
+    // spec 051 US10: the startup update check moved to the frontend
+    // (`updateSubscription.ts`'s `startUpdateSubscription()`, #888 staged
+    // flow) — this process no longer runs its own independent check, which
+    // used to emit an `update-available` event nothing listens for anymore.
 
     // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
     // than via AppState), so the raw pool must be managed too. Without this they
@@ -1088,15 +594,43 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     app.manage(pool.clone());
 
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming);
 
     app.manage(state);
 
-    // Developer diagnostics call buffer (spec 021).
-    // Always managed so the type is available; only populated when dev-tools
-    // feature is compiled in and devMode is on at runtime.
-    #[cfg(feature = "dev-tools")]
-    app.manage(CallBuffer::new());
+    // Last, and only here: the schema is current and every `State` a command
+    // can ask for is managed, so it is now safe for a webview to exist.
+    create_main_window(&app);
+}
 
-    app.run(|_handle, _event| {});
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn window(label: &str) -> WindowConfig {
+        WindowConfig { label: label.to_owned(), ..WindowConfig::default() }
+    }
+
+    /// The ordering guarantee, at the only place it can be enforced: Tauri
+    /// creates `create: true` config windows on `RunEvent::Ready`, so the
+    /// splash must stay eager and `main` must not — otherwise the React app
+    /// loads, and its IPC reaches commands, while `boot` is still migrating.
+    #[test]
+    fn real_config_creates_the_splash_eagerly_and_defers_main() {
+        let context = instance_context();
+        let windows = &context.config().app.windows;
+
+        let main = windows.iter().find(|w| w.label == MAIN_WINDOW_LABEL).expect("main window");
+        assert!(!main.create, "`main` must not be created before migrations run");
+
+        let splash = windows.iter().find(|w| w.label == "splash").expect("splash window");
+        assert!(splash.create, "the splash must paint while migrations run");
+    }
+
+    #[test]
+    fn deferring_reports_a_missing_main_entry() {
+        let mut windows = [window("splash")];
+        assert!(!defer_main_window(&mut windows));
+        assert!(windows[0].create, "an unrelated window must keep its `create` flag");
+    }
 }

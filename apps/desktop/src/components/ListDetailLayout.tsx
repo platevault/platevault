@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ReactNode } from 'react';
 
 export interface ListDetailLayoutProps {
@@ -7,25 +10,30 @@ export interface ListDetailLayoutProps {
   sidebar?: ReactNode;
 }
 
-export function ListDetailLayout({ topBar, list, detail, sidebar }: ListDetailLayoutProps) {
+export function ListDetailLayout({
+  topBar,
+  list,
+  detail,
+  sidebar,
+}: ListDetailLayoutProps) {
   if (sidebar) {
     return (
       <>
-        {topBar && <div className="alm-page__bar">{topBar}</div>}
-        <div className="alm-three-pane">
+        {topBar && <div className="pv-page__bar">{topBar}</div>}
+        <div className="pv-three-pane">
           {list}
-          <div className="alm-three-pane__content">{detail}</div>
-          <div className="alm-three-pane__sidebar">{sidebar}</div>
+          <div className="pv-three-pane__content">{detail}</div>
+          <div className="pv-three-pane__sidebar">{sidebar}</div>
         </div>
       </>
     );
   }
   return (
     <>
-      {topBar && <div className="alm-page__bar">{topBar}</div>}
-      <div className="alm-two-pane">
+      {topBar && <div className="pv-page__bar">{topBar}</div>}
+      <div className="pv-two-pane">
         {list}
-        <div className="alm-two-pane__detail">{detail}</div>
+        <div className="pv-two-pane__detail">{detail}</div>
       </div>
     </>
   );

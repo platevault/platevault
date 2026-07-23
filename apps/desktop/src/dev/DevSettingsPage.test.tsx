@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * DevSettingsPage vitest unit tests (spec 021 T032).
  *
@@ -13,6 +16,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { DevSettingsPage } from './DevSettingsPage';
+import { assertDefined } from '@/test/assertDefined';
 
 const { mockSettingsGet, mockSettingsUpdate } = vi.hoisted(() => ({
   mockSettingsGet: vi.fn(),
@@ -22,15 +26,24 @@ const { mockSettingsGet, mockSettingsUpdate } = vi.hoisted(() => ({
 vi.mock('@/bindings/index', () => ({
   commands: {
     settingsGet: (...a: unknown[]) =>
-      Promise.resolve(mockSettingsGet(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockSettingsGet(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     settingsUpdate: (...a: unknown[]) =>
-      Promise.resolve(mockSettingsUpdate(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockSettingsUpdate(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSettingsGet.mockResolvedValue({ scope: 'advanced', values: { devMode: false } });
+  mockSettingsGet.mockResolvedValue({
+    scope: 'advanced',
+    values: { devMode: false },
+  });
   mockSettingsUpdate.mockResolvedValue(undefined);
 });
 
@@ -45,7 +58,10 @@ describe('DevSettingsPage (T032)', () => {
   });
 
   it('renders the toggle as checked when devMode is already on', async () => {
-    mockSettingsGet.mockResolvedValue({ scope: 'advanced', values: { devMode: true } });
+    mockSettingsGet.mockResolvedValue({
+      scope: 'advanced',
+      values: { devMode: true },
+    });
     render(<DevSettingsPage />);
     const toggle = await screen.findByTestId('dev-mode-toggle');
     await waitFor(() => expect(toggle.querySelector('input')).toBeChecked());
@@ -54,15 +70,23 @@ describe('DevSettingsPage (T032)', () => {
   it('calls settings.update with devMode=true when toggled on', async () => {
     render(<DevSettingsPage />);
     const toggle = await screen.findByTestId('dev-mode-toggle');
-    const input = toggle.querySelector('input')!;
+    const input = assertDefined(
+      toggle.querySelector('input'),
+      'dev-mode-toggle input',
+    );
     fireEvent.click(input);
     await waitFor(() => {
-      expect(mockSettingsUpdate).toHaveBeenCalledWith('advanced', { devMode: true });
+      expect(mockSettingsUpdate).toHaveBeenCalledWith('advanced', {
+        devMode: true,
+      });
     });
   });
 
   it('shows a restart hint once devMode is on', async () => {
-    mockSettingsGet.mockResolvedValue({ scope: 'advanced', values: { devMode: true } });
+    mockSettingsGet.mockResolvedValue({
+      scope: 'advanced',
+      values: { devMode: true },
+    });
     render(<DevSettingsPage />);
     await waitFor(() => {
       expect(screen.getByText(/restart/i)).toBeTruthy();
@@ -73,7 +97,10 @@ describe('DevSettingsPage (T032)', () => {
     mockSettingsUpdate.mockRejectedValue(new Error('db unavailable'));
     render(<DevSettingsPage />);
     const toggle = await screen.findByTestId('dev-mode-toggle');
-    const input = toggle.querySelector('input')!;
+    const input = assertDefined(
+      toggle.querySelector('input'),
+      'dev-mode-toggle input',
+    );
     fireEvent.click(input);
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Toast notification container.
  *
@@ -12,10 +15,10 @@ import { useToasts, type Toast as ToastType } from '@/shared/toast';
 import { m } from '@/lib/i18n';
 
 const VARIANT_CLASS: Record<string, string> = {
-  info: 'alm-toast__item--info',
-  error: 'alm-toast__item--error',
-  success: 'alm-toast__item--success',
-  warn: 'alm-toast__item--warn',
+  info: 'pv-toast__item--info',
+  error: 'pv-toast__item--error',
+  success: 'pv-toast__item--success',
+  warn: 'pv-toast__item--warn',
 };
 
 function ToastItem({
@@ -28,14 +31,14 @@ function ToastItem({
   return (
     <div
       role="alert"
-      className={`alm-toast__item ${VARIANT_CLASS[toast.variant] ?? ''}`}
+      className={`pv-toast__item ${VARIANT_CLASS[toast.variant] ?? ''}`}
     >
-      <span className="alm-toast__message">{toast.message}</span>
-      <div className="alm-toast__controls">
+      <span className="pv-toast__message">{toast.message}</span>
+      <div className="pv-toast__controls">
         {toast.action && (
           <button
             onClick={toast.action.onClick}
-            className="alm-toast__action-btn"
+            className="pv-toast__action-btn"
           >
             {toast.action.label}
           </button>
@@ -43,7 +46,7 @@ function ToastItem({
         <button
           onClick={() => onDismiss(toast.id)}
           aria-label={m.ui_toast_dismiss_aria()}
-          className="alm-toast__dismiss-btn"
+          className="pv-toast__dismiss-btn"
         >
           <X size={14} aria-hidden="true" />
         </button>
@@ -60,7 +63,7 @@ export const ToastContainer = forwardRef<HTMLDivElement, ToastContainerProps>(
 
     if (toasts.length === 0) return null;
 
-    const cls = ['alm-toast__container', className].filter(Boolean).join(' ');
+    const cls = ['pv-toast__container', className].filter(Boolean).join(' ');
 
     return (
       // eslint-disable-next-line no-restricted-syntax -- dynamic: ToastContainer style prop passthrough from caller
@@ -70,6 +73,6 @@ export const ToastContainer = forwardRef<HTMLDivElement, ToastContainerProps>(
         ))}
       </div>
     );
-  }
+  },
 );
 ToastContainer.displayName = 'ToastContainer';

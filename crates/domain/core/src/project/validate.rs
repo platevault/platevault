@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project name and tool validation (spec 008 F-2).
 
 /// Maximum length for a project name (per data-model.md invariants).

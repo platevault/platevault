@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared test fixtures for project-path anchoring (Constitution I).
 //!
 //! Cross-platform note: a leading-slash path like `/library/...` is absolute

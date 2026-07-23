@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Rust-side contract DTO boundary.
 
 pub mod archive;
@@ -6,10 +9,11 @@ pub mod calibration;
 pub mod calibration_match;
 pub mod calibration_tolerances;
 pub mod cleanup;
+pub mod cone_search;
 pub mod dev;
 pub mod enums;
 pub mod error_code;
-pub mod guided;
+pub mod framing;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
@@ -18,6 +22,7 @@ pub mod lifecycle;
 pub mod log;
 pub mod manifests;
 pub mod native;
+pub mod onboarding;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
@@ -33,6 +38,7 @@ pub mod search;
 pub mod sessions;
 pub mod settings;
 pub mod source_view_generate;
+pub mod source_view_verify;
 pub mod status;
 pub mod targets;
 pub mod tools;
@@ -360,7 +366,10 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "contracts_core");
+        // Ties CRATE_NAME to the actual Cargo.toml `name` (the real source of
+        // truth) instead of duplicating the literal, which would pass even if
+        // the two silently drifted apart.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 
     #[test]

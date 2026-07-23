@@ -21,6 +21,8 @@ Project {
   channels:          ProjectChannel[]           // inferred + manual, see R4
   plans:             ProjectPlanRef[]           // owned by spec 025
   manifests:         ProjectManifest[]          // owned by spec 024
+  framings:          Framing[]                  // co-registerable integration units, see below (Q27)
+  isMosaic:          Boolean                    // mosaic-mode flag, default false (Q27)
   notes?:            String                     // free-text, ≤ 4 KB
   lastAction?:       LastAction                 // owned by spec 009
   blockedReason?:    BlockedReason              // owned by spec 009
@@ -28,6 +30,12 @@ Project {
   updatedAt:         Timestamp
 }
 ```
+
+`isMosaic` defaults to `false` (backward-compatible with existing rows). When
+`true`, the project may hold multiple framings that all inherit the project's
+declared target, and per-frame OBJECT/coordinate resolution is suppressed
+(Q27, FR-017). There is no panel entity — panels are the framings of a mosaic
+project.
 
 ```
 ProcessingTool = "PixInsight" | "Siril" | "Planetary Suite"
@@ -78,6 +86,57 @@ removals of inferred channels are recorded as user-intent and not
 auto-restored even when a matching source is added later — except when
 the user explicitly re-runs "Re-infer channels" from the edit pane.
 
+## Framing (Q27)
+
+A **framing** is the co-registerable integration unit within a project — the
+light sessions sharing target + optic-train + pointing + rotation within a
+tunable tolerance, spanning all filters and nights of one pointing. It sits
+between the project and its sessions: `project → framing → session → frames`.
+
+```
+Framing {
+  id:           Uuid
+  projectId:    Uuid                 // a framing belongs to exactly one project
+  targetId:     Uuid | null          // the framing's target; == the project's declared target for mosaic panels
+  opticTrainKey: String              // optic-train identity (Q12/Q17 grouping key)
+  pointing:     { ra: f64, dec: f64 } // representative FOV-relative pointing
+  rotation:     f32                   // representative rotation, degrees
+  tolerance:    { pointing: f64, rotation: f32 } // snapshot of the tunable tolerance the clustering used
+  sessionIds:   Uuid[]               // member light sessions (spec 006 sessions)
+  clustering:   "suggested" | "user_adjusted"     // provenance — never authoritative
+  sourceViewId?: Uuid                // Q20 per-framing source view (reproducible projection)
+  manifest?:    FramingManifestRef   // Q10 per-framing manifest (rendered on demand)
+}
+```
+
+```
+FramingManifestRef { id: Uuid, path: String }   // Q10 projection, not a stored dump
+```
+
+- `clustering` starts as `"suggested"` (the app's tolerance-based grouping) and
+  flips to `"user_adjusted"` on any user merge/split/reassign (FR-015). The app
+  never treats its clustering as authoritative.
+- `tolerance` is a snapshot of the parameters used, documenting *why* these
+  sessions grouped; it is a tunable parameter, never an exact-match key (FR-014).
+- Membership is derived from physical acquisition attributes only — never from
+  OBJECT/panel-name strings (FR-018).
+- A framing is a lights-only unit; calibration sessions are matched by the
+  Q18/Q26 rules and are not framing members.
+- **Durable clustering key (session-level geometry)**: the clustering inputs
+  MUST be durably persisted on the acquisition session — **nullable**
+  `pointing (ra/dec)`, `rotation`, and `optic_train_key` columns populated at
+  confirm time (today pointing/rotation exist only on non-durable inbox staging;
+  `acquisition_session` has no geometry/optic-train columns). **Legacy rows keep
+  NULL geometry** (consistent with the merged Q16 null semantics — missing is
+  missing, never fabricated); NULL-geometry sessions are **excluded from
+  clustering** until backfilled via rescan (the Q28 onboarding path) and surface
+  as unassigned for manual reassign.
+- **Clustering trigger + protection**: clustering runs **incrementally at
+  confirm** (the attribution pass) and as an **explicit bulk derive**
+  (onboarding/rescan, Q28). Re-derivation MUST NEVER modify a framing with
+  `clustering == "user_adjusted"` — it may only surface **new** suggestions
+  (this is what makes US5 AS2's "the adjustment persists" hold).
+
 ## Cross-Spec References
 
 ```
@@ -121,6 +180,22 @@ spec-009 operation that runs after the create plan is applied.
 - `lifecycle == "archived"` ⇒ all edit operations refuse with
   `lifecycle.read_only` (research R7).
 - `notes` is plain text, ≤ 4 KB; markdown is not rendered in v1.
+- A `Framing` belongs to exactly one project; a light session belongs to at most
+  one framing.
+- `isMosaic == false` ⇒ all framings share the single project target
+  (`Framing.targetId == Project.canonical_target_id`) and the project has **one
+  active framing** — extra derived framings surface for user reconciliation
+  (reassign, retune tolerance, or enable mosaic mode), never as silent parallel
+  integration units (FR-016).
+- Re-derivation never modifies a `user_adjusted` framing; it only surfaces new
+  suggestions.
+- Sessions with NULL geometry (legacy/pre-Q12 rows) are excluded from clustering
+  until backfilled via rescan (Q28); they surface as unassigned.
+- `isMosaic == true` ⇒ every framing inherits the project's declared target, and
+  per-frame OBJECT/coordinate resolution is suppressed. There is no panel entity.
+- Framing membership is derived from physical clustering (target + optic-train +
+  pointing + rotation within tolerance), never from OBJECT/panel-name strings.
+- Framing tolerance is a tunable parameter, not an exact-match key.
 
 ## Storage Notes
 
@@ -130,6 +205,17 @@ spec-009 operation that runs after the create plan is applied.
 - `channels` is a child table keyed by `(project_id, label)`.
 - `manifests`, `plans`, and `calibrationSets` are owned by their
   respective specs; this spec only carries foreign keys.
+- `framing` is a child table keyed by `id`, FK `project_id`, with a
+  `framing_session` join keyed by `(framing_id, session_id)`. `Project.is_mosaic`
+  is a new column defaulting to `false` (backward-compatible migration).
+  Session-level nullable geometry columns (`pointing`, `rotation`,
+  `optic_train_key`) are added to the acquisition-session table (see Durable
+  clustering key above).
+- **Migration numbering**: no version is pinned in spec text — claim the next
+  free version at implementation merge against origin/main, and the reviewer
+  MUST dup-check `crates/persistence/db/migrations/` for version collisions
+  (duplicate-0046 precedent, PR #317). Touch the persistence crate's `lib.rs`
+  to force the sqlx macro to re-embed new migration files.
 
 ## Derived Views
 
@@ -191,3 +277,53 @@ ChannelDrift {
 Present on the `project.get` response. Reset to `hasNewSources = false` by
 calling `project.channels.reinfer` or `project.channels.dismiss_drift`
 (R-ChannelDrift, GRILL 2026-05-22).
+
+### IngestionAttributionCandidate (Q27 — Inbox confirm response extension)
+
+The Inbox confirm gate's attribution pass (the first pre-ingest pass; the Q22
+duplicate sweep joins the same pass when its iterate lands)
+returns a ranked list of candidates per incoming light session. It is a
+**suggestion surface**: it never writes a merge (FR-019/FR-020).
+
+```
+IngestionAttributionCandidate {
+  kind:         "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project"
+  projectId?:   Uuid            // present for the first three kinds
+  framingId?:   Uuid            // present for add_to_framing
+  targetId?:    Uuid            // matched target
+  matchScore:   f32             // ranking key: framing-match strength (target+optic-train+pointing+rotation)
+  reopen?:      Boolean         // true when projectId is a completed project (add + reopen, Q25 revoke/warn)
+  opticMismatch?: Boolean       // true for flag_optic_difference
+}
+```
+
+Candidates are **ranked by `matchScore`**; the user picks (recommend-then-
+override). A `reopen == true` candidate targets a completed project and, on
+selection, uses the spec-009 `completed → processing` reopen edge with its
+raw-subs-archived warning (Q25).
+
+**Apply-path (FR-022)** — the pick is persisted at confirm time as an
+**additive field on the confirm request** (per session/item):
+
+```
+chosenAttribution? {
+  kind:       "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project" | "unassigned"
+  projectId?: Uuid
+  framingId?: Uuid            // required for add_to_framing
+}
+```
+
+Confirm writes the framing membership (and creates the framing/project when the
+kind requires it) as **database metadata** — not a filesystem mutation, so no
+§II plan is generated for it, and the write applies identically on
+catalogue-in-place and queued-move confirms. Omitting `chosenAttribution`
+leaves the session unassigned (attributable later via reassign). This is what
+makes SC-008 testable end-to-end.
+
+### Framing adjustment results (Q27)
+
+`framing.merge`, `framing.split`, and `framing.reassign` are user-driven
+adjustments. Each returns the affected framing ids and sets `clustering =
+"user_adjusted"`; an audit event is emitted. `framing.list` returns the
+project's `Framing[]`. These mutate framing membership only — never image files
+(§III).

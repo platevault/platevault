@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 cleanup policy + spec 017 cleanup candidate commands.
 //!
 //! Two-step cleanup flow (D11):
@@ -12,6 +15,7 @@
 use app_core::cleanup_generator;
 use contracts_core::cleanup::{
     CleanupPolicy, CleanupScanResult, GenerateCleanupPlanRequest, GenerateCleanupPlanResult,
+    RawFrameCleanupGenerateRequest, RawFrameCleanupScanRequest, RawFrameCleanupScanResponse,
     UpdateCleanupPolicy,
 };
 use contracts_core::ContractError;
@@ -92,4 +96,41 @@ pub async fn cleanup_plan_generate(
         request.destructive_destination.as_deref(),
     )
     .await
+}
+
+/// `cleanup.raw_frames.scan` — pure, read-only raw sub-frame cleanup preview
+/// for a root or session (spec 048 US3). Distinct from `cleanup.scan`, which
+/// enumerates a project's processing artifacts; this enumerates present,
+/// non-protected per-frame inventory entries. Creates NO plan and performs
+/// NO filesystem mutation.
+///
+/// # Errors
+/// Returns `ContractError` on database failure or an invalid/empty scope.
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_raw_frames_scan(
+    state: State<'_, AppState>,
+    request: RawFrameCleanupScanRequest,
+) -> Result<RawFrameCleanupScanResponse, ContractError> {
+    tracing::debug!("cleanup.raw_frames.scan scope={:?}", request.scope);
+    cleanup_generator::scan_raw_frames(state.repo.pool(), &request).await
+}
+
+/// `cleanup.raw_frames.generate` — materialise a reviewable cleanup plan for
+/// user-selected raw sub-frames (spec 048 US3). Reuses the same protection
+/// generator tail as `cleanup.plan.generate` (PR #408 overlap guard,
+/// `.astro-plan-archive/<planId>/` destination). Performs NO filesystem
+/// mutation (FR-019).
+///
+/// # Errors
+/// Returns `ContractError` on database failure or when no selected frame id
+/// resolves to a present `file_record` row.
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_raw_frames_generate(
+    state: State<'_, AppState>,
+    request: RawFrameCleanupGenerateRequest,
+) -> Result<GenerateCleanupPlanResult, ContractError> {
+    tracing::debug!("cleanup.raw_frames.generate selected={}", request.selected_frame_ids.len());
+    cleanup_generator::generate_raw_frame_plan(state.repo.pool(), &request).await
 }

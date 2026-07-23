@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tests for LogPanel follow-state wiring (spec 019, T010).
  *
@@ -22,9 +25,15 @@ const mockUpdateSettings = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/bindings/index', () => ({
   commands: {
     settingsGet: (...args: unknown[]) =>
-      Promise.resolve(mockGetSettings(...args)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockGetSettings(...args)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     settingsUpdate: (...args: unknown[]) =>
-      Promise.resolve(mockUpdateSettings(...args)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockUpdateSettings(...args)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
@@ -118,7 +127,9 @@ describe('LogPanel follow state (T010)', () => {
       </LogPanelProvider>,
     );
 
-    await waitFor(() => expect(getByTestId('follow-state').textContent).toBe('off'));
+    await waitFor(() =>
+      expect(getByTestId('follow-state').textContent).toBe('off'),
+    );
     fireEvent.click(getByRole('button', { name: 'toggle' }));
     expect(getByTestId('follow-state').textContent).toBe('on');
   });

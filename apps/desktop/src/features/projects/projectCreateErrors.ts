@@ -1,11 +1,15 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Shared `projects.create` error handling — spec 008 US1 / WP-008-B.
  *
  * Extracted from `CreateProjectDialog` (the original spec-008 US1 modal) so the
  * live wizard create path (`WizardPage`) can surface the same per-field error
  * mapping and live duplicate-name pre-check instead of one generic toast.
- * `CreateProjectDialog` remains a consumer of this module (its fate — restore
- * vs. delete — is a separate product decision, WP-008-A).
+ * `CreateProjectDialog` was retired by the #887/#719/#586 wizard-only
+ * convergence (2026-07-17); this module remains the sole `projects.create`
+ * error-handling implementation, now with one consumer.
  *
  * `EditProjectPane` has its own `mapUpdateError()` — the `projects.update`
  * error codes/messages differ (e.g. `project.not_found`, `tool.locked`,
@@ -15,7 +19,8 @@
 import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { ProjectSummaryDto } from '@/bindings/index';
+import type { ErrorCode, ProjectSummaryDto } from '@/bindings/index';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
 
 /** Which UI location a `projects.create` error code should be attached to. */
 export type ProjectCreateErrorField = 'name' | 'tool' | 'path' | 'general';
@@ -37,18 +42,30 @@ export function projectCreateErrorField(code: string): ProjectCreateErrorField {
  * Map a `projects.create` error code to a user-facing message.
  *
  * Error codes surfaced: `name.empty`, `name.too_long`, `name.duplicate`,
- * `tool.unknown`, `path.invalid`, `path.collision`. Anything else falls back
- * to a generic message that still names the raw code for support/diagnosis.
+ * `tool.unknown`, `path.invalid`, `path.collision`. Create-specific wording
+ * wins for those; any other known code falls through to the shared errors.ts
+ * catalog before the generic (code-free, FR-009) fallback.
  */
 export function mapCreateProjectErrorCode(code: string): string {
   switch (code) {
-    case 'name.empty':     return m.projects_create_err_name_empty();
-    case 'name.too_long':  return m.projects_create_err_name_too_long();
-    case 'name.duplicate': return m.projects_create_name_duplicate();
-    case 'tool.unknown':   return m.projects_create_err_tool_unknown();
-    case 'path.invalid':   return m.projects_create_err_path_invalid();
-    case 'path.collision': return m.projects_create_err_path_collision();
-    default:               return m.projects_create_err_generic({ code });
+    case 'name.empty':
+      return m.projects_create_err_name_empty();
+    case 'name.too_long':
+      return m.projects_create_err_name_too_long();
+    case 'name.duplicate':
+      return m.projects_create_name_duplicate();
+    case 'tool.unknown':
+      return m.projects_create_err_tool_unknown();
+    case 'path.invalid':
+      return m.projects_create_err_path_invalid();
+    case 'path.collision':
+      return m.projects_create_err_path_collision();
+    default: {
+      const resolve = ERROR_MESSAGES[code as ErrorCode] as
+        | (() => string)
+        | undefined;
+      return resolve ? resolve() : m.projects_create_err_generic();
+    }
   }
 }
 
@@ -63,7 +80,11 @@ export function mapCreateProjectErrorCode(code: string): string {
  */
 export function createProjectErrorCode(err: unknown): string {
   if (typeof err === 'string') return err;
-  if (err && typeof err === 'object' && typeof (err as { code?: unknown }).code === 'string') {
+  if (
+    err &&
+    typeof err === 'object' &&
+    typeof (err as { code?: unknown }).code === 'string'
+  ) {
     return (err as { code: string }).code;
   }
   if (err instanceof Error) return err.message;
@@ -76,7 +97,9 @@ export function createProjectErrorCode(err: unknown): string {
  * on failure (offline/IPC error) — the backend still enforces uniqueness on
  * submit, so a failed pre-check just means the user finds out one step later.
  */
-export async function findDuplicateProjectName(trimmedName: string): Promise<boolean> {
+export async function findDuplicateProjectName(
+  trimmedName: string,
+): Promise<boolean> {
   try {
     const list: ProjectSummaryDto[] = unwrap(await commands.projectsList(null));
     return list.some((p) => p.name.toLowerCase() === trimmedName.toLowerCase());

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `audit.list` / `audit.export` — Tauri commands exposed to the webview.
 //!
 //! These were spec-029 stubs (hardcoded fixture, filters/pagination ignored).
@@ -241,6 +244,9 @@ fn build_filter(
         entity_id: f.entity_id,
         outcome: f.outcome.map(outcome_to_db_str).map(str::to_owned),
         severity: f.severity.map(severity_to_db_str).map(str::to_owned),
+        // T120 (spec 030): reason_code filtering is not yet exposed on the
+        // `AuditFilterDto` contract — no UI consumer needs it in this task.
+        reason_code: None,
         from: f.from,
         to: f.to,
         search: f.search,

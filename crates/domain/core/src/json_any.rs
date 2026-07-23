@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `JsonAny` — wire-equivalent to `serde_json::Value`, opaque in TypeScript.
 //!
 //! Used in contract fields whose JSON shape is intentionally free-form

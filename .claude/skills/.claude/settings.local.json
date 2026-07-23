@@ -1,0 +1,11 @@
+{
+  "enabledMcpjsonServers": [
+    "codebase-memory-mcp",
+    "context7",
+    "mcp-package-version",
+    "playwright",
+    "repomix",
+    "serena",
+    "tauri"
+  ]
+}

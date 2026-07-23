@@ -1,14 +1,24 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
- * Vitest unit tests for SourceProtectionOverride (spec 016 US2, T015).
+ * Vitest unit tests for SourceProtectionOverride (spec 016 US2, T015; issue
+ * #562 controlled-open rewrite).
  *
- * Tests per-source protection badge, inheritance display, and override flow
- * using mock invoke. Does NOT run against a real backend.
+ * `open`/`onOpenChange` are now controlled by the caller (DataSources' kebab
+ * "Edit protection…" item) — the component itself renders only the compact
+ * pill plus, when `open`, the level-select editor. Uses a thin wrapper to
+ * hold the open state the real caller would own.
  */
 
+import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
-import type { SourceProtectionGetResponse } from './settingsIpc';
+import type {
+  SourceProtectionGetResponse,
+  ProtectionLevel,
+} from './settingsIpc';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
@@ -41,6 +51,30 @@ function makeGetResponse(
   };
 }
 
+/** Wraps the controlled component with the open-state the caller would own. */
+function ControlledHarness({
+  initialOpen = false,
+  onSaved,
+}: {
+  initialOpen?: boolean;
+  onSaved?: (level: ProtectionLevel) => void;
+}) {
+  const [open, setOpen] = useState(initialOpen);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Edit protection…
+      </button>
+      <SourceProtectionOverride
+        sourceId="src-1"
+        open={open}
+        onOpenChange={setOpen}
+        onSaved={onSaved}
+      />
+    </>
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -50,60 +84,97 @@ beforeEach(() => {
 describe('SourceProtectionOverride', () => {
   it('shows loading state initially', () => {
     mockGet.mockReturnValue(new Promise(() => {}));
-    render(<SourceProtectionOverride sourceId="src-1" />);
+    render(
+      <SourceProtectionOverride
+        sourceId="src-1"
+        open={false}
+        onOpenChange={() => {}}
+      />,
+    );
     expect(screen.getByText(/Loading/i)).toBeTruthy();
   });
 
-  it('shows Protected pill and Inherits global default badge when inheriting', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ inheritsDefault: true, level: 'protected' }) });
-    render(<SourceProtectionOverride sourceId="src-1" />);
+  it('shows just the compact protection pill when not open (issue #562 declutter)', async () => {
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ inheritsDefault: true, level: 'protected' }),
+    });
+    render(
+      <SourceProtectionOverride
+        sourceId="src-1"
+        open={false}
+        onOpenChange={() => {}}
+      />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText('Protected')).toBeTruthy();
-      expect(screen.getByText('Inherits global default')).toBeTruthy();
     });
-  });
-
-  it('shows override pill without inherits badge when override is set', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ inheritsDefault: false, level: 'normal' }) });
-    render(<SourceProtectionOverride sourceId="src-1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Normal')).toBeTruthy();
-    });
-    // Should not show the inherits badge.
+    // No separate "Inherits global default" pill/sentence, no Override
+    // trigger button — the caller drives editing via the kebab menu instead.
     expect(screen.queryByText('Inherits global default')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Override/i })).toBeNull();
   });
 
-  it('shows Override button', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse() });
-    render(<SourceProtectionOverride sourceId="src-1" />);
+  it('shows the override pill for a non-default level when not open', async () => {
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ inheritsDefault: false, level: 'unprotected' }),
+    });
+    render(
+      <SourceProtectionOverride
+        sourceId="src-1"
+        open={false}
+        onOpenChange={() => {}}
+      />,
+    );
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Override/i })).toBeTruthy();
+      expect(screen.getByText('Unprotected')).toBeTruthy();
     });
   });
 
-  it('opens editing mode on Override click', async () => {
+  it('renders the editor when open is true', async () => {
     mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse() });
-    render(<SourceProtectionOverride sourceId="src-1" />);
+    render(<ControlledHarness initialOpen />);
 
-    await waitFor(() => screen.getByRole('button', { name: /Override/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Override/i }));
-
-    expect(screen.getByRole('combobox', { name: /Protection level override/i })).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('combobox', { name: /Protection level override/i }),
+      ).toBeTruthy(),
+    );
     expect(screen.getByRole('button', { name: /Save override/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeTruthy();
   });
 
-  it('saves override and updates level display', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: true }) });
+  it('opens the editor when the caller flips open to true', async () => {
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse() });
+    render(<ControlledHarness />);
+
+    expect(
+      screen.queryByRole('combobox', { name: /Protection level override/i }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit protection/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: /Protection level override/i }),
+      ).toBeTruthy();
+    });
+  });
+
+  it('saves override, updates the pill, and closes via onOpenChange', async () => {
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ level: 'protected', inheritsDefault: true }),
+    });
     mockSet.mockResolvedValue({
       status: 'ok',
       data: {
         sourceId: 'src-1',
         priorLevel: 'protected',
-        newLevel: 'normal',
+        newLevel: 'unprotected',
         priorBlockPermanentDelete: null,
         newBlockPermanentDelete: null,
         priorCategories: null,
@@ -113,52 +184,81 @@ describe('SourceProtectionOverride', () => {
     });
 
     const onSaved = vi.fn();
-    render(<SourceProtectionOverride sourceId="src-1" onSaved={onSaved} />);
+    render(<ControlledHarness initialOpen onSaved={onSaved} />);
 
-    await waitFor(() => screen.getByRole('button', { name: /Override/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Override/i }));
-
-    // Change the select to "normal".
-    const select = screen.getByRole('combobox', { name: /Protection level override/i });
-    fireEvent.change(select, { target: { value: 'normal' } });
+    const select = await screen.findByRole('combobox', {
+      name: /Protection level override/i,
+    });
+    fireEvent.change(select, { target: { value: 'unprotected' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Save override/i }));
 
+    // Gate on the select disappearing — i.e. the editor actually CLOSING, which
+    // happens only in handleSave's .then once sourceProtectionSet RESOLVES
+    // (SourceProtectionOverride.tsx:107-113). Two nearby queries are vacuous
+    // here and prove nothing (#1083, same shape as #1109): getByText(
+    // 'Unprotected') also matches the <option> that is present from first
+    // render, and the Save button's own name flips to "Saving…" the instant it
+    // is clicked, so it goes null while the editor is still open.
     await waitFor(() => {
-      expect(screen.getByText('Normal')).toBeTruthy();
+      expect(
+        screen.queryByRole('combobox', { name: /Protection level override/i }),
+      ).toBeNull();
     });
-    expect(mockSet).toHaveBeenCalledWith({ sourceId: 'src-1', level: 'normal' });
-    expect(onSaved).toHaveBeenCalledWith('normal');
-    // After save, should not be in edit mode anymore.
-    expect(screen.queryByRole('button', { name: /Save override/i })).toBeNull();
+    // Unambiguous now the <option> is gone: only the pill carries this label.
+    expect(screen.getByText('Unprotected')).toBeTruthy();
+    expect(mockSet).toHaveBeenCalledWith({
+      sourceId: 'src-1',
+      level: 'unprotected',
+    });
+    expect(onSaved).toHaveBeenCalledWith('unprotected');
   });
 
   it('shows error on load failure', async () => {
     mockGet.mockRejectedValue('network error');
-    render(<SourceProtectionOverride sourceId="src-1" />);
+    render(
+      <SourceProtectionOverride
+        sourceId="src-1"
+        open={false}
+        onOpenChange={() => {}}
+      />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText(/Could not load protection/i)).toBeTruthy();
     });
   });
 
-  it('shows level hint text for protected level', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: false }) });
-    render(<SourceProtectionOverride sourceId="src-1" />);
+  it('shows level hint as a pill tooltip (title) for the protected level', async () => {
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ level: 'protected', inheritsDefault: false }),
+    });
+    render(
+      <SourceProtectionOverride
+        sourceId="src-1"
+        open={false}
+        onOpenChange={() => {}}
+      />,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText(/Cleanup plans require explicit approval/i)).toBeTruthy();
+      expect(screen.getByText('Protected').getAttribute('title')).toMatch(
+        /Cleanup plans require explicit approval/i,
+      );
     });
   });
 
-  it('can cancel edit without saving', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: true }) });
-    render(<SourceProtectionOverride sourceId="src-1" />);
+  it('can cancel edit without saving, closing via onOpenChange', async () => {
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ level: 'protected', inheritsDefault: true }),
+    });
+    render(<ControlledHarness initialOpen />);
 
-    await waitFor(() => screen.getByRole('button', { name: /Override/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Override/i }));
-
-    const select = screen.getByRole('combobox', { name: /Protection level override/i });
+    const select = await screen.findByRole('combobox', {
+      name: /Protection level override/i,
+    });
     fireEvent.change(select, { target: { value: 'unprotected' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
@@ -168,5 +268,6 @@ describe('SourceProtectionOverride', () => {
       expect(screen.getByText('Protected')).toBeTruthy();
     });
     expect(mockSet).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Save override/i })).toBeNull();
   });
 });

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Plan-apply IPC helper (spec 037 caller migration).
  *
@@ -35,5 +38,7 @@ export async function applyPlan(args: {
   // `plansApplyReal(planId, approvalToken, onEvent)` requires a token; when
   // absent we default to '' which the backend rejects — the real flow supplies
   // the token from `plansApprove.approvalToken`.
-  return unwrap(await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel));
+  return unwrap(
+    await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel),
+  );
 }

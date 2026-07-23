@@ -1,0 +1,34 @@
+{
+  "text": {
+    "$value": "{ink}",
+    "$description": "Semantic aliases \u2014 resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root:not([data-theme]), [data-theme=\"warm-slate\"]` block below, so there is a single source of truth for the default light palette without overriding a named theme."
+  },
+  "text-secondary": {
+    "$value": "{ink2}"
+  },
+  "text-muted": {
+    "$value": "{ink3}"
+  },
+  "text-faint": {
+    "$value": "{ink4}"
+  },
+  "border": {
+    "$value": "{rule}"
+  },
+  "border-subtle": {
+    "$value": "{rule2}"
+  },
+  "chip": {
+    "$value": "{bg3}"
+  },
+  "link": {
+    "$value": "{accent-text}"
+  },
+  "focus-ring": {
+    "$value": "0 0 0 2px {accent}"
+  },
+  "font-mono": {
+    "$value": "ui-monospace, 'Cascadia Code', monospace",
+    "$description": "JetBrains Mono is no longer bundled/loaded (spec 055 Phase 1) \u2014 the system mono stack is natively hinted on every OS at zero bytes."
+  }
+}

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { registerRootBatch } from './registerSources';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
@@ -9,7 +12,6 @@ const STORAGE_KEY = 'alm-setup-wizard-state';
 // folder the file is in. 'calibration' here is only a user-facing folder
 // category that covers darks, flats, and bias frames together.
 export type SourceKind = 'light_frames' | 'calibration' | 'project' | 'inbox';
-export type ScanDepth = 'recursive' | 'single';
 export type OrganizationState = 'organized' | 'unorganized';
 
 export const ALL_SOURCE_KINDS: SourceKind[] = [
@@ -27,6 +29,15 @@ export const SOURCE_KIND_LABELS: Record<SourceKind, () => string> = {
   inbox: () => m.settings_datasources_category_inbox(),
 };
 
+export function sourceKindLabel(kind: string): string {
+  if (Object.hasOwn(SOURCE_KIND_LABELS, kind)) {
+    return SOURCE_KIND_LABELS[kind as SourceKind]();
+  }
+  return m.setup_scan_source_unknown({
+    value: kind.trim() || m.common_unknown(),
+  });
+}
+
 // spec 039: inbox is now optional — users do not need a dedicated drop folder
 // to use the Inbox (which aggregates unacknowledged items across all roots).
 export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
@@ -34,7 +45,6 @@ export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
 export interface SourceEntry {
   path: string;
   kind: SourceKind;
-  scanDepth: ScanDepth;
   /** Organization state for this source (spec 041 R-7).
    *  Inbox kind is always 'unorganized'. Non-inbox defaults to 'organized' (local-first safe default).
    */
@@ -58,6 +68,13 @@ export interface FlushRowResult {
   success: boolean;
   /** The registered root's id (present on successful rows); used to scan the source. */
   rootId?: string;
+  /**
+   * True when the row "failed" only because the path was already registered
+   * (issue #704). The restart flow pre-fills already-registered folders, so
+   * re-confirming them is the desired end state, not a user-facing failure —
+   * the wizard treats these as benign no-ops rather than blocking failures.
+   */
+  alreadyRegistered?: boolean;
   error?: string;
 }
 
@@ -71,7 +88,6 @@ export interface ValidationError {
   message: string;
 }
 
-
 /** Load sources state from localStorage. */
 export function loadSources(): SourcesState {
   try {
@@ -80,22 +96,33 @@ export function loadSources(): SourcesState {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.sources)) {
         // Accept persisted entries; supply organizationState default for
-      // entries written before this field existed (backward compat).
-      return parsed.sources
-        .filter(
-          (e: unknown): e is Omit<SourceEntry, 'organizationState'> & { organizationState?: OrganizationState } =>
-            typeof e === 'object' &&
-            e !== null &&
-            typeof (e as SourceEntry).path === 'string' &&
-            typeof (e as SourceEntry).kind === 'string' &&
-            ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
-        )
-        .map((e: Omit<SourceEntry, 'organizationState'> & { organizationState?: OrganizationState }) => ({
-          ...e,
-          organizationState: e.kind === 'inbox'
-            ? 'unorganized' as OrganizationState
-            : (e.organizationState ?? 'organized'),
-        }));
+        // entries written before this field existed (backward compat).
+        return parsed.sources
+          .filter(
+            (
+              e: unknown,
+            ): e is Omit<SourceEntry, 'organizationState'> & {
+              organizationState?: OrganizationState;
+            } =>
+              typeof e === 'object' &&
+              e !== null &&
+              typeof (e as SourceEntry).path === 'string' &&
+              typeof (e as SourceEntry).kind === 'string' &&
+              ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
+          )
+          .map(
+            (
+              e: Omit<SourceEntry, 'organizationState'> & {
+                organizationState?: OrganizationState;
+              },
+            ) => ({
+              ...e,
+              organizationState:
+                e.kind === 'inbox'
+                  ? ('unorganized' as OrganizationState)
+                  : (e.organizationState ?? 'organized'),
+            }),
+          );
       }
     }
   } catch {
@@ -144,7 +171,8 @@ export function checkDeduplication(
   const normalizedPath = path.toLowerCase();
 
   const sameKindDuplicate = sources.some(
-    (entry) => entry.kind === kind && entry.path.toLowerCase() === normalizedPath,
+    (entry) =>
+      entry.kind === kind && entry.path.toLowerCase() === normalizedPath,
   );
 
   let crossKindConflict: SourceKind | undefined;
@@ -169,12 +197,11 @@ export function addSource(
   sources: SourcesState,
   kind: SourceKind,
   path: string,
-  scanDepth: ScanDepth = 'recursive',
   organizationState?: OrganizationState,
 ): SourcesState {
   const state: OrganizationState =
     kind === 'inbox' ? 'unorganized' : (organizationState ?? 'organized');
-  return [...sources, { path, kind, scanDepth, organizationState: state }];
+  return [...sources, { path, kind, organizationState: state }];
 }
 
 /** Remove a source entry by index, returning updated state. */
@@ -187,15 +214,16 @@ export function removeSource(
 }
 
 /** Get sources for a specific kind. */
-export function getSourcesByKind(sources: SourcesState, kind: SourceKind): SourceEntry[] {
+export function getSourcesByKind(
+  sources: SourcesState,
+  kind: SourceKind,
+): SourceEntry[] {
   return sources.filter((e) => e.kind === kind);
 }
 
 /** Check which required kinds are missing from the current sources. */
 export function getMissingRequiredKinds(sources: SourcesState): SourceKind[] {
-  return REQUIRED_KINDS.filter(
-    (kind) => !sources.some((e) => e.kind === kind),
-  );
+  return REQUIRED_KINDS.filter((kind) => !sources.some((e) => e.kind === kind));
 }
 
 /**
@@ -208,13 +236,16 @@ export function validatePath(
   path: string,
   kind: SourceKind,
 ): ValidationError | null {
-  if (!path || !path.trim()) {
+  if (!path?.trim()) {
     return { code: 'path.empty', message: m.setup_validate_path_empty() };
   }
 
   const dedup = checkDeduplication(sources, kind, path);
   if (dedup.sameKindDuplicate) {
-    return { code: 'path.already_registered', message: m.err_path_already_registered() };
+    return {
+      code: 'path.already_registered',
+      message: m.err_path_already_registered(),
+    };
   }
   if (dedup.crossKindConflict) {
     return {
@@ -251,13 +282,17 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       sources: validSources.map((s) => ({
         kind: s.kind,
         path: s.path,
-        // Backend RegisterSourceRequest is camelCase — must be `scanDepth`,
-        // not `scan_depth`, or the whole batch arg fails to deserialize.
-        scanDepth: s.scanDepth,
+        // scanDepth is a required backend contract field (camelCase) with no
+        // frontend-configurable state left — 'single' was never implemented,
+        // every scan is recursive (#509), and the UI plumbing was retired
+        // end-to-end (#913). Hardcode the only value the backend ever acts on.
+        scanDepth: 'recursive',
         // organizationState is required by the backend contract (spec 041 R-7).
         // Inbox is always unorganized; non-inbox carries the user's explicit choice.
         organizationState:
-          s.kind === 'inbox' ? 'unorganized' : (s.organizationState ?? 'organized'),
+          s.kind === 'inbox'
+            ? 'unorganized'
+            : (s.organizationState ?? 'organized'),
       })),
     });
 
@@ -273,8 +308,20 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       }
       // Resolve through the single translation point so the user sees a friendly
       // catalog message, never the raw backend code (spec 046 FR-008/FR-009).
-      const message = errMessage({ code: item.error ?? 'unknown', message: '' });
-      return { kind: item.kind as SourceKind, path: item.path, success: false, error: message };
+      const message = errMessage({
+        code: item.error ?? 'unknown',
+        message: '',
+      });
+      return {
+        kind: item.kind as SourceKind,
+        path: item.path,
+        success: false,
+        // Issue #704: an exact-path duplicate is not a genuine failure in the
+        // restart flow — flag it so the wizard advances instead of blocking.
+        alreadyRegistered:
+          item.error === 'path.already_registered' || undefined,
+        error: message,
+      };
     });
 
     return { results, allSucceeded: results.every((r) => r.success) };
@@ -284,7 +331,9 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         kind: s.kind,
         path: s.path,
         success: false,
-        error: m.setup_sources_error_batch_registration_failed({ message: errMessage(err) }),
+        error: m.setup_sources_error_batch_registration_failed({
+          message: errMessage(err),
+        }),
       })),
       allSucceeded: false,
     };

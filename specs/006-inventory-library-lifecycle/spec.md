@@ -18,6 +18,24 @@
 > "Show ignored") are implemented against the 043-redesigned **Sessions** surface;
 > the FR-010 route is `/sessions?reviewFilter=ignored`. See `pending-iteration.md`.
 
+> **AMENDED (2026-07-14) by the Q27 framing-layer iteration on
+> [Spec 008 — Project Create, Onboard, And Edit](../008-project-create-onboard-edit/spec.md).**
+> Spec 008 introduces a **framing layer** (`project → framing → session →
+> frames`). Cross-spec delta for this spec: (1) a light **session may be a
+> member of at most one framing** (a project sub-structure; membership is owned
+> by spec 008, referenced by session id — no new field on the InventorySession
+> projection is required); (2) the framing **clustering** groups a project's
+> light sessions by target + optic-train + pointing + rotation within a tunable
+> tolerance, reading session-level geometry persisted at confirm (spec-008
+> F-Framing-1; the Q12 strict-gate iterate — not yet applied — will guarantee
+> presence on new ingests, and NULL-geometry legacy sessions are excluded until
+> a Q28 rescan backfill); (3) the Q27 **incremental ingestion-attribution**
+> pass is the **first** pre-ingest pass at the Inbox confirm gate — the Q22
+> duplicate-detection sweep joins the same pass when its iterate lands —
+> producing ranked, user-picked suggestions (never an auto-merge), with the
+> pick persisted via the confirm-request extension (spec-008 FR-022).
+> No InventorySession state or projection shape changes. See the Iterations log.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
@@ -77,7 +95,20 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 
 ### Functional Requirements
 
-- **FR-001**: The product name for the stable library surface MUST be "Inventory".
+> **Reconciliation note (2026-07-19, issue #764)**: three drifts confirmed
+> against the current tree. **FR-001**: the shipped surface is labeled
+> "Sessions" everywhere (nav, command palette `common_sessions()`, route
+> `/sessions`), not "Inventory" — this spec's own prose already calls it
+> "Inventory/Sessions" throughout; treat "Sessions" as the actual product
+> name. **FR-004/SC-003**: 041 FR-051 removed the review-state lifecycle
+> almost entirely (no `reviewState`/`SessionState` rendering remains in
+> `features/sessions/`) rather than restyling it as plain text — only the
+> `ignored`/recoverable state survived (FR-010); FR-004/SC-003 describe a
+> milder "restyle" outcome than what actually shipped. **FR-006**: no
+> "primary action + small More menu" pattern exists in
+> `features/sessions/` — row actions did not converge on that shape.
+>
+> **FR-001**: The product name for the stable library surface MUST be "Inventory".
 - **FR-002**: The Inventory/Sessions view is lights-centric and MUST NOT expose a frame-type filter. Dark/flat/bias inventory is filtered on the Calibration page (spec 040), and Inbox single-type ingest (spec 041) means the Inventory ledger is already single-type. *(Superseded 2026-07-03: the original light/dark/flat/bias row filter was removed by the 043 redesign + 040 Calibration surface.)*
 - **FR-003**: Inventory MUST NOT use ambiguous "tags" or "handling" fields as primary workflow controls.
 - **FR-004**: Inventory MUST show review state as plain text or structured data, not as decorative state bubbles.
@@ -167,3 +198,23 @@ treat the mockup as the visual and interaction contract. The Rust port keeps
 hook signatures (`useInventorySources`, `setSessionReviewState`,
 `getInventorySources`) intact so the component tree under
 `apps/desktop/src/features/inventory/` is not touched by the migration.
+
+## Iterations
+
+### Iteration 2026-07-14: Framing-layer session membership (Q27, cross-spec delta)
+
+**Change**: Spec 008's Q27 framing layer references light sessions as **framing
+members** (`project → framing → session → frames`). A light session belongs to
+at most one framing; membership and the `Framing` entity are owned by spec 008.
+The framing clustering reads session-level geometry (pointing/rotation/
+optic-train) persisted at confirm by spec-008 F-Framing-1 — the Q12
+strict-gate iterate (not yet applied) will guarantee those attributes on new
+ingests; NULL-geometry legacy sessions are excluded until a Q28 rescan
+backfill. The Q27 incremental attribution pass is the **first** pre-ingest
+pass at the Inbox confirm gate; the Q22 duplicate sweep joins the same pass
+when its iterate lands. No `InventorySession` state, projection shape, or
+contract changes here — the delta is a documented reference from spec 008.
+**Scope**: Cross-spec delta (documentation only; no new FR/entity in this spec).
+**Artifacts updated**: spec.md (amendment note + log), data-model.md (framing-
+membership reference note). *(2026-07-14 gate-fix update: Q22/Q12 references
+restated as composition points / pending iterates, not existing artifacts.)*

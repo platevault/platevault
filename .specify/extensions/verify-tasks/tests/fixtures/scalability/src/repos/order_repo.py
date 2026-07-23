@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Order repository — T008, T010."""
 from typing import Dict, List
 from models.order import Order

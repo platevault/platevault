@@ -13,11 +13,15 @@ reasons:
    `\\wsl$\…` / `\\wsl.localhost\…` path as a working directory (`cmd.exe`
    refuses UNC CWDs; many tools break). So you cannot drive the build from
    Windows against the WSL filesystem.
-2. **WSL↔Windows networking problem.** A Vite dev server bound inside WSL is
-   often unreachable from a Windows browser under NAT networking (`localhost`
-   forwarding is flaky/absent), so the browser-preview path is unreliable.
+2. **WSL↔Windows networking** — historical: under NAT networking a Vite dev
+   server bound inside WSL was often unreachable from a Windows browser.
+   This host now runs WSL in **mirrored networking mode**
+   (`networkingMode=mirrored` in `.wslconfig`), so `localhost` is shared in
+   both directions and this reason no longer applies — but note the flip
+   side: WSL and Windows now share one port space, so a stray WSL process on
+   `:5173` (or `:9223`) directly conflicts with the Windows app's ports.
 
-The fix that eliminates **both**: keep a **second checkout on a native Windows
+Reason 1 alone still mandates the fix: keep a **second checkout on a native Windows
 NTFS drive** (e.g. `C:\dev\astro-plan`) and build/run there. node, cargo, Vite,
 and the WebView2 window are all Windows-native — nothing crosses the WSL
 boundary. The WSL copy stays as the canonical repo; the Windows copy is the
@@ -165,6 +169,86 @@ terminal:
   ```
   Then read `/mnt/c/dev/astro-plan/tauri-dev.log` for progress.
 
+### Validation driving (MCP bridge, reset, recompile trap)
+
+Canonical mechanics for driving the **real running app** during validation —
+manual computer-use ("cowork") scenarios and automated journeys alike. Each
+block below is self-contained: copy the relevant one verbatim into a scenario or
+run doc, since a zero-context agent must be able to execute it without following
+a link.
+
+**Launch with a throwaway database (bridge on).** For validation, point the app
+at a disposable DB inside the checkout so a reset never touches a real library,
+and launch with the dev overlay that enables the MCP bridge:
+
+```powershell
+cd C:\dev\astro-plan\apps\desktop
+$env:VITE_USE_MOCKS = 'false'                                        # real backend
+$env:ALM_DB_URL     = 'sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc'
+pnpm tauri dev --config src-tauri\tauri.dev.conf.json               # overlay = bridge on
+```
+
+`scripts\win-native-dev.ps1` launches the same overlay with the real backend;
+add the `ALM_DB_URL` line above when you need a disposable DB. Any `run-dev*.bat`
+referenced elsewhere is an optional local convenience wrapper — **not** tracked
+in the repo, so the tracked launcher above is the source of truth. App process is
+`desktop_shell.exe`; Vite on `http://127.0.0.1:5173`.
+
+**Reset to a clean first-run.** The DB is the first-run source of truth —
+clearing `localStorage` alone triggers a `/`↔`/setup` redirect loop, not a
+reset. Delete the throwaway DB and relaunch:
+
+```powershell
+Remove-Item 'C:\dev\astro-plan\wizard-test.db*' -Force
+```
+
+**Recompile (mtime) trap.** Deploy a branch as its own command, then force a
+rebuild when any Rust changed — `git reset --hard` restores file content but
+keeps the old mtime, so cargo thinks the binary is current and runs a **stale**
+build (symptom: a command that IS in the code returns "not found"):
+
+```powershell
+cd C:\dev\astro-plan
+git fetch origin
+git reset --hard origin/<branch>        # its OWN command (a guard rejects it bundled)
+Get-ChildItem <changed>.rs | ForEach-Object { $_.LastWriteTime = Get-Date }
+```
+
+Then relaunch (`tauri dev` recompiles). A frontend-only change needs only a hard
+refresh (Ctrl+R). Confirm the binary mtime is newer than the source.
+
+**Connect the MCP bridge.** The bridge is `#[cfg(debug_assertions)]`, WebSocket
+on `0.0.0.0:9223`. This host runs WSL in mirrored networking, so `localhost`
+reaches Windows directly — connect with `driver_session host=localhost
+port=9223`. The old NAT gateway-IP lookup (`ip route show default`) is
+**obsolete**. Invoke a command directly with `webview_execute_js` →
+`window.__TAURI__.core.invoke('<snake_command>', {args})` (`ipc_execute_command`
+rejects many real commands but is fine for scripted backend probes).
+
+**Native pickers can't be driven.** Relaunch with `VITE_E2E=1` to expose
+`data-testid="e2e-path-input-<kind>"` / `e2e-add-path-btn-<kind>` stand-ins
+(kinds: `light_frames`, `calibration`, `project`, `inbox`). Set the
+React-controlled input via the native value setter + dispatch `input`, then click
+the button in a **separate** call so React state commits.
+
+**Driving quirks.** JS eval has a ~2 s timeout (avoid zombie loops); navigate in
+two steps (nav, then probe); **never** send modifier-key combos (renderer
+freeze). Recovery: kill `desktop_shell`, relaunch.
+
+**Blank screen (empty `#root`).** Two Vite causes: a mid-session `pnpm install`
+re-optimized deps → restart the dev server; or a cold start hit the
+`@rollup/rollup-win32-x64-msvc` optional-native bug → `pnpm install` with
+`$env:CI='true'`, then relaunch.
+
+**Fidelity honesty.** Backend-only IPC probes do not substitute for UI-level
+checks: anything visually or interactively observable must be validated in the
+real webview, not IPC-only. State which fidelity you actually drove.
+
+The test-layer and coverage story (Layer-1 integration, Layer-2 `tauri-driver`,
+the coverage matrix) lives in `docs/development/testing.md` and
+`specs/037-e2e-integration-testing/contracts/coverage-matrix.md` — it is not
+restated here.
+
 ## Stop / cleanup
 
 ```powershell
@@ -186,4 +270,4 @@ Get-Process desktop_shell,cargo,rustc -ErrorAction SilentlyContinue | Stop-Proce
 | `link.exe`/`cl` “not found” at the Rust link step | Install VS Build Tools 2022 “Desktop development with C++”. |
 | WSL-side edits don’t hot-reload | Ensure `CHOKIDAR_USEPOLLING=true` (default in the launch script). |
 | Keeping the two checkouts in sync | Treat WSL as canonical: `git push origin main` from WSL, then on Windows `git fetch origin; git reset --hard origin/main` (the mirror tree is often dirty/divergent so a plain `git pull` won't fast-forward — `git stash` first to keep any local mods). **Do NOT** pull the Windows checkout from the WSL repo over a `\\wsl.localhost\…` UNC path: `node`/`pnpm` fail over UNC and git is flaky there. Keep all git + node + cargo on the native `C:\` filesystem. |
-| `tauri dev` fails with `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295` | The `beforeDevCommand` (Vite) couldn't bind `:5173`. A Vite dev server left running **inside WSL** on `:5173` is forwarded to Windows `localhost:5173`, and Vite uses `strictPort`. Kill the WSL `:5173` server (`lsof -ti :5173 \| xargs kill`) before launching on Windows, or change the port. |
+| `tauri dev` fails with `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295` | The `beforeDevCommand` (Vite) couldn't bind `:5173`. Under mirrored networking WSL and Windows share one port space, so a Vite dev server left running **inside WSL** on `:5173` occupies the port outright, and Vite uses `strictPort`. Kill the WSL `:5173` server (`lsof -ti :5173 \| xargs kill`) before launching on Windows, or change the port. |

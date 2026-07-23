@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! PixInsight / WBPP-specific calibration master detector (spec 040, FR-002).
 //!
 //! # PixInsight / WBPP master heuristics
@@ -60,7 +63,14 @@ impl MasterDetector for PixInsightDetector {
             infer_frame_type_from_path(input.file_name, input.rel_path)?
         };
 
-        Some(MasterDetection { frame_type, is_master, detector: self.id() })
+        // PixInsight/WBPP never write STACKCNT/NCOMBINE-derived masters; this
+        // detector's is_master is always a naming-convention inference.
+        Some(MasterDetection {
+            frame_type,
+            is_master,
+            detector: self.id(),
+            stack_count_evidence: false,
+        })
     }
 }
 

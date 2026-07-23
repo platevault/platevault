@@ -9,8 +9,12 @@ path = "src/lib.rs"
 
 [dependencies]
 domain_core = { path = "../domain/core" }
+skymath = "0.6.0"
 thiserror = { workspace = true }
 time = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
 
 [lints]
 workspace = true

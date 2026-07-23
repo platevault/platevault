@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Recorder redaction tests (spec 021 T019).
  *
@@ -9,7 +12,12 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { wrap, getCallSnapshot, resetRecorder, type DispatchFn } from './recorder';
+import {
+  wrap,
+  getCallSnapshot,
+  resetRecorder,
+  type DispatchFn,
+} from './recorder';
 import type { ContractMeta } from '@/bindings/index';
 
 beforeEach(() => {
@@ -71,7 +79,10 @@ describe('recorder redaction (T019)', () => {
   it('redacts custom sensitiveFields declared in ContractMeta', async () => {
     const contracts = makeContracts({ sensitiveFields: ['customCredential'] });
     const dispatch = wrap(makeOkDispatch(), true, contracts);
-    await dispatch('test.op', { customCredential: 'cred-123', safe: 'visible' });
+    await dispatch('test.op', {
+      customCredential: 'cred-123',
+      safe: 'visible',
+    });
 
     const req = getCallSnapshot()[0].request as Record<string, unknown>;
     expect(req.customCredential).toBe('<redacted>');
@@ -91,7 +102,9 @@ describe('recorder redaction (T019)', () => {
 
   it('redacts nested sensitive fields', async () => {
     const dispatch = wrap(makeOkDispatch(), true, makeContracts());
-    await dispatch('test.op', { auth: { token: 'nested-tok', type: 'bearer' } });
+    await dispatch('test.op', {
+      auth: { token: 'nested-tok', type: 'bearer' },
+    });
 
     const req = getCallSnapshot()[0].request as Record<string, unknown>;
     const auth = req.auth as Record<string, unknown>;
@@ -101,7 +114,10 @@ describe('recorder redaction (T019)', () => {
 
   it('redacts Unix filesystem paths from request', async () => {
     const dispatch = wrap(makeOkDispatch(), true, makeContracts());
-    await dispatch('test.op', { rootPath: '/home/user/astrophoto', label: 'NGC 7000' });
+    await dispatch('test.op', {
+      rootPath: '/home/user/astrophoto',
+      label: 'NGC 7000',
+    });
 
     const req = getCallSnapshot()[0].request as Record<string, unknown>;
     expect(req.rootPath).toBe('${PATH}');

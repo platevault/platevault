@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Hierarchical, tuple-based query key factory for TanStack Query.
  *
@@ -9,9 +12,18 @@ export const queryKeys = {
   projects: {
     all: () => ['projects'] as const,
     detail: (id: string) => ['projects', id] as const,
+    artifacts: (id: string) => ['projects', id, 'artifacts'] as const,
+    history: (id: string) => ['projects', id, 'history'] as const,
   },
   inventory: {
-    all: (filters?: object) => ['inventory', filters] as const,
+    // No filters → prefix-only key, so `invalidateQueries({ queryKey:
+    // inventory.all() })` fuzzy-matches every inventory query regardless of
+    // its filters (TanStack Query's partial-match compares own array indices,
+    // so a trailing `undefined` element would NOT match a filtered entry).
+    all: (filters?: object) =>
+      filters ? (['inventory', filters] as const) : (['inventory'] as const),
+    rootConfig: (rootId: string) =>
+      ['inventory', 'rootConfig', rootId] as const,
   },
   sessions: {
     all: () => ['sessions'] as const,
@@ -21,14 +33,23 @@ export const queryKeys = {
   inbox: {
     list: (rootId: string) => ['inbox', rootId] as const,
     metadata: (itemId: string) => ['inbox', 'metadata', itemId] as const,
+    coneSearch: (framesetId: string) =>
+      ['inbox', 'coneSearch', framesetId] as const,
   },
   calibration: {
     masters: () => ['calibration', 'masters'] as const,
     master: (id: string) => ['calibration', 'masters', id] as const,
     matches: (sid: string) => ['calibration', 'matches', sid] as const,
+    settings: () => ['calibration', 'settings'] as const,
   },
-  guided: {
-    state: () => ['guided'] as const,
+  targets: {
+    list: () => ['targets'] as const,
+    detail: (id: string) => ['targets', id] as const,
+    sessions: (id: string) => ['targets', id, 'sessions'] as const,
+    projects: (id: string) => ['targets', id, 'projects'] as const,
+    notes: (id: string) => ['targets', id, 'notes'] as const,
+    astroFormat: (id: string) => ['targets', id, 'astroFormat'] as const,
+    favourites: () => ['targets', 'favourites'] as const,
   },
   setup: {
     sources: () => ['setup', 'sources'] as const,
@@ -42,5 +63,10 @@ export const queryKeys = {
   },
   plans: {
     detail: (id: string) => ['plans', 'detail', id] as const,
+    freeSpaceEstimate: (id: string) =>
+      ['plans', 'freeSpaceEstimate', id] as const,
+  },
+  roots: {
+    all: () => ['roots'] as const,
   },
 } as const;

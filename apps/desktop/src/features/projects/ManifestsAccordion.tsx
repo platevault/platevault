@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ManifestsAccordion — spec 024 T1.7 / T2.2 / T2.3 / T3.4.
  *
@@ -38,7 +41,10 @@ export interface ManifestsAccordionProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsAccordionProps) {
+export function ManifestsAccordion({
+  projectId,
+  defaultOpen = true,
+}: ManifestsAccordionProps) {
   const [manifests, setManifests] = useState<ManifestSummaryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -58,7 +64,10 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+          const msg =
+            typeof err === 'string'
+              ? err
+              : ((err as Error)?.message ?? 'unknown');
           setFetchError(msg);
         }
       })
@@ -84,8 +93,14 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
         const resp = await getManifest({ manifestId: id });
         setBodyMap((prev) => ({ ...prev, [id]: resp.manifest.body }));
       } catch (err: unknown) {
-        const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        addToast({ message: m.projects_manifests_load_body_failed({ error: msg }), variant: 'error' });
+        const msg =
+          typeof err === 'string'
+            ? err
+            : ((err as Error)?.message ?? 'unknown');
+        addToast({
+          message: m.projects_manifests_load_body_failed({ error: msg }),
+          variant: 'error',
+        });
       } finally {
         setBodyLoading(null);
       }
@@ -94,28 +109,21 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
   );
 
   // Reveal manifest file in OS file manager.
-  const handleReveal = useCallback(
-    async (manifest: ManifestSummaryDto) => {
-      setRevealWorking(manifest.id);
-      try {
-        await revealManifestInOs({ path: manifest.path });
-      } catch (err: unknown) {
-        const msg = typeof err === 'string' ? err : (err as Error)?.message ?? m.projects_manifests_reveal_failed_fallback();
-        addToast({ message: msg, variant: 'error' });
-      } finally {
-        setRevealWorking(null);
-      }
-    },
-    [],
-  );
+  const handleReveal = useCallback(async (manifest: ManifestSummaryDto) => {
+    setRevealWorking(manifest.id);
+    try {
+      await revealManifestInOs({ path: manifest.path });
+    } catch {
+      addToast({ message: m.common_reveal_error(), variant: 'error' });
+    } finally {
+      setRevealWorking(null);
+    }
+  }, []);
 
   if (loading) {
     return (
       <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
-        <div
-          data-testid="manifests-loading"
-          className="alm-manifests__status"
-        >
+        <div data-testid="manifests-loading" className="pv-manifests__status">
           {m.common_loading()}
         </div>
       </Section>
@@ -127,7 +135,7 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
       <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-error"
-          className="alm-manifests__status--error"
+          className="pv-manifests__status--error"
         >
           {m.projects_manifests_load_error()}
         </div>
@@ -136,31 +144,31 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
   }
 
   return (
-    <Section title={m.projects_manifests_title()} count={manifests.length} defaultOpen={defaultOpen}>
+    <Section
+      title={m.projects_manifests_title()}
+      count={manifests.length}
+      defaultOpen={defaultOpen}
+    >
       {manifests.length === 0 ? (
-        <div
-          data-testid="manifests-empty"
-          className="alm-manifests__status"
-        >
+        <div data-testid="manifests-empty" className="pv-manifests__status">
           {m.projects_manifests_empty()}
         </div>
       ) : (
         <div data-testid="manifests-list">
           {manifests.map((manifest) => (
-            <div
-              key={manifest.id}
-              className="alm-manifests__item"
-            >
+            <div key={manifest.id} className="pv-manifests__item">
               {/* Row header */}
-              <div className="alm-manifests__row-header">
+              <div className="pv-manifests__row-header">
                 <button
                   data-testid={`manifest-row-${manifest.id}`}
                   onClick={() => void handleToggle(manifest.id)}
-                  className="alm-manifests__toggle-btn"
+                  className="pv-manifests__toggle-btn"
                   aria-expanded={expandedId === manifest.id}
                 >
-                  <span className="alm-manifests__reason-label">{manifestReasonLabel(manifest.reason)}</span>
-                  <span className="alm-manifests__timestamp">
+                  <span className="pv-manifests__reason-label">
+                    {manifestReasonLabel(manifest.reason)}
+                  </span>
+                  <span className="pv-manifests__timestamp">
                     {formatManifestTimestamp(manifest.timestamp)}
                   </span>
                 </button>
@@ -180,31 +188,35 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
               {expandedId === manifest.id && (
                 <div
                   data-testid={`manifest-body-${manifest.id}`}
-                  className="alm-manifests__body-panel"
+                  className="pv-manifests__body-panel"
                 >
                   {bodyLoading === manifest.id ? (
                     <span>{m.projects_manifests_body_loading()}</span>
                   ) : bodyMap[manifest.id] ? (
                     <div>
                       <div>
-                        <strong>{m.projects_manifests_lifecycle_label()}</strong> {bodyMap[manifest.id].lifecycleState}
+                        <strong>
+                          {m.projects_manifests_lifecycle_label()}
+                        </strong>{' '}
+                        {bodyMap[manifest.id].lifecycleState}
                       </div>
                       {bodyMap[manifest.id].workflowProfile && (
                         <div>
-                          <strong>{m.projects_manifests_workflow_label()}</strong> {bodyMap[manifest.id].workflowProfile}
+                          <strong>
+                            {m.projects_manifests_workflow_label()}
+                          </strong>{' '}
+                          {bodyMap[manifest.id].workflowProfile}
                         </div>
                       )}
                       {bodyMap[manifest.id].notes && (
-                        <div className="alm-manifests__notes-block">
+                        <div className="pv-manifests__notes-block">
                           <strong>{m.projects_manifests_notes_label()}</strong>
-                          <div className="alm-manifests__notes-content">
+                          <div className="pv-manifests__notes-content">
                             {bodyMap[manifest.id].notes}
                           </div>
                         </div>
                       )}
-                      <div className="alm-manifests__path">
-                        {manifest.path}
-                      </div>
+                      <div className="pv-manifests__path">{manifest.path}</div>
                     </div>
                   ) : null}
                 </div>

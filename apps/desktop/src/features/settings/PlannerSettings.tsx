@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PlannerSettings — Settings → Target Planner pane (spec 044 + spec 047 T015).
  *
@@ -23,7 +26,11 @@
 
 import { useState } from 'react';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
 import {
   useAltitudeThreshold,
   setAltitudeThreshold,
@@ -54,7 +61,14 @@ export function PlannerSettings() {
     if (Number.isFinite(n)) {
       setAltitudeThreshold(n);
       // Reflect the clamped value back into the draft so the field self-corrects.
-      setDraft(String(Math.max(ALTITUDE_THRESHOLD_MIN, Math.min(ALTITUDE_THRESHOLD_MAX, Math.round(n)))));
+      setDraft(
+        String(
+          Math.max(
+            ALTITUDE_THRESHOLD_MIN,
+            Math.min(ALTITUDE_THRESHOLD_MAX, Math.round(n)),
+          ),
+        ),
+      );
     } else {
       // Non-numeric input: revert to the currently stored value.
       setDraft(String(stored));
@@ -71,7 +85,7 @@ export function PlannerSettings() {
         >
           <input
             type="number"
-            className="alm-input alm-input--sm alm-settings__num-input"
+            className="pv-input pv-input--sm pv-settings__num-input"
             value={draft}
             min={ALTITUDE_THRESHOLD_MIN}
             max={ALTITUDE_THRESHOLD_MAX}
@@ -80,10 +94,13 @@ export function PlannerSettings() {
             onChange={(e) => setDraft(e.target.value)}
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+              if (e.key === 'Enter')
+                commit((e.target as HTMLInputElement).value);
             }}
           />
-          <span className="alm-settings__unit-label">{m.settings_planner_altitude_unit()}</span>
+          <span className="pv-settings__unit-label">
+            {m.settings_planner_altitude_unit()}
+          </span>
         </SettingsRow>
       </SettingsSection>
       <MoonAvoidanceSettings />
@@ -119,10 +136,16 @@ function MoonAvoidanceSettings() {
   async function commit(band: Band, field: ParamField, raw: string) {
     const key = draftKey(band, field);
     const n = Number(raw);
-    const [lo, hi] = field === 'distanceDeg' ? [DISTANCE_MIN, DISTANCE_MAX] : [WIDTH_MIN, WIDTH_MAX];
+    const [lo, hi] =
+      field === 'distanceDeg'
+        ? [DISTANCE_MIN, DISTANCE_MAX]
+        : [WIDTH_MIN, WIDTH_MAX];
     if (Number.isFinite(n)) {
       const clamped = Math.max(lo, Math.min(hi, n));
-      await saveGuidanceParams({ ...params, [band]: { ...params[band], [field]: clamped } });
+      await saveGuidanceParams({
+        ...params,
+        [band]: { ...params[band], [field]: clamped },
+      });
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[key];
@@ -147,6 +170,7 @@ function MoonAvoidanceSettings() {
             await restoreGuidanceDefaults();
             setDrafts({});
           }}
+          scopeLabel={m.settings_planner_moon_avoidance_restore_scope()}
         />
       }
     >
@@ -154,30 +178,38 @@ function MoonAvoidanceSettings() {
         label={m.settings_planner_moon_avoidance_band_col()}
         info={m.settings_planner_moon_avoidance_info()}
       >
-        <span className="alm-settings__unit-label">
-          {m.settings_planner_moon_avoidance_distance_col()} · {m.settings_planner_moon_avoidance_width_col()}
+        <span className="pv-settings__unit-label">
+          {m.settings_planner_moon_avoidance_distance_col()} ·{' '}
+          {m.settings_planner_moon_avoidance_width_col()}
         </span>
       </SettingsRow>
       {BANDS.map((band) => (
         <SettingsRow key={band} label={band}>
           <input
             type="number"
-            className="alm-input alm-input--sm alm-settings__num-input"
+            className="pv-input pv-input--sm pv-settings__num-input"
             value={valueFor(band, 'distanceDeg')}
             min={DISTANCE_MIN}
             max={DISTANCE_MAX}
             step={1}
-            aria-label={m.settings_planner_moon_avoidance_distance_aria({ band })}
+            aria-label={m.settings_planner_moon_avoidance_distance_aria({
+              band,
+            })}
             data-testid={`guidance-distance-${band}`}
             onChange={(e) => setDraft(band, 'distanceDeg', e.target.value)}
             onBlur={(e) => void commit(band, 'distanceDeg', e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void commit(band, 'distanceDeg', (e.target as HTMLInputElement).value);
+              if (e.key === 'Enter')
+                void commit(
+                  band,
+                  'distanceDeg',
+                  (e.target as HTMLInputElement).value,
+                );
             }}
           />
           <input
             type="number"
-            className="alm-input alm-input--sm alm-settings__num-input"
+            className="pv-input pv-input--sm pv-settings__num-input"
             value={valueFor(band, 'widthDays')}
             min={WIDTH_MIN}
             max={WIDTH_MAX}
@@ -187,7 +219,12 @@ function MoonAvoidanceSettings() {
             onChange={(e) => setDraft(band, 'widthDays', e.target.value)}
             onBlur={(e) => void commit(band, 'widthDays', e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void commit(band, 'widthDays', (e.target as HTMLInputElement).value);
+              if (e.key === 'Enter')
+                void commit(
+                  band,
+                  'widthDays',
+                  (e.target as HTMLInputElement).value,
+                );
             }}
           />
         </SettingsRow>

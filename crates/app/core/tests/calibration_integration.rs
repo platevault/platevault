@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for calibration matching & masters — feature 037 (T005 coverage area #5).
 //!
 //! Tests use the shared harness (`support::setup`) which provides a real in-memory
@@ -7,17 +10,20 @@
 //!
 //! Coverage:
 //! - `suggest`: session+fingerprint seeded → candidates returned.
-//! - `suggest`: session without fingerprint → observer_location_missing guard fires.
+//! - `suggest`: session without a fingerprint row degrades gracefully (#867)
+//!   instead of hard-blocking with observer_location_missing.
 //! - `assign`: happy-path → assignment persists and audit event emitted.
+//! - `unassign` (#875): removes a persisted assignment, returning the session
+//!   to "no master assigned" for that type.
 //! - `batch_suggest`: two sessions, one with matching master → results per session.
 
 mod support;
 
-use app_core::calibration::{assign, batch_suggest, suggest};
+use app_core::calibration::{assign, batch_suggest, suggest, unassign};
 use contracts_core::calibration_match::{
     CalibrationMatchAssignRequest, CalibrationMatchBatchRequest, CalibrationMatchSuggestRequest,
-    CalibrationType, SuggestStatus, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION,
-    SUGGEST_CONTRACT_VERSION,
+    CalibrationMatchUnassignRequest, CalibrationType, SuggestStatus, ASSIGN_CONTRACT_VERSION,
+    BATCH_CONTRACT_VERSION, SUGGEST_CONTRACT_VERSION, UNASSIGN_CONTRACT_VERSION,
 };
 use uuid::Uuid;
 
@@ -201,16 +207,76 @@ async fn suggest_returns_candidates_when_master_matches() {
     );
 }
 
-/// Session with no fingerprint row (no observer location) triggers the A6 guard.
+/// T134 (Q16 / FR-136) regression: calibration matching runs on the
+/// Option-typed domain `SessionInfo`/`MasterInfo`, loaded straight from
+/// `acquisition_fingerprint`/`calibration_fingerprint` — never through the
+/// contract DTOs de-zeroed by T128/T129. Absent gain (a hard-rule dimension
+/// for dark matching) must still be handled deterministically; it must
+/// never be silently treated as a real 0 that spuriously matches a master
+/// whose gain is also absent (the exact failure mode de-zeroing the
+/// contract could have introduced had matching read the DTO instead of the
+/// domain-layer Option fields).
 #[tokio::test]
-async fn suggest_returns_observer_location_missing_when_no_fingerprint() {
+async fn suggest_deterministic_when_gain_absent_on_both_sides() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    // Fingerprint with NO gain/offset_val (both NULL) — every other hard-rule
+    // dimension matches the master below.
+    sqlx::query(
+        "INSERT INTO acquisition_fingerprint \
+         (id, session_type, temp_c, binning, has_observer_location, has_exposure_start_utc) \
+         VALUES (?, 'light', -10.0, '1x1', 1, 1)",
+    )
+    .bind(&session_id)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("insert acquisition_fingerprint failed: {e}"));
+
+    insert_cal_session(pool, &master_id, "dark").await;
+    // Master fingerprint ALSO with NO gain/offset_val.
+    sqlx::query(
+        "INSERT INTO calibration_fingerprint (id, calibration_type, temp_c, binning) \
+         VALUES (?, 'dark', -10.0, '1x1')",
+    )
+    .bind(&master_id)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("insert calibration_fingerprint failed: {e}"));
+
+    let req = CalibrationMatchSuggestRequest {
+        contract_version: SUGGEST_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        calibration_types: Some(vec![CalibrationType::Dark]),
+    };
+
+    let resp = suggest(pool, req).await.expect("suggest should not return Err");
+    assert_eq!(resp.status, "success", "expected success, got: {:?}", resp.error);
+    let matches = resp.matches.expect("expected Some(matches)");
+    assert!(
+        matches.iter().all(|m| m.master_id != master_id),
+        "absent gain must never be silently synthesized as a real 0 that \
+         spuriously matches another absent-gain master; got: {matches:?}",
+    );
+}
+
+/// Session with no fingerprint row (no observer location) no longer hard-blocks
+/// suggest (#867): it degrades to a normal no-match result instead of the
+/// observer_location_missing guard error.
+#[tokio::test]
+async fn suggest_degrades_gracefully_when_no_fingerprint() {
     let (db, _repo, _bus) = support::setup().await;
     let pool = db.pool();
 
     let session_id = Uuid::new_v4().to_string();
 
     // Seed the session but intentionally omit the fingerprint row so that
-    // has_observer_location defaults to false → A6 guard fires.
+    // has_observer_location/has_exposure_start_utc default to false.
     insert_acq_session(pool, &session_id).await;
 
     let req = CalibrationMatchSuggestRequest {
@@ -222,15 +288,12 @@ async fn suggest_returns_observer_location_missing_when_no_fingerprint() {
 
     let resp = suggest(pool, req).await.expect("suggest should not return Err");
 
-    assert_eq!(resp.status, "error", "expected error status, got {}", resp.status);
+    assert_eq!(resp.status, "success", "expected success, got: {:?}", resp.error);
 
-    // The guard code `match.observer_location_missing` maps to
-    // SuggestStatus::ObserverLocationMissing.
+    // No masters were seeded, so the degraded session still resolves to
+    // NoMatch rather than the old ObserverLocationMissing hard guard.
     let status = resp.suggest_status;
-    assert!(
-        matches!(status, Some(SuggestStatus::ObserverLocationMissing)),
-        "expected ObserverLocationMissing, got {status:?}",
-    );
+    assert!(matches!(status, Some(SuggestStatus::NoMatch)), "expected NoMatch, got {status:?}");
 }
 
 /// Happy-path `assign`: persists the assignment row and emits an audit event.
@@ -290,6 +353,202 @@ async fn assign_persists_assignment_and_emits_audit_event() {
     .expect("events query failed");
 
     assert_eq!(audit_count, 1, "expected 1 audit event for assignment, found {audit_count}");
+}
+
+/// #718 (spec 007 SC-003): an override assignment's `was_override` flag must
+/// survive a reopen — read back through the session detail path (the same
+/// one the UI hits), not just the raw DB row.
+#[tokio::test]
+async fn assign_override_flag_is_distinguishable_on_reopen() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+    let other_master_id = Uuid::new_v4().to_string();
+
+    // Session + a dark master with a mismatched hard-rule dimension (gain),
+    // requiring override=true. A second, non-overridden assignment for a
+    // different calibration type on the same session acts as a control.
+    insert_acq_session(pool, &session_id).await;
+    insert_acq_fingerprint(pool, &session_id, 200.0, 20.0, -15.0, "2x2").await;
+    insert_cal_session(pool, &master_id, "dark").await;
+    insert_cal_fingerprint(pool, &master_id, "dark", 999.0, 20.0, -15.0, "2x2").await;
+    insert_cal_session(pool, &other_master_id, "bias").await;
+    insert_cal_fingerprint(pool, &other_master_id, "bias", 200.0, 20.0, -15.0, "2x2").await;
+
+    let override_req = CalibrationMatchAssignRequest {
+        contract_version: ASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        master_id: master_id.clone(),
+        r#override: true,
+    };
+    let override_resp =
+        assign(pool, &bus, override_req).await.expect("override assign should not return Err");
+    assert_eq!(override_resp.status, "success", "expected success, got: {:?}", override_resp.error);
+
+    let normal_req = CalibrationMatchAssignRequest {
+        contract_version: ASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        master_id: other_master_id.clone(),
+        r#override: false,
+    };
+    let normal_resp =
+        assign(pool, &bus, normal_req).await.expect("normal assign should not return Err");
+    assert_eq!(normal_resp.status, "success", "expected success, got: {:?}", normal_resp.error);
+
+    let detail =
+        app_core::sessions::get_session(pool, &session_id).await.expect("session must exist");
+
+    let dark_match = detail
+        .calibration_matches
+        .iter()
+        .find(|m| m.master_id == master_id)
+        .expect("expected the override assignment in calibration_matches");
+    assert!(dark_match.was_override, "override assignment must reopen with was_override=true");
+
+    let bias_match = detail
+        .calibration_matches
+        .iter()
+        .find(|m| m.master_id == other_master_id)
+        .expect("expected the normal assignment in calibration_matches");
+    assert!(!bias_match.was_override, "normal assignment must reopen with was_override=false");
+}
+
+/// #875: `unassign` removes a persisted assignment, returning the session to
+/// "no master assigned" for that calibration type.
+#[tokio::test]
+async fn unassign_removes_persisted_assignment() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    insert_acq_fingerprint(pool, &session_id, 200.0, 20.0, -15.0, "2x2").await;
+    insert_cal_session(pool, &master_id, "dark").await;
+    insert_cal_fingerprint(pool, &master_id, "dark", 200.0, 20.0, -15.0, "2x2").await;
+
+    let assign_req = CalibrationMatchAssignRequest {
+        contract_version: ASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        master_id: master_id.clone(),
+        r#override: false,
+    };
+    let assign_resp = assign(pool, &bus, assign_req).await.expect("assign should not return Err");
+    assert_eq!(assign_resp.status, "success", "expected success, got: {:?}", assign_resp.error);
+
+    let unassign_req = CalibrationMatchUnassignRequest {
+        contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        calibration_type: CalibrationType::Dark,
+    };
+    let unassign_resp =
+        unassign(pool, &bus, unassign_req).await.expect("unassign should not return Err");
+    assert_eq!(unassign_resp.status, "success", "expected success, got: {:?}", unassign_resp.error);
+
+    let detail =
+        app_core::sessions::get_session(pool, &session_id).await.expect("session must exist");
+    assert!(
+        detail.calibration_matches.iter().all(|m| m.master_id != master_id),
+        "assignment must be gone from the session detail after unassign"
+    );
+
+    // Un-assigning again (nothing left to remove) surfaces a clear error, not a silent success.
+    let unassign_again_req = CalibrationMatchUnassignRequest {
+        contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id,
+        calibration_type: CalibrationType::Dark,
+    };
+    let again = unassign(pool, &bus, unassign_again_req).await.expect("should not return Err");
+    assert_eq!(again.status, "error");
+    assert_eq!(again.error.expect("expected error details").code, "assignment.not_found");
+}
+
+/// #1120: assign/unassign history must land in `audit_log_entry`, the
+/// authoritative durable record — not only in the non-authoritative `events`
+/// table that `bus.publish` writes. Asserted on the durable table directly,
+/// because an `events` row satisfies the old (weak) check either way.
+#[tokio::test]
+async fn assign_and_unassign_write_durable_audit_log_entries() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    insert_acq_fingerprint(pool, &session_id, 200.0, 20.0, -15.0, "2x2").await;
+    insert_cal_session(pool, &master_id, "dark").await;
+    insert_cal_fingerprint(pool, &master_id, "dark", 200.0, 20.0, -15.0, "2x2").await;
+
+    let assign_resp = assign(
+        pool,
+        &bus,
+        CalibrationMatchAssignRequest {
+            contract_version: ASSIGN_CONTRACT_VERSION.to_owned(),
+            request_id: Uuid::new_v4().to_string(),
+            session_id: session_id.clone(),
+            master_id: master_id.clone(),
+            r#override: false,
+        },
+    )
+    .await
+    .expect("assign should not return Err");
+    assert_eq!(assign_resp.status, "success", "expected success, got: {:?}", assign_resp.error);
+    let assignment_id = assign_resp.assigned.expect("expected Some(assigned)").assignment_id;
+
+    let (created_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM audit_log_entry \
+         WHERE trigger = 'calibration.assignment.created' AND entity_type = 'calibration' \
+           AND outcome = 'applied' AND payload LIKE ?",
+    )
+    .bind(format!("%{assignment_id}%"))
+    .fetch_one(pool)
+    .await
+    .expect("audit_log_entry query failed");
+    assert_eq!(created_count, 1, "assign must write exactly 1 durable audit row");
+
+    let unassign_resp = unassign(
+        pool,
+        &bus,
+        CalibrationMatchUnassignRequest {
+            contract_version: UNASSIGN_CONTRACT_VERSION.to_owned(),
+            request_id: Uuid::new_v4().to_string(),
+            session_id: session_id.clone(),
+            calibration_type: CalibrationType::Dark,
+        },
+    )
+    .await
+    .expect("unassign should not return Err");
+    assert_eq!(unassign_resp.status, "success", "expected success, got: {:?}", unassign_resp.error);
+
+    let (removed_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM audit_log_entry \
+         WHERE trigger = 'calibration.assignment.removed' AND entity_type = 'calibration' \
+           AND outcome = 'applied' AND payload LIKE ?",
+    )
+    .bind(format!("%{assignment_id}%"))
+    .fetch_one(pool)
+    .await
+    .expect("audit_log_entry query failed");
+    assert_eq!(removed_count, 1, "unassign must write exactly 1 durable audit row");
+
+    // Both mutations must resolve to the same audit entity, so an assignment's
+    // full history is reachable from one entity_id.
+    let (entity_ids,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT entity_id) FROM audit_log_entry WHERE entity_type = 'calibration'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("audit_log_entry query failed");
+    assert_eq!(entity_ids, 1, "create+remove must share one entity_id");
 }
 
 /// `batch_suggest` across two sessions: one with a matching master, one unknown.

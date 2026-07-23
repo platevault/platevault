@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 016 US3 — plan protection gating UI (T024).
 //
 // Renders the protection-affected items for a plan before execution proceeds.
@@ -8,11 +11,15 @@
 // until it is true.
 
 import { useEffect, useState, useCallback } from 'react';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { Pill, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/bindings/index';
+import type {
+  ProtectedPlanItem,
+  PlanProtectionCheckResponse,
+} from '@/bindings/index';
 
 interface PlanProtectionGateProps {
   planId: string;
@@ -22,18 +29,35 @@ interface PlanProtectionGateProps {
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * #807: previously suffixed a rewritten action with "(rewritten by
+ * protection policy)", implying the SOFTER action (e.g. delete → archive)
+ * would actually run. It never does: the apply-time protection gate
+ * (`fs/executor/run.rs`) unconditionally refuses ANY mutating action —
+ * rewritten or not — on a protected item; only NoOp/Catalogue pass. Showing
+ * the rewrite is still useful context (what the plan WOULD have done absent
+ * protection), but the wording must not imply it will be applied.
+ */
 function actionLabel(item: ProtectedPlanItem): string {
   if (item.rewrittenAction) {
-    return `${item.originalAction} → ${item.rewrittenAction} (rewritten by protection policy)`;
+    return `${item.originalAction} → ${item.rewrittenAction}`;
   }
   return item.originalAction;
 }
 
-export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtectionGateProps) {
+export function PlanProtectionGate({
+  planId,
+  onAcknowledgedChange,
+}: PlanProtectionGateProps) {
   const [loadState, setLoadState] = useState<LoadState>('idle');
-  const [checkResult, setCheckResult] = useState<PlanProtectionCheckResponse | null>(null);
+  const [checkResult, setCheckResult] =
+    useState<PlanProtectionCheckResponse | null>(null);
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
   const [ackErrors, setAckErrors] = useState<Record<string, string>>({});
+
+  // `load` reruns whenever `planId`/`onAcknowledgedChange` change, so the guard
+  // belongs in the callback rather than in a per-effect `cancelled` flag.
+  const mountedRef = useMountedRef();
 
   const load = useCallback(() => {
     setLoadState('loading');
@@ -41,6 +65,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
       .planProtectionCheckCmd(planId)
       .then(unwrap)
       .then((resp) => {
+        if (!mountedRef.current) return;
         setCheckResult(resp);
         setLoadState('ready');
         // If no protected items, immediately signal all-acknowledged.
@@ -49,7 +74,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         }
       })
       .catch(() => {
-        setLoadState('error');
+        if (mountedRef.current) setLoadState('error');
       });
   }, [planId, onAcknowledgedChange]);
 
@@ -88,30 +113,29 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <div className="alm-plan-gate__status">
-        {m.plans_gate_checking()}
-      </div>
+      <div className="pv-plan-gate__status">{m.plans_gate_checking()}</div>
     );
   }
 
   if (loadState === 'error') {
     return (
-      <div className="alm-plan-gate__status">
-        {m.plans_gate_load_error()}
-      </div>
+      <div className="pv-plan-gate__status">{m.plans_gate_load_error()}</div>
     );
   }
 
-  if (!checkResult || !checkResult.hasProtectedItems) {
-    const { normalCount, unprotectedCount } = checkResult?.nonBlockingSummary ?? {
-      normalCount: 0,
-      unprotectedCount: 0,
-    };
+  if (!checkResult?.hasProtectedItems) {
+    const { normalCount, unprotectedCount } =
+      checkResult?.nonBlockingSummary ?? {
+        normalCount: 0,
+        unprotectedCount: 0,
+      };
     return (
-      <div className="alm-plan-gate__status">
+      <div className="pv-plan-gate__status">
         {m.plans_gate_no_protected()}
-        {normalCount > 0 && m.plans_gate_normal_items_sentence({ count: normalCount })}
-        {unprotectedCount > 0 && m.plans_gate_unprotected_items_sentence({ count: unprotectedCount })}
+        {normalCount > 0 &&
+          m.plans_gate_normal_items_sentence({ count: normalCount })}
+        {unprotectedCount > 0 &&
+          m.plans_gate_unprotected_items_sentence({ count: unprotectedCount })}
       </div>
     );
   }
@@ -121,17 +145,20 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   const allDone = doneCount >= total;
 
   return (
-    <div className="alm-plan-gate__root">
+    <div className="pv-plan-gate__root">
       <div
-        className={'alm-plan-gate__summary-bar' + (allDone ? ' alm-plan-gate__summary-bar--done' : '')}
+        className={
+          'pv-plan-gate__summary-bar' +
+          (allDone ? ' pv-plan-gate__summary-bar--done' : '')
+        }
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
-          {allDone ? m.plans_all_acknowledged() : m.plans_gate_require_ack({ done: total - doneCount, total })}
-        </Pill>
-        <span className="alm-plan-gate__summary-label">
           {allDone
-            ? m.plans_may_proceed()
-            : m.plans_review_acknowledge()}
+            ? m.plans_all_acknowledged()
+            : m.plans_gate_require_ack({ done: total - doneCount, total })}
+        </Pill>
+        <span className="pv-plan-gate__summary-label">
+          {allDone ? m.plans_may_proceed() : m.plans_review_acknowledge()}
         </span>
       </div>
 
@@ -140,32 +167,42 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         return (
           <div
             key={item.itemId}
-            className={'alm-plan-gate__item' + (isDone ? ' alm-plan-gate__item--done' : '')}
+            className={`pv-plan-gate__item${
+              isDone ? ' pv-plan-gate__item--done' : ''
+            }`}
           >
-            <div className="alm-plan-gate__item-header">
+            <div className="pv-plan-gate__item-header">
               <Pill variant="ok">{item.level}</Pill>
-              <code className="alm-mono alm-plan-gate__item-id">
+              <code className="pv-mono pv-plan-gate__item-id">
                 {item.itemId}
               </code>
-              {isDone && <Pill variant="ok">{m.plans_gate_acknowledged()}</Pill>}
+              {isDone && (
+                <Pill variant="ok">{m.plans_gate_acknowledged()}</Pill>
+              )}
             </div>
 
-            <div className="alm-plan-gate__item-action">
+            <div className="pv-plan-gate__item-action">
               {m.plans_gate_action_label()} <strong>{actionLabel(item)}</strong>
             </div>
 
+            {/* #807: state the truth plainly — protection is permanent, so
+                this item will never be archived/moved/deleted regardless of
+                the action shown above or of acknowledging below. */}
+            <div className="pv-plan-gate__item-note">
+              {m.plans_protected_item_note()}
+            </div>
+
             {item.matchedCategories.length > 0 && (
-              <div className="alm-plan-gate__item-categories">
-                {m.plans_gate_categories_label()} {item.matchedCategories.join(', ')}
+              <div className="pv-plan-gate__item-categories">
+                {m.plans_gate_categories_label()}{' '}
+                {item.matchedCategories.join(', ')}
               </div>
             )}
 
-            <div className="alm-plan-gate__item-reason">
-              {item.reason}
-            </div>
+            <div className="pv-plan-gate__item-reason">{item.reason}</div>
 
             {ackErrors[item.itemId] && (
-              <div className="alm-plan-gate__item-error">
+              <div className="pv-plan-gate__item-error">
                 {ackErrors[item.itemId]}
               </div>
             )}
@@ -182,16 +219,20 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
       {/* Non-blocking summary counts (FR-008) */}
       {(checkResult.nonBlockingSummary.normalCount > 0 ||
         checkResult.nonBlockingSummary.unprotectedCount > 0) && (
-        <div className="alm-plan-gate__footer-summary">
+        <div className="pv-plan-gate__footer-summary">
           {m.plans_gate_also_in_plan()}{' '}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
-            m.plans_gate_normal_items({ count: checkResult.nonBlockingSummary.normalCount })}
+            m.plans_gate_normal_items({
+              count: checkResult.nonBlockingSummary.normalCount,
+            })}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
             checkResult.nonBlockingSummary.unprotectedCount > 0 &&
             ', '}
           {checkResult.nonBlockingSummary.unprotectedCount > 0 &&
-            m.plans_gate_unprotected_items({ count: checkResult.nonBlockingSummary.unprotectedCount })}
-          {' '}{m.plans_no_ack_required()}
+            m.plans_gate_unprotected_items({
+              count: checkResult.nonBlockingSummary.unprotectedCount,
+            })}{' '}
+          {m.plans_no_ack_required()}
         </div>
       )}
     </div>

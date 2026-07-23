@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
@@ -42,9 +45,13 @@ describe('MoonSummary', () => {
     const { rerender } = render(
       <MoonSummary night={computeObservingNight(before)} />,
     );
-    const firstPhase = screen.getByTestId('moon-summary').querySelector('.alm-moon-summary__phase')?.textContent;
+    const firstPhase = screen
+      .getByTestId('moon-summary')
+      .querySelector('.pv-moon-summary__phase')?.textContent;
     rerender(<MoonSummary night={computeObservingNight(after)} />);
-    const secondPhase = screen.getByTestId('moon-summary').querySelector('.alm-moon-summary__phase')?.textContent;
+    const secondPhase = screen
+      .getByTestId('moon-summary')
+      .querySelector('.pv-moon-summary__phase')?.textContent;
     expect(firstPhase).toBe(secondPhase);
   });
 });

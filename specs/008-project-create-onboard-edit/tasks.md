@@ -82,11 +82,15 @@ counterparts (contract-backed, audited) are tracked separately.
 - [x] US1-4. Tool field: RadioGroup seeded with PixInsight default. All three
   `ProjectTool` values rendered. Submit button disabled when `!tool`.
 
-- [ ] US1-5. Optional sources field (`AddSourcePicker.tsx`): deferred.
-  No confirmed Inventory sessions exist (spec 003 not shipped). The dialog
-  accepts `initialSources: []` at the contract level; the picker surface is
-  deferred to when spec 003 ships inventory data. _Reason: picking from an
-  empty inventory is a dead UI; the contract already handles the empty case._
+- [ ] US1-5. Optional sources field (`AddSourcePicker.tsx`): RE-ADJUDICATED,
+  stays deferred but the original rationale is stale. Spec 003 (sessions,
+  the renamed "Inventory") shipped; the equivalent picker
+  (`SessionSourcePicker.tsx`) exists and is proven wired into
+  `EditProjectPane.tsx` (US1b-1/US3-4, below). `CreateProjectDialog.tsx`
+  still hardcodes `initialSources: []` — wiring the picker into the create
+  flow is a real, bounded UI feature addition (new field + state + tests),
+  not a reconciliation of existing coverage, so it's left for a follow-up
+  pass rather than expanded into this sweep.
 
 - [x] US1-6. "New project" click handler opens the dialog. Static button
   replaced with `<Btn onClick={() => setCreateOpen(true)}>`.
@@ -108,15 +112,18 @@ counterparts (contract-backed, audited) are tracked separately.
 
 ## US 1b — Source Remove (P2)
 
-- [ ] US1b-1. Wire source-remove rows in `EditProjectPane.tsx` to
-  `useRemoveProjectSource`.
-  _Deferred: the EditProjectPane sources section renders source rows but the
-  remove icon/button row is not yet present. The backend use case is fully
-  implemented and tested (see F-3). UI wiring deferred to a follow-up pass
-  once spec 003 Inventory ships and sources can actually be linked._
+- [x] US1b-1. Wire source-remove rows in `EditProjectPane.tsx` to
+  `useRemoveProjectSource`. DONE (WP-008-C, landed since the original note):
+  `EditProjectPane.tsx` lists current sources with a per-row Remove button
+  wired to `callRemoveProjectSource`/`handleRemoveSource`, with a confirm
+  step. Evidence: 17 passing tests in `EditProjectPane.test.tsx`, including
+  `lists current sources with a Remove affordance` and
+  `removes a source when Remove is clicked`.
 
-- [ ] US1b-2..US1b-5: Backend logic complete (lifecycle gate tested in Rust).
-  UI lifecycle-gating in the remove row: deferred with US1b-1.
+- [x] US1b-2..US1b-5: Backend logic complete (lifecycle gate tested in Rust).
+  UI lifecycle-gating in the remove row: DONE — `isSourceRemoveLocked(lifecycle)`
+  disables Remove per lifecycle state; test `hides the add-sources toggle and
+  disables Remove when the project is archived` in `EditProjectPane.test.tsx`.
 
 ## US 1c — Channel Drift Detection (P3)
 
@@ -134,7 +141,11 @@ counterparts (contract-backed, audited) are tracked separately.
 
 ## US 2 — Onboard An Existing Project (P2)
 
-- [ ] US2-1..US2-7: **Deferred.** Reason: no mockup precedent exists and
+- [ ] US2-1..US2-7: RE-VERIFIED, stays deferred — checked `docs/design/` for a
+  since-added onboard-existing-project mockup; none exists (the only
+  "onboarding" wireframes found are first-run wizard variants, a different
+  flow). Design pass genuinely still required before implementation; not a
+  reconciliation candidate. **Deferred.** Reason: no mockup precedent exists and
   design research R6 (three-way marker reconciliation) has not been validated
   against a real library root. The building blocks are in place:
   - `project_structure::parse_marker()` handles the three-way reconcile logic
@@ -160,10 +171,13 @@ counterparts (contract-backed, audited) are tracked separately.
   Tool select disabled when `isToolLocked(lifecycle)`.
   All fields disabled when `isReadOnly(lifecycle)`.
 
-- [ ] US3-4. Inline "Add source" row wired to `AddSourcePicker.tsx`: deferred
-  with US1-5 (no Inventory yet).
+- [x] US3-4. Inline "Add source" row wired to `AddSourcePicker.tsx`: DONE —
+  `EditProjectPane.tsx`'s "Add sources" toggle reveals `SessionSourcePicker`
+  (the shipped replacement for the planned `AddSourcePicker.tsx`), selection
+  wired through `addSelection`/`callAddProjectSource` (WP-008-C). Evidence:
+  `EditProjectPane.test.tsx` (17 passing tests, including add-source flows).
 
-- [ ] US3-5. Source-remove icon: deferred with US1b-1.
+- [x] US3-5. Source-remove icon: DONE, same evidence as US1b-1 above.
 
 - [x] US3-6. Channel inference preview renders in `EditProjectPane` from
   `channels` state (synced from `project.channels`). Inferred channels show
@@ -197,16 +211,120 @@ counterparts (contract-backed, audited) are tracked separately.
   `channels.rs`); vitest tests for re-infer and dismiss in
   `EditProjectPane.test.tsx`; Rust use-case test `reinfer_clears_drift_flag`.
 
+## Phase F — Framing Layer (Q27)
+
+Additive layer between the `Project` aggregate and spec-006 sessions
+(`project → framing → session → frames`). Does not invalidate any completed
+task above. Cross-spec deltas land in spec-009 (reopen-on-match) and spec-006
+(session→framing membership).
+
+- [ ] F-Framing-1. `[US5]` Add the `framing` table + `framing_session` join +
+  `project.is_mosaic` column (default false) **+ session-level nullable
+  geometry columns** — `pointing (ra/dec)`, `rotation`, `optic_train_key` on
+  the acquisition-session table, **populated at confirm** (today
+  pointing/rotation live only on non-durable inbox staging) — in
+  `crates/persistence/db`. **Legacy rows keep NULL geometry** (Q16 null
+  semantics) and are excluded from clustering until backfilled via rescan
+  (Q28). Claim the **next free migration version at merge** against
+  origin/main; reviewer MUST dup-check `migrations/` (duplicate-0046
+  precedent, PR #317); touch persistence `lib.rs` to force sqlx re-embed. Add
+  the `Framing` entity per `data-model.md` in
+  `crates/domain/core/src/project/` (or `crates/sessions/`).
+  (FR-013/FR-016/FR-017)
+- [ ] F-Framing-2. `[US5]` Tolerance-based clustering in `crates/sessions/` per
+  **research R11a** (single-link vs representative linkage, circular-mean
+  representative, FOV source + fallback, concrete defaults): group a project's
+  light sessions by target + optic-train + pointing + rotation within the
+  tunable tolerance; emit a **suggested** clustering. Triggers: incremental at
+  confirm + explicit bulk derive (onboarding/rescan). **Re-derivation never
+  modifies `user_adjusted` framings** — it only surfaces new suggestions.
+  NULL-geometry sessions are excluded (surface as unassigned). Unit-test the
+  collapse (multi-night/multi-filter → one framing), the split (pointing
+  beyond tolerance → distinct framings), the `user_adjusted` protection, and
+  the NULL-geometry exclusion. Blocked-by: F-Framing-1 (session geometry);
+  new-ingest completeness guarantee arrives with the Q12 strict-gate iterate
+  (not yet applied — cluster whatever has geometry until then).
+  (FR-013/FR-014/FR-015)
+- [ ] F-Framing-3. `[US5]` `framing.list` + `framing.merge` / `framing.split` /
+  `framing.reassign` use cases in `crates/app/core/` + contracts + bindings;
+  flip `Framing.clustering` to `user_adjusted`; membership-only mutation (no
+  filesystem); emit audit events. (FR-015)
+- [ ] F-Framing-4. `[US6]` Mosaic-mode flag on `project.create` / `project.update`
+  (`is_mosaic`); when set, framings inherit the project's declared target and
+  per-frame OBJECT/coordinate resolution is suppressed. No panel entity, no
+  OBJECT/panel-name string parsing. (FR-017/FR-018)
+- [X] F-Framing-5. `[US7]` Inbox-confirm attribution pass in
+  `crates/app/inbox/src/confirm.rs`: match each new light session against
+  existing framings/projects; return ranked `IngestionAttributionCandidate`s
+  (add-to-framing / new-framing / flag-optic-difference / new-project) with the
+  **FR-019 mosaic relaxation** (optic-train + pointing within the existing-
+  framings envelope) and an **optic-train + coarse-sky-bin prefilter**.
+  Suggest-never-auto-merge; user picks. **Attribution is the FIRST pre-ingest
+  pass**: the Q22 duplicate sweep exists in no spec/code yet and **joins this
+  same pass when its iterate lands** (documented composition point — not a
+  blocker). Blocked-by: F-Framing-1/2. (FR-019/FR-020)
+- [X] F-Framing-6. `[US7]` Completed-project attribution match → add + reopen via
+  the spec-009 `completed → processing` edge with the Q25 raw-subs-archived
+  reopen warning. (FR-020)
+- [ ] F-Framing-7. `[US5]` Per-framing source view (Q20) + per-framing manifest
+  (Q10) wiring as reproducible projections; assert §III — the app groups and
+  prepares but never stitches/integrates. **Blocked-by: the Q20 (spec-026/049)
+  and Q10 (spec-024) iterations** — these projections are consumers of the
+  framing model, not Phase F prerequisites; do not start this task before they
+  land. (FR-021)
+- [ ] F-Framing-8. Layer-1 tests: multi-night/multi-filter collapse into
+  one framing; merge/split/reassign persistence + `user_adjusted`; mosaic
+  multi-framing inherit target with no OBJECT parsing; **first-new-panel mosaic
+  suggestion (US6 AS3)**; attribution ranking + user-pick-only apply via
+  `chosenAttribution` (SC-008); **NULL-geometry exclusion**; completed-project
+  add+reopen. Depends on F-Framing-3/4/6/7 and F-Framing-10 — not
+  parallelizable with them.
+- [ ] F-Framing-9. Quickstart + Windows-E2E scenario (tauri MCP) for the framing
+  grouping + attribution flow; update
+  `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`.
+- [X] F-Framing-10. `[US7]` **Attribution apply-path (FR-022)**: extend the
+  Inbox confirm **request** contract with the per-item `chosenAttribution`
+  field (see data-model.md §Apply-path) and persist the picked membership at
+  confirm time — create the framing/project when the kind requires it.
+  Membership is DB metadata (no §II plan); the write applies identically on
+  catalogue-in-place and queued-move confirms. Additive contract extension +
+  bindings + Layer-1 test proving SC-008 end-to-end. Blocked-by: F-Framing-5.
+- [ ] F-Framing-11. `[US5]` **Clustering tunables settings storage (FR-014)**:
+  persist the R11a tolerance parameters (pointing fraction of FOV, rotation
+  degrees, mosaic envelope factor, no-FOV fallback) in Settings with the R11a
+  defaults; surface them in the Settings UI. Blocked-by: F-Framing-2.
+
 ## Cross-Cutting
 
-- [ ] X-1. Update steering index entry for `specs/008-` once tasks land.
-- [ ] X-2. Contract snapshot test for enum drift between JSON Schemas and Rust
-  domain types: deferred (no snapshot tooling wired yet).
-- [ ] X-3. Coordinate with spec 010 (guided first project flow): `CreateProjectDialog`
-  accepts `open`/`onClose`/`onSuccess` props and has no internal navigation,
-  so it is already invocable from an external orchestrator without behavior
-  change.
-- [ ] X-4. Coordinate with spec 011 (tool launch): `update` emits a
+- [x] X-1. Update steering index entry for `specs/008-` once tasks land.
+  OBSOLETE-BY-DESIGN: the per-spec "steering index" this referred to no
+  longer exists — project steering was restructured into hand-maintained
+  domain rule files under `.claude/rules/` (no per-spec-number entries;
+  `grep -rl "008-project-create" .claude/rules/` = no hits). Nothing to
+  update.
+- [x] X-2. Contract snapshot test for enum drift between JSON Schemas and Rust
+  domain types: DONE. Added `tests/contract/project_tool_enum_parity.rs`
+  (3 tests) reusing the existing schema-parity harness pattern from
+  `tests/contract/contract_schema_parity.rs` — asserts `project.create.json`
+  and `project.update.json`'s `ProcessingTool` enum matches
+  `contracts_core::projects_v2::ProjectTool`'s serialized values, and that
+  `ProjectTool` matches `domain_core::project::validate::VALID_TOOLS` (three
+  independently hand-maintained sources of truth for the same vocabulary).
+- [ ] X-3. Coordinate with spec 010 (guided first project flow): RE-VERIFIED,
+  correcting the record — the claim ("already invocable... without behavior
+  change") was never exercised. Spec 010's `WizardPage.tsx` does NOT import
+  `CreateProjectDialog`; its own comment says it "ported CreateProjectDialog's
+  live duplicate-name pre-check" — i.e. spec 010 duplicated the validation
+  logic into a second implementation rather than reusing the component. This
+  is a minor drift risk (two places to keep name/duplicate-check rules in
+  sync) worth a follow-up, not something to refactor inside this sweep.
+  Tracked as issue #586.
+- [ ] X-4. Coordinate with spec 011 (tool launch): RE-VERIFIED, still
+  accurate — checked both the Rust side (`grep -rn project.updated crates/`
+  finds only the publisher in `project_setup.rs`, no subscriber) and the
+  frontend (`apps/desktop/src/features/projects/tool-launch.ts` has no
+  `project.updated`/invalidation wiring). Genuinely still deferred. `update`
+  emits a
   `project.updated` audit event with `fieldsUpdated` including `"tool"` when
   the tool changes. Spec 011 should subscribe to this event to invalidate
   launcher caches. The event emission is live; spec 011 wiring is deferred.
@@ -222,9 +340,26 @@ F-1 ─► F-2 ─► F-3 ─► F-4 ─► F-5 ─► F-6
                                     ├─► US3-1 ─► US3-2 ─► US3-3, US3-6 ✓
                                     └─► US4-1 (via F-2) ─► US4-2 ─► US4-3, US4-4 ✓
 
-US1-5 / US3-4: depend on spec 003 Inventory — deferred.
-US1b-1..US1b-5 (remove UI): deferred with US1-5.
+US1-5: spec 003 shipped; CreateProjectDialog still hasn't picked up the source
+picker — deferred as net-new UI scope, not a spec-003 blocker anymore.
+US3-4, US1b-1..US1b-5 (remove/add-source UI): DONE (WP-008-C) — see ticked items above.
 US2-3 depends on spec 004 (native filesystem controls) — backend ready, UI deferred.
+
+Phase F (framing layer, Q27):
+F-Framing-1 ─► F-Framing-2 ─► F-Framing-3 (list + adjustment)
+                          ├─► F-Framing-11 (tunables settings)
+                          └─► F-Framing-5 ─► F-Framing-6 (reopen)
+                                         └─► F-Framing-10 (apply-path, FR-022)
+F-Framing-1 ─► F-Framing-4 (mosaic flag)
+F-Framing-2 ─► F-Framing-7 (per-framing view/manifest —
+               ALSO blocked-by the Q20 spec-026/049 + Q10 spec-024 iterations)
+F-Framing-8 (tests) follows F-Framing-3/4/6/7/10 — NOT parallelizable with
+them; F-Framing-9 (E2E) last.
+External ordering: attribution (F-Framing-5) is the FIRST pre-ingest pass —
+the Q22 duplicate sweep (no spec/code yet) joins the same pass when its
+iterate lands; the Q12 strict-gate iterate (not yet applied) later guarantees
+geometry on new ingests; NULL-geometry legacy sessions are excluded until a
+Q28 rescan backfill.
 ```
 
 ## Out of Scope
@@ -245,11 +380,12 @@ US2-3 depends on spec 004 (native filesystem controls) — backend ready, UI def
 
 | Item | Reason | Unblocked By |
 |------|--------|--------------|
-| US1-5 `AddSourcePicker` | No confirmed Inventory sessions (spec 003 pending) | spec 003 |
-| US1b-1..US1b-5 remove UI | Needs source rows in EditPane (depends on US1-5) | spec 003 |
+| US1-5 `AddSourcePicker` in Create dialog | `SessionSourcePicker` exists and works (proven in Edit); wiring it into Create is net-new UI scope | Follow-up UI pass |
 | US2 Onboard wizard | No design precedent; marker logic ready in backend | Design pass |
-| US3-4 Add source inline | Depends on AddSourcePicker (US1-5) | spec 003 |
-| US3-5 Source remove icon | Depends on remove UI (US1b-1) | spec 003 |
-| X-1 Steering index | Minor doc update | Any |
-| X-2 Snapshot test | No snapshot tooling | Tooling |
+| X-3 spec 010 dedup | Guided flow ported the validation logic instead of reusing `CreateProjectDialog` | Follow-up refactor |
+| X-4 spec 011 cache invalidation | `project.updated` has no subscriber in tool-launch (Rust or frontend) | spec 011 follow-up |
 | Playwright smokes | WSL headless, no Tauri runtime | CI/E2E env |
+
+Closed since the original notes were written: US1b-1..US1b-5 and US3-4/US3-5
+(WP-008-C source add/remove UI), X-1 (steering-index mechanism retired), X-2
+(snapshot test added).

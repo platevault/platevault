@@ -1,116 +1,59 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 023 target identity logic tests.
  *
  * Tests:
- * 1. Error code mapping — all 7 known TargetOpError codes produce human-readable strings.
- * 2. Date formatting helper.
- * 3. Targets NOT in primary nav (T007 / X-3 regression guard).
- * 4. Contract snapshot: ProjectLifecycle enum values match spec 009.
+ * 1. Error code mapping — the real TargetDetailV2 `errorMessage` helper maps
+ *    every known `ContractError` code to its localized message.
+ * 2. Targets NOT in primary nav (T007 / X-3 regression guard).
+ * 3. Contract snapshot: ProjectLifecycle enum values match the real
+ *    PROJECT_STATES route-contract allow-list.
  */
 
 import { describe, it, expect } from 'vitest';
 
-// ── Error code mapping (mirrors TargetDetailV2.tsx helper) ────────────────────
+import { m } from '@/lib/i18n';
+import type { ContractError } from '@/lib/errors';
+import { errorMessage } from './target-error-message';
+import { PROJECT_STATES } from '@/lib/route-contract';
 
-type TargetOpError = { code: string; message: string };
+// ── Error code mapping (exercises the REAL TargetDetailV2 helper) ─────────────
+//
+// This imports the production `errorMessage` (extracted to
+// `target-error-message.ts`) rather than a hand-copied mirror, so the test
+// cannot silently drift from the mapping the UI actually uses — as it did when
+// the target error envelope moved from the old `TargetOpError` (`alias.duplicate`,
+// `designation.*`, …) to `ContractError` (`alias.blank`, `alias.not_removable`, …).
 
-function errorMessage(err: TargetOpError, fallback: string): string {
-  switch (err.code) {
-    case 'alias.duplicate':
-      return 'This alias is already used by a different target.';
-    case 'alias.invalid':
-      return 'Alias must not be empty.';
-    case 'alias.is_primary':
-      return 'Cannot remove the primary name. Rename primary first.';
-    case 'alias.not_found':
-      return 'Alias not found on this target.';
-    case 'designation.not_in_aliases':
-      return 'New primary must already be an alias. Add it first.';
-    case 'designation.already_primary':
-      return 'This is already the primary name.';
-    case 'target.not_found':
-      return 'Target not found.';
-    default:
-      return fallback;
-  }
-}
+const ce = (code: string): ContractError =>
+  ({ code, message: '' }) as ContractError;
 
-describe('errorMessage', () => {
-  it('maps alias.duplicate', () => {
-    expect(errorMessage({ code: 'alias.duplicate', message: '' }, 'fallback')).toBe(
-      'This alias is already used by a different target.',
-    );
+describe('errorMessage (real TargetDetailV2 mapping)', () => {
+  it.each([
+    ['alias.blank', m.targets_detail_alias_blank()],
+    ['alias.not_found', m.targets_detail_alias_not_found()],
+    ['alias.not_removable', m.targets_detail_alias_not_removable()],
+    ['target.not_found', m.targets_detail_target_not_found()],
+    ['target.invalid_id', m.targets_detail_invalid_target_id()],
+    ['note.content_too_large', m.err_note_content_too_large()],
+  ])('maps %s to its localized message', (code, expected) => {
+    expect(errorMessage(ce(code), 'fallback')).toBe(expected);
   });
 
-  it('maps alias.invalid', () => {
-    expect(errorMessage({ code: 'alias.invalid', message: '' }, 'fallback')).toBe(
-      'Alias must not be empty.',
-    );
-  });
-
-  it('maps alias.is_primary', () => {
-    expect(errorMessage({ code: 'alias.is_primary', message: '' }, 'fallback')).toBe(
-      'Cannot remove the primary name. Rename primary first.',
-    );
-  });
-
-  it('maps alias.not_found', () => {
-    expect(errorMessage({ code: 'alias.not_found', message: '' }, 'fallback')).toBe(
-      'Alias not found on this target.',
-    );
-  });
-
-  it('maps designation.not_in_aliases', () => {
-    expect(
-      errorMessage({ code: 'designation.not_in_aliases', message: '' }, 'fallback'),
-    ).toBe('New primary must already be an alias. Add it first.');
-  });
-
-  it('maps designation.already_primary', () => {
-    expect(
-      errorMessage({ code: 'designation.already_primary', message: '' }, 'fallback'),
-    ).toBe('This is already the primary name.');
-  });
-
-  it('maps target.not_found', () => {
-    expect(errorMessage({ code: 'target.not_found', message: '' }, 'fallback')).toBe(
-      'Target not found.',
-    );
-  });
-
-  it('returns fallback for unknown code', () => {
-    expect(errorMessage({ code: 'some.unknown.code', message: '' }, 'fallback')).toBe('fallback');
+  it('returns the fallback for an unknown code', () => {
+    expect(errorMessage(ce('some.unknown.code'), 'fallback')).toBe('fallback');
   });
 });
 
-// ── Date format helper ────────────────────────────────────────────────────────
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-describe('formatDate', () => {
-  it('returns a non-empty string for a valid ISO timestamp', () => {
-    const result = formatDate('2026-06-01T12:00:00Z');
-    expect(result).toBeTruthy();
-    expect(result.length).toBeGreaterThan(0);
-  });
-
-  it('returns the input for an unparseable string', () => {
-    // new Date('not-a-date').toLocaleDateString() returns 'Invalid Date'
-    // We return it as-is to avoid a blank label.
-    const result = formatDate('not-a-date');
-    expect(typeof result).toBe('string');
-  });
-});
+// The former "formatDate" describe block defined and tested a date-formatting
+// helper inline, entirely inside this test file. A codebase-wide check
+// confirms no such standalone helper exists in production: TargetDetailV2.tsx
+// calls `new Date(s.createdAt).toLocaleDateString(...)` inline (not extracted
+// to a reusable function) — so this test only ever validated its own local
+// copy. The real formatting is exercised by TargetDetailV2.test.tsx's
+// "(US2) Linked sessions list renders date and frameCount" render test.
 
 // ── T007 / X-3: Targets NOT in primary nav manifest ───────────────────────────
 //
@@ -125,33 +68,37 @@ describe('formatDate', () => {
 //
 // The regression we guard against is /targets/$id being added as a PRIMARY
 // sidebar entry (i.e. a nav item with path == '/targets/:id').
+//
+// Sidebar.tsx renders NavItem/NavGroup structures built from Tauri-specific
+// icon imports that don't resolve cleanly under jsdom, so this reads the
+// REAL source as raw text (compile-time Vite `?raw` glob, the same technique
+// InboxPage.classify.test.tsx and anchors.test.ts use) instead of a
+// hand-copied path list that could silently drift from the actual nav.
+
+const SIDEBAR_SOURCE = Object.values(
+  import.meta.glob('@/app/Sidebar.tsx', { as: 'raw', eager: true }),
+)[0] as string;
 
 describe('T007 / X-3 — targets/$id is NOT a primary nav entry', () => {
-  const PRIMARY_NAV_PATHS = [
-    '/inbox',
-    '/sessions',
-    '/calibration',
-    '/targets', // the LIST page is allowed; the detail route is not
-    '/projects',
-    '/archive',
-    '/settings',
-  ];
+  // Every NavItem `path:` literal in the real Sidebar.tsx source.
+  const navPaths = [...SIDEBAR_SOURCE.matchAll(/path:\s*'([^']+)'/g)].map(
+    (m) => m[1],
+  );
 
-  it('no primary nav path contains a $id or :id segment', () => {
-    for (const path of PRIMARY_NAV_PATHS) {
+  it('Sidebar.tsx source was actually read (glob sanity check)', () => {
+    expect(navPaths.length).toBeGreaterThan(0);
+    expect(navPaths).toContain('/targets');
+  });
+
+  it('no real nav path contains a $id or :id segment', () => {
+    for (const path of navPaths) {
       expect(path).not.toMatch(/\$id|:id/);
     }
   });
 
-  it('the /targets list path is present (expected; not a regression)', () => {
-    expect(PRIMARY_NAV_PATHS).toContain('/targets');
-  });
-
-  it('no primary nav path is the targets detail pattern', () => {
-    for (const path of PRIMARY_NAV_PATHS) {
-      expect(path).not.toBe('/targets/:id');
-      expect(path).not.toBe('/targets/$id');
-    }
+  it('no real nav path is the targets detail pattern', () => {
+    expect(navPaths).not.toContain('/targets/:id');
+    expect(navPaths).not.toContain('/targets/$id');
   });
 });
 
@@ -159,8 +106,18 @@ describe('T007 / X-3 — targets/$id is NOT a primary nav entry', () => {
 //
 // The spec 023 target.get.json contract defines ProjectLifecycle as a closed
 // enum. This snapshot fails if the enum drifts from spec 009 canonical values.
+//
+// The former version compared two arrays hand-copied VERBATIM into this test
+// file — neither imported from anywhere, so they could never disagree with
+// each other, only silently drift from the real enum together. `PROJECT_STATES`
+// (route-contract.ts) is declared `as const satisfies readonly ProjectState[]`
+// against the generated backend binding, so it IS the real spec 009 canonical
+// source — anchoring against it means a backend enum change that isn't
+// mirrored here fails at compile time (the `satisfies` clause) before this
+// test would even need to catch it at runtime.
 
 describe('X-2 ProjectLifecycle enum snapshot', () => {
+  // Spec 023 contract's documented lifecycle values (target.get.json).
   const SPEC_023_PROJECT_LIFECYCLE = [
     'setup_incomplete',
     'ready',
@@ -171,23 +128,14 @@ describe('X-2 ProjectLifecycle enum snapshot', () => {
     'blocked',
   ] as const;
 
-  // Spec 009 canonical values (from domain_core / lifecycle module).
-  const SPEC_009_CANONICAL = [
-    'setup_incomplete',
-    'ready',
-    'prepared',
-    'processing',
-    'completed',
-    'archived',
-    'blocked',
-  ] as const;
-
-  it('spec 023 contract lifecycle enum matches spec 009 canonical enum', () => {
-    expect([...SPEC_023_PROJECT_LIFECYCLE].sort()).toEqual([...SPEC_009_CANONICAL].sort());
+  it('spec 023 contract lifecycle enum matches the real PROJECT_STATES allow-list', () => {
+    expect([...SPEC_023_PROJECT_LIFECYCLE].sort()).toEqual(
+      [...PROJECT_STATES].sort(),
+    );
   });
 
   it('no enum value contains whitespace', () => {
-    for (const v of SPEC_023_PROJECT_LIFECYCLE) {
+    for (const v of PROJECT_STATES) {
       expect(v).not.toMatch(/\s/);
     }
   });

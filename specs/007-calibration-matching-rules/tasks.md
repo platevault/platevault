@@ -18,7 +18,7 @@ description: "Task list for 007-calibration-matching-rules"
 ## Phase 1: Setup
 
 - [x] T001 Add `crates/calibration/core/Cargo.toml` entry to workspace if not present; confirm crate compiles empty. — Already in workspace; updated with serde/uuid deps; 66 tests pass.
-- [ ] T002 [P] Add JSON Schema validation harness for `packages/contracts/schemas/calibration.match.*.json` in `tests/contracts/`. — DEFERRED: JSON Schema validator in tests/contract/ requires jsonschema crate not yet in workspace. Schemas live in specs/007.../contracts/ and are validated structurally by the Rust DTO tests in contracts_core.
+- [x] T002 [P] Add JSON Schema validation harness for `packages/contracts/schemas/calibration.match.*.json` in `tests/contracts/`. — RECONCILED: the generic AJV-based conformance runner already exists at `packages/contracts/tests/conformance-harness.mjs` (added for spec 033 T063, wired into `pnpm --filter @astro-plan/contracts test`) — a single `validate(label, schema, payload, expectValid)` function that compiles any schema and checks fixtures against it. No second harness needed; extended it with calibration.match.* fixtures instead of building a duplicate in `tests/contract/` (that dir is a separate Rust `cargo test` crate, not a JS Schema runner).
 - [x] T003 [P] Add migration scaffold `crates/persistence/db/migrations/00X_calibration_matches.sql` for `calibration_assignment` and `calibration_rule_config` tables (empty bodies acceptable here). — Done: migration 0022_calibration_assignments.sql + 0023_calibration_fingerprints.sql; all persistence_db tests pass.
 
 ---
@@ -47,7 +47,7 @@ description: "Task list for 007-calibration-matching-rules"
 - [x] T012 [P] [US1] Unit tests for dark rule edge cases (missing temperature metadata, exact match, partial tolerance) in `crates/calibration/core/tests/dark_matching.rs`. — Done: tests are inline in `rules/dark.rs` (same coverage; separate file not required by spec).
 - [x] T013 [US1] Implement suggest dispatcher in `crates/calibration/core/src/lib.rs` to fan-out per calibration type; dark path live. — Done: `suggest()` fan-out with all three types; 7 lib-level tests.
 - [x] T014 [US1] Implement Tauri command adapter for `calibration.match.suggest` in `apps/desktop/src-tauri/src/commands/calibration.rs` returning the schema-shaped payload (dark only at this checkpoint). — Done: `calibration_match_suggest` wired to `app_core::calibration::suggest`; registered in specta_builder.
-- [ ] T015 [P] [US1] Contract test against `packages/contracts/schemas/calibration.match.suggest.json` for the dark response shape in `tests/contracts/calibration_match_suggest_dark.rs`. — DEFERRED: JSON Schema runner not yet in tests/contract/ (T002 dependency). Shape is validated by contracts_core tests + bindings export.
+- [x] T015 [P] [US1] Contract test against `packages/contracts/schemas/calibration.match.suggest.json` for the dark response shape in `tests/contracts/calibration_match_suggest_dark.rs`. — RECONCILED (T002 unblocked): covered via `packages/contracts/tests/conformance-harness.mjs` fixtures "T015 calibration.match.suggest dark match response is valid" + drift case (missing `confidence`), run in CI via `pnpm --filter @astro-plan/contracts test`.
 
 **Checkpoint**: Dark matching MVP complete.
 
@@ -63,7 +63,7 @@ description: "Task list for 007-calibration-matching-rules"
 - [x] T017 [US2] Implement observing-night lookup helper consuming `crates/sessions/` API in `crates/calibration/core/src/rules/flat.rs`. — Done: `flat_selection_reason()` + `night_distance()` in ranking.rs (pure; no sessions crate dep needed for domain logic).
 - [x] T018 [P] [US2] Unit tests for flat selection reasons and binning hard-fail in `crates/calibration/core/tests/flat_matching.rs`. — Done: inline in rules/flat.rs; selection reason and binning-mismatch-excludes tests pass.
 - [x] T019 [US2] Extend suggest dispatcher to route flat type; update Tauri command to support `calibration_types` filter. — Done: suggest dispatcher handles all 3 types; calibration_types filter forwarded through DTO.
-- [ ] T020 [P] [US2] Contract test for flat response shape including `selection_reason` field in `tests/contracts/calibration_match_suggest_flat.rs`. — DEFERRED: same as T015 (JSON Schema runner).
+- [x] T020 [P] [US2] Contract test for flat response shape including `selection_reason` field in `tests/contracts/calibration_match_suggest_flat.rs`. — RECONCILED: conformance-harness.mjs "T020 calibration.match.suggest flat match response includes selectionReason" + drift case (invalid enum value).
 
 **Checkpoint**: Flat matching complete; suggest works for dark + flat.
 
@@ -78,7 +78,7 @@ description: "Task list for 007-calibration-matching-rules"
 - [x] T021 [US3] Implement `rules::bias::evaluate` in `crates/calibration/core/src/rules/bias.rs` (gain hard, offset hard, no soft defaults). — Done: confidence always 1.0 on match; 7 unit tests.
 - [x] T022 [P] [US3] Unit tests asserting bias responses contain no exposure/temperature dimension entries in `crates/calibration/core/tests/bias_matching.rs`. — Done: `no_exposure_or_temperature_dimensions_reported` test passes.
 - [x] T023 [US3] Extend suggest dispatcher to route bias type. — Done: bias included in default types_ref; all 3 types dispatched.
-- [ ] T024 [P] [US3] Contract test for bias response shape in `tests/contracts/calibration_match_suggest_bias.rs`. — DEFERRED: same as T015.
+- [x] T024 [P] [US3] Contract test for bias response shape in `tests/contracts/calibration_match_suggest_bias.rs`. — RECONCILED: conformance-harness.mjs "T024 calibration.match.suggest bias ambiguous response is valid" + drift case (mismatch entry missing `reason`).
 
 **Checkpoint**: All three suggest paths live.
 
@@ -94,7 +94,7 @@ description: "Task list for 007-calibration-matching-rules"
 - [x] T026 [US4] Persistence write path in `crates/persistence/db/src/calibration_assignment.rs` honoring `(session_id, calibration_type)` uniqueness and upsert semantics. — Done: ON CONFLICT upsert; dark_flat rejected by DB CHECK; all 7 tests pass.
 - [x] T027 [P] [US4] Unit tests for override accept/reject paths and audit fields in `crates/calibration/core/tests/override.rs`. — Done: inline in assign.rs; incompatible_dark_with_override_succeeds, was_override=true, confidence=0.7.
 - [x] T028 [US4] Tauri command adapter for `calibration.match.assign` in `apps/desktop/src-tauri/src/commands/calibration.rs`. — Done: `calibration_match_assign` wired to `app_core::calibration::assign`.
-- [ ] T029 [P] [US4] Contract test against `packages/contracts/schemas/calibration.match.assign.json` covering success, `incompatible.dimensions`, and `master.not_found` paths in `tests/contracts/calibration_match_assign.rs`. — DEFERRED: same as T015.
+- [x] T029 [P] [US4] Contract test against `packages/contracts/schemas/calibration.match.assign.json` covering success, `incompatible.dimensions`, and `master.not_found` paths in `tests/contracts/calibration_match_assign.rs`. — RECONCILED: conformance-harness.mjs "T029 calibration.match.assign success/incompatible.dimensions/master.not_found" fixtures + drift case.
 - [x] T030 [US4] Emit audit event via `crates/audit/` on every assign call, including override flag and mismatched dimensions. — Done: `bus.publish("calibration.assignment.created", ...)` in assign use case; includes wasOverride and mismatchedDimensions fields.
 
 **Checkpoint**: Suggest + assign fully wired end-to-end.
@@ -111,7 +111,7 @@ session returns `status: "observer_location_missing"` while others return matche
 
 - [x] T035 [US5] Implement `batch_suggest` dispatcher in `crates/calibration/core/src/lib.rs` that fans out per (session, calibration_type) pair and aggregates results. — Done: `batch_suggest()` in lib.rs + `batch_suggest()` use case in app_core.
 - [x] T036 [US5] Handle `observer_location_missing` and `session.mixed_state` per-item statuses in the batch dispatcher. — Done: per-item error codes propagated as `status` in BatchSessionResultDto; test `batch_suggest_mixed_state_returns_per_item_error` passes.
-- [ ] T037 [P] [US5] Contract test against `packages/contracts/schemas/calibration.match.suggest.batch.json` covering: all-success, partial (one observer_location_missing), all-error in `tests/contracts/calibration_match_suggest_batch.rs`. — DEFERRED: same as T015.
+- [x] T037 [P] [US5] Contract test against `packages/contracts/schemas/calibration.match.suggest.batch.json` covering: all-success, partial (one observer_location_missing), all-error in `tests/contracts/calibration_match_suggest_batch.rs`. — RECONCILED: conformance-harness.mjs "T037 calibration.match.suggest.batch all-success/partial/all-error" fixtures + drift case.
 - [x] T038 [US5] Tauri command adapter for `calibration.match.suggest.batch` in `apps/desktop/src-tauri/src/commands/calibration.rs`. — Done: `calibration_match_suggest_batch` registered in specta_builder.
 - [x] T039 [P] [US5] Unit test: batch with mixed session returns `session.mixed_state` for that session; other sessions unaffected. — Done: `batch_suggest_mixed_state_returns_per_item_error` in lib.rs tests.
 
@@ -126,8 +126,8 @@ session returns `status: "observer_location_missing"` while others return matche
 - [ ] T033 [P] Performance check: simulate 1k masters and assert single-session suggest returns under 200ms; record results in `docs/research/`. — DEFERRED: requires seeding 1k fingerprint rows; pure-domain test feasible but not yet wired.
 - [x] T034 Update calibration match panel consumer to drive the project-detail accordion (spec 008 surface). — Done: `CalibrationMatchPanel.tsx` added to `apps/desktop/src/features/projects/`; wired into `ProjectDetail.tsx`; calls `calibration.match.suggest.batch` for all source session IDs; renders per-(session, type) status + confidence; read-only (assign from CalibrationPage); 7 vitest tests pass. Also: `CalibrationPage` + `MastersList` + `MasterDetail` + `MatchCandidatesPanel` wired to real backend with `useCalibrationMasters`, `useCalibrationSuggest`, `useCalibrationAssign`, `useCalibrationSettings`; `prefill_suggestion` respected; 16 MatchCandidatesPanel tests + 8 MastersList tests pass. Route search param for `/calibration` migrated from `parseNumber` to `parseString` (UUID IDs).
 - [ ] T040 [P] CI snapshot test: assert that the `calibration_types` enum in all three suggest/assign contracts matches the canonical definition in spec 002 when spec 002 adds it. — DEFERRED: spec 002 CalibrationType enum not yet finalized.
-- [ ] T041 [P] Contract test: `session.mixed_state` error returned when calling `calibration.match.suggest` or `calibration.match.assign` with a session whose type is `mixed`. — DEFERRED: same as T015 (JSON Schema runner). Domain guard is tested at unit level.
-- [ ] T042 [P] Contract test: `match.observer_location_missing` returned when calling `calibration.match.suggest` with a session lacking `observer_location` or `exposure_start_utc`. — DEFERRED: same as T015. Domain guard is tested at unit level.
+- [x] T041 [P] Contract test: `session.mixed_state` error returned when calling `calibration.match.suggest` or `calibration.match.assign` with a session whose type is `mixed`. — RECONCILED: conformance-harness.mjs "T041 calibration.match.suggest session.mixed_state error response is valid" + drift (unknown error code). Domain guard already covered at unit level.
+- [x] T042 [P] Contract test: `match.observer_location_missing` returned when calling `calibration.match.suggest` with a session lacking `observer_location` or `exposure_start_utc`. — RECONCILED: conformance-harness.mjs "T042 calibration.match.suggest observer_location_missing result status is valid". Domain guard already covered at unit level.
 
 ---
 

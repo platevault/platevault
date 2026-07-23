@@ -12,8 +12,13 @@ extend-exclude = [
     "GEMINI.md",
     "*/CLAUDE.md",
     "*/AGENTS.md",
+    # release-please generated; full of commit-hash substrings that read as
+    # misspellings ("ede"/"caf" fragments of full SHAs)
+    "CHANGELOG.md",
     # generated star-catalog seed data (Bayer designations trip the checker)
     "assets/seed/",
+    # non-English UI catalogue (Portuguese text trips the English checker)
+    "apps/desktop/messages/pt-BR.json",
 ]
 
 [default.extend-words]

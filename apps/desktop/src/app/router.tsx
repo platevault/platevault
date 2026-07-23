@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import {
   createHashHistory,
   createRouter,
@@ -12,7 +15,6 @@ import { Shell } from './Shell';
 import { checkFirstRunComplete } from './first-run';
 import {
   makeValidateSearch,
-  parseNumber,
   parseString,
   parseEnum,
   parseCsvEnum,
@@ -61,7 +63,10 @@ const sessionDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/sessions/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/sessions', search: selectedSearchString(params.id) });
+    throw redirect({
+      to: '/sessions',
+      search: selectedSearchString(params.id),
+    });
   },
 });
 
@@ -71,7 +76,11 @@ const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/inbox',
   validateSearch: makeValidateSearch({
-    selected: parseNumber,
+    // Issue #644: `selected` is the item's own id, not a list-position index —
+    // an index silently points at whatever item now occupies that slot once
+    // search/filters change the array shape (Sessions/Calibration already use
+    // this id-based pattern).
+    selected: parseString,
     type: parseEnum(FRAME_TYPES),
     group: parseEnum(INBOX_GROUPS),
   }),
@@ -99,7 +108,10 @@ const calibrationDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/calibration/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/calibration', search: selectedSearchString(params.id) });
+    throw redirect({
+      to: '/calibration',
+      search: selectedSearchString(params.id),
+    });
   },
 });
 
@@ -151,13 +163,20 @@ const projectDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/projects', search: selectedSearchString(params.id) });
+    throw redirect({
+      to: '/projects',
+      search: selectedSearchString(params.id),
+    });
   },
 });
 
 const projectNewRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/new',
+  // #612: carries the originating target's id from "+ New project here" so
+  // the wizard can prefill a real target reference instead of fabricating a
+  // "From target context" label from typed text.
+  validateSearch: makeValidateSearch({ targetId: parseString }),
   component: lazyRouteComponent(
     () => import('@/features/projects/wizard/WizardPage'),
     'WizardPage',

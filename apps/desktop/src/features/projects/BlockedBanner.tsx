@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * BlockedBanner — spec 009 US4-2 + US4-3.
  *
@@ -61,6 +64,39 @@ export type RecoveryEdge =
   | 'prepared'
   | 'processing';
 
+/**
+ * Derive a typed {@link BlockedReason} from the raw DTO fields
+ * (`blockedReasonKind`/`blockedReasonNote`, spec 033 FR-020). Shared between
+ * ProjectDetail's banner and ProjectsTable's list-row tooltip (#720 SC-001)
+ * so both surfaces render the identical reason text.
+ */
+export function deriveBlockedReason(
+  kind: string | null | undefined,
+  note: string | null | undefined,
+): BlockedReason {
+  const noteVal = note ?? undefined;
+  if (kind === 'source_missing') {
+    const inventoryId =
+      noteVal?.replace(/^Source missing:\s*/i, '') ?? 'unknown';
+    return { kind: 'source_missing', inventoryId };
+  }
+  if (kind === 'tool_unconfigured') {
+    const tool =
+      noteVal?.replace(/^Tool path not configured:\s*/i, '') ?? 'unknown';
+    return { kind: 'tool_unconfigured', tool };
+  }
+  if (kind === 'calibration_unmatched') {
+    return {
+      kind: 'calibration_unmatched',
+      calibrationSetId: noteVal ?? 'unknown',
+    };
+  }
+  if (kind === 'prepared_source_stale') {
+    return { kind: 'prepared_source_stale', preparedId: noteVal ?? 'unknown' };
+  }
+  return { kind: 'user', note: noteVal ?? m.projects_blocked_note_fallback() };
+}
+
 /** Map a BlockedReason to its human-readable message text. */
 export function blockedReasonMessage(reason: BlockedReason): string {
   switch (reason.kind) {
@@ -109,15 +145,19 @@ export interface BlockedBannerProps {
  * Shows the structured reason text and a primary "Resolve" action that
  * dispatches the appropriate recovery edge.
  */
-export function BlockedBanner({ reason, onResolve, disabled }: BlockedBannerProps) {
+export function BlockedBanner({
+  reason,
+  onResolve,
+  disabled,
+}: BlockedBannerProps) {
   const message = blockedReasonMessage(reason);
   const edge = resolveEdgeForReason(reason);
 
   return (
     <Banner variant="danger" role="alert" aria-live="assertive">
-      <div className="alm-blocked-banner__body">
+      <div className="pv-blocked-banner__body">
         <span data-testid="blocked-reason-message">{message}</span>
-        <div className="alm-blocked-banner__actions">
+        <div className="pv-blocked-banner__actions">
           <Btn
             size="sm"
             variant="danger"

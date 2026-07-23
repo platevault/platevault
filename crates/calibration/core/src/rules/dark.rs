@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Dark frame matching rule (spec 007 US1, FR-003).
 //!
 //! Hard dimensions: `gain`, `offset` — exact match required.
@@ -27,19 +30,11 @@ pub fn evaluate(
     let mut confidence = 1.0_f64;
 
     // ── Hard rule: gain ───────────────────────────────────────────────────────
-    match (session.gain, master.gain) {
-        (Some(sg), Some(mg)) => {
-            if (sg - mg).abs() < 1e-9 {
-                matched.push(MatchedDim::exact(Dimension::Gain));
-            } else {
-                // Hard rule violation — exclude candidate.
-                return None;
-            }
-        }
-        _ => {
-            // Missing metadata on either side — hard rule cannot be satisfied.
-            return None;
-        }
+    if crate::rules::hard_rule_numeric(session.gain, master.gain) {
+        matched.push(MatchedDim::exact(Dimension::Gain));
+    } else {
+        // Hard rule violation, or missing metadata on either side — exclude.
+        return None;
     }
 
     // ── Hard rule: offset (controlled by config.require_same_offset) ─────────
@@ -50,7 +45,7 @@ pub fn evaluate(
     // and reduces confidence rather than excluding the candidate entirely.
     match (session.offset, master.offset) {
         (Some(so), Some(mo)) => {
-            if (so - mo).abs() < 1e-9 {
+            if (so - mo).abs() < crate::rules::HARD_RULE_EPSILON {
                 matched.push(MatchedDim::exact(Dimension::Offset));
             } else if config.require_same_offset {
                 return None;

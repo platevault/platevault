@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Example: Form Pattern with shadcn/ui components
 // Demonstrates: Form building, validation, and composition
 

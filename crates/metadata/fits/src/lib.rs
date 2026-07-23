@@ -1,4 +1,7 @@
-//! Minimal pure-Rust FITS header reader (spec 005 T005).
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Pure-Rust FITS header reader (spec 005 T005), built on the `fits-header` crate.
 //!
 //! # FITS Header Format
 //!
@@ -11,16 +14,17 @@
 //! `GAIN`, `XBINNING`, `YBINNING`, `NAXIS1`, `NAXIS2`, `INSTRUME`, `TELESCOP`,
 //! `DATE-OBS`.
 //!
-//! No cfitsio or heavy C dependencies — the implementation reads raw bytes.
-//! Missing or garbage headers are handled gracefully; the extractor never
-//! panics or returns hard errors for corrupt files, preferring `None` values.
+//! No cfitsio or heavy C dependencies — `fits-header` is pure Rust. Missing or
+//! garbage headers are handled gracefully; the extractor never panics or
+//! returns hard errors for corrupt files, preferring `None` values.
 #![allow(clippy::doc_markdown)]
 
 use std::io::{self, Read};
 use std::path::Path;
 
+use fits_header::{FitsError, FromCard, Header};
 use metadata_core::{
-    parse_f64, parse_i64, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
+    interpret_wcs_pointing, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
     MetadataExtractor, RawFileMetadata,
 };
 
@@ -28,7 +32,6 @@ use metadata_core::{
 
 const BLOCK_SIZE: usize = 2880;
 const CARD_SIZE: usize = 80;
-const CARDS_PER_BLOCK: usize = BLOCK_SIZE / CARD_SIZE;
 
 /// Maximum number of blocks to read before giving up.
 /// A typical FITS primary header is 1-4 blocks; 32 is extremely generous.
@@ -58,12 +61,18 @@ impl MetadataExtractor for FitsExtractor {
             msg: e.to_string(),
         })?;
 
-        let cards = read_header_cards(file, path).map_err(|e| MetadataExtractError::Io {
+        let bytes = read_header_bytes(file).map_err(|e| MetadataExtractError::Io {
             path: path.display().to_string(),
             msg: e.to_string(),
         })?;
 
-        Ok(Some(parse_cards(&cards)))
+        // Header::parse never actually errs (parsing is lenient by design);
+        // propagate defensively rather than unwrap.
+        let header = fits_header::Header::parse(&bytes).map_err(|e| {
+            MetadataExtractError::Parse { path: path.display().to_string(), msg: e.to_string() }
+        })?;
+
+        Ok(Some(parse_header(&header)))
     }
 
     fn supports_extension(&self, ext: &str) -> bool {
@@ -73,11 +82,14 @@ impl MetadataExtractor for FitsExtractor {
 
 // ── Header reading ────────────────────────────────────────────────────────────
 
-/// Read all header cards up to (but not including) the END card.
+/// Read header blocks from `reader`, stopping once the `END` card is seen or
+/// after `MAX_HEADER_BLOCKS` (whichever first).
 ///
-/// Returns only the 80-byte cards that precede the `END` marker.
-fn read_header_cards(mut reader: impl Read, _path: &Path) -> io::Result<Vec<[u8; CARD_SIZE]>> {
-    let mut cards = Vec::new();
+/// FITS files can carry gigabytes of pixel data after the header; bounding the
+/// read here keeps header extraction cheap regardless of file size instead of
+/// pulling the whole file into memory for `fits_header::parse`.
+fn read_header_bytes(mut reader: impl Read) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(BLOCK_SIZE);
     let mut block = [0u8; BLOCK_SIZE];
 
     for _ in 0..MAX_HEADER_BLOCKS {
@@ -87,206 +99,126 @@ fn read_header_cards(mut reader: impl Read, _path: &Path) -> io::Result<Vec<[u8;
             Err(e) => return Err(e),
         }
 
-        for i in 0..CARDS_PER_BLOCK {
-            let card_bytes = &block[i * CARD_SIZE..(i + 1) * CARD_SIZE];
-            let mut card = [0u8; CARD_SIZE];
-            card.copy_from_slice(card_bytes);
-
-            // Check for END marker
-            if card_bytes.starts_with(b"END     ") || card_bytes.starts_with(b"END\x00") {
-                return Ok(cards);
-            }
-
-            cards.push(card);
+        let has_end = block
+            .chunks_exact(CARD_SIZE)
+            .any(|c| c.starts_with(b"END     ") || c.starts_with(b"END\x00"));
+        bytes.extend_from_slice(&block);
+        if has_end {
+            break;
         }
     }
 
-    Ok(cards)
+    Ok(bytes)
 }
 
-// ── Card parsing ──────────────────────────────────────────────────────────────
+// ── Header field extraction ──────────────────────────────────────────────────
 
-/// Parse a list of 80-byte FITS cards into [`RawFileMetadata`].
+/// Typed keyword read that never hard-errors: a duplicated keyword
+/// (`FitsError::AmbiguousKeyword`) falls back to its first occurrence instead
+/// of surfacing an error, preserving this extractor's "always `None`, never
+/// `Err`" contract for corrupt/odd files.
+fn get<T: FromCard>(header: &Header, key: &str) -> Option<T> {
+    match header.get::<T>(key) {
+        Ok(v) => v,
+        Err(FitsError::AmbiguousKeyword { .. }) => header.get_all::<T>(key).into_iter().next(),
+        Err(_) => None,
+    }
+}
+
+/// Like [`get`] but for quoted string values (`Header::get_str`).
+fn get_str(header: &Header, key: &str) -> Option<String> {
+    match header.get_str(key) {
+        Ok(v) => v.map(str::to_owned),
+        Err(FitsError::AmbiguousKeyword { .. }) => header.get_all::<String>(key).into_iter().next(),
+        Err(_) => None,
+    }
+}
+
+/// Map header keywords into [`RawFileMetadata`].
 ///
-/// The observer-location fallback arms share bodies but are intentionally
-/// separate keyword patterns with per-field `is_none()` guards (fallback
-/// precedence); the keyword dispatch is necessarily long.
-#[allow(clippy::match_same_arms, clippy::too_many_lines)]
-fn parse_cards(cards: &[[u8; CARD_SIZE]]) -> RawFileMetadata {
+/// The observer-location fallback chains and RA/DEC decimal-over-sexagesimal
+/// precedence are shared value shapes but are intentionally kept as separate
+/// keyword lookups (fallback precedence); the field list is necessarily long.
+// A struct-literal initializer would be far less readable than these named
+// per-field assignments given the multi-keyword fallback chains.
+#[allow(clippy::field_reassign_with_default)]
+fn parse_header(header: &Header) -> RawFileMetadata {
     let mut meta = RawFileMetadata::default();
 
-    for card in cards {
-        // A value card has keyword in bytes 0..8 and '= ' at bytes 8..10.
-        // Some cards use HIERARCH extension but we ignore those for now.
-        let keyword_bytes = &card[0..8];
-        // Trim trailing spaces from the 8-byte keyword field.
-        let keyword = std::str::from_utf8(keyword_bytes).unwrap_or("").trim_end();
+    meta.image_typ = get_str(header, "IMAGETYP");
+    meta.filter = get_str(header, "FILTER");
+    meta.object = get_str(header, "OBJECT");
+    // EXPTIME takes priority; EXPOSURE is the fallback.
+    meta.exposure = get::<String>(header, "EXPTIME").or_else(|| get::<String>(header, "EXPOSURE"));
+    meta.gain = get(header, "GAIN");
+    meta.x_binning = get(header, "XBINNING");
+    meta.y_binning = get(header, "YBINNING");
+    meta.naxis1 = get(header, "NAXIS1");
+    meta.naxis2 = get(header, "NAXIS2");
+    meta.instrume = get_str(header, "INSTRUME");
+    meta.telescop = get_str(header, "TELESCOP");
+    meta.date_obs = get_str(header, "DATE-OBS");
 
-        match keyword {
-            "IMAGETYP" => meta.image_typ = extract_string_value(card),
-            "FILTER" => meta.filter = extract_string_value(card),
-            "OBJECT" => meta.object = extract_string_value(card),
-            "EXPTIME" | "EXPOSURE" if meta.exposure.is_none() => {
-                meta.exposure = extract_numeric_string(card);
-            }
-            "GAIN" => meta.gain = extract_numeric_string(card),
-            "XBINNING" => meta.x_binning = extract_numeric_string(card),
-            "YBINNING" => meta.y_binning = extract_numeric_string(card),
-            "NAXIS1" => meta.naxis1 = extract_numeric_string(card),
-            "NAXIS2" => meta.naxis2 = extract_numeric_string(card),
-            "INSTRUME" => meta.instrume = extract_string_value(card),
-            "TELESCOP" => meta.telescop = extract_string_value(card),
-            "DATE-OBS" => meta.date_obs = extract_string_value(card),
-            // Stack/integration count: STACKCNT (preferred) or NCOMBINE fallback.
-            "STACKCNT" => {
-                meta.stack_count =
-                    extract_numeric_string(card).and_then(|s| s.trim().parse::<u32>().ok());
-            }
-            "NCOMBINE" if meta.stack_count.is_none() => {
-                meta.stack_count =
-                    extract_numeric_string(card).and_then(|s| s.trim().parse::<u32>().ok());
-            }
+    // Stack/integration count: STACKCNT (preferred) or NCOMBINE fallback.
+    meta.stack_count = get::<u32>(header, "STACKCNT").or_else(|| get::<u32>(header, "NCOMBINE"));
 
-            // ── Extended extracted metadata (spec 041 T062, R-9/R-18) ───────
-            // Offset / pedestal: OFFSET preferred, BLKLEVEL fallback.
-            "OFFSET" => {
-                meta.offset = extract_numeric_string(card).and_then(|s| parse_i64(&s));
-            }
-            "BLKLEVEL" if meta.offset.is_none() => {
-                meta.offset = extract_numeric_string(card).and_then(|s| parse_i64(&s));
-            }
-            // Temperatures.
-            "SET-TEMP" => {
-                meta.set_temp_c = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "CCD-TEMP" => {
-                meta.ccd_temp_c = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "DET-TEMP" if meta.ccd_temp_c.is_none() => {
-                // DWARF III non-standard fallback for actual sensor temp.
-                meta.ccd_temp_c = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            // Pointing: decimal RA/DEC preferred over sexagesimal OBJCTRA/OBJCTDEC.
-            "RA" => {
-                meta.ra_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "OBJCTRA" if meta.ra_deg.is_none() => {
-                meta.ra_deg = extract_string_value(card).and_then(|s| sexagesimal_ra_to_deg(&s));
-            }
-            "DEC" => {
-                meta.dec_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "OBJCTDEC" if meta.dec_deg.is_none() => {
-                meta.dec_deg = extract_string_value(card).and_then(|s| sexagesimal_dec_to_deg(&s));
-            }
-            // Rotation: ROTATANG (= ROTATOR, mechanical) is the flat-match key;
-            // OBJCTROT is the informational sky position angle. Never swap them.
-            "ROTATANG" => {
-                meta.rotator_angle_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "ROTATOR" if meta.rotator_angle_deg.is_none() => {
-                meta.rotator_angle_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "ROTNAME" => meta.rotator_name = extract_string_value(card),
-            "OBJCTROT" => {
-                meta.sky_rotation_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            // Readout mode (optional grouping dim).
-            "READOUTM" => meta.readout_mode = extract_string_value(card),
-            // Optic train inputs.
-            "FOCALLEN" => {
-                meta.focal_length_mm = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "XPIXSZ" => {
-                meta.pixel_size_um = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "PIXSIZE" if meta.pixel_size_um.is_none() => {
-                meta.pixel_size_um = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            // Observer location: SITE* preferred, OBSGEO-* then *-OBS fallbacks.
-            "SITELAT" => {
-                meta.observer_lat = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "OBSGEO-B" if meta.observer_lat.is_none() => {
-                meta.observer_lat = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "LAT-OBS" if meta.observer_lat.is_none() => {
-                meta.observer_lat = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "SITELONG" => {
-                meta.observer_long = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "OBSGEO-L" if meta.observer_long.is_none() => {
-                meta.observer_long = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "LONG-OBS" if meta.observer_long.is_none() => {
-                meta.observer_long = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "SITEELEV" => {
-                meta.observer_elev = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "OBSGEO-H" if meta.observer_elev.is_none() => {
-                meta.observer_elev = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "ALT-OBS" if meta.observer_elev.is_none() => {
-                meta.observer_elev = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            // Time keywords.
-            "DATE-LOC" => meta.date_loc = extract_string_value(card),
-            "DATE-END" => meta.date_end = extract_string_value(card),
-            "MJD-AVG" => {
-                meta.mjd_avg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            "MJD-OBS" => {
-                meta.mjd_obs = extract_numeric_string(card).and_then(|s| parse_f64(&s));
-            }
-            _ => {}
-        }
+    // ── Extended extracted metadata (spec 041 T062, R-9/R-18) ───────────────
+    // Offset / pedestal: OFFSET preferred, BLKLEVEL fallback.
+    meta.offset = get::<i64>(header, "OFFSET").or_else(|| get::<i64>(header, "BLKLEVEL"));
+    // Temperatures.
+    meta.set_temp_c = get(header, "SET-TEMP");
+    // CCD-TEMP preferred; DET-TEMP is the DWARF III non-standard fallback.
+    meta.ccd_temp_c = get::<f64>(header, "CCD-TEMP").or_else(|| get::<f64>(header, "DET-TEMP"));
+    // Pointing: decimal RA/DEC preferred over sexagesimal OBJCTRA/OBJCTDEC.
+    meta.ra_deg = get::<f64>(header, "RA")
+        .or_else(|| get_str(header, "OBJCTRA").and_then(|s| sexagesimal_ra_to_deg(&s)));
+    meta.dec_deg = get::<f64>(header, "DEC")
+        .or_else(|| get_str(header, "OBJCTDEC").and_then(|s| sexagesimal_dec_to_deg(&s)));
+    // Rotation: ROTATANG (= ROTATOR, mechanical) is the flat-match key;
+    // OBJCTROT is the informational sky position angle. Never swap them.
+    meta.rotator_angle_deg =
+        get::<f64>(header, "ROTATANG").or_else(|| get::<f64>(header, "ROTATOR"));
+    meta.rotator_name = get_str(header, "ROTNAME");
+    meta.sky_rotation_deg = get(header, "OBJCTROT");
+    // Readout mode (optional grouping dim).
+    meta.readout_mode = get_str(header, "READOUTM");
+    // Optic train inputs.
+    meta.focal_length_mm = get(header, "FOCALLEN");
+    meta.pixel_size_um = get::<f64>(header, "XPIXSZ").or_else(|| get::<f64>(header, "PIXSIZE"));
+    // Observer location: SITE* preferred, OBSGEO-* then *-OBS fallbacks.
+    meta.observer_lat = get::<f64>(header, "SITELAT")
+        .or_else(|| get::<f64>(header, "OBSGEO-B"))
+        .or_else(|| get::<f64>(header, "LAT-OBS"));
+    meta.observer_long = get::<f64>(header, "SITELONG")
+        .or_else(|| get::<f64>(header, "OBSGEO-L"))
+        .or_else(|| get::<f64>(header, "LONG-OBS"));
+    meta.observer_elev = get::<f64>(header, "SITEELEV")
+        .or_else(|| get::<f64>(header, "OBSGEO-H"))
+        .or_else(|| get::<f64>(header, "ALT-OBS"));
+    // Time keywords.
+    meta.date_loc = get_str(header, "DATE-LOC");
+    meta.date_end = get_str(header, "DATE-END");
+    meta.mjd_avg = get(header, "MJD-AVG");
+    meta.mjd_obs = get(header, "MJD-OBS");
+
+    // Plate-solved WCS pointing (spec 052 P3, FR-012): passthrough keyword
+    // reads only — interpretation (the CTYPE solve-gate, CD/CROTA2 rotation)
+    // lives once in `metadata_core::interpret_wcs_pointing`.
+    if let Some(wcs) = interpret_wcs_pointing(
+        get_str(header, "CTYPE1").as_deref(),
+        get_str(header, "CTYPE2").as_deref(),
+        get(header, "CRVAL1"),
+        get(header, "CRVAL2"),
+        get(header, "CD1_1"),
+        get(header, "CD2_1"),
+        get(header, "CROTA2"),
+    ) {
+        meta.wcs_ra_deg = Some(wcs.ra_deg);
+        meta.wcs_dec_deg = Some(wcs.dec_deg);
+        meta.wcs_rotation_deg = wcs.rotation_deg;
     }
 
     meta
-}
-
-/// Extract a FITS string value (between single quotes) from a card.
-///
-/// FITS string values look like:  `IMAGETYP= 'Light Frame'         / comment`
-/// The value is between single quotes. Trailing spaces inside the quotes are
-/// significant per FITS standard but we trim them for practical use.
-fn extract_string_value(card: &[u8; CARD_SIZE]) -> Option<String> {
-    // Bytes 0..8 keyword, byte 8 should be '=', byte 9 is usually ' '.
-    let value_area = std::str::from_utf8(&card[8..]).ok()?;
-    let after_eq = value_area.trim_start_matches(['=', ' ']);
-
-    if let Some(inner) = after_eq.strip_prefix('\'') {
-        // Find closing quote (handle doubled single-quote escape '' → ')
-        let close = inner.find('\'')?;
-        let raw = &inner[..close];
-        let trimmed = raw.trim_end();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.replace("''", "'"))
-        }
-    } else {
-        None
-    }
-}
-
-/// Extract a FITS numeric value (no quotes) from a card as a string.
-///
-/// Example: `NAXIS1  =                 4144 / image width in pixels`
-fn extract_numeric_string(card: &[u8; CARD_SIZE]) -> Option<String> {
-    let value_area = std::str::from_utf8(&card[8..]).ok()?;
-    // Skip '=' and whitespace
-    let value_part = value_area.trim_start_matches(['=', ' ']);
-    // Take until '/' (comment marker) or end of field
-    let raw_value = value_part.split('/').next().unwrap_or("").trim().to_owned();
-
-    if raw_value.is_empty() {
-        None
-    } else {
-        Some(raw_value)
-    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -300,6 +232,7 @@ mod tests {
     /// Build a single FITS block (2880 bytes) from a list of 80-char card strings.
     /// Missing cards are filled with spaces. Appends an END card.
     fn build_fits_header(cards: &[&str]) -> Vec<u8> {
+        const CARDS_PER_BLOCK: usize = BLOCK_SIZE / CARD_SIZE;
         let mut block = vec![b' '; BLOCK_SIZE];
         let mut idx = 0usize;
 
@@ -327,107 +260,86 @@ mod tests {
         format!("{s:<80}")
     }
 
+    /// Parse a set of 80-char card strings into [`RawFileMetadata`] via the
+    /// real [`fits_header::Header::parse`] + [`parse_header`] path.
+    fn parse(cards: &[String]) -> RawFileMetadata {
+        let refs: Vec<&str> = cards.iter().map(String::as_str).collect();
+        let block = build_fits_header(&refs);
+        let header = fits_header::Header::parse(&block).unwrap();
+        parse_header(&header)
+    }
+
     // ── IMAGETYP extraction ───────────────────────────────────────────────────
 
     #[test]
     fn parses_imagetyp_light_frame() {
-        let card = pad80("IMAGETYP= 'Light Frame'");
-        let block = build_fits_header(&[&card]);
-        let cards_parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards_parsed);
+        let meta = parse(&[pad80("IMAGETYP= 'Light Frame'")]);
         assert_eq!(meta.image_typ, Some("Light Frame".to_owned()));
     }
 
     #[test]
     fn parses_imagetyp_dark() {
-        let card = pad80("IMAGETYP= 'Dark Frame'           / frame type");
-        let block = build_fits_header(&[&card]);
-        let cards_parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards_parsed);
+        let meta = parse(&[pad80("IMAGETYP= 'Dark Frame'           / frame type")]);
         assert_eq!(meta.image_typ, Some("Dark Frame".to_owned()));
     }
 
     #[test]
     fn parses_imagetyp_bias() {
-        let card = pad80("IMAGETYP= 'Bias Frame'");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[pad80("IMAGETYP= 'Bias Frame'")]);
         assert_eq!(meta.image_typ, Some("Bias Frame".to_owned()));
     }
 
     #[test]
     fn parses_filter() {
-        let card = pad80("FILTER  = 'Ha      '");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[pad80("FILTER  = 'Ha      '")]);
         assert_eq!(meta.filter, Some("Ha".to_owned()));
     }
 
     #[test]
     fn parses_object() {
-        let card = pad80("OBJECT  = 'NGC 7000'           / object name");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[pad80("OBJECT  = 'NGC 7000'           / object name")]);
         assert_eq!(meta.object, Some("NGC 7000".to_owned()));
     }
 
     #[test]
     fn parses_exptime() {
-        let card = pad80("EXPTIME =                 300.0 / exposure time in seconds");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[pad80("EXPTIME =                 300.0 / exposure time in seconds")]);
         assert_eq!(meta.exposure, Some("300.0".to_owned()));
     }
 
     #[test]
     fn parses_gain() {
-        let card = pad80("GAIN    =                   100 / camera gain");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[pad80("GAIN    =                   100 / camera gain")]);
         assert_eq!(meta.gain, Some("100".to_owned()));
     }
 
     #[test]
     fn parses_naxis() {
-        let cards =
-            [pad80("NAXIS1  =                  4144"), pad80("NAXIS2  =                  2822")];
-        let block = build_fits_header(&cards.iter().map(String::as_str).collect::<Vec<_>>());
-        let parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&parsed);
+        let meta = parse(&[
+            pad80("NAXIS1  =                  4144"),
+            pad80("NAXIS2  =                  2822"),
+        ]);
         assert_eq!(meta.naxis1, Some("4144".to_owned()));
         assert_eq!(meta.naxis2, Some("2822".to_owned()));
     }
 
     #[test]
     fn parses_instrume_and_telescop() {
-        let cards = [pad80("INSTRUME= 'ZWO ASI2600MM Pro'"), pad80("TELESCOP= 'AT130-EDT'")];
-        let block = build_fits_header(&cards.iter().map(String::as_str).collect::<Vec<_>>());
-        let parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&parsed);
+        let meta = parse(&[pad80("INSTRUME= 'ZWO ASI2600MM Pro'"), pad80("TELESCOP= 'AT130-EDT'")]);
         assert_eq!(meta.instrume, Some("ZWO ASI2600MM Pro".to_owned()));
         assert_eq!(meta.telescop, Some("AT130-EDT".to_owned()));
     }
 
     #[test]
     fn parses_date_obs() {
-        let card = pad80("DATE-OBS= '2025-10-10T22:15:00'");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[pad80("DATE-OBS= '2025-10-10T22:15:00'")]);
         assert_eq!(meta.date_obs, Some("2025-10-10T22:15:00".to_owned()));
     }
 
     #[test]
     fn missing_keywords_return_none() {
-        let card = pad80("SIMPLE  =                    T / file conforms to FITS standard");
-        let block = build_fits_header(&[&card]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta =
+            parse(&[pad80("SIMPLE  =                    T / file conforms to FITS standard")]);
         assert!(meta.image_typ.is_none());
         assert!(meta.filter.is_none());
         assert!(meta.object.is_none());
@@ -435,9 +347,7 @@ mod tests {
 
     #[test]
     fn empty_block_returns_empty_metadata() {
-        let block = build_fits_header(&[]);
-        let cards = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&cards);
+        let meta = parse(&[]);
         assert!(meta.image_typ.is_none());
     }
 
@@ -452,16 +362,13 @@ mod tests {
 
     #[test]
     fn multi_keyword_card_set() {
-        let cards = [
+        let meta = parse(&[
             pad80("IMAGETYP= 'Flat Frame'"),
             pad80("FILTER  = 'OIII    '"),
             pad80("EXPTIME =                   3.0"),
             pad80("XBINNING=                     1"),
             pad80("YBINNING=                     1"),
-        ];
-        let block = build_fits_header(&cards.iter().map(String::as_str).collect::<Vec<_>>());
-        let parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&parsed);
+        ]);
         assert_eq!(meta.image_typ, Some("Flat Frame".to_owned()));
         assert_eq!(meta.filter, Some("OIII".to_owned()));
         assert_eq!(meta.exposure, Some("3.0".to_owned()));
@@ -472,21 +379,11 @@ mod tests {
     #[test]
     fn exposure_keyword_fallback_to_exposure() {
         // EXPTIME takes priority; if absent, EXPOSURE is used
-        let cards = [pad80("EXPOSURE=                 120.0 / exposure in seconds")];
-        let block = build_fits_header(&cards.iter().map(String::as_str).collect::<Vec<_>>());
-        let parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
-        let meta = parse_cards(&parsed);
+        let meta = parse(&[pad80("EXPOSURE=                 120.0 / exposure in seconds")]);
         assert_eq!(meta.exposure, Some("120.0".to_owned()));
     }
 
     // ── Extended extracted metadata (spec 041 T062) ───────────────────────────
-
-    fn parse(cards: &[String]) -> RawFileMetadata {
-        let refs: Vec<&str> = cards.iter().map(String::as_str).collect();
-        let block = build_fits_header(&refs);
-        let parsed = read_header_cards(block.as_slice(), Path::new("t.fits")).unwrap();
-        parse_cards(&parsed)
-    }
 
     fn approx(a: Option<f64>, b: f64) {
         let v = a.expect("expected Some");
@@ -638,5 +535,45 @@ mod tests {
         assert!(meta.observer_lat.is_none());
         assert!(meta.date_loc.is_none());
         assert!(meta.mjd_avg.is_none());
+    }
+
+    // ── WCS plate-solved pointing (spec 052 P3) ───────────────────────────────
+
+    #[test]
+    fn parses_wcs_pointing_with_cd_matrix() {
+        let meta = parse(&[
+            pad80("CTYPE1  = 'RA---TAN'"),
+            pad80("CTYPE2  = 'DEC--TAN'"),
+            pad80("CRVAL1  =            10.684708 / [deg] solved RA"),
+            pad80("CRVAL2  =             41.26875 / [deg] solved Dec"),
+            pad80("CD1_1   =        -0.0001935"),
+            pad80("CD2_1   =         0.0000501"),
+        ]);
+        approx(meta.wcs_ra_deg, 10.684_708);
+        approx(meta.wcs_dec_deg, 41.268_75);
+        assert!(meta.wcs_rotation_deg.is_some());
+    }
+
+    #[test]
+    fn wcs_pointing_absent_without_equatorial_ctype() {
+        // A bare CRVAL1/2 pair with no matching CTYPE is not trusted as a solve.
+        let meta = parse(&[
+            pad80("CRVAL1  =                 10.0"),
+            pad80("CRVAL2  =                 20.0"),
+        ]);
+        assert!(meta.wcs_ra_deg.is_none());
+        assert!(meta.wcs_dec_deg.is_none());
+    }
+
+    #[test]
+    fn wcs_rotation_falls_back_to_crota2() {
+        let meta = parse(&[
+            pad80("CTYPE1  = 'RA---TAN'"),
+            pad80("CTYPE2  = 'DEC--TAN'"),
+            pad80("CRVAL1  =                 83.822"),
+            pad80("CRVAL2  =                 -5.391"),
+            pad80("CROTA2  =                 12.5"),
+        ]);
+        assert_eq!(meta.wcs_rotation_deg, Some(12.5));
     }
 }

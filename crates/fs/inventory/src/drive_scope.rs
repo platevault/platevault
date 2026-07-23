@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 (T007): drive-scope classification for source-view generation.
 //!
 //! Classifies a source path relative to a generation destination as

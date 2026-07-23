@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for plan storage (spec 017).
 //!
 //! Operates on the `plans` and `plan_items` tables from migration 0014.
@@ -7,7 +10,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::{DbError, DbResult};
 
@@ -120,9 +123,26 @@ pub struct InsertPlanItem<'a> {
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i64> {
+    let mut conn = pool.acquire().await?;
+    insert_plan_conn(&mut conn, plan).await
+}
+
+/// Connection-level variant of [`insert_plan`]: takes `&mut SqliteConnection`
+/// (works against a plain connection or a `Transaction` deref) so composite
+/// `*_tx` functions elsewhere in this crate (e.g.
+/// `repositories::projects::create_project_tx`) can compose it with other
+/// writes in one transaction.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub(crate) async fn insert_plan_conn(
+    conn: &mut SqliteConnection,
+    plan: &InsertPlan<'_>,
+) -> DbResult<i64> {
     let now = Timestamp::now_iso();
     let number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(number), 0) + 1 FROM plans")
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
     sqlx::query(
@@ -143,7 +163,7 @@ pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i
     .bind(plan.parent_plan_id)
     .bind(plan.total_bytes_required)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     Ok(number)
@@ -155,6 +175,19 @@ pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    insert_plan_item_conn(&mut conn, item).await
+}
+
+/// Connection-level variant of [`insert_plan_item`]. See [`insert_plan_conn`].
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub(crate) async fn insert_plan_item_conn(
+    conn: &mut SqliteConnection,
+    item: &InsertPlanItem<'_>,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO plan_items (
@@ -181,7 +214,7 @@ pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> D
     .bind(item.source_id)
     .bind(item.category)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     // Update items_total and items_pending counters on the parent plan.
@@ -190,7 +223,7 @@ pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> D
          WHERE id = ?",
     )
     .bind(item.plan_id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     Ok(())
@@ -289,6 +322,32 @@ pub async fn list_plan_items(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<P
         .await?)
 }
 
+/// Set `destructive_confirmed = 1` on every item in `plan_id` that requires
+/// destructive confirmation (`action IN ('delete','trash')`, or the explicit
+/// `requires_destructive_confirm` override column — mirrors the derivation in
+/// `app_core::plan_apply::item_row_to_executor_item`).
+///
+/// This is the write half of the FR-003/D9 confirm gate: the executor
+/// (`fs_executor::run::execute_plan`) refuses any destructive item where
+/// `destructive_confirmed` is still 0 (issue #741 — the column previously had
+/// no writer anywhere in the codebase). Idempotent: re-confirming an
+/// already-confirmed plan is a no-op.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn confirm_plan_destructive_items(pool: &SqlitePool, plan_id: &str) -> DbResult<u64> {
+    let result = sqlx::query(
+        "UPDATE plan_items SET destructive_confirmed = 1 \
+         WHERE plan_id = ? AND destructive_confirmed = 0 \
+         AND (action IN ('delete', 'trash') OR requires_destructive_confirm = 1)",
+    )
+    .bind(plan_id)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 /// Update the plan state.
 ///
 /// Only the review-side states are written by this function:
@@ -300,10 +359,25 @@ pub async fn list_plan_items(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<P
 /// Returns [`DbError::NotFound`] if no plan with `plan_id` exists.
 /// Returns [`DbError::Database`] on connection failure.
 pub async fn update_plan_state(pool: &SqlitePool, plan_id: &str, state: &str) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    update_plan_state_conn(&mut conn, plan_id, state).await
+}
+
+/// Connection-level variant of [`update_plan_state`]. See [`insert_plan_conn`].
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] if no plan with `plan_id` exists.
+/// Returns [`DbError::Database`] on connection failure.
+pub(crate) async fn update_plan_state_conn(
+    conn: &mut SqliteConnection,
+    plan_id: &str,
+    state: &str,
+) -> DbResult<()> {
     let rows = sqlx::query("UPDATE plans SET state = ? WHERE id = ?")
         .bind(state)
         .bind(plan_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
     if rows.rows_affected() == 0 {
@@ -335,6 +409,42 @@ pub async fn set_approved(
     .await?;
 
     Ok(())
+}
+
+/// Set the attribution pick's target framing on a plan (spec 008 Q27,
+/// F-Framing-10, migration 0068). Read back at plan-apply completion
+/// (`app_core_targets::ingest_sessions`) once the plan's light frames are
+/// folded into a real `acquisition_session` — that is the earliest point a
+/// session id exists to add as a framing member.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn set_chosen_framing_id(
+    pool: &SqlitePool,
+    plan_id: &str,
+    framing_id: &str,
+) -> DbResult<()> {
+    sqlx::query("UPDATE plans SET chosen_framing_id = ? WHERE id = ?")
+        .bind(framing_id)
+        .bind(plan_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Read the attribution pick's target framing for a plan, if any (F-Framing-10).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_chosen_framing_id(pool: &SqlitePool, plan_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT chosen_framing_id FROM plans WHERE id = ?")
+            .bind(plan_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(v,)| v))
 }
 
 /// Set `discarded_at` and transition state to `discarded` (soft-delete, A5).
@@ -435,6 +545,38 @@ mod tests {
         assert_eq!(row.origin, "cleanup");
     }
 
+    // ── chosen_framing_id (F-Framing-10) ────────────────────────────────────
+
+    #[tokio::test]
+    async fn chosen_framing_id_defaults_to_none_and_round_trips() {
+        let db = setup().await;
+        insert_plan(db.pool(), &sample_plan("plan-attr")).await.unwrap();
+        assert_eq!(get_chosen_framing_id(db.pool(), "plan-attr").await.unwrap(), None);
+
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, is_mosaic, created_at, updated_at) \
+             VALUES ('proj-attr', 'P', 'PixInsight', 'ready', 'projects/proj-attr', NULL, 0, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO framing (id, project_id, optic_train_key, pointing_ra_deg, pointing_dec_deg, \
+             rotation_deg, tolerance_pointing, tolerance_rotation_deg, clustering, created_at, updated_at) \
+             VALUES ('framing-attr', 'proj-attr', 'scope-a|cam-a', 10.0, 20.0, 0.0, 0.1, 3.0, 'suggested', \
+             '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        set_chosen_framing_id(db.pool(), "plan-attr", "framing-attr").await.unwrap();
+        assert_eq!(
+            get_chosen_framing_id(db.pool(), "plan-attr").await.unwrap().as_deref(),
+            Some("framing-attr")
+        );
+    }
+
     #[tokio::test]
     async fn display_numbers_increment() {
         let db = setup().await;
@@ -520,6 +662,68 @@ mod tests {
         let plan = get_plan(db.pool(), "p1", false).await.unwrap();
         assert_eq!(plan.items_total, 1);
         assert_eq!(plan.items_pending, 1);
+    }
+
+    #[tokio::test]
+    async fn confirm_plan_destructive_items_confirms_only_destructive_actions() {
+        let db = setup().await;
+        insert_plan(db.pool(), &sample_plan("p-confirm")).await.unwrap();
+
+        let move_item = InsertPlanItem {
+            id: "item-move",
+            plan_id: "p-confirm",
+            item_index: 1,
+            name: "keep.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: "raw/keep.fits",
+            to_root_id: None,
+            to_relative_path: "archive/keep.fits",
+            reason: "cleanup",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        };
+        // `plan_items.action` CHECK never admits the literal 'trash' — the
+        // archive/trash *destination* choice lives on `plans.destructive_destination`;
+        // item-level destructive intent is always the 'delete' action (mirrors
+        // `cleanup_generator::action_label` and `item_row_to_executor_item`).
+        let delete_item = InsertPlanItem {
+            id: "item-delete",
+            plan_id: "p-confirm",
+            item_index: 2,
+            name: "junk.fits",
+            action: "delete",
+            from_root_id: None,
+            from_relative_path: "raw/junk.fits",
+            to_root_id: None,
+            to_relative_path: "",
+            reason: "cleanup",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        };
+        insert_plan_item(db.pool(), &move_item).await.unwrap();
+        insert_plan_item(db.pool(), &delete_item).await.unwrap();
+
+        let confirmed = confirm_plan_destructive_items(db.pool(), "p-confirm").await.unwrap();
+        assert_eq!(confirmed, 1, "only the delete item requires confirmation");
+
+        let items = list_plan_items(db.pool(), "p-confirm").await.unwrap();
+        let move_row = items.iter().find(|i| i.id == "item-move").unwrap();
+        let delete_row = items.iter().find(|i| i.id == "item-delete").unwrap();
+        assert_eq!(move_row.destructive_confirmed, 0);
+        assert_eq!(delete_row.destructive_confirmed, 1);
+
+        // Idempotent: a second confirm on an already-confirmed plan touches nothing.
+        let confirmed_again = confirm_plan_destructive_items(db.pool(), "p-confirm").await.unwrap();
+        assert_eq!(confirmed_again, 0);
     }
 
     #[tokio::test]

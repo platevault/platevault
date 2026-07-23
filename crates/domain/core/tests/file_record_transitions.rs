@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! T035a: edge-list test for `InventoryState` (`FileRecord`) transitions.
 //!
 //! Mirrors research.md §2.4 and data-model.md `FileRecord` Lifecycle. The

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 002 lifecycle commands exposed to the Tauri webview.
 //!
 //! Every command is annotated with both `#[tauri::command]` (so Tauri
@@ -10,7 +13,6 @@
 use std::sync::Arc;
 
 use app_core::ledger_use_case::list_assets_ledger;
-use app_core::lifecycle_use_case::{build_edge_table, EdgeMeta};
 use app_core::provenance_use_case::read_provenance;
 use app_core::transition_use_case::{apply_transition, preview_transition};
 use audit::bus::EventBus;
@@ -28,13 +30,119 @@ use uuid::Uuid;
 pub struct AppState {
     pub repo: Arc<SqliteLifecycleRepository>,
     pub bus: EventBus,
-    pub edge_table: std::collections::HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>>,
+    /// Spec 052 P1 (D2): the shared SIMBAD resolve cache — one global redb
+    /// file, opened once at app startup. Readers clone the cheap `Arc`-backed
+    /// handle out from under a short-lived read lock; `target.cache.clear`
+    /// (`commands::resolve_cache::clear_and_rewarm`) takes the write lock
+    /// only to swap in a freshly reopened, still-empty store — the re-warm
+    /// itself runs afterward as a background task that never takes this
+    /// lock (issue #695).
+    pub resolve_cache: tokio::sync::RwLock<targeting_resolver::simbad::ResolveCache>,
+    /// Filesystem path backing `resolve_cache`, needed by
+    /// `target.cache.clear` to delete + reopen the redb file.
+    pub resolve_cache_path: std::path::PathBuf,
+    /// True while a bundled-seed/durable-row re-warm of `resolve_cache` is
+    /// running in the background (the startup warm in `lib.rs`, or the one
+    /// `commands::resolve_cache::clear_and_rewarm` schedules). Set true and
+    /// cleared by a [`CacheWarmingGuard`] held for the warm task's whole
+    /// scope, never a bare sequential store, so a panic mid-warm still clears
+    /// it; `target.search` surfaces the value so a caller whose query landed
+    /// mid-warm can tell a still-settling empty result apart from a genuine
+    /// miss (issue #818). Two overlapping warms (startup racing an
+    /// almost-immediate cache-clear) can make the flag go false slightly
+    /// early, when the first of the two finishes — an accepted, rare
+    /// edge case, not a full per-warm reference count.
+    pub cache_warming: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
     #[must_use]
-    pub fn new(repo: Arc<SqliteLifecycleRepository>, bus: EventBus) -> Self {
-        Self { repo, bus, edge_table: build_edge_table() }
+    pub fn new(
+        repo: Arc<SqliteLifecycleRepository>,
+        bus: EventBus,
+        resolve_cache: targeting_resolver::simbad::ResolveCache,
+        resolve_cache_path: std::path::PathBuf,
+        cache_warming: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        Self {
+            repo,
+            bus,
+            resolve_cache: tokio::sync::RwLock::new(resolve_cache),
+            resolve_cache_path,
+            cache_warming,
+        }
+    }
+}
+
+/// RAII guard that flips [`AppState::cache_warming`] back to `false` on
+/// **any** scope exit — normal return *or* unwind from a panic inside the
+/// warm task (issue #818 review). A bare sequential
+/// `flag.store(false, ...)` after both warm phases is skipped if either
+/// panics, since the unwind jumps past it; the flag then sticks `true` for
+/// the rest of the process, and every later `target.search` pays the full
+/// retry budget (`TargetSearch.tsx`) for a warm that will never finish.
+///
+/// [`CacheWarmingGuard::start`] sets the flag `true` and returns the guard in
+/// one call (mirroring `plan_apply::check_overlap_and_register` + its
+/// `ActiveRunGuard`) so the flag is visible to a concurrent `target.search`
+/// the instant the caller schedules the warm — the guard itself is then
+/// moved into the spawned task, so its `Drop` runs exactly once, whichever
+/// way that task ends. Shared by both warm sites (`lib.rs`'s startup warm and
+/// `resolve_cache.rs`'s `clear_and_rewarm`) instead of duplicating the
+/// set/clear pair at each.
+pub struct CacheWarmingGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl CacheWarmingGuard {
+    /// Set `flag` true and return the guard that will clear it on drop.
+    #[must_use]
+    pub fn start(flag: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        Self(flag)
+    }
+}
+
+impl Drop for CacheWarmingGuard {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod cache_warming_guard_tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    use super::CacheWarmingGuard;
+
+    #[test]
+    fn start_sets_true_and_normal_drop_clears_it() {
+        let flag = Arc::new(AtomicBool::new(false));
+        {
+            let _guard = CacheWarmingGuard::start(flag.clone());
+            assert!(flag.load(Ordering::Relaxed), "flag must be true while the guard is held");
+        } // guard drops here
+        assert!(!flag.load(Ordering::Relaxed), "guard Drop must clear the flag on normal exit");
+    }
+
+    /// Regression for the #818 review finding: a panic inside the warm task
+    /// (after the guard is constructed) must still clear the flag, mirroring
+    /// `plan_apply::active_run_guard_removes_entry_when_scope_panics`.
+    #[test]
+    fn panic_after_start_still_clears_the_flag() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_for_scope = flag.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            // Guard is owned by this scope, mirroring
+            // `tokio::spawn(async move { let _guard = ...; warm().await })`.
+            let _guard = CacheWarmingGuard::start(flag_for_scope);
+            panic!("warm task panicked mid-warm");
+        }));
+
+        assert!(result.is_err(), "the scope must have panicked");
+        assert!(
+            !flag.load(Ordering::Relaxed),
+            "guard Drop must clear the flag even when the scope unwinds from a panic"
+        );
     }
 }
 
@@ -104,6 +212,12 @@ pub async fn provenance_read(
 
 /// `lifecycle.transition.apply` Tauri command.
 ///
+/// #665: on a successful `Project` entity transition, fires the
+/// `LifecycleTransition` manifest trigger — this and the source add/remove
+/// trigger were the last of the 4 unwired manifest emitters (project create
+/// and source add/remove are wired in `app_core_projects`; `workflow_run` was
+/// the only one that ever existed).
+///
 /// # Errors
 /// Never returns `Err`; refusal / persistence errors fold into
 /// `TransitionResponse::error(...)` per the contract.
@@ -113,7 +227,26 @@ pub async fn lifecycle_transition_apply(
     state: State<'_, AppState>,
     request: TransitionRequest,
 ) -> Result<TransitionResponse, String> {
-    Ok(apply_transition(state.repo.as_ref(), &state.bus, request, &state.edge_table).await)
+    let project_id = match &request {
+        TransitionRequest::Project(req) => Some(req.entity_id.to_string()),
+        _ => None,
+    };
+
+    let response = apply_transition(state.repo.as_ref(), &state.bus, request).await;
+
+    if let Some(project_id) = project_id {
+        if response.status == contracts_core::lifecycle::TransitionStatus::Success {
+            app_core::project_manifests::write_lifecycle_manifest(
+                state.repo.pool(),
+                &state.bus,
+                &project_id,
+                contracts_core::manifests::ManifestReason::LifecycleTransition,
+            )
+            .await;
+        }
+    }
+
+    Ok(response)
 }
 
 /// `lifecycle.transition.preview` — read-only dry-run for UI button enabling.

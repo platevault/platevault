@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-channel integration accounting (spec 008 US4 / task #56).
 //!
 //! A [`ChannelMap`] maps each filter/channel label to a [`ChannelIntegration`]

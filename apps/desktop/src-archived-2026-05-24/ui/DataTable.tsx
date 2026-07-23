@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Fragment, useState, type ReactNode } from "react";
 import { ChevronUp, ChevronDown, ChevronRight } from "lucide-react";
 import clsx from "clsx";

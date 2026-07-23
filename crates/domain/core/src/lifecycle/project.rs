@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project lifecycle state model (spec 002 data-model.md §Project).
 
 use schemars::JsonSchema;
@@ -138,14 +141,53 @@ pub struct Project {
 mod tests {
     use super::*;
 
-    /// All 19 allowed edges from data-model.md §Transition Table.
+    /// All 19 allowed edges, independently transcribed from
+    /// specs/002-data-lifecycle-state-model/data-model.md §Lifecycle (the
+    /// spec's `PROJECT_TRANSITIONS` table), NOT read from `TRANSITIONS`
+    /// itself — so a drift between the table and the spec, or a broken
+    /// `is_allowed`, is caught rather than checking `TRANSITIONS` against
+    /// its own membership predicate.
     #[test]
     fn all_allowed_edges_are_accepted() {
-        let allowed = TRANSITIONS;
-        for &(from, to) in allowed {
+        use ProjectState::{
+            Archived, Blocked, Completed, Prepared, Processing, Ready, SetupIncomplete,
+        };
+        let spec_edges: &[(ProjectState, ProjectState)] = &[
+            (SetupIncomplete, Ready),
+            (SetupIncomplete, Blocked),
+            (Ready, Prepared),
+            (Ready, Processing),
+            (Ready, Blocked),
+            (Prepared, Ready),
+            (Prepared, Processing),
+            (Prepared, Blocked),
+            (Processing, Completed),
+            (Processing, Blocked),
+            (Completed, Archived),
+            (Completed, Processing),
+            (Archived, Processing),
+            (Archived, Ready),
+            (Blocked, SetupIncomplete),
+            (Blocked, Ready),
+            (Blocked, Prepared),
+            (Blocked, Processing),
+            (Blocked, Archived),
+        ];
+        assert_eq!(spec_edges.len(), 19, "expected exactly 19 allowed edges");
+        for &(from, to) in spec_edges {
             assert!(is_allowed(from, to), "expected ({from:?} → {to:?}) to be allowed");
         }
-        assert_eq!(allowed.len(), 19, "expected exactly 19 allowed edges");
+        assert_eq!(
+            TRANSITIONS.len(),
+            spec_edges.len(),
+            "TRANSITIONS has drifted from the spec's edge count"
+        );
+        for &(from, to) in TRANSITIONS {
+            assert!(
+                spec_edges.contains(&(from, to)),
+                "TRANSITIONS has an edge ({from:?} → {to:?}) not present in the spec table"
+            );
+        }
     }
 
     /// Forbidden edges: a representative set. Includes the explicitly

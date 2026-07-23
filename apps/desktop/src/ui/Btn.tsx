@@ -1,19 +1,34 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import { forwardRef } from 'react';
 import type { ReactNode, ButtonHTMLAttributes } from 'react';
 
-export type BtnVariant = 'primary' | 'accent' | 'danger' | 'ghost';
-export type BtnSize = 'sm';
+export type BtnVariant = 'primary' | 'danger' | 'destructive' | 'ghost';
+export type BtnSize = 'sm' | 'md';
 export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: BtnVariant;
   size?: BtnSize;
   children: ReactNode;
 }
 
-export function Btn({ variant, size, className, children, ...rest }: BtnProps) {
-  const cls = [
-    'alm-btn',
-    variant && `alm-btn--${variant}`,
-    size && `alm-btn--${size}`,
-    className,
-  ].filter(Boolean).join(' ');
-  return <button className={cls} {...rest}>{children}</button>;
-}
+export const Btn = forwardRef<HTMLButtonElement, BtnProps>(
+  // Omitting `variant` yields the base `.pv-btn`; `md` is the base size and
+  // emits no modifier so callers passing no size render exactly as before.
+  function Btn({ variant, size = 'md', className, children, ...rest }, ref) {
+    const cls = [
+      'pv-btn',
+      variant && `pv-btn--${variant}`,
+      size !== 'md' && `pv-btn--${size}`,
+      className,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return (
+      <button ref={ref} className={cls} {...rest}>
+        {children}
+      </button>
+    );
+  },
+);
+Btn.displayName = 'Btn';

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Menu, type MenuGroup } from "./Menu";

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tool Launches accordion — spec 012 T023/T024/T025.
  *
@@ -12,6 +15,7 @@
 
 import { useCallback } from 'react';
 import { basename } from 'pathe';
+import { Section } from '@/ui';
 import { m } from '@/lib/i18n';
 import type { ArtifactSummary } from '@/bindings/index';
 import {
@@ -27,6 +31,8 @@ interface Props {
   projectId: string;
   /** Optional ordered list of launch ids (newest first) for bucket ordering. */
   launchOrder?: string[];
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
 // ── ArtifactRow ───────────────────────────────────────────────────────────────
@@ -35,9 +41,15 @@ interface ArtifactRowProps {
   artifact: ArtifactSummary;
   projectId: string;
   onResolved: () => void;
+  guideAnchor?: string;
 }
 
-function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
+function ArtifactRow({
+  artifact,
+  projectId,
+  onResolved,
+  guideAnchor,
+}: ArtifactRowProps) {
   const { working, markResolved } = useArtifactMarkResolved(onResolved);
   const isMissing = artifact.state === 'missing';
   const isManualOverride = artifact.classificationSource === 'manual_override';
@@ -54,13 +66,17 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
   return (
     <div
-      className="artifact-row alm-tool-launches__artifact-row"
+      className="artifact-row pv-tool-launches__artifact-row"
       data-state={artifact.state}
       data-kind={artifact.kind}
+      data-guide-anchor={guideAnchor}
     >
       {/* Kind badge */}
       <span
-        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` + (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')}
+        className={
+          `artifact-kind-badge artifact-kind-${artifact.kind} pv-tool-launches__kind-badge` +
+          (isFallback ? ' pv-tool-launches__kind-badge--fallback' : '')
+        }
         title={
           isFallback
             ? m.projects_toollaunch_low_confidence({ kind: artifact.kind })
@@ -72,7 +88,10 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
       {/* File name — strikethrough when missing */}
       <span
-        className={'artifact-file-name alm-tool-launches__file-name' + (isMissing ? ' alm-tool-launches__file-name--missing' : '')}
+        className={
+          'artifact-file-name pv-tool-launches__file-name' +
+          (isMissing ? ' pv-tool-launches__file-name--missing' : '')
+        }
         title={artifact.path}
       >
         {fileName}
@@ -80,14 +99,14 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
       {/* Status badges */}
       {isMissing && (
-        <span className="artifact-badge artifact-badge-missing alm-tool-launches__badge-missing">
+        <span className="artifact-badge artifact-badge-missing pv-tool-launches__badge-missing">
           {m.settings_tools_missing()}
         </span>
       )}
 
       {isManualOverride && (
         <span
-          className="artifact-badge artifact-badge-manual alm-tool-launches__badge-manual"
+          className="artifact-badge artifact-badge-manual pv-tool-launches__badge-manual"
           title={m.projects_artifacts_manual_override_title()}
         >
           {m.projects_artifacts_manual_badge()}
@@ -98,7 +117,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {isMissing && (
         <button
           type="button"
-          className="artifact-mark-resolved-btn alm-tool-launches__resolve-btn"
+          className="artifact-mark-resolved-btn pv-tool-launches__resolve-btn"
           onClick={handleMarkResolved}
           disabled={working}
           aria-label={m.projects_mark_resolved_aria({ file: fileName })}
@@ -116,9 +135,15 @@ interface GroupSectionProps {
   group: ArtifactGroup;
   projectId: string;
   onAction: () => void;
+  anchorFirstArtifact?: boolean;
 }
 
-function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps) {
+function ArtifactGroupSection({
+  group,
+  projectId,
+  onAction,
+  anchorFirstArtifact = false,
+}: GroupSectionProps) {
   const label = group.toolLaunchId
     ? m.projects_toollaunch_label({ id: group.toolLaunchId.slice(0, 8) })
     : m.projects_toollaunch_unattributed();
@@ -135,23 +160,28 @@ function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps)
     .join(', ');
 
   return (
-    <div className="artifact-group alm-tool-launches__group">
-      <div className="artifact-group-header alm-tool-launches__group-header">
-        <span className="alm-tool-launches__group-label">{label}</span>
+    <div className="artifact-group pv-tool-launches__group">
+      <div className="artifact-group-header pv-tool-launches__group-header">
+        <span className="pv-tool-launches__group-label">{label}</span>
         <span
-          className="artifact-count-badge alm-tool-launches__count-badge"
+          className="artifact-count-badge pv-tool-launches__count-badge"
           title={countBadge}
         >
           {group.artifacts.length}
         </span>
       </div>
 
-      {group.artifacts.map((artifact) => (
+      {group.artifacts.map((artifact, index) => (
         <ArtifactRow
           key={artifact.id}
           artifact={artifact}
           projectId={projectId}
           onResolved={onAction}
+          guideAnchor={
+            anchorFirstArtifact && index === 0
+              ? 'projects.artifacts-row'
+              : undefined
+          }
         />
       ))}
     </div>
@@ -160,41 +190,72 @@ function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps)
 
 // ── ToolLaunchesAccordion ─────────────────────────────────────────────────────
 
-/** Renders the "Tool Launches" accordion section of the project drawer (T023). */
-export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
+/**
+ * Renders the "Tool Launches" accordion section of the project drawer
+ * (T023). Mounted in {@link ProjectBottomDetail} alongside the other
+ * secondary/operational sections (#728 — previously built and tested but
+ * never mounted anywhere, so observed artifacts were invisible to users).
+ */
+export function ToolLaunchesAccordion({
+  projectId,
+  launchOrder = [],
+  defaultOpen = true,
+}: Props) {
   const { artifacts, loading, error, reload } = useArtifacts(projectId);
   const groups = groupArtifactsByLaunch(artifacts, launchOrder);
 
   if (loading) {
-    return <div className="tool-launches-loading alm-tool-launches__loading">{m.projects_artifacts_loading()}</div>;
+    return (
+      <Section
+        title={m.projects_toollaunches_title()}
+        defaultOpen={defaultOpen}
+      >
+        <div className="tool-launches-loading pv-tool-launches__loading">
+          {m.projects_artifacts_loading()}
+        </div>
+      </Section>
+    );
   }
 
   if (error) {
     return (
-      <div className="tool-launches-error alm-tool-launches__error">
-        {m.projects_artifacts_load_error({ error })}
-      </div>
+      <Section
+        title={m.projects_toollaunches_title()}
+        defaultOpen={defaultOpen}
+      >
+        <div className="tool-launches-error pv-tool-launches__error">
+          {m.projects_artifacts_load_error({ error })}
+        </div>
+      </Section>
     );
   }
 
   if (groups.length === 0) {
     return (
-      <div className="tool-launches-empty alm-tool-launches__empty">
-        {m.projects_artifacts_empty()}
-      </div>
+      <Section
+        title={m.projects_toollaunches_title()}
+        defaultOpen={defaultOpen}
+      >
+        <div className="tool-launches-empty pv-tool-launches__empty">
+          {m.projects_artifacts_empty()}
+        </div>
+      </Section>
     );
   }
 
   return (
-    <div className="tool-launches-accordion" data-testid="tool-launches-accordion">
-      {groups.map((group, idx) => (
-        <ArtifactGroupSection
-          key={group.toolLaunchId ?? `unattributed-${idx}`}
-          group={group}
-          projectId={projectId}
-          onAction={reload}
-        />
-      ))}
-    </div>
+    <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+      <div data-testid="tool-launches-accordion">
+        {groups.map((group, idx) => (
+          <ArtifactGroupSection
+            key={group.toolLaunchId ?? `unattributed-${idx}`}
+            group={group}
+            projectId={projectId}
+            onAction={reload}
+            anchorFirstArtifact={idx === 0}
+          />
+        ))}
+      </div>
+    </Section>
   );
 }

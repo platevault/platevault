@@ -1,0 +1,176 @@
+name: Cache cleanup
+
+# Actions caches are restored by key with a ref-scoped fallback: a PR sees its
+# own `refs/pull/N/merge` entries, then its base branch, then the default
+# branch. So one bad entry on `main` is restored by every PR that has no entry
+# of its own — which is exactly how a poisoned macOS entry produced
+# `build-script-build: cannot execute binary file` (exit 126) on an unrelated
+# PR, presenting as a source defect.
+#
+# Two hygiene passes, both of which only ever DELETE caches (a deleted cache
+# costs one rebuild; a bad cache costs a wrong diagnosis):
+#
+#   1. PR closed        — drop that PR's entries. They can never be restored
+#                         again, so keeping them only consumes the repo quota
+#                         and pushes out entries that are still useful.
+#   2. Run cancelled    — drop entries scoped to that run's PR. A run killed
+#                         mid-save is the most likely way a partial entry is
+#                         committed, and `cancel-in-progress` makes that common
+#                         under push traffic.
+#
+# Deliberately NOT triggered on plain `failure`: a legitimately red PR would
+# lose its cache on every iteration, making an already-slow feedback loop
+# slower. Saving from failed runs is prevented at the source instead —
+# `cache-on-failure` is left at its default (false) everywhere.
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_run:
+    workflows: ["CI", "Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)"]
+    types: [completed]
+
+permissions:
+  actions: write # required to delete caches
+  contents: read
+
+concurrency:
+  # Serialize per target ref so two passes cannot race the same delete.
+  group: cache-cleanup-${{ github.event.pull_request.number || github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Purge ref-scoped caches
+    runs-on: ubuntu-latest
+    # workflow_run fires for every completion; only act on cancellations.
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event.workflow_run.conclusion == 'cancelled'
+    steps:
+      - name: Resolve target PR refs
+        id: refs
+        env:
+          # Event data is never interpolated into the script body — it is read
+          # from the environment and validated before use.
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests.*.number) }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            printf '%s\n' "$PR_NUMBER" > /tmp/prs.txt
+          else
+            printf '%s' "$RUN_PRS" | jq -r '.[]' > /tmp/prs.txt
+          fi
+
+          # Reject anything that is not a bare integer before it reaches a URL.
+          if grep -qvE '^[0-9]+$' /tmp/prs.txt 2>/dev/null; then
+            echo "refusing: non-numeric PR identifier in event payload" >&2
+            grep -vE '^[0-9]+$' /tmp/prs.txt >&2 || true
+            exit 1
+          fi
+          echo "targets: $(tr '\n' ' ' < /tmp/prs.txt)"
+
+      - name: Delete caches for those refs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -s /tmp/prs.txt ] || { echo "no PR refs to clean"; exit 0; }
+
+          total=0
+          failed=0
+          while read -r pr; do
+            [ -n "$pr" ] || continue
+            ref="refs/pull/${pr}/merge"
+
+            # Snapshot the key list once. Deliberately NOT a re-query loop: if a
+            # DELETE ever fails silently the list never drains and the job spins
+            # until the runner times out. One pass, then report what is left.
+            keys="$(gh api --paginate \
+              "/repos/${REPO}/actions/caches?ref=${ref}&per_page=100" \
+              --jq '.actions_caches[].key' 2>/dev/null || true)"
+            [ -n "$keys" ] || { echo "no caches for ${ref}"; continue; }
+
+            while read -r key; do
+              [ -n "$key" ] || continue
+              if gh api --method DELETE \
+                   "/repos/${REPO}/actions/caches?key=${key}&ref=${ref}" >/dev/null 2>&1; then
+                echo "deleted  ${ref}  ${key}"
+                total=$((total + 1))
+              else
+                echo "FAILED   ${ref}  ${key}" >&2
+                failed=$((failed + 1))
+              fi
+            done <<< "$keys"
+          done < /tmp/prs.txt
+
+          echo "removed ${total} cache entries, ${failed} failed"
+          # Surface partial failure without failing the job: cleanup is hygiene,
+          # and a red cleanup run on a merged PR is noise, not signal.
+          [ "$failed" -eq 0 ] || echo "::warning::${failed} cache deletion(s) failed"
+
+  delete-closed-branch:
+    name: Delete closed PR branch
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete unchanged, unused head branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          case "$HEAD_REF" in
+            "$DEFAULT_BRANCH"|cla-signatures|__dolt_remote_info__)
+              echo "retaining managed branch: $HEAD_REF"
+              exit 0
+              ;;
+          esac
+
+          encoded_branch="$(jq -rn --arg value "$HEAD_REF" '$value | @uri')"
+          encoded_ref="$(jq -rn --arg value "heads/$HEAD_REF" '$value | @uri')"
+
+          branch_json="$(gh api "repos/${REPO}/branches/${encoded_branch}" 2>/dev/null || true)"
+          if [ -z "$branch_json" ]; then
+            echo "branch already absent: $HEAD_REF"
+            exit 0
+          fi
+          if [ "$(jq -r '.protected' <<<"$branch_json")" = "true" ]; then
+            echo "retaining protected branch: $HEAD_REF"
+            exit 0
+          fi
+
+          current_sha="$(gh api "repos/${REPO}/git/ref/${encoded_ref}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -z "$current_sha" ]; then
+            echo "ref vanished concurrently: $HEAD_REF"
+            exit 0
+          fi
+          if [ "$current_sha" != "$HEAD_SHA" ]; then
+            echo "retaining $HEAD_REF: head moved after PR closure"
+            exit 0
+          fi
+
+          open_uses="$(
+            gh api --paginate "repos/${REPO}/pulls?state=open&per_page=100" |
+              jq -s --arg ref "$HEAD_REF" \
+                '[.[][] | select(.head.ref == $ref or .base.ref == $ref)] | length'
+          )"
+          if [ "$open_uses" -ne 0 ]; then
+            echo "retaining $HEAD_REF: referenced by $open_uses open PR(s)"
+            exit 0
+          fi
+
+          gh api --method DELETE "repos/${REPO}/git/refs/${encoded_ref}"
+          echo "deleted closed PR branch: $HEAD_REF"

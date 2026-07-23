@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for spec 040 Phase 2a — master detection during scan.
 //!
 //! Tests that:
@@ -196,4 +199,53 @@ fn dummy_content_files_in_fits_lane_produce_no_masters() {
     let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
     assert_eq!(items.len(), 1);
     assert!(items[0].masters.is_empty(), "unreadable files must not yield masters");
+}
+
+// ── Spec 058 FR-015 — the master carve-out arithmetic ─────────────────────────
+
+#[test]
+fn masters_only_folder_has_no_sub_frames_left_to_classify() {
+    // FR-015: a folder whose every file is a detected master must score 0, so
+    // `list_unclassified_source_groups` does not surface it in addition to the
+    // master item rows that already represent it.
+    let tmp = tempfile::tempdir().unwrap();
+    let masters = tmp.path().join("masters");
+    fs::create_dir_all(&masters).unwrap();
+
+    write_fits(&masters, "masterDark.fits", "DARK", Some(30));
+    write_fits(&masters, "masterFlat.fits", "FLAT", Some(20));
+
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    assert_eq!(items.len(), 1, "one leaf folder");
+    let item = &items[0];
+    assert_eq!(item.masters.len(), 2, "both files detected as masters");
+    assert_eq!(
+        item.sub_frame_count(),
+        0,
+        "a masters-only folder has nothing left for classification to split (FR-015)"
+    );
+}
+
+#[test]
+fn mixed_master_and_sub_folder_counts_only_the_subs() {
+    // The other side of FR-015: masters are excluded from the folder's count,
+    // but the remaining sub-frames still are counted, so the folder keeps
+    // appearing as scanned-but-unclassified.
+    let tmp = tempfile::tempdir().unwrap();
+    let darks = tmp.path().join("darks");
+    fs::create_dir_all(&darks).unwrap();
+
+    write_fits(&darks, "masterDark.fits", "DARK", Some(30));
+    write_fits(&darks, "dark_001.fits", "DARK", None);
+    write_fits(&darks, "dark_002.fits", "DARK", None);
+
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let item = &items[0];
+    assert_eq!(item.masters.len(), 1);
+    assert_eq!(item.fits_files.len(), 3, "masters are a subset of fits_files");
+    assert_eq!(
+        item.sub_frame_count(),
+        2,
+        "the two plain darks remain to be classified; the master does not (FR-015)"
+    );
 }

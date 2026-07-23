@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Multi-level grouping — shared across every list page (promoted from the
  * Inbox, spec 041 US2/FR-009). Groups a flat list into nested, collapsible
@@ -9,7 +12,9 @@
 import { m } from '@/lib/i18n';
 
 /** Extracts the grouping key for one dimension from an item. */
-export type DimensionAccessor<T> = (item: T) => string | number | null | undefined;
+export type DimensionAccessor<T> = (
+  item: T,
+) => string | number | null | undefined;
 
 /** A node in the grouping tree. Leaf nodes carry `items`; inner nodes carry `children`. */
 export interface GroupNode<T> {
@@ -30,7 +35,10 @@ export interface GroupNode<T> {
 /** Sentinel key for items missing a grouping dimension. */
 export const NONE_KEY = '__none__';
 
-function keyOf<T>(item: T, accessor: DimensionAccessor<T>): { key: string; label: string } {
+function keyOf<T>(
+  item: T,
+  accessor: DimensionAccessor<T>,
+): { key: string; label: string } {
   const raw = accessor(item);
   if (raw === null || raw === undefined || raw === '') {
     // Call-time, not a module-level const, so the label re-reads the active
@@ -55,14 +63,16 @@ export function groupByDimensions<T>(
   dimensions: readonly string[],
   accessors: Readonly<Record<string, DimensionAccessor<T>>>,
 ): GroupNode<T>[] {
-  const activeDims = dimensions.filter((d) => typeof accessors[d] === 'function');
+  const activeDims = dimensions.filter(
+    (d) => typeof accessors[d] === 'function',
+  );
 
   if (activeDims.length === 0) {
     return [
       {
         dimension: '',
         key: '__all__',
-        label: m.inbox_group_all_label(),
+        label: m.common_all(),
         count: items.length,
         items: [...items],
         children: [],
@@ -102,14 +112,19 @@ function buildLevel<T>(
       label,
       count: bucketItems.length,
       items: isLeaf ? bucketItems : [],
-      children: isLeaf ? [] : buildLevel(bucketItems, dimensions, depth + 1, accessors),
+      children: isLeaf
+        ? []
+        : buildLevel(bucketItems, dimensions, depth + 1, accessors),
     });
   }
 
   nodes.sort((a, b) => {
     if (a.key === NONE_KEY) return 1;
     if (b.key === NONE_KEY) return -1;
-    return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' });
+    return a.label.localeCompare(b.label, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
   });
 
   return nodes;
@@ -159,7 +174,8 @@ export function flattenVisibleGroups<T>(
       if (node.children.length > 0) {
         walk(node.children, depth + 1, path);
       } else {
-        for (const item of node.items) rows.push({ kind: 'item', item, depth: depth + 1 });
+        for (const item of node.items)
+          rows.push({ kind: 'item', item, depth: depth + 1 });
       }
     }
   };

@@ -6,6 +6,20 @@
 >
 > **What this document is NOT:** a tasks.md substitute or a checkbox list. Ticked
 > boxes are not proof; real-backend evidence is. This catalog drives authoring work.
+>
+> **2026-07-11 update:** the **RB** layer described below
+> (`apps/desktop/e2e/real-backend/*.spec.ts`, Playwright + `tauri-driver` +
+> `WebKitWebDriver`) was never completed and has since been superseded
+> end-to-end by spec 037's `crates/e2e-tests` Layer-2 harness (thirtyfour +
+> `tauri-plugin-webdriver` + cargo-nextest, run in `.github/workflows/e2e.yml`
+> on Linux+Windows CI, not the WSL sandbox this doc's RB layer targeted). The
+> `apps/desktop/e2e/` scaffold (`README.md`, `tsconfig.json`) referenced
+> throughout this file has been removed (spec 033 T085) as it described a
+> directory structure that no longer exists on `main`. Any row below marked
+> RB/"missing" should be checked against
+> `specs/037-e2e-integration-testing/contracts/coverage-matrix.md` — the
+> currently-maintained source of truth for e2e coverage state — before being
+> treated as an open gap.
 
 ---
 

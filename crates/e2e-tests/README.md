@@ -65,11 +65,6 @@ D10 and `quickstart.md`).
 - Vite dev server / `vite preview` running on `:5173` with:
   - `VITE_USE_MOCKS=false` — real backend.
   - `VITE_E2E=1` — exposes the `window.__ALM_E2E__` invoke bridge.
-- Set `ALM_DB_URL=sqlite:///path/to/alm.db?mode=rwc` to control which database
-  is wiped before each test run and which one the launched app connects to
-  (CI sets this — see `.github/workflows/e2e.yml`). If unset, `reset_database`
-  no-ops and the app falls back to the OS app-data path (wiring deferred —
-  see `tests/common/mod.rs`).
 
 ## Notes
 
@@ -77,5 +72,19 @@ D10 and `quickstart.md`).
   `tauri-plugin-webdriver` replaces them on every OS (research D10). The
   harness's `preflight()` only checks for the `tauri-webdriver` CLI and the
   built `desktop_shell` binary.
-- Tests run serially (`test-threads = 1` in the `e2e` nextest profile) because
-  there is one app instance, one driver session, and one database per run.
+- Each nextest test process gets its own isolated `tauri-webdriver` proxy
+  port, native plugin port, app-data/config dir, and SQLite DB file
+  (`tests/common/mod.rs::InstanceEnv`), lazily allocated once per process and
+  reused across `launch()`/`relaunch()` calls within that test. `ALM_DB_URL`
+  is set internally per instance and no longer read from the ambient
+  environment — nothing to configure. Each instance also gets its own
+  `ALM_E2E_INSTANCE_ID`, whose presence tells `apps/desktop/src-tauri/src/lib.rs`
+  to skip the single-instance plugin entirely so concurrently-launched
+  `desktop_shell` processes no longer collide on Tauri's default
+  identifier-derived identity. The plugin's per-instance override exists only
+  on Linux (`dbus_id`) — not Windows (named mutex) or macOS — so skipping is
+  the only cross-platform fix; no journey exercises single-instance behaviour.
+  It is a no-op outside e2e (real users never set this env var, so the guard
+  stays active). Together this lets `test-threads` in the `e2e` nextest profile
+  exceed 1 without journeys racing each other; see `.config/nextest.toml`
+  for the current value and its rationale.

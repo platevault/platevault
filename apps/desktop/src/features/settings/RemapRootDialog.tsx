@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * RemapRootDialog — Data Sources "Remap" flow (P6a).
  *
@@ -30,9 +33,15 @@ export interface RemapRootDialogProps {
   onApplied: () => void;
 }
 
-export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogProps) {
+export function RemapRootDialog({
+  root,
+  onClose,
+  onApplied,
+}: RemapRootDialogProps) {
   const [newPath, setNewPath] = useState('');
-  const [verification, setVerification] = useState<RemapVerification | null>(null);
+  const [verification, setVerification] = useState<RemapVerification | null>(
+    null,
+  );
   const [verifying, setVerifying] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,16 +128,18 @@ export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogPro
             onClick={() => void handleApply()}
             disabled={!verification || verifying || applying}
           >
-            {applying ? m.common_applying() : m.settings_datasources_remap_apply_btn()}
+            {applying
+              ? m.common_applying()
+              : m.settings_datasources_remap_apply_btn()}
           </Btn>
         </>
       }
     >
-      <div className="alm-remap-dialog__field">
-        <span className="alm-remap-dialog__field-label">
+      <div className="pv-remap-dialog__field">
+        <span className="pv-remap-dialog__field-label">
           {m.settings_datasources_remap_current_path_label()}
         </span>
-        <code className="alm-mono">{root.path}</code>
+        <code className="pv-mono">{root.path}</code>
       </div>
 
       <DirPicker
@@ -139,7 +150,7 @@ export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogPro
       />
 
       {error && (
-        <Banner variant="danger" className="alm-remap-dialog__banner">
+        <Banner variant="danger" className="pv-remap-dialog__banner">
           {m.settings_datasources_remap_error({ error })}
         </Banner>
       )}
@@ -148,16 +159,29 @@ export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogPro
         <>
           <Banner
             variant={verification.allVerified ? 'info' : 'warn'}
-            className="alm-remap-dialog__banner"
+            className="pv-remap-dialog__banner"
           >
-            {verification.allVerified
-              ? m.settings_datasources_remap_all_verified()
-              : m.settings_datasources_remap_not_all_verified()}
+            {/* Issue #560: report the exhaustive matched/total counts (no more
+                "sample" wording), and distinguish the zero-recorded-items case
+                so an empty verification never reads as a vacuous "all found". */}
+            {verification.samples.length === 0
+              ? m.settings_datasources_remap_no_items()
+              : verification.allVerified
+                ? m.settings_datasources_remap_all_verified_count({
+                    total: verification.samples.length,
+                  })
+                : m.settings_datasources_remap_not_all_verified_count({
+                    matched: verification.samples.filter((s) => s.found).length,
+                    total: verification.samples.length,
+                  })}
           </Banner>
-          <ul className="alm-remap-dialog__samples">
+          <ul className="pv-remap-dialog__samples">
             {verification.samples.map((sample) => (
-              <li key={sample.relativePath} className="alm-remap-dialog__sample-row">
-                <code className="alm-mono">{sample.relativePath}</code>
+              <li
+                key={sample.relativePath}
+                className="pv-remap-dialog__sample-row"
+              >
+                <code className="pv-mono">{sample.relativePath}</code>
                 <Pill variant={sample.found ? 'ok' : 'warn'}>
                   {sample.found
                     ? m.settings_datasources_remap_found()

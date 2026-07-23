@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * BlockedBanner tests — spec 009 US4-2 / US4-3.
@@ -23,18 +26,29 @@ import type { BlockedReason } from './BlockedBanner';
 
 describe('blockedReasonMessage', () => {
   it('formats source_missing with inventoryId', () => {
-    const reason: BlockedReason = { kind: 'source_missing', inventoryId: 'inv-abc' };
+    const reason: BlockedReason = {
+      kind: 'source_missing',
+      inventoryId: 'inv-abc',
+    };
     expect(blockedReasonMessage(reason)).toBe('Source missing: inv-abc');
   });
 
   it('formats prepared_source_stale', () => {
-    const reason: BlockedReason = { kind: 'prepared_source_stale', preparedId: 'ps-1' };
+    const reason: BlockedReason = {
+      kind: 'prepared_source_stale',
+      preparedId: 'ps-1',
+    };
     expect(blockedReasonMessage(reason)).toBe('Prepared source out of date');
   });
 
   it('formats tool_unconfigured with tool name', () => {
-    const reason: BlockedReason = { kind: 'tool_unconfigured', tool: 'PixInsight' };
-    expect(blockedReasonMessage(reason)).toBe('Tool path not configured: PixInsight');
+    const reason: BlockedReason = {
+      kind: 'tool_unconfigured',
+      tool: 'PixInsight',
+    };
+    expect(blockedReasonMessage(reason)).toBe(
+      'Tool path not configured: PixInsight',
+    );
   });
 
   it('formats calibration_unmatched', () => {
@@ -55,29 +69,36 @@ describe('blockedReasonMessage', () => {
 
 describe('resolveEdgeForReason', () => {
   it('routes source_missing to setup_incomplete', () => {
-    expect(resolveEdgeForReason({ kind: 'source_missing', inventoryId: 'x' })).toBe(
-      'setup_incomplete',
-    );
+    expect(
+      resolveEdgeForReason({ kind: 'source_missing', inventoryId: 'x' }),
+    ).toBe('setup_incomplete');
   });
 
   it('routes tool_unconfigured to setup_incomplete', () => {
-    expect(resolveEdgeForReason({ kind: 'tool_unconfigured', tool: 'PI' })).toBe(
-      'setup_incomplete',
-    );
+    expect(
+      resolveEdgeForReason({ kind: 'tool_unconfigured', tool: 'PI' }),
+    ).toBe('setup_incomplete');
   });
 
   it('routes prepared_source_stale to ready', () => {
-    expect(resolveEdgeForReason({ kind: 'prepared_source_stale', preparedId: 'p' })).toBe('ready');
+    expect(
+      resolveEdgeForReason({ kind: 'prepared_source_stale', preparedId: 'p' }),
+    ).toBe('ready');
   });
 
   it('routes calibration_unmatched to ready', () => {
     expect(
-      resolveEdgeForReason({ kind: 'calibration_unmatched', calibrationSetId: 'c' }),
+      resolveEdgeForReason({
+        kind: 'calibration_unmatched',
+        calibrationSetId: 'c',
+      }),
     ).toBe('ready');
   });
 
   it('routes user reason to ready', () => {
-    expect(resolveEdgeForReason({ kind: 'user', note: 'manual' })).toBe('ready');
+    expect(resolveEdgeForReason({ kind: 'user', note: 'manual' })).toBe(
+      'ready',
+    );
   });
 });
 
@@ -115,7 +136,9 @@ describe('BlockedBanner', () => {
         onResolve={vi.fn()}
       />,
     );
-    expect(screen.getByTestId('blocked-reason-message')).toHaveTextContent('Something broke');
+    expect(screen.getByTestId('blocked-reason-message')).toHaveTextContent(
+      'Something broke',
+    );
   });
 
   it('calls onResolve with the correct edge for source_missing', () => {

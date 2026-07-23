@@ -1,11 +1,18 @@
 # Persistence Layer Hardening
 
-Status: infrastructure scaffolding landed. The actual query relocation is a
-**separate, later effort**. This document seeds the future tinyspec and
-records the research behind the chosen mechanisms.
+**Status (2026-07-11): COMPLETE — boundary sealed at zero.** The relocation
+effort has landed. Every production `sqlx` query/exec site has been drained out
+of the app and domain crates into `crates/persistence/db`, and the guard is now
+locked at zero: `scripts/db-boundary-baseline.txt` is empty and any new
+production SQL outside `persistence/db` fails CI. Delivered across PRs #534,
+#536–#544 (the per-crate drains) and #546 (the seal), under the
+`db-boundary-zero` orchestration run.
 
-This branch adds **scaffolding + a guard rail only**. It does NOT migrate any
-existing query, convert any query code, or touch domain-crate query sites.
+This document is preserved as the research and history behind the effort.
+Sections 4–5 (sea-query pattern, sqlx offline verification) remain the reference
+record for the chosen mechanisms. Where the original text said "later effort" or
+"this branch does not migrate," that work is now done — see the dated notes
+inline.
 
 ---
 
@@ -26,9 +33,11 @@ occurrences, including test code):
 Production-only count, as measured by the ratchet (`scripts/check-db-boundary.sh`,
 which excludes `tests/` directories and inline `#[cfg(test)]` modules):
 
-- **212 production query sites** across **23 production files** (baseline as
-  regenerated for this branch; see `scripts/db-boundary-baseline.txt` for the
-  authoritative per-file counts, which will keep moving as other work lands).
+- At scaffolding time: **212 production query sites** across **23 production
+  files**. **As of 2026-07-11 this count is 0** — every one of those sites was
+  relocated into `crates/persistence/db` and `scripts/db-boundary-baseline.txt`
+  is now sealed empty. The audit numbers below are the historical starting
+  point; the table in the next section records where the SQL used to live.
 
 > The raw audit count (~504, taken when this scaffolding was first drafted) and
 > the ratchet count differ because the ratchet deliberately scopes to
@@ -38,7 +47,7 @@ which excludes `tests/` directories and inline `#[cfg(test)]` modules):
 > number, and `scripts/db-boundary-baseline.txt` (not this doc) is the source of
 > truth for current per-file counts.
 
-### Top offenders (production sites, from `scripts/db-boundary-baseline.txt`)
+### Top offenders (historical — where the SQL used to live, all now drained to 0)
 
 | Sites | File |
 | ----: | ---- |
@@ -68,20 +77,25 @@ not this table, as authoritative — it will drift as unrelated work lands.)
 
 ## 2. The 6-part plan
 
-1. **Boundary enforcement (this branch).** A ratcheting CI guard that forbids
-   *new* production SQL outside `persistence/db`. Counts may only shrink.
-2. **Relocation (later).** Move each production query into a `persistence/db`
-   repository method. Drives the ratchet baseline toward zero.
-3. **Typed rows (later).** Each query maps onto a `#[derive(sqlx::FromRow)]`
-   struct instead of ad-hoc tuple/`Row` access.
-4. **sea-query for dynamic queries (this branch: pattern + dep).** Dynamic
+1. **Boundary enforcement.** ✅ **Done.** A CI guard that forbids production SQL
+   outside `persistence/db`. Started as a shrink-only ratchet; now **sealed at
+   zero** (see §3).
+2. **Relocation.** ✅ **Done.** Every production query was moved into a
+   `persistence/db` repository method, driving the baseline to zero (PRs #534,
+   #536–#544).
+3. **Typed rows.** ✅ **Done as part of relocation.** Relocated queries map onto
+   `#[derive(sqlx::FromRow)]` row structs in the `persistence/db` repositories
+   instead of ad-hoc tuple/`Row` access.
+4. **sea-query for dynamic queries (pattern + dep).** Dynamic
    `WHERE`/`ORDER BY`/pagination built with `sea-query`, bound to sqlx 0.9
    manually. Reference pattern in `query_builder_example.rs`.
-5. **Compile-time verification (this branch: mechanism only).** sqlx offline
-   query cache (`.sqlx/`) so static queries are checked against the schema at
-   build time, and CI builds with `SQLX_OFFLINE=true`.
-6. **Lint ratchet (this branch).** The boundary script + a secondary clippy
-   signal, wired into CI; baseline regenerated as relocation lands.
+5. **Compile-time verification (mechanism only).** sqlx offline query cache
+   (`.sqlx/`) so static queries are checked against the schema at build time,
+   and CI builds with `SQLX_OFFLINE=true`.
+6. **Lint ratchet.** ✅ **Done + wired into CI.** The boundary script (+ a
+   secondary clippy signal) runs as the `DB boundary ratchet` step in
+   `.github/workflows/ci.yml` via `just db-boundary`; the baseline is now sealed
+   empty.
 
 ---
 
@@ -110,23 +124,29 @@ So the **authoritative** guard is `scripts/check-db-boundary.sh`, and clippy is 
   (`sqlx::query | query_as | query_scalar | .fetch_(one|all|optional) |
   .execute(`) that appear **before** the first `#[cfg(test)]` line. Inline unit
   test modules are not production code and are excluded.
-- Compares each file's count against `scripts/db-boundary-baseline.txt`
-  (per-file `count<TAB>path`). A file that **exceeds** its baseline fails the
-  check (exit 1). New files default to baseline 0 — any new leak fails.
-- Counts may only shrink: as queries are relocated, regenerate the baseline so
-  it ratchets downward.
+- **Now sealed at zero (2026-07-11).** `scripts/db-boundary-baseline.txt` is
+  empty, so the check fails (exit 1) on **any** production query site outside
+  `persistence/db`. It also rejects a non-empty (hand-edited) baseline
+  (`SEAL BROKEN`) so the boundary cannot be silently re-opened, and `--generate`
+  refuses to record leakage — new SQL must be added as a `persistence/db`
+  repository method.
+- *History:* this began as a shrink-only ratchet that compared each file's count
+  against a per-file baseline (`count<TAB>path`) and allowed counts only to
+  decrease. Once relocation drove every count to 0, the baseline was sealed
+  empty and the guard hardened to zero-tolerance.
 
 Commands:
 
 ```bash
-bash scripts/check-db-boundary.sh            # CI check (exit 1 on regression)
-bash scripts/check-db-boundary.sh --generate # (re)write the baseline
-bash scripts/check-db-boundary.sh --list     # print current per-file counts
+bash scripts/check-db-boundary.sh            # CI check (exit 1 on ANY production SQL / non-empty baseline)
+bash scripts/check-db-boundary.sh --generate # re-seal the empty baseline (refuses to record leakage)
+bash scripts/check-db-boundary.sh --list     # print current per-file counts (now empty)
 just db-boundary                             # = the CI check
 ```
 
-Current state: **green** at 23 files / 212 sites (see
-`scripts/db-boundary-baseline.txt` for the live numbers).
+Current state: **green, sealed at zero** — 0 files / 0 production query sites
+outside `persistence/db` (`scripts/db-boundary-baseline.txt` holds only header
+comments).
 
 ### clippy.toml (secondary signal)
 
@@ -141,39 +161,35 @@ legitimate sites while letting a developer surface the signal on demand:
 cargo clippy -- -W clippy::disallowed_methods
 ```
 
-### CI wiring — NOT YET DONE
+### CI wiring — DONE
 
-`just db-boundary` runs locally today but is **not** wired into any GitHub
-Actions workflow yet. This branch intentionally leaves `.github/workflows/*`
-untouched (a separate concern from landing the scaffolding — see the PR that
-introduced this doc for the reason). To wire it in later, add a step to the
-relevant workflow alongside the existing fast checks (e.g. right after
-`cargo fmt --all --check`):
+`just db-boundary` is wired into CI as the **DB boundary ratchet** step in
+`.github/workflows/ci.yml`:
 
 ```yaml
       - name: DB boundary ratchet
         run: just db-boundary
 ```
 
-`just` is already installed in CI via `taiki-e/install-action`. The step is fast
-(pure grep, no compile) and platform-independent (bash is available on the
-ubuntu/macos runners; the Windows runner has Git Bash — if Windows portability
-is a concern, restrict the step to `if: runner.os != 'Windows'` since the
-ratchet only needs to run once).
+`just` is installed in CI via `taiki-e/install-action`. The step is fast (pure
+grep, no compile). It runs on every change so any new production SQL outside
+`persistence/db` fails the build.
 
-### Regenerating the baseline
+### Regenerating the baseline (sealed at zero)
 
-Any refactor that materially shuffles query sites outside `persistence/db`
-(renames, file splits, moving code between crates) changes the per-file counts.
-Regenerate and review the diff before committing:
+The baseline is now locked empty, so regeneration is no longer routine
+housekeeping. `--generate` **refuses** to write a non-empty baseline: if any
+production query site exists outside `persistence/db`, it prints the offenders
+and exits non-zero instead of recording them. The correct fix for a new leak is
+to move the query into a `persistence/db` repository method — not to regenerate.
 
 ```bash
-bash scripts/check-db-boundary.sh --generate
+bash scripts/check-db-boundary.sh --generate  # re-seals the empty baseline; refuses any leak
 ```
 
-`scripts/db-boundary-baseline.txt` is the source of truth for current counts;
-this document's tables are illustrative snapshots only and are expected to
-drift.
+`scripts/db-boundary-baseline.txt` remains the source of truth; it should stay
+empty (header comments only). The tables in this document are historical
+snapshots.
 
 ---
 
@@ -249,9 +265,13 @@ Notable sea-query 1.0 API points discovered while writing the example:
 
 ## 5. sqlx compile-time verification (offline)
 
-This branch sets up the **mechanism only**. It does NOT convert existing
-`query()` calls to the `query!`/`query_as!` macros — that conversion is part of
-the later migration.
+This branch set up the **mechanism only**, and it remains unadopted. Note
+(2026-07-11): the relocation (part 2) moved queries into `persistence/db` using
+**runtime** `sqlx::query_as` + `#[derive(sqlx::FromRow)]` row structs, **not**
+the compile-time `query!`/`query_as!` macros. So there is still no `.sqlx/`
+offline cache and CI does not set `SQLX_OFFLINE`. Converting the runtime queries
+to checked macros (and populating `.sqlx/`) is a possible future step; the
+zero-boundary seal does not depend on it.
 
 ### 5.1 sqlx 0.9 dynamic-SQL guard (`AssertSqlSafe`)
 
@@ -325,23 +345,21 @@ not a stale one. Sequence for the migration effort:
 - `justfile`: `db-boundary` and `sqlx-prepare` recipes.
 - `.gitignore`: note that `.sqlx/` is intentionally committed.
 
-No existing query was migrated, converted, or relocated.
+No existing query was migrated, converted, or relocated *by that scaffolding
+branch*. The relocation itself landed later, under the `db-boundary-zero` run
+(PRs #534, #536–#544, sealed by #546) — see the status banner at the top.
 
 ---
 
-## 7. Open design question for the relocation effort
+## 7. Resolved: inline test SQL stays inline
 
 Many production source files carry their unit tests inline as
 `#[cfg(test)] mod tests` at the bottom of the same `.rs` file, and those test
-modules hold the bulk (~1010) of the query sites. The ratchet excludes them by
-design (they are not production code). The relocation effort should decide
-whether, as queries move into `persistence/db`, the inline test SQL should:
+modules held the bulk (~1010) of the query sites. The ratchet excludes them by
+design (they are not production code).
 
-- stay inline (idiomatic Rust unit-test convention), or
-- move to `persistence/db` integration tests alongside the relocated queries
-  (so the boundary is enforced for tests too), or
-- be left as-is (tests legitimately exercise behavior through the new repository
-  API and no longer touch raw SQL).
-
-This is a relocation-time decision, not an infrastructure one, and is left open
-here intentionally.
+**Resolution (2026-07-11):** the relocation moved only **production** SQL into
+`persistence/db`; inline `#[cfg(test)]` fixture SQL was **left as-is**. Test
+modules legitimately set up fixtures with raw `sqlx`, and the boundary is scoped
+to production code, so those sites remain and are correctly ignored by the guard.
+The zero-boundary seal counts only production sites.

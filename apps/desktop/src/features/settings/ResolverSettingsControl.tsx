@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Reusable SIMBAD resolver settings control (spec 035, T031).
 //
 // Loads `ResolverSettings` via `target.resolution.settings`, and persists every
@@ -12,15 +15,16 @@
 // In `compact` mode only the online toggle is shown (used by the wizard step),
 // with the endpoint / debounce / timeout fields deferred to full Settings.
 
-import { useCallback, useEffect, useId, useState } from 'react';
-import { Toggle } from '@/ui';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Btn, Skeleton, Toggle } from '@/ui';
 import {
+  clearResolveCache,
   getResolverSettings,
   updateResolverSettings,
   type ResolverSettings,
 } from './settingsIpc';
 import { m } from '@/lib/i18n';
-import { SettingsRow } from './SettingsKit';
+import { SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
 
 const DEFAULT_SETTINGS: ResolverSettings = {
   onlineEnabled: true,
@@ -34,7 +38,9 @@ export interface ResolverSettingsControlProps {
   compact?: boolean;
 }
 
-export function ResolverSettingsControl({ compact = false }: ResolverSettingsControlProps) {
+export function ResolverSettingsControl({
+  compact = false,
+}: ResolverSettingsControlProps) {
   const endpointId = useId();
   const debounceId = useId();
   const timeoutId = useId();
@@ -42,13 +48,26 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
   const [settings, setSettings] = useState<ResolverSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [cacheClearMessage, setCacheClearMessage] = useState<string | null>(
+    null,
+  );
+  const [cacheClearError, setCacheClearError] = useState<string | null>(null);
+
+  // #822: guards the two-phase (onChange local state, onBlur commit) endpoint/
+  // debounce/timeout fields against the same mount-race fixed for Framing
+  // (4c39ec12) — the mount fetch below can resolve in the gap between an
+  // onChange and its later blur commit, clobbering the typed value back to
+  // the fetched one before a blur ever fires. Marked true as soon as the user
+  // starts typing (onChange), not only once they commit.
+  const editedRef = useRef(false);
 
   // Load persisted settings on mount.
   useEffect(() => {
     let cancelled = false;
     getResolverSettings()
       .then((resp) => {
-        if (!cancelled) setSettings(resp.settings);
+        if (!cancelled && !editedRef.current) setSettings(resp.settings);
       })
       .catch(() => {
         // Backend unavailable — keep in-code defaults.
@@ -77,110 +96,227 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
     [settings],
   );
 
+  // #802: reuses the same optimistic-then-persist path as every other
+  // control in this component; marks editedRef so a still-in-flight mount
+  // fetch can't clobber the restored values back to whatever it was about
+  // to load (same mount-race guard as #822).
+  const handleRestoreDefaults = useCallback(async () => {
+    editedRef.current = true;
+    await persist(DEFAULT_SETTINGS);
+  }, [persist]);
+
+  // spec 052 P1 (FR-002): manual "clear resolve cache" action — wipes the
+  // shared redb typeahead/search cache and re-warms it; never touches saved
+  // targets (canonical_target). The re-warm itself runs in the background
+  // (issue #695 — it used to freeze this button for minutes), so the success
+  // copy can no longer report a synchronous count.
+  const handleClearCache = useCallback(async () => {
+    setClearingCache(true);
+    setCacheClearMessage(null);
+    setCacheClearError(null);
+    try {
+      await clearResolveCache();
+      setCacheClearMessage(m.settings_resolver_cache_clear_success());
+    } catch (e) {
+      setCacheClearError(
+        m.settings_resolver_cache_clear_error({
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    } finally {
+      setClearingCache(false);
+    }
+  }, []);
+
   return (
     <>
       {compact ? (
         // First-run Configuration step: label + toggle on one line, description
         // below the control (not beside it).
-        <div className="alm-resolver-settings__compact-wrap">
-          <div className="alm-resolver-settings__compact-row">
-            <span className="alm-resolver-settings__compact-label">
+        <div className="pv-resolver-settings__compact-wrap">
+          <div className="pv-resolver-settings__compact-row">
+            <span className="pv-resolver-settings__compact-label">
               {m.settings_resolver_online_label()}
             </span>
-            <Toggle
-              checked={settings.onlineEnabled}
-              aria-label={m.settings_resolver_online_aria()}
-              onChange={(v) => void persist({ onlineEnabled: v })}
-            />
+            {loaded ? (
+              <Toggle
+                checked={settings.onlineEnabled}
+                aria-label={m.settings_resolver_online_aria()}
+                onChange={(v) => void persist({ onlineEnabled: v })}
+              />
+            ) : (
+              <Skeleton
+                variant="block"
+                width={36}
+                height={20}
+                radius="10px"
+                label={m.common_loading()}
+              />
+            )}
           </div>
-          <div className="alm-settings__row-desc">
-            {settings.onlineEnabled
-              ? m.settings_resolver_online_desc()
-              : m.settings_resolver_offline_desc()}
+          <div className="pv-settings__row-desc">
+            {loaded &&
+              (settings.onlineEnabled
+                ? m.settings_resolver_online_desc()
+                : m.settings_resolver_offline_desc())}
           </div>
         </div>
       ) : (
         <SettingsRow
           label={m.settings_resolver_online_label()}
           info={
-            settings.onlineEnabled
-              ? m.settings_resolver_online_on_info()
-              : m.settings_resolver_online_off_info()
+            loaded
+              ? settings.onlineEnabled
+                ? m.settings_resolver_online_on_info()
+                : m.settings_resolver_online_off_info()
+              : undefined
           }
         >
-          <Toggle
-            checked={settings.onlineEnabled}
-            aria-label={m.settings_resolver_online_aria()}
-            onChange={(v) => void persist({ onlineEnabled: v })}
-          />
+          {loaded ? (
+            <Toggle
+              checked={settings.onlineEnabled}
+              aria-label={m.settings_resolver_online_aria()}
+              onChange={(v) => void persist({ onlineEnabled: v })}
+            />
+          ) : (
+            <Skeleton
+              variant="block"
+              width={36}
+              height={20}
+              radius="10px"
+              label={m.common_loading()}
+            />
+          )}
         </SettingsRow>
       )}
 
       {!compact && (
         <>
           <SettingsRow
-
-            label={<label htmlFor={endpointId}>{m.settings_resolver_endpoint_label()}</label>}
+            label={
+              <label htmlFor={endpointId}>
+                {m.settings_resolver_endpoint_label()}
+              </label>
+            }
             info={m.settings_resolver_tapurl_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={endpointId} (cross-column association the rule can't trace) */}
             <input
               id={endpointId}
-              className="alm-input"
+              className="pv-input"
               type="text"
               value={settings.simbadEndpoint}
               disabled={!loaded || !settings.onlineEnabled}
-              onChange={(e) => setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }))}
-              onBlur={(e) => void persist({ simbadEndpoint: e.target.value.trim() })}
+              onChange={(e) => {
+                editedRef.current = true;
+                setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }));
+              }}
+              onBlur={(e) =>
+                void persist({ simbadEndpoint: e.target.value.trim() })
+              }
             />
           </SettingsRow>
 
           <SettingsRow
-
-            label={<label htmlFor={debounceId}>{m.settings_resolver_debounce_label()}</label>}
+            label={
+              <label htmlFor={debounceId}>
+                {m.settings_resolver_debounce_label()}
+              </label>
+            }
             info={m.settings_resolver_debounce_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={debounceId} (cross-column association the rule can't trace) */}
             <input
               id={debounceId}
-              className="alm-input alm-resolver-settings__narrow-input"
+              className="pv-input pv-resolver-settings__narrow-input"
               type="number"
               min={0}
               step={50}
               value={settings.debounceMs}
               disabled={!loaded}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, debounceMs: Number(e.target.value) }))
+              onChange={(e) => {
+                editedRef.current = true;
+                setSettings((s) => ({
+                  ...s,
+                  debounceMs: Number(e.target.value),
+                }));
+              }}
+              onBlur={(e) =>
+                void persist({ debounceMs: Number(e.target.value) })
               }
-              onBlur={(e) => void persist({ debounceMs: Number(e.target.value) })}
             />
           </SettingsRow>
 
           <SettingsRow
-
-            label={<label htmlFor={timeoutId}>{m.settings_resolver_timeout_label()}</label>}
+            label={
+              <label htmlFor={timeoutId}>
+                {m.settings_resolver_timeout_label()}
+              </label>
+            }
             info={m.settings_resolver_timeout_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={timeoutId} (cross-column association the rule can't trace) */}
             <input
               id={timeoutId}
-              className="alm-input alm-resolver-settings__narrow-input"
+              className="pv-input pv-resolver-settings__narrow-input"
               type="number"
               min={1}
               step={1}
               value={settings.requestTimeoutSecs}
               disabled={!loaded || !settings.onlineEnabled}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, requestTimeoutSecs: Number(e.target.value) }))
+              onChange={(e) => {
+                editedRef.current = true;
+                setSettings((s) => ({
+                  ...s,
+                  requestTimeoutSecs: Number(e.target.value),
+                }));
+              }}
+              onBlur={(e) =>
+                void persist({ requestTimeoutSecs: Number(e.target.value) })
               }
-              onBlur={(e) => void persist({ requestTimeoutSecs: Number(e.target.value) })}
             />
           </SettingsRow>
+
+          <SettingsRow
+            label={m.settings_action_restore_defaults()}
+            info={m.settings_resolver_restore_scope()}
+          >
+            <RestoreDefaultsBtn
+              onRestore={handleRestoreDefaults}
+              scopeLabel={m.settings_resolver_restore_scope()}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            label={m.settings_resolver_cache_clear_label()}
+            info={m.settings_resolver_cache_clear_info()}
+          >
+            <Btn
+              type="button"
+              variant="ghost"
+              disabled={clearingCache}
+              onClick={() => void handleClearCache()}
+            >
+              {clearingCache
+                ? m.settings_resolver_cache_clear_pending()
+                : m.settings_resolver_cache_clear_label()}
+            </Btn>
+          </SettingsRow>
+          {cacheClearMessage && (
+            <div className="pv-settings__row-desc" role="status">
+              {cacheClearMessage}
+            </div>
+          )}
+          {cacheClearError && (
+            <div className="pv-settings__error" role="alert">
+              {cacheClearError}
+            </div>
+          )}
         </>
       )}
 
       {saveError && (
-        <div className="alm-settings__error" role="alert">
+        <div className="pv-settings__error" role="alert">
           {m.settings_resolver_save_error({ error: saveError })}
         </div>
       )}

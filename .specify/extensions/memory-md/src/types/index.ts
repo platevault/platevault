@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export interface RetrievalConfig {
   max_index_entries: number;
   max_memory_results: number;

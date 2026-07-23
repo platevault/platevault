@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Product service — T012."""
 import uuid
 from models.product import Product

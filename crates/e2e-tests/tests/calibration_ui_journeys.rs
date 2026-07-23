@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journeys — Calibration masters (batch #3 of the
 //! coverage-matrix "Batched plan", Journey 8): masters-ingest-as-individual-
 //! items and the Calibration page's kind-conditional master detail, promoted
@@ -204,25 +207,22 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
         );
     }
 
-    let rows = app.find_all_testid_prefix("inbox-item-").await?;
+    // One live-document snapshot, not `find_all` + per-handle `.text()`: a
+    // `stale element reference` defaulted to "" would UNDERCOUNT the master
+    // labels and report a driver failure as a missing product label (#1111).
+    let row_texts = app.testid_prefix_texts("inbox-item-").await?;
     anyhow::ensure!(
-        rows.len() >= 2,
+        row_texts.len() >= 2,
         "expected the master dark + master bias to appear as 2 individual real \
          Inbox items (not one folder aggregate), found {}",
-        rows.len()
+        row_texts.len()
     );
-    let mut saw_master_label = 0usize;
-    for row in &rows {
-        let text = row.text().await.unwrap_or_default().to_lowercase();
-        if text.contains("master") {
-            saw_master_label += 1;
-        }
-    }
+    let saw_master_label = row_texts.iter().filter(|t| t.contains("master")).count();
     anyhow::ensure!(
         saw_master_label >= 2,
         "expected each master item's row to carry a real 'N master' label \
          (`inbox_master_row_label`), got {saw_master_label} of {} rows",
-        rows.len()
+        row_texts.len()
     );
 
     app.shutdown().await
@@ -232,10 +232,12 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
 /// Inbox UI registers it as a real `CalibrationMaster` row on the real
 /// Calibration page (`master-row-<id>` — added as a thin, additive test hook
 /// on `MastersTable.tsx`, mirroring the existing `inbox-item-<id>` row-testid
-/// convention already used by `InboxList.tsx`), and the kind-conditional
-/// Temperature property (only meaningful when `fingerprint.tempC` is present)
-/// is genuinely OMITTED from the master's detail — not a fabricated number —
-/// because this fixture carries no temperature header.
+/// convention already used by `InboxList.tsx`), and the master's detail
+/// renders spec-030 Q16 missing-value semantics: every matrix property row is
+/// always present — Temperature (not applicable to a bias master) renders the
+/// blank not-applicable marker, while applicable-but-missing values (this
+/// minimal fixture carries no camera header) render the unresolved chip —
+/// never a fabricated number.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyhow::Result<()> {
@@ -336,21 +338,32 @@ async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyh
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
 
-    // Now assert the kind-conditional Temperature row is genuinely absent
-    // (fp.tempC is null for this fixture — `MasterDetail.tsx` omits the whole
-    // property row rather than rendering a fabricated dash/number).
+    // Q16 missing-value semantics (spec-030 FR-135/FR-137): the Temperature
+    // row is ALWAYS present. For a bias master `setTemp` is not-applicable
+    // per the field-applicability matrix, so it renders the blank marker —
+    // a deliberate "n/a", visually distinct from missing data.
     anyhow::ensure!(
-        !page_contains_text(&app, "Temperature").await?,
-        "expected the Temperature property row to be omitted (not a dash) for a master with no tempC"
+        page_contains_text(&app, "Temperature").await?,
+        "expected the Temperature property row to be present (not-applicable marker) for a bias master"
     );
+
+    // And applicable-but-missing values (no camera header in this minimal
+    // fixture) must surface the unresolved chip — never a fabricated value,
+    // never a silently omitted row.
+    app.wait_testid("unresolved-chip", UI_TIMEOUT).await.map_err(|e| {
+        anyhow::anyhow!(
+            "expected at least one unresolved chip in the master detail for \
+             applicable-but-missing fields (e.g. camera): {e}"
+        )
+    })?;
 
     app.shutdown().await
 }
 
 /// `true` if any element on the current page contains the exact text
-/// `needle` — a coarse but real DOM check for a property LABEL that should
-/// be conditionally absent (`MasterDetail.tsx` omits the whole `PropertyDef`
-/// entry rather than rendering a dash when `fp.tempC` is null).
+/// `needle` — a coarse but real DOM check for a property LABEL
+/// (`MasterDetail.tsx` renders every matrix row unconditionally under Q16;
+/// value state is conveyed by the marker/chip, not row presence).
 async fn page_contains_text(app: &E2eApp, needle: &str) -> anyhow::Result<bool> {
     use thirtyfour::error::WebDriverErrorInner;
     let xpath = format!("//*[text()[contains(., '{needle}')]]");

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Shell -- main application shell with sidebar, main content area, status bar.
  * Route hybrid layout: Inbox and Projects get their own right sidebar
@@ -7,6 +10,8 @@
 import { useEffect } from 'react';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import { usePreferences } from '@/data/preferences';
+import { stepZoomIn, stepZoomOut, resetZoom } from '@/data/theme';
+import { useHotkeys } from '@/lib/useHotkeys';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
 import { LogPanel } from './LogPanel';
@@ -15,11 +20,12 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
-import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
-import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
-import { startGuidedEventBridge, stopGuidedEventBridge } from '@/features/guided/eventBridge';
+import { OrientationWalk } from '@/features/onboarding/OrientationWalk';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
-import { startUpdateSubscription, stopUpdateSubscription } from '@/data/updateSubscription';
+import {
+  startUpdateSubscription,
+  stopUpdateSubscription,
+} from '@/data/updateSubscription';
 
 function ShellInner() {
   const prefs = usePreferences();
@@ -43,18 +49,47 @@ function ShellInner() {
     void loadObservingState();
   }, [prefs.setupCompleted]);
 
-  // Guided first-project-flow coach (spec 010).
-  const guided = useGuidedFlow(prefs.setupCompleted);
+  // Spec 055 T030: app-owned whole-app zoom shortcuts (VS Code-style,
+  // stacks with the font-size dial). Window-local tinykeys bindings, NOT
+  // Tauri global shortcuts — WebView2 exposes no zoom-change event, so the
+  // app must own every write path; there is no listener to keep in sync.
+  useHotkeys(
+    {
+      '$mod+Equal': (e) => {
+        e.preventDefault();
+        stepZoomIn();
+      },
+      '$mod+Shift+Equal': (e) => {
+        e.preventDefault();
+        stepZoomIn();
+      },
+      '$mod+NumpadAdd': (e) => {
+        e.preventDefault();
+        stepZoomIn();
+      },
+      '$mod+Minus': (e) => {
+        e.preventDefault();
+        stepZoomOut();
+      },
+      '$mod+NumpadSubtract': (e) => {
+        e.preventDefault();
+        stepZoomOut();
+      },
+      '$mod+Digit0': (e) => {
+        e.preventDefault();
+        resetZoom();
+      },
+      '$mod+Numpad0': (e) => {
+        e.preventDefault();
+        resetZoom();
+      },
+    },
+    [],
+    { ignoreFormFields: false },
+  );
 
-  // Spec 033 US2/T029: drive guided auto-advance off real domain events.
-  useEffect(() => {
-    if (!prefs.setupCompleted) return undefined;
-    void startGuidedEventBridge();
-    return () => stopGuidedEventBridge();
-  }, [prefs.setupCompleted]);
-
-  // Spec 051 US10 (T058): listen for the backend's startup `update-available`
-  // event for the whole app session, so it's captured even if the user
+  // Spec 051 US10 (T058, #888 staged flow): run the frontend-driven update
+  // check for the whole app session, so it's captured even if the user
   // hasn't opened Settings > Advanced yet.
   useEffect(() => {
     void startUpdateSubscription();
@@ -93,10 +128,10 @@ function ShellInner() {
   }, [navigate]);
 
   return (
-    <div className={`alm-frame density-${prefs.density}`}>
-      <div className="alm-frame__body">
+    <div className={`pv-frame density-${prefs.density}`}>
+      <div className="pv-frame__body">
         <Sidebar />
-        <main className="alm-frame__main">
+        <main className="pv-frame__main">
           <Outlet />
         </main>
       </div>
@@ -104,11 +139,7 @@ function ShellInner() {
       <StatusBar />
       <CommandPalette />
       <ToastContainer />
-      {/* Guided overlay — non-blocking, portal-rendered (spec 010 FR-002) */}
-      <GuidedOverlay
-        guidedState={guided.state}
-        onDismiss={() => void guided.dismiss()}
-      />
+      <OrientationWalk />
     </div>
   );
 }

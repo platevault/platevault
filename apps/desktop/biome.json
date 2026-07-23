@@ -1,0 +1,62 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  "root": false,
+  "files": {
+    "includes": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "src/**/*.js",
+      "src/**/*.jsx",
+      "!src/bindings",
+      "!src/paraglide",
+      "!**/src-archived-2026-05-24",
+      "!node_modules",
+      "!dist"
+    ]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": "off",
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "off",
+        "useHookAtTopLevel": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "warn",
+        "useTemplate": "error",
+        "noCommonJs": "error"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "off",
+        "noExplicitAny": "error",
+        "noTemplateCurlyInString": "off",
+        "useBiomeIgnoreFolder": "error"
+      }
+    }
+  },
+  "assist": {
+    "enabled": false
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "jsxQuoteStyle": "double"
+    }
+  }
+}

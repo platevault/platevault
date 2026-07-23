@@ -10,9 +10,22 @@ path = "src/lib.rs"
 # spec 042 (T250): the SIMBAD on-demand resolver, the SQLite resolution cache,
 # and the bundled-seed loader were split out of the (now pure) `targeting`
 # crate into this crate so the heavy async/network/db dependency surface
-# (sqlx + reqwest + tokio + async-trait) no longer infects pure catalog
-# consumers. Public function/type names are unchanged — only the crate boundary
-# moved (`targeting::resolver::X` → `targeting_resolver::X`).
+# (sqlx + async-trait) no longer infects pure catalog consumers. Public
+# function/type names are unchanged — only the crate boundary moved
+# (`targeting::resolver::X` → `targeting_resolver::X`).
+#
+# Adopted the published `simbad-resolver` crate (nightwatch-astro org, same
+# author) as the TAP/Sesame network client + Caldwell map + normalize/fuzzy
+# helpers.
+#
+# spec 052 P1: `simbad.rs` now wraps the crate's own `SimbadResolver` FACADE
+# (cache-first resolve + `CacheBackend::File` redb, one global
+# `<app_data>/simbad-cache.redb`, no TTL) instead of a direct `TapResolver`
+# call — the redb cache is the reproducible typeahead/search projection.
+# `canonical_target`/`target_alias` in SQLite remain the durable record
+# (constitution §V), but are now written ONLY at an in-use commit (add to
+# project / link to session / favourite / Inbox-confirm), superseding
+# spec-035 FR-006 (persist-on-resolve). See data-model.md / research.md D1-D4.
 
 [dependencies]
 # Pure catalog primitives (normalization + UUIDv5 identity) live in the base
@@ -25,25 +38,35 @@ sqlx.workspace = true
 thiserror.workspace = true
 tracing = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
-# spec 035 (SIMBAD resolver): async HTTP client for SIMBAD TAP/Sesame.
-# reqwest 0.13 uses default-features = false + ["json", "rustls"] (no openssl);
-# the `rustls-tls` feature was renamed to `rustls` in 0.13. tokio provides the
-# async runtime for the client.
-reqwest = { workspace = true }
-tokio = { workspace = true }
 # spec 035 (SIMBAD resolver): async trait seam for the `Resolver` trait,
 # mirroring the retired `download::CatalogFetcher` pattern.
 async-trait.workspace = true
 # spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
 # `persistence_db` repositories' time convention.
 time.workspace = true
-# spec 042 (T200): percent-encode the ADQL URL query (reqwest is built with
-# `default-features = false`, so the high-level query builder is unavailable).
-percent-encoding.workspace = true
-# spec 042 (T204): RFC-4180 TSV tokenization of SIMBAD `basic` rows.
-csv.workspace = true
-# Fuzzy matching: token-set similarity + Damerau-Levenshtein (R2).
-strsim = "0.11"
+# db-boundary-zero: production dependency (not dev-only) so cache.rs's raw
+# sqlx sites can move into `persistence_db::repositories::q_resolver`.
+persistence_db = { path = "../../persistence/db" }
+# Published SIMBAD TAP client + Caldwell map + normalize/fuzzy helpers + the
+# cache-first facade (see crate doc above). Same author/org as this
+# workspace's own CI app.
+simbad-resolver = "0.4.0"
+# IAU constellation-from-coordinates, for `canonical_target.constellation`
+# enrichment at the in-use write (spec 052 P1 D8).
+skymath = "0.6.0"
+
+[dev-dependencies]
+# `#[tokio::test]` only — no production `tokio` usage in this crate (the
+# `simbad-resolver` dependency brings its own async runtime requirement for
+# `TapResolver`).
+tokio = { workspace = true }
+# spec 052 P1 (T005, SC-001): the crate's own call-counting FakeResolver, to
+# prove the facade never re-queries a cached object across a
+# drop-and-rebuild pointed at the same redb file — astro-plan's production
+# `simbad::SimbadResolver` wrapper only ever builds a real `TapResolver`, so
+# this test constructs the crate's facade directly.
+simbad-resolver = { version = "0.4.0", features = ["test-util"] }
+tempfile = { workspace = true }
 
 [features]
 # Enables the seeded in-memory test fixture (FakeResolver) for use in
@@ -53,9 +76,6 @@ test-fixture = []
 [[test]]
 name = "simbad_live"
 path = "tests/simbad_live.rs"
-
-[dev-dependencies]
-persistence_db = { path = "../../persistence/db" }
 
 [lints]
 workspace = true

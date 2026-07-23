@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journeys — Settings auto-save + theme persistence
 //! (batch #11 of the coverage-matrix "Batched plan", Journey 10). Promotes
 //! two of `docs/development/windows-journeys/journey-10-settings-appearance-i18n.md`'s
@@ -20,13 +23,27 @@
 //! backend-persisted setting (e.g. Ingestion's toggles, which round-trip
 //! through `ingestion.settings.get`/`update` into the same DB) CANNOT be
 //! proven to survive a relaunch in this harness — the DB reset would erase
-//! it regardless of whether the real app would have kept it. Only
-//! `localStorage`-backed state (e.g. the theme choice,
-//! `apps/desktop/src/data/theme.ts`) survives a `relaunch()` (unlike a
-//! second `launch()`, which also wipes webview storage) and can honestly
-//! prove cross-relaunch persistence here; the
+//! it regardless of whether the real app would have kept it. The
 //! ingestion-settings-persist-across-restart scenario (journey-10 Test 4) is
 //! left as a follow-up for that reason, not an oversight.
+//!
+//! (theme-settings-db, 2026-07-09) The theme choice used to be the one
+//! exception — purely `localStorage`-backed
+//! (`apps/desktop/src/data/theme.ts`), and therefore untouched by
+//! `reset_database()`, which is why the original version of Test 2 below
+//! asserted it survived a `relaunch()`. Theme is now DB-backed (settings
+//! `general` scope, `theme` key) so the WebView2 force-kill data-loss finding
+//! (a graceful shutdown flushes `localStorage`'s LevelDB store; a forced kill
+//! does not) can't silently lose the user's choice. `localStorage` is kept
+//! only as a synchronous boot cache, reconciled from the DB by
+//! `hydrateThemeFromSettings()` shortly after boot. That moves theme into the
+//! same "cannot be proven to survive a relaunch in this harness" bucket as
+//! Ingestion above — this harness's `reset_database()` wipes the very row
+//! `hydrateThemeFromSettings()` would otherwise confirm survived, and will
+//! instead reconcile the boot cache back to the default. Test 2 below is
+//! trimmed to the live-apply assertion only (unaffected by the DB reset); a
+//! true cross-relaunch proof needs a harness `ResetScope` that preserves the
+//! DB, left as a follow-up alongside Ingestion's.
 
 mod common;
 
@@ -140,143 +157,91 @@ async fn settings_ui_ingestion_toggle_autosaves_no_global_save_button() -> anyho
 }
 
 /// Test 2 (journey-10): switching the theme applies live (`<html
-/// data-theme>` changes with no reload) and survives a full app relaunch —
-/// the ONE piece of Settings state this harness can honestly prove survives
-/// a relaunch, since theme choice is `localStorage`-backed
-/// (`apps/desktop/src/data/theme.ts`) and therefore untouched by
-/// `E2eApp::launch()`'s per-session `reset_database()` (see module docs).
+/// data-theme>` changes with no reload) and the write actually lands in both
+/// the localStorage boot cache AND the settings DB (spec 018 `general`
+/// scope, `theme` key — theme-settings-db).
+///
+/// (theme-settings-db, 2026-07-09) Trimmed from the original version, which
+/// also asserted the choice survived a full `relaunch()`. That assertion
+/// relied on theme being purely `localStorage`-backed and therefore
+/// untouched by `E2eApp::relaunch()`'s unconditional `reset_database()`; now
+/// that the DB is the source of truth, `relaunch()` wipes the very row that
+/// would prove it survived, same as every other backend-persisted setting
+/// (see module docs, Ingestion's `-persist-across-restart` follow-up). A
+/// true cross-relaunch proof needs a harness `ResetScope` that preserves the
+/// DB — left as a follow-up.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow::Result<()> {
-    {
-        let app = E2eApp::launch().await?;
-        app.wait_bridge_ready(Duration::from_secs(30)).await?;
-        complete_first_run(&app).await?;
+async fn settings_ui_theme_applies_live_and_persists_to_settings_db() -> anyhow::Result<()> {
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    complete_first_run(&app).await?;
 
-        app.goto_route("/settings/general").await?;
-        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.goto_route("/settings/general").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
 
-        // "Espresso" (`THEMES` id `espresso-dark`) — a real, non-default theme
-        // swatch, matched by its visible name (the swatch button's full text
-        // also includes its light/dark mode label, so an exact-match helper
-        // would be wrong here — use `contains`).
-        // Poll for the swatch to actually mount: it opens asynchronously
-        // after the navigation, same route/render race `E2eApp::find_waiting`
-        // documents.
-        let xpath = "//button[contains(., 'Espresso')]";
-        app.find_waiting(By::XPath(xpath), "the 'Espresso' theme swatch button")
-            .await?
-            .click()
-            .await
-            .context("click the Espresso theme swatch failed")?;
-
-        // Live apply: no reload needed.
-        let theme: String = app
-            .driver
-            .execute("return document.documentElement.getAttribute('data-theme')", vec![])
-            .await
-            .context("failed to read document.documentElement's data-theme")?
-            .convert()
-            .context("failed to deserialise data-theme")?;
-        anyhow::ensure!(
-            theme == "espresso-dark",
-            "expected the theme to apply live with no reload, got data-theme={theme:?}"
-        );
-
-        // Diagnostic (round 2, fix-464-theme): confirm the write actually
-        // landed in `localStorage` itself, not just the derived `data-theme`
-        // attribute — rules out "never written" as a cause of a later
-        // relaunch failure.
-        let stored: serde_json::Value = app
-            .driver
-            .execute("return window.localStorage.getItem('alm.theme')", vec![])
-            .await
-            .context("failed to read localStorage['alm.theme'] before shutdown")?
-            .convert()
-            .context("failed to deserialise localStorage['alm.theme'] before shutdown")?;
-        anyhow::ensure!(
-            stored == serde_json::json!("espresso-dark"),
-            "expected localStorage['alm.theme']=\"espresso-dark\" to be written before \
-             shutdown, got {stored:?}"
-        );
-
-        // `E2eApp::shutdown()` force-kills the app process (the CLI's only
-        // handle on the app's lifetime — see `blocking_session_delete`'s
-        // doc). CI evidence (round 2, fix-464-theme: CI run 28810006837) is
-        // that this reliably LOSES a `localStorage` write on Windows — the
-        // raw value read back after a relaunch was `null`, not merely stale
-        // — and a delay before the kill (tried in that round) does not save
-        // it: WebView2 commits `localStorage` to its on-disk LevelDB-backed
-        // store on a graceful shutdown, not on a timer, so nothing short of
-        // an actual graceful close preserves it. Use
-        // `E2eApp::graceful_shutdown()` instead, which closes the window for
-        // real (`getCurrentWindow().close()`) before tearing the session
-        // down — real-user fidelity, and the only path that gives WebView2 a
-        // normal teardown to flush during.
-        app.graceful_shutdown().await?;
-    }
-
-    // Relaunch: a fresh WebDriver session + a fresh `desktop_shell` process,
-    // via `E2eApp::relaunch()` (NOT `launch()` — `launch()` wipes the
-    // webview's persisted storage on every call, which would erase the very
-    // localStorage state this journey is trying to prove survives a real
-    // app restart). `reset_database()` still wipes the SQLite DB (first-run
-    // state), but the theme choice lives in the SAME OS webview profile's
-    // localStorage and is applied by `initAppearance()` at boot, before
-    // routing/first-run even resolves — so it should already be set the
-    // instant the bridge is ready, with no navigation needed.
-    let app2 = E2eApp::relaunch().await?;
-    app2.wait_bridge_ready(Duration::from_secs(30)).await?;
-
-    // Diagnostic (round 2, fix-464-theme): read the RAW localStorage value
-    // directly, in addition to the derived `data-theme` attribute. If this
-    // is `null`, the write was lost between processes (harness/OS-level
-    // storage loss). If it's still `"espresso-dark"` but `data-theme` below
-    // reverted to the default, the value survived fine and the bug is a
-    // product-code race in `initAppearance()`/`applyTheme()` reading
-    // localStorage before hydration completes — a very different fix.
-    let stored_after_relaunch: serde_json::Value = app2
-        .driver
-        .execute("return window.localStorage.getItem('alm.theme')", vec![])
+    // "Observatory" (`THEMES` id `observatory-dark`) — a real, non-default,
+    // canonical theme swatch (handoff 03: Espresso Dark is now a disabled,
+    // picker-hidden variant — see apps/desktop/src/data/theme.ts `enabled`),
+    // matched by its visible name (the swatch button's full text also
+    // includes its light/dark mode label, so an exact-match helper would be
+    // wrong here — use `contains`). The predicate excludes "Cool" so this
+    // can't accidentally match the new "Observatory Cool" / "Observatory
+    // Cool · Light" swatches, which also contain the substring "Observatory".
+    // Poll for the swatch to actually mount: it opens asynchronously
+    // after the navigation, same route/render race `E2eApp::find_waiting`
+    // documents.
+    let xpath = "//button[contains(., 'Observatory') and not(contains(., 'Cool'))]";
+    app.find_waiting(By::XPath(xpath), "the 'Observatory' theme swatch button")
+        .await?
+        .click()
         .await
-        .context("failed to read localStorage['alm.theme'] after relaunch")?
-        .convert()
-        .context("failed to deserialise localStorage['alm.theme'] after relaunch")?;
+        .context("click the Observatory theme swatch failed")?;
 
-    let theme_after_relaunch: String = app2
+    // Live apply: no reload needed.
+    let theme: String = app
         .driver
         .execute("return document.documentElement.getAttribute('data-theme')", vec![])
         .await
-        .context("failed to read document.documentElement's data-theme after relaunch")?
+        .context("failed to read document.documentElement's data-theme")?
         .convert()
-        .context("failed to deserialise data-theme after relaunch")?;
+        .context("failed to deserialise data-theme")?;
     anyhow::ensure!(
-        theme_after_relaunch == "espresso-dark",
-        "expected the theme choice to survive a full app relaunch (localStorage), \
-         got data-theme={theme_after_relaunch:?} (raw localStorage['alm.theme']={stored_after_relaunch:?} \
-         — null means the value never made it to disk/the new process; \
-         \"espresso-dark\" means it survived but something ignored it at boot)"
+        theme == "observatory-dark",
+        "expected the theme to apply live with no reload, got data-theme={theme:?}"
     );
 
-    // Confirm the Settings UI itself reflects the persisted choice too (not
-    // just the raw DOM attribute).
-    complete_first_run(&app2).await?;
-    app2.goto_route("/settings/general").await?;
-    app2.wait_bridge_ready(Duration::from_secs(15)).await?;
-    let espresso_swatch = app2
-        .find_waiting(
-            By::XPath("//button[contains(., 'Espresso')]"),
-            "the 'Espresso' theme swatch button after relaunch",
-        )
-        .await?;
-    let pressed = espresso_swatch
-        .attr("aria-pressed")
+    // The localStorage boot cache is written synchronously alongside the
+    // live apply.
+    let stored: serde_json::Value = app
+        .driver
+        .execute("return window.localStorage.getItem('alm.theme')", vec![])
         .await
-        .context("failed to read aria-pressed on the Espresso swatch")?;
+        .context("failed to read localStorage['alm.theme']")?
+        .convert()
+        .context("failed to deserialise localStorage['alm.theme']")?;
     anyhow::ensure!(
-        pressed.as_deref() == Some("true"),
-        "expected the Espresso swatch to show aria-pressed=true after relaunch, got {pressed:?}"
+        stored == serde_json::json!("observatory-dark"),
+        "expected localStorage['alm.theme']=\"observatory-dark\" to be written on click, got {stored:?}"
     );
 
-    app2.shutdown().await
+    // The settings DB write-through (theme-settings-db) is fire-and-forget,
+    // so poll `settings.get` rather than asserting immediately.
+    let settings: serde_json::Value = app
+        .invoke_until(
+            "settings_get",
+            json!({ "scope": "general" }),
+            UI_TIMEOUT,
+            |v: &serde_json::Value| v["values"]["theme"] == json!("observatory-dark"),
+        )
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!("expected the theme choice to persist to the settings DB: {e}")
+        })?;
+    anyhow::ensure!(
+        settings["values"]["theme"] == json!("observatory-dark"),
+        "unexpected persisted settings.theme: {settings}"
+    );
+
+    app.shutdown().await
 }

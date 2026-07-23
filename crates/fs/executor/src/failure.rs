@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Failure taxonomy for plan item apply operations (spec 025, research R3).
 //!
 //! Maps raw `std::io::Error` and domain conditions to structured
@@ -176,6 +179,12 @@ fn classify_io_error(err: &io::Error) -> (FailureCode, bool) {
         io::ErrorKind::NotFound => (FailureCode::SourceMissing, false),
         io::ErrorKind::WouldBlock => (FailureCode::SourceLocked, true),
         io::ErrorKind::StorageFull => (FailureCode::DiskFull, true),
+        // A path the OS refuses to name: ENAMETOOLONG on Unix, and on Windows
+        // both ERROR_INVALID_NAME and the filename-exceeds-range error raised
+        // past MAX_PATH. Retry cannot help — the path itself must change — so this
+        // is not recoverable, and it must not degrade to `Unknown`, which would
+        // tell the user nothing about their too-long path (constitution §II).
+        io::ErrorKind::InvalidFilename => (FailureCode::PathInvalid, false),
         _ => {
             // Inspect raw OS error for volume / cross-device clues.
             #[cfg(unix)]
@@ -186,6 +195,13 @@ fn classify_io_error(err: &io::Error) -> (FailureCode, bool) {
                     return (FailureCode::VolumeUnavailable, true);
                 }
             }
+            // Surface classification gaps in production instead of swallowing
+            // them: every `Unknown` a user sees is a kind we could have named.
+            tracing::warn!(
+                io_error_kind = ?err.kind(),
+                raw_os_error = ?err.raw_os_error(),
+                "fs_executor: unclassified io error mapped to FailureCode::Unknown"
+            );
             (FailureCode::Unknown, false)
         }
     }
@@ -245,6 +261,33 @@ mod tests {
     }
 
     #[test]
+    fn remaining_io_kinds_map_to_producible_codes() {
+        let cases = [
+            (io::ErrorKind::WouldBlock, FailureCode::SourceLocked),
+            (io::ErrorKind::StorageFull, FailureCode::DiskFull),
+            (io::ErrorKind::InvalidFilename, FailureCode::PathInvalid),
+            (io::ErrorKind::Other, FailureCode::Unknown),
+        ];
+
+        for (kind, expected) in cases {
+            let failure = PlanItemFailure::from_io(&io::Error::from(kind), "test operation");
+            assert_eq!(failure.code, expected, "failed for {kind:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unavailable_volume_os_errors_map_correctly() {
+        for raw_os_error in [6, 19] {
+            let failure = PlanItemFailure::from_io(
+                &io::Error::from_raw_os_error(raw_os_error),
+                "test operation",
+            );
+            assert_eq!(failure.code, FailureCode::VolumeUnavailable);
+        }
+    }
+
+    #[test]
     fn item_stale_triggers_pause() {
         assert!(FailureCode::ItemStale.triggers_pause());
         assert!(FailureCode::VolumeUnavailable.triggers_pause());
@@ -260,6 +303,11 @@ mod tests {
             FailureCode::CopySucceededDeleteFailedRollbackFailed.as_str(),
             "copy.succeeded.delete.failed.rollback.failed"
         );
+    }
+
+    #[test]
+    fn os_trash_unavailable_compatibility_alias_retains_its_wire_value() {
+        assert_eq!(FailureCode::OsTrashUnavailable.as_str(), "os_trash.unavailable");
     }
 
     #[test]

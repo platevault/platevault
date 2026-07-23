@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Processing tool contract DTOs for the Tauri IPC surface (spec 011 T005).
 //!
 //! Covers:
@@ -42,6 +45,11 @@ pub struct ToolPathValidation {
     pub path: String,
     pub valid: bool,
     pub reason: Option<String>,
+    /// `Some(true)` when the path exists and is a directory, `Some(false)`
+    /// when it exists and is a file (or other non-directory entry). `None`
+    /// when the path does not exist, so callers cannot distinguish file vs.
+    /// directory (issue #1056).
+    pub is_dir: Option<bool>,
 }
 
 // ── Spec 011 new DTOs ─────────────────────────────────────────────────────────

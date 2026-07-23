@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useState, type ReactNode } from 'react';
 import { Btn, InfoTip } from '@/ui';
 import { settingsRestoreDefaults, getSettings } from './settingsIpc';
@@ -21,16 +24,20 @@ export interface SettingsSectionProps {
   children: ReactNode;
 }
 
-export function SettingsSection({ title, action, children }: SettingsSectionProps) {
+export function SettingsSection({
+  title,
+  action,
+  children,
+}: SettingsSectionProps) {
   return (
-    <div className="alm-settings__group">
+    <div className="pv-settings__group">
       {action ? (
-        <div className="alm-settings__group-header alm-settings__group-header--ruled">
-          <div className="alm-settings__group-title">{title}</div>
+        <div className="pv-settings__group-header pv-settings__group-header--ruled">
+          <div className="pv-settings__group-title">{title}</div>
           {action}
         </div>
       ) : (
-        <div className="alm-settings__group-title">{title}</div>
+        <div className="pv-settings__group-title">{title}</div>
       )}
       {children}
     </div>
@@ -46,12 +53,12 @@ export interface SettingsRowProps {
 
 export function SettingsRow({ label, info, children }: SettingsRowProps) {
   return (
-    <div className="alm-settings__row">
-      <div className="alm-settings__row-label">
+    <div className="pv-settings__row">
+      <div className="pv-settings__row-label">
         <span>{label}</span>
         {info ? <InfoTip tip={info} /> : null}
       </div>
-      <div className="alm-settings__row-content">{children}</div>
+      <div className="pv-settings__row-content">{children}</div>
     </div>
   );
 }
@@ -65,7 +72,7 @@ export interface SettingsFormShellProps {
   saving: boolean;
   onCancel: () => void;
   onSave: () => void | Promise<void>;
-  /** The entity-specific field controls (each wrapped in `.alm-stack-1`). */
+  /** The entity-specific field controls (each wrapped in `.pv-stack-1`). */
   children: ReactNode;
 }
 
@@ -75,15 +82,21 @@ export interface SettingsFormShellProps {
  * differ per entity type (shared-component mandate — no per-pane clones).
  * Originally lived only in `Equipment.tsx`; promoted here so other panes
  * (e.g. observing-site management, spec 044 US3) reuse it verbatim, and to
- * keep the `.alm-equipment__form*` markup as one generic settings-form frame
+ * keep the `.pv-equipment__form*` markup as one generic settings-form frame
  * rather than a per-feature copy.
  */
-export function SettingsFormShell({ error, saving, onCancel, onSave, children }: SettingsFormShellProps) {
+export function SettingsFormShell({
+  error,
+  saving,
+  onCancel,
+  onSave,
+  children,
+}: SettingsFormShellProps) {
   return (
-    <div className="alm-equipment__form">
-      <div className="alm-equipment__form-grid">{children}</div>
-      {error && <span className="alm-field-error">{error}</span>}
-      <div className="alm-equipment__form-actions">
+    <div className="pv-equipment__form">
+      <div className="pv-equipment__form-grid">{children}</div>
+      {error && <span className="pv-field-error">{error}</span>}
+      <div className="pv-equipment__form-actions">
         <Btn size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
           {m.common_cancel()}
         </Btn>
@@ -115,6 +128,15 @@ export interface RestoreDefaultsBtnProps {
    * `keys`/`scope`/`onRestored` are unused.
    */
   onRestore?: () => Promise<void>;
+  /**
+   * What this button resets, e.g. "moon-avoidance defaults" (#837) — several
+   * panes scope a "Restore defaults" button to only PART of the pane (a
+   * sub-table, not the whole settings section), and the bare label gives no
+   * indication of that. Rendered as the button's `aria-label`/`title` so
+   * screen readers and hover both disambiguate scope; the visible label
+   * stays the short "Restore defaults" text.
+   */
+  scopeLabel?: string;
 }
 
 type RestoreState = 'idle' | 'restoring' | 'done';
@@ -126,7 +148,13 @@ type RestoreState = 'idle' | 'restoring' | 'done';
  * then re-fetches the scope so controls reflect the restored values. Panes
  * backed by a different store pass `onRestore` to run their own reset instead.
  */
-export function RestoreDefaultsBtn({ keys, onRestored, scope, onRestore }: RestoreDefaultsBtnProps) {
+export function RestoreDefaultsBtn({
+  keys,
+  onRestored,
+  scope,
+  onRestore,
+  scopeLabel,
+}: RestoreDefaultsBtnProps) {
   const [state, setState] = useState<RestoreState>('idle');
 
   const handleClick = async () => {
@@ -156,7 +184,14 @@ export function RestoreDefaultsBtn({ keys, onRestored, scope, onRestore }: Resto
         : m.settings_action_restore_defaults();
 
   return (
-    <Btn size="sm" variant="ghost" disabled={state === 'restoring'} onClick={() => void handleClick()}>
+    <Btn
+      size="sm"
+      variant="ghost"
+      disabled={state === 'restoring'}
+      onClick={() => void handleClick()}
+      title={scopeLabel}
+      aria-label={scopeLabel ? `${label} — ${scopeLabel}` : undefined}
+    >
       {label}
     </Btn>
   );

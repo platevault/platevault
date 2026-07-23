@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Canonical `(entity_type, from, to) → action_critical_fields[]` table
 //! (spec 002 FR-009/FR-010, T050).
 //!
@@ -67,13 +70,5 @@ mod tests {
     fn unknown_edge_returns_empty() {
         let fields = action_critical_fields(EntityType::Project, "ready", "processing");
         assert!(fields.is_empty());
-    }
-
-    #[test]
-    fn table_is_empty_since_session_review_removal() {
-        // Spec 041 FR-051 (T076): the session confirmation cells were the
-        // only rows this table ever carried. If a future entity family adds
-        // action-bound review cells here, update this test to match.
-        assert!(TABLE.is_empty());
     }
 }

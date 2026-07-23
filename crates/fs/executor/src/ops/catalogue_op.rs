@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Catalogue operation — record-in-place, no filesystem mutation (spec 041).
 //!
 //! A `catalogue` plan item signals that the file should be noted in the

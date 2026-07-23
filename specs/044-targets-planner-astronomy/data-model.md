@@ -115,3 +115,25 @@ or date recomputes everything consistently (SC-005/SC-004).
 (Ha/SII/OIII/L/R/G/B, LRGB included), Moon phase/illumination presentation, per-band viability pills, and
 the filter recommendation. These live in one shared frontend module + shared settings owned by 047;
 `planner-derive.ts` imports `lorentzianMinSep(band, moonAge)` from it (FR-023).
+
+---
+
+## 4. Iterate 2026-07-15 — Camera sensor type (equipment extension)
+
+The planner observability iterate (FR-035–FR-038; decision record
+`docs/research/044-047-planner-observability-ux-iterate.md` D7) extends the
+**equipment Camera model** — owned by the equipment/settings surface
+(`apps/desktop/src/features/settings/Equipment.tsx`, camera DTO today
+`{ id, name, aliases, autoDetected }`) — with:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `sensorType` | `'mono' \| 'osc' \| null` | `null`/absent = unknown → planner behaves as mono (FR-038). |
+| `passband` | `'rgb' \| Band[]` (OSC only) | `'rgb'` = plain color camera; a band subset (e.g. `['Ha','OIII']`) = dual/tri-band filter. |
+
+Consumed ephemerally by `planner-derive.ts` for the OSC single-pass
+aggregation (FR-036: strictest-band `max` of Track A's `minSeparationDeg`
+across the passband). No new parameter store; the per-band Lorentzian
+parameters remain spec-047-owned. Contract + generated bindings updated in
+`packages/contracts`; migration numbering follows the same next-free-number
+rule as §1.

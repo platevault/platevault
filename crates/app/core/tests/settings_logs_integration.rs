@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for settings/configuration model (#19) and
 //! bottom log viewer (#20) — feature 037 (T006/T007).
 //!
@@ -224,7 +227,10 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         .await
         .expect("snapshot count query");
 
-    settings::emit_snapshot(pool, &bus, "test").await.expect("emit_snapshot must not error");
+    let dedupe = settings::SnapshotDedupe::new();
+    settings::emit_snapshot(pool, &bus, "test", &dedupe)
+        .await
+        .expect("emit_snapshot must not error");
 
     let after_snap: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
         .bind(TOPIC_SETTINGS_SNAPSHOT)
@@ -257,7 +263,7 @@ async fn global_protection_default_update_persists_and_emits_protection_event() 
     let pool = db.pool();
 
     for (key, value) in [
-        ("defaultProtection", serde_json::json!("normal")),
+        ("defaultProtection", serde_json::json!("unprotected")),
         ("blockPermanentDelete", serde_json::json!(false)),
         ("protectedCategories", serde_json::json!(["lights", "masters", "finals", "raw"])),
     ] {

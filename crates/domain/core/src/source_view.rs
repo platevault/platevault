@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 (T009): source view generation link-kind resolution.
 //!
 //! Pure domain logic (no I/O). Deterministic mapping from

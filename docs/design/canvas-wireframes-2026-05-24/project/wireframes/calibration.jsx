@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Calibration — masters as primary content, with details and project linkage.
 // Three-pane: masters list (left), selected master detail (right), with calibration sessions as a tab.
 function WfCalibration() {

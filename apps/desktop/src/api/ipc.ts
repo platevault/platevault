@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Single IPC dispatch point (spec 037).
  *
@@ -82,12 +85,15 @@ const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
  * Optional recording-proxy override installed by the dev-tools bootRecorder
  * (spec 021, T075 / SC-002). Null in release builds (zero overhead).
  */
-let _invokeOverride: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null =
-  null;
+let _invokeOverride:
+  | ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>)
+  | null = null;
 
 /** Install a recording proxy over the IPC dispatcher (dev-tools builds only). */
 export function setInvokeOverride(
-  fn: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null,
+  fn:
+    | ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>)
+    | null,
 ): void {
   _invokeOverride = fn;
 }
@@ -96,7 +102,10 @@ export function setInvokeOverride(
  * Dispatch an IPC command. Signature-compatible with `@tauri-apps/api/core`'s
  * `invoke` so the generated bindings can call it unchanged.
  */
-export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function invoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   if (_invokeOverride) {
     return _invokeOverride(cmd, args) as Promise<T>;
   }
@@ -111,7 +120,9 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
 }
 
 /** A generated tauri-specta `Result` value. */
-export type IpcResult<T, E = unknown> = { status: 'ok'; data: T } | { status: 'error'; error: E };
+export type IpcResult<T, E = unknown> =
+  | { status: 'ok'; data: T }
+  | { status: 'error'; error: E };
 
 /**
  * Translate a generated `Result` into the throw-on-error contract the app's
@@ -132,7 +143,12 @@ export function unwrap<T, E = unknown>(result: IpcResult<T, E>): T {
   }
   const err = result.error;
   // Validate object-shaped errors as ContractError envelopes (T118).
-  if (err !== null && typeof err === 'object' && !Array.isArray(err) && !(err instanceof Error)) {
+  if (
+    err !== null &&
+    typeof err === 'object' &&
+    !Array.isArray(err) &&
+    !(err instanceof Error)
+  ) {
     // Run validation; if it throws IpcPayloadValidationError we let that propagate
     // so the caller sees exactly what drifted.  On success we rethrow the original.
     validateContractError(err);

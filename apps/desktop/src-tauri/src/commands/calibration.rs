@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Calibration commands (spec 033, T037 + spec 007 matching).
 //!
 //! Real implementations (T037):
@@ -13,6 +16,7 @@ use contracts_core::calibration::{CalibrationMaster, MasterDetail, MatchCandidat
 use contracts_core::calibration_match::{
     CalibrationMatchAssignRequest, CalibrationMatchAssignResponse, CalibrationMatchBatchRequest,
     CalibrationMatchBatchResponse, CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse,
+    CalibrationMatchUnassignRequest, CalibrationMatchUnassignResponse,
 };
 use tauri::State;
 
@@ -121,4 +125,82 @@ pub async fn calibration_match_suggest_batch(
 ) -> Result<CalibrationMatchBatchResponse, ContractError> {
     tracing::debug!("calibration.match.suggest.batch session_count={}", req.session_ids.len());
     cal_uc::batch_suggest(state.repo.pool(), req).await.map_err(ContractError::internal)
+}
+
+/// `calibration.match.unassign` — remove a session's assignment for one
+/// calibration type (#875: previously there was no way back to "no master
+/// assigned"). Emits `calibration.assignment.removed` on success.
+///
+/// # Errors
+/// Returns `Err(String)` on database error.
+#[tauri::command]
+#[specta::specta]
+pub async fn calibration_match_unassign(
+    state: State<'_, AppState>,
+    req: CalibrationMatchUnassignRequest,
+) -> Result<CalibrationMatchUnassignResponse, ContractError> {
+    tracing::debug!(
+        "calibration.match.unassign session_id={} calibration_type={:?}",
+        req.session_id,
+        req.calibration_type
+    );
+    cal_uc::unassign(state.repo.pool(), &state.bus, req).await.map_err(ContractError::internal)
+}
+
+// ── #886 — calibration master archive ─────────────────────────────────────────
+
+/// `calibration.masters.archive_plan_generate` — build a reviewable
+/// single-master archive plan (#886). Creates a `ready_for_review` plan;
+/// performs NO filesystem mutation and never auto-applies (constitution
+/// §II / FR-002). A master currently assigned to one or more sessions
+/// requires `confirm_in_use: true` — a first call without it returns
+/// `"calibration.master_in_use"` so the UI can show a confirm dialog before
+/// retrying.
+///
+/// # Errors
+/// Returns `Err` with `"master.not_found"`, `"plan.invalid_state"` (already
+/// archived), `"calibration.master_untracked"` (no tracked file), or
+/// `"calibration.master_in_use"` (needs confirm).
+#[tauri::command]
+#[specta::specta]
+pub async fn calibration_masters_archive_plan_generate(
+    state: State<'_, AppState>,
+    master_id: String,
+    title: Option<String>,
+    confirm_in_use: Option<bool>,
+) -> Result<contracts_core::archive::GenerateArchivePlanResult, ContractError> {
+    tracing::debug!("calibration.masters.archive_plan_generate master_id={master_id}");
+    app_core::calibration_archive_generator::generate(
+        state.repo.pool(),
+        &master_id,
+        title.as_deref(),
+        confirm_in_use.unwrap_or(false),
+    )
+    .await
+}
+
+/// `calibration.masters.archive_plan_generate_restore` — build a reviewable
+/// restore (un-archive) plan from a previously applied master-archive plan
+/// (#886). Creates a `ready_for_review` plan; performs NO filesystem
+/// mutation and never auto-applies (constitution §II / FR-002).
+///
+/// # Errors
+/// Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+/// applied master-archive plan), or `"archive.empty"` (nothing to restore).
+#[tauri::command]
+#[specta::specta]
+pub async fn calibration_masters_archive_plan_generate_restore(
+    state: State<'_, AppState>,
+    archived_plan_id: String,
+    title: Option<String>,
+) -> Result<contracts_core::archive::GenerateRestorePlanResult, ContractError> {
+    tracing::debug!(
+        "calibration.masters.archive_plan_generate_restore archived_plan_id={archived_plan_id}"
+    );
+    app_core::calibration_archive_generator::generate_restore(
+        state.repo.pool(),
+        &archived_plan_id,
+        title.as_deref(),
+    )
+    .await
 }

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Processing artifact Tauri commands (spec 012 TX01/T008).
 //!
 //! ## Commands

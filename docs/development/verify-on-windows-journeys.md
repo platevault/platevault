@@ -24,8 +24,11 @@ blocked on an open PR. Re-check `gh pr view <n>` if this doc ages.
   "reuses prior state"): `Remove-Item 'C:\dev\astro-plan\wizard-test.db*'
   -Force`, then relaunch. Clearing `localStorage` alone is NOT a reset (causes
   a `/`↔`/setup` redirect loop) — the DB is the first-run source of truth.
-- Full mechanics (bridge connect, `VITE_E2E` native-picker stand-ins, blank
-  screen recovery): `~/.claude/skills/verify-on-windows/references/windows-mechanics.md`.
+- Full mechanics (canonical: launch, reset, recompile trap, bridge connect,
+  `VITE_E2E` native-picker stand-ins, blank-screen recovery):
+  `docs/development/windows-native-rust-dev.md` §"Validation driving (MCP bridge,
+  reset, recompile trap)". The blocks above are the copy-once summary; that doc
+  is the source of truth.
 
 ## Automated coverage baseline (what you do NOT need to re-prove by hand)
 
