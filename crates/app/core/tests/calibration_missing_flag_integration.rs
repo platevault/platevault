@@ -27,7 +27,7 @@ use app_core::calibration::masters_get;
 use app_core::lifecycle::artifact::{mark_missing, mark_recovered};
 use contracts_core::calibration::CalibrationMatchMissingFlag;
 use contracts_core::inventory_frame::{InventoryReconcileRunRequest, ReconcileReason};
-use persistence_db::repositories::artifacts::{insert_artifact, InsertArtifact};
+use persistence_db::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
 use persistence_db::repositories::calibration_assignment::{upsert, UpsertParams};
 
 // ── Seed helpers ──────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ async fn master_artifact_missing_flags_match_and_clears_on_recovery() {
     let assignment_id = "assign-a".to_owned();
 
     insert_cal_session(pool, &master_id, "dark", "[]").await;
-    insert_artifact(
+    insert_artifact_if_absent(
         pool,
         InsertArtifact {
             id: &artifact_id,

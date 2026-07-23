@@ -999,14 +999,13 @@
   "setup_language_heading": "Escolha seu idioma",
   "setup_language_label": "Idioma",
   "setup_language_review_notice": "Esta tradução foi gerada automaticamente e aguarda a revisão de uma pessoa fluente.",
-  "setup_theme_heading": "Escolha a aparência do PlateVault",
+"setup_theme_heading": "Escolha a aparência do PlateVault",
   "setup_theme_desc": "Escolha um tema. As alterações são aplicadas imediatamente; Sistema acompanha o tema do seu sistema operacional.",
   "setup_theme_preview_heading": "Registro de observação",
   "setup_theme_preview_desc": "Uma amostra compacta das superfícies, controles e linguagem de status que você usará no PlateVault.",
   "setup_theme_preview_source_meta": "42 FITS · M31",
   "setup_theme_preview_input": "Nome da biblioteca",
-  "setup_theme_preview_feedback": "Origem pronta para revisão",
-  "setup_scan_classify_failed": "Não foi possível ler os tipos",
+  "setup_theme_preview_feedback": "Origem pronta para revisão",  "setup_scan_classify_failed": "Não foi possível ler os tipos",
   "setup_scan_classify_failed_count": [
     {
       "declarations": [

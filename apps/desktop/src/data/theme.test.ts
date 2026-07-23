@@ -1,5 +1,6 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+// PR #1434: first-run OS theme policy tests.
 
 /**
  * theme.test.ts — spec 051 US6 (T039): native window theme sync.

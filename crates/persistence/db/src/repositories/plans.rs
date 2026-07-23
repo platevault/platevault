@@ -512,13 +512,7 @@ pub async fn update_item_fs_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     fn sample_plan(id: &str) -> InsertPlan<'_> {
         InsertPlan {
@@ -535,7 +529,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_and_get_plan_roundtrip() {
-        let db = setup().await;
+        let db = setup_db().await;
         let number = insert_plan(db.pool(), &sample_plan("plan-1")).await.unwrap();
         assert_eq!(number, 1);
 
@@ -549,7 +543,7 @@ mod tests {
 
     #[tokio::test]
     async fn chosen_framing_id_defaults_to_none_and_round_trips() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("plan-attr")).await.unwrap();
         assert_eq!(get_chosen_framing_id(db.pool(), "plan-attr").await.unwrap(), None);
 
@@ -579,7 +573,7 @@ mod tests {
 
     #[tokio::test]
     async fn display_numbers_increment() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("plan-a")).await.unwrap();
         insert_plan(db.pool(), &sample_plan("plan-b")).await.unwrap();
         let row_b = get_plan(db.pool(), "plan-b", false).await.unwrap();
@@ -588,14 +582,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_plan_not_found_returns_error() {
-        let db = setup().await;
+        let db = setup_db().await;
         let err = get_plan(db.pool(), "nonexistent", false).await.unwrap_err();
         assert!(matches!(err, DbError::NotFound(_)));
     }
 
     #[tokio::test]
     async fn soft_delete_sets_discarded_state() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("plan-x")).await.unwrap();
         soft_delete_plan(db.pool(), "plan-x", "2026-06-01T00:00:00Z").await.unwrap();
 
@@ -611,7 +605,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_plans_excludes_discarded_by_default() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("p1")).await.unwrap();
         insert_plan(db.pool(), &sample_plan("p2")).await.unwrap();
         soft_delete_plan(db.pool(), "p2", "2026-06-01T00:00:00Z").await.unwrap();
@@ -623,7 +617,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_plans_with_state_filter() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("p1")).await.unwrap();
         insert_plan(db.pool(), &sample_plan("p2")).await.unwrap();
         // Update p2 to ready_for_review.
@@ -636,7 +630,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_plan_item_updates_counters() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("p1")).await.unwrap();
 
         let item = InsertPlanItem {
@@ -666,7 +660,7 @@ mod tests {
 
     #[tokio::test]
     async fn confirm_plan_destructive_items_confirms_only_destructive_actions() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("p-confirm")).await.unwrap();
 
         let move_item = InsertPlanItem {
@@ -728,7 +722,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_first_ordering() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_plan(db.pool(), &sample_plan("p-draft")).await.unwrap();
         insert_plan(db.pool(), &sample_plan("p-failed")).await.unwrap();
         update_plan_state(db.pool(), "p-failed", "failed").await.unwrap();
