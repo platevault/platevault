@@ -356,8 +356,29 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
         Ok(db) => db,
         Err(e) => return fatal(&app, &format!("failed to connect to SQLite at {db_url}: {e}")),
     };
-    if let Err(e) = db.migrate().await {
-        return fatal(&app, &format!("failed to run migrations on {db_url}: {e}"));
+    if let Err(error) = db.migrate().await {
+        // A raw `fatal()` here produced `Migration(VersionMismatch(71))` and
+        // nothing else — technically true, actionable by nobody. Translate
+        // the recognised "this file predates this build" cases into a named
+        // failure that says which migration diverged and what to do about
+        // it.
+        if let Some(detail) = persistence_db::migration_divergence_detail(&error) {
+            let message = format!(
+                "Database schema does not match this build: {detail}.\n\
+                 \n\
+                 This database was created by a different revision of PlateVault. \
+                 It is a development-only condition — switching between branches \
+                 that each added migrations leaves a file whose migration history \
+                 no longer matches the running binary.\n\
+                 \n\
+                 To recover, delete the database and let it be recreated:\n\
+                 \x20 {db_url}\n\
+                 \n\
+                 Set ALM_DB_URL to point at a different file if you need to keep this one."
+            );
+            return fatal(&app, &message);
+        }
+        return fatal(&app, &format!("failed to run migrations on {db_url}: {error}"));
     }
     let pool = db.pool().clone();
 
@@ -377,9 +398,6 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
-    //  - spec 010 (#722): guided-flow event forwarder → re-emits
-    //    inventory.confirmed/project.created/tool.launch as named events so
-    //    `eventBridge.ts` can advance the coach on real domain completions.
     app_core::inbox::plan_listener::start_inbox_plan_listener(
         pool.clone(),
         &bus,
@@ -391,8 +409,27 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
-    crate::commands::guided::start_guided_event_forwarder(app.clone(), &bus);
     drop(spawn_stale_dependent_propagator(pool.clone(), &bus));
+    // spec 056 (R5): backend-authoritative onboarding tick subscriber →
+    // persists auto-ticks from domain-completion topics and emits
+    // `onboarding:state-changed`. Started here, before the webview can invoke,
+    // so no tick can be lost to a UI race (PQ-005 ordering).
+    crate::commands::onboarding::start_onboarding_subscriber(app.clone(), pool.clone(), &bus);
+    // spec 056 (PQ-005): recover ticks whose live event was missed — published
+    // before the subscriber subscribed, or lost to a kill between the action
+    // and the tick write. Started AFTER the subscriber so the two can only
+    // agree, and never fatally: a failure leaves the checklist exactly as it
+    // behaves today, still repairable via the Settings restore.
+    {
+        let reconcile_pool = pool.clone();
+        drop(tokio::spawn(async move {
+            match app_core::onboarding::reconcile_missed_events(&reconcile_pool).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("onboarding reconciliation recovered {n} missed tick(s)"),
+                Err(e) => tracing::warn!("onboarding reconciliation failed: {e:?}"),
+            }
+        }));
+    }
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));

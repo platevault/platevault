@@ -13,15 +13,6 @@ use crate::enums::{Density, ViewMode};
 
 // ── Structs ─────────────────────────────────────────────────────────────────
 
-/// Tour completion state tracking.
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct TourCompleted {
-    pub step1: bool,
-    pub step2: bool,
-    pub step3: bool,
-}
-
 /// Sessions grouping mode.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
@@ -76,7 +67,6 @@ pub struct AppPreferences {
     pub default_project_view: ViewMode,
     pub sessions_group_by: SessionsGroupBy,
     pub sessions_view: SessionsView,
-    pub tour_completed: TourCompleted,
     pub setup_completed: bool,
     /// Keyed by `dockId` (the adopting list page, e.g. `"sessions"`).
     pub detail_dock: std::collections::HashMap<String, DetailDockPref>,

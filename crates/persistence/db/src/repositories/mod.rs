@@ -6,7 +6,7 @@
 //! spec 008 projects, spec 018 settings,
 //! spec 017 plans, spec 025 plan apply runs/events, spec 012 artifacts,
 //! spec 016 source protection, spec 024 manifests/notes,
-//! spec 026 prepared source views, and spec 010 guided flow.
+//! and spec 026 prepared source views.
 //!
 //! Spec 008 Q27 framing layer (`framing`/`framing_session` +
 //! `acquisition_session` clustering-key geometry) lives in `framing`.
@@ -14,6 +14,11 @@
 //! Spec 013/023 gen-2 target repository (`targets`) removed by spec 036.
 //! Spec 023 US2/US3/US4 target history + notes queries live in `targets`.
 //! Spec 051 US2 target favourites queries live in `target_favourites`.
+//!
+//! Spec 056 onboarding redesign lives in `onboarding` (per-item state +
+//! section flags, migration 0080). The legacy spec-010 coach and its
+//! `guided_flow_state` table were removed by the spec 056 deletion lane
+//! (T010); migration 0081 drops the table.
 
 pub mod artifacts;
 pub mod audit;
@@ -24,11 +29,11 @@ pub mod equipment;
 pub mod events;
 pub mod first_run;
 pub mod framing;
-pub mod guided_flow;
 pub mod inbox;
 pub mod inventory;
 pub mod lifecycle;
 pub mod manifests;
+pub mod onboarding;
 pub mod plan_apply;
 pub mod plans;
 pub mod prepared_source_views;

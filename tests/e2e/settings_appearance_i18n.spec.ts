@@ -56,9 +56,14 @@ import {
   test,
   expect,
   seedSetupComplete,
+  disableOnboarding,
   assertDefined,
 } from './support/harness';
 import type { Page } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 // ── Scenario 1 — Settings config model persists (spec 018) ──────────────────
 
@@ -179,23 +184,144 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
 // themes (2 warm + 2 cool families) — Warm Clay/Espresso Dark are disabled
 // (registry-only) variants, hidden from the picker DOM entirely
 // (apps/desktop/src/features/settings/General.tsx WARM_CHOICES/COOL_CHOICES).
-// Swatch buttons' accessible name concatenates the theme-name span and the
-// mode span with no guaranteed literal space between them (differs slightly
-// between jsdom/testing-library and a real Chromium AX tree) — every case
-// below is a RegExp with an optional `\s*` at the join point so it matches
-// either rendering, anchored so e.g. "Observatory" (warm, dark) can't
-// accidentally match "Observatory Cool" (cool, dark/light).
+// Swatch buttons expose the shared ThemePicker's explicit
+// `<theme> · <mode>` accessible-name contract. Keep every case anchored so
+// e.g. "Observatory" cannot accidentally match "Observatory Cool".
 const THEME_CASES: { name: RegExp; dataTheme: string }[] = [
-  { name: /^Warm Slate\s*light$/i, dataTheme: 'warm-slate' },
-  { name: /^Observatory\s*dark$/i, dataTheme: 'observatory-dark' },
+  { name: /^Warm Slate · light$/i, dataTheme: 'warm-slate' },
+  { name: /^Observatory · dark$/i, dataTheme: 'observatory-dark' },
   {
-    name: /^Observatory Cool · Light\s*light$/i,
+    name: /^Observatory Cool · light$/i,
     dataTheme: 'observatory-cool-light',
   },
-  { name: /^Observatory Cool\s*dark$/i, dataTheme: 'observatory-cool' },
+  { name: /^Observatory Cool · dark$/i, dataTheme: 'observatory-cool' },
 ];
 
+const THEME_TOKEN_CASES = [
+  {
+    dataTheme: 'espresso-dark',
+    ink: '#ece7df',
+    background: '#161412',
+    controlBorder: '#726f6a',
+  },
+  {
+    dataTheme: 'observatory-cool-light',
+    ink: '#191d24',
+    background: '#f2f4f8',
+    controlBorder: '#7b7f86',
+  },
+  {
+    dataTheme: 'observatory-cool',
+    ink: '#eef2f7',
+    background: '#12151b',
+    controlBorder: '#6f7379',
+  },
+  {
+    dataTheme: 'observatory-dark',
+    ink: '#f0ebe2',
+    background: '#1b1916',
+    controlBorder: '#76736b',
+  },
+  {
+    dataTheme: 'warm-clay',
+    ink: '#221f1a',
+    background: '#f6f4ef',
+    controlBorder: '#817d77',
+  },
+  {
+    dataTheme: 'warm-slate',
+    ink: '#20211f',
+    background: '#f5f4f1',
+    controlBorder: '#7d7d7a',
+  },
+] as const;
+
 test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
+  test('each named theme and the no-attribute fallback resolve their own palette in Chromium', async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    await page.goto('/#/settings/general');
+
+    const actual = await page.evaluate(
+      (themeIds) => {
+        const root = document.documentElement;
+        const semanticProbe = document.createElement('div');
+        semanticProbe.style.color = 'var(--pv-text)';
+        semanticProbe.style.backgroundColor = 'var(--pv-bg)';
+        semanticProbe.style.border = '1px solid var(--pv-control-border)';
+
+        const rawProbe = document.createElement('div');
+        document.body.append(semanticProbe, rawProbe);
+
+        const readPalette = () => {
+          const rootStyle = getComputedStyle(root);
+          const raw = {
+            ink: rootStyle.getPropertyValue('--pv-ink').trim(),
+            background: rootStyle.getPropertyValue('--pv-bg').trim(),
+            controlBorder: rootStyle
+              .getPropertyValue('--pv-control-border')
+              .trim(),
+          };
+          rawProbe.style.color = raw.ink;
+          rawProbe.style.backgroundColor = raw.background;
+          rawProbe.style.border = `1px solid ${raw.controlBorder}`;
+
+          const semanticStyle = getComputedStyle(semanticProbe);
+          const rawStyle = getComputedStyle(rawProbe);
+          return {
+            raw,
+            semantic: {
+              ink: semanticStyle.color,
+              background: semanticStyle.backgroundColor,
+              controlBorder: semanticStyle.borderTopColor,
+            },
+            resolvedRaw: {
+              ink: rawStyle.color,
+              background: rawStyle.backgroundColor,
+              controlBorder: rawStyle.borderTopColor,
+            },
+          };
+        };
+
+        const named = themeIds.map((dataTheme) => {
+          root.setAttribute('data-theme', dataTheme);
+          return { dataTheme, ...readPalette() };
+        });
+        root.removeAttribute('data-theme');
+        const fallback = readPalette();
+        semanticProbe.remove();
+        rawProbe.remove();
+        return { named, fallback };
+      },
+      THEME_TOKEN_CASES.map(({ dataTheme }) => dataTheme),
+    );
+
+    for (const expected of THEME_TOKEN_CASES) {
+      const theme = assertDefined(
+        actual.named.find(({ dataTheme }) => dataTheme === expected.dataTheme),
+        `${expected.dataTheme} computed palette`,
+      );
+      expect(theme.raw).toEqual({
+        ink: expected.ink,
+        background: expected.background,
+        controlBorder: expected.controlBorder,
+      });
+      expect(theme.semantic).toEqual(theme.resolvedRaw);
+    }
+
+    const warmSlate = assertDefined(
+      THEME_TOKEN_CASES.find(({ dataTheme }) => dataTheme === 'warm-slate'),
+      'warm-slate token case',
+    );
+    expect(actual.fallback.raw).toEqual({
+      ink: warmSlate.ink,
+      background: warmSlate.background,
+      controlBorder: warmSlate.controlBorder,
+    });
+    expect(actual.fallback.semantic).toEqual(actual.fallback.resolvedRaw);
+  });
+
   test('switching among the 4 themes updates data-theme on <html> and persists', async ({
     page,
   }) => {
@@ -233,7 +359,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     // Observatory Cool (canonical, cool/dark) exercises the same non-default
     // explicit-choice path.
     await page
-      .getByRole('button', { name: /^Observatory Cool\s*dark$/i })
+      .getByRole('button', { name: /^Observatory Cool · dark$/i })
       .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
@@ -646,7 +772,7 @@ test.describe('Journey 10 · Appearance Restore defaults (#802)', () => {
     // Observatory Cool (canonical, cool/dark) exercises the same
     // restore-to-System path.
     await page
-      .getByRole('button', { name: /^Observatory Cool\s*dark$/i })
+      .getByRole('button', { name: /^Observatory Cool · dark$/i })
       .click();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
@@ -663,26 +789,25 @@ test.describe('Journey 10 · Appearance Restore defaults (#802)', () => {
   });
 });
 
-// ── Scenario 8 — Advanced > Guided Tour restart confirm gate (#827) ─────────
-
-test.describe('Journey 10 · Advanced Guided Tour restart gate (#827)', () => {
-  test("'Restart guided flow' requires confirmation and shows success feedback, matching 'Restart first-run setup'", async ({
-    page,
-  }) => {
-    seedSetupComplete(page);
-    await page.goto('/#/settings/advanced');
-
-    const restartBtn = page.getByTestId('guided-restart-btn');
-    await expect(restartBtn).toBeVisible();
-
-    // Clicking must not fire the restart directly — a confirm step gates it,
-    // symmetric with the "Restart first-run setup" control below it.
-    await restartBtn.click();
-    const confirmBtn = page.getByTestId('guided-restart-confirm-btn');
-    await expect(confirmBtn).toBeVisible();
-    await expect(page.getByTestId('guided-restart-done')).toHaveCount(0);
-
-    await confirmBtn.click();
-    await expect(page.getByTestId('guided-restart-done')).toBeVisible();
-  });
-});
+// ── Scenario 8 — REMOVED: Advanced > Guided Tour restart gate (#827) ────────
+//
+// The spec-010 guided flow is deleted by spec 056, taking `guided-restart-btn`
+// and its confirm gate with it. The user-facing capability — re-run orientation
+// from Settings → Advanced — survives on `onboarding-replay-btn` (FR-005/T015),
+// so Journey 10 keeps this coverage; it just lives with the rest of the
+// onboarding suite now:
+//
+//   tests/e2e/onboarding_orientation.spec.ts
+//     "replays from Settings → Advanced, ignoring the done flag"
+//   tests/e2e/onboarding_removal.spec.ts
+//     "Settings → Advanced renders the restore control ... (T030)"
+//
+// It is NOT re-homed here: this file's `beforeEach` calls `disableOnboarding`,
+// so no onboarding surface renders for any test in it. A replay assertion added
+// here could only ever pass vacuously.
+//
+// #827's confirm gate is deliberately not carried forward. It existed for
+// symmetry with "Restart first-run setup", but the two differ in consequence:
+// restarting first-run setup discards setup state, whereas replaying the walk
+// is non-destructive and dismissible at any stop. If replay ever gains a
+// destructive side effect, the gate should come back with it.

@@ -25,6 +25,11 @@
  *   - apps/desktop/src/app/router.tsx  indexRoute.beforeLoad
  */
 import { test, expect } from '@playwright/test';
+import { disableOnboarding } from './support/harness';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 // The app uses createHashHistory — routes are in the URL hash (#/sessions).
 // Seed preferences via the `alm-preferences` localStorage key so the

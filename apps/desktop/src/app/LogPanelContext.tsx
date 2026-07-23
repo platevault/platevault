@@ -18,6 +18,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 import { commands } from '@/bindings/index';
@@ -84,7 +85,22 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<LogEntrySource[]>([]);
 
+  // Set once the user explicitly toggles follow-tail, so the async load below
+  // can never overwrite a deliberate choice.
+  const followTouchedRef = useRef(false);
+
   // Load persisted settings on mount (T012, T032).
+  //
+  // This resolves asynchronously, so it can land AFTER the user has already
+  // interacted: open the panel on a slow machine, hit Follow, and the in-flight
+  // read arrives a moment later and flips it straight back. The click is the
+  // more recent intent and must win — a late read of the very setting the user
+  // just changed is stale by definition.
+  //
+  // Surfaced as a Windows-only CI failure in LogPanel.followScroll.test.tsx
+  // ("expected '↓ Follow' to be '— Follow'"): the loaded `true` clobbered the
+  // test's toggle-off whenever the loaded runner resolved the promise late
+  // enough. The flakiness was the symptom; this race is the defect.
   useEffect(() => {
     let cancelled = false;
     commands
@@ -96,7 +112,10 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
         if (vals?.logLevel && typeof vals.logLevel === 'string') {
           setLogLevel(vals.logLevel as LogLevel);
         }
-        if (typeof vals?.rememberFollowLogs === 'boolean') {
+        if (
+          typeof vals?.rememberFollowLogs === 'boolean' &&
+          !followTouchedRef.current
+        ) {
           setFollowLogsState(vals.rememberFollowLogs);
         }
       })
@@ -121,6 +140,9 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setFollowLogs = useCallback((v: boolean) => {
+    // Claim the setting before the mount read can answer (see the effect
+    // above) — from here on, the user owns it for this session.
+    followTouchedRef.current = true;
     setFollowLogsState(v);
     // Persist via settings.update (spec 018).
     void commands

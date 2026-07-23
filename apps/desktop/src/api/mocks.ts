@@ -89,6 +89,9 @@ import type {
   ProjectNoteUpdateResult,
   ManifestListResponse_Serialize,
   PlanSummary_Serialize,
+  OnboardingStateDto,
+  OnboardingItemDto,
+  OnboardingFlagsDto,
   // Value imported in type position only, so this stays erased at runtime and
   // does not create an import cycle with `ipc.ts` (which the bindings import).
   commands,
@@ -349,6 +352,226 @@ let mockCalibrationTolerances: CalibrationTolerances = {
   requireSameOffset: true,
 };
 
+// ── Onboarding (spec 056) ─────────────────────────────────────────────────
+//
+// Static mock state mirroring the Rust ITEM_REGISTRY's shape (11 items, five
+// FR-006 pages). The backend-authoritative auto-tick event path (research R5)
+// is a documented no-op in mock mode (VC-002 limit): mock mode can never fake
+// an `auto_checked` item — only the real bus subscriber produces them. Manual
+// actions (`set_item_state`, `section_set`, `restore`) round-trip through this
+// in-memory cache so mock-mode checklist specs can exercise check-off, dismiss,
+// remove, and restore without a backend.
+type MockOnboardingItemSeed = [
+  itemId: string,
+  page: OnboardingItemDto['page'],
+  hasAutoTick: boolean,
+  /** Upstream registry item id, mirroring the Rust `PrerequisiteDef`. */
+  upstreamItemId?: string,
+  /** Page that satisfies the prerequisite (defaults to the upstream's page). */
+  jumpPage?: OnboardingItemDto['page'],
+];
+
+const MOCK_ONBOARDING_ITEMS: MockOnboardingItemSeed[] = [
+  ['inbox.confirm_first', 'inbox', true],
+  ['inbox.apply_first_plan', 'inbox', true, 'inbox.confirm_first', 'inbox'],
+  ['sessions.review_first', 'sessions', false, 'inbox.confirm_first', 'inbox'],
+  ['sessions.add_note', 'sessions', false, 'inbox.confirm_first', 'inbox'],
+  [
+    'calibration.match_master',
+    'calibration',
+    false,
+    'inbox.confirm_first',
+    'inbox',
+  ],
+  ['calibration.review_masters', 'calibration', false],
+  ['targets.resolve_first', 'targets', true],
+  [
+    'targets.add_favourite',
+    'targets',
+    false,
+    'targets.resolve_first',
+    'targets',
+  ],
+  ['projects.create_first', 'projects', true, 'inbox.confirm_first', 'inbox'],
+  [
+    'projects.launch_tool',
+    'projects',
+    true,
+    'projects.create_first',
+    'projects',
+  ],
+  [
+    'projects.review_artifacts',
+    'projects',
+    false,
+    'projects.launch_tool',
+    'projects',
+  ],
+];
+
+/**
+ * Item ids seeded as BLOCKED (`met: false`).
+ *
+ * The real backend computes `met` from library milestones, not from checklist
+ * state, and the mock library ships populated (confirmed inventory, resolved
+ * targets, a project) — so the faithful default is "satisfied", which is also
+ * what every pre-existing mock spec assumes. This escape hatch lets a spec seed
+ * a genuinely blocked row (`localStorage`, before boot) to exercise the
+ * prerequisite paths; `prerequisite` used to be flatly `null`, which made the
+ * blocked branch untestable in mock mode at all.
+ */
+const E2E_ONBOARDING_UNMET_STORE_ID = 'alm-e2e-onboarding-unmet';
+
+/** Boolean e2e toggle read from `localStorage`; false when unset/unavailable. */
+function isE2EFlagSet(key: string): boolean {
+  try {
+    return (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem(key) === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Makes `inventory.list` report an empty library (see the handler below). */
+const E2E_EMPTY_INVENTORY_STORE_ID = 'alm-e2e-empty-inventory';
+
+function unmetPrerequisiteIds(): Set<string> {
+  try {
+    if (typeof localStorage === 'undefined') return new Set();
+    const raw = localStorage.getItem(E2E_ONBOARDING_UNMET_STORE_ID);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function freshMockOnboardingItems(): OnboardingItemDto[] {
+  const unmet = unmetPrerequisiteIds();
+  return MOCK_ONBOARDING_ITEMS.map(
+    ([itemId, page, hasAutoTick, upstreamItemId, jumpPage]) => ({
+      itemId,
+      page,
+      state: 'unchecked',
+      at: new Date().toISOString(),
+      source: 'seed',
+      prerequisite: upstreamItemId
+        ? {
+            upstreamItemId,
+            met: !unmet.has(itemId),
+            reasonKey: `onboarding.prerequisite.${upstreamItemId}`,
+            jumpPage: jumpPage ?? page,
+          }
+        : null,
+      hasAutoTick,
+    }),
+  );
+}
+
+let mockOnboardingItems: OnboardingItemDto[] = freshMockOnboardingItems();
+let mockOnboardingFlags: OnboardingFlagsDto = {
+  orientationDone: false,
+  sectionHidden: false,
+  sidebarCollapsed: false,
+};
+
+// Persist the onboarding flags + settled item states across a `page.reload()`
+// (module state alone re-initialises on reload). Mirrors the
+// `E2E_OBSERVING_SEED_STORE_ID` single-JSON-blob round-trip above: hydrate once
+// on first read, persist after every mutation. This is what makes the mock
+// faithful to the real backend's durable persistence, so the cross-restart
+// walk / collapse / removal specs (FR-004/FR-012/FR-013) are exercisable, and
+// lets a test seed a pre-settled state via `localStorage` before boot.
+const E2E_ONBOARDING_STORE_ID = 'alm-e2e-onboarding';
+
+interface OnboardingSeed {
+  flags?: Partial<OnboardingFlagsDto>;
+  items?: Record<
+    string,
+    { state: OnboardingItemDto['state']; source?: OnboardingItemDto['source'] }
+  >;
+}
+
+let onboardingHydrated = false;
+
+function hydrateOnboarding(): void {
+  if (onboardingHydrated) return;
+  onboardingHydrated = true;
+  try {
+    const raw =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(E2E_ONBOARDING_STORE_ID)
+        : null;
+    if (!raw) return;
+    const seed = JSON.parse(raw) as OnboardingSeed;
+    if (seed.flags) {
+      mockOnboardingFlags = { ...mockOnboardingFlags, ...seed.flags };
+    }
+    if (seed.items) {
+      mockOnboardingItems = mockOnboardingItems.map((i) => {
+        const s = seed.items?.[i.itemId];
+        return s ? { ...i, state: s.state, source: s.source ?? i.source } : i;
+      });
+    }
+  } catch {
+    // ignore malformed seed — fall back to the fresh defaults
+  }
+}
+
+function persistOnboarding(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const items: NonNullable<OnboardingSeed['items']> = {};
+    for (const i of mockOnboardingItems) {
+      if (i.state !== 'unchecked') {
+        items[i.itemId] = { state: i.state, source: i.source };
+      }
+    }
+    localStorage.setItem(
+      E2E_ONBOARDING_STORE_ID,
+      JSON.stringify({
+        flags: mockOnboardingFlags,
+        items,
+      } satisfies OnboardingSeed),
+    );
+  } catch {
+    // best-effort persistence; never throw from a mock handler
+  }
+}
+
+function mockOnboardingStateDto(): OnboardingStateDto {
+  hydrateOnboarding();
+  const perPageMap = new Map<
+    OnboardingItemDto['page'],
+    { done: number; total: number }
+  >();
+  for (const item of mockOnboardingItems) {
+    const entry = perPageMap.get(item.page) ?? { done: 0, total: 0 };
+    entry.total += 1;
+    if (item.state !== 'unchecked') entry.done += 1;
+    perPageMap.set(item.page, entry);
+  }
+  const pageOrder: OnboardingItemDto['page'][] = [
+    'inbox',
+    'sessions',
+    'calibration',
+    'targets',
+    'projects',
+  ];
+  const perPage = pageOrder.flatMap((page) => {
+    const entry = perPageMap.get(page);
+    return entry ? [{ page, ...entry }] : [];
+  });
+  const done = perPage.reduce((sum, p) => sum + p.done, 0);
+  const total = perPage.reduce((sum, p) => sum + p.total, 0);
+  return {
+    items: mockOnboardingItems.map((i) => ({ ...i })),
+    flags: { ...mockOnboardingFlags },
+    progress: { done, total, perPage },
+  };
+}
+
 let mockRoots: LibraryRoot[] = [
   {
     id: 'root-001',
@@ -496,7 +719,6 @@ const mockPreferences: AppPreferences = {
   defaultProjectView: 'combined',
   sessionsGroupBy: 'none',
   sessionsView: 'list',
-  tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
   detailDock: {},
 };
@@ -1776,8 +1998,121 @@ export const mockHandlers = {
   preferences_set: async () => {
     return null;
   },
-  tour_complete_step: async () => {
-    return null;
+  // ---------- Onboarding (spec 056) ----------
+  // Manual actions round-trip through the in-memory cache; the auto-tick
+  // event path is a documented no-op in mock mode (VC-002 limit).
+  onboarding_state_get: async () => {
+    return { state: mockOnboardingStateDto() };
+  },
+  onboarding_item_set_state: async (_args) => {
+    hydrateOnboarding();
+    // The generated binding invokes `{ request: { itemId, state } }`; the
+    // handler must read the request-wrapped args (mirrors
+    // `ingestion_settings_update` / `calibration_tolerances_update`).
+    const req = (
+      _args as
+        | {
+            request?: { itemId?: string; state?: OnboardingItemDto['state'] };
+          }
+        | undefined
+    )?.request;
+    const itemId = req?.itemId as string;
+    const nextState = req?.state as OnboardingItemDto['state'];
+    const item = mockOnboardingItems.find((i) => i.itemId === itemId);
+    if (!item) {
+      return mockContractError(
+        'onboarding.item.unknown',
+        `unknown onboarding item id: ${itemId}`,
+      );
+    }
+    // An explicit un-check is the one transition allowed to clear a settled
+    // row (it mirrors `force_unchecked` on the backend, which bypasses the
+    // terminality rule). It never settles anything, so it cannot trigger the
+    // FR-031 auto-hide below — it moves an item away from settled.
+    if (nextState === 'unchecked') {
+      item.state = 'unchecked';
+      item.source = 'user';
+      item.at = new Date().toISOString();
+      persistOnboarding();
+    } else if (item.state === 'unchecked') {
+      // Otherwise settled states stay terminal (FR-017).
+      item.state = nextState;
+      item.source = 'user';
+      item.at = new Date().toISOString();
+      // FR-031 completion auto-hide: once the last open item settles, the
+      // backend flips `sectionHidden`; mirror that so the whole-section
+      // auto-hide is exercisable in mock mode.
+      if (mockOnboardingItems.every((i) => i.state !== 'unchecked')) {
+        mockOnboardingFlags = { ...mockOnboardingFlags, sectionHidden: true };
+      }
+      persistOnboarding();
+    }
+    return { item: { ...item } };
+  },
+  onboarding_orientation_complete: async () => {
+    hydrateOnboarding();
+    // No request field is read here (the `outcome` in `{ request: { outcome
+    // } }` does not change the mock's done-forever effect), but the flip must
+    // persist so "no auto-run after restart" (FR-004) holds across a reload.
+    if (!mockOnboardingFlags.orientationDone) {
+      mockOnboardingFlags = {
+        ...mockOnboardingFlags,
+        orientationDone: true,
+      };
+      persistOnboarding();
+    }
+    return { orientationDoneAt: new Date().toISOString() };
+  },
+  onboarding_section_set: async (_args) => {
+    hydrateOnboarding();
+    // Request-wrapped args (see `onboarding_item_set_state` above).
+    const sectionReq = (
+      _args as
+        | {
+            request?: {
+              hidden?: boolean | null;
+              sidebarCollapsed?: boolean | null;
+            };
+          }
+        | undefined
+    )?.request;
+    const hidden = sectionReq?.hidden;
+    const sidebarCollapsed = sectionReq?.sidebarCollapsed;
+    if (hidden == null && sidebarCollapsed == null) {
+      return mockContractError(
+        'onboarding.invalid_state',
+        'onboarding.section.set request must set hidden or sidebarCollapsed',
+      );
+    }
+    if (hidden === false) {
+      return mockContractError(
+        'onboarding.invalid_state',
+        'hidden may only be true; unhide via onboarding.restore',
+      );
+    }
+    mockOnboardingFlags = {
+      ...mockOnboardingFlags,
+      sectionHidden: hidden === true ? true : mockOnboardingFlags.sectionHidden,
+      sidebarCollapsed:
+        sidebarCollapsed == null
+          ? mockOnboardingFlags.sidebarCollapsed
+          : sidebarCollapsed,
+    };
+    persistOnboarding();
+    return { flags: { ...mockOnboardingFlags } };
+  },
+  onboarding_restore: async () => {
+    hydrateOnboarding();
+    // Re-derive AUTOMATIC items only (mock: reset to unchecked); manual
+    // states survive. Clears the hidden flag (FR-014).
+    mockOnboardingItems = mockOnboardingItems.map((i) =>
+      i.hasAutoTick && (i.state === 'unchecked' || i.state === 'auto_checked')
+        ? { ...i, state: 'unchecked', source: 'seed' }
+        : i,
+    );
+    mockOnboardingFlags = { ...mockOnboardingFlags, sectionHidden: false };
+    persistOnboarding();
+    return { state: mockOnboardingStateDto() };
   },
 
   // ---------- First-Run / Batch Commands ----------
@@ -2314,6 +2649,12 @@ export const mockHandlers = {
     const { INVENTORY_LIST_RESPONSE } = await import(
       '@/data/fixtures/inventory'
     );
+    // Empty-library toggle: lets a spec exercise the "no sessions exist yet"
+    // branches (e.g. the onboarding find spotlight's note-field deep link,
+    // which has no session to link to) without a second fixture.
+    if (isE2EFlagSet(E2E_EMPTY_INVENTORY_STORE_ID)) {
+      return { ...INVENTORY_LIST_RESPONSE, sources: [] };
+    }
     const req = (
       _args as
         | {

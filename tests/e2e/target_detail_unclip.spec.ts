@@ -37,7 +37,7 @@
  */
 import type { Locator } from '@playwright/test';
 import {
-  disableGuidedTourOverlay,
+  disableOnboarding,
   expect,
   seedSetupComplete,
   test,
@@ -64,7 +64,7 @@ test.describe('Regression · Target detail pane content unclipped (#816)', () =>
     await page.setViewportSize({ width: 1100, height: 620 });
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = page.locator('.pv-targets-table__row', { hasText: 'M 31' });
     await expect(m31).toBeVisible({ timeout: 8_000 });

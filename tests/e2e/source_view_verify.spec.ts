@@ -23,7 +23,16 @@
  *   sourceview_verify → `mock-sv-view-broken` reports one broken item
  *                        (state `moved`); every other view id reports clean.
  */
-import { test, expect, seedSetupComplete } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 async function selectProject(
   page: import('@playwright/test').Page,

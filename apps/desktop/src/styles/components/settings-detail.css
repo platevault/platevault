@@ -573,8 +573,8 @@
   height: var(--pv-control-h);
 }
 
-/* Settings-row control description paragraph — shared by the guided-tour
-   restart and first-run setup restart controls. */
+/* Settings-row control description paragraph — shared by the onboarding-walk
+   replay/restore and first-run setup restart controls. */
 .pv-adv-settings__control-desc {
   font-size: var(--pv-text-xs);
   color: var(--pv-text-muted);

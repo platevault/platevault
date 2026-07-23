@@ -101,6 +101,8 @@ export function SessionNotesSection({
         rows={4}
         aria-invalid={overLimit}
         aria-describedby={overLimit ? 'session-notes-error' : undefined}
+        // Onboarding find-it spotlight anchor (spec 056 FR-026).
+        data-guide-anchor="sessions.note-field"
       />
       <div className="pv-project-notes__toolbar">
         <span

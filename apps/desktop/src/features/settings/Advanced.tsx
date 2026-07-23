@@ -8,27 +8,21 @@
 // audited this pane's key list; both are covered elsewhere by design.
 // On mount, loads persisted values from backend via settings.get('advanced').
 // Changes are auto-saved via the save() prop (useAutoSave -> settings.update).
-// spec 010 — Guided flow restart control added (T042).
 // spec 003 US3 — first-run setup wizard restart control added (regression fix:
 // firstrun.restart was fully wired on the backend but had no UI caller).
 import { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Btn } from '@/ui';
 import { getSettings, restartFirstRun } from './settingsIpc';
-import { resetPreferences } from '@/data/preferences';
-import {
-  getGuidedState,
-  restartGuidedFlow,
-  type GuidedFlowStateDto,
-} from '@/features/guided/store';
-import { STEP_ORDER } from '@/features/guided/store';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
-import { setPreference } from '@/data/preferences';
+import { setPreference, resetPreferences } from '@/data/preferences';
 import {
   resetWizardStateWithSources,
   type SourceEntry,
 } from '@/features/setup/sources-store';
+import { requestOrientationReplay } from '@/features/onboarding/OrientationWalk';
+import { restoreOnboarding } from '@/features/onboarding/store';
 import {
   SettingsSection,
   SettingsRow,
@@ -53,12 +47,6 @@ type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 export function Advanced({ save }: AdvancedProps) {
   const navigate = useNavigate();
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
-  const [guidedState, setGuidedState] = useState<GuidedFlowStateDto | null>(
-    null,
-  );
-  const [guidedRestarting, setGuidedRestarting] = useState(false);
-  const [guidedConfirming, setGuidedConfirming] = useState(false);
-  const [guidedRestarted, setGuidedRestarted] = useState(false);
   const [firstRunConfirming, setFirstRunConfirming] = useState(false);
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
@@ -102,51 +90,8 @@ export function Advanced({ save }: AdvancedProps) {
     };
   }, []);
 
-  // Load guided flow state on mount (spec 010, T042).
-  useEffect(() => {
-    let cancelled = false;
-    getGuidedState()
-      .then((state) => {
-        if (!cancelled) setGuidedState(state);
-      })
-      .catch(() => {
-        /* Backend unavailable — hide control */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // #827: this control was a silent no-op with no confirm gate, asymmetric
-  // with the sibling "Restart first-run setup" control below (which has both).
-  // It doesn't reopen anything destructive (unlike the first-run wizard
-  // restart, which clears the setup-completed flag), so the confirm copy is
-  // lighter, but the gate + a transient success message are still required
-  // so a click always produces an observable result.
-  const handleGuidedRestart = async () => {
-    setGuidedRestarting(true);
-    setGuidedRestarted(false);
-    try {
-      const newState = await restartGuidedFlow();
-      setGuidedState(newState);
-      setGuidedConfirming(false);
-      setGuidedRestarted(true);
-      setTimeout(() => setGuidedRestarted(false), 3000);
-    } catch {
-      // Best-effort.
-    } finally {
-      setGuidedRestarting(false);
-    }
-  };
-
-  // A "Completed" flow is one where all steps are in completedSteps.
-  const guidedCompleted = guidedState
-    ? STEP_ORDER.every((id) => guidedState.completedSteps.includes(id))
-    : false;
-
-  // Restart the first-run *source setup* wizard (spec 003 US3) — distinct from
-  // the guided first-project tour above. Requires an explicit confirm step
-  // because it reopens the whole source-registration flow.
+  // Restart the first-run *source setup* wizard (spec 003 US3). Requires an
+  // explicit confirm step because it reopens the whole source-registration flow.
   const handleFirstRunRestart = async () => {
     setFirstRunRestarting(true);
     setFirstRunError(null);
@@ -270,74 +215,9 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Guided first-project-flow restart (spec 010, T042) */}
-      {guidedState !== null && (
-        <SettingsSection title={m.settings_advanced_tour_title()}>
-          <SettingsRow
-            label={m.settings_advanced_tour_label()}
-            info={m.settings_advanced_firstrun_info()}
-          >
-            <div className="pv-adv-settings__control-col">
-              <p className="pv-adv-settings__control-desc">
-                {guidedCompleted
-                  ? m.settings_advanced_guided_completed()
-                  : guidedState.dismissed
-                    ? m.settings_advanced_guided_dismissed()
-                    : m.settings_advanced_guided_active()}
-              </p>
-              {guidedConfirming ? (
-                <div className="pv-adv-settings__danger-box">
-                  <p className="pv-adv-settings__danger-desc">
-                    {m.settings_advanced_guided_restart_confirm_desc()}
-                  </p>
-                  <div className="pv-adv-settings__control-row">
-                    <Btn
-                      size="sm"
-                      onClick={() => void handleGuidedRestart()}
-                      disabled={guidedRestarting}
-                      data-testid="guided-restart-confirm-btn"
-                    >
-                      {guidedRestarting
-                        ? m.common_restarting()
-                        : m.settings_advanced_guided_restart_confirm_yes()}
-                    </Btn>
-                    <Btn
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setGuidedConfirming(false)}
-                      disabled={guidedRestarting}
-                    >
-                      {m.common_cancel()}
-                    </Btn>
-                  </div>
-                </div>
-              ) : (
-                <Btn
-                  size="sm"
-                  onClick={() => setGuidedConfirming(true)}
-                  data-testid="guided-restart-btn"
-                >
-                  {m.settings_advanced_restart_guided()}
-                </Btn>
-              )}
-              {guidedRestarted && (
-                <p
-                  className="pv-adv-settings__control-desc"
-                  role="status"
-                  data-testid="guided-restart-done"
-                >
-                  {m.settings_advanced_guided_restart_done()}
-                </p>
-              )}
-            </div>
-          </SettingsRow>
-        </SettingsSection>
-      )}
-
-      {/* First-run source setup wizard restart (spec 003 US3). Distinct from
-          the guided first-project tour above: this reopens the Raw/
-          Calibration/Project/Inbox source-registration wizard, not the
-          walkthrough. Requires an explicit confirm step (A7, R-E5). */}
+      {/* First-run source setup wizard restart (spec 003 US3). Reopens the
+          Raw/Calibration/Project/Inbox source-registration wizard. Requires
+          an explicit confirm step (A7, R-E5). */}
       <SettingsSection title={m.settings_advanced_firstrun_restart_title()}>
         <SettingsRow
           label={m.settings_advanced_firstrun_restart_label()}
@@ -459,6 +339,34 @@ export function Advanced({ save }: AdvancedProps) {
               </Btn>
             )}
           </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* Getting started (spec 056). Replay control (T015) + the single restore/
+          reset control (T030, FR-014): unhides the section after explicit
+          removal AND after completion auto-hide, re-derives automatic pre-ticks,
+          preserves manual/dismissed state; idempotent on repeat. */}
+      <SettingsSection title={m.onboarding_section_title()}>
+        <SettingsRow label={m.onboarding_settings_replay_label()}>
+          <Btn
+            size="sm"
+            onClick={() => requestOrientationReplay()}
+            data-testid="onboarding-replay-btn"
+          >
+            {m.onboarding_settings_replay_label()}
+          </Btn>
+        </SettingsRow>
+        <SettingsRow
+          label={m.onboarding_settings_restore_label()}
+          info={m.onboarding_settings_restore_description()}
+        >
+          <Btn
+            size="sm"
+            onClick={() => void restoreOnboarding()}
+            data-testid="onboarding-restore-btn"
+          >
+            {m.onboarding_settings_restore_label()}
+          </Btn>
         </SettingsRow>
       </SettingsSection>
 

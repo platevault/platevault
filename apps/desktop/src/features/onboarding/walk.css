@@ -1,0 +1,68 @@
+/* Copyright (C) 2024-2026 Sjors Robroek */
+/* SPDX-License-Identifier: AGPL-3.0-only */
+
+/*
+ * Orientation-walk tooltip card (spec 056, US1).
+ *
+ * The T009 adapter deliberately does NOT spread joyride's `tooltipProps` (that
+ * spread is the only source of `role="alertdialog"`/`aria-modal`, which VC-002
+ * forbids). joyride's default tooltip styling rides on that same spread, so
+ * skipping it leaves our custom tooltip with NO styling of its own — it
+ * rendered as bare text over the dim overlay with OS-default buttons until
+ * this file existed. Presence-only e2e assertions
+ * (`document.querySelector('.pv-onboarding-tooltip')`) cannot catch that, so
+ * `walk.contract.test.tsx` asserts the card rule is actually loaded.
+ *
+ * Surface tokens mirror `.pv-onb-popover` in checklist.css (raised surface +
+ * border + shadow + radius) so the walk and the checklist read as one system.
+ * Controls reuse the shared `Btn` primitive (`.pv-btn`, primitives.css) — no
+ * button styling is redeclared here, per the one-component/one-class rule.
+ * Tokens only, no raw colours.
+ */
+
+.pv-onboarding-tooltip {
+  width: 320px;
+  max-width: calc(100vw - var(--pv-sp-6));
+  padding: var(--pv-sp-4);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  box-shadow: var(--pv-shadow-sm);
+  color: var(--pv-text);
+  font-size: var(--pv-text-sm);
+}
+
+.pv-onboarding-tooltip__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pv-sp-2);
+  margin-bottom: var(--pv-sp-2);
+}
+
+.pv-onboarding-tooltip__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--pv-text-md);
+  font-weight: var(--pv-weight-semibold);
+  line-height: var(--pv-leading-tight);
+  color: var(--pv-text);
+}
+
+.pv-onboarding-tooltip__body {
+  margin-bottom: var(--pv-sp-4);
+  color: var(--pv-text-secondary);
+  line-height: var(--pv-leading-normal, 1.5);
+}
+
+.pv-onboarding-tooltip__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pv-sp-2);
+}
+
+.pv-onboarding-tooltip__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+}

@@ -50,7 +50,7 @@ import {
   test,
   expect,
   seedSetupComplete,
-  disableGuidedTourOverlay,
+  disableOnboarding,
   assertDefined,
 } from './support/harness';
 import type { Page } from '@playwright/test';
@@ -117,7 +117,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
@@ -165,7 +165,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
@@ -260,7 +260,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
     // Gate closed initially.
     await expect(page.getByTestId('planner-site-prompt')).toBeVisible({
       timeout: 8_000,
@@ -290,7 +290,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
       );
     });
     await page.reload();
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     // Planner alive after reload.
     await expect(page.getByTestId('moon-summary')).toBeVisible({
@@ -318,7 +318,7 @@ test.describe('Planner date picker + per-band moon-free hours (spec 044 Track B 
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -351,7 +351,7 @@ test.describe('Planner date picker + per-band moon-free hours (spec 044 Track B 
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -373,7 +373,7 @@ test.describe('Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await expect(targetRow(page, 'M 31')).toBeVisible({ timeout: 8_000 });
     await expect(targetRow(page, 'NGC 7000')).toBeVisible();
@@ -389,7 +389,7 @@ test.describe('Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await page.getByRole('button', { name: 'Add target' }).click();
     const search = page.getByLabel('Search for a target');
@@ -416,7 +416,7 @@ test.describe('Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await page.getByRole('button', { name: 'Add target' }).click();
     const search = page.getByLabel('Search for a target');
@@ -452,7 +452,7 @@ test.describe('Honest empty-state disclosure (no fabricated data)', () => {
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -481,7 +481,7 @@ test.describe('Honest empty-state disclosure (no fabricated data)', () => {
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     // Baseline: the catalog is populated.
     await expect(targetRow(page, 'M 31')).toBeVisible({ timeout: 8_000 });
@@ -512,7 +512,7 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -555,7 +555,7 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -589,7 +589,7 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -637,7 +637,7 @@ test.describe('Design-review follow-ups (2026-07-11): #614 dead CTA, #618 header
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
@@ -664,7 +664,7 @@ test.describe('Design-review follow-ups (2026-07-11): #614 dead CTA, #618 header
     seedSetupComplete(page);
     seedObservingSite(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await expect(targetRow(page, 'M 31')).toBeVisible({ timeout: 8_000 });
 

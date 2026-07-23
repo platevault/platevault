@@ -18,11 +18,6 @@ calibration_match_unassign
 cleanup_raw_frames_generate
 cleanup_raw_frames_scan
 dev_calls_push
-guided_activate
-guided_dismiss
-guided_restart
-guided_state_get
-guided_step_complete
 inbox_scan
 inbox_target_recommendations
 inventory_frame_list

@@ -18,7 +18,16 @@
  *                        a synthetic removal + regeneration plan scoped to
  *                        `mock-sv-view-stale` via `originPath`.
  */
-import { test, expect, seedSetupComplete } from './support/harness';
+import {
+  test,
+  expect,
+  seedSetupComplete,
+  disableOnboarding,
+} from './support/harness';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 async function selectProject(
   page: import('@playwright/test').Page,

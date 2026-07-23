@@ -20,12 +20,7 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
-import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
-import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
-import {
-  startGuidedEventBridge,
-  stopGuidedEventBridge,
-} from '@/features/guided/eventBridge';
+import { OrientationWalk } from '@/features/onboarding/OrientationWalk';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
@@ -93,16 +88,6 @@ function ShellInner() {
     { ignoreFormFields: false },
   );
 
-  // Guided first-project-flow coach (spec 010).
-  const guided = useGuidedFlow(prefs.setupCompleted);
-
-  // Spec 033 US2/T029: drive guided auto-advance off real domain events.
-  useEffect(() => {
-    if (!prefs.setupCompleted) return undefined;
-    void startGuidedEventBridge();
-    return () => stopGuidedEventBridge();
-  }, [prefs.setupCompleted]);
-
   // Spec 051 US10 (T058, #888 staged flow): run the frontend-driven update
   // check for the whole app session, so it's captured even if the user
   // hasn't opened Settings > Advanced yet.
@@ -154,11 +139,7 @@ function ShellInner() {
       <StatusBar />
       <CommandPalette />
       <ToastContainer />
-      {/* Guided overlay — non-blocking, portal-rendered (spec 010 FR-002) */}
-      <GuidedOverlay
-        guidedState={guided.state}
-        onDismiss={() => void guided.dismiss()}
-      />
+      <OrientationWalk />
     </div>
   );
 }

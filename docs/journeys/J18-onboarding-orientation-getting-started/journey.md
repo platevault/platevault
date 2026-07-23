@@ -1,19 +1,17 @@
 ---
 id: J18
 title: Get oriented after setup and track first-run progress
-version: 1
+version: 2
 status: draft
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-19
 actors: [astrophotographer]
 surfaces: [onboarding, shell]
 interfaces: [desktop-ui]
 trace:
-  - specs/056-onboarding-redesign (design authored in parallel on branch
-    spec/056-onboarding-redesign — not yet merged; this journey does not wait
-    on it, see Known gaps G1)
+  - specs/056-onboarding-redesign (implemented; PR #1048)
   - specs/010-guided-first-project-flow/spec.md (superseded — the 3-step
     non-modal `guided/` coach this replaces)
-  - github: nightwatch-astro/alm#881
+  - github: platevault/platevault#881
   - product decision 2026-07-18 (user-approved onboarding redesign, relayed
     via orchestration run run-onb-0718)
 ---
@@ -85,18 +83,25 @@ faking progress.
 - **Expect (negative):** Replaying the walk does not reset or alter the
   Getting-started checklist's tick state — the two are independent.
 
-### S6 — The Getting-started section sits in the sidebar {#S6}
+### S6 — The Getting-started trigger sits in the sidebar {#S6}
 - **Do:** With the walk closed, look at the sidebar's workflow navigation.
-- **Expect:** An accordion section labeled for getting started appears
-  above the Settings entry, separated from the primary workflow nav the
-  same way Settings is. It is expanded by default.
-- **Expect:** An overall progress indicator (e.g. a count or fraction line)
-  is visible at the top of the section, summarizing progress across all
-  page groups.
+- **Expect:** A Getting-started trigger appears above the Settings entry,
+  separated from the primary workflow nav the same way Settings is. It
+  carries a progress ring summarizing progress across all page groups, and
+  is labelled while the sidebar is expanded.
+- **Do:** Click the trigger.
+- **Expect:** The checklist opens as a flyout panel beside the sidebar, with
+  an overall progress indicator at its top. It is a panel, not an inline
+  sidebar section: the sidebar's own content does not reflow to make room.
+- **Expect:** The flyout is non-modal — the rest of the app stays visible and
+  clickable, and clicking outside it (including a nav link) closes it.
+- **Expect (negative):** Nothing resembling the checklist is visible in the
+  sidebar before the trigger is clicked.
 
 ### S7 — Per-page groups and auto-expand {#S7}
-- **Do:** Expand the Getting-started section and navigate between Inbox,
-  Sessions, Calibration, Targets, and Projects.
+- **Do:** Open the Getting-started flyout, then navigate between Inbox,
+  Sessions, Calibration, Targets, and Projects — re-opening the flyout after
+  each navigation, since navigating closes it.
 - **Expect:** The section contains exactly five page groups, one each for
   Inbox, Sessions, Calibration, Targets, and Projects; each group lists
   between 2 and 4 short item labels.
@@ -104,8 +109,11 @@ faking progress.
   explanatory copy lives only in the item's tooltip, not inline.
 - **Expect:** Whichever page group matches the page currently open is
   auto-expanded; the others may be collapsed.
-- **Expect:** Hovering or focusing an item label surfaces its explanatory
-  tooltip copy (distinct from the short label shown inline).
+- **Expect:** Hovering an item label surfaces its explanatory tooltip copy
+  (distinct from the short label). Keyboard-focusing the item's checkbox
+  surfaces the same copy, and Escape dismisses it without moving focus
+  (WCAG 1.4.13 — the reveal is owned by the checkbox, not the label, because
+  the label is not focusable).
 
 ### S8 — Prerequisite-gated item shows reason and jump-link {#S8}
 - **Do:** With no inventory item confirmed yet, open the Projects group and
@@ -201,27 +209,30 @@ faking progress.
   action and clears the spotlight in the same interaction — it does not
   take a separate click to clear it first.
 
-### S14 — Icon-collapsed sidebar shows a progress-ring popover {#S14}
+### S14 — Icon-collapsed sidebar keeps the same flyout {#S14}
 - **Do:** Collapse the sidebar to its icon-only mode.
-- **Expect:** The Getting-started section collapses to a single progress-ring
-  icon; interacting with it opens a popover showing the same overall and
-  per-page progress summary available in the expanded view, without
-  requiring the sidebar to expand.
+- **Expect:** The Getting-started trigger becomes a bare progress ring with
+  no label; opening it shows the SAME flyout, with the same overall and
+  per-page progress, without requiring the sidebar to expand.
+- **Expect (negative):** The checklist is not rendered inline at either
+  sidebar width — the flyout is the only host, so collapsing the sidebar
+  changes the trigger's appearance and nothing else.
 
 ### S15 — Collapse state persists across restart {#S15}
-- **Do:** Collapse the Getting-started accordion itself (not the whole
-  sidebar), then fully restart the app.
-- **Expect:** The accordion remains collapsed after relaunch.
-- **Expect (negative):** Collapsing the accordion does not reset, hide, or
-  remove any item's tick state or the overall progress count.
+- **Do:** Collapse the checklist section from inside the flyout (not the
+  whole sidebar), then fully restart the app.
+- **Expect:** The section is still collapsed when the flyout is re-opened
+  after relaunch.
+- **Expect (negative):** Collapsing does not reset, hide, or remove any
+  item's tick state or the overall progress count.
 
 ### S16 — Permanently remove the section {#S16}
 - **Do:** Open the Getting-started section's header menu and choose the
   permanent-remove action; confirm at the resulting prompt.
 - **Expect:** A confirmation prompt appears before the section is removed
   (it is not a single-click irreversible action).
-- **Expect:** After confirming, the section no longer appears in the
-  sidebar.
+- **Expect:** After confirming, both the checklist and its sidebar trigger
+  (the progress ring) disappear — there is no leftover ring to click.
 - **Expect (negative):** The removed section does not reappear on its own —
   not after an app restart, not after navigating between pages, not after
   completing further real domain actions that would otherwise have ticked
@@ -230,7 +241,8 @@ faking progress.
 ### S17 — Restore from Settings re-seeds from real state {#S17}
 - **Do:** In Settings, use the control that restores the Getting-started
   section.
-- **Expect:** The section reappears in the sidebar with its auto-tick items
+- **Expect:** The sidebar trigger reappears, and opening it shows the
+  checklist with its auto-tick items
   re-seeded from actual current database state — any item whose real
   domain event already occurred (e.g. an inventory item confirmed earlier
   in this journey) shows as already complete, not reset to zero.
@@ -239,7 +251,7 @@ faking progress.
   data show unlocked immediately, not locked pending a fresh event.
 
 ### S18 — The checklist never blocks ordinary workflow {#S18}
-- **Do:** With the Getting-started section visible (expanded or collapsed)
+- **Do:** With the Getting-started trigger present (flyout open or closed)
   and, separately, with a spotlight active from S12, perform a complete
   real workflow unrelated to any checklist affordance (e.g. navigate
   directly to Projects and create a project without touching the
@@ -284,16 +296,35 @@ faking progress.
   regresses back to incomplete on its own — only a permanent-remove +
   restore cycle can change how it's re-seeded, and only from real DB state.
 
-## Known gaps
-
-- G1: No code implements this design yet — `apps/desktop/src/features/guided/`
-  currently implements the superseded spec-010 3-step non-modal coach, not
-  the walk/checklist/spotlight design this journey describes. The
-  replacement (spec-056-onboarding-redesign) is being authored in parallel
-  and had not merged as of this journey's authoring (2026-07-18). This
-  journey cannot be validated against a running app until that
-  implementation lands; first validation run is pending.
-
 ## Delta log
 
-(none — first version)
+### v2 — 2026-07-19 — realign to the shipped flyout architecture
+
+Authored in parallel with spec 056 and never reconciled against what shipped,
+so v1 described a UI that does not exist. Amended against the implementation
+on PR #1048.
+
+- **S6** rewritten. v1 had the checklist as an inline accordion in the sidebar,
+  expanded by default. It ships as a **flyout**: a progress-ring trigger sits
+  above Settings and opens a portalled non-modal panel beside the sidebar.
+  Rendered inline, the list blended into the sidebar's own surface and read as
+  navigation. Added a negative expectation that nothing checklist-like is
+  visible before the trigger is clicked.
+- **S7** now re-opens the flyout after each navigation, because navigating
+  closes it. The tooltip expectation names the checkbox as the keyboard
+  reveal owner and adds Escape-without-moving-focus (WCAG 1.4.13, #1103) —
+  the label is not focusable, which is how the keyboard path regressed.
+- **S14** no longer describes the icon-collapsed width as a *different*
+  presentation. Both widths use the same flyout; only the trigger differs
+  (labelled row vs bare ring). Added a negative expectation against an inline
+  host at either width.
+- **S15** collapses the section from inside the flyout rather than collapsing
+  an inline accordion.
+- **S16** expects the trigger to disappear along with the checklist, so no
+  dead ring is left behind.
+- **S17/S18** reworded from "the section in the sidebar" to the trigger plus
+  its flyout.
+
+The v1 Known-gaps entry (G1: "no code implements this design yet; first
+validation run pending") is removed — the implementation has landed and the
+steps above were checked against it.

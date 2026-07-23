@@ -407,7 +407,12 @@ checked/dismissed items keep their prior state.
   section hidden — removed or auto-hidden — and applicable collapse state) MUST
   persist across app restarts
   and MUST reflect authoritative recorded state — identical regardless of which
-  screen was open when the milestone happened.
+  screen was open when the milestone happened. Because ticks are event-sourced,
+  a live event the subscriber never saw (published before subscription, or lost
+  to a process kill between the action and the tick write) MUST self-heal at
+  the next app start rather than waiting for the user to run restore: startup
+  re-derives automatic items that are still unchecked from a non-user source
+  (PQ-005). A user's deliberate un-check is never re-ticked by that pass.
 
 #### Layer 3 — Find-it spotlight
 

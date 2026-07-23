@@ -18,7 +18,6 @@ const defaults: AppPreferences = {
   defaultProjectView: 'combined',
   sessionsGroupBy: 'none',
   sessionsView: 'list',
-  tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
   detailDock: {},
 };

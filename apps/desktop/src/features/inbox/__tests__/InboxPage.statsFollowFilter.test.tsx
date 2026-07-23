@@ -33,6 +33,7 @@ import {
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageStatusProvider, usePageStatus } from '@/app/PageStatusContext';
+import { InboxPage } from '../InboxPage';
 
 /**
  * The stats strip is not rendered by `InboxPage` itself — the page pushes it
@@ -142,7 +143,6 @@ beforeEach(() => {
 
 describe('Inbox summary counts follow the filtered list (T022, SC-004)', () => {
   it('reports one folder after a search narrows the list to one row', async () => {
-    const { InboxPage } = await import('../InboxPage');
     render(<InboxPage />);
 
     // Both folders are in the queue to begin with.
@@ -180,7 +180,6 @@ describe('Inbox summary counts follow the filtered list (T022, SC-004)', () => {
   // disagreed under any active filter — the same SC-004 defect, one surface
   // over.
   it('the top-bar folder count follows the filter too, agreeing with the strip', async () => {
-    const { InboxPage } = await import('../InboxPage');
     render(<InboxPage />);
 
     await waitFor(() => {
@@ -226,7 +225,6 @@ describe('Inbox summary counts include source-group rows (T013, CHK010)', () => 
   });
 
   it('counts a source-group row as a folder in the top-bar summary', async () => {
-    const { InboxPage } = await import('../InboxPage');
     render(<InboxPage />);
 
     // One classified item + one scanned-but-unclassified folder = two rows on

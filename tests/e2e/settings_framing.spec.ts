@@ -23,7 +23,16 @@
  * (`apps/desktop/src/api/mocks.ts`), seeded at the R11a shipped defaults —
  * mirrors the Ingestion/Cleanup panes' proven round-trip pattern.
  */
-import { expect, seedSetupComplete, test } from './support/harness';
+import {
+  expect,
+  seedSetupComplete,
+  test,
+  disableOnboarding,
+} from './support/harness';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 test.describe('Settings · Framing clustering tolerances (spec 008 Q27 F-Framing-11)', () => {
   test('pane loads R11a defaults, edits the pointing tolerance, and PERSISTS via the settings mock round-trip', async ({

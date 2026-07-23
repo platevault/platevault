@@ -37,7 +37,7 @@ import {
   test,
   expect,
   seedSetupComplete,
-  disableGuidedTourOverlay,
+  disableOnboarding,
 } from './support/harness';
 
 // The six wizard "Next" labels in order (StepName → … → Review). Clicking each
@@ -58,7 +58,7 @@ async function openWizard(
   await expect(
     page.getByTestId('app-error-boundary-fallback'),
   ).not.toBeVisible();
-  await disableGuidedTourOverlay(page);
+  await disableOnboarding(page);
   await page.getByRole('button', { name: '+ New project' }).click();
   // Wizard toolbar title confirms we landed on /#/projects/new.
   await expect(page.getByText(/New project —/)).toBeVisible({ timeout: 8_000 });

@@ -641,9 +641,9 @@ pub async fn confirm(
         _ => None,
     };
 
-    // 15. Publish `inventory.confirmed` so the guided flow's `inbox.confirm_first`
-    // step can auto-advance (spec 010; discovered by the guided-events lane #722
-    // — this use case previously took no EventBus at all).
+    // 15. Publish `inventory.confirmed` so the onboarding tick subscriber can
+    // auto-check the `inbox.confirm_first` item (spec 056; this use case takes an
+    // EventBus for this domain-completion signal).
     //
     // Best-effort: the plan, plan_items, plan-link, and inbox_item.state=plan_open
     // are already durably committed above, so confirm() has succeeded by this

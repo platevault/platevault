@@ -15,6 +15,7 @@
 
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
@@ -57,6 +58,29 @@ export async function saveSessionNote(
       }),
     ),
   );
+}
+
+/**
+ * Id of the first session in the (unfiltered) inventory ledger, or `null` when
+ * the library has none yet.
+ *
+ * The onboarding find spotlight needs one: the note field it points at lives on
+ * a session's detail pane, not on the sessions list, so it has to deep-link to
+ * a real session. `fetchQuery` reuses a warm cache and only hits IPC when the
+ * sessions page has never loaded.
+ */
+export async function fetchFirstSessionId(
+  queryClient: QueryClient,
+): Promise<string | null> {
+  const response = await queryClient.fetchQuery({
+    queryKey: queryKeys.inventory.all(),
+    queryFn: () => inventoryList(makeRequest()),
+  });
+  for (const source of response.sources) {
+    const first = source.sessions[0];
+    if (first) return first.id;
+  }
+  return null;
 }
 
 // Filters shape
