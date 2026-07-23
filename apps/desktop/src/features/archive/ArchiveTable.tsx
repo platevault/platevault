@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ArchiveTable — spec 017 WP-B list on the spec 043 list-page system.
  *
@@ -16,7 +19,7 @@ import { useMemo } from 'react';
 import type { ArchiveEntry } from '@/bindings/index';
 import { Pill, Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
-import { SortHeader, ariaSortFor } from '@/components';
+import { SortHeader, ariaSortFor, renderValue } from '@/components';
 import { formatBytes } from '@/lib/format';
 import { m } from '@/lib/i18n';
 
@@ -30,9 +33,16 @@ export interface ArchiveSort {
   dir: SortDir;
 }
 
-export const DEFAULT_ARCHIVE_SORT: ArchiveSort = { col: 'archived', dir: 'desc' };
+export const DEFAULT_ARCHIVE_SORT: ArchiveSort = {
+  col: 'archived',
+  dir: 'desc',
+};
 
-function compareEntries(a: ArchiveEntry, b: ArchiveEntry, sort: ArchiveSort): number {
+function compareEntries(
+  a: ArchiveEntry,
+  b: ArchiveEntry,
+  sort: ArchiveSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'name':
@@ -42,10 +52,12 @@ function compareEntries(a: ArchiveEntry, b: ArchiveEntry, sort: ArchiveSort): nu
       cmp = a.entityType.localeCompare(b.entityType);
       break;
     case 'reason':
-      cmp = a.reason.localeCompare(b.reason);
+      cmp = (a.reason ?? '').localeCompare(b.reason ?? '');
       break;
     case 'size':
-      cmp = a.sizeBytes - b.sizeBytes;
+      // Unresolved sorts as lowest — never fabricated as 0 in the DISPLAYED
+      // value, only in this internal ordering key (spec-030 Q16 / FR-136).
+      cmp = (a.sizeBytes ?? -Infinity) - (b.sizeBytes ?? -Infinity);
       break;
     case 'archived':
       cmp = a.archivedAt.localeCompare(b.archivedAt);
@@ -57,12 +69,32 @@ function compareEntries(a: ArchiveEntry, b: ArchiveEntry, sort: ArchiveSort): nu
 // ── Column model ──────────────────────────────────────────────────────────────
 
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
-const COLUMNS: Array<{ key: string; label: () => string; sort: ArchiveSortCol; className?: string }> = [
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort: ArchiveSortCol;
+  className?: string;
+}> = [
   { key: 'name', label: () => m.archive_col_name(), sort: 'name' },
   { key: 'type', label: () => m.archive_col_type(), sort: 'type' },
-  { key: 'reason', label: () => m.archive_prop_reason(), sort: 'reason', className: 'alm-cell--muted' },
-  { key: 'size', label: () => m.archive_prop_size(), sort: 'size', className: 'alm-cell--num' },
-  { key: 'archived', label: () => m.archive_prop_archived_at(), sort: 'archived', className: 'alm-cell--mono' },
+  {
+    key: 'reason',
+    label: () => m.archive_prop_reason(),
+    sort: 'reason',
+    className: 'pv-cell--muted',
+  },
+  {
+    key: 'size',
+    label: () => m.archive_prop_size(),
+    sort: 'size',
+    className: 'pv-cell--num',
+  },
+  {
+    key: 'archived',
+    label: () => m.archive_prop_archived_at(),
+    sort: 'archived',
+    className: 'pv-cell--mono',
+  },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -75,7 +107,13 @@ interface Props {
   onSort: (col: ArchiveSortCol) => void;
 }
 
-export function ArchiveTable({ entries, selected, onSelect, sort, onSort }: Props) {
+export function ArchiveTable({
+  entries,
+  selected,
+  onSelect,
+  sort,
+  onSort,
+}: Props) {
   const sorted = useMemo(
     () => [...entries].sort((a, b) => compareEntries(a, b, sort)),
     [entries, sort],
@@ -91,7 +129,7 @@ export function ArchiveTable({ entries, selected, onSelect, sort, onSort }: Prop
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort)}
-        ariaLabel={m.archive_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ),
   }));
@@ -99,18 +137,24 @@ export function ArchiveTable({ entries, selected, onSelect, sort, onSort }: Prop
   const rows: TableRow[] = sorted.map((a) => ({
     _testid: `archive-row-${a.id}`,
     _rowClassName:
-      'alm-densetable__row' + (selected === a.id ? ' alm-densetable__row--selected' : ''),
+      'pv-densetable__row' +
+      (selected === a.id ? ' pv-densetable__row--selected' : ''),
     _onClick: () => onSelect(a.id),
+    _selected: selected === a.id,
     name: a.name,
     type: <Pill variant="ghost">{a.entityType}</Pill>,
-    reason: a.reason,
-    size: formatBytes(a.sizeBytes),
+    reason: renderValue(a.reason ?? null, { applicability: 'applicable' }),
+    size: renderValue(
+      a.sizeBytes ?? null,
+      { applicability: 'applicable' },
+      (v) => formatBytes(v as number),
+    ),
     archived: a.archivedAt,
   }));
 
   return (
-    <div className="alm-listtable" data-testid="archive-list">
-      <Table className="alm-densetable" columns={columns} rows={rows} />
+    <div className="pv-listtable" data-testid="archive-list">
+      <Table className="pv-densetable" columns={columns} rows={rows} />
     </div>
   );
 }

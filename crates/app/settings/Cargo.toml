@@ -8,6 +8,8 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_cache = { path = "../cache" }
+app_core_calibration = { path = "../calibration" }
 app_core_errors = { path = "../errors" }
 audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
@@ -17,7 +19,10 @@ persistence_db = { path = "../../persistence/db" }
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-uuid = { workspace = true }
+# "v5" beyond the workspace default ("v4"): deterministic audit `entity_id`
+# derivation for settings keys (T122, spec 030 FR-133), same pattern as
+# `crates/targeting/Cargo.toml`.
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
 workflow_profiles = { path = "../../workflow/profiles" }
 
 [features]

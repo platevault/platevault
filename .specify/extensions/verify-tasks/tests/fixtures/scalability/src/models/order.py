@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Order model — T003, T004, T005."""
 from dataclasses import dataclass, field, asdict
 from typing import List

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 024 — Project manifest and notes contract DTOs.
 //!
 //! Mirrors the JSON schemas in

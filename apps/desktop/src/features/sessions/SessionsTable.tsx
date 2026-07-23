@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SessionsTable — spec 043 §4 Sessions redesign (task #36) + multi-level
  * grouping (spec 043 gold-standard, shared groupByDimensions engine).
@@ -14,7 +17,7 @@
  * existing SessionDetail in the bottom detail panel on SessionsPage.
  *
  * Inbox-parity (spec 043 §4): the table renders inside the shared
- * `.alm-listtable` viewport, windows its rows via the shared Table's
+ * `.pv-listtable` viewport, windows its rows via the shared Table's
  * `virtualized` padding-spacer mode (sticky header included), carries a
  * per-row `sessions-row-<id>` testid, shows the row's target identity in the
  * Target cell even when flat (the default), and pins a grouping-hint footer
@@ -27,7 +30,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import type { InventorySource, InventorySession } from '@/bindings/index';
-import { Table, Pill } from '@/ui';
+import { Table, Pill, Skeleton, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
@@ -37,6 +40,9 @@ import {
   type DimensionAccessor,
 } from '@/lib/grouping';
 import { useCollapsibleGroups } from '@/lib/use-grouping';
+import { sessionDisplayName } from './displayName';
+import { integrationSeconds, integrationLabel } from './integration';
+import { connectivityLabel, connectivityVariant } from './connectivity';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -58,7 +64,9 @@ export const DEFAULT_SESSION_SORT: SessionSort = { col: 'night', dir: 'desc' };
 
 // ── Grouping dimensions ────────────────────────────────────────────────────────
 
-export const SESSION_ACCESSORS: Readonly<Record<string, DimensionAccessor<InventorySession>>> = {
+export const SESSION_ACCESSORS: Readonly<
+  Record<string, DimensionAccessor<InventorySession>>
+> = {
   target: (s) => s.target ?? s.name,
   filter: (s) => s.filter,
   night: (s) => s.capturedOn,
@@ -81,11 +89,18 @@ export const SESSION_DIM_LABELS: Readonly<Record<string, () => string>> = {
 
 // ── Sort helpers ────────────────────────────────────────────────────────────────
 
-function compareStr(a: string | null | undefined, b: string | null | undefined): number {
+function compareStr(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
   return (a ?? '').localeCompare(b ?? '');
 }
 
-function compareSessions(a: InventorySession, b: InventorySession, sort: SessionSort): number {
+function compareSessions(
+  a: InventorySession,
+  b: InventorySession,
+  sort: SessionSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'target':
@@ -98,7 +113,10 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
       cmp = a.frames - b.frames;
       break;
     case 'exposure':
-      cmp = compareStr(a.exposure, b.exposure);
+      // Sorts the "Integration" column by TOTAL integration time (#798),
+      // matching what the column now displays — not the raw per-frame
+      // exposure string.
+      cmp = (integrationSeconds(a) ?? 0) - (integrationSeconds(b) ?? 0);
       break;
     case 'night':
       cmp = compareStr(a.capturedOn, b.capturedOn);
@@ -115,13 +133,42 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
 // spec 041 FR-051 (T076): the `state` column is dropped along with the session
 // review-state machine — sessions no longer have a review state to display.
-const COLUMNS: Array<{ key: string; label: () => string; sort?: SessionSortCol; className?: string }> = [
-  { key: 'target', label: () => m.projects_create_target_label(), sort: 'target' },
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort?: SessionSortCol;
+  className?: string;
+}> = [
+  {
+    key: 'target',
+    label: () => m.projects_create_target_label(),
+    sort: 'target',
+  },
   { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
-  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-cell--num' },
-  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-cell--mono' },
-  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-cell--mono' },
-  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-cell--muted' },
+  {
+    key: 'frames',
+    label: () => m.projects_wizard_col_frames(),
+    sort: 'frames',
+    className: 'pv-cell--num',
+  },
+  {
+    key: 'integration',
+    label: () => m.projects_wizard_col_integration(),
+    sort: 'exposure',
+    className: 'pv-cell--mono',
+  },
+  {
+    key: 'night',
+    label: () => m.sessions_col_night(),
+    sort: 'night',
+    className: 'pv-cell--mono',
+  },
+  {
+    key: 'camera',
+    label: () => m.settings_calmatch_camera(),
+    sort: 'camera',
+    className: 'pv-cell--muted',
+  },
   { key: 'projects', label: () => m.common_projects() },
 ];
 
@@ -133,8 +180,6 @@ const EMPTY_CELLS = {
   camera: '' as string | ReactNode,
   projects: '' as string | ReactNode,
 };
-
-const INDENT_PER_DEPTH = 12;
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -163,6 +208,13 @@ export function SessionsTable({
 }: Props) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
+  // Backing-source connectivity per session (#889) — a session's row-level
+  // health is its owning source's state, looked up by `sourceId`.
+  const sourceStateById = useMemo(
+    () => new Map(sources.map((src) => [src.id, src.state])),
+    [sources],
+  );
+
   // Flatten all sessions across sources, then sort.
   const allSessions = useMemo<InventorySession[]>(() => {
     const flat: InventorySession[] = [];
@@ -176,7 +228,8 @@ export function SessionsTable({
   // table is a TRUE flat list (Inbox-parity): plain item rows, no synthetic
   // "All" group header (groupByDimensions would emit an `__all__` node).
   const tree = useMemo(
-    () => (grouped ? groupByDimensions(allSessions, dims, SESSION_ACCESSORS) : []),
+    () =>
+      grouped ? groupByDimensions(allSessions, dims, SESSION_ACCESSORS) : [],
     [grouped, allSessions, dims],
   );
 
@@ -184,7 +237,11 @@ export function SessionsTable({
     () =>
       grouped
         ? flattenVisibleGroups(tree, collapsed)
-        : allSessions.map((s) => ({ kind: 'item' as const, item: s, depth: 0 })),
+        : allSessions.map((s) => ({
+            kind: 'item' as const,
+            item: s,
+            depth: 0,
+          })),
     [grouped, tree, collapsed, allSessions],
   );
 
@@ -200,84 +257,92 @@ export function SessionsTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as SessionSortCol)}
-        ariaLabel={m.sessions_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ) : (
       c.label()
     ),
   }));
 
-  const rows: TableRow[] = useMemo(
-    () =>
-      visualRows.map((row) => {
-        if (row.kind === 'header') {
-          const { node, depth, path, collapsed: isCollapsed } = row;
-          return {
-            _rowClassName: 'alm-listgroup',
-            target: (
-              <button
-                type="button"
-                className="alm-listgroup__cell"
-                data-testid={`sessions-group-${node.dimension}-${node.key}`}
-                aria-expanded={!isCollapsed}
-                onClick={() => toggle(path)}
-                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-                style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
-              >
-                <span className="alm-listgroup__caret" aria-hidden="true">
-                  {isCollapsed ? '▸' : '▾'}
-                </span>
-                <span className="alm-listgroup__label">{node.label}</span>
-                <span className="alm-listgroup__count">{node.count}</span>
-              </button>
-            ),
-            ...EMPTY_CELLS,
-          };
-        }
-
-        // Flat item or grouped leaf. The session's TARGET IDENTITY is the row
-        // headline (spec 043 §4) — rendered in the Target cell whether the
-        // table is flat (the default) or a grouped leaf (indented under its
-        // header). Inbox-parity: rows carry a stable per-row testid.
-        const s = row.item;
-        const indentPx = grouped ? 8 + row.depth * INDENT_PER_DEPTH : 0;
-        const projects = s.linked?.projects ?? [];
+  const rows: TableRow[] = useMemo(() => {
+    const firstItemIndex = visualRows.findIndex((row) => row.kind === 'item');
+    return visualRows.map((row, rowIndex) => {
+      if (row.kind === 'header') {
+        const { node, depth, path, collapsed: isCollapsed } = row;
         return {
-          _testid: `sessions-row-${s.id}`,
-          _rowClassName:
-            'alm-sessions-table__row' +
-            (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
-          _onClick: () => onSelect(s.id),
+          _rowClassName: 'pv-listgroup',
+          _indent: tableIndent(depth),
           target: (
-            <span
-              className="alm-sessions-cell--target"
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-              style={indentPx ? { paddingLeft: indentPx } : undefined}
+            <button
+              type="button"
+              className="pv-listgroup__cell"
+              data-testid={`sessions-group-${node.dimension}-${node.key}`}
+              aria-expanded={!isCollapsed}
+              onClick={() => toggle(path)}
             >
-              {s.target ?? s.name}
-            </span>
-          ),
-          filter: s.filter ?? '—',
-          frames: s.frames,
-          integration: s.exposure ?? '—',
-          night: s.capturedOn ?? '—',
-          camera: s.camera ?? '—',
-          projects:
-            projects.length > 0 ? (
-              <span className="alm-sessions-cell__projects">
-                {projects.map((p) => (
-                  <Pill key={p.id} variant="info">
-                    {p.name}
-                  </Pill>
-                ))}
+              <span className="pv-listgroup__caret" aria-hidden="true">
+                {isCollapsed ? '▸' : '▾'}
               </span>
-            ) : (
-              <span className="alm-cell--muted">—</span>
-            ),
+              <span className="pv-listgroup__label">{node.label}</span>
+              <span className="pv-listgroup__count">{node.count}</span>
+            </button>
+          ),
+          ...EMPTY_CELLS,
         };
-      }),
-    [visualRows, selected, onSelect, toggle, grouped],
-  );
+      }
+
+      // Flat item or grouped leaf. The session's TARGET IDENTITY is the row
+      // headline (spec 043 §4) — rendered in the Target cell whether the
+      // table is flat (the default) or a grouped leaf (indented under its
+      // header). Inbox-parity: rows carry a stable per-row testid.
+      const s = row.item;
+      const indentPx = grouped ? tableIndent(row.depth) : 0;
+      const projects = s.linked?.projects ?? [];
+      const sourceState = sourceStateById.get(s.sourceId);
+      const connLabel = sourceState ? connectivityLabel(sourceState) : null;
+      return {
+        _testid: `sessions-row-${s.id}`,
+        _guideAnchor:
+          rowIndex === firstItemIndex ? 'sessions.review-row' : undefined,
+        _rowClassName:
+          'pv-sessions-table__row' +
+          (selected === s.id ? ' pv-sessions-table__row--selected' : ''),
+        _onClick: () => onSelect(s.id),
+        _selected: selected === s.id,
+        _indent: indentPx || undefined,
+        target: (
+          <span className="pv-sessions-cell--target">
+            {sessionDisplayName(s)}
+            {connLabel && sourceState && (
+              <Pill
+                variant={connectivityVariant(sourceState)}
+                data-testid={`sessions-row-connectivity-${s.id}`}
+              >
+                {connLabel}
+              </Pill>
+            )}
+          </span>
+        ),
+        filter: s.filter ?? '—',
+        frames: s.frames,
+        integration: integrationLabel(s),
+        night: s.capturedOn ?? '—',
+        camera: s.camera ?? '—',
+        projects:
+          projects.length > 0 ? (
+            <span className="pv-sessions-cell__projects">
+              {projects.map((p) => (
+                <Pill key={p.id} variant="info">
+                  {p.name}
+                </Pill>
+              ))}
+            </span>
+          ) : (
+            <span className="pv-cell--muted">—</span>
+          ),
+      };
+    });
+  }, [visualRows, grouped, sourceStateById, selected, toggle, onSelect]);
 
   // Inbox-parity: grouping-state hint footer under the table when grouped.
   const groupingHint = grouped
@@ -287,22 +352,29 @@ export function SessionsTable({
     : null;
 
   return (
-    <div className="alm-listtable" data-testid="sessions-list">
-      {visualRows.length === 0 && !loading ? (
-        <div className="alm-listtable__empty">{m.sessions_no_match()}</div>
+    <div className="pv-listtable" data-testid="sessions-list">
+      {visualRows.length === 0 && loading ? (
+        <div className="pv-listtable__empty">
+          <Skeleton variant="block" count={8} label={m.common_loading()} />
+        </div>
+      ) : visualRows.length === 0 && !loading ? (
+        <div className="pv-listtable__empty">{m.sessions_no_match()}</div>
       ) : (
         <Table
-          className="alm-sessions-table"
+          className="pv-sessions-table"
           columns={columns}
           rows={rows}
           virtualized
           estimateRowHeight={36}
-          scrollClassName="alm-listtable__scroll"
+          scrollClassName="pv-listtable__scroll"
           scrollTestId="sessions-virtual-sizer"
         />
       )}
       {groupingHint && (
-        <div className="alm-listtable__foot" data-testid="sessions-grouping-hint">
+        <div
+          className="pv-listtable__foot"
+          data-testid="sessions-grouping-hint"
+        >
           {groupingHint}
         </div>
       )}

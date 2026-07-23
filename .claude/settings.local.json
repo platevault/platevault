@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Read(//home/sjors/.claude/**)",
+      "Read(//home/sjors/.claude/plugins/cache/headroom-marketplace/**)",
+      "Read(//home/sjors/.claude/plugins/**)",
+      "Bash(rtk read *)",
+      "Bash(starship --version)",
+      "Bash(starship config *)",
+      "Bash(STARSHIP_CONFIG=/home/sjors/.config/starship-claude.toml starship module claude_context)",
+      "Bash(rtk ps *)",
+      "Bash(wslg-type)",
+      "Bash(env)",
+      "Bash(wmctrl -l)",
+      "Bash(xdotool search *)",
+      "Bash(xwininfo -root)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "codebase-memory-mcp",
+    "context7",
+    "mcp-package-version",
+    "playwright",
+    "repomix",
+    "serena",
+    "tauri"
+  ],
+  "sandbox": {
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
+  }
+}

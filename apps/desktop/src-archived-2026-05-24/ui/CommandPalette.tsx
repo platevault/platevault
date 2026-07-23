@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Command } from "cmdk";
 import { Search, ArrowRight, AlertTriangle } from "lucide-react";
 import { useEffect, type ReactNode } from "react";

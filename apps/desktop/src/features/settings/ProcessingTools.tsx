@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProcessingTools pane — spec 011 T016.
  *
@@ -31,11 +34,14 @@ export function ProcessingTools() {
   const [validating, setValidating] = useState<Record<string, boolean>>({});
   const [detecting, setDetecting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<Record<string, string>>({});
 
   // Load profiles on mount.
   useEffect(() => {
+    let cancelled = false;
     toolProfileList()
       .then((resp) => {
+        if (cancelled) return;
         setTools(resp.tools);
         const drafts: Record<string, string> = {};
         for (const t of resp.tools) {
@@ -44,15 +50,32 @@ export function ProcessingTools() {
         setPathDraft(drafts);
       })
       .catch((e: unknown) => {
+        if (cancelled) return;
         setLoadError(String(e));
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const saveToolPath = useCallback(
     async (toolId: string, path: string) => {
       setSaving((s) => ({ ...s, [toolId]: true }));
+      setSaveError((e) => {
+        if (!(toolId in e)) return e;
+        const next = { ...e };
+        delete next[toolId];
+        return next;
+      });
       try {
-        const updated = await toolUpdate({ id: toolId, path: path || null, enabled: true });
+        // #656: preserve the tool's current enabled/disabled state — a path
+        // edit must never silently re-enable a disabled tool.
+        const current = tools.find((t) => t.id === toolId);
+        const updated = await toolUpdate({
+          id: toolId,
+          path: path || null,
+          enabled: current?.enabled ?? true,
+        });
         setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
         // Validate existence after save
         if (path) {
@@ -61,18 +84,28 @@ export function ProcessingTools() {
             const v = await toolValidatePath(path);
             setTools((prev) =>
               prev.map((t) =>
-                t.id === toolId ? { ...t, available: v.valid, configured: !!path } : t,
+                t.id === toolId
+                  ? { ...t, available: v.valid, configured: !!path }
+                  : t,
               ),
             );
           } finally {
             setValidating((v) => ({ ...v, [toolId]: false }));
           }
         }
+      } catch (err) {
+        // #825: a rejected path save (e.g. non-absolute path) must be surfaced
+        // inline, not lost as an unhandled rejection — and the stale
+        // Available/Missing pill must not be left implying the save succeeded.
+        setSaveError((e) => ({
+          ...e,
+          [toolId]: err instanceof Error ? err.message : String(err),
+        }));
       } finally {
         setSaving((s) => ({ ...s, [toolId]: false }));
       }
     },
-    [],
+    [tools],
   );
 
   const handleToggle = useCallback(
@@ -122,7 +155,9 @@ export function ProcessingTools() {
   if (loadError) {
     return (
       <SettingsSection title={m.settings_tools_title()}>
-        <p className="alm-proc-tools__error">{m.settings_tools_load_error({ error: loadError })}</p>
+        <p className="pv-proc-tools__error">
+          {m.settings_tools_load_error({ error: loadError })}
+        </p>
       </SettingsSection>
     );
   }
@@ -130,7 +165,7 @@ export function ProcessingTools() {
   const reDetectBtn = (
     <button
       type="button"
-      className="alm-btn alm-btn--ghost alm-proc-tools__auto-detect-btn"
+      className="pv-btn pv-btn--ghost pv-proc-tools__auto-detect-btn"
       onClick={handleAutoDetect}
       disabled={detecting}
       aria-label={m.settings_tools_redetect_aria()}
@@ -142,27 +177,25 @@ export function ProcessingTools() {
   return (
     <SettingsSection title={m.settings_tools_title()} action={reDetectBtn}>
       {tools.length === 0 && !loadError && (
-        <p className="alm-proc-tools__loading">
-          {m.common_loading()}
-        </p>
+        <p className="pv-proc-tools__loading">{m.common_loading()}</p>
       )}
 
       {tools.map((tool) => {
         const label = (
-          <span className="alm-proc-tools__tool-header">
+          <span className="pv-proc-tools__tool-header">
             <strong>{tool.name}</strong>
             {tool.autoDetected && (
-              <Pill variant="neutral" className="alm-proc-tools__pill">
+              <Pill variant="neutral" className="pv-proc-tools__pill">
                 {m.settings_tools_auto_detected()}
               </Pill>
             )}
             {tool.available && (
-              <Pill variant="ok" className="alm-proc-tools__pill">
+              <Pill variant="ok" className="pv-proc-tools__pill">
                 {m.settings_tools_available()}
               </Pill>
             )}
             {tool.configured && !tool.available && (
-              <Pill variant="warn" className="alm-proc-tools__pill">
+              <Pill variant="warn" className="pv-proc-tools__pill">
                 {m.settings_tools_missing()}
               </Pill>
             )}
@@ -171,15 +204,18 @@ export function ProcessingTools() {
 
         return (
           <SettingsRow key={tool.id} label={label}>
-            <div className="alm-proc-tools__tool-controls">
+            <div className="pv-proc-tools__tool-controls">
               <input
                 type="text"
-                className="alm-input alm-proc-tools__path-input"
+                className="pv-input pv-proc-tools__path-input"
                 value={pathDraft[tool.id] ?? ''}
                 placeholder={m.settings_tools_path_placeholder()}
                 aria-label={m.settings_tools_path_aria({ name: tool.name })}
                 onChange={(e) =>
-                  setPathDraft((prev) => ({ ...prev, [tool.id]: e.target.value }))
+                  setPathDraft((prev) => ({
+                    ...prev,
+                    [tool.id]: e.target.value,
+                  }))
                 }
                 onBlur={(e) => {
                   const val = e.target.value.trim();
@@ -195,8 +231,10 @@ export function ProcessingTools() {
                 }}
               />
               {(saving[tool.id] || validating[tool.id]) && (
-                <span className="alm-proc-tools__status">
-                  {saving[tool.id] ? m.common_saving() : m.settings_tools_checking()}
+                <span className="pv-proc-tools__status">
+                  {saving[tool.id]
+                    ? m.common_saving()
+                    : m.settings_tools_checking()}
                 </span>
               )}
               <Toggle
@@ -207,6 +245,14 @@ export function ProcessingTools() {
                 aria-label={m.settings_tools_enable_aria({ name: tool.name })}
               />
             </div>
+            {saveError[tool.id] && (
+              <div className="pv-settings__error" role="alert">
+                {m.settings_tools_save_error({
+                  name: tool.name,
+                  error: saveError[tool.id],
+                })}
+              </div>
+            )}
           </SettingsRow>
         );
       })}

@@ -1,8 +1,3 @@
----
-paths:
-  - "**/*"
----
-
 # Astro Monorepo Structure
 
 The repository is a monorepo with a Tauri/React desktop app at the edge,

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `schema-agreement-test` — CI-only binary that fails if a committed
 //! `.generated.json` schema has drifted from what `schemars::schema_for!()` now
 //! produces from the Rust types.

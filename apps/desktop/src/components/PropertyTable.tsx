@@ -1,22 +1,62 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PropertyTable — key-value property display supporting both read-only and
  * editable modes. Used for session details, inbox review, and equipment.
  *
- * Source badge colors: fits=blue, user=green, inferred=amber, default=gray.
+ * Value rendering goes through the shared missing-value renderer (spec-030
+ * Q16 / FR-135–FR-138, `@/components/RenderValue`): a real value (including
+ * a real 0/false/"") renders plain, a missing-but-applicable value renders
+ * the muted unresolved chip, and a not-applicable value renders blank — the
+ * source badge only ever appears next to a real value (FR-138). Each
+ * `PropertyDef` carries an explicit `applicability` marker (default
+ * `'applicable'`) rather than overloading `value === null`, so a caller that
+ * knows a field genuinely doesn't apply to the entity (per the
+ * data-model.md field-applicability matrix) states that, instead of the
+ * renderer guessing from data absence (FR-135).
+ *
  * Uses @base-ui-components/react/checkbox for confirm toggles.
  */
 
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { Select } from '@base-ui-components/react/select';
-import { clsx } from 'clsx';
+import { Tooltip } from '@/ui';
 import { m } from '@/lib/i18n';
+import {
+  renderValueOnly,
+  SourceBadge,
+  valueState,
+  type FieldApplicability,
+  type ValueSource,
+} from './RenderValue';
 
 export interface PropertyDef {
   key: string;
   label: string;
   value: string | number | boolean | null;
   editable?: boolean;
-  source?: 'fits' | 'user' | 'inferred' | 'default';
+  source?: ValueSource;
+  /**
+   * Whether this field applies to the entity being shown (Q16 / FR-135).
+   * Defaults to `'applicable'` — a `null` value then renders the unresolved
+   * chip, not a silent blank. Set `'not_applicable'` when the
+   * data-model.md field-applicability matrix says the field doesn't apply
+   * to this entity/frame-type (e.g. filter on a dark).
+   */
+  applicability?: FieldApplicability;
+  /**
+   * Optional explanation revealed on hover/focus of the VALUE (view mode
+   * only), via the shared token-styled `ui/Tooltip`. Mirrored into the
+   * trigger's `aria-label` together with the value (the InfoTip pattern) so
+   * screen readers get it without a hover.
+   */
+  tooltip?: string;
+  /**
+   * Render the value in the monospace stack (spec 055 FR-005) — e.g. RA/Dec
+   * coordinate values, where fixed digit width matters for scanability.
+   */
+  mono?: boolean;
   confirmed?: boolean;
   onConfirmToggle?: () => void;
   onChange?: (newValue: string) => void;
@@ -31,19 +71,6 @@ export interface PropertyTableProps {
   showConfirm?: boolean;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  fits: 'FITS',
-  user: 'User',
-  inferred: 'Inferred',
-  default: 'Default',
-};
-
-function formatDisplayValue(value: string | number | boolean | null): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  return String(value);
-}
-
 function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
   const { type = 'text', value, onChange, options } = prop;
 
@@ -55,15 +82,22 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
           if (v !== null) onChange?.(v);
         }}
       >
-        <Select.Trigger className="alm-select alm-select--sm" aria-label={prop.label}>
+        <Select.Trigger
+          className="pv-select pv-select--sm"
+          aria-label={prop.label}
+        >
           <Select.Value />
-          <Select.Icon className="alm-select__icon" />
+          <Select.Icon className="pv-select__icon" />
         </Select.Trigger>
         <Select.Portal>
           <Select.Positioner>
-            <Select.Popup className="alm-select__popup">
+            <Select.Popup className="pv-select__popup">
               {options.map((opt) => (
-                <Select.Item key={opt.value} value={opt.value} className="alm-select__item">
+                <Select.Item
+                  key={opt.value}
+                  value={opt.value}
+                  className="pv-select__item"
+                >
                   <Select.ItemText>{opt.label}</Select.ItemText>
                 </Select.Item>
               ))}
@@ -77,12 +111,14 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
   if (type === 'boolean') {
     return (
       <Checkbox.Root
-        className="alm-checkbox"
+        className="pv-checkbox"
         checked={value === true}
         onCheckedChange={(checked) => onChange?.(String(checked))}
         aria-label={prop.label}
       >
-        <Checkbox.Indicator className="alm-checkbox__indicator">&#x2713;</Checkbox.Indicator>
+        <Checkbox.Indicator className="pv-checkbox__indicator">
+          &#x2713;
+        </Checkbox.Indicator>
       </Checkbox.Root>
     );
   }
@@ -90,7 +126,7 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
   return (
     <input
       type={type === 'number' ? 'number' : 'text'}
-      className="alm-input alm-input--sm"
+      className="pv-input pv-input--sm"
       value={value !== null && value !== undefined ? String(value) : ''}
       onChange={(e) => onChange?.(e.target.value)}
       aria-label={prop.label}
@@ -105,22 +141,38 @@ export function PropertyTable({
   showConfirm = false,
 }: PropertyTableProps) {
   return (
-    <div className="alm-property-table" role="table" aria-label={m.cmp_property_table_aria()}>
+    <div
+      className="pv-property-table"
+      role="table"
+      aria-label={m.cmp_property_table_aria()}
+    >
       {/* Header row */}
-      <div className="alm-property-table__header" role="row">
-        <span className="alm-property-table__cell alm-property-table__cell--label" role="columnheader">
+      <div className="pv-property-table__header" role="row">
+        <span
+          className="pv-property-table__cell pv-property-table__cell--label"
+          role="columnheader"
+        >
           {m.cmp_property_table_col_property()}
         </span>
-        <span className="alm-property-table__cell alm-property-table__cell--value" role="columnheader">
+        <span
+          className="pv-property-table__cell pv-property-table__cell--value"
+          role="columnheader"
+        >
           {m.cmp_property_table_col_value()}
         </span>
         {showSource && (
-          <span className="alm-property-table__cell alm-property-table__cell--source" role="columnheader">
+          <span
+            className="pv-property-table__cell pv-property-table__cell--source"
+            role="columnheader"
+          >
             {m.projects_wizard_col_source()}
           </span>
         )}
         {showConfirm && (
-          <span className="alm-property-table__cell alm-property-table__cell--confirm" role="columnheader">
+          <span
+            className="pv-property-table__cell pv-property-table__cell--confirm"
+            role="columnheader"
+          >
             {m.cmp_property_table_col_confirmed()}
           </span>
         )}
@@ -129,46 +181,77 @@ export function PropertyTable({
       {/* Data rows */}
       {properties.map((prop) => {
         const isEditing = mode === 'edit' && prop.editable;
+        const applicability = prop.applicability ?? 'applicable';
+        const state = valueState(prop.value, applicability);
 
         return (
-          <div key={prop.key} className="alm-property-table__row" role="row">
-            <span className="alm-property-table__cell alm-property-table__cell--label" role="rowheader">
+          <div key={prop.key} className="pv-property-table__row" role="row">
+            <span
+              className="pv-property-table__cell pv-property-table__cell--label"
+              role="rowheader"
+            >
               {prop.label}
             </span>
 
-            <span className="alm-property-table__cell alm-property-table__cell--value" role="cell">
+            <span
+              className={
+                'pv-property-table__cell pv-property-table__cell--value' +
+                (prop.mono ? ' pv-mono' : '')
+              }
+              role="cell"
+            >
               {isEditing ? (
                 <PropertyValueEditor prop={prop} />
+              ) : prop.tooltip ? (
+                <Tooltip
+                  content={prop.tooltip}
+                  // `tabIndex` makes the tooltip reachable without a pointer
+                  // (the shared Tooltip trigger is a bare <span>); `role` is
+                  // what actually exposes `aria-label` — naming is ignored on
+                  // a role-less <span>, so without it assistive tech hears the
+                  // value and never the tooltip. Same pairing as `ui/Lock`.
+                  role="note"
+                  tabIndex={0}
+                  data-testid={`proptable-tooltip-${prop.key}`}
+                  aria-label={
+                    prop.value != null
+                      ? `${String(prop.value)} — ${prop.tooltip}`
+                      : prop.tooltip
+                  }
+                >
+                  {renderValueOnly(prop.value, { applicability })}
+                </Tooltip>
               ) : (
-                formatDisplayValue(prop.value)
+                renderValueOnly(prop.value, { applicability })
               )}
             </span>
 
             {showSource && (
-              <span className="alm-property-table__cell alm-property-table__cell--source" role="cell">
-                {prop.source && (
-                  <span
-                    className={clsx(
-                      'alm-property-table__source-badge',
-                      `alm-property-table__source-badge--${prop.source}`,
-                    )}
-                  >
-                    {SOURCE_LABELS[prop.source] ?? prop.source}
-                  </span>
+              <span
+                className="pv-property-table__cell pv-property-table__cell--source"
+                role="cell"
+              >
+                {/* Source pills couple to value presence (FR-138) — never
+                    shown for an unresolved or not-applicable field. */}
+                {state === 'real' && prop.source && (
+                  <SourceBadge source={prop.source} />
                 )}
               </span>
             )}
 
             {showConfirm && (
-              <span className="alm-property-table__cell alm-property-table__cell--confirm" role="cell">
+              <span
+                className="pv-property-table__cell pv-property-table__cell--confirm"
+                role="cell"
+              >
                 {prop.onConfirmToggle !== undefined && (
                   <Checkbox.Root
-                    className="alm-checkbox"
+                    className="pv-checkbox"
                     checked={prop.confirmed ?? false}
                     onCheckedChange={() => prop.onConfirmToggle?.()}
                     aria-label={m.proptable_confirm_aria({ label: prop.label })}
                   >
-                    <Checkbox.Indicator className="alm-checkbox__indicator">
+                    <Checkbox.Indicator className="pv-checkbox__indicator">
                       &#x2713;
                     </Checkbox.Indicator>
                   </Checkbox.Root>

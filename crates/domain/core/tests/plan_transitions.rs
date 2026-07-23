@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! T027: edge-list test for `PlanState` transitions (research.md §2.2).
 
 use domain_core::lifecycle::plan::{is_allowed, PlanState, TRANSITIONS};

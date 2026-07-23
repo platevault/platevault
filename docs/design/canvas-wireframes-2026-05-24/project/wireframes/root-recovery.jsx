@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Root recovery — drive went offline, reconnect with verification
 function WfRootRecovery() {
   return (

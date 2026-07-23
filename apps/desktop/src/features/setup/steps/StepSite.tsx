@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // First-run wizard: "Observing Site" step (spec 044 Track B, US6 T016).
 //
 // Captures a default+active observing site (name/lat/lon/timezone required,
@@ -9,8 +12,12 @@
 // never blocks Finish (FR-025 does not require a site to complete setup).
 
 import { m } from '@/lib/i18n';
-import { localTimezone, ianaTimezones } from '@/features/targets/observing-sites/iana-timezones';
+import {
+  localTimezone,
+  ianaTimezones,
+} from '@/features/targets/observing-sites/iana-timezones';
 import type { Twilight } from '@/features/targets/observing-sites/observer-site';
+import { SiteLocationPicker } from './SiteLocationPicker';
 
 export interface SiteStepState {
   name: string;
@@ -37,27 +44,52 @@ export interface StepSiteProps {
   onChange: (state: SiteStepState) => void;
 }
 
+type SiteField = 'name' | 'latitude' | 'longitude' | 'elevation';
+type SiteStepErrors = Partial<Record<SiteField, string>>;
+
 /** True when enough fields are filled in to create a site from this step (name/lat/lon; matches T016's "required" fields plus timezone, which always has a value). */
 export function siteStepHasSite(state: SiteStepState): boolean {
-  return state.name.trim() !== '' && state.latitudeDegText.trim() !== '' && state.longitudeDegText.trim() !== '';
+  return (
+    state.name.trim() !== '' &&
+    state.latitudeDegText.trim() !== '' &&
+    state.longitudeDegText.trim() !== ''
+  );
 }
 
-/** Validate the (optional) site step; `null` when the step is empty (skipped) or valid. */
-export function siteStepError(state: SiteStepState): string | null {
-  if (!siteStepHasSite(state)) return null;
+/** Validate the optional site and return localized errors keyed by field. */
+export function siteStepErrors(state: SiteStepState): SiteStepErrors {
+  const nameFilled = state.name.trim() !== '';
+  const coordsFilled =
+    state.latitudeDegText.trim() !== '' && state.longitudeDegText.trim() !== '';
+  // A blank step (nothing filled in yet) is skipped, not invalid. But once
+  // the user has entered coordinates, the site needs a name too — matching
+  // the Settings -> Target Planner site editor, which requires it
+  // (`ObservingSites.tsx`) — otherwise Continue silently accepted an
+  // anonymous site that then got dropped entirely at Finish (#516).
+  if (!nameFilled && !coordsFilled) return {};
+  const errors: SiteStepErrors = {};
+  if (!nameFilled) {
+    errors.name = m.settings_observing_sites_error_name();
+  }
+  if (!coordsFilled) return errors;
   const lat = Number(state.latitudeDegText.trim());
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-    return m.settings_observing_sites_error_latitude();
+    errors.latitude = m.settings_observing_sites_error_latitude();
   }
   const lon = Number(state.longitudeDegText.trim());
   if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
-    return m.settings_observing_sites_error_longitude();
+    errors.longitude = m.settings_observing_sites_error_longitude();
   }
   const elevRaw = state.elevationMText.trim();
   if (elevRaw !== '' && !Number.isFinite(Number(elevRaw))) {
-    return m.settings_observing_sites_error_elevation();
+    errors.elevation = m.settings_observing_sites_error_elevation();
   }
-  return null;
+  return errors;
+}
+
+/** Validate the optional site using the first field error for the wizard gate. */
+export function siteStepError(state: SiteStepState): string | null {
+  return Object.values(siteStepErrors(state))[0] ?? null;
 }
 
 /**
@@ -68,77 +100,140 @@ export function siteStepError(state: SiteStepState): string | null {
  * wizard owns its own step-state shape rather than the settings-backed
  * site-store (the site isn't persisted until Finish).
  */
+/** Parsed field value for the map, or `null` when blank/not-a-number (no pin shown). */
+function parsedCoord(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function StepSite({ state, onChange }: StepSiteProps) {
   const timezones = ianaTimezones();
-  const error = siteStepError(state);
+  const errors = siteStepErrors(state);
 
   return (
-    <div className="alm-step-site">
-      <p className="alm-step-site__intro">{m.setup_site_intro()}</p>
+    <div className="pv-step-site">
+      <p className="pv-step-site__intro">{m.setup_site_intro()}</p>
 
-      <div className="alm-step-site__grid">
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-name">
+      <div className="pv-step-site__map-section">
+        <span className="pv-field-label">{m.setup_site_map_label()}</span>
+        <SiteLocationPicker
+          latitudeDeg={parsedCoord(state.latitudeDegText)}
+          longitudeDeg={parsedCoord(state.longitudeDegText)}
+          onPick={(lat, lon) =>
+            onChange({
+              ...state,
+              latitudeDegText: lat.toFixed(5),
+              longitudeDegText: lon.toFixed(5),
+            })
+          }
+        />
+      </div>
+
+      <div className="pv-step-site__grid">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-name">
             {m.settings_observing_sites_field_name()}
           </label>
           <input
             id="setup-site-name"
             type="text"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_name()}
+            aria-invalid={errors.name ? 'true' : undefined}
+            aria-describedby={errors.name ? 'setup-site-name-error' : undefined}
             value={state.name}
             onChange={(e) => onChange({ ...state, name: e.target.value })}
           />
+          {errors.name && (
+            <span id="setup-site-name-error" className="pv-field-error">
+              {errors.name}
+            </span>
+          )}
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-lat">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-lat">
             {m.settings_observing_sites_field_latitude()}
           </label>
           <input
             id="setup-site-lat"
             type="text"
             inputMode="decimal"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_latitude()}
+            aria-invalid={errors.latitude ? 'true' : undefined}
+            aria-describedby={
+              errors.latitude ? 'setup-site-lat-error' : undefined
+            }
             value={state.latitudeDegText}
-            onChange={(e) => onChange({ ...state, latitudeDegText: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...state, latitudeDegText: e.target.value })
+            }
           />
+          {errors.latitude && (
+            <span id="setup-site-lat-error" className="pv-field-error">
+              {errors.latitude}
+            </span>
+          )}
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-lon">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-lon">
             {m.settings_observing_sites_field_longitude()}
           </label>
           <input
             id="setup-site-lon"
             type="text"
             inputMode="decimal"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_longitude()}
+            aria-invalid={errors.longitude ? 'true' : undefined}
+            aria-describedby={
+              errors.longitude ? 'setup-site-lon-error' : undefined
+            }
             value={state.longitudeDegText}
-            onChange={(e) => onChange({ ...state, longitudeDegText: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...state, longitudeDegText: e.target.value })
+            }
           />
+          {errors.longitude && (
+            <span id="setup-site-lon-error" className="pv-field-error">
+              {errors.longitude}
+            </span>
+          )}
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-elevation">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-elevation">
             {m.settings_observing_sites_field_elevation()}
           </label>
           <input
             id="setup-site-elevation"
             type="text"
             inputMode="decimal"
-            className="alm-input"
+            className="pv-input"
             aria-label={m.settings_observing_sites_field_elevation()}
+            aria-invalid={errors.elevation ? 'true' : undefined}
+            aria-describedby={
+              errors.elevation ? 'setup-site-elevation-error' : undefined
+            }
             value={state.elevationMText}
-            onChange={(e) => onChange({ ...state, elevationMText: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...state, elevationMText: e.target.value })
+            }
           />
+          {errors.elevation && (
+            <span id="setup-site-elevation-error" className="pv-field-error">
+              {errors.elevation}
+            </span>
+          )}
         </div>
-        <div className="alm-stack-1">
-          <label className="alm-field-label" htmlFor="setup-site-tz">
+        <div className="pv-stack-1">
+          <label className="pv-field-label" htmlFor="setup-site-tz">
             {m.settings_observing_sites_field_timezone()}
           </label>
           <select
             id="setup-site-tz"
-            className="alm-select"
+            className="pv-select"
             aria-label={m.settings_observing_sites_field_timezone()}
             value={state.timezone}
             onChange={(e) => onChange({ ...state, timezone: e.target.value })}
@@ -152,9 +247,7 @@ export function StepSite({ state, onChange }: StepSiteProps) {
         </div>
       </div>
 
-      {error && <span className="alm-field-error">{error}</span>}
-
-      <p className="alm-step-site__note">{m.setup_site_skip_note()}</p>
+      <p className="pv-step-site__note">{m.setup_site_skip_note()}</p>
     </div>
   );
 }

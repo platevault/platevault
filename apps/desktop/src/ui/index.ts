@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export { Pill } from './Pill';
 export type { PillProps, PillVariant } from './Pill';
 export { Btn } from './Btn';
@@ -10,12 +13,16 @@ export { KV } from './KV';
 export type { KVProps } from './KV';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
-export { Table } from './Table';
+export { Skeleton } from './Skeleton';
+export type { SkeletonProps, SkeletonVariant } from './Skeleton';
+export { Table, tableIndent } from './Table';
 export type { TableProps, TableColumn, TableRow } from './Table';
 export { Banner } from './Banner';
 export type { BannerProps, BannerVariant } from './Banner';
 export { Toggle } from './Toggle';
 export type { ToggleProps } from './Toggle';
+export { NumberField } from './NumberField';
+export type { NumberFieldProps } from './NumberField';
 export { SegControl } from './SegControl';
 export type { SegControlProps } from './SegControl';
 export { RadioGroup } from './RadioGroup';
@@ -31,3 +38,13 @@ export type { WizardShellProps, WizardStep } from './WizardShell';
 export { ToastContainer } from './ToastContainer';
 export { InfoTip } from './InfoTip';
 export type { InfoTipProps } from './InfoTip';
+export { Tooltip } from './Tooltip';
+export type { TooltipProps } from './Tooltip';
+export { useAdaptiveDock } from './useAdaptiveDock';
+export type {
+  DockPlacement,
+  UseAdaptiveDockOptions,
+  UseAdaptiveDockResult,
+} from './useAdaptiveDock';
+export { ResizeHandle } from './ResizeHandle';
+export type { ResizeHandleProps } from './ResizeHandle';

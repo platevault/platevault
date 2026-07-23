@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * MatchCandidatesPanel tests — spec 007 UI wiring.
@@ -44,10 +47,28 @@ const matchResponse: CalibrationMatchSuggestResponse = {
       calibrationType: 'dark',
       confidence: 1.0,
       dimensionsMatched: [
-        { dimension: 'gain', observed: { value: 100 }, reference: { value: 100 } },
-        { dimension: 'offset', observed: { value: 50 }, reference: { value: 50 } },
-        { dimension: 'exposure', observed: { value: 300 }, reference: { value: 300 }, delta: 0 },
-        { dimension: 'temperature', observed: { value: -10 }, reference: { value: -10 }, delta: 0 },
+        {
+          dimension: 'gain',
+          observed: { value: 100 },
+          reference: { value: 100 },
+        },
+        {
+          dimension: 'offset',
+          observed: { value: 50 },
+          reference: { value: 50 },
+        },
+        {
+          dimension: 'exposure',
+          observed: { value: 300 },
+          reference: { value: 300 },
+          delta: 0,
+        },
+        {
+          dimension: 'temperature',
+          observed: { value: -10 },
+          reference: { value: -10 },
+          delta: 0,
+        },
       ],
       dimensionsMismatched: [],
       selectionReason: 'compatible_fallback',
@@ -63,8 +84,16 @@ const matchResponse: CalibrationMatchSuggestResponse = {
       calibrationType: 'dark',
       confidence: 0.72,
       dimensionsMatched: [
-        { dimension: 'gain', observed: { value: 100 }, reference: { value: 100 } },
-        { dimension: 'offset', observed: { value: 50 }, reference: { value: 50 } },
+        {
+          dimension: 'gain',
+          observed: { value: 100 },
+          reference: { value: 100 },
+        },
+        {
+          dimension: 'offset',
+          observed: { value: 50 },
+          reference: { value: 50 },
+        },
       ],
       dimensionsMismatched: [
         { dimension: 'temperature', reason: 'out_of_tolerance', delta: 5.2 },
@@ -94,7 +123,10 @@ const observerMissingResponse: CalibrationMatchSuggestResponse = {
   contractVersion: '2.0.0',
   requestId: 'req-003',
   suggestStatus: 'observer_location_missing',
-  error: { code: 'match.observer_location_missing', message: 'missing location' },
+  error: {
+    code: 'match.observer_location_missing',
+    message: 'missing location',
+  },
 };
 
 const mixedStateResponse: CalibrationMatchSuggestResponse = {
@@ -108,7 +140,10 @@ const mixedStateResponse: CalibrationMatchSuggestResponse = {
 
 const _noop = async () => ({ status: 'success' as const });
 
-type OnAssignFn = (masterId: string, override: boolean) => Promise<{
+type OnAssignFn = (
+  masterId: string,
+  override: boolean,
+) => Promise<{
   status: string;
   error?: { code: string; message: string; details?: { dimensions: string[] } };
 }>;
@@ -154,7 +189,9 @@ describe('MatchCandidatesPanel', () => {
   it('2. error state renders error banner', () => {
     renderPanel({ error: 'Network failure' });
     expect(screen.getByTestId('suggest-error')).toBeInTheDocument();
-    expect(screen.getByTestId('suggest-error')).toHaveTextContent('Network failure');
+    expect(screen.getByTestId('suggest-error')).toHaveTextContent(
+      'Network failure',
+    );
   });
 
   it('3. observer_location_missing guard error renders observer-location warning', () => {
@@ -162,13 +199,17 @@ describe('MatchCandidatesPanel', () => {
     // guard-error banner with location text.
     renderPanel({ response: observerMissingResponse });
     expect(screen.getByTestId('suggest-guard-error')).toBeInTheDocument();
-    expect(screen.getByTestId('suggest-guard-error')).toHaveTextContent('Observer location');
+    expect(screen.getByTestId('suggest-guard-error')).toHaveTextContent(
+      'Observer location',
+    );
   });
 
   it('4. session.mixed_state error renders the mixed-session banner', () => {
     renderPanel({ response: mixedStateResponse });
     expect(screen.getByTestId('suggest-guard-error')).toBeInTheDocument();
-    expect(screen.getByTestId('suggest-guard-error')).toHaveTextContent('mixed');
+    expect(screen.getByTestId('suggest-guard-error')).toHaveTextContent(
+      'mixed',
+    );
   });
 
   it('5. no_match status renders empty state', () => {
@@ -193,7 +234,9 @@ describe('MatchCandidatesPanel', () => {
     renderPanel({ response: matchResponse });
     // Second candidate has temperature out_of_tolerance
     expect(screen.getByTestId('mismatch-temperature')).toBeInTheDocument();
-    expect(screen.getByTestId('mismatch-temperature')).toHaveTextContent('out of tolerance');
+    expect(screen.getByTestId('mismatch-temperature')).toHaveTextContent(
+      'out of tolerance',
+    );
   });
 
   it('8. matched dimensions render with a "matched" indicator', () => {
@@ -207,12 +250,16 @@ describe('MatchCandidatesPanel', () => {
 
   it("9. suggest status pill shows 'match'", () => {
     renderPanel({ response: matchResponse });
-    expect(screen.getByTestId('suggest-status-pill')).toHaveTextContent('match');
+    expect(screen.getByTestId('suggest-status-pill')).toHaveTextContent(
+      'match',
+    );
   });
 
   it("10. suggest status pill shows 'ambiguous'", () => {
     renderPanel({ response: ambiguousResponse });
-    expect(screen.getByTestId('suggest-status-pill')).toHaveTextContent('ambiguous');
+    expect(screen.getByTestId('suggest-status-pill')).toHaveTextContent(
+      'ambiguous',
+    );
   });
 
   it('11. Assign button is present for each candidate', () => {
@@ -229,7 +276,9 @@ describe('MatchCandidatesPanel', () => {
   });
 
   it('13. Confirming assign calls onAssign with masterId and override=false', async () => {
-    const onAssign: OnAssignFn = vi.fn().mockResolvedValue({ status: 'success' }) as OnAssignFn;
+    const onAssign: OnAssignFn = vi
+      .fn()
+      .mockResolvedValue({ status: 'success' }) as OnAssignFn;
     renderPanel({ response: matchResponse, onAssign });
     fireEvent.click(screen.getByTestId(`assign-btn-${MASTER_ID_1}`));
     fireEvent.click(screen.getByTestId('assign-confirm-btn'));
@@ -257,10 +306,15 @@ describe('MatchCandidatesPanel', () => {
   });
 
   it('15. Force-assign calls onAssign with override=true', async () => {
-    const onAssign: OnAssignFn = vi.fn()
+    const onAssign: OnAssignFn = vi
+      .fn()
       .mockResolvedValueOnce({
         status: 'error',
-        error: { code: 'incompatible.dimensions', message: 'mismatch', details: { dimensions: ['gain'] } },
+        error: {
+          code: 'incompatible.dimensions',
+          message: 'mismatch',
+          details: { dimensions: ['gain'] },
+        },
       })
       .mockResolvedValueOnce({ status: 'success' }) as OnAssignFn;
     renderPanel({ response: matchResponse, onAssign });

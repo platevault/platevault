@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Popover as BasePopover } from "@base-ui-components/react/popover";
 import { ChevronDown, Check, Minus } from "lucide-react";
 import { useRef, type KeyboardEvent } from "react";

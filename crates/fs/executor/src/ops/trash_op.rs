@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! OS trash primitive (spec 025, spec 033 T022, FR-006, D4).
 //!
 //! Moves the file to the OS recycle bin / Trash / XDG trash via the `trash`
@@ -50,6 +53,28 @@ pub fn trash_file(
     path: &Utf8Path,
     fallback_archive_dest: Option<&Utf8Path>,
 ) -> Result<TrashResult, (PlanItemFailure, TrashResult)> {
+    // E2E boundary double. The OS Shell trash needs an interactive
+    // window-station/desktop; on the headless CI runner `trash::delete`
+    // (`IFileOperation::PerformOperations` on Windows) blocks forever. A real
+    // Recycle-Bin move is unperformable there, so under the e2e harness env we
+    // remove the file deterministically — the observable side effect the
+    // real-UI journeys assert (the file leaves the archive subtree) is
+    // identical, and the real OS-trash primitive stays covered by the Layer-1
+    // unit tests below and by live use. Only the e2e harness sets this var
+    // (`crates/e2e-tests/tests/common/mod.rs`); production/release never does.
+    if std::env::var_os("ALM_E2E_OS_TRASH_FAKE").is_some() {
+        return match std::fs::remove_file(path) {
+            Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
+            Err(e) => Err((
+                PlanItemFailure::with_code(
+                    FailureCode::TrashUnavailable,
+                    format!("e2e fake-trash removal failed for '{path}': {e}"),
+                ),
+                TrashResult::default(),
+            )),
+        };
+    }
+
     match trash::delete(path) {
         Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
         Err(trash_err) => {
@@ -111,13 +136,18 @@ fn classify_trash_error(err: &trash::Error, path: &Utf8Path) -> (FailureCode, St
     let msg = format!("OS trash failed for '{path}': {err}");
     // `trash::Error` doesn't expose a rich enum in all versions; use Display
     // to detect common cases.
-    let err_str = err.to_string().to_lowercase();
+    let failure_code = classify_trash_error_message(&err.to_string());
+    (failure_code, msg)
+}
+
+fn classify_trash_error_message(message: &str) -> FailureCode {
+    let err_str = message.to_lowercase();
     if err_str.contains("permission") || err_str.contains("access denied") {
-        (FailureCode::OsTrashPermissionDenied, msg)
+        FailureCode::OsTrashPermissionDenied
     } else if err_str.contains("full") || err_str.contains("no space") {
-        (FailureCode::OsTrashFull, msg)
+        FailureCode::OsTrashFull
     } else {
-        (FailureCode::TrashUnavailable, msg)
+        FailureCode::TrashUnavailable
     }
 }
 
@@ -130,6 +160,21 @@ mod tests {
 
     fn utf8(p: &std::path::Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
+
+    #[test]
+    fn trash_error_messages_map_to_producible_codes() {
+        let cases = [
+            ("permission denied", FailureCode::OsTrashPermissionDenied),
+            ("access denied", FailureCode::OsTrashPermissionDenied),
+            ("trash is full", FailureCode::OsTrashFull),
+            ("no space left", FailureCode::OsTrashFull),
+            ("trash service unavailable", FailureCode::TrashUnavailable),
+        ];
+
+        for (message, expected) in cases {
+            assert_eq!(classify_trash_error_message(message), expected, "failed for {message}");
+        }
     }
 
     /// T014: trash destination moves to OS bin; archive fallback recorded when

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Canonical alias module (T117 — CB4).
  *
@@ -21,7 +24,6 @@ export type {
 
   // ── Targets gen-3 (spec 036) ──────────────────────────────────────────────
   TargetDetailV3_Deserialize as TargetDetailV3,
-  TargetOpError_Serialize as TargetOpError,
 
   // ── SIMBAD resolution (spec 035) ──────────────────────────────────────────
   // Request params → _Deserialize (what the backend deserializes from us);

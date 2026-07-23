@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for spec 041 US4 — confirm a detected calibration master
 //! inbox item now routes through a reviewable plan (Constitution §II) instead
 //! of the old confirm-time "register directly" fast path (spec 040 US3).
@@ -29,7 +32,7 @@ use persistence_db::Database;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async fn test_db() -> Database {
+async fn test_db(dest_root: &Path) -> Database {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     // Override all per-type destination patterns with literal-only patterns so
@@ -44,15 +47,21 @@ async fn test_db() -> Database {
     .await
     .unwrap();
     // Register destination library roots so inbox → library routing succeeds.
-    // Using /tmp/dest-* as stable paths (tests do not actually write there).
+    // `dest_root` must be a real, writable directory (#765 fix: the executor
+    // now correctly joins the destination path against the picked
+    // *destination* root instead of silently falling back to the source
+    // root, so a fictional path here would make every real move fail).
+    std::fs::create_dir_all(dest_root).unwrap();
+    let dest_path = dest_root.to_str().unwrap();
     for (id, kind) in &[("dest-light", "light_frames"), ("dest-calib", "calibration")] {
         sqlx::query(
             "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
-             VALUES (?, ?, '/tmp/dest-shared', NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')
+             VALUES (?, ?, ?, NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')
              ON CONFLICT(id) DO NOTHING",
         )
         .bind(id)
         .bind(kind)
+        .bind(dest_path)
         .execute(db.pool())
         .await
         .unwrap();
@@ -185,9 +194,13 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterDark_300s.fits", "DARK");
 
-    let db = test_db().await;
+    let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
-    app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     let item_id = "master-item-001";
     let sig = "sig-master-001";
 
@@ -207,12 +220,14 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
 
     let resp = confirm(
         db.pool(),
+        &bus,
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id: None,
+            chosen_attribution: None,
         },
     )
     .await
@@ -257,9 +272,13 @@ async fn organized_master_catalogues_then_registers_at_apply() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterFlat_Ha.fits", "FLAT");
 
-    let db = test_db().await;
+    let db = test_db(&tmp.path().join("dest")).await;
     let bus = EventBus::with_pool(db.pool().clone());
-    app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     let item_id = "master-item-flat";
     let sig = "sig-master-flat";
 
@@ -279,12 +298,14 @@ async fn organized_master_catalogues_then_registers_at_apply() {
 
     let resp = confirm(
         db.pool(),
+        &bus,
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id: None,
+            chosen_attribution: None,
         },
     )
     .await
@@ -304,7 +325,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
         "kind must be flat"
     );
     assert_eq!(masters[0].fingerprint.filter.as_deref(), Some("Ha"), "filter must be Ha");
-    assert!((masters[0].fingerprint.exposure_s - 2.0).abs() < f64::EPSILON);
+    assert!((masters[0].fingerprint.exposure_s.unwrap() - 2.0).abs() < f64::EPSILON);
 }
 
 /// US4 regression guard: non-master items still go through the plan path.
@@ -313,7 +334,8 @@ async fn non_master_item_still_creates_plan() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "light_001.fits", "Light Frame");
 
-    let db = test_db().await;
+    let db = test_db(&tmp.path().join("dest")).await;
+    let bus = EventBus::with_pool(db.pool().clone());
     let item_id = "non-master-item";
     let sig = "sig-non-master";
 
@@ -364,12 +386,14 @@ async fn non_master_item_still_creates_plan() {
 
     let resp = confirm(
         db.pool(),
+        &bus,
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id: None,
+            chosen_attribution: None,
         },
     )
     .await

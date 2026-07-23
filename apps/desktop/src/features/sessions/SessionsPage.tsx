@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SessionsPage — spec 006 wired; spec 043 §4 redesign (task #36) + shared
  * layout-system adoption (tasks #62/#63/#73).
@@ -10,8 +13,15 @@
  *
  * Toolbar (spec 043 §4): search + Group-by control (Target / Filter / Night /
  * Camera / Month). Consistent with every list page, the table is FLAT by
- * default (a single sorted list) and grouping is opt-in. The legacy
- * frame-type filter was removed — sessions are light frames.
+ * default (a single sorted list) and grouping is opt-in.
+ *
+ * #652: the ledger also carries calibration (dark/flat/bias) frame groups
+ * alongside light (acquisition) sessions, but the sidebar/status-bar "N
+ * sessions" chrome counts acquisition-only (`d.library.sessions`,
+ * `count_acquisition_sessions`). The Type field defaults to Light so the
+ * table's row count matches that chrome by default; switching it surfaces
+ * calibration sessions too, with the mismatch then self-explained by the
+ * selected Type.
  *
  * Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
  * inventory. The review-state filter (`reviewFilter`) and the contextual
@@ -37,14 +47,12 @@ import {
 } from './SessionsTable';
 import type { SessionSort, SessionSortCol } from './SessionsTable';
 import { SessionDetail } from './SessionDetail';
-import {
-  useInventorySources,
-  type InventoryFilters,
-} from './store';
+import { useInventorySources, type InventoryFilters } from './store';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
-import { revealInventoryPath } from './revealInventory';
-import type { InventorySource } from '@/bindings/index';
+import { revealInventoryPath, resolveRevealPath } from './revealInventory';
+import { isSourceActionable } from './connectivity';
+import type { InventoryFrameType, InventorySource } from '@/bindings/index';
 
 /**
  * Client-side text search + field filters across the visible session fields
@@ -59,7 +67,8 @@ export function filterSources(
 ): InventorySource[] {
   const q = query.trim().toLowerCase();
   if (!q && !filterName && !camera) return sources;
-  const matches = (v: string | null | undefined) => (v ?? '').toLowerCase().includes(q);
+  const matches = (v: string | null | undefined) =>
+    (v ?? '').toLowerCase().includes(q);
   return sources
     .map((src) => ({
       ...src,
@@ -89,7 +98,9 @@ export function fieldOptions(
       if (v) seen.add(v);
     }
   }
-  return [...seen].sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: v }));
+  return [...seen]
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
 }
 
 export function SessionsPage() {
@@ -103,6 +114,11 @@ export function SessionsPage() {
   // Inbox-parity field filters ('' = all): optical filter + camera.
   const [filterName, setFilterName] = useState('');
   const [cameraFilter, setCameraFilter] = useState('');
+  // Type field ('' = all); defaults to 'light' (acquisition) so the table's
+  // row count matches the acquisition-only sidebar/status-bar count (#652).
+  const [kindFilter, setKindFilter] = useState<InventoryFrameType | ''>(
+    'light',
+  );
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'sessions.grouping.dims.v1',
@@ -111,18 +127,21 @@ export function SessionsPage() {
   });
 
   // Group-by options share their labels with the table's grouping-hint footer.
-  const SESSION_DIMENSIONS: FilterOption[] = Object.entries(SESSION_DIM_LABELS).map(
-    ([value, label]) => ({ value, label: label() }),
-  );
+  const SESSION_DIMENSIONS: FilterOption[] = Object.entries(
+    SESSION_DIM_LABELS,
+  ).map(([value, label]) => ({ value, label: label() }));
 
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
-  if (sourceFilter && sourceFilter !== 'all') filters.sourceFilter = sourceFilter;
+  if (sourceFilter && sourceFilter !== 'all')
+    filters.sourceFilter = sourceFilter;
+  if (kindFilter) filters.frameFilter = kindFilter;
 
   const { data: response, loading, error } = useInventorySources(filters);
 
   const sources = useMemo(
-    () => filterSources(response?.sources ?? [], search, filterName, cameraFilter),
+    () =>
+      filterSources(response?.sources ?? [], search, filterName, cameraFilter),
     [response?.sources, search, filterName, cameraFilter],
   );
 
@@ -143,43 +162,78 @@ export function SessionsPage() {
 
   // Flatten all sessions across sources to find the selected one.
   const allSessions = response?.sources.flatMap((src) => src.sessions) ?? [];
-  const selectedSession = selected != null ? allSessions.find((s) => s.id === selected) : undefined;
+  const selectedSession =
+    selected != null ? allSessions.find((s) => s.id === selected) : undefined;
 
-  // Resolve the selected session's owning source path for the Reveal action
-  // (FR-007) — sessions carry only `sourceId`; the path lives on the source.
-  const selectedSourcePath =
-    selectedSession != null
-      ? response?.sources.find((src) => src.id === selectedSession.sourceId)?.path
-      : undefined;
+  // Resolve the selected session's owning source for the Reveal action
+  // (FR-007) and connectivity chip (#889) — sessions carry only `sourceId`;
+  // the root path + connectivity state live on the source. The reveal target
+  // then joins the root with the session's own frame folder (`relativePath`,
+  // #567) so it opens that session's folder rather than the shared library
+  // root; it falls back to the root when relativePath is null.
+  const selectedSource = useMemo(
+    () =>
+      selectedSession != null
+        ? response?.sources.find((src) => src.id === selectedSession.sourceId)
+        : undefined,
+    [selectedSession, response?.sources],
+  );
+  const revealTarget = useMemo(
+    () =>
+      selectedSession != null && selectedSource != null
+        ? resolveRevealPath(selectedSource.path, selectedSession.relativePath)
+        : undefined,
+    [selectedSession, selectedSource],
+  );
 
   // Clear stale selection when the session disappears after a filter change.
   const clearSelection = useCallback(
     () =>
-      navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
-  useStaleSelectionCleanup(selected, selectedSession !== undefined, clearSelection);
+  // #735: gated on `loading` so a cold reload's empty cache isn't mistaken for
+  // a stale id — see ProjectsPage for the full rationale.
+  useStaleSelectionCleanup(
+    selected,
+    loading || selectedSession !== undefined,
+    clearSelection,
+  );
 
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   const handleSort = useCallback((col: SessionSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 
-  // Reveal the session's source location in the OS file browser (FR-007).
+  // Reveal the session's frame folder in the OS file browser (FR-007, #567).
   const handleReveal = useCallback(async () => {
-    if (!selected || !selectedSourcePath) return;
+    if (!selected || !revealTarget) return;
     try {
-      await revealInventoryPath({ path: selectedSourcePath, sessionId: selected });
+      await revealInventoryPath({
+        path: revealTarget,
+        sessionId: selected,
+      });
     } catch {
-      addToast({ message: m.sessions_toast_reveal_error(), variant: 'error' });
+      addToast({ message: m.common_reveal_error(), variant: 'error' });
     }
-  }, [selected, selectedSourcePath]);
+  }, [selected, revealTarget]);
 
-  const revealVisible = selectedSourcePath != null;
+  // #889: file-touching actions are gated on the backing source being
+  // actively connected — a session on a missing/disabled/reconnect-required
+  // root no longer offers Reveal (the connectivity chip in the header
+  // explains why).
+  const revealVisible =
+    revealTarget != null &&
+    (selectedSource == null || isSourceActionable(selectedSource.state));
 
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
@@ -198,6 +252,19 @@ export function SessionsPage() {
             ariaLabel: m.sessions_search_aria(),
           }}
           fields={[
+            {
+              key: 'kind',
+              label: m.sessions_kind_filter_label(),
+              value: kindFilter,
+              options: [
+                { value: 'light', label: m.sessions_kind_light_label() },
+                { value: 'dark', label: m.common_dark() },
+                { value: 'flat', label: m.inbox_kind_flat() },
+                { value: 'bias', label: m.common_bias() },
+              ],
+              allLabel: m.common_all(),
+              onChange: (v) => setKindFilter(v as InventoryFrameType | ''),
+            },
             {
               key: 'filter',
               label: m.common_filter(),
@@ -228,13 +295,17 @@ export function SessionsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockId="sessions"
       detail={
         selectedSession != null ? (
           <SessionDetail
             session={selectedSession}
             onReveal={() => void handleReveal()}
             revealVisible={revealVisible}
-            onOpenProject={() => navigate({ to: '/projects' })}
+            sourceState={selectedSource?.state}
+            onOpenProject={(id) =>
+              navigate({ to: '/projects', search: { selected: id } })
+            }
           />
         ) : undefined
       }
@@ -242,7 +313,7 @@ export function SessionsPage() {
       detailLabel={m.cmp_listpage_close_session_details_aria()}
     >
       {error != null ? (
-        <div className="alm-listtable__empty">{m.sessions_load_error()}</div>
+        <div className="pv-listtable__empty">{m.sessions_load_error()}</div>
       ) : (
         <SessionsTable
           sources={sources}

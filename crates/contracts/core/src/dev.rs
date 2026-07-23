@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Developer-diagnostics contract DTOs (spec 021).
 //!
 //! These types are the Rust mirrors of the JSON Schemas in

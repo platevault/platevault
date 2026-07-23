@@ -1,0 +1,542 @@
+# Local branches/worktrees compact index
+Generated: 2026-07-22T23:08:54+04:00
+Repo: /home/sjors/dev/astro-plan
+Branches total: 515 | Attached: 12 | Orphaned: 503
+Detached worktree snapshots: 3
+Worktrees total: 15 | Attached: 12 | Detached: 3
+
+## 1) Branches
+idx | state | branch | upstream | status | file_count | sample_changed_paths
+1 | orphaned | 037-ipc-wrapper-removal | origin/main | [ahead 429, behind 77] | 2326 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+2 | orphaned | 037-ui-journeys-inbox | origin/037-ui-journeys-inbox | [behind 7] | 9 | .github/workflows/ci.yml, apps/desktop/src-tauri/src/commands/inbox.rs, apps/desktop/src/features/inbox/InboxPage.tsx
+3 | orphaned | 037-ui-journeys-targets | origin/037-ui-journeys-targets | (none) | 0 | (none)
+4 | orphaned | 044-targets-planner-track-b | origin/044-targets-planner-track-b | (none) | 0 | (none)
+5 | orphaned | 044-us3-site-management | origin/044-us3-site-management | (none) | 0 | (none)
+6 | orphaned | 048-complete-per-frame-inventory | origin/048-complete-per-frame-inventory | (none) | 0 | (none)
+7 | orphaned | 048-us5-calibration-missing-flag | origin/048-us5-calibration-missing-flag | (none) | 0 | (none)
+8 | orphaned | 049-us2-profile-layout | origin/049-us2-profile-layout | (none) | 0 | (none)
+9 | orphaned | 051-foundation | origin/051-foundation | (none) | 0 | (none)
+10 | orphaned | 051-impl-cache | origin/051-tauri-shell-integration | [ahead 1, behind 199] | 295 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+11 | orphaned | 051-shell-foundation | origin/051-shell-foundation | (none) | 0 | (none)
+12 | orphaned | 051-tauri-shell-integration | origin/main | [ahead 443, behind 77] | 2203 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+13 | orphaned | 051-us1-single-instance | origin/051-us1-single-instance | (none) | 0 | (none)
+14 | orphaned | 051-us10-updater-wiring | origin/051-us10-updater-wiring | (none) | 0 | (none)
+15 | orphaned | 051-us2-favourites-db | origin/051-us2-favourites-db | (none) | 0 | (none)
+16 | orphaned | 051-us3-cleanup-overrides | origin/051-us3-cleanup-overrides | (none) | 0 | (none)
+17 | orphaned | 051-us4-us5-us7-shell-polish | origin/051-us4-us5-us7-shell-polish | (none) | 0 | (none)
+18 | orphaned | 051-us6-theme-sync | origin/051-us6-theme-sync | (none) | 0 | (none)
+19 | orphaned | 052-p1-facade-cache | origin/052-p1-facade-cache | (none) | 0 | (none)
+20 | orphaned | 052-p2-dual-lookup | origin/052-p2-dual-lookup | (none) | 0 | (none)
+21 | orphaned | 052-p2ux-search-more-hybrid | origin/052-p2ux-search-more-hybrid | (none) | 0 | (none)
+22 | orphaned | 052-p3-cone-search | origin/052-p3-cone-search | (none) | 0 | (none)
+23 | orphaned | 052-simbad-caching-dual-lookup-cone-search | origin/052-simbad-caching-dual-lookup-cone-search | (none) | 0 | (none)
+24 | orphaned | 057-branding-splash | origin/057-branding-splash | (none) | 0 | (none)
+25 | orphaned | 060-selectable-app-language | origin/main | [ahead 1005, behind 77] | 510 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+26 | orphaned | 061-p0-settings-key | origin/061-p0-settings-key | (none) | 0 | (none)
+27 | orphaned | 061-p1-locale-runtime | origin/061-p1-locale-runtime | [behind 6] | 4 | .typos.toml, apps/desktop/messages/pt-BR.json, apps/desktop/src/data/locale.persistence.test.ts
+28 | orphaned | 061-p5-drift-guard | origin/061-p5-drift-guard | (none) | 0 | (none)
+29 | orphaned | 061-selectable-app-language | origin/061-selectable-app-language | (none) | 0 | (none)
+30 | orphaned | 061-us1-wizard-step | origin/061-us1-wizard-step | [behind 7] | 37 | .config/nextest.toml, .release-please-manifest.json, CHANGELOG.md
+31 | orphaned | 061-us2-settings-ui | origin/061-us2-settings-ui | (none) | 0 | (none)
+32 | orphaned | 061-us3-ptbr-catalog | origin/061-us3-ptbr-catalog | (none) | 0 | (none)
+33 | orphaned | agent-a058133e51ce8f66b |  | (none) | n/a | (no upstream)
+34 | orphaned | agent-a1eae5c09cf2755ae |  | (none) | n/a | (no upstream)
+35 | orphaned | agent-a2412c68373faf361 |  | (none) | n/a | (no upstream)
+36 | orphaned | agent-a36847fd6d790444d |  | (none) | n/a | (no upstream)
+37 | orphaned | agent-a433f0d65cbab97e5 |  | (none) | n/a | (no upstream)
+38 | orphaned | agent-a4ee7014a5e416d7a |  | (none) | n/a | (no upstream)
+39 | orphaned | agent-a55bfe86e8eebd15a |  | (none) | n/a | (no upstream)
+40 | orphaned | agent-a5c69db22e63b5547 |  | (none) | n/a | (no upstream)
+41 | orphaned | agent-a5c9d8d32f55aed06 |  | (none) | n/a | (no upstream)
+42 | orphaned | agent-a6e778f6a3cee193d |  | (none) | n/a | (no upstream)
+43 | orphaned | agent-a73b3fe3d3ed141fd |  | (none) | n/a | (no upstream)
+44 | orphaned | agent-a7968f58661cc1236 |  | (none) | n/a | (no upstream)
+45 | orphaned | agent-a857a2a87cd3982c0 |  | (none) | n/a | (no upstream)
+46 | orphaned | agent-a8697bc6a1881b4a9 |  | (none) | n/a | (no upstream)
+47 | orphaned | agent-a8b0b116ce2ff7eaa |  | (none) | n/a | (no upstream)
+48 | orphaned | agent-a914ffa2bfb72dbe0 |  | (none) | n/a | (no upstream)
+49 | orphaned | agent-a9ab93097758a82ce |  | (none) | n/a | (no upstream)
+50 | orphaned | agent-a9b326de9b08ab513 |  | (none) | n/a | (no upstream)
+51 | orphaned | agent-a9e3953659036b10d |  | (none) | n/a | (no upstream)
+52 | orphaned | agent-aa4a963627409beb8 |  | (none) | n/a | (no upstream)
+53 | orphaned | agent-aa7481a9c6850317e |  | (none) | n/a | (no upstream)
+54 | orphaned | agent-aaaecd1a4c3e86a93 |  | (none) | n/a | (no upstream)
+55 | orphaned | agent-ab1cdae4b84d3acfd |  | (none) | n/a | (no upstream)
+56 | orphaned | agent-ad40a268806f443a5 |  | (none) | n/a | (no upstream)
+57 | orphaned | agent-adea39a2e071bb824 |  | (none) | n/a | (no upstream)
+58 | orphaned | agent-ae8a645386a7b3aed |  | (none) | n/a | (no upstream)
+59 | orphaned | agent-af04aa9853a956cc5 |  | (none) | n/a | (no upstream)
+60 | orphaned | akon/project-lifecycle-auto-transitions | origin/akon/project-lifecycle-auto-transitions | (none) | 0 | (none)
+61 | orphaned | audit/apm-drift-validator-20260721 |  | (none) | n/a | (no upstream)
+62 | orphaned | audit/apm-drift-validator-20260721b |  | (none) | n/a | (no upstream)
+63 | orphaned | audit/apm-recovery-20260721 | origin/main | [behind 11] | 78 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+64 | orphaned | backup-before-rebase-86636df7 |  | (none) | n/a | (no upstream)
+65 | orphaned | backup-css-consolidation |  | (none) | n/a | (no upstream)
+66 | orphaned | chore/712-retire-session-snapshot | origin/chore/712-retire-session-snapshot | [behind 34] | 158 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+67 | orphaned | chore/apm-beads-0-4-1 | origin/chore/apm-beads-0-4-1 | [behind 26] | 100 | .design-sync/conventions.md, .github/workflows/e2e.yml, Cargo.lock
+68 | orphaned | chore/apm-install-beads | origin/chore/apm-install-beads | [ahead 26, behind 1] | 111 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+69 | orphaned | chore/apm-journey-campaign-issue-driven | origin/chore/apm-journey-campaign-issue-driven | (none) | 0 | (none)
+70 | orphaned | chore/apm-pull-speckit-hook-fix | origin/chore/apm-pull-speckit-hook-fix | (none) | 0 | (none)
+71 | orphaned | chore/bd-close-guard | origin/chore/bd-close-guard | [behind 15] | 68 | .design-sync/conventions.md, Cargo.lock, apps/desktop/messages/en.json
+72 | orphaned | chore/beads-init | origin/chore/beads-init | [behind 10] | 57 | .design-sync/generate-palette-cards.mjs, .github/workflows/ci.yml, .github/workflows/e2e.yml
+73 | orphaned | chore/biome-formatter | origin/chore/biome-formatter | (none) | 0 | (none)
+74 | attached | chore/biome-strict | origin/chore/biome-strict | (none) | 0 | (none)
+75 | orphaned | chore/ci-granular | origin/chore/ci-granular | (none) | 0 | (none)
+76 | orphaned | chore/dead-caller-guard | origin/chore/dead-caller-guard | (none) | 0 | (none)
+77 | orphaned | chore/dead-code-triage | origin/chore/dead-code-triage | (none) | 0 | (none)
+78 | orphaned | chore/design-sync-platevault | origin/chore/design-sync-platevault | (none) | 0 | (none)
+79 | orphaned | chore/emptystate-dead-prop | origin/main | [behind 62] | 333 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+80 | orphaned | chore/hygiene-tooling | origin/chore/hygiene-tooling | (none) | 0 | (none)
+81 | orphaned | chore/journey-verification-formulas-20260721 | origin/chore/journey-verification-formulas-20260721 | (none) | 0 | (none)
+82 | orphaned | chore/lint-tests-e2e | origin/chore/lint-tests-e2e | (none) | 0 | (none)
+83 | orphaned | chore/org-migration-platevault | origin/chore/org-migration-platevault | [gone] | n/a | [upstream missing]
+84 | orphaned | chore/remove-project-lsp-serena | origin/chore/remove-project-lsp-serena | (none) | 0 | (none)
+85 | orphaned | chore/resume-0720 | origin/chore/resume-0720 | [behind 18] | 74 | .config/nextest.toml, .design-sync/generate-palette-cards.mjs, .github/workflows/ci.yml
+86 | orphaned | chore/safe-dep-bumps | origin/chore/safe-dep-bumps | (none) | 0 | (none)
+87 | orphaned | chore/simbad-version-range | origin/chore/simbad-version-range | [behind 3] | 8 | apps/desktop/src/features/inbox/InboxPage.tsx, apps/desktop/src/features/inbox/__tests__/InboxPage.statsFollowFilter.test.tsx, crates/app/inbox/src/classify.rs
+88 | orphaned | ci-release-please | origin/ci-release-please | (none) | 0 | (none)
+89 | orphaned | ci/1203-concurrency-doc | origin/ci/1203-concurrency-doc | (none) | 0 | (none)
+90 | orphaned | ci/detect-changes-names | origin/ci/detect-changes-names | [ahead 1] | 127 | .agents/skills/catchup/SKILL.md, .agents/skills/catchup/references/selection.md, .agents/skills/handover/SKILL.md
+91 | orphaned | ci/e2e-ubuntu-4shards | origin/ci/e2e-ubuntu-4shards | (none) | 0 | (none)
+92 | orphaned | ci/e2e-windows-shard-rebalance | origin/ci/e2e-windows-shard-rebalance | (none) | 0 | (none)
+93 | orphaned | ci/rustfmt-included-sources | origin/ci/rustfmt-included-sources | [behind 4] | 9 | apps/desktop/src/features/inbox/InboxPage.tsx, apps/desktop/src/features/inbox/__tests__/InboxPage.statsFollowFilter.test.tsx, apps/desktop/src/features/inbox/inboxDetailHelpers.ts
+94 | orphaned | ci/windows-oss-signing | origin/ci/windows-oss-signing | (none) | 0 | (none)
+95 | orphaned | coder-g-archive | origin/coder-g-archive | [behind 9] | 45 | .agents/skills/orchestrate/SKILL.md, .agents/skills/write-agentic/references/template-steering.md, .agents/skills/write-agentic/scripts/lint.py
+96 | orphaned | coder-g-backend-fixes | origin/coder-g-backend-fixes | (none) | 0 | (none)
+97 | orphaned | coder-g-calibration | origin/coder-g-calibration | (none) | 0 | (none)
+98 | orphaned | coder-g-calibration-archive | origin/coder-g-calibration-archive | (none) | 0 | (none)
+99 | orphaned | coder-g-chrome-nav | origin/coder-g-chrome-nav | (none) | 0 | (none)
+100 | orphaned | coder-g-cleanup | origin/coder-g-cleanup | (none) | 0 | (none)
+101 | orphaned | coder-g-cleanup-apply | origin/coder-g-cleanup-apply | (none) | 0 | (none)
+102 | orphaned | coder-g-db-contention | origin/coder-g-db-contention | (none) | 0 | (none)
+103 | orphaned | coder-g-design-system-a | origin/coder-g-design-system-a | (none) | 0 | (none)
+104 | orphaned | coder-g-design-system-b | origin/coder-g-design-system-b | (none) | 0 | (none)
+105 | orphaned | coder-g-homebrew-tap | origin/coder-g-homebrew-tap | (none) | 0 | (none)
+106 | orphaned | coder-g-hub-detail-dock | origin/coder-g-hub-detail-dock | (none) | 0 | (none)
+107 | orphaned | coder-g-i18n-guard | origin/coder-g-i18n-guard | (none) | 0 | (none)
+108 | orphaned | coder-g-inbox-711 | origin/coder-g-inbox-711 | (none) | 0 | (none)
+109 | orphaned | coder-g-inbox-711b | origin/coder-g-inbox-711b | (none) | 0 | (none)
+110 | orphaned | coder-g-inbox-ui | origin/coder-g-inbox-ui | (none) | 0 | (none)
+111 | orphaned | coder-g-maintenance-sweep | origin/coder-g-maintenance-sweep | (none) | 0 | (none)
+112 | orphaned | coder-g-metadata-tools | origin/coder-g-metadata-tools | (none) | 0 | (none)
+113 | orphaned | coder-g-projects-detail-v2 | origin/coder-g-projects-detail-v2 | (none) | 0 | (none)
+114 | orphaned | coder-g-projects-wizard | origin/coder-g-projects-wizard | (none) | 0 | (none)
+115 | orphaned | coder-g-projects-wizard-followup | origin/coder-g-projects-wizard-followup | (none) | 0 | (none)
+116 | orphaned | coder-g-protection-settings | origin/coder-g-protection-settings | (none) | 0 | (none)
+117 | orphaned | coder-g-refactor-p1 | origin/coder-g-refactor-p1 | (none) | 0 | (none)
+118 | orphaned | coder-g-sessions | origin/coder-g-sessions | (none) | 0 | (none)
+119 | orphaned | coder-g-sessions-backend | origin/coder-g-sessions-backend | (none) | 0 | (none)
+120 | orphaned | coder-g-settings-equipment | origin/coder-g-settings-equipment | (none) | 0 | (none)
+121 | orphaned | coder-g-settings-general-a | origin/coder-g-settings-general-a | (none) | 0 | (none)
+122 | orphaned | coder-g-settings-general-b | origin/coder-g-settings-general-b | (none) | 0 | (none)
+123 | orphaned | coder-g-setup-sources | origin/coder-g-setup-sources | (none) | 0 | (none)
+124 | orphaned | coder-g-tanstack | origin/coder-g-tanstack | (none) | 0 | (none)
+125 | orphaned | coder-g-targets-backend | origin/coder-g-targets-backend | (none) | 0 | (none)
+126 | orphaned | coder-g-targets-catalog | origin/coder-g-targets-catalog | (none) | 0 | (none)
+127 | orphaned | coder-g-targets-catalog-v2 | origin/coder-g-targets-catalog-v2 | (none) | 0 | (none)
+128 | orphaned | coder-g-targets-planner | origin/coder-g-targets-planner | (none) | 0 | (none)
+129 | orphaned | coder-g-targets-v3 | origin/coder-g-targets-v3 | (none) | 0 | (none)
+130 | orphaned | coder-g-unassign-ui | origin/coder-g-unassign-ui | (none) | 0 | (none)
+131 | orphaned | coder/0wmx-lost-merge-gate | origin/coder/0wmx-lost-merge-gate | (none) | 0 | (none)
+132 | orphaned | coder/b1-pill-contract | origin/coder/b1-pill-contract | (none) | 0 | (none)
+133 | attached | coder/b2-db-tests | origin/coder/b2-db-tests | (none) | 0 | (none)
+134 | orphaned | coder/b2-wizard-eight-step | origin/coder/b2-wizard-eight-step | (none) | 0 | (none)
+135 | orphaned | coder/b3-theme-coverage | origin/coder/b3-theme-coverage | (none) | 0 | (none)
+136 | orphaned | coder/b4-theme-e2e | origin/coder/b4-theme-e2e | (none) | 0 | (none)
+137 | orphaned | coder/datq-residue | origin/coder/datq-residue | (none) | 0 | (none)
+138 | orphaned | coder/master-detect-residue | origin/coder/master-detect-residue | (none) | 0 | (none)
+139 | orphaned | coder/plan-failure-code-residue | origin/coder/plan-failure-code-residue | (none) | 0 | (none)
+140 | orphaned | coder/plan-failure-code-tests | origin/coder/plan-failure-code-tests | (none) | 0 | (none)
+141 | attached | coder/yv3u-i18n-drift-gate | origin/coder/yv3u-i18n-drift-gate | (none) | 0 | (none)
+142 | orphaned | deps/skymath-ecosystem-releases | origin/deps/skymath-ecosystem-releases | (none) | 0 | (none)
+143 | orphaned | design-system-fixes | origin/design-system-fixes | (none) | 0 | (none)
+144 | orphaned | design-system-refresh | origin/design-system-refresh | (none) | 0 | (none)
+145 | orphaned | docs/037-plan-review-coverage | origin/docs/037-plan-review-coverage | (none) | 0 | (none)
+146 | orphaned | docs/058-q10-classify-trigger | origin/docs/058-q10-classify-trigger | (none) | 0 | (none)
+147 | orphaned | docs/1008-windows-validation-scenario | origin/docs/1008-windows-validation-scenario | (none) | 0 | (none)
+148 | orphaned | docs/1155-tooltip-split | origin/docs/1155-tooltip-split | [behind 32] | 153 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+149 | orphaned | docs/748-retire-diff-view | origin/docs/748-retire-diff-view | [behind 9] | 56 | .github/workflows/ci.yml, .github/workflows/e2e.yml, apps/desktop/messages/en.json
+150 | orphaned | docs/design-fix-campaign-log | origin/docs/design-fix-campaign-log | (none) | 0 | (none)
+151 | orphaned | docs/grilling-decisions-2026-07-13 | origin/docs/grilling-decisions-2026-07-13 | (none) | 0 | (none)
+152 | orphaned | docs/jc0714-wave2-journey-deltas-2 | origin/docs/jc0714-wave2-journey-deltas-2 | (none) | 0 | (none)
+153 | orphaned | docs/planner-obs-iterate-apply | origin/docs/planner-obs-iterate-apply | (none) | 0 | (none)
+154 | orphaned | docs/planner-obs-iterate-define | origin/docs/planner-obs-iterate-define | (none) | 0 | (none)
+155 | orphaned | docs/regen-journey-index | origin/docs/regen-journey-index | (none) | 0 | (none)
+156 | orphaned | ds/01-rename-pv | origin/main | [ahead 948, behind 77] | 760 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+157 | orphaned | ds/02-a11y | origin/ds/02-a11y | (none) | 0 | (none)
+158 | orphaned | ds/03-themes | origin/ds/03-themes | (none) | 0 | (none)
+159 | orphaned | ds/04-foundation | origin/ds/04-foundation | [gone] | n/a | [upstream missing]
+160 | attached | ds/05a-sync-hygiene | origin/ds/05a-sync-hygiene | (none) | 0 | (none)
+161 | orphaned | ds/06-destructive | origin/ds/06-destructive | [gone] | n/a | [upstream missing]
+162 | orphaned | ds/08-dark-default | origin/ds/08-dark-default | (none) | 0 | (none)
+163 | orphaned | e2e-b1-inbox | origin/main | [ahead 622, behind 77] | 2130 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+164 | orphaned | e2e-b2-cleanup-archive | origin/main | [ahead 622, behind 77] | 2130 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+165 | orphaned | e2e-b3-lifecycle | origin/main | [ahead 628, behind 77] | 2129 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+166 | orphaned | e2e-b4-calibration | origin/main | [ahead 628, behind 77] | 2129 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+167 | orphaned | e2e-b5-targets | origin/main | [ahead 628, behind 77] | 2129 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+168 | orphaned | e2e-b6-settings | origin/main | [ahead 628, behind 77] | 2129 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+169 | orphaned | e2e-b7-housekeep | origin/main | [ahead 628, behind 77] | 2126 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+170 | orphaned | e2e-mocks-enhance | origin/main | [ahead 626, behind 77] | 2129 | .agents/skills/architecture-decision-records/SKILL.md, .agents/skills/audit-steering/SKILL.md, .agents/skills/audit-steering/references/measurement.md
+171 | orphaned | feat-source-view-materialization-toast | origin/feat-source-view-materialization-toast | (none) | 0 | (none)
+172 | orphaned | feat/056-autotick-l1-tests | origin/feat/056-backend-foundation | [ahead 1] | 1 | crates/app/core/tests/onboarding_seed_integration.rs
+173 | orphaned | feat/056-backend-foundation | origin/feat/056-backend-foundation | (none) | 0 | (none)
+174 | orphaned | feat/056-commands-platform | origin/feat/056-backend-foundation | [ahead 2] | 8 | apps/desktop/messages/en.json, apps/desktop/src-tauri/src/commands/mod.rs, apps/desktop/src-tauri/src/commands/onboarding.rs
+175 | orphaned | feat/056-find-anchors | origin/feat/056-find-anchors | (none) | 0 | (none)
+176 | orphaned | feat/056-legacy-deletion | origin/feat/056-commands-platform | [ahead 1] | 57 | apps/desktop/messages/en.json, apps/desktop/src-tauri/src/commands/guided.rs, apps/desktop/src-tauri/src/commands/mod.rs
+177 | orphaned | feat/056-onboarding-redesign | origin/feat/056-onboarding-redesign | [behind 70] | 205 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+178 | orphaned | feat/056-stories-integrated | origin/feat/056-legacy-deletion | [ahead 4] | 23 | apps/desktop/src/app/Shell.tsx, apps/desktop/src/app/Sidebar.tsx, apps/desktop/src/features/onboarding/ChecklistPopover.tsx
+179 | orphaned | feat/056-story-behaviors |  | (none) | n/a | (no upstream)
+180 | orphaned | feat/056-story-checklist | origin/feat/056-legacy-deletion | [ahead 1] | 5 | apps/desktop/src/app/Sidebar.tsx, apps/desktop/src/features/onboarding/ChecklistPopover.tsx, apps/desktop/src/features/onboarding/ChecklistSection.tsx
+181 | orphaned | feat/056-story-orientation | origin/feat/056-legacy-deletion | [ahead 2] | 18 | apps/desktop/src/app/Shell.tsx, apps/desktop/src/features/onboarding/OrientationWalk.tsx, apps/desktop/src/features/onboarding/orientationSteps.ts
+182 | orphaned | feat/056-t022-subscriber-it | origin/feat/056-commands-platform | [ahead 1] | 2 | apps/desktop/src-tauri/src/commands/onboarding.rs, apps/desktop/src-tauri/tests/onboarding_subscriber_integration.rs
+183 | orphaned | feat/062-immutable-session-repository | origin/main | (none) | 0 | (none)
+184 | orphaned | feat/062-immutable-session-repository-luna | origin/main | (none) | 0 | (none)
+185 | orphaned | feat/1143-brand-assets-gaps | origin/feat/1143-brand-assets-gaps | (none) | 0 | (none)
+186 | orphaned | feat/491-observing-site-map-picker | origin/feat/491-observing-site-map-picker | (none) | 0 | (none)
+187 | orphaned | feat/712-confirm-provenance | origin/feat/712-confirm-provenance | (none) | 0 | (none)
+188 | orphaned | feat/878-ingestion-settings-consumer | origin/feat/878-ingestion-settings-consumer | [behind 31] | 153 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+189 | orphaned | feat/879-equipment-wiring | origin/feat/879-equipment-wiring | (none) | 0 | (none)
+190 | orphaned | feat/943-attribution-suggest | origin/feat/943-attribution-suggest | (none) | 0 | (none)
+191 | orphaned | feat/bh1a-camera-sensor-geometry | origin/feat/bh1a-camera-sensor-geometry | [behind 4] | 6 | apps/desktop/src-tauri/src/lib.rs, apps/desktop/src-tauri/src/main.rs, apps/desktop/src/splash/main.ts
+192 | orphaned | feat/hew-alias-autodetect | origin/feat/hew-alias-autodetect | (none) | 0 | (none)
+193 | orphaned | feat/ic9h-11-targeting-domain | origin/feat/ic9h-11-targeting-domain | (none) | 0 | (none)
+194 | orphaned | feat/ic9h-12-topology-persistence | origin/main | (none) | 0 | (none)
+195 | orphaned | feat/ic9h-4-session-identity | origin/feat/ic9h-4-session-identity | (none) | 0 | (none)
+196 | orphaned | feat/ic9h-6-portable-contracts | origin/feat/ic9h-6-portable-contracts | (none) | 0 | (none)
+197 | orphaned | feat/ic9h-7-normalized-schema | origin/feat/ic9h-7-normalized-schema | (none) | 0 | (none)
+198 | orphaned | feat/ic9h-8-command-ledger | origin/feat/ic9h-8-command-ledger | (none) | 0 | (none)
+199 | orphaned | feat/nku-sessions-camera | origin/feat/nku-sessions-camera | [behind 34] | 165 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+200 | attached | feat/pre-1.0-db-baseline | origin/feat/pre-1.0-db-baseline | [behind 5] | 16 | Cargo.lock, crates/persistence/db/README.md, crates/persistence/db/tests/baseline_invariants.rs
+201 | orphaned | feat/r17-target-resolution-gate | origin/feat/r17-target-resolution-gate | (none) | 0 | (none)
+202 | orphaned | feat/sd-foundation-outputs | origin/feat/sd-foundation-outputs | [behind 7] | 46 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+203 | orphaned | feat/sd-token-pipeline | origin/feat/sd-token-pipeline | [behind 43] | 184 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+204 | orphaned | feat/tlw15-theme-step-preview | origin/feat/tlw15-theme-step-preview | [behind 11] | 15 | apps/desktop/src/components/StatusTag.tsx, apps/desktop/src/components/ThemePicker.test.tsx, apps/desktop/src/components/ThemePicker.tsx
+205 | orphaned | feat/trqq-splash-before-migration | origin/feat/trqq-splash-before-migration | [behind 22] | 94 | .design-sync/conventions.md, .github/workflows/e2e.yml, Cargo.lock
+206 | orphaned | feat/validate-token-references | origin/feat/validate-token-references | (none) | 0 | (none)
+207 | orphaned | fix-466 | origin/037-archive-cleanup-apply | (none) | 0 | (none)
+208 | orphaned | fix-470-journeys | origin/037-journeys-sourceview-perframe | (none) | 0 | (none)
+209 | orphaned | fix-antipattern-cleanup | origin/fix-antipattern-cleanup | (none) | 0 | (none)
+210 | orphaned | fix-backlog-defects | origin/fix-backlog-defects | (none) | 0 | (none)
+211 | orphaned | fix-calibration-matching-unreachable | origin/fix-calibration-matching-unreachable | (none) | 0 | (none)
+212 | orphaned | fix-inbox-rescan-registered-roots | origin/fix-inbox-rescan-registered-roots | (none) | 0 | (none)
+213 | orphaned | fix-inbox-splitrow-label | origin/fix-inbox-splitrow-label | (none) | 0 | (none)
+214 | orphaned | fix-main-e2e-interplay | origin/fix-main-e2e-interplay | [behind 1] | 4 | apps/desktop/src/main.tsx, apps/desktop/vite.config.ts, crates/e2e-tests/tests/common/mod.rs
+215 | orphaned | fix-wizard-journey-flake | origin/fix-wizard-journey-flake | (none) | 0 | (none)
+216 | orphaned | fix/025-r-pause-1-resume-executor | origin/fix/025-r-pause-1-resume-executor | (none) | 0 | (none)
+217 | orphaned | fix/025-t025-move-op-rollback-tests | origin/fix/025-t025-move-op-rollback-tests | (none) | 0 | (none)
+218 | orphaned | fix/058-source-group-selection | origin/fix/058-source-group-selection | (none) | 0 | (none)
+219 | orphaned | fix/058-wire-sourcegroup-classify | origin/fix/058-wire-sourcegroup-classify | (none) | 0 | (none)
+220 | orphaned | fix/1048-biome-format | origin/fix/1048-biome-format | [ahead 1, behind 45] | 180 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+221 | orphaned | fix/1048-lint-and-baseline | origin/fix/1048-lint-and-baseline | (none) | 0 | (none)
+222 | orphaned | fix/1056-validate-path-is-dir | origin/fix/1056-validate-path-is-dir | (none) | 0 | (none)
+223 | orphaned | fix/1067-detailpanel-migrations | origin/fix/1067-detailpanel-migrations | [gone] | n/a | [upstream missing]
+224 | orphaned | fix/1069-spec054-artifacts | origin/fix/1069-spec054-artifacts | [gone] | n/a | [upstream missing]
+225 | orphaned | fix/1083-calibration-vacuous-gate | origin/fix/1083-calibration-vacuous-gate | (none) | 0 | (none)
+226 | orphaned | fix/1090-549-inbox-counts | origin/fix/1090-549-inbox-counts | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+227 | orphaned | fix/1101-classify-write-errors | origin/fix/1101-classify-write-errors | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+228 | orphaned | fix/1114-needs-review-banner | origin/fix/1114-needs-review-banner | [ahead 2, behind 3] | 5 | apps/desktop/src/components/TwoColDetailLayout.test.tsx, apps/desktop/src/components/TwoColDetailLayout.tsx, apps/desktop/src/features/inbox/InboxDetail.tsx
+229 | orphaned | fix/1120-calibration-audit | origin/fix/1120-calibration-audit | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+230 | orphaned | fix/1129-emit-snapshot-cache-race | origin/fix/1129-emit-snapshot-cache-race | (none) | 0 | (none)
+231 | orphaned | fix/1132-r17-target-resolution | origin/fix/1132-r17-target-resolution | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+232 | orphaned | fix/1165-clippy-devtools-ci | origin/main | [ahead 1006, behind 77] | 509 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+233 | orphaned | fix/1203-ci-main-concurrency | origin/fix/1203-ci-main-concurrency | (none) | 0 | (none)
+234 | orphaned | fix/1204-1205-e2e-harness-diagnostics | origin/fix/1204-1205-e2e-harness-diagnostics | (none) | 0 | (none)
+235 | orphaned | fix/1204-webview-data-dir | origin/fix/1204-webview-data-dir | (none) | 0 | (none)
+236 | orphaned | fix/1207-spec058-justification | origin/main | [ahead 990, behind 77] | 647 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+237 | orphaned | fix/1208-1203-l3-shards-on-main | origin/fix/1208-1203-l3-shards-on-main | [behind 41] | 166 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+238 | orphaned | fix/1209-logpanel-followscroll-race | origin/main | [ahead 971, behind 77] | 669 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+239 | orphaned | fix/1218-source-snapshots | origin/fix/1218-source-snapshots | (none) | 0 | (none)
+240 | orphaned | fix/1219-libr-tests-db-guard | origin/fix/1219-libr-tests-db-guard | (none) | 0 | (none)
+241 | orphaned | fix/1221-mock-types | origin/fix/1221-mock-types | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+242 | orphaned | fix/1230-1231-migration-perf | origin/fix/1230-1231-migration-perf | [behind 33] | 157 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+243 | orphaned | fix/1232-1233-fs-failure-tests | origin/fix/1232-1233-fs-failure-tests | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+244 | orphaned | fix/1234-channel-claim | origin/fix/1234-channel-claim | [behind 3] | 3 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+245 | orphaned | fix/1236-reverify-journey-findings | origin/main | [ahead 990, behind 77] | 646 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+246 | orphaned | fix/1272-testid-wait-context | origin/fix/1272-testid-wait-context | [ahead 1, behind 22] | 197 | .claude/agents/journey-scribe.md, .claude/agents/journey-validator.md, .claude/agents/workflow-reviewer.md
+247 | orphaned | fix/1294-cone-search-target-join | origin/fix/1294-cone-search-target-join | (none) | 0 | (none)
+248 | orphaned | fix/1307-plans-cascade-delete | origin/fix/1307-plans-cascade-delete | (none) | 0 | (none)
+249 | orphaned | fix/1418-windows-dock-followup | origin/fix/1418-windows-dock-followup | [ahead 3, behind 4] | 2 | crates/app/core/tests/plan_apply_audit_integration.rs, crates/app/inbox/src/plan_listener.rs
+250 | orphaned | fix/307-1256-session-targets | origin/fix/307-1256-session-targets | [behind 21] | 197 | .claude/agents/journey-scribe.md, .claude/agents/journey-validator.md, .claude/agents/workflow-reviewer.md
+251 | orphaned | fix/45xl-theme-token-cascade | origin/fix/45xl-theme-token-cascade | (none) | 0 | (none)
+252 | orphaned | fix/5ri-tooltip-focus-indicators | origin/fix/5ri-tooltip-focus-indicators | [behind 32] | 153 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+253 | orphaned | fix/606-plan-overlays | origin/fix/606-plan-overlays | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+254 | orphaned | fix/622-739-tables | origin/fix/622-739-tables | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+255 | orphaned | fix/631-1182-polish | origin/fix/631-1182-polish | (none) | 0 | (none)
+256 | orphaned | fix/640-660-dialog-chrome | origin/fix/640-660-dialog-chrome | (none) | 0 | (none)
+257 | orphaned | fix/641-cleanup-scope-keys | origin/fix/641-cleanup-scope-keys | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+258 | orphaned | fix/642-669-812-empty-actions | origin/fix/642-669-812-empty-actions | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+259 | orphaned | fix/711-unsplit-badge | origin/fix/711-unsplit-badge | (none) | 0 | (none)
+260 | orphaned | fix/734-logpanel | origin/fix/734-logpanel | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+261 | orphaned | fix/735-738-navigation | origin/fix/735-738-navigation | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+262 | orphaned | fix/747-754-801-inbox | origin/fix/747-754-801-inbox | [behind 5] | 4 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+263 | orphaned | fix/752-wizard-scan | origin/fix/752-wizard-scan | (none) | 0 | (none)
+264 | orphaned | fix/802-804-settings | origin/fix/802-804-settings | [behind 23] | 105 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+265 | orphaned | fix/809-shared-entity-names | origin/fix/809-shared-entity-names | (none) | 0 | (none)
+266 | orphaned | fix/813-inbox-twocol | origin/fix/813-inbox-twocol | (none) | 0 | (none)
+267 | orphaned | fix/813-twocol-migration | origin/fix/813-twocol-migration | (none) | 0 | (none)
+268 | orphaned | fix/833-project-history | origin/fix/833-project-history | (none) | 0 | (none)
+269 | orphaned | fix/854-reclassify-confirm-gate | origin/fix/854-reclassify-confirm-gate | (none) | 0 | (none)
+270 | orphaned | fix/astro-plan-mxhz-honest-empty | origin/fix/astro-plan-mxhz-honest-empty | (none) | 0 | (none)
+271 | orphaned | fix/async-effect-unmount-guards | origin/fix/async-effect-unmount-guards | [behind 3] | 3 | .config/nextest.toml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+272 | orphaned | fix/bc4e-dead-caller-reexports | origin/fix/bc4e-dead-caller-reexports | (none) | 0 | (none)
+273 | orphaned | fix/branch-protection-name-verify | origin/fix/branch-protection-name-verify | [behind 26] | 100 | .design-sync/conventions.md, .github/workflows/e2e.yml, Cargo.lock
+274 | orphaned | fix/calibration-matching-hydration-race | origin/fix/calibration-matching-hydration-race | (none) | 0 | (none)
+275 | orphaned | fix/check-tokens-macos-grep | origin/fix/check-tokens-macos-grep | [behind 16] | 66 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+276 | attached | fix/ci-required-checks-skip-shim | origin/fix/ci-required-checks-skip-shim | (none) | 0 | (none)
+277 | attached | fix/close-guard-content-fallback | origin/fix/close-guard-content-fallback | [behind 2] | 2 | docs/development/bd-close-guard.md, scripts/bd-close-guard.sh
+278 | orphaned | fix/confirm-staleness-guard | origin/fix/confirm-staleness-guard | (none) | 0 | (none)
+279 | orphaned | fix/datq-source-missing-autoblock | origin/fix/datq-source-missing-autoblock | (none) | 0 | (none)
+280 | orphaned | fix/dead-caller-ratchet | origin/fix/dead-caller-ratchet | (none) | 0 | (none)
+281 | orphaned | fix/e2e-settle-and-error-propagation | origin/fix/e2e-settle-and-error-propagation | (none) | 0 | (none)
+282 | orphaned | fix/evl-biome-key-and-lint-surfaces | origin/fix/evl-biome-key-and-lint-surfaces | [behind 32] | 153 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+283 | orphaned | fix/framing-mount-race | origin/fix/framing-mount-race | (none) | 0 | (none)
+284 | orphaned | fix/geometry-session-grouping | origin/fix/geometry-session-grouping | (none) | 0 | (none)
+285 | orphaned | fix/guided-event-emission | origin/fix/guided-event-emission | (none) | 0 | (none)
+286 | orphaned | fix/i18n-locale-parity-gate | origin/fix/i18n-locale-parity-gate | (none) | 0 | (none)
+287 | orphaned | fix/inbox-classify-swallowed-writes | origin/fix/inbox-classify-swallowed-writes | (none) | 0 | (none)
+288 | orphaned | fix/inbox-confirm-review-plans-split-folders | origin/fix/inbox-confirm-review-plans-split-folders | (none) | 0 | (none)
+289 | orphaned | fix/inbox-helpers-unused-import | origin/fix/inbox-helpers-unused-import | (none) | 0 | (none)
+290 | orphaned | fix/inter-ofl-licence-attribution | origin/fix/inter-ofl-licence-attribution | [behind 31] | 153 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+291 | orphaned | fix/jc0714-nJ01c | origin/fix/jc0714-nJ01c | (none) | 0 | (none)
+292 | orphaned | fix/jc0714-nJ04c | origin/fix/jc0714-nJ04c | (none) | 0 | (none)
+293 | orphaned | fix/jc0714-nNIT-scan | origin/fix/jc0714-nNIT-scan | [behind 13] | 92 | .github/workflows/ci.yml, .github/workflows/cla-assistant.yml, .github/workflows/e2e.yml
+294 | orphaned | fix/jc0714-nNIT-ui | origin/fix/jc0714-nNIT-ui | [behind 17] | 80 | .agents/skills/journey-campaign/SKILL.md, .claude/apm-hooks.json, .claude/skills/journey-campaign/SKILL.md
+295 | orphaned | fix/logpanel-virtualizer-timer-leak | origin/fix/logpanel-virtualizer-timer-leak | [behind 29] | 143 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+296 | orphaned | fix/qmc-window-state-isolation | origin/main | [behind 62] | 333 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+297 | orphaned | fix/races-settings-setup | origin/fix/races-settings-setup | (none) | 0 | (none)
+298 | orphaned | fix/reclassify-v2-callers | origin/fix/reclassify-v2-callers | [ahead 2, behind 18] | 125 | .claude/agents/coder.md, .claude/agents/journey-validator.md, .claude/agents/parallel-coder.md
+299 | orphaned | fix/restore-defaults-catalogue | origin/fix/restore-defaults-catalogue | [behind 21] | 83 | .design-sync/conventions.md, Cargo.lock, apps/desktop/messages/en.json
+300 | orphaned | fix/run-completed-artifacts | origin/fix/run-completed-artifacts | (none) | 0 | (none)
+301 | orphaned | fix/rust-ci-js-deps | origin/fix/rust-ci-js-deps | (none) | 0 | (none)
+302 | orphaned | fix/scan-classification-failure-visible | origin/fix/scan-classification-failure-visible | [behind 26] | 100 | .design-sync/conventions.md, .github/workflows/e2e.yml, Cargo.lock
+303 | orphaned | fix/settings-test-flakes | origin/fix/settings-test-flakes | [gone] | n/a | [upstream missing]
+304 | orphaned | fix/status-count-dedup | origin/fix/status-count-dedup | [gone] | n/a | [upstream missing]
+305 | orphaned | fix/tlw1-onboarding-continue-layout | origin/fix/tlw1-onboarding-continue-layout | (none) | 0 | (none)
+306 | orphaned | fix/tlw10-toggle-focus | origin/fix/tlw10-toggle-focus | (none) | 0 | (none)
+307 | orphaned | fix/tlw11-13-control-contrast-motion | origin/fix/tlw11-13-control-contrast-motion | (none) | 0 | (none)
+308 | orphaned | fix/tlw2-onboarding-locale | origin/main | [behind 11] | 78 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+309 | orphaned | fix/tlw2-onboarding-locale-1048 | origin/fix/tlw2-onboarding-locale-1048 | (none) | 0 | (none)
+310 | orphaned | fix/tlw2-parent-locale-integration |  | (none) | n/a | (no upstream)
+311 | orphaned | fix/tlw5-locale-settings-read | origin/fix/tlw5-locale-settings-read | (none) | 0 | (none)
+312 | orphaned | fix/tlw6-source-folder-primitives | origin/fix/tlw6-source-folder-primitives | (none) | 0 | (none)
+313 | orphaned | fix/tlw7-document-lang | origin/fix/tlw7-document-lang | (none) | 0 | (none)
+314 | orphaned | fix/tlw8-wizard-navigation-a11y | origin/fix/tlw8-wizard-navigation-a11y | (none) | 0 | (none)
+315 | orphaned | fix/tlw9-12-status-scan-i18n | origin/fix/tlw9-12-status-scan-i18n | (none) | 0 | (none)
+316 | attached | fix/token-adoption-css-colours | origin/fix/token-adoption-css-colours | (none) | 0 | (none)
+317 | orphaned | fix/tooltip-unstyled-and-click | origin/fix/tooltip-unstyled-and-click | (none) | 0 | (none)
+318 | orphaned | fix/windows-targets-pinned-scroll | origin/fix/windows-targets-pinned-scroll | (none) | 0 | (none)
+319 | orphaned | fix/xhj0-outofline-test-modules | origin/fix/xhj0-outofline-test-modules | [behind 36] | 145 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .beads/.gitignore
+320 | orphaned | fix/xz3r-windows-dock | origin/fix/xz3r-windows-dock | (none) | 0 | (none)
+321 | orphaned | fix/xz3r-windows-dock-followup | origin/fix/xz3r-windows-dock-followup | [behind 1] | 1 | crates/e2e-tests/tests/common/mod.rs
+322 | orphaned | fix/xz3r-windows-dock-followup2 |  | (none) | n/a | (no upstream)
+323 | attached | fix/zfuy-watcher-recreate | origin/fix/zfuy-watcher-recreate | (none) | 0 | (none)
+324 | orphaned | integrate/1048-main-reconcile-20260722 |  | (none) | n/a | (no upstream)
+325 | attached | investigate/711-instance-b | origin/main | [ahead 893, behind 77] | 997 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+326 | orphaned | journey/init-scaffold-2026-07-14 | origin/journey/init-scaffold-2026-07-14 | (none) | 0 | (none)
+327 | orphaned | journeys/2026-07-20-deltas | origin/journeys/2026-07-20-deltas | (none) | 0 | (none)
+328 | orphaned | lane/3w31-plan-repair | origin/lane/3w31-plan-repair | [behind 8] | 18 | apps/desktop/src/features/inbox/InboxPage.tsx, apps/desktop/src/features/inbox/__tests__/InboxPage.statsFollowFilter.test.tsx, apps/desktop/src/features/inbox/inboxDetailHelpers.ts
+329 | orphaned | lane/sm7-token-refs | origin/lane/sm7-token-refs | [behind 7] | 16 | apps/desktop/src/features/inbox/InboxPage.tsx, apps/desktop/src/features/inbox/__tests__/InboxPage.statsFollowFilter.test.tsx, apps/desktop/src/features/inbox/inboxDetailHelpers.ts
+330 | orphaned | local-037 | origin/037-ui-journeys-sessions | (none) | 0 | (none)
+331 | attached | main | origin/main | (none) | 0 | (none)
+332 | orphaned | mock/1068-inbox-layouts | origin/main | [ahead 907, behind 77] | 970 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+333 | orphaned | orc/b4f-desktop-wizard-fit | origin/orc/b4f-desktop-wizard-fit | (none) | 0 | (none)
+334 | orphaned | orc/branch-recovery-control-20260721 | origin/main | [behind 11] | 78 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+335 | orphaned | orc/ic9h.5-metadata-evidence | origin/orc/ic9h.5-metadata-evidence | (none) | 0 | (none)
+336 | orphaned | orc/mcp-allowlist | origin/orc/mcp-allowlist | (none) | 0 | (none)
+337 | orphaned | orc/tlw15-b5-validation | origin/orc/tlw15-b5-validation | (none) | 0 | (none)
+338 | orphaned | orch/adopt-metadata-headers | origin/orch/adopt-metadata-headers | (none) | 0 | (none)
+339 | orphaned | orch/adopt-target-match | origin/orch/adopt-target-match | (none) | 0 | (none)
+340 | orphaned | pr-1048 |  | (none) | n/a | (no upstream)
+341 | orphaned | pr-1279 |  | (none) | n/a | (no upstream)
+342 | orphaned | pr-1299 |  | (none) | n/a | (no upstream)
+343 | orphaned | pr-1300 |  | (none) | n/a | (no upstream)
+344 | orphaned | pr-1306 |  | (none) | n/a | (no upstream)
+345 | orphaned | pr-1335 |  | (none) | n/a | (no upstream)
+346 | orphaned | pr-1354 |  | (none) | n/a | (no upstream)
+347 | orphaned | pr-1364 |  | (none) | n/a | (no upstream)
+348 | orphaned | pr1048-integrate | origin/feat/056-onboarding-redesign | [behind 53] | 173 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+349 | orphaned | probe/1202-list-visibility | origin/main | [ahead 971, behind 77] | 669 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+350 | orphaned | rebase/1126 | origin/fix/1114-needs-review-banner | [ahead 1, behind 7] | 66 | Cargo.lock, apps/desktop/playwright.config.ts, apps/desktop/scripts/gen-token-types.mjs
+351 | orphaned | rebase/1160 | origin/coder-g-refactor-p2p3 | [gone] | n/a | [upstream missing]
+352 | orphaned | rebase/1171 | origin/coder-g-refactor-p1 | [ahead 2, behind 8] | 63 | Cargo.lock, apps/desktop/playwright.config.ts, apps/desktop/scripts/gen-token-types.mjs
+353 | orphaned | reconcile/tlw-parent-current-main | origin/feat/056-onboarding-redesign | [behind 17] | 82 | Cargo.lock, apps/desktop/biome.json, apps/desktop/messages/en-GB.json
+354 | orphaned | recovery/local-checkout-20260722 | origin/recovery/local-checkout-20260722 | (none) | 0 | (none)
+355 | orphaned | recovery/local-main-pre-sync-20260722 | origin/recovery/local-main-pre-sync-20260722 | (none) | 0 | (none)
+356 | orphaned | recovery/shared-checkout-20260721 | origin/recovery/shared-checkout-20260721 | (none) | 0 | (none)
+357 | orphaned | refactor/615-630-tanstack-setupwizard | origin/refactor/615-630-tanstack-setupwizard | (none) | 0 | (none)
+358 | orphaned | refactor/968-split-inbox | origin/refactor/968-split-inbox | (none) | 0 | (none)
+359 | orphaned | refactor/998-split-project-detail | origin/refactor/998-split-project-detail | (none) | 0 | (none)
+360 | orphaned | release-pipeline-updater | origin/release-pipeline-updater | (none) | 0 | (none)
+361 | orphaned | repair/1048-migrations-20260721 | origin/feat/056-onboarding-redesign | [behind 55] | 179 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+362 | orphaned | repair/pr1422-main | origin/pr/1422 | [gone] | n/a | [upstream missing]
+363 | attached | resolve/1299-vs-main | origin/main | [ahead 1017, behind 77] | 502 | .agents/skills/beads/SKILL.md, .agents/skills/beads/agents/openai.yaml, .agents/skills/speckit-analyze/SKILL.md
+364 | orphaned | review-orchestrate-6329c8c |  | (none) | n/a | (no upstream)
+365 | orphaned | run-pre1-db-baseline-20260722-b3 | origin/run-pre1-db-baseline-20260722-b3 | (none) | 0 | (none)
+366 | orphaned | run-pre1-db-baseline-20260722-b4 | origin/run-pre1-db-baseline-20260722-b4 | (none) | 0 | (none)
+367 | orphaned | salvage/605-inbox-plan-pending-pill | origin/salvage/605-inbox-plan-pending-pill | (none) | 0 | (none)
+368 | orphaned | salvage/643-inbox-metadata-gate | origin/salvage/643-inbox-metadata-gate | (none) | 0 | (none)
+369 | orphaned | salvage/711-attempt-1 | origin/salvage/711-attempt-1 | (none) | 0 | (none)
+370 | orphaned | salvage/724-reclassify-sentinel-clear | origin/salvage/724-reclassify-sentinel-clear | (none) | 0 | (none)
+371 | orphaned | salvage/744-plan-apply-resume-polling | origin/salvage/744-plan-apply-resume-polling | (none) | 0 | (none)
+372 | orphaned | salvage/767-plan-overlay-visibility | origin/salvage/767-plan-overlay-visibility | (none) | 0 | (none)
+373 | orphaned | salvage/769-inbox-approve-before-apply | origin/salvage/769-inbox-approve-before-apply | (none) | 0 | (none)
+374 | orphaned | salvage/886-calibration-archive-backend | origin/salvage/886-calibration-archive-backend | (none) | 0 | (none)
+375 | orphaned | salvage/g-calibration-postmerge-dirty | origin/salvage/g-calibration-postmerge-dirty | (none) | 0 | (none)
+376 | orphaned | salvage/g-sessions-postmerge-dirty | origin/salvage/g-sessions-postmerge-dirty | (none) | 0 | (none)
+377 | orphaned | salvage/g-targets-catalog-postmerge-dirty | origin/salvage/g-targets-catalog-postmerge-dirty | (none) | 0 | (none)
+378 | orphaned | salvage/journeys-migration-jc0714 | origin/salvage/journeys-migration-jc0714 | (none) | 0 | (none)
+379 | orphaned | spec/057-inbox-drop-parent-items | origin/spec/057-inbox-drop-parent-items | (none) | 0 | (none)
+380 | orphaned | spec/058-docs | origin/spec/058-docs | (none) | 0 | (none)
+381 | orphaned | spec/058-inbox-drop-parent-items | origin/spec/058-inbox-drop-parent-items | (none) | 0 | (none)
+382 | orphaned | spec/058-owner-answers | origin/spec/058-owner-answers | (none) | 0 | (none)
+383 | orphaned | spec/058-t013-inboxlist | origin/spec/058-t013-inboxlist | (none) | 0 | (none)
+384 | orphaned | spec/058-targetrec | origin/spec/058-targetrec | (none) | 0 | (none)
+385 | orphaned | spec/058-us4 | origin/spec/058-us4 | (none) | 0 | (none)
+386 | orphaned | spec/062-session-heterogeneity | origin/main | [behind 22] | 98 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+387 | orphaned | spec/062-session-heterogeneity-artifacts | origin/spec/062-session-heterogeneity-artifacts | [behind 1] | 2 | specs/062-session-heterogeneity/checklists/architecture-security-scale.md, specs/062-session-heterogeneity/data-model.md
+388 | orphaned | spec/adaptive-detail-dock | origin/spec/adaptive-detail-dock | (none) | 0 | (none)
+389 | orphaned | spec/reclassify-split | origin/spec/reclassify-split | (none) | 0 | (none)
+390 | orphaned | split/editprojectpane | origin/split/editprojectpane | [behind 21] | 83 | .design-sync/conventions.md, Cargo.lock, apps/desktop/messages/en.json
+391 | orphaned | split/grouping | origin/split/grouping | (none) | 0 | (none)
+392 | orphaned | split/planpanel | origin/split/planpanel | (none) | 0 | (none)
+393 | orphaned | test/1220-plan-review-e2e-coverage | origin/test/1220-plan-review-e2e-coverage | (none) | 0 | (none)
+394 | orphaned | test/1223-cleanup-protected-gate | origin/test/1223-cleanup-protected-gate | (none) | 0 | (none)
+395 | orphaned | test/1257-t023-reload | origin/test/1257-t023-reload | (none) | 0 | (none)
+396 | orphaned | test/1257-t026-pinned-columns-e2e | origin/test/1257-t026-pinned-columns-e2e | (none) | 0 | (none)
+397 | orphaned | test/1419-raw-alm-preferences | origin/main | [behind 11] | 78 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+398 | orphaned | test/tlw3-first-run-os-theme | origin/test/tlw3-first-run-os-theme | (none) | 0 | (none)
+399 | orphaned | test/xz3r-1422-20260721 | origin/test/xz3r-1422-20260721 | (none) | 0 | (none)
+400 | orphaned | tmp-1126 | origin/fix/1114-needs-review-banner | (none) | 0 | (none)
+401 | orphaned | tmp-914-merge |  | (none) | n/a | (no upstream)
+402 | orphaned | wave2-037-ui-journeys-calibration | origin/037-ui-journeys-calibration | (none) | 0 | (none)
+403 | orphaned | wave2-fix-targetsearch-keepmounted | origin/fix-targetsearch-keepmounted | (none) | 0 | (none)
+404 | orphaned | win-qa |  | (none) | n/a | (no upstream)
+405 | orphaned | wip-457-debug | origin/037-ui-journeys-inbox | (none) | 0 | (none)
+406 | orphaned | work-fix-main-e2e-interplay | origin/fix-main-e2e-interplay | (none) | 0 | (none)
+407 | orphaned | worktree-worktree-105422 |  | (none) | n/a | (no upstream)
+408 | orphaned | worktree-worktree-1074187 |  | (none) | n/a | (no upstream)
+409 | orphaned | worktree-worktree-1075078 |  | (none) | n/a | (no upstream)
+410 | orphaned | worktree-worktree-1077554 |  | (none) | n/a | (no upstream)
+411 | orphaned | worktree-worktree-1120595 |  | (none) | n/a | (no upstream)
+412 | orphaned | worktree-worktree-1123520 |  | (none) | n/a | (no upstream)
+413 | orphaned | worktree-worktree-1141429 |  | (none) | n/a | (no upstream)
+414 | orphaned | worktree-worktree-1357001 |  | (none) | n/a | (no upstream)
+415 | orphaned | worktree-worktree-1392441 |  | (none) | n/a | (no upstream)
+416 | orphaned | worktree-worktree-1459779 |  | (none) | n/a | (no upstream)
+417 | orphaned | worktree-worktree-148634 |  | (none) | n/a | (no upstream)
+418 | orphaned | worktree-worktree-149459 |  | (none) | n/a | (no upstream)
+419 | orphaned | worktree-worktree-1694423 |  | (none) | n/a | (no upstream)
+420 | orphaned | worktree-worktree-1727475 |  | (none) | n/a | (no upstream)
+421 | orphaned | worktree-worktree-1778823 |  | (none) | n/a | (no upstream)
+422 | orphaned | worktree-worktree-180097 |  | (none) | n/a | (no upstream)
+423 | orphaned | worktree-worktree-1836358 |  | (none) | n/a | (no upstream)
+424 | orphaned | worktree-worktree-1871840 |  | (none) | n/a | (no upstream)
+425 | orphaned | worktree-worktree-1880376 |  | (none) | n/a | (no upstream)
+426 | orphaned | worktree-worktree-2007781 |  | (none) | n/a | (no upstream)
+427 | orphaned | worktree-worktree-2008378 |  | (none) | n/a | (no upstream)
+428 | orphaned | worktree-worktree-2009202 |  | (none) | n/a | (no upstream)
+429 | orphaned | worktree-worktree-2107062 | origin/worktree-worktree-2107062 | (none) | 0 | (none)
+430 | orphaned | worktree-worktree-2113499 | origin/worktree-worktree-2113499 | (none) | 0 | (none)
+431 | orphaned | worktree-worktree-2183034 |  | (none) | n/a | (no upstream)
+432 | orphaned | worktree-worktree-2185385 |  | (none) | n/a | (no upstream)
+433 | orphaned | worktree-worktree-2189680 |  | (none) | n/a | (no upstream)
+434 | orphaned | worktree-worktree-2200576 |  | (none) | n/a | (no upstream)
+435 | orphaned | worktree-worktree-2310056 |  | (none) | n/a | (no upstream)
+436 | orphaned | worktree-worktree-2314421 |  | (none) | n/a | (no upstream)
+437 | orphaned | worktree-worktree-2319080 |  | (none) | n/a | (no upstream)
+438 | orphaned | worktree-worktree-2324046 |  | (none) | n/a | (no upstream)
+439 | orphaned | worktree-worktree-2685479 |  | (none) | n/a | (no upstream)
+440 | orphaned | worktree-worktree-2686092 |  | (none) | n/a | (no upstream)
+441 | orphaned | worktree-worktree-2686937 |  | (none) | n/a | (no upstream)
+442 | orphaned | worktree-worktree-2687096 |  | (none) | n/a | (no upstream)
+443 | orphaned | worktree-worktree-2690362 |  | (none) | n/a | (no upstream)
+444 | orphaned | worktree-worktree-2728252 |  | (none) | n/a | (no upstream)
+445 | orphaned | worktree-worktree-2734180 |  | (none) | n/a | (no upstream)
+446 | orphaned | worktree-worktree-281880 |  | (none) | n/a | (no upstream)
+447 | orphaned | worktree-worktree-287309 |  | (none) | n/a | (no upstream)
+448 | orphaned | worktree-worktree-2897577 |  | (none) | n/a | (no upstream)
+449 | orphaned | worktree-worktree-2947572 |  | (none) | n/a | (no upstream)
+450 | orphaned | worktree-worktree-2951853 |  | (none) | n/a | (no upstream)
+451 | orphaned | worktree-worktree-2953965 |  | (none) | n/a | (no upstream)
+452 | orphaned | worktree-worktree-2956522 |  | (none) | n/a | (no upstream)
+453 | orphaned | worktree-worktree-2969010 |  | (none) | n/a | (no upstream)
+454 | orphaned | worktree-worktree-3005806 |  | (none) | n/a | (no upstream)
+455 | orphaned | worktree-worktree-3008119 | origin/worktree-worktree-3008119 | [gone] | n/a | [upstream missing]
+456 | orphaned | worktree-worktree-304162 |  | (none) | n/a | (no upstream)
+457 | orphaned | worktree-worktree-304402 |  | (none) | n/a | (no upstream)
+458 | orphaned | worktree-worktree-305235 |  | (none) | n/a | (no upstream)
+459 | orphaned | worktree-worktree-3064475 |  | (none) | n/a | (no upstream)
+460 | orphaned | worktree-worktree-3178686 |  | (none) | n/a | (no upstream)
+461 | orphaned | worktree-worktree-3179332 |  | (none) | n/a | (no upstream)
+462 | orphaned | worktree-worktree-3180011 |  | (none) | n/a | (no upstream)
+463 | orphaned | worktree-worktree-3182089 |  | (none) | n/a | (no upstream)
+464 | orphaned | worktree-worktree-3186107 |  | (none) | n/a | (no upstream)
+465 | orphaned | worktree-worktree-3188342 |  | (none) | n/a | (no upstream)
+466 | orphaned | worktree-worktree-3189890 |  | (none) | n/a | (no upstream)
+467 | orphaned | worktree-worktree-3192437 |  | (none) | n/a | (no upstream)
+468 | orphaned | worktree-worktree-3193709 |  | (none) | n/a | (no upstream)
+469 | orphaned | worktree-worktree-3202696 | origin/ci/job-level-gating-ci-yml | [ahead 1, behind 27] | 150 | .github/workflows/cache-cleanup.yml, .github/workflows/ci.yml, .github/workflows/e2e.yml
+470 | orphaned | worktree-worktree-3230587 |  | (none) | n/a | (no upstream)
+471 | orphaned | worktree-worktree-330430 |  | (none) | n/a | (no upstream)
+472 | orphaned | worktree-worktree-3322340 |  | (none) | n/a | (no upstream)
+473 | orphaned | worktree-worktree-3329786 |  | (none) | n/a | (no upstream)
+474 | orphaned | worktree-worktree-3330373 |  | (none) | n/a | (no upstream)
+475 | orphaned | worktree-worktree-3394144 |  | (none) | n/a | (no upstream)
+476 | orphaned | worktree-worktree-3408123 |  | (none) | n/a | (no upstream)
+477 | orphaned | worktree-worktree-3408740 |  | (none) | n/a | (no upstream)
+478 | orphaned | worktree-worktree-3410519 |  | (none) | n/a | (no upstream)
+479 | orphaned | worktree-worktree-3437035 |  | (none) | n/a | (no upstream)
+480 | orphaned | worktree-worktree-3451816 |  | (none) | n/a | (no upstream)
+481 | orphaned | worktree-worktree-3477881 |  | (none) | n/a | (no upstream)
+482 | orphaned | worktree-worktree-3479171 |  | (none) | n/a | (no upstream)
+483 | orphaned | worktree-worktree-3587395 |  | (none) | n/a | (no upstream)
+484 | orphaned | worktree-worktree-3658326 |  | (none) | n/a | (no upstream)
+485 | orphaned | worktree-worktree-3663157 |  | (none) | n/a | (no upstream)
+486 | orphaned | worktree-worktree-3666736 |  | (none) | n/a | (no upstream)
+487 | orphaned | worktree-worktree-3674707 | origin/main | [ahead 1056, behind 52] | 305 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+488 | orphaned | worktree-worktree-3677302 |  | (none) | n/a | (no upstream)
+489 | orphaned | worktree-worktree-3680783 | origin/main | [ahead 1050, behind 77] | 381 | .agents/skills/speckit-analyze/SKILL.md, .agents/skills/speckit-checklist/SKILL.md, .agents/skills/speckit-clarify/SKILL.md
+490 | orphaned | worktree-worktree-3696183 |  | (none) | n/a | (no upstream)
+491 | orphaned | worktree-worktree-3714780 |  | (none) | n/a | (no upstream)
+492 | orphaned | worktree-worktree-3767471 |  | (none) | n/a | (no upstream)
+493 | orphaned | worktree-worktree-3942749 |  | (none) | n/a | (no upstream)
+494 | orphaned | worktree-worktree-3943414 |  | (none) | n/a | (no upstream)
+495 | orphaned | worktree-worktree-3943998 |  | (none) | n/a | (no upstream)
+496 | orphaned | worktree-worktree-400748 |  | (none) | n/a | (no upstream)
+497 | orphaned | worktree-worktree-401729 |  | (none) | n/a | (no upstream)
+498 | orphaned | worktree-worktree-4093053 |  | (none) | n/a | (no upstream)
+499 | orphaned | worktree-worktree-4135381 |  | (none) | n/a | (no upstream)
+500 | orphaned | worktree-worktree-4184558 |  | (none) | n/a | (no upstream)
+501 | orphaned | worktree-worktree-4186746 |  | (none) | n/a | (no upstream)
+502 | orphaned | worktree-worktree-4187156 |  | (none) | n/a | (no upstream)
+503 | orphaned | worktree-worktree-4188725 |  | (none) | n/a | (no upstream)
+504 | orphaned | worktree-worktree-419362 | origin/worktree-worktree-419362 | (none) | 0 | (none)
+505 | orphaned | worktree-worktree-523020 |  | (none) | n/a | (no upstream)
+506 | orphaned | worktree-worktree-593418 |  | (none) | n/a | (no upstream)
+507 | orphaned | worktree-worktree-594741 |  | (none) | n/a | (no upstream)
+508 | orphaned | worktree-worktree-687330 |  | (none) | n/a | (no upstream)
+509 | orphaned | worktree-worktree-688019 |  | (none) | n/a | (no upstream)
+510 | orphaned | worktree-worktree-69740 |  | (none) | n/a | (no upstream)
+511 | orphaned | worktree-worktree-730491 |  | (none) | n/a | (no upstream)
+512 | orphaned | worktree-worktree-782674 |  | (none) | n/a | (no upstream)
+513 | orphaned | worktree-worktree-79640 | origin/worktree-worktree-79640 | (none) | 0 | (none)
+514 | orphaned | worktree-worktree-88239 |  | (none) | n/a | (no upstream)
+515 | orphaned | worktree-worktree-927782 |  | (none) | n/a | (no upstream)
+
+## 2) Worktrees
+idx | state | path | branch | file_count | sample_changed_paths
+1 | attached | /home/sjors/dev/astro-plan | main | 3 | local-branches.txt; local-quick-index.txt; local-worktrees.txt
+2 | attached | /home/sjors/dev/astro-plan/.orchestration/run-apm-codex-20260721/worktrees/watcher-recreate | fix/zfuy-watcher-recreate | 1 | .agents/skills/orchestrate/scripts/__pycache__/
+3 | attached | /home/sjors/dev/astro-plan/.orchestration/run-pre1-db-baseline-20260722/worktrees/b1 | feat/pre-1.0-db-baseline | 1 | Cargo.lock
+4 | attached | /home/sjors/dev/astro-plan/.orchestration/run-pre1-db-baseline-20260722/worktrees/b2 | coder/b2-db-tests | 1 | Cargo.lock
+5 | detached | /home/sjors/dev/astro-plan/wt_1416_guard | [detached] | 1 | .agents/skills/orchestrate/scripts/__pycache__/
+6 | detached | /home/sjors/dev/astro-plan/wt_ok | [detached] | 1 | .agents/skills/orchestrate/scripts/__pycache__/
+7 | attached | /home/sjors/dev/astro-plan/wt_yv3u | coder/yv3u-i18n-drift-gate | 1 | review-astro-plan-yv3u.log
+8 | attached | /home/sjors/tmp/worktrees/astro-plan/ci-shim | fix/ci-required-checks-skip-shim | 1 | .ds-css/
+9 | attached | /home/sjors/tmp/worktrees/astro-plan/ds-05a | ds/05a-sync-hygiene | 2 | .design-sync/generate-palette-cards.mjs; .ds-sync
+10 | attached | /home/sjors/tmp/worktrees/astro-plan/inv-711b | investigate/711-instance-b | 1 | apps/desktop/src/features/inbox/__tests__/InboxPage.reclassifyGate.test.tsx
+11 | detached | /home/sjors/tmp/worktrees/astro-plan/mainchk | [detached] | 1 | .ds-sync
+12 | attached | /home/sjors/tmp/worktrees/astro-plan/merge-lane | chore/biome-strict | 2 | apps/desktop/biome.json; apps/desktop/src/features/targets/TargetsTable.tsx
+13 | attached | /home/sjors/tmp/worktrees/astro-plan/token-sweep | fix/token-adoption-css-colours | 1 | .ds-css/
+14 | attached | /home/sjors/tmp/wt-1299 | resolve/1299-vs-main | 15 | apps/desktop/index.html; apps/desktop/package.json; apps/desktop/public/brand/README.md; apps/desktop/public/brand/lockup.svg
+15 | attached | /home/sjors/tmp/wt-guard | fix/close-guard-content-fallback | 2 | docs/development/bd-close-guard.md; scripts/bd-close-guard.sh

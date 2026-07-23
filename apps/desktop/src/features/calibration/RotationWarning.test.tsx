@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * RotationWarning tests — spec 041 T080 · FR-040.
@@ -41,7 +44,9 @@ describe('RotationWarningNotice', () => {
   });
 
   it('renders the rotation-unavailable banner', () => {
-    render(<RotationWarningNotice warning={{ kind: 'rotation_unavailable' }} />);
+    render(
+      <RotationWarningNotice warning={{ kind: 'rotation_unavailable' }} />,
+    );
     const banner = screen.getByTestId('rotation-warning-rotation_unavailable');
     expect(banner).toBeInTheDocument();
     expect(banner).toHaveTextContent(/ROTATANG/);
@@ -51,12 +56,14 @@ describe('RotationWarningNotice', () => {
   it('is non-blocking (warn-variant banner)', () => {
     render(<RotationWarningNotice warning={{ kind: 'deviation', deg: 2 }} />);
     const banner = screen.getByTestId('rotation-warning-deviation');
-    expect(banner).toHaveClass('alm-banner--warn');
-    expect(banner).not.toHaveClass('alm-banner--danger');
+    expect(banner).toHaveClass('pv-banner--warn');
+    expect(banner).not.toHaveClass('pv-banner--danger');
   });
 
   it('exposes an accessible label on the warning icon', () => {
     render(<RotationWarningNotice warning={{ kind: 'deviation', deg: 0.6 }} />);
-    expect(screen.getByRole('img', { name: /rotation warning/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: /rotation warning/i }),
+    ).toBeInTheDocument();
   });
 });

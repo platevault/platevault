@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Global search command (spec 033, T039, FR-015).
 //!
 //! `search.global` is backed by a real cross-entity `SQLite` query over

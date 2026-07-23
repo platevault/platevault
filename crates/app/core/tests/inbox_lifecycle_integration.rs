@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Feature 037 — Layer-1 integration tests for inbox mixed-folder split (#3)
 //! and inventory/data-lifecycle state (#4).
 //!

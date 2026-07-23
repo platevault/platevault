@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared metadata model used by format-specific extractors (spec 005).
 //!
 //! # Contents
@@ -8,11 +11,22 @@
 //!   [`FrameType`] via case-insensitive lookup.
 //! - [`MetadataExtractor`] — trait implemented by FITS/XISF adapters.
 //! - [`RawFileMetadata`] — minimal header values returned by extractors.
+//! - [`CaptureProfileRegistry`] — versioned normalization of raw FITS/XISF fields.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+
+mod evidence;
+mod profile;
+
+pub use evidence::{
+    CalculatedFocalLength, CanonicalField, CaptureProfileVersion, EvidenceConfidence,
+    EvidenceError, EvidenceState, FieldEvidence, MetadataEvidence, MetadataValue, RawMetadata,
+    MAX_EVIDENCE_PAYLOAD_BYTES, MAX_EVIDENCE_VALUE_BYTES,
+};
+pub use profile::{CaptureProfileError, CaptureProfileRegistry, MAX_CAPTURE_PROFILE_TOML_BYTES};
 
 // ── FrameType ─────────────────────────────────────────────────────────────────
 
@@ -301,6 +315,22 @@ pub struct RawFileMetadata {
     /// Modified Julian Date of exposure start from `MJD-OBS`.
     /// Ordering / dark-run span fallback.
     pub mjd_obs: Option<f64>,
+
+    // ── Plate-solved WCS pointing (spec 052 P3, FR-012) ─────────────────────
+    // Populated only when `CTYPE1`/`CTYPE2` are genuine equatorial WCS
+    // projections (see [`interpret_wcs_pointing`]) — a bare `CRVAL1/2` pair
+    // with no matching `CTYPE` is not trusted as a solve. Distinct from
+    // [`Self::ra_deg`]/[`Self::dec_deg`] (mount `RA`/`DEC`/`OBJCTRA`/
+    // `OBJCTDEC`), never conflated: WCS is the high-confidence source,
+    // mount is medium (FR-012 precedence).
+    /// Plate-solved right ascension from `CRVAL1`, decimal degrees.
+    pub wcs_ra_deg: Option<f64>,
+    /// Plate-solved declination from `CRVAL2`, decimal degrees.
+    pub wcs_dec_deg: Option<f64>,
+    /// Plate-solved sky position angle (east of north), decimal degrees, from
+    /// the WCS CD matrix (preferred) or `CROTA2` fallback. `None` when no
+    /// rotation term is present even though the pointing itself solved.
+    pub wcs_rotation_deg: Option<f64>,
 }
 
 // ── Coordinate / value parsing helpers ──────────────────────────────────────
@@ -309,55 +339,211 @@ pub struct RawFileMetadata {
 /// `"18 10 38"` or `"5 34 57.984"`) into decimal **degrees**.
 ///
 /// RA is expressed in hours; the result is multiplied by 15 (360° / 24h).
-/// Separators may be spaces or colons. Returns `None` for unparseable input.
+/// Separators may be spaces or colons. Returns `None` for unparseable input,
+/// or when the parsed value is outside the RA domain (`[0, 360)`).
+///
+/// Delegates the sexagesimal→decimal conversion to
+/// `skymath::Equatorial::parse_at_epoch` in [`skymath::ParseMode::Lenient`]
+/// (a paired call with a `"0"` Dec sentinel, since that constructor validates
+/// RA and Dec together; Lenient tolerates the missing-minutes/seconds and
+/// bare-decimal forms this parser has always accepted). FITS/XISF header
+/// values are frequently single-quoted; that quoting is stripped here before
+/// parsing, since `skymath` treats quote characters as part of the token (a
+/// FITS-specific tolerance, not a general coordinate concern).
 #[must_use]
 pub fn sexagesimal_ra_to_deg(raw: &str) -> Option<f64> {
-    let hours = sexagesimal_to_units(raw)?;
-    Some(hours * 15.0)
+    let cleaned = strip_fits_quotes(raw)?;
+    skymath::Equatorial::parse_at_epoch(
+        cleaned,
+        "0",
+        skymath::Epoch::J2000,
+        skymath::ParseMode::Lenient,
+    )
+    .ok()
+    .map(|e| e.ra().degrees())
 }
 
 /// Parse a sexagesimal declination string in `±D M S` form (e.g.
 /// `"-15 01 11"` or `"+0 00 00.00"`) into decimal **degrees**.
 ///
 /// A leading `-` on the degrees field applies to the whole value.
-/// Separators may be spaces or colons. Returns `None` for unparseable input.
+/// Separators may be spaces or colons. Returns `None` for unparseable input,
+/// or when the parsed value is outside the Dec domain (`[-90, 90]`).
+///
+/// See [`sexagesimal_ra_to_deg`] for the shared parsing/quoting approach.
 #[must_use]
 pub fn sexagesimal_dec_to_deg(raw: &str) -> Option<f64> {
-    sexagesimal_to_units(raw)
+    let cleaned = strip_fits_quotes(raw)?;
+    skymath::Equatorial::parse_at_epoch(
+        "0",
+        cleaned,
+        skymath::Epoch::J2000,
+        skymath::ParseMode::Lenient,
+    )
+    .ok()
+    .map(|e| e.dec().degrees())
 }
 
-/// Shared sexagesimal parser: `D M S` (or `H M S`) → fractional units, sign
-/// taken from the first field. Minutes/seconds are optional.
-fn sexagesimal_to_units(raw: &str) -> Option<f64> {
+/// Strip surrounding whitespace and a single layer of FITS single-quoting
+/// (`'...'`) from a header value string. Returns `None` for empty input.
+fn strip_fits_quotes(raw: &str) -> Option<&str> {
     let trimmed = raw.trim().trim_matches('\'').trim();
-    if trimmed.is_empty() {
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+// ── WCS pointing interpretation (spec 052 P3) ────────────────────────────────
+
+/// A plate-solved WCS pointing derived from standard FITS WCS keywords.
+///
+/// Shared by every format adapter (`crates/metadata/fits`,
+/// `crates/metadata/xisf`) via [`interpret_wcs_pointing`] so the WCS
+/// interpretation itself lives in exactly one place — the adapters only read
+/// the raw passthrough keywords (`CRVAL1/2`, `CTYPE1/2`, the `CD*` matrix,
+/// `CROTA2`) via their own header API and hand them here.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WcsPointing {
+    /// Plate-solved right ascension, decimal degrees.
+    pub ra_deg: f64,
+    /// Plate-solved declination, decimal degrees.
+    pub dec_deg: f64,
+    /// Sky position angle (east of north), decimal degrees, when a rotation
+    /// term is present.
+    pub rotation_deg: Option<f64>,
+}
+
+/// Interpret raw WCS header keywords into a [`WcsPointing`], or `None` when
+/// the header does not carry a real equatorial WCS solution.
+///
+/// Gated on `CTYPE1`/`CTYPE2` being genuine RA/Dec projections (e.g.
+/// `RA---TAN`/`DEC--TAN`) — a bare `CRVAL1/2` pair with no matching `CTYPE`
+/// is not trusted as a solve (could be a leftover/garbage keyword from an
+/// unrelated tool). Rotation prefers the CD matrix
+/// (`atan2(CD2_1, CD1_1)`, the position angle of the WCS Y axis under a
+/// simple rotation+scale — this does not attempt to fully decompose a
+/// skewed/flipped CD matrix, which is adequate at the planning-grade
+/// precision this app needs) over `CROTA2` when both are present; `CROTA2`
+/// alone is used verbatim when there is no CD matrix.
+#[must_use]
+#[allow(clippy::too_many_arguments)] // one keyword per WCS term; a struct would just move the list
+pub fn interpret_wcs_pointing(
+    ctype1: Option<&str>,
+    ctype2: Option<&str>,
+    crval1: Option<f64>,
+    crval2: Option<f64>,
+    cd1_1: Option<f64>,
+    cd2_1: Option<f64>,
+    crota2: Option<f64>,
+) -> Option<WcsPointing> {
+    if !is_ra_axis(ctype1) || !is_dec_axis(ctype2) {
         return None;
     }
+    let ra_deg = crval1.filter(|v| v.is_finite())?;
+    let dec_deg = crval2.filter(|v| v.is_finite())?;
 
-    // Normalise colon separators to spaces, then split on whitespace.
-    let normalised = trimmed.replace(':', " ");
-    let mut parts = normalised.split_whitespace();
-
-    let deg_str = parts.next()?;
-    let negative = deg_str.starts_with('-');
-    let deg: f64 = deg_str.parse().ok()?;
-    let deg_abs = deg.abs();
-
-    let min: f64 = match parts.next() {
-        Some(s) => s.parse().ok()?,
-        None => 0.0,
-    };
-    let sec: f64 = match parts.next() {
-        Some(s) => s.parse().ok()?,
-        None => 0.0,
+    let rotation_deg = match (cd1_1, cd2_1) {
+        (Some(a), Some(b)) if a.is_finite() && b.is_finite() && (a != 0.0 || b != 0.0) => {
+            Some(b.atan2(a).to_degrees())
+        }
+        _ => crota2.filter(|v| v.is_finite()),
     };
 
-    if min < 0.0 || sec < 0.0 {
-        return None;
+    Some(WcsPointing { ra_deg, dec_deg, rotation_deg })
+}
+
+/// Whether a `CTYPE` value names the WCS RA axis (`RA---<projection>`, e.g.
+/// `RA---TAN`, `RA---TAN-SIP`).
+fn is_ra_axis(ctype: Option<&str>) -> bool {
+    ctype.is_some_and(|c| c.trim().starts_with("RA--"))
+}
+
+/// Whether a `CTYPE` value names the WCS Dec axis (`DEC--<projection>`).
+fn is_dec_axis(ctype: Option<&str>) -> bool {
+    ctype.is_some_and(|c| c.trim().starts_with("DEC-"))
+}
+
+#[cfg(test)]
+mod wcs_tests {
+    use super::*;
+
+    #[test]
+    fn solved_tan_projection_with_cd_matrix_rotation() {
+        let w = interpret_wcs_pointing(
+            Some("RA---TAN"),
+            Some("DEC--TAN"),
+            Some(10.684_708),
+            Some(41.268_75),
+            Some(-0.000_193_5),
+            Some(0.000_050_1),
+            None,
+        )
+        .expect("real WCS keywords must solve");
+        assert!((w.ra_deg - 10.684_708).abs() < 1e-9);
+        assert!((w.dec_deg - 41.268_75).abs() < 1e-9);
+        assert!(w.rotation_deg.is_some());
     }
 
-    let magnitude = deg_abs + min / 60.0 + sec / 3600.0;
-    Some(if negative { -magnitude } else { magnitude })
+    #[test]
+    fn crota2_fallback_when_no_cd_matrix() {
+        let w = interpret_wcs_pointing(
+            Some("RA---TAN"),
+            Some("DEC--TAN"),
+            Some(83.822_08),
+            Some(-5.391_11),
+            None,
+            None,
+            Some(12.5),
+        )
+        .unwrap();
+        assert_eq!(w.rotation_deg, Some(12.5));
+    }
+
+    #[test]
+    fn no_rotation_term_is_none_but_pointing_still_solves() {
+        let w = interpret_wcs_pointing(
+            Some("RA---TAN"),
+            Some("DEC--TAN"),
+            Some(83.822_08),
+            Some(-5.391_11),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(w.rotation_deg, None);
+    }
+
+    #[test]
+    fn missing_or_non_equatorial_ctype_is_not_solved() {
+        // No CTYPE at all.
+        assert!(
+            interpret_wcs_pointing(None, None, Some(10.0), Some(20.0), None, None, None).is_none()
+        );
+        // Galactic projection, not equatorial — CRVAL1/2 must not be trusted.
+        assert!(interpret_wcs_pointing(
+            Some("GLON-TAN"),
+            Some("GLAT-TAN"),
+            Some(10.0),
+            Some(20.0),
+            None,
+            None,
+            None
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn missing_crval_is_not_solved() {
+        assert!(interpret_wcs_pointing(
+            Some("RA---TAN"),
+            Some("DEC--TAN"),
+            None,
+            Some(20.0),
+            None,
+            None,
+            None
+        )
+        .is_none());
+    }
 }
 
 /// Parse a decimal value from a FITS/XISF value string, tolerating a trailing

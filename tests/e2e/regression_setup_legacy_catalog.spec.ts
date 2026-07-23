@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Regression — setup wizard tolerates legacy persisted `catalogSettings`.
  *
@@ -14,23 +17,29 @@
  *
  * Verification layer: PE — Playwright mocks-UI (run in WSL).
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
 // App uses createHashHistory; setup wizard reads its persisted state on mount.
-function seedLegacyWizardState(page: import("@playwright/test").Page): void {
+function seedLegacyWizardState(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {
     // Not setup-complete → SetupPage renders the wizard (mock mode skips the gate).
-    window.localStorage.removeItem("alm-preferences");
+    window.localStorage.removeItem('alm-preferences');
     window.localStorage.setItem(
-      "alm-setup-wizard-state",
+      'alm-setup-wizard-state',
       JSON.stringify({
         // Confirm step — reads catalogSettings.selectedCatalogIds.length.
-        // (spec 044 US3 inserted a first-run Site step at index 3, shifting Confirm 3→4.)
-        currentStep: 4,
+        // (spec 044 US3 inserted a first-run Site step at index 3, shifting
+        // Confirm 3→4; spec 061 US1 then inserted a Language step at index
+        // 0, shifting every step +1, so Confirm is now 5.)
+        currentStep: 5,
         sources: [
-          { kind: "light_frames", path: "/astro/lights", scanDepth: "recursive" },
-          { kind: "project", path: "/astro/projects", scanDepth: "recursive" },
-          { kind: "inbox", path: "/astro/inbox", scanDepth: "recursive" },
+          {
+            kind: 'light_frames',
+            path: '/astro/lights',
+            scanDepth: 'recursive',
+          },
+          { kind: 'project', path: '/astro/projects', scanDepth: 'recursive' },
+          { kind: 'inbox', path: '/astro/inbox', scanDepth: 'recursive' },
         ],
         // OLD shape — no `selectedCatalogIds`.
         catalogSettings: { downloadAll: true },
@@ -43,39 +52,41 @@ function seedLegacyWizardState(page: import("@playwright/test").Page): void {
   });
 }
 
-test.describe("Regression · setup legacy catalogSettings", () => {
-  test("Confirm step renders with legacy {downloadAll} state (no crash)", async ({
+test.describe('Regression · setup legacy catalogSettings', () => {
+  test('Confirm step renders with legacy {downloadAll} state (no crash)', async ({
     page,
   }) => {
     const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(String(e)));
+    page.on('pageerror', (e) => errors.push(String(e)));
 
     seedLegacyWizardState(page);
-    await page.goto("/#/setup");
+    await page.goto('/#/setup');
 
     // The error boundary must NOT appear, and no 'length' of undefined error.
     await expect(page.getByText(/Something went wrong/i)).toHaveCount(0);
     // Confirm step heading (from SetupWizard STEPS[3]).
-    await expect(page.getByText(/Ready to go/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Ready to go/i)).toBeVisible({
+      timeout: 10_000,
+    });
 
     expect(
       errors.filter((e) => /Cannot read properties of undefined/i.test(e)),
-      `page errors: ${errors.join(" | ")}`,
+      `page errors: ${errors.join(' | ')}`,
     ).toHaveLength(0);
   });
 
-  test("Catalogs step renders with legacy {downloadAll} state (no crash)", async ({
+  test('Catalogs step renders with legacy {downloadAll} state (no crash)', async ({
     page,
   }) => {
     const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(String(e)));
+    page.on('pageerror', (e) => errors.push(String(e)));
 
     page.addInitScript(() => {
-      window.localStorage.removeItem("alm-preferences");
+      window.localStorage.removeItem('alm-preferences');
       window.localStorage.setItem(
-        "alm-setup-wizard-state",
+        'alm-setup-wizard-state',
         JSON.stringify({
-          currentStep: 2, // Catalogs step
+          currentStep: 3, // Catalogs/Configuration step (spec 061 US1 shifted this 2→3)
           sources: [],
           catalogSettings: { downloadAll: true },
           tools: {
@@ -85,15 +96,17 @@ test.describe("Regression · setup legacy catalogSettings", () => {
         }),
       );
     });
-    await page.goto("/#/setup");
+    await page.goto('/#/setup');
 
     await expect(page.getByText(/Something went wrong/i)).toHaveCount(0);
     // Step index 2 was rebranded "Catalogs" → "Configuration" (#259); the legacy
     // `{ downloadAll: true }` catalogSettings must still render the step (no crash).
-    await expect(page.getByText(/Configuration/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Configuration/i).first()).toBeVisible({
+      timeout: 10_000,
+    });
     expect(
       errors.filter((e) => /Cannot read properties of undefined/i.test(e)),
-      `page errors: ${errors.join(" | ")}`,
+      `page errors: ${errors.join(' | ')}`,
     ).toHaveLength(0);
   });
 });

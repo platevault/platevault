@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useMemo, type ReactElement } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Plus, FolderOpen, Telescope } from "lucide-react";

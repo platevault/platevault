@@ -13,12 +13,12 @@
   },
   "scripts": {
     "build": "node scripts/build-schemas.mjs",
-    "test": "node tests/lifecycle.transition.errors.test.mjs && node tests/conformance-harness.mjs",
+    "test": "node tests/lifecycle.transition.errors.test.mjs && node tests/sourceview.generate.test.mjs && node tests/sourceview.verify.test.mjs && node tests/conformance-harness.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "ajv": "^8.17.1",
-    "zod": "^4.1.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "json-schema-to-typescript": "^15.0.4",

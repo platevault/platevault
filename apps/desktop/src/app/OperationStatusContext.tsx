@@ -1,4 +1,13 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import { m } from '@/lib/i18n';
 
 export type OperationStatus = 'idle' | 'scanning' | 'applying';

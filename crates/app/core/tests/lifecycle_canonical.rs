@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 033 US5 tests — trustworthy project lifecycle.
 //!
 //! T046: user-IPC and automatic transitions both read/write `projects.lifecycle`
@@ -7,15 +10,13 @@
 
 mod support;
 
-use std::sync::{Arc, Mutex};
-
-use app_core::lifecycle_use_case::build_edge_table;
 use app_core::project_health::{
     check_project_ready_invariant, emit_block_transition, emit_unarchive_transition,
-    BlockCondition, DebounceTable, DEBOUNCE_WINDOW,
+    BlockCondition, DEBOUNCE_WINDOW,
 };
 use app_core::transition_use_case::apply_transition;
 use app_core::{project_setup, project_setup::add_source};
+use app_core_cache::DebounceCache;
 use audit::bus::EventBus;
 use contracts_core::lifecycle::{
     ProjectState, ProjectTransitionRequest, TransitionActor, TransitionRequest, TransitionStatus,
@@ -44,6 +45,12 @@ fn new_id() -> String {
     Uuid::new_v4().to_string()
 }
 
+/// These tests create projects with no `canonical_target_id`, so
+/// `project_setup::create`'s promotion never touches the cache.
+fn empty_cache() -> simbad_resolver::RedbCache {
+    simbad_resolver::Store::in_memory().unwrap().cache()
+}
+
 async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String {
     use contracts_core::projects_v2::ProjectCreateRequest;
     let req = ProjectCreateRequest {
@@ -54,8 +61,9 @@ async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     };
-    let result = project_setup::create(pool, bus, &req).await.unwrap();
+    let result = project_setup::create(pool, bus, &empty_cache(), &req).await.unwrap();
     result.project_id
 }
 
@@ -84,7 +92,6 @@ fn make_project_transition(
 #[tokio::test]
 async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
     let (pool, bus) = setup().await;
-    let edge_table = build_edge_table();
     let project_id = create_project(&pool, &bus, "Canonical Test M31").await;
 
     // Step 1: add a source so the project can be ready.
@@ -118,7 +125,6 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
             ProjectState::Processing,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
 
@@ -141,7 +147,7 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
     assert_eq!(result, None, "auto-ready invariant is a no-op when lifecycle != setup_incomplete");
 
     // Step 5: drive the block auto-transition via the health surface.
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
     let condition = BlockCondition::SourceMissing { inventory_id: "inv-gone".to_owned() };
     let block_result =
         emit_block_transition(&pool, &bus, &debounce, &project_id, &condition).await.unwrap();
@@ -164,7 +170,6 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
             ProjectState::Ready,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
 
@@ -184,7 +189,6 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
 async fn t046b_no_dual_write_to_legacy_project_table() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "No Divergence NGC 7000").await;
-    let edge_table = build_edge_table();
 
     // Force the lifecycle to `ready` by direct repo call.
     repo::update_project_lifecycle(&pool, &project_id, "ready").await.unwrap();
@@ -203,7 +207,6 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
             ProjectState::Processing,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
 
@@ -213,20 +216,21 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
     let row = repo::get_project(&pool, &project_id).await.unwrap();
     assert_eq!(row.lifecycle, "processing", "canonical table updated");
 
-    // The legacy `project` table should NOT have `processing` for this id
-    // (it was never written by the new path — confirming no dual-write).
-    // After migration 0036, the `project` table no longer has a `state` column,
-    // so this query verifies that the column is absent.
+    // The legacy `project` table must have NO row for this id: the project
+    // was created via the `projects` table (spec-008 path), and no write
+    // surface inserts into legacy `project` for that path. A real dual-write
+    // regression (an accidental INSERT into `project` alongside `projects`)
+    // would surface here as `Some(_)`.
     let legacy_state: Option<(String,)> = sqlx::query_as("SELECT name FROM project WHERE id = ?")
         .bind(&project_id)
         .fetch_optional(&pool)
         .await
         .unwrap_or(None);
-    // The project was created via `projects` (spec-008 path) — it may not even
-    // have a row in the legacy `project` table (different tables for different specs).
-    // If it does exist, there is no `state` column after migration 0036.
-    // The important assertion is that `projects.lifecycle` is the only state source.
-    let _ = legacy_state; // just confirm no crash — table_for now points to `projects`
+    assert!(
+        legacy_state.is_none(),
+        "no row should exist in the legacy `project` table for a projects-table-path project; \
+         found: {legacy_state:?}"
+    );
 }
 
 // ── T048: auto-transitions write audit rows and emit project.unarchived ───────
@@ -236,7 +240,7 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
 async fn t048a_auto_block_writes_audit_row() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M42 Block Audit").await;
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
 
     let condition = BlockCondition::ToolUnconfigured { tool: "PixInsight".to_owned() };
     let result =
@@ -363,7 +367,7 @@ async fn t048c_auto_unarchive_writes_audit_row_and_emits_event() {
 async fn t048d_typed_blocked_reason_persisted_and_readable() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M8 Blocked Reason").await;
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
 
     let condition = BlockCondition::SourceMissing { inventory_id: "inv-missing-42".to_owned() };
     emit_block_transition(&pool, &bus, &debounce, &project_id, &condition).await.unwrap();
@@ -387,8 +391,7 @@ async fn t048d_typed_blocked_reason_persisted_and_readable() {
 async fn t048e_unblocking_clears_blocked_reason() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M101 Clear Reason").await;
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
-    let edge_table = build_edge_table();
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
 
     // Block first.
     let condition = BlockCondition::User { note: "manual block".to_owned() };
@@ -408,7 +411,6 @@ async fn t048e_unblocking_clears_blocked_reason() {
             ProjectState::Ready,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
     assert!(resp.error.is_none());
@@ -442,9 +444,10 @@ async fn relative_project_path_without_registered_root_is_rejected() {
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     };
 
-    let err = project_setup::create(db.pool(), &bus, &req).await.unwrap_err();
+    let err = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.unwrap_err();
     assert_eq!(
         err.code,
         contracts_core::error_code::ErrorCode::PathInvalid,

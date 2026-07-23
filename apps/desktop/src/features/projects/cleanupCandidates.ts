@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Cleanup-scan view helpers (spec 017 WP-E, D11 step 1).
  *
@@ -37,7 +40,9 @@ const REASON_RE =
  * Parse the backend's structured candidate reason. Returns `null` when the
  * string does not match the documented format (render the raw reason then).
  */
-export function parseCandidateReason(reason: string): ParsedCandidateReason | null {
+export function parseCandidateReason(
+  reason: string,
+): ParsedCandidateReason | null {
   const match = REASON_RE.exec(reason);
   if (!match) return null;
   return {
@@ -75,7 +80,9 @@ function dataTypeRank(dataType: string): number {
  * Group candidates by their `dataType` classification, in stable
  * intermediate → master → final order, with per-group byte subtotals.
  */
-export function groupCandidates(candidates: CleanupCandidate[]): CandidateGroup[] {
+export function groupCandidates(
+  candidates: CleanupCandidate[],
+): CandidateGroup[] {
   const byType = new Map<string, CandidateGroup>();
   for (const candidate of candidates) {
     let group = byType.get(candidate.dataType);

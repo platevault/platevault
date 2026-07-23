@@ -22,7 +22,7 @@
 #                   /speckit.* exists in every agent the project compiles steering for (e.g.
 #                   "claude,codex"). The primary is always included. DEFAULT: just --integration.
 #   --script        script flavor for `specify init` (default: sh)
-#   --force         pass --force to `specify init` (skip dir-not-empty prompt)
+#   --force         re-run `specify init` even if .specify/ already exists (re-scaffold)
 #
 # WHY auto-detect the primary: `specify extension add` renders an extension's command files
 # ONLY for the integration active at add-time. If `specify init` records the wrong primary
@@ -39,6 +39,7 @@ INTEGRATION=""        # empty => auto-detect (resolve_primary_integration below)
 RENDER_FOR=""         # empty => render for the primary only
 SCRIPT_FLAVOR="sh"
 FORCE=""
+FAILED_EXTENSIONS=""  # accumulates skipped extension names for end-of-step summary
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -138,13 +139,17 @@ CATALOG_URL="https://raw.githubusercontent.com/github/spec-kit/main/extensions/c
 #   writes `specs/spec-status.md` on every run -- gitignored in the scaffold.
 #   Installed via `latest-release:` (newest GitHub release tag resolved at setup
 #   time) rather than the community catalog, which lags behind upstream.
+#
+# verify + verify-tasks are NOT in this list: verification runs via the merged
+# `speckit-verify` local agent (spawned as a prompt step in the workflow YAMLs),
+# which writes the required report files that gate downstream DAG nodes.
 EXTENSIONS=(
   agent-assign
-  archive brownfield bugfix checkpoint cleanup conduct critique diagram doctor
-  fix-findings fleet github-issues iterate onboard optimize qa reconcile
-  refine retro review roadmap security-review
+  cleanup critique
+  fix-findings iterate qa
+  retro review roadmap security-review
   status-report=latest-release:Open-Agent-Tools/spec-kit-status
-  tinyspec verify verify-tasks worktree
+  tinyspec
 )
 
 # Workflow definitions, installed via the `workflow` primitive (since spec-kit
@@ -159,14 +164,38 @@ WORKFLOWS=(speckit speckit-quality speckit-full)
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: '$1' not found on PATH" >&2; exit 1; }; }
 need specify
 
+# Require spec-kit >= 0.12.0: workflows are a first-class primitive (not an extension),
+# --no-git was removed, and specify-cli is published natively on PyPI.
+# Upgrade with: uv tool install specify-cli  (installs/upgrades from PyPI)
+_specify_ver="$(specify --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+' | head -n1)"
+_specify_major="${_specify_ver%%.*}"
+_specify_minor="${_specify_ver#*.}"; _specify_minor="${_specify_minor%%.*}"
+_ver_ok=0
+if [ -n "$_specify_major" ] && [ -n "$_specify_minor" ]; then
+  if [ "$_specify_major" -gt 0 ]; then
+    _ver_ok=1   # major >= 1 is fine
+  elif [ "$_specify_major" -eq 0 ] && [ "$_specify_minor" -ge 12 ]; then
+    _ver_ok=1   # 0.12.x or higher 0.x
+  fi
+fi
+if [ "$_ver_ok" -ne 1 ]; then
+  echo "ERROR: specify >= 0.12.0 required (found: ${_specify_ver:-unknown})" >&2
+  echo "       Upgrade with: uv tool install specify-cli" >&2
+  exit 1
+fi
+unset _specify_ver _specify_major _specify_minor _ver_ok
+
 echo "==> 1/6 specify init (.specify/ scaffold) -- integration=$INTEGRATION script=$SCRIPT_FLAVOR"
 if [ -d .specify ] && [ -z "$FORCE" ]; then
   echo "    .specify/ already present -- skipping init (pass --force to re-run)"
 else
+  # Always pass --force so the init is unconditionally non-interactive: on a
+  # fresh git repo .git/ makes the directory non-empty and specify prompts y/N
+  # (default: abort) when stdin is /dev/null. --force skips that check entirely.
   # stdin from /dev/null so the post-init "Agent Folder Security" prompt and any
   # other interactive confirmations resolve to their non-interactive default
   # instead of blocking (or aborting under set -e).
-  specify init --here --integration "$INTEGRATION" --script "$SCRIPT_FLAVOR" $FORCE </dev/null
+  specify init --here --integration "$INTEGRATION" --script "$SCRIPT_FLAVOR" --force </dev/null
 fi
 
 echo "==> 2/6 register community extension catalog"
@@ -225,11 +254,17 @@ for entry in "${EXTENSIONS[@]}"; do
     case "$src" in
       latest-release:*)
         repo="${src#latest-release:}"
-        # Resolve the latest published release tag via the GitHub API (no auth needed
-        # for public repos), then install that tag's source archive. Tracks newest
-        # without pinning a version in this file.
-        tag="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
-                 | grep -m1 '"tag_name"' | sed 's/.*"tag_name"[^"]*"\([^"]*\)".*/\1/')"
+        # Resolve the latest published release tag. Prefer `gh api` (authenticated,
+        # no rate-limit risk) with a curl fallback. Both are wrapped so a failure
+        # yields an empty tag rather than aborting the script under set -e -o pipefail.
+        tag=""
+        if command -v gh >/dev/null 2>&1; then
+          tag="$(gh api "repos/${repo}/releases/latest" --jq '.tag_name' 2>/dev/null || true)"
+        fi
+        if [ -z "$tag" ]; then
+          tag="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
+                   | grep -m1 '"tag_name"' | sed 's/.*"tag_name"[^"]*"\([^"]*\)".*/\1/' || true)"
+        fi
         if [ -z "$tag" ]; then
           echo "    WARNING: could not resolve latest release of '$repo' for '$ext' -- skipping" >&2
           continue
@@ -242,7 +277,9 @@ for entry in "${EXTENSIONS[@]}"; do
         echo "    + $ext (from $url)"
         ;;
     esac
-    if ! specify extension add "$ext" --from "$url" </dev/null; then
+    # `specify extension add --from` may prompt y/N (default: abort) for the
+    # directory-not-empty check on a fresh git repo -- pipe `y` to confirm.
+    if ! echo y | specify extension add "$ext" --from "$url"; then
       echo "    WARNING: could not install '$ext' from $url -- skipping (publish it or check access)" >&2
       continue
     fi
@@ -331,7 +368,54 @@ for wf in "${WORKFLOWS[@]}"; do
   specify workflow add "$wf_dir" </dev/null
 done
 
-echo "==> 6/6 ignore generated status-report artefact"
+echo "==> 6/7 provision speckit-gate (gates.yaml-driven enforcement)"
+# speckit-gate is a Python CLI distributed on PyPI and consumed via uvx (no APM
+# dependency). It supersedes speckit-dag-hooks. Guard: skip gracefully when uvx
+# cannot resolve it (publish may be pending) rather than aborting setup.
+if uvx speckit-gate --help >/dev/null 2>&1; then
+  echo "    speckit-gate available -- running init/compile/install"
+  # Init writes gates.yaml from the built-in defaults (--defaults skips the
+  # interactive wizard). Idempotent: re-running overwrites with the same content.
+  uvx speckit-gate init --defaults
+
+  # Merge the project overlay (A2 policy: deprecated implement, agent-assign
+  # chain, verify/verify-tasks spawn-agent gates). Append the overlay's `gates:`
+  # entries to the project's gates.yaml. This is safe because:
+  #   1. init --defaults writes built-in commands only (core preset).
+  #   2. The overlay keys (implement, agent-assign-*, verify, verify-tasks) are
+  #      NOT in the core preset, so there are no collisions on a fresh init.
+  #   3. If gates.yaml already has these keys (re-run) the append creates
+  #      duplicates that speckit-gate compile will reject with a clear error;
+  #      prefer the duplicate-key compile error over silently losing the overlay.
+  OVERLAY="$SCRIPT_DIR/gates-overlay.yaml"
+  if [ -f "$OVERLAY" ]; then
+    GATES_FILE="gates.yaml"
+    if [ -f "$GATES_FILE" ]; then
+      # Extract only the `gates:` block from the overlay and append it.
+      # sed -n '/^gates:/,$ p' preserves the header comment block under gates:.
+      echo "    merging gates-overlay.yaml into $GATES_FILE"
+      printf '\n' >> "$GATES_FILE"
+      sed -n '/^gates:/,$ p' "$OVERLAY" | tail -n +2 >> "$GATES_FILE"
+    else
+      echo "    WARNING: gates.yaml not found after init -- overlay not merged" >&2
+    fi
+  else
+    echo "    WARNING: gates-overlay.yaml not found at $OVERLAY -- skipping overlay merge" >&2
+  fi
+
+  # Compile resolves the merged gates.yaml into the hook dispatch table.
+  uvx speckit-gate compile
+
+  # Install merges the compiled hooks into .claude/settings.json (Claude harness).
+  uvx speckit-gate install --harness claude
+  echo "    speckit-gate: init + overlay + compile + install complete"
+else
+  echo "    SKIP: uvx could not resolve speckit-gate" >&2
+  echo "          Install hint: pip install speckit-gate  OR  wait for PyPI publish" >&2
+  echo "          Re-run setup-speckit.sh once speckit-gate is available to enable gate enforcement." >&2
+fi
+
+echo "==> 7/7 ignore generated status-report artefact"
 # The status-report extension (/speckit.status-report.show) regenerates
 # specs/spec-status.md on every run despite its read-only catalog tag. It is a
 # derived report, not a tracked spec artefact (spec.md/plan.md/tasks.md ARE
@@ -350,7 +434,7 @@ fi
 
 echo ""
 echo "==> SpecKit setup complete."
-echo "    The speckit orchestration layer (agents + DAG hooks) ships in the same"
+echo "    The speckit orchestration layer (agents + gate hooks) ships in the same"
 echo "    package as this script. If steering is not yet compiled, run:"
 echo "      apm compile --target codex,claude --no-constitution"
 echo "    Then start the workflow with /speckit.specify."

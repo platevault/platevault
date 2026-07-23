@@ -75,7 +75,8 @@ the setup wizard's repurposed step).
 
 ## Operations
 
-- **Run the live SIMBAD test** (gated, needs network): `cargo test -p targeting --test simbad_live -- --ignored`.
+- **Run the live SIMBAD test** (opt-in via env var, needs network):
+  `ALM_LIVE_SIMBAD=1 cargo test -p targeting_resolver --test simbad_live`.
 - **Regenerate the seed**: `cargo run -p seed-builder` (commits to `assets/seed/seed.json`).
 - **Attribution** (FR-012): SIMBAD (CDS, Université de Strasbourg) + OpenNGC — shown in the settings
   Attribution section.

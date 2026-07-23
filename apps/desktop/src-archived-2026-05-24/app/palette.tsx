@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Folder, Image, FolderInput, Telescope, ClipboardList, Settings, Plus, AlertTriangle } from "lucide-react";
 import type { PaletteGroup } from "../ui";
 import { projects, inventorySources, plans, inboxItems } from "../data/mock";

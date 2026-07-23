@@ -1,8 +1,14 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { GuidanceCell } from './GuidanceCell';
-import { deriveRowMoonPlanning, UNKNOWN_ROW_PLANNING } from './astro/row-planning';
+import {
+  deriveRowMoonPlanning,
+  UNKNOWN_ROW_PLANNING,
+} from './astro/row-planning';
 import { DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
 import type { ObservingNight } from './astro/moon-state';
 
@@ -21,9 +27,18 @@ function night(): ObservingNight {
 describe('GuidanceCell — explanation popover (spec 047 T018, FR-012)', () => {
   it('opens the explanation on click/focus-activate, showing Moon state + separation + per-band thresholds', async () => {
     const n = night();
-    const moon = deriveRowMoonPlanning({ raDeg: 70, decDeg: 0 }, n, DEFAULT_MOON_AVOIDANCE);
+    const moon = deriveRowMoonPlanning(
+      { raDeg: 70, decDeg: 0 },
+      n,
+      DEFAULT_MOON_AVOIDANCE,
+    );
     render(
-      <GuidanceCell night={n} moon={moon} params={DEFAULT_MOON_AVOIDANCE} targetLabel="M 42" />,
+      <GuidanceCell
+        night={n}
+        moon={moon}
+        params={DEFAULT_MOON_AVOIDANCE}
+        targetLabel="M 42"
+      />,
     );
 
     const trigger = screen.getByRole('button');
@@ -53,12 +68,25 @@ describe('GuidanceCell — explanation popover (spec 047 T018, FR-012)', () => {
 
   it('the trigger button stops row-select click propagation', async () => {
     const n = night();
-    const moon = deriveRowMoonPlanning({ raDeg: 70, decDeg: 0 }, n, DEFAULT_MOON_AVOIDANCE);
+    const moon = deriveRowMoonPlanning(
+      { raDeg: 70, decDeg: 0 },
+      n,
+      DEFAULT_MOON_AVOIDANCE,
+    );
     let rowClicked = false;
     render(
       // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- test harness only
-      <div onClick={() => { rowClicked = true; }}>
-        <GuidanceCell night={n} moon={moon} params={DEFAULT_MOON_AVOIDANCE} targetLabel="M 42" />
+      <div
+        onClick={() => {
+          rowClicked = true;
+        }}
+      >
+        <GuidanceCell
+          night={n}
+          moon={moon}
+          params={DEFAULT_MOON_AVOIDANCE}
+          targetLabel="M 42"
+        />
       </div>,
     );
     fireEvent.click(screen.getByRole('button'));

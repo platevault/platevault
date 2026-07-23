@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for the sessions coverage area — feature 037 (T???).
 //!
 //! Covers:
@@ -36,29 +39,14 @@ async fn insert_acquisition_session(pool: &sqlx::SqlitePool, id: &str) {
 }
 
 // ── 1. sessions stub: merge and split return not-implemented errors ───────────
-
-#[tokio::test]
-async fn merge_and_split_stubs_return_not_implemented_errors() {
-    let (db, _repo, _bus) = support::setup().await;
-    let pool = db.pool();
-
-    // split_session stub
-    let split_result = app_core::sessions::split_session(pool, "ses-001", "filter").await;
-    assert!(split_result.is_err(), "split_session must return Err");
-    assert!(
-        split_result.unwrap_err().contains("not yet implemented"),
-        "error message must mention 'not yet implemented'"
-    );
-
-    // merge_sessions stub
-    let ids = vec!["ses-001".to_owned(), "ses-002".to_owned()];
-    let merge_result = app_core::sessions::merge_sessions(pool, &ids).await;
-    assert!(merge_result.is_err(), "merge_sessions must return Err");
-    assert!(
-        merge_result.unwrap_err().contains("not yet implemented"),
-        "error message must mention 'not yet implemented'"
-    );
-}
+//
+// `merge_and_split_stubs_return_not_implemented_errors` removed: it exactly
+// duplicated `split_session_returns_not_implemented` /
+// `merge_sessions_returns_not_implemented` in `src/sessions.rs`'s own unit
+// tests, with zero added value — both stubs take `_pool: &SqlitePool` and
+// ignore it entirely, so exercising them through a real DB pool here (vs. an
+// unconnected in-memory pool at the unit level) exercises no additional code
+// path.
 
 // ── 2. list_sessions: returns real rows, empty on fresh DB ───────────────────
 
@@ -193,4 +181,143 @@ async fn get_session_excludes_missing_frames_from_active_totals() {
 
     assert_eq!(detail.frame_count, 1, "a missing frame drops out of the active count (INV-5)");
     assert_eq!(detail.total_size_bytes, 1000, "a missing frame's bytes drop out of the total");
+}
+
+// ── 8. #775: real total_integration_seconds from per-frame exposure_s ───────
+
+/// Attach a real `inbox_items` + `inbox_file_metadata` row for a frame
+/// previously inserted by `insert_file_record`, giving it a real exposure.
+async fn insert_frame_exposure(
+    pool: &sqlx::SqlitePool,
+    frame_id: &str,
+    root_id: &str,
+    relative_path: &str,
+    exposure_s: f64,
+) {
+    let item_id = format!("item-{frame_id}");
+    sqlx::query(
+        "INSERT INTO inbox_items (id, root_id, relative_path, discovered_at, last_scanned_at)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+    )
+    .bind(&item_id)
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(pool)
+    .await
+    .expect("insert inbox_items");
+
+    sqlx::query(
+        "INSERT INTO inbox_file_metadata (id, inbox_item_id, relative_file_path, exposure_s)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(format!("meta-{frame_id}"))
+    .bind(&item_id)
+    .bind(relative_path)
+    .bind(exposure_s)
+    .execute(pool)
+    .await
+    .expect("insert inbox_file_metadata");
+}
+
+#[tokio::test]
+#[allow(clippy::float_cmp)] // seeded SUM of exact literal inputs; no rounding involved
+async fn list_sessions_sums_real_per_frame_exposure() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_file_record(pool, "exp-a", "root-exp", 1000, "classified").await;
+    insert_file_record(pool, "exp-b", "root-exp", 1000, "classified").await;
+    insert_frame_exposure(pool, "exp-a", "root-exp", "exp-a.fits", 180.0).await;
+    insert_frame_exposure(pool, "exp-b", "root-exp", "exp-b.fits", 180.0).await;
+    sqlx::query(
+        "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+         VALUES ('ses-exposed', 'KEY', '[\"exp-a\",\"exp-b\"]', '2026-05-01T00:00:00Z')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let sessions = app_core::sessions::list_sessions(pool).await.unwrap();
+    let ses = sessions.iter().find(|s| s.id == "ses-exposed").expect("ses-exposed must be in list");
+
+    assert_eq!(
+        ses.total_integration_seconds, 360.0,
+        "total_integration_seconds must be the real per-frame sum, never 0 (#775)"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::float_cmp)] // seeded SUM of exact literal inputs; no rounding involved
+async fn get_session_excludes_missing_frames_from_integration_seconds() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_file_record(pool, "exp-present", "root-exp2", 1000, "classified").await;
+    insert_file_record(pool, "exp-gone", "root-exp2", 1000, "missing").await;
+    insert_frame_exposure(pool, "exp-present", "root-exp2", "exp-present.fits", 300.0).await;
+    insert_frame_exposure(pool, "exp-gone", "root-exp2", "exp-gone.fits", 9999.0).await;
+    sqlx::query(
+        "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+         VALUES ('ses-exp-missing', 'KEY', '[\"exp-present\",\"exp-gone\"]', '2026-05-01T00:00:00Z')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let detail = app_core::sessions::get_session(pool, "ses-exp-missing").await.unwrap();
+
+    assert_eq!(
+        detail.total_integration_seconds, 300.0,
+        "a missing frame's exposure drops out of the total (INV-5 parity)"
+    );
+}
+
+// ── 9. reviewer seq=277: target_id/canonical_target_id precedence agreement ──
+
+/// Seed a minimal `canonical_target` row (spec 035).
+async fn insert_canonical_target(pool: &sqlx::SqlitePool, id: &str) {
+    sqlx::query(
+        "INSERT INTO canonical_target
+            (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+         VALUES (?, NULL, ?, 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(format!("C-{id}"))
+    .execute(pool)
+    .await
+    .expect("insert canonical_target");
+}
+
+/// `backfill_session_targets` (crates/app/targets/src/ingest_sessions.rs) only
+/// gates on `canonical_target_id IS NULL`, so a session can legitimately end
+/// up with BOTH `target_id` and `canonical_target_id` set to *different*
+/// targets. `list_sessions`/`get_session` must resolve the SAME target as
+/// `q_targets_mgmt::session_counts_by_target` (both call
+/// `q_core::resolve_session_target_id`) — otherwise the Sessions page and the
+/// planner's Sessions column would attribute the same session to two
+/// different targets.
+#[tokio::test]
+async fn list_sessions_prefers_legacy_target_id_when_both_columns_set() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    support::insert_target(pool, "legacy-both").await;
+    insert_canonical_target(pool, "canon-both").await;
+    sqlx::query(
+        "INSERT INTO acquisition_session
+            (id, session_key, frame_ids, target_id, canonical_target_id, created_at)
+         VALUES ('ses-both', 'KEY', '[]', 'legacy-both', 'canon-both', '2026-01-01T00:00:00Z')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let sessions = app_core::sessions::list_sessions(pool).await.unwrap();
+    let ses = sessions.iter().find(|s| s.id == "ses-both").expect("ses-both must be in list");
+    assert_eq!(
+        ses.target_ids,
+        vec!["legacy-both".to_owned()],
+        "target_id must win over canonical_target_id when both are set, \
+         matching q_targets_mgmt::session_counts_by_target's precedence exactly"
+    );
 }

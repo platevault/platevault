@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journey: whole-project archive -> trash ->
 //! permanent delete (coverage-matrix Journey 7, "Archive lifecycle + trash +
 //! permanent delete" — previously **zero automated coverage at any layer**).
@@ -21,33 +24,24 @@ use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Whole-project archive: real lifecycle progression to `completed` ->
-/// `archive.plan.generate` -> `plans.apply.direct` -> real filesystem move
-/// into the app-managed archive subtree -> `archive.list` durable read ->
-/// `archive.send_to_trash` -> `archive.permanently_delete` honoring the
-/// `blockPermanentDelete` protection default.
+/// Real lifecycle progression to `completed` -> real archive plan ->
+/// `plans.apply.direct` (real filesystem move into `.astro-plan-archive`) ->
+/// `archive.list` durable read. One real archived project + plan per call —
+/// the caller then exercises exactly ONE destructive archive-management
+/// command (`archive.send_to_trash` XOR `archive.permanently_delete`)
+/// against it, because both commands now really remove the plan's entire
+/// archive subtree (#732): calling one after the other against the SAME plan
+/// would legitimately find nothing left for the second call, which is not
+/// what either sub-journey is testing. `label` disambiguates request ids and
+/// the project name across calls in the same test.
 ///
-/// Backend REAL: `projects.create`, `lifecycle.transition.apply` (x3),
-/// `source.protection.set`, `artifact.watcher.attach`, `artifact.list`,
-/// `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`,
-/// `archive.list`, `archive.send_to_trash`, `settings.update`,
-/// `archive.permanently_delete`.
-///
-/// Honest boundaries (documented, not faked): `archive.send_to_trash` and
-/// `archive.permanently_delete` are METADATA-ONLY today
-/// (`crates/app/core/src/plans.rs::send_archive_to_trash` /
-/// `permanently_delete_archive` — both only count `archive_path`-bearing
-/// items and emit an audit event; neither calls into the filesystem). This
-/// journey therefore asserts the real response/audit shape and the real
-/// `blockPermanentDelete` gate, but does NOT assert an OS trash/deletion
-/// side effect, because none exists yet — asserting one would test an
-/// invented behavior, not the product (constitution II / FR-018 spirit).
-#[tokio::test]
-#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> {
-    let app = E2eApp::launch().await?;
-    app.wait_bridge_ready(Duration::from_secs(30)).await?;
-
+/// Returns `(project_id, plan_id, project_dir)` — the caller must hold
+/// `project_dir` (a `TempDir` guard) alive for as long as it still needs the
+/// real archived file on disk.
+async fn setup_archived_project(
+    app: &E2eApp,
+    label: &str,
+) -> anyhow::Result<(String, String, tempfile::TempDir)> {
     // 1. Create a project with no sources — it starts `setup_incomplete`
     // (real, documented lifecycle rule; `projects.create` does not
     // auto-advance an empty-source project).
@@ -57,8 +51,8 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
             "projects_create",
             json!({
                 "req": {
-                    "requestId": "e2e-archive-create",
-                    "name": "E2E Archive Project",
+                    "requestId": format!("e2e-archive-create-{label}"),
+                    "name": format!("E2E Archive Project {label}"),
                     "tool": "PixInsight",
                     "path": project_dir.path().to_string_lossy(),
                     "initialSources": [],
@@ -83,12 +77,9 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
     // once its processing is done — and `completed -> archived` is itself
     // plan-required, so this journey proves the plan-driven closure path,
     // never a direct transition into `archived`).
-    let hops: &[(&str, &str, &str)] = &[
-        ("setup_incomplete", "ready", "e2e00000-0000-4000-8000-000000000101"),
-        ("ready", "processing", "e2e00000-0000-4000-8000-000000000102"),
-        ("processing", "completed", "e2e00000-0000-4000-8000-000000000103"),
-    ];
-    for (current_state, next_state, request_id) in hops {
+    let hops: &[(&str, &str)] =
+        &[("setup_incomplete", "ready"), ("ready", "processing"), ("processing", "completed")];
+    for (current_state, next_state) in hops.iter() {
         let transition: serde_json::Value = app
             .invoke(
                 "lifecycle_transition_apply",
@@ -96,7 +87,11 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
                     "request": {
                         "entityType": "project",
                         "contractVersion": "2.0.0",
-                        "requestId": request_id,
+                        // `requestId` deserializes as a real `Uuid`
+                        // (contracts_core::lifecycle transition_request_base!),
+                        // unlike most other request ids — a hand-crafted
+                        // placeholder string fails IPC deserialization.
+                        "requestId": uuid::Uuid::new_v4().to_string(),
                         "entityId": project_id,
                         "currentState": current_state,
                         "nextState": next_state,
@@ -117,13 +112,15 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
     // safe-by-default level is "protected" (constitution II) — without
     // this, every archive item refuses apply with `protected.source`. A
     // real user sets this the same way before a first archive.
+    // 2-level model (issue #506): "normal" is retired — "unprotected" is the
+    // non-gating override this test needs.
     let _: serde_json::Value = app
         .invoke(
             "source_protection_set",
             json!({
                 "request": {
                     "sourceId": project_id,
-                    "level": "normal",
+                    "level": "unprotected",
                     "blockPermanentDelete": null,
                     "categories": null,
                 }
@@ -133,7 +130,7 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
 
     // 4. A real processing output, classified `intermediate` by the real
     // artifact-kind rules (`crates/workflow/artifacts/src/default_rules.rs`).
-    let original_path = project_dir.path().join("integration_M31_Ha.xisf");
+    let original_path = project_dir.path().join(format!("integration_M31_Ha_{label}.xisf"));
     std::fs::write(&original_path, b"not-a-real-xisf-file")?;
 
     let _: serde_json::Value = app
@@ -239,32 +236,75 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
         "expected the archive.list entry to carry the owning plan id: {entry}"
     );
 
-    // 10. `archive.send_to_trash` — real metadata response + audit event
-    // (see module doc: no real OS trash side effect exists yet). Now that
-    // the applied plan's items carry a real `archive_path` (this spec's
-    // bugfix — see `crates/app/core/src/protection.rs`), `archive_count` is
-    // real and non-zero rather than always failing `archive.empty`.
+    Ok((project_id, plan_id, project_dir))
+}
+
+/// Whole-project archive: real lifecycle progression to `completed` ->
+/// `archive.plan.generate` -> `plans.apply.direct` -> real filesystem move
+/// into the app-managed archive subtree -> `archive.list` durable read ->
+/// `archive.send_to_trash` -> `archive.permanently_delete` honoring the
+/// `blockPermanentDelete` protection default.
+///
+/// Backend REAL: `projects.create`, `lifecycle.transition.apply` (x3),
+/// `source.protection.set`, `artifact.watcher.attach`, `artifact.list`,
+/// `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`,
+/// `archive.list`, `archive.send_to_trash`, `settings.update`,
+/// `archive.permanently_delete`.
+///
+/// `archive.send_to_trash` and `archive.permanently_delete` now execute real
+/// filesystem operations (#732 — previously metadata-only stubs). Both
+/// commands act on a plan's ENTIRE archive subtree, so this journey uses two
+/// independent real archived projects/plans (`setup_archived_project`): one
+/// exercises real OS-trash removal, the other exercises the real
+/// `blockPermanentDelete` gate + real permanent delete. Running both
+/// commands sequentially against the SAME plan would have nothing left for
+/// the second call once the first really removes the files.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> {
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // ── Sub-journey A: archive.send_to_trash really removes the file ──────
+    let (_project_a, plan_a, dir_a) = setup_archived_project(&app, "trash").await?;
+
+    let archive_root_a = dir_a.path().join(".astro-plan-archive");
     let send_to_trash: serde_json::Value =
-        app.invoke("archive_send_to_trash", json!({ "planId": plan_id })).await?;
+        app.invoke("archive_send_to_trash", json!({ "planId": plan_a })).await?;
     anyhow::ensure!(
-        send_to_trash["planId"] == json!(plan_id)
+        send_to_trash["planId"] == json!(plan_a)
             && send_to_trash["itemsMoved"].as_i64().unwrap_or(0) >= 1,
         "expected archive.send_to_trash to report the real archived item count: {send_to_trash}"
     );
+    // Real filesystem side effect (#732): the archived file is genuinely
+    // gone from the app-managed archive subtree, not just audit-logged.
+    anyhow::ensure!(
+        !any_file_under(&archive_root_a),
+        "expected archive.send_to_trash to leave no files under {archive_root_a:?}"
+    );
 
-    // 11. `archive.permanently_delete` honors the `blockPermanentDelete`
-    // protection default (spec 016). The app's default is `true` (blocked)
-    // — assert the call is refused without depending on how the WebDriver
-    // bridge's `.catch` stringifies the rejected `ContractError` object.
+    // ── Sub-journey B: archive.permanently_delete honors blockPermanentDelete,
+    // then really removes the file once unblocked ─────────────────────────
+    let (_project_b, plan_b, dir_b) = setup_archived_project(&app, "delete").await?;
+    let archive_root_b = dir_b.path().join(".astro-plan-archive");
+
+    // The app's default is `true` (blocked) — assert the call is refused
+    // without depending on how the WebDriver bridge's `.catch` stringifies
+    // the rejected `ContractError` object.
     let blocked = app
         .invoke::<serde_json::Value>(
             "archive_permanently_delete",
-            json!({ "planId": plan_id, "confirmText": "DELETE" }),
+            json!({ "planId": plan_b, "confirmText": "DELETE" }),
         )
         .await;
     anyhow::ensure!(
         blocked.is_err(),
         "expected archive.permanently_delete to be refused while blockPermanentDelete=true (default)"
+    );
+    // Refused before touching the filesystem (constitution II).
+    anyhow::ensure!(
+        any_file_under(&archive_root_b),
+        "expected the blocked delete to leave the archived file untouched: {archive_root_b:?}"
     );
 
     // Explicitly disable the protection default (a real, user-facing
@@ -276,13 +316,40 @@ async fn archive_lifecycle_apply_trash_permanent_delete() -> anyhow::Result<()> 
         )
         .await?;
     let permanently_delete: serde_json::Value = app
-        .invoke("archive_permanently_delete", json!({ "planId": plan_id, "confirmText": "DELETE" }))
+        .invoke("archive_permanently_delete", json!({ "planId": plan_b, "confirmText": "DELETE" }))
         .await?;
     anyhow::ensure!(
-        permanently_delete["planId"] == json!(plan_id)
+        permanently_delete["planId"] == json!(plan_b)
             && permanently_delete["itemsDeleted"].as_i64().unwrap_or(0) >= 1,
         "expected archive.permanently_delete to succeed once unblocked: {permanently_delete}"
     );
+    // Real filesystem side effect (#732): the archived file is genuinely
+    // removed, not just audit-logged.
+    anyhow::ensure!(
+        !any_file_under(&archive_root_b),
+        "expected archive.permanently_delete to leave no files under {archive_root_b:?}"
+    );
 
     app.shutdown().await
+}
+
+/// True if `root` exists and contains at least one file (recursively).
+/// Used to assert real archive-management side effects without hardcoding
+/// the item-id-derived archive filename.
+fn any_file_under(root: &std::path::Path) -> bool {
+    fn walk(dir: &std::path::Path) -> bool {
+        let Ok(entries) = std::fs::read_dir(dir) else { return false };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if walk(&path) {
+                    return true;
+                }
+            } else if path.is_file() {
+                return true;
+            }
+        }
+        false
+    }
+    root.is_dir() && walk(root)
 }

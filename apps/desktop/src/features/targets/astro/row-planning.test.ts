@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest';
 import { deriveRowMoonPlanning, UNKNOWN_ROW_PLANNING } from './row-planning';
 import type { ObservingNight } from './moon-state';
@@ -35,7 +38,8 @@ describe('deriveRowMoonPlanning — US3 filter guidance', () => {
     const night = nightAt(14.77); // ~new Moon: required separations shrink toward zero
     const row = deriveRowMoonPlanning({ raDeg: 90, decDeg: 0 }, night);
     expect(row.recommendation).toBe('broadband-ok');
-    for (const v of Object.values(row.bandViability ?? {})) expect(v).toBe(true);
+    for (const v of Object.values(row.bandViability ?? {}))
+      expect(v).toBe(true);
   });
 
   it('boundary: separation exactly at min_separation counts as viable (>=, per moon-avoidance.ts)', () => {
@@ -66,7 +70,11 @@ describe('deriveRowMoonPlanning — US3 filter guidance', () => {
       ...DEFAULT_MOON_AVOIDANCE,
       Ha: { distanceDeg: 90, widthDays: 14 },
     };
-    const row = deriveRowMoonPlanning({ raDeg: 60, decDeg: 0 }, night, tightened);
+    const row = deriveRowMoonPlanning(
+      { raDeg: 60, decDeg: 0 },
+      night,
+      tightened,
+    );
     // With Ha's distance widened to 90°, a 60° separation is no longer viable.
     expect(row.bandViability?.Ha).toBe(false);
     expect(row.recommendation).toBe('avoid-tonight');

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Review queue — session-centric. Walk through sessions that need review, not individual files.
 function WfReviewQueue() {
   const queue = [

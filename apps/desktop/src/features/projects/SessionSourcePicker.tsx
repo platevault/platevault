@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SessionSourcePicker — shared session-list-with-selection pattern (WP-008-C).
  *
@@ -69,8 +72,18 @@ export function SessionSourcePicker({
       // resolved (contract says `string`, but that's a best-effort backend
       // guarantee — defend the UI so an unresolved session doesn't crash the
       // whole picker, it just never matches a target filter).
-      if (filterTarget && !(s.sessionKey.target ?? '').toLowerCase().includes(filterTarget.toLowerCase())) return false;
-      if (filterFilter && !s.sessionKey.filter.toLowerCase().includes(filterFilter.toLowerCase())) return false;
+      if (
+        filterTarget &&
+        !(s.sessionKey.target ?? '')
+          .toLowerCase()
+          .includes(filterTarget.toLowerCase())
+      )
+        return false;
+      if (
+        filterFilter &&
+        !s.sessionKey.filter.toLowerCase().includes(filterFilter.toLowerCase())
+      )
+        return false;
       return true;
     });
   }, [sessions, filterTarget, filterFilter]);
@@ -100,13 +113,17 @@ export function SessionSourcePicker({
   }
 
   if (loading) {
-    return <div className="alm-source-picker__loading">{m.projects_wizard_sources_loading()}</div>;
+    return (
+      <div className="pv-source-picker__loading">
+        {m.projects_wizard_sources_loading()}
+      </div>
+    );
   }
 
   return (
-    <div className="alm-source-picker">
+    <div className="pv-source-picker">
       {/* Filter row */}
-      <div className="alm-source-picker__filter-row">
+      <div className="pv-source-picker__filter-row">
         <input
           type="text"
           placeholder={m.projects_wizard_filter_target_placeholder()}
@@ -116,8 +133,10 @@ export function SessionSourcePicker({
           // These are free-text filters, not a submittable field — guard
           // against an ambient <form> ancestor treating Enter as submit if
           // this component is ever embedded inside one (WP-008-C).
-          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-          className="alm-source-picker__filter-input"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault();
+          }}
+          className="pv-source-picker__filter-input"
         />
         <input
           type="text"
@@ -125,28 +144,39 @@ export function SessionSourcePicker({
           aria-label={m.projects_wizard_filter_filter_placeholder()}
           value={filterFilter}
           onChange={(e) => setFilterFilter(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-          className="alm-source-picker__filter-input"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault();
+          }}
+          className="pv-source-picker__filter-input"
         />
       </div>
 
       {/* Summary */}
-      <div className="alm-source-picker__summary">
-        <span><strong>{selectedSessionIds.length}</strong> {m.projects_wizard_sessions_selected()}</span>
-        <span>{m.projects_wizard_total_integration()} <strong>{formatIntegration(totalIntegration)}</strong></span>
+      <div className="pv-source-picker__summary">
+        <span>
+          <strong>{selectedSessionIds.length}</strong>{' '}
+          {m.projects_wizard_sessions_selected()}
+        </span>
+        <span>
+          {m.projects_wizard_total_integration()}{' '}
+          <strong>{formatIntegration(totalIntegration)}</strong>
+        </span>
       </div>
 
       {/* Session list */}
-      <div className="alm-source-picker__list">
+      <div className="pv-source-picker__list">
         {/* Header */}
-        <div className="alm-source-picker__list-header">
+        <div className="pv-source-picker__list-header">
           <Checkbox.Root
-            className="alm-checkbox"
-            checked={filtered.length > 0 && selectedSessionIds.length === filtered.length}
+            className="pv-checkbox"
+            checked={
+              filtered.length > 0 &&
+              selectedSessionIds.length === filtered.length
+            }
             onCheckedChange={toggleAll}
             aria-label={m.projects_wizard_select_all_aria()}
           >
-            <Checkbox.Indicator className="alm-checkbox__indicator">
+            <Checkbox.Indicator className="pv-checkbox__indicator">
               &#x2713;
             </Checkbox.Indicator>
           </Checkbox.Root>
@@ -163,29 +193,42 @@ export function SessionSourcePicker({
           // contract types it as `string` — render a disclosed placeholder
           // instead of crashing (`undefined.toLowerCase()` et al) or silently
           // showing a blank cell.
-          const targetLabel = session.sessionKey.target || m.projects_wizard_target_unresolved();
+          const targetLabel =
+            session.sessionKey.target || m.projects_wizard_target_unresolved();
           return (
             <label
               key={session.id}
-              className={'alm-source-picker__row' + (selectedSessionIds.includes(session.id) ? ' alm-source-picker__row--selected' : '')}
+              className={
+                'pv-source-picker__row' +
+                (selectedSessionIds.includes(session.id)
+                  ? ' pv-source-picker__row--selected'
+                  : '')
+              }
               data-testid={`session-picker-row-${session.id}`}
             >
               <Checkbox.Root
-                className="alm-checkbox"
+                className="pv-checkbox"
                 checked={selectedSessionIds.includes(session.id)}
                 onCheckedChange={() => toggleSession(session.id)}
-                aria-label={m.projects_wizard_select_session_aria({ target: targetLabel })}
+                aria-label={m.projects_wizard_select_session_aria({
+                  target: targetLabel,
+                })}
               >
-                <Checkbox.Indicator className="alm-checkbox__indicator">
+                <Checkbox.Indicator className="pv-checkbox__indicator">
                   &#x2713;
                 </Checkbox.Indicator>
               </Checkbox.Root>
               <span>
-                {targetLabel} / {session.sessionKey.filter} / {session.sessionKey.night}
+                {targetLabel} / {session.sessionKey.filter} /{' '}
+                {session.sessionKey.night}
               </span>
-              <span data-testid={`session-picker-frames-${session.id}`}>{session.frameCount}</span>
-              <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
-              <span className="alm-source-picker__train-id">
+              <span data-testid={`session-picker-frames-${session.id}`}>
+                {session.frameCount}
+              </span>
+              <span>
+                {formatIntegration(session.totalIntegrationSeconds ?? 0)}
+              </span>
+              <span className="pv-source-picker__train-id">
                 {session.opticalTrainId.slice(0, 8)}
               </span>
             </label>
@@ -193,7 +236,7 @@ export function SessionSourcePicker({
         })}
 
         {filtered.length === 0 && (
-          <div className="alm-source-picker__empty">
+          <div className="pv-source-picker__empty">
             {emptyMessage ?? m.projects_wizard_sessions_empty()}
           </div>
         )}

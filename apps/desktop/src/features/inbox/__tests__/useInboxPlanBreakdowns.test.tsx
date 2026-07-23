@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * useInboxPlanBreakdowns tests (spec 043 task #98).
@@ -30,11 +33,18 @@ import { useInboxPlanBreakdowns } from '../store';
 import type { InboxBreakdownTarget } from '../store';
 
 function wrapper({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
-function classifyResponse(itemId: string, breakdown: Array<{ kind: string; count: number }>) {
+function classifyResponse(
+  itemId: string,
+  breakdown: Array<{ kind: string; count: number }>,
+) {
   return {
     inboxItemId: itemId,
     type: 'mixed',
@@ -78,7 +88,9 @@ describe('useInboxPlanBreakdowns (#98)', () => {
       { inboxItemId: 'b', rootAbsolutePath: '/lib/root-b' },
     ];
 
-    const { result } = renderHook(() => useInboxPlanBreakdowns(targets), { wrapper });
+    const { result } = renderHook(() => useInboxPlanBreakdowns(targets), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(result.current['a']).toBeDefined();
@@ -97,17 +109,25 @@ describe('useInboxPlanBreakdowns (#98)', () => {
     // One classify call per distinct target.
     expect(mockInboxClassify).toHaveBeenCalledTimes(2);
     expect(mockInboxClassify).toHaveBeenCalledWith(
-      expect.objectContaining({ inboxItemId: 'a', rootAbsolutePath: '/lib/root-a' }),
+      expect.objectContaining({
+        inboxItemId: 'a',
+        rootAbsolutePath: '/lib/root-a',
+      }),
     );
   });
 
   it('omits an item whose classify returns an empty breakdown', async () => {
-    mockInboxClassify.mockResolvedValue({ status: 'ok', data: classifyResponse('a', []) });
+    mockInboxClassify.mockResolvedValue({
+      status: 'ok',
+      data: classifyResponse('a', []),
+    });
     const targets: InboxBreakdownTarget[] = [
       { inboxItemId: 'a', rootAbsolutePath: '/lib/root-a' },
     ];
 
-    const { result } = renderHook(() => useInboxPlanBreakdowns(targets), { wrapper });
+    const { result } = renderHook(() => useInboxPlanBreakdowns(targets), {
+      wrapper,
+    });
 
     await waitFor(() => expect(mockInboxClassify).toHaveBeenCalled());
     // Empty breakdown → no entry in the map (caller falls back to actions).
@@ -115,7 +135,9 @@ describe('useInboxPlanBreakdowns (#98)', () => {
   });
 
   it('issues no fetch and returns an empty map for no targets', () => {
-    const { result } = renderHook(() => useInboxPlanBreakdowns([]), { wrapper });
+    const { result } = renderHook(() => useInboxPlanBreakdowns([]), {
+      wrapper,
+    });
     expect(mockInboxClassify).not.toHaveBeenCalled();
     expect(result.current).toEqual({});
   });

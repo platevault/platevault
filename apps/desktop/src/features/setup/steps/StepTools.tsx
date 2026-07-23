@@ -1,9 +1,15 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { RotateCw } from 'lucide-react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Toggle } from '@/ui/Toggle';
 import { m } from '@/lib/i18n';
 import { useFilePicker } from '@/shared/native/picker';
+import { unwrap } from '@/api/ipc';
 
 export interface ToolConfig {
   enabled: boolean;
@@ -45,44 +51,65 @@ const TOOL_DEFS: ToolDef[] = [
   },
 ];
 
+/** Extensions recognized as executables across Windows/macOS/Linux (#511). */
+const EXECUTABLE_EXTENSIONS = new Set(['exe', 'app', 'bin', 'sh', 'appimage']);
+
+/**
+ * Best-effort, no-exec heuristic for "is this path an executable" (#511
+ * decision: detect/require an executable only, never spawn to verify
+ * identity). A path with no extension is treated as plausibly valid --
+ * that's the common case for Linux binaries (e.g. `siril`), which native
+ * pickers can't filter by executable bit. Anything with a recognized
+ * non-executable extension (e.g. the reported `.zip`) is rejected.
+ */
+function looksExecutable(path: string): boolean {
+  const base = path.split(/[\\/]/).pop() ?? path;
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0) return true; // no extension, or a dotfile -- Linux-typical
+  const ext = base.slice(dot + 1).toLowerCase();
+  return EXECUTABLE_EXTENSIONS.has(ext);
+}
+
 /**
  * Step 2 -- Processing Tools.
  * Auto-detects installed tools (`tools.discover`, application-based per OS) on mount,
  * then lets the user toggle/override the executable path.
  */
 export function StepTools({ tools, onToolsChange }: StepToolsProps) {
-  // Auto-detect installed tools once on mount and fill in any unset paths.
+  // Auto-detect installed tools once on mount (TanStack Query dedups a
+  // StrictMode double-invoke via the shared query cache) and fill in any
+  // unset paths. Detection is best-effort (spec 011): a failed/disabled
+  // discovery just leaves `tools` unchanged, never surfaced as an error.
+  const discoveryQuery = useQuery({
+    queryKey: ['setup', 'toolsDiscover'] as const,
+    queryFn: async () => {
+      const { commands } = await import('@/bindings/index');
+      return unwrap(await commands.toolsDiscover({ toolId: null }));
+    },
+    enabled: import.meta.env.VITE_USE_MOCKS !== 'true',
+    retry: false,
+  });
+
   useEffect(() => {
-    if (import.meta.env.VITE_USE_MOCKS === 'true') return undefined;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { commands } = await import('@/bindings/index');
-        const res = await commands.toolsDiscover({ toolId: null });
-        if (cancelled || res.status !== 'ok') return;
-        const found = new Map(
-          res.data.entries.filter((e) => e.available).map((e) => [e.toolId, e.path]),
-        );
-        let changed = false;
-        const next: ToolsState = { ...tools };
-        for (const def of TOOL_DEFS) {
-          const path = found.get(def.key);
-          if (path && !next[def.key].path) {
-            next[def.key] = { enabled: true, path };
-            changed = true;
-          }
-        }
-        if (changed) onToolsChange(next);
-      } catch {
-        // detection is best-effort; the user can still set paths manually.
+    const found = discoveryQuery.data;
+    if (!found) return;
+    const foundPaths = new Map(
+      found.entries.filter((e) => e.available).map((e) => [e.toolId, e.path]),
+    );
+    let changed = false;
+    const next: ToolsState = { ...tools };
+    for (const def of TOOL_DEFS) {
+      const path = foundPaths.get(def.key);
+      if (path && !next[def.key].path) {
+        next[def.key] = { enabled: true, path };
+        changed = true;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Run once on mount; merging only fills empty paths so re-runs are safe.
+    }
+    if (changed) onToolsChange(next);
+    // Fires once when discovery data lands; merging only fills empty paths so
+    // a StrictMode double-invoke re-running this with the same data is safe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [discoveryQuery.data]);
 
   const handleToggle = (key: keyof ToolsState, checked: boolean) => {
     // Only flip `enabled`; keep the (detected or manually-set) path so disabling →
@@ -100,14 +127,20 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
     });
   };
 
-  // Re-run auto-detection for a single tool (the "Redetect" button). Returns
-  // true if a binary was found (and the path was filled in), false otherwise.
+  // Re-run auto-detection for a single tool (the "Redetect" button).
+  const redetectMutation = useMutation({
+    mutationFn: async (key: keyof ToolsState) => {
+      const { commands } = await import('@/bindings/index');
+      return unwrap(await commands.toolsDiscover({ toolId: key }));
+    },
+  });
+
+  // Returns true if a binary was found (and the path was filled in), false
+  // otherwise — ToolCard uses the result to show its "not found" message.
   const handleRedetect = async (key: keyof ToolsState): Promise<boolean> => {
     try {
-      const { commands } = await import('@/bindings/index');
-      const res = await commands.toolsDiscover({ toolId: key });
-      if (res.status !== 'ok') return false;
-      const entry = res.data.entries.find((e) => e.toolId === key && e.available);
+      const data = await redetectMutation.mutateAsync(key);
+      const entry = data.entries.find((e) => e.toolId === key && e.available);
       if (entry?.path) {
         onToolsChange({ ...tools, [key]: { enabled: true, path: entry.path } });
         return true;
@@ -119,12 +152,10 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
   };
 
   return (
-    <div className="alm-step-tools">
-      <p className="alm-step-tools__intro">
-        {m.setup_tools_intro()}
-      </p>
+    <div className="pv-step-tools">
+      <p className="pv-step-tools__intro">{m.setup_tools_intro()}</p>
 
-      <div className="alm-step-tools__list">
+      <div className="pv-step-tools__list">
         {TOOL_DEFS.map((def) => {
           const config = tools[def.key];
           return (
@@ -140,9 +171,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
         })}
       </div>
 
-      <p className="alm-step-tools__note">
-        {m.setup_tools_skip_note()}
-      </p>
+      <p className="pv-step-tools__note">{m.setup_tools_skip_note()}</p>
     </div>
   );
 }
@@ -161,9 +190,31 @@ function ToolCard({
   onPathChange: (path: string | null) => void;
   onRedetect: () => Promise<boolean>;
 }) {
-  const detected = Boolean(config.path);
+  // One status pill per tool (#510): "Detected" only when a path is set AND
+  // passes the executable heuristic; a set-but-invalid path (#511) reads as
+  // "Invalid" rather than a false-positive "Detected"/"OK".
+  const pathValid = config.path !== null && looksExecutable(config.path);
   const [redetecting, setRedetecting] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const noInstallationFound = notFound;
+  const statusLabel = redetecting
+    ? m.setup_tools_detecting({ name: def.name() })
+    : noInstallationFound
+      ? m.setup_tools_no_installation()
+      : config.path === null
+        ? m.setup_tools_not_detected()
+        : pathValid
+          ? m.setup_tools_detected()
+          : m.setup_tools_invalid();
+  const statusVariant = redetecting
+    ? 'warn'
+    : noInstallationFound
+      ? 'neutral'
+      : config.path === null
+        ? 'neutral'
+        : pathValid
+          ? 'ok'
+          : 'danger';
 
   const handleRedetect = async () => {
     setRedetecting(true);
@@ -173,60 +224,75 @@ function ToolCard({
     if (!found) setNotFound(true);
   };
 
+  const handlePathChange = (path: string | null) => {
+    setNotFound(false);
+    onPathChange(path);
+  };
+
   return (
-    <div
-      className="alm-step-tools__card"
-      data-testid={`tool-card-${def.key}`}
-    >
-      {/* Header row: name + detected pill + description + enable toggle */}
-      <div className="alm-step-tools__header">
-        <div className="alm-step-tools__tool-info">
-          <div className="alm-step-tools__name-row">
-            <span className="alm-step-tools__tool-name">
-              {def.name()}
-            </span>
-            {detected ? (
-              <Pill variant="ok">{m.setup_tools_detected()}</Pill>
-            ) : (
-              <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
-            )}
+    <div className="pv-step-tools__card" data-testid={`tool-card-${def.key}`}>
+      {/* Header row: name + status pill + description + enable toggle */}
+      <div className="pv-step-tools__header">
+        <div className="pv-step-tools__tool-info">
+          <div
+            className="pv-step-tools__name-row"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span className="pv-step-tools__tool-name">{def.name()}</span>
+            <Pill variant={statusVariant}>{statusLabel}</Pill>
           </div>
-          <span className="alm-step-tools__tool-desc">
-            {def.description()}
-          </span>
+          <span className="pv-step-tools__tool-desc">{def.description()}</span>
         </div>
-        <div className="alm-step-tools__controls">
-          <div className="alm-step-tools__actions">
+        <div className="pv-step-tools__controls">
+          <div className="pv-step-tools__actions">
             <Btn
               variant="ghost"
+              size="sm"
               onClick={handleRedetect}
               disabled={redetecting}
-              aria-label={m.setup_tools_redetect_binary_aria({ name: def.name() })}
+              aria-busy={redetecting}
+              aria-label={m.setup_tools_redetect_binary_aria({
+                name: def.name(),
+              })}
+              title={m.setup_tools_redetect()}
+              className="pv-step-tools__redetect-btn"
             >
-              {redetecting ? m.common_detecting() : m.setup_tools_redetect()}
+              <RotateCw
+                size={14}
+                aria-hidden="true"
+                className={
+                  redetecting
+                    ? 'pv-step-tools__redetect-icon--spinning'
+                    : undefined
+                }
+              />
             </Btn>
             <Toggle
               checked={config.enabled}
               onChange={onToggle}
-              aria-label={m.setup_tools_enable_aria({ name: def.name() })}
+              aria-label={m.settings_tools_enable_aria({ name: def.name() })}
             />
           </div>
-          {notFound && (
-            <span className="alm-step-tools__not-found">
-              {m.setup_tools_no_installation()}
-            </span>
-          )}
         </div>
       </div>
 
       {/* Executable path picker, only when enabled */}
       {config.enabled && (
-        <div className="alm-step-tools__path-row">
-          <ToolPathPicker
-            toolName={def.name()}
-            path={config.path}
-            onPathChange={onPathChange}
-          />
+        <div className="pv-step-tools__path-block">
+          <div className="pv-step-tools__path-row">
+            <ToolPathPicker
+              toolName={def.name()}
+              path={config.path}
+              onPathChange={handlePathChange}
+            />
+          </div>
+          {config.path !== null && !pathValid && (
+            <span className="pv-field-error">
+              {m.setup_tools_invalid_executable()}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -247,9 +313,15 @@ function ToolPathPicker({
   const handleChoose = async () => {
     // The processing tool's executable is a file (e.g. PixInsight.exe /
     // pixinsight / Siril), not a directory — pick the binary, not a folder.
+    // No "All files" filter (#511): the native dialog enforces the
+    // executable-only filter on Windows/macOS. Linux binaries are usually
+    // extension-less and native dialogs there can't filter by executable
+    // bit, so `looksExecutable` is the real safety net for that platform.
     const result = await pick([
-      { name: m.setup_tools_executable_label(), extensions: ['exe', 'app', 'bin'] },
-      { name: m.setup_tools_filter_all_files(), extensions: ['*'] },
+      {
+        name: m.setup_tools_executable_label(),
+        extensions: ['exe', 'app', 'bin'],
+      },
     ]);
     if (result.path) {
       onPathChange(result.path);
@@ -258,16 +330,18 @@ function ToolPathPicker({
 
   return (
     <>
-      <span className="alm-step-tools__path-label">
+      <span className="pv-step-tools__path-label">
         {m.setup_tools_executable_label()}
       </span>
       <span
-        className={'alm-mono alm-step-tools__path-value' + (path ? ' alm-step-tools__path-value--set' : '')}
+        className={
+          'pv-mono pv-step-tools__path-value' +
+          (path ? ' pv-step-tools__path-value--set' : '')
+        }
         title={path ?? undefined}
       >
         {path ?? m.setup_tools_no_path()}
       </span>
-      {path && <Pill variant="ok">{m.setup_tools_ok()}</Pill>}
       <Btn
         size="sm"
         onClick={handleChoose}

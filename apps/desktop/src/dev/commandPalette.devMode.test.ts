@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CommandPalette devMode gate tests (spec 021 T009).
  *
@@ -32,7 +35,9 @@ const DEV_PAGES: Array<{ label: string; route: string }> = [
 ];
 
 /** Mirror of the CommandPalette visibility logic. */
-function visiblePages(devMode: boolean): Array<{ label: string; route: string }> {
+function visiblePages(
+  devMode: boolean,
+): Array<{ label: string; route: string }> {
   return devMode ? [...PAGES, ...DEV_PAGES] : PAGES;
 }
 

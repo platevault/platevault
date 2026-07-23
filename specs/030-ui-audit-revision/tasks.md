@@ -244,6 +244,43 @@ testable and deployable. Paths relative to `apps/desktop/src/`.
 
 ---
 
+## Phase 10: Durable Audit Unification (Q15 / #647) — iteration 2026-07-14
+
+**Purpose**: Every attempted mutation of durable state writes a durable
+`audit_log_entry` row; the durable table is the authoritative audit record
+over the live event bus; the entry shape generalizes to a generic mutation
+record (FR-130–FR-134, SC-009, spec §8.3).
+
+- [ ] T120 Generalize the durable audit entry model in `crates/audit-types` from lifecycle-transition shape to generic mutation record (action, generic entity type beyond the lifecycle enum, first-class reason/code, optional before→after) with a compatible migration for `audit_log_entry`
+- [ ] T121 Shared write-through helper: one path that writes the durable `audit_log_entry` row and emits the bus event, returning the durable `audit_id`. Failure semantics: the durable row is load-bearing (constitution §II) — insert failure fails the command; the bus emit is best-effort — failure is logged and the command succeeds
+- [ ] T122 Settings mutations write durable audit rows with before→after (`crates/app/settings/src/lib.rs` bus-only publishes)
+- [ ] T123 Protection overrides/acknowledgements write durable audit rows; returned `auditId` references the durable row (`crates/app/core/src/protection.rs`)
+- [ ] T124 Equipment CRUD writes durable audit rows (`crates/app/calibration/src/equipment.rs` — currently no audit emission at all)
+- [ ] T125 Source enable/disable/register and rescans/root ops (incl. remap) write durable audit rows (`crates/app/core/src/first_run.rs` bus-only publishes). Scoped to mutations that exist in spec-030 today; the Q5 source-delete cascade joins here when the spec-003/006 iterate lands
+- [ ] T126 Activity/log panel reads durable audit for user-meaningful events + live event bus for transient/internal noise (Q9 wiring point; BLOCKED on the Q9 log-panel iteration — see Phase Dependencies)
+- [ ] T127 Refusal/failure coverage tests: refused and failed mutations produce durable rows with outcome + reason/code; reads/navigation/UI state produce none (FR-134)
+
+---
+
+## Phase 11: Missing-Value Semantics & Detail-as-Delta (Q16 / #620, #619) — iteration 2026-07-14
+
+**Purpose**: Three distinguishable value states (real / unresolved /
+not-applicable) modeled as null/None end-to-end with no numeric
+zero-defaulting, rendered through one shared renderer with
+presence-coupled source pills; detail panels add information over their
+list rows (FR-135–FR-140, SC-010–SC-011, spec §12).
+
+- [x] T128 Make absence representable in contract DTOs: `CalibrationFingerprint.exposure_s`/`gain` (`crates/contracts/core/src/calibration.rs`) become `Option<f64>`; `CalibrationMaster.size_bytes`/`MasterDetail.size_bytes` become nullable (fed by the T129 view fix); sweep other absence-capable non-optional DTO fields; regenerate bindings and sweep DTO consumers — incl. the unguarded `String(fp.gain)`/`` `${fp.exposureS}s` `` at `apps/desktop/src/features/calibration/MasterDetail.tsx:234,238`
+- [x] T129 Remove absence-synthesizing fallbacks end-to-end: `crates/app/calibration/src/matching.rs` `unwrap_or(0.0)` on exposure/gain (`:739,741,794,796`); the master-size zero is hardcoded in SQL — redefine `calibration_master_view` (`crates/persistence/db/migrations/0041_calibration_fingerprint_indices.sql:51` `0 AS size_bytes`) via a new view migration to emit NULL (or a computed size), make the row field `Option<i64>` (`q_calibration.rs:92`); migration version claimed at implementation-merge time with reviewer duplicate-check (Q15/Q27 rule). Repo-wide sweep for ANY `unwrap_or*`/`COALESCE` synthesizing a value for absent metadata, numeric or string — incl. fabricated binning `"1x1"` (`matching.rs:742,797`), empty-string camera (`:737,792`), self-referential `source_session_id` (`:745,800`); carry `Option` through to the contract
+- [x] T130 Shared `renderValue(value, {source, applicability})` renderer + muted "unresolved" chip component: real → value + source pill; missing → unresolved chip, no source pill, never 0; n/a → blank/"—" without chip; applicability from the data-model.md field-applicability matrix; chip copy registered in the Paraglide i18n catalog (spec-046 convention) in `apps/desktop/src/components/`
+- [x] T131 `PropertyTable` adopts the shared renderer: couple source badge to value presence (no badge when value missing), distinguish not-applicable from missing in `PropertyDef` via an explicit applicability marker driven by the data-model.md field-applicability matrix (not null-overload, no per-surface guesswork) in `apps/desktop/src/components/PropertyTable.tsx`
+- [x] T132 Adopt the shared renderer across all metadata surfaces: Inbox review, Sessions detail, Calibration (incl. `MastersTable` meta lines/cells), Targets, Projects, Archive; per-field applicability read from the data-model.md matrix; composed identifying strings omit missing tokens (FR-137). Calibration (MasterDetail + MastersTable, per-kind applicability via `master-applicability.ts`) and Sessions detail (SessionDetail — all fields, Light column is all-✓) done in the first pass. Completion round: Inbox review (`InboxDetail.tsx` — detection facts, per-file metadata popup table, and FileInspector all converted from conditional row-omission to always-present + `renderValue`, driven by a new shared `apps/desktop/src/lib/field-applicability.ts` full matrix — `master-applicability.ts` now delegates to it); Targets (`TargetDetailV2.tsx` — SIMBAD OID row no longer omitted); Projects (`ProjectDetail.tsx` Sources table — role/filter columns adopt `renderValue`); Archive (`ArchiveTable.tsx`/`ArchiveDetail.tsx` adopt `renderValue` — required a companion backend fix, see T129 addendum below, since the contract itself synthesized sentinels for `reason`/`size_bytes`).
+  - **T129 addendum (found during T132 completion)**: `crates/app/core/src/archive_generator.rs` `list_archived()` had the identical T129 anti-pattern outside calibration — `reason: r.plan_title.unwrap_or_default()` (empty-string sentinel) and `size_bytes: r.archived_bytes.unwrap_or(0)` (the exact "Size 0 KB" pattern spec §12 names) for archived-project rows whose owning plan was deleted. Fixed: `ArchiveEntry.reason`/`size_bytes` are now `Option` in the contract, fallbacks removed, bindings regenerated.
+- [x] T133 Detail-as-delta rework: audit every detail panel against its list row; lead with new information (full metadata, provenance, related entities, history, actions); trim echoed columns to a small identifying summary; keep panels curated (FR-139, FR-140). Audited all 6 detail panels. Verdicts: **MasterDetail** — compliant as-found (used-by/compatible/match-panel/actions beyond the row). **SessionDetail** — compliant as-found (full fact table is the permitted "full metadata" category; linked projects + frame inventory + raw-cleanup sections are genuinely new). **TargetDetailV2** — compliant as-found (altitude graph, moon/filter guidance, linked sessions/projects, aliases, notes all beyond the row). **InboxDetail** — compliant as-found (full FITS metadata, per-file breakdown table + inspector, unclassified-file review, cone-search suggestions all beyond the row). **ProjectDetail + ProjectBottomDetail** — compliant as-found (Sources/Channels tables carry per-row granularity the row summary doesn't; bottom panel adds Notes/Calibration-match/Manifests/Source-views/Outputs/Cleanup as genuinely new sections). **ArchiveDetail** — VIOLATION, fixed: the "Details" PropertyTable (archivedAt/reason/entityType/size/originalPath) was a 100% echo of the ArchiveTable row columns plus the header subtitle — zero new information. Removed; Audit History (a real new information class) now leads the panel.
+- [x] T134 Tests: real 0 renders as "0" with source pill; missing numeric renders unresolved chip (never 0, no source pill); n/a renders blank/"—" without chip; contract round-trips null; regression test pinning calibration matching results unchanged by de-zeroing (matching runs on Option-typed `SessionInfo`/`MasterInfo`, never the contract DTO — pinned with a fixture with absent gain/exposure). Completion round adds: `field-applicability.test.ts` (full matrix), `InboxDetail.test.tsx` Q16 describe block (detection facts, per-file table, FileInspector — missing vs not-applicable), `ArchiveTable.test.tsx` (unresolved chip for absent reason/size), `ProjectDetail.sources-applicability.test.tsx`, and an archive-contract round-trip assertion in `archive_generator.rs`'s existing `list_archived_returns_only_archived_projects` test. **Not covered**: an exhaustive SC-011 ("≥1 non-row information class") *test assertion* per surface — verified by audit/review (see T133) rather than a dedicated automated check for each panel.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -257,6 +294,8 @@ testable and deployable. Paths relative to `apps/desktop/src/`.
 - **Phase 7 (US5 Settings)**: Depends on Phase 2 (uses backend settings commands)
 - **Phase 8 (US6 Status Bar)**: Depends on Phase 2 (uses status.summary command)
 - **Phase 9 (Polish)**: Depends on all previous phases
+- **Phase 10 (Audit Unification)**: Depends only on existing audit plumbing (audit-types model, `audit_log_entry` table, event bus); independent of Phases 3–9. T120 → T121 first (the helper builds on the generalized model); T122–T125 parallel after T121; T127 last. T126 is BLOCKED on the Q9 log-panel iteration — the Activity/log panel it wires is not yet specified in spec-030 (spec §8 defines the Settings Audit Log pane, not an activity panel)
+- **Phase 11 (Missing-Value Semantics & Detail-as-Delta)**: Depends on shipped metadata/contract plumbing and shared components (Phase 2) only; independent of Phases 3–10. T128–T129 first (model), then T130–T131 (renderer), then T132–T133 in parallel, T134 last
 
 ### User Story Independence
 
@@ -301,7 +340,9 @@ After Phase 2, three parallel tracks:
 
 ## Notes
 
-- Total: 109 tasks across 9 phases
+- Total: 124 tasks across 11 phases (T120–T127 added by iteration
+  2026-07-14, durable audit unification; T128–T134 added by iteration
+  2026-07-14, missing-value semantics & detail-as-delta)
 - US1 (Wizard): 9 tasks
 - US2 (Inbox): 12 tasks
 - US3 (Projects): 11 tasks

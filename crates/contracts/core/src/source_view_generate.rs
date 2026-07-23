@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract DTOs for spec 049 — `sourceview.generate` (source view
 //! first-materialization).
 //!
@@ -86,4 +89,44 @@ pub struct SourceViewGenerateResponse {
     /// Non-blocking review warnings surfaced with the plan.
     #[serde(default)]
     pub warnings: Vec<GenerationWarning>,
+    /// `true` when at least one item resolved to a copy-fallback
+    /// materialization (no link kind was achievable and `copyOptIn` allowed a
+    /// copy — FR-003/FR-004b). Lets callers surface link vs. copy-fallback
+    /// distinctly instead of a generic success message.
+    #[serde(default)]
+    pub used_copy_fallback: bool,
+}
+
+// ── T041: per-project destination override (FR-021b) ────────────────────────
+
+/// Request: read the persisted per-project destination override.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationGetRequest {
+    pub project_id: String,
+}
+
+/// Response: `None` when no override is persisted (the envelope default applies).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationGetResponse {
+    #[serde(default)]
+    pub destination: Option<String>,
+}
+
+/// Request: persist (or clear, with `destination: null`) the per-project
+/// destination override.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationSetRequest {
+    pub project_id: String,
+    #[serde(default)]
+    pub destination: Option<String>,
+}
+
+/// Bare success response for `sourceview.destination.set`.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationSetResponse {
+    pub ok: bool,
 }

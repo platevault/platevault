@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journey — Project creation wizard (batch #10 of
 //! the coverage-matrix "Batched plan", Journey 5). Promotes journey-05's
 //! Tests 1/2: duplicate-name inline error (never a generic toast) and
@@ -21,9 +24,9 @@ mod common;
 use std::time::Duration;
 
 use anyhow::Context;
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
-use thirtyfour::By;
+use thirtyfour::{By, WebElement};
 
 const UI_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -65,13 +68,14 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
     // confirmed session with a known target, so the wizard's Sources step
     // has something real to select.
     let root_dir = tempfile::tempdir()?;
-    write_minimal_fits(
+    write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_wizard_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-13T21:30:00"),
+        Some(300.0),
     )?;
     let register: serde_json::Value = app
         .invoke(
@@ -89,22 +93,15 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
             json!({ "sourceId": root_id, "organizationState": "unorganized" }),
         )
         .await?;
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
     let classify: serde_json::Value = app
         .invoke(
             "inbox_classify",
@@ -141,7 +138,12 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
     // Session grouping is event-driven — poll the real backend read until it
     // resolves before the wizard needs it.
     let _: serde_json::Value = app
-        .invoke_until("sessions_list", json!({}), UI_TIMEOUT, |v: &serde_json::Value| {
+        // `targetIds` is populated only by the 30 s-interval ingest-resolution
+        // drain, so this needs DRAIN_BACKED_TIMEOUT rather than the 30 s
+        // UI_TIMEOUT — a 30 s wait on a 30 s-period task is a coin flip
+        // (#1205). Same latent race as `ingestion_sessions_search`; it had not
+        // been observed failing here yet, but the mechanism is identical.
+        .invoke_until("sessions_list", json!({}), DRAIN_BACKED_TIMEOUT, |v: &serde_json::Value| {
             v.as_array().is_some_and(|arr| {
                 arr.iter().any(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
             })
@@ -152,6 +154,88 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
     Ok(project_root_path)
 }
 
+/// Poll for the wizard's `#project-name` input, with ONE full-page-reload
+/// fallback if it hasn't appeared within `first_attempt` — the recovery for a
+/// windows-only, self-recovering flake first sighted across three separate CI
+/// runs (different branches + `main`; latest sample: `main` run for commit
+/// `1ac2ea2b`, job `85493169943`, 22/23 passed, both retries red then green
+/// on rerun): `no #project-name input found / no such element` right at
+/// `.../#/projects/new`.
+///
+/// An earlier investigation (spec-037 fix-lane, batch before #467) read
+/// `WizardPage.tsx`/`StepName.tsx` end to end and found no logic bug —
+/// `currentStep` initializes to `0` synchronously, `StepName` renders
+/// unconditionally with `id="project-name"`, and the route lands correctly.
+/// That, plus the "always windows-latest, always self-recovers" signature,
+/// points at a first-paint stall on a cold WebView2 renderer rather than a
+/// route/gate race: `goto_route` never does a full page load (the app uses
+/// HASH history, so navigating only mutates `location.hash`), so if
+/// WebView2's first paint after that in-place hash change stalls, nothing in
+/// this harness's existing waits (`wait_document_ready`, `wait_bridge_ready`)
+/// would catch it — both already report ready; only the next paint is stuck.
+/// A single `driver.refresh()` forces a genuine full page reload, which gives
+/// the router (and the WebView2 renderer) a clean start; re-settling via
+/// `wait_document_ready` + `wait_bridge_ready` before retrying the poll
+/// mirrors the exact sequence `E2eApp::launch` and `goto_route` already rely
+/// on elsewhere in this harness, so the reload path is proven machinery, not
+/// a new mechanism. On a genuine failure (not just a slow first paint) the
+/// reload changes nothing and the second poll still times out, which is then
+/// reported with full diagnostics rather than the bare original message.
+async fn find_project_name_input_with_reload_retry(app: &E2eApp) -> anyhow::Result<WebElement> {
+    let first_attempt_timeout = Duration::from_secs(10);
+    let deadline = tokio::time::Instant::now() + first_attempt_timeout;
+    loop {
+        if let Ok(el) = app.driver.find(By::Id("project-name")).await {
+            return Ok(el);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    // Not there after 10s of polling: attempt the one-shot reload recovery.
+    //
+    // KEEP the reload (#1113 reviewed): the reload IS the mechanism under
+    // test here — recovering a stalled WebView2 first paint. There is no
+    // query to invalidate; the document itself is what has to be rebuilt, and
+    // every element used afterwards is re-found post-reload.
+    app.driver.refresh().await.context("page refresh after a #project-name stall failed")?;
+    app.wait_document_ready(Duration::from_secs(10))
+        .await
+        .context("document.readyState never settled after the #project-name reload retry")?;
+    app.wait_bridge_ready(Duration::from_secs(15))
+        .await
+        .context("__ALM_E2E__ bridge never re-armed after the #project-name reload retry")?;
+
+    match app.find_waiting(By::Id("project-name"), "the wizard's #project-name input").await {
+        Ok(el) => Ok(el),
+        Err(original_err) => {
+            let url = app
+                .driver
+                .current_url()
+                .await
+                .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
+            let body_html: String = app
+                .driver
+                .execute(
+                    "return document.body ? document.body.outerHTML.slice(0, 4096) : '<no body>';",
+                    vec![],
+                )
+                .await
+                .ok()
+                .and_then(|ret| ret.convert::<String>().ok())
+                .unwrap_or_else(|| "<failed to read document.body.outerHTML>".to_owned());
+            let ui_diag = app.dump_ui_diagnostics().await;
+            Err(anyhow::anyhow!(
+                "no #project-name input found even after a reload retry \
+                 (current URL: {url}); body outerHTML sample: {body_html}; \
+                 dump_ui_diagnostics: {ui_diag:#}; original poll error: {original_err}"
+            ))
+        }
+    }
+}
+
 /// Drive the wizard's Name -> Sources -> Calibration -> Views -> Naming ->
 /// Review steps for a given project `name`, ending with a click on the real
 /// Create button (`data-testid="wizard-create-btn"`) — real DOM interaction
@@ -159,9 +243,9 @@ async fn setup_project_library_and_one_session(app: &E2eApp) -> anyhow::Result<s
 async fn run_wizard_to_create(app: &E2eApp, name: &str) -> anyhow::Result<()> {
     // Poll for the wizard's Name step to actually mount: it opens
     // asynchronously after the navigation, same route/render race
-    // `E2eApp::find_waiting` documents.
-    let name_input = app
-        .find_waiting(By::Id("project-name"), "the wizard's #project-name input")
+    // `E2eApp::find_waiting` documents — plus a bounded one-shot reload
+    // recovery for the windows-only first-paint stall (see the helper's doc).
+    let name_input = find_project_name_input_with_reload_retry(app)
         .await
         .context("no #project-name input found")?;
     name_input.clear().await?;

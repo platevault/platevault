@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Read access over the durable `audit_log_entry` table (migration
 //! `0002_lifecycle.sql`).
 //!
@@ -18,14 +21,15 @@
 
 use std::fmt::Write as _;
 
-use sqlx::SqlitePool;
+use audit_types::AuditLogEntry;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::DbResult;
 
 /// One row from `audit_log_entry`, as stored (no enum parsing — that is a
 /// concern of the IPC/contract layer, which maps these strings onto the
 /// `AuditActor`/`AuditOutcome` contract enums).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct AuditLogRow {
     pub audit_id: String,
     pub entity_type: String,
@@ -39,6 +43,9 @@ pub struct AuditLogRow {
     pub request_id: String,
     pub at: String,
     pub payload: Option<String>,
+    /// Machine-readable reason/code for `refused`/`failed` outcomes (T120
+    /// migration 0063); `NULL` for `applied`.
+    pub reason_code: Option<String>,
 }
 
 /// Filter for `audit_log_entry` queries. All fields are AND-combined.
@@ -55,6 +62,8 @@ pub struct AuditLogFilter {
     pub outcome: Option<String>,
     /// Exact match against the `severity` column (`workflow` | `diagnostic`).
     pub severity: Option<String>,
+    /// Exact match against the `reason_code` column (T120 migration 0063).
+    pub reason_code: Option<String>,
     /// RFC 3339 lower bound on `at` (inclusive).
     pub from: Option<String>,
     /// RFC 3339 upper bound on `at` (exclusive).
@@ -99,6 +108,10 @@ fn build_where(filter: &AuditLogFilter) -> (String, Vec<String>) {
         clauses.push("severity = ?".to_owned());
         binds.push(v.clone());
     }
+    if let Some(ref v) = filter.reason_code {
+        clauses.push("reason_code = ?".to_owned());
+        binds.push(v.clone());
+    }
     if let Some(ref v) = filter.from {
         clauses.push("at >= ?".to_owned());
         binds.push(v.clone());
@@ -138,7 +151,7 @@ pub async fn list_audit_entries(
 
     let mut sql = format!(
         "SELECT audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-         outcome, severity, request_id, at, payload \
+         outcome, severity, request_id, at, payload, reason_code \
          FROM audit_log_entry{where_sql} ORDER BY at DESC, audit_id DESC"
     );
 
@@ -156,62 +169,12 @@ pub async fn list_audit_entries(
     // fragments in `build_where`; every user-supplied value flows through a
     // `?` placeholder bound below. `limit`/`offset` are integer literals
     // derived from typed `u32` filter fields, never user strings.
-    #[allow(clippy::type_complexity)]
-    let mut q = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-        ),
-    >(sqlx::AssertSqlSafe(sql));
+    let mut q = sqlx::query_as::<_, AuditLogRow>(sqlx::AssertSqlSafe(sql));
     for v in &binds {
         q = q.bind(v);
     }
 
-    let raw = q.fetch_all(pool).await?;
-
-    Ok(raw
-        .into_iter()
-        .map(
-            |(
-                audit_id,
-                entity_type,
-                entity_id,
-                from_state,
-                to_state,
-                trigger,
-                actor,
-                outcome,
-                severity,
-                request_id,
-                at,
-                payload,
-            )| AuditLogRow {
-                audit_id,
-                entity_type,
-                entity_id,
-                from_state,
-                to_state,
-                trigger,
-                actor,
-                outcome,
-                severity,
-                request_id,
-                at,
-                payload,
-            },
-        )
-        .collect())
+    Ok(q.fetch_all(pool).await?)
 }
 
 /// Count `audit_log_entry` rows matching `filter` (ignores `limit`/`offset`).
@@ -231,6 +194,109 @@ pub async fn count_audit_entries(pool: &SqlitePool, filter: &AuditLogFilter) -> 
 
     let (count,) = q.fetch_one(pool).await?;
     Ok(u32::try_from(count).unwrap_or(u32::MAX))
+}
+
+/// Insert a system-driven ("auto") project lifecycle-transition audit row.
+///
+/// Owns the raw `INSERT` for `app_core_projects::project_health` so no `sqlx`
+/// lives in the app layer (db-boundary rule). Fixed columns for this path:
+/// `entity_type = 'project'`, `actor = 'system'`, `outcome = 'applied'`,
+/// `severity = 'workflow'`, `payload = NULL`. Generates the `audit_id` /
+/// `request_id` UUIDs and the RFC3339 `at` timestamp.
+///
+/// # Errors
+/// Returns [`DbError`](crate::DbError) if the insert fails.
+pub async fn insert_project_auto_transition(
+    pool: &SqlitePool,
+    project_id: &str,
+    from_state: &str,
+    to_state: &str,
+    trigger: &str,
+) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    insert_project_auto_transition_conn(&mut conn, project_id, from_state, to_state, trigger).await
+}
+
+pub(crate) async fn insert_project_auto_transition_conn(
+    conn: &mut SqliteConnection,
+    project_id: &str,
+    from_state: &str,
+    to_state: &str,
+    trigger: &str,
+) -> DbResult<()> {
+    use time::format_description::well_known::Rfc3339;
+    use uuid::Uuid;
+
+    let audit_id = Uuid::new_v4().to_string();
+    let request_id = Uuid::new_v4().to_string();
+    let at = time::OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, 'project', ?, ?, ?, ?, 'system', 'applied', 'workflow', ?, ?, NULL)",
+    )
+    .bind(&audit_id)
+    .bind(project_id)
+    .bind(from_state)
+    .bind(to_state)
+    .bind(trigger)
+    .bind(&request_id)
+    .bind(&at)
+    .execute(conn)
+    .await?;
+
+    Ok(())
+}
+
+/// Insert a generalized `audit_log_entry` row from an `AuditLogEntry` (T120,
+/// spec 030 FR-131/FR-133).
+///
+/// The single durable-write half of `EventBus::write_audit` (`crates::audit`
+/// crate, T121) — the load-bearing half per constitution §II: callers MUST
+/// propagate an `Err` here as a command failure, unlike the bus emit, which
+/// is best-effort. Distinct from `record_transition`/`record_refused_transition`
+/// (`crate::repositories::lifecycle`): this is a plain append with no
+/// accompanying CAS state-column update, for audit-worthy mutations that
+/// have no lifecycle state (settings, protection, equipment) as well as any
+/// other mutation that does not need the CAS coupling.
+///
+/// # Errors
+/// Returns [`DbError`](crate::DbError) if the insert fails.
+pub async fn insert_audit_entry(pool: &SqlitePool, entry: &AuditLogEntry) -> DbResult<()> {
+    let at_str = entry
+        .at
+        .as_offset_date_time()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    let payload_str = entry.payload.as_ref().map(std::string::ToString::to_string);
+
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload, reason_code) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(entry.audit_id.as_uuid().to_string())
+    .bind(entry.entity_type.as_str())
+    .bind(entry.entity_id.to_string())
+    .bind(&entry.from_state)
+    .bind(&entry.to_state)
+    .bind(&entry.trigger)
+    .bind(&entry.actor)
+    .bind(entry.outcome.as_str())
+    .bind(entry.severity.as_str())
+    .bind(entry.request_id.to_string())
+    .bind(&at_str)
+    .bind(&payload_str)
+    .bind(&entry.reason_code)
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -253,7 +319,8 @@ mod tests {
              severity TEXT NOT NULL CHECK (severity IN ('workflow', 'diagnostic')),\
              request_id TEXT NOT NULL,\
              at TEXT NOT NULL,\
-             payload TEXT\
+             payload TEXT,\
+             reason_code TEXT\
              )",
         )
         .execute(&pool)

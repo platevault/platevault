@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * Regression coverage for the exact `inbox.list` payload captured off a
@@ -37,6 +40,7 @@ const items = [
     groupId: '1eac81eb-931a-473e-a6eb-c1e9a984e32c',
     groupKey: '',
     groupTarget: 'M42',
+    needsReview: false,
     inboxItemId: '1eac81eb-931a-473e-a6eb-c1e9a984e32c',
     isMaster: false,
     lane: 'fits',
@@ -53,8 +57,9 @@ const items = [
     fileCount: 2,
     format: 'fits',
     groupId: '94acc60b-cfef-45f6-8460-d1f23b76827d',
-    groupKey: '__needs_review__',
+    groupKey: 'type=dark·filter=∅',
     groupLabel: '(root) · needs review',
+    needsReview: true,
     inboxItemId: '94acc60b-cfef-45f6-8460-d1f23b76827d',
     isMaster: false,
     lane: 'fits',
@@ -72,7 +77,7 @@ describe('InboxList — Windows CI split-payload regression', () => {
     render(
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={vi.fn()}
         filterType="all"
       />,

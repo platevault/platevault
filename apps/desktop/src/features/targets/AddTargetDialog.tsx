@@ -1,28 +1,30 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * AddTargetDialog — spec 036 "Add target" action.
  *
  * Lets the user search for an astronomical target (via the existing
- * TargetSearch / SIMBAD two-phase pipeline) and confirm a selection, which
- * resolves + persists a `canonical_target` via `target.resolve`.  On success
- * the dialog closes and calls `onAdded(targetId)` so the page can reload
- * the list and navigate to the new target.
+ * TargetSearch / SIMBAD two-phase pipeline) and confirm a selection.
+ * Confirming is the explicit in-use commit (spec 052 P1 FR-004): `target.
+ * search`/`target.resolve` no longer persist a `canonical_target` row on
+ * their own (they only populate the shared redb resolve cache), so the
+ * confirm click calls `target.adopt` with the selected suggestion's
+ * `targetId` to promote it into the durable table. On success the dialog
+ * closes and calls `onAdded(targetId)` so the page can reload the list and
+ * navigate to the new target.
  *
- * Reuses `TargetSearch` (spec 035 US1/US3) unchanged.  No new backend
- * commands are required: `target.search` supplies suggestions and
- * `target.resolve` persists the canonical row.
+ * Reuses `TargetSearch` (spec 035 US1/US3) unchanged.
  */
 
-import { useState, useCallback } from 'react';
-import { Dialog } from '@base-ui-components/react/dialog';
+import { useState, useCallback, useRef } from 'react';
 import { m } from '@/lib/i18n';
 import { Btn, Pill } from '@/ui';
-import { TargetSearch } from '@/components';
+import { Modal, TargetSearch } from '@/components';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import type { TargetSuggestion } from '@/bindings/aliases';
-
-/** Contract version for the spec-035 `target.*` resolution commands. */
-const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
 
 export interface AddTargetDialogProps {
   open: boolean;
@@ -31,10 +33,18 @@ export interface AddTargetDialogProps {
   onAdded: (targetId: string) => void;
 }
 
-export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps) {
+export function AddTargetDialog({
+  open,
+  onClose,
+  onAdded,
+}: AddTargetDialogProps) {
   const [pending, setPending] = useState<TargetSuggestion | null>(null);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #841: point the dialog's initial focus directly at the search input
+  // instead of racing Base UI's own default (first tabbable = the ✕ close
+  // button) with a bare `autoFocus`.
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
     setPending(null);
@@ -62,96 +72,89 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
     setResolving(true);
     setError(null);
     try {
-      const res = unwrap(await commands.targetResolve({
-        contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-        requestId: crypto.randomUUID(),
-        query: pending.primaryDesignation,
-        override: null,
-      }));
-      if (res.status === 'resolved' && res.target) {
+      const res = unwrap(
+        await commands.targetAdopt({
+          requestId: crypto.randomUUID(),
+          targetId: pending.targetId,
+        }),
+      );
+      if (res.adopted) {
         handleOpenChange(false);
-        onAdded(res.target.targetId);
+        onAdded(res.targetId);
       } else {
         setError(
           m.targets_add_resolve_failed({ query: pending.primaryDesignation }),
         );
       }
     } catch (err: unknown) {
-      const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-      setError(m.targets_add_failed({ code }));
+      setError(m.targets_add_failed({ message: errMessage(err) }));
     } finally {
       setResolving(false);
     }
   }, [pending, handleOpenChange, onAdded]);
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
-        <Dialog.Popup
-          className="alm-confirm-overlay alm-add-target__popup"
-          aria-label={m.targets_add_target()}
-        >
-          <div className="alm-confirm-overlay__header">
-            <Dialog.Title className="alm-confirm-overlay__title">{m.targets_add_target()}</Dialog.Title>
-            <Dialog.Description className="alm-confirm-overlay__description">
-              {m.targets_add_target_desc()}
-            </Dialog.Description>
-          </div>
-
-          <div
-            className="alm-confirm-overlay__body alm-add-target__body"
+    <Modal
+      open={open}
+      onClose={() => handleOpenChange(false)}
+      title={m.targets_add_target()}
+      subtitle={m.targets_add_target_desc()}
+      size="md"
+      className="pv-add-target__popup"
+      ariaLabel={m.targets_add_target()}
+      initialFocus={searchInputRef}
+      footer={
+        <>
+          <Btn
+            type="button"
+            variant="ghost"
+            onClick={() => handleOpenChange(false)}
+            disabled={resolving}
           >
-            {pending ? (
-              <div>
-                <span className="alm-field-label">{m.targets_add_target_selected()}</span>
-                <div className="alm-add-target__selected-row">
-                  <Pill variant="accent">{pending.primaryDesignation}</Pill>
-                  {pending.commonName && (
-                    <span className="alm-field-hint">{pending.commonName}</span>
-                  )}
-                  <Btn type="button" variant="ghost" onClick={reset}>
-                    {m.common_change()}
-                  </Btn>
-                </div>
-              </div>
-            ) : (
-              <TargetSearch
-                label={m.targets_add_target_search_label()}
-                placeholder={m.projects_create_target_search_placeholder()}
-                onSelect={handleSelect}
-                // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the search field when the Add Target dialog opens (expected modal behaviour)
-                autoFocus
-              />
-            )}
-
-            {error && (
-              <span role="alert" className="alm-field-error">
-                {error}
-              </span>
-            )}
+            {m.common_cancel()}
+          </Btn>
+          <Btn
+            type="button"
+            variant="primary"
+            disabled={!pending || resolving}
+            onClick={() => void handleConfirm()}
+          >
+            {resolving ? m.common_adding() : m.targets_add_target()}
+          </Btn>
+        </>
+      }
+    >
+      <div className="pv-add-target__body">
+        {pending ? (
+          <div>
+            <span className="pv-field-label">
+              {m.targets_add_target_selected()}
+            </span>
+            <div className="pv-add-target__selected-row">
+              <Pill variant="accent">{pending.primaryDesignation}</Pill>
+              {pending.commonName && (
+                <span className="pv-field-hint">{pending.commonName}</span>
+              )}
+              <Btn type="button" variant="ghost" onClick={reset}>
+                {m.common_change()}
+              </Btn>
+            </div>
           </div>
+        ) : (
+          <TargetSearch
+            label={m.targets_add_target_search_label()}
+            placeholder={m.projects_create_target_search_placeholder()}
+            onSelect={handleSelect}
+            inputRef={searchInputRef}
+          />
+        )}
 
-          <div className="alm-confirm-overlay__footer">
-            <Btn
-              type="button"
-              variant="ghost"
-              onClick={() => handleOpenChange(false)}
-              disabled={resolving}
-            >
-              {m.common_cancel()}
-            </Btn>
-            <Btn
-              type="button"
-              variant="primary"
-              disabled={!pending || resolving}
-              onClick={() => void handleConfirm()}
-            >
-              {resolving ? m.common_adding() : m.targets_add_target()}
-            </Btn>
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+        {error && (
+          <span role="alert" className="pv-field-error">
+            {error}
+          </span>
+        )}
+      </div>
+    </Modal>
   );
 }

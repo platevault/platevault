@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """
 Output formatters — T005, T006.
 Both functions referenced by src/pipeline.py and src/app.py.

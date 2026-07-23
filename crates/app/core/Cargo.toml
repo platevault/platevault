@@ -29,22 +29,37 @@ persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 workflow_artifacts = { path = "../../workflow/artifacts" }
 workflow_profiles = { path = "../../workflow/profiles" }
+# spec 052 P1: project_create::create threads the shared redb resolve cache
+# through to app_core_projects::project_setup::create for in-use promotion.
+simbad-resolver = "0.4.0"
+# In-memory caching layer (F0 foundation).
+app_core_cache = { path = "../cache" }
 camino = { workspace = true }
 dashmap = { workspace = true }
 hex.workspace = true
 serde_json.workspace = true
+# #1218: session_key parsing goes through the crate that owns the format.
+sessions = { path = "../../sessions" }
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time = { workspace = true }
 tokio.workspace = true
 tracing = { workspace = true }
-uuid = { workspace = true }
+# "v5" beyond the workspace default ("v4"): deterministic audit `entity_id`
+# derivation for protection/source/root mutations (T123/T125, spec 030
+# FR-133), same pattern as `crates/targeting/Cargo.toml`.
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
+app_core_cache = { path = "../cache" }
 tempfile = { workspace = true }
 rstest = { workspace = true }
 proptest = { workspace = true }
+# spec 052 P1 (resolution_e2e.rs): computes the same deterministic UUIDv5 the
+# resolver crate and app_core_targets already derive, to assert target_id
+# stability across the redb cache / SQLite promotion boundary.
+targeting = { path = "../../targeting" }
 # spec 035 (T020): the `FakeResolver` test double lives behind the resolver's
 # `test-fixture` feature; enable it for offline target.resolve use-case tests.
 # (spec 042 / T250: moved from `targeting` to `targeting_resolver`.)

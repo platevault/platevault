@@ -1,9 +1,19 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Regenerate the TypeScript bindings on every `cargo test`.
 //!
 //! The bindings file lives at `apps/desktop/src/bindings/index.ts` and is
 //! committed to the tree. CI is expected to run this test then
 //! `git diff --exit-code apps/desktop/src/bindings/` to catch unsynced
 //! changes to the typed command surface (spec 002 plan, research.md §9.5).
+//!
+//! `index.ts` carries no SPDX/copyright header: `tauri-specta`'s `export()`
+//! never emits one, so adding one to the committed file (as the AGPL
+//! relicense in #693 briefly did) makes the drift check above fail on every
+//! push. `specs/*/contracts/*.generated.json` is excluded from header sweeps
+//! for the same reason — a future repo-wide license-header pass MUST exclude
+//! all generated output, not just this file.
 //!
 //! Failure modes:
 //! - `Builder::export` errors: a derived `Type` for a contract DTO is broken
@@ -143,6 +153,7 @@ fn exports_typescript_bindings() {
         "target_resolve",
         "target_resolution_settings",
         "target_resolution_settings_update",
+        "target_astro_format_batch",
         // projects
         "projects_list",
         "projects_get",
@@ -195,7 +206,7 @@ fn exports_typescript_bindings() {
         "source_protection_set",
         "plan_protection_check_cmd",
         "protection_plan_acknowledged",
-        // settings / preferences / search / tour
+        // settings / preferences / search
         "settings_get",
         "settings_update",
         "settings_restore_defaults",
@@ -203,13 +214,6 @@ fn exports_typescript_bindings() {
         "preferences_get",
         "preferences_set",
         "search_global",
-        "tour_complete_step",
-        // guided
-        "guided_state_get",
-        "guided_step_complete",
-        "guided_dismiss",
-        "guided_restart",
-        "guided_activate",
         // native
         "native_directory_pick",
         "native_file_pick",
