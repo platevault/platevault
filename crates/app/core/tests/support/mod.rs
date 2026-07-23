@@ -16,15 +16,11 @@ use persistence_db::Database;
 /// Provision an isolated in-memory SQLite DB with all migrations applied and a
 /// repository/event-bus wired to it. Real backend, no mocks.
 ///
-/// Review round 1 #5: `app_core_settings::caches::settings_bag()` is a
-/// process-global single-slot cache shared by every in-memory DB in this test
-/// binary (same caveat as `app_core_settings::lib.rs`'s own `setup()` and
-/// `app_core::protection::PROTECTION_DEFAULTS_TEST_LOCK`). Without a reset
-/// here, a settings test that runs after another test populated the bag can
-/// read that other test's stale snapshot instead of its own DB — the flake
-/// behind `settings_logs_integration.rs`'s `setting_update_persists_and_reads_back`.
-/// Invalidating at setup is a minimal fix for the shared-cache symptom, not
-/// the underlying single-process-cache architecture (out of scope here).
+/// Returns a fresh `AppCaches` per call so tests never share mutable cache
+/// state (the root cause of the previously-serialized flakes). The deprecated
+/// `invalidate_settings_bag()` call is retained only as a belt-and-suspenders
+/// reset for code paths that still read the process-global shim during this
+/// incremental migration.
 pub async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {
     app_core_settings::caches::invalidate_settings_bag();
     let db = Database::in_memory().await.expect("in-memory db");
@@ -32,6 +28,21 @@ pub async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {
     let bus = EventBus::with_pool(db.pool().clone());
     let repo = SqliteLifecycleRepository::new(db.pool().clone(), bus.clone());
     (db, repo, bus)
+}
+
+/// Same as [`setup`] but also returns a fresh per-instance `AppCaches`.
+///
+/// Prefer this over [`setup`] for new tests — the returned caches struct
+/// eliminates cross-contamination without needing `invalidate_*` calls or
+/// serialization mutexes.
+pub async fn setup_with_caches(
+) -> (Database, SqliteLifecycleRepository, EventBus, std::sync::Arc<app_core::AppCaches>) {
+    let db = Database::in_memory().await.expect("in-memory db");
+    db.migrate().await.expect("migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+    let repo = SqliteLifecycleRepository::new(db.pool().clone(), bus.clone());
+    let caches = app_core::AppCaches::shared();
+    (db, repo, bus, caches)
 }
 
 /// Platform-absolute path of the project folder registered by
