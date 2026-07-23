@@ -56,10 +56,10 @@ function bindingCommands(src) {
  * elsewhere in the file cannot be mistaken for handlers.
  */
 function mockedCommands(src) {
-  const start = src.indexOf('export const mockHandlers = {');
+  const start = src.indexOf('const mockHandlers = {');
   if (start === -1) {
     throw new Error(
-      'mocks.ts: `export const mockHandlers = {` not found — the registry was renamed; update scripts/check-mock-baseline.mjs.',
+      'mocks.ts: `const mockHandlers = {` not found — the registry was renamed; update scripts/check-mock-baseline.mjs.',
     );
   }
   const end = src.indexOf('\n} satisfies MockRegistry;', start);

@@ -211,31 +211,12 @@
   gap: var(--pv-sp-3);
 }
 
-/* Individual root card */
-.pv-data-sources__root-card {
-  border: 1px solid var(--pv-border);
-  border-radius: var(--pv-radius-md);
-  padding: var(--pv-sp-3);
-}
-
-/* Offline root — dimmed surface */
-.pv-data-sources__root-card--offline {
-  background: var(--pv-bg3);
-}
-
 /* Card header row: path + pills */
 .pv-data-sources__root-header {
   display: flex;
   align-items: flex-start;
   gap: var(--pv-sp-2);
   flex-wrap: wrap;
-}
-
-/* Path code element */
-.pv-data-sources__root-path {
-  flex: 1;
-  font-size: var(--pv-text-xs);
-  word-break: break-all;
 }
 
 /* Pills group */
@@ -312,7 +293,7 @@
 
 /* Monospace path text */
 .pv-data-sources__root-path {
-
+  flex: 1;
   font-size: var(--pv-text-xs);
   color: var(--pv-text);
   word-break: break-all;

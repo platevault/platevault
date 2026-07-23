@@ -107,30 +107,11 @@ pub async fn remove_favourite(pool: &SqlitePool, target_id: &str) -> DbResult<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
-
-    // Helper: insert a bare canonical_target row (no aliases, no notes).
-    async fn insert_target(pool: &SqlitePool, id: &str) {
-        sqlx::query(
-            "INSERT INTO canonical_target
-             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
-             VALUES (?, NULL, 'Test Target', 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .expect("insert_target failed");
-    }
+    use crate::test_support::{insert_target, setup_db};
 
     #[tokio::test]
     async fn add_then_list_returns_favourited_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-001").await;
 
         add_favourite(db.pool(), "t-001", "2026-07-05T00:00:00Z").await.unwrap();
@@ -141,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_twice_is_idempotent_single_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-002").await;
 
         add_favourite(db.pool(), "t-002", "2026-07-05T00:00:00Z").await.unwrap();
@@ -162,7 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_deletes_the_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-003").await;
         add_favourite(db.pool(), "t-003", "2026-07-05T00:00:00Z").await.unwrap();
 
@@ -174,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_of_never_favourited_id_is_a_noop() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-004").await;
 
         // Never favourited; removing must not error.
@@ -186,20 +167,20 @@ mod tests {
 
     #[tokio::test]
     async fn list_is_empty_when_nothing_favourited() {
-        let db = setup().await;
+        let db = setup_db().await;
         let ids = list_favourites(db.pool()).await.unwrap();
         assert!(ids.is_empty());
     }
 
     #[tokio::test]
     async fn count_favourites_is_zero_when_nothing_favourited() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert_eq!(count_favourites(db.pool()).await.unwrap(), 0);
     }
 
     #[tokio::test]
     async fn count_favourites_reflects_add_and_remove() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-009").await;
         insert_target(db.pool(), "t-010").await;
 
@@ -213,27 +194,27 @@ mod tests {
 
     #[tokio::test]
     async fn target_exists_true_for_known_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-006").await;
         assert!(target_exists(db.pool(), "t-006").await.unwrap());
     }
 
     #[tokio::test]
     async fn target_exists_false_for_unknown_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert!(!target_exists(db.pool(), "missing").await.unwrap());
     }
 
     #[tokio::test]
     async fn get_favourited_at_returns_none_when_not_favourited() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-007").await;
         assert!(get_favourited_at(db.pool(), "t-007").await.unwrap().is_none());
     }
 
     #[tokio::test]
     async fn get_favourited_at_returns_stored_timestamp() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-008").await;
         add_favourite(db.pool(), "t-008", "2026-07-05T00:00:00Z").await.unwrap();
         assert_eq!(
@@ -244,7 +225,7 @@ mod tests {
 
     #[tokio::test]
     async fn cascade_delete_of_canonical_target_drops_favourite() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-005").await;
         add_favourite(db.pool(), "t-005", "2026-07-05T00:00:00Z").await.unwrap();
 

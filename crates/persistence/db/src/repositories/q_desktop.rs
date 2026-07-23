@@ -168,17 +168,11 @@ pub use super::q_targets_mgmt::get_resolver_settings_online as get_resolver_sett
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     #[tokio::test]
     async fn status_counts_are_zero_on_fresh_db() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert_eq!(count_unacknowledged_inbox_items(db.pool()).await.unwrap(), 0);
         assert_eq!(count_acquisition_sessions(db.pool()).await.unwrap(), 0);
         assert_eq!(count_calibration_masters(db.pool()).await.unwrap(), 0);
@@ -188,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolver_settings_seeded_by_migration_0031() {
-        let db = setup().await;
+        let db = setup_db().await;
         let row = get_resolver_settings(db.pool()).await.unwrap().expect("seeded singleton row");
         assert_eq!(row.online_enabled, 1, "default online_enabled per migration 0031");
         assert_eq!(row.request_timeout_secs, 10, "default request_timeout_secs");
@@ -218,7 +212,7 @@ mod tests {
 
     #[tokio::test]
     async fn inbox_master_item_round_trips() {
-        let db = setup().await;
+        let db = setup_db().await;
         let root_id = register_test_root(db.pool()).await;
         insert_inbox_master_item(
             db.pool(),
