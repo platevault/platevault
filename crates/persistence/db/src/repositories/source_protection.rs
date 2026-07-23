@@ -312,17 +312,11 @@ pub async fn resolve_protection_with_fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     #[tokio::test]
     async fn upsert_and_read_round_trip() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-001";
 
         upsert_source_protection(db.pool(), source_id, "unprotected", Some(false), None, "user")
@@ -341,7 +335,7 @@ mod tests {
 
     #[tokio::test]
     async fn upsert_updates_existing_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-002";
 
         upsert_source_protection(db.pool(), source_id, "protected", None, None, "user")
@@ -362,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_removes_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-003";
 
         upsert_source_protection(db.pool(), source_id, "unprotected", None, None, "user")
@@ -376,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_returns_override_when_present() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-004";
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
 
@@ -403,7 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_elevates_level_for_protected_category() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-005";
         let global_cats = vec!["lights".to_owned(), "masters".to_owned()];
 
@@ -425,7 +419,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_uses_global_defaults_when_no_override() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-006";
         let global_cats: Vec<String> = vec![];
 
@@ -441,7 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn categories_with_override_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         let source_id = "src-007";
         let per_source_cats = vec!["finals".to_owned()];
 
