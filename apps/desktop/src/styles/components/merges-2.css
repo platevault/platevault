@@ -182,8 +182,9 @@
 
 .pv-calib-detail {
   display: grid;
-  /* Facts compact (fixed-ish), matches take the rest. */
-  grid-template-columns: var(--pv-rail-width) minmax(0, 1fr);
+  /* Facts compact (fixed-ish), matches take the rest.
+   * Overridden below by calib-compact merge: 0.9fr/1.1fr column ratio. */
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: var(--pv-sp-5);
   align-items: start;
   margin-top: var(--pv-sp-3);
@@ -227,9 +228,6 @@
  * the wide-short bottom panel without inner scroll. Must follow the
  * calibration-detail.css block above so the .pv-calib-detail column override
  * wins on source order. */
-.pv-calib-detail {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-}
 .pv-calib-kvgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -355,6 +353,9 @@
 .pv-targets-table__scroll .pv-targets-table thead th:nth-child(2),
 .pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(2) {
   left: var(--pv-targets-star-w);
+  /* Seam marking: box-shadow tracks the sticky cell; border-right would detach
+     under border-collapse. */
+  box-shadow: 1px 0 0 var(--pv-border-subtle);
 }
 
 /* Layering: pinned header corner > pinned body cells > sticky header > rest.
@@ -385,15 +386,6 @@
   .pv-targets-table__row--selected
   > td:nth-child(-n + 2) {
   background: var(--pv-accent-bg);
-}
-
-/* Seam marking where the pinned region ends, drawn with box-shadow rather than
-   border-right: `.pv-table` is `border-collapse: collapse`, where borders
-   belong to the table rather than the cell and detach from sticky cells while
-   scrolling. A shadow is painted by the cell and tracks it exactly. */
-.pv-targets-table__scroll .pv-targets-table thead th:nth-child(2),
-.pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(2) {
-  box-shadow: 1px 0 0 var(--pv-border-subtle);
 }
 
 /* The windowed body's height is set inline (getTotalSize) so the scrollbar
@@ -474,6 +466,9 @@
  * the detail sits to the RIGHT of the full-width primary content as a fixed,
  * full-height column with its own scroll. */
 .pv-listpage__body--side {
+  /* Fixed side-panel width token (scoped here so --pv-side-detail-w resolves
+     on the element that uses it in .pv-listpage__detail--side). */
+  --pv-side-detail-w: 420px;
   flex-direction: row;
 }
 
@@ -486,11 +481,6 @@
   align-self: stretch;
   border-top: none;
   border-left: 1px solid var(--pv-border);
-}
-
-/* Fixed side-panel width token (kept local to this block). */
-.pv-listpage__body--side {
-  --pv-side-detail-w: 420px;
 }
 
 /* ── Projects-detail structure for the side column ───────────────────────────
