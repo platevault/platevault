@@ -89,13 +89,14 @@
 .pv-sidebar__brand-name {
   font-size: var(--pv-text-md); font-weight: var(--pv-weight-semibold);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; flex-shrink: 0;
 }
 .pv-sidebar__collapse {
   width: 24px; height: 24px; border: none; background: none;
   cursor: pointer; color: var(--pv-text-muted);
   border-radius: var(--pv-radius-sm);
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+  flex-shrink: 0; margin-left: auto;
 }
 .pv-sidebar__collapse:hover { background: var(--pv-hover-bg); }
 .pv-sidebar__nav { flex: 1; padding: var(--pv-sp-1) 0; overflow-y: auto; }
@@ -142,12 +143,7 @@
   color: var(--pv-on-accent); font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-/* #962: flex-shrink:0 — the product wordmark must never be the element that
-   concedes space under flex pressure; the version chip (below) is the
-   lower-priority sibling that can shrink first if the row is ever tight. */
-.pv-sidebar__brand-name { flex: 1; flex-shrink: 0; }
 .pv-sidebar__version { font-size: var(--pv-text-xs); color: var(--pv-text-faint); }
-.pv-sidebar__collapse { margin-left: auto; }
 .pv-sidebar__group { padding-bottom: var(--pv-sp-1); }
 .pv-sidebar__group-label {
   font-size: var(--pv-text-xs); font-weight: var(--pv-weight-semibold);

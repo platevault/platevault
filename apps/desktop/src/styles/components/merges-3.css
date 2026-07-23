@@ -353,7 +353,7 @@
 
 /* Column widths (task 044; re-sized iteration 2026-07-15 FR-032) — fixed
    layout prevents per-page shift. Imaging time fits "2h10m" + why-glyph. */
-.pv-targets-col--lunardist { width: 6%; }
+.pv-targets-col--lunardist { width: 6.5%; }
 .pv-targets-col--filters   { width: 18%; }
 .pv-targets-col--imagingtime { width: 10%; }
 
@@ -407,7 +407,7 @@
 .pv-filter-badges {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--pv-sp-1);
+  gap: var(--pv-sp-2);
   align-items: center;
 }
 
@@ -778,10 +778,7 @@
  * Filter badges run together — increase gap from sp-1 to sp-2.
  * These override the values set in the spec 044 block in components.css. */
 
-.pv-targets-col--lunardist  { width: 6.5%; }
-
-/* task 5: add readable spacing between filter badges (was pv-sp-1 = 4px). */
-.pv-filter-badges { gap: var(--pv-sp-2); }
+/* task 5: lunardist width (6.5%) + filter-badge gap (sp-2) applied at first occurrence above. */
 
 /* task 19 sparkline CSS removed (iteration 2026-07-15, FR-007 hard removal). */
 
