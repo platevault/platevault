@@ -111,3 +111,66 @@ jobs:
           # Surface partial failure without failing the job: cleanup is hygiene,
           # and a red cleanup run on a merged PR is noise, not signal.
           [ "$failed" -eq 0 ] || echo "::warning::${failed} cache deletion(s) failed"
+
+  delete-closed-branch:
+    name: Delete closed PR branch
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete unchanged, unused head branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          case "$HEAD_REF" in
+            "$DEFAULT_BRANCH"|cla-signatures|__dolt_remote_info__)
+              echo "retaining managed branch: $HEAD_REF"
+              exit 0
+              ;;
+          esac
+
+          encoded_branch="$(jq -rn --arg value "$HEAD_REF" '$value | @uri')"
+          encoded_ref="$(jq -rn --arg value "heads/$HEAD_REF" '$value | @uri')"
+
+          branch_json="$(gh api "repos/${REPO}/branches/${encoded_branch}" 2>/dev/null || true)"
+          if [ -z "$branch_json" ]; then
+            echo "branch already absent: $HEAD_REF"
+            exit 0
+          fi
+          if [ "$(jq -r '.protected' <<<"$branch_json")" = "true" ]; then
+            echo "retaining protected branch: $HEAD_REF"
+            exit 0
+          fi
+
+          current_sha="$(gh api "repos/${REPO}/git/ref/${encoded_ref}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -z "$current_sha" ]; then
+            echo "ref vanished concurrently: $HEAD_REF"
+            exit 0
+          fi
+          if [ "$current_sha" != "$HEAD_SHA" ]; then
+            echo "retaining $HEAD_REF: head moved after PR closure"
+            exit 0
+          fi
+
+          open_uses="$(
+            gh api --paginate "repos/${REPO}/pulls?state=open&per_page=100" |
+              jq -s --arg ref "$HEAD_REF" \
+                '[.[][] | select(.head.ref == $ref or .base.ref == $ref)] | length'
+          )"
+          if [ "$open_uses" -ne 0 ]; then
+            echo "retaining $HEAD_REF: referenced by $open_uses open PR(s)"
+            exit 0
+          fi
+
+          gh api --method DELETE "repos/${REPO}/git/refs/${encoded_ref}"
+          echo "deleted closed PR branch: $HEAD_REF"

@@ -29,6 +29,15 @@ export const SOURCE_KIND_LABELS: Record<SourceKind, () => string> = {
   inbox: () => m.settings_datasources_category_inbox(),
 };
 
+export function sourceKindLabel(kind: string): string {
+  if (Object.hasOwn(SOURCE_KIND_LABELS, kind)) {
+    return SOURCE_KIND_LABELS[kind as SourceKind]();
+  }
+  return m.setup_scan_source_unknown({
+    value: kind.trim() || m.common_unknown(),
+  });
+}
+
 // spec 039: inbox is now optional — users do not need a dedicated drop folder
 // to use the Inbox (which aggregates unacknowledged items across all roots).
 export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];

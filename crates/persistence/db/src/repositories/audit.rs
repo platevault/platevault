@@ -22,7 +22,7 @@
 use std::fmt::Write as _;
 
 use audit_types::AuditLogEntry;
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::DbResult;
 
@@ -213,6 +213,17 @@ pub async fn insert_project_auto_transition(
     to_state: &str,
     trigger: &str,
 ) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    insert_project_auto_transition_conn(&mut conn, project_id, from_state, to_state, trigger).await
+}
+
+pub(crate) async fn insert_project_auto_transition_conn(
+    conn: &mut SqliteConnection,
+    project_id: &str,
+    from_state: &str,
+    to_state: &str,
+    trigger: &str,
+) -> DbResult<()> {
     use time::format_description::well_known::Rfc3339;
     use uuid::Uuid;
 
@@ -235,7 +246,7 @@ pub async fn insert_project_auto_transition(
     .bind(trigger)
     .bind(&request_id)
     .bind(&at)
-    .execute(pool)
+    .execute(conn)
     .await?;
 
     Ok(())
