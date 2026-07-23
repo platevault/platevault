@@ -27,8 +27,6 @@ import {
   openChecklist,
   seedEmptyInventory,
   seedOnboardingUnmet,
-  ONB_SECTION as SECTION,
-  ONB_RING as RING,
 } from './support/harness';
 import type { Page } from '@playwright/test';
 
@@ -37,6 +35,7 @@ const SPOTLIGHT = '.react-joyride__spotlight';
 const CREATE_CTA = '[data-guide-anchor="projects.create-cta"]';
 const RESOLVE_CTA = '[data-guide-anchor="targets.resolve-cta"]';
 const NOTE_FIELD = '[data-guide-anchor="sessions.note-field"]';
+const REVIEW_MASTER_ROW = '[data-guide-anchor="calibration.review-row"]';
 
 /**
  * Open the checklist flyout and wait for its body (no-op when already open).
@@ -224,21 +223,18 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
     );
   });
 
-  test('an item with no resolvable control offers no find affordance at all', async ({
+  test('every registry item offers find; review masters spotlights its first row', async ({
     page,
   }) => {
-    // `calibration.review_masters` has no prerequisite to fall back to and no
-    // anchor of its own, so nothing can be pointed at — the affordance stays
-    // hidden rather than promising something it cannot deliver. (Every
-    // prerequisite in the current registry IS anchored, so a blocked row
-    // always has somewhere to point; this is the remaining hidden case.)
     await landOnMockRoute(page, '/#/calibration');
     await openChecklist(page);
 
-    await expect(
-      page.locator('[data-item-id="calibration.review_masters"]'),
-    ).toBeVisible({ timeout: 8_000 });
-    await expect(findBtn(page, 'calibration.review_masters')).toHaveCount(0);
+    const btn = findBtn(page, 'calibration.review_masters');
+    await expect(btn).toBeVisible({ timeout: 8_000 });
+    await btn.click();
+
+    await expect(page.locator(OVERLAY)).toBeVisible();
+    await expect(page.locator(REVIEW_MASTER_ROW)).toBeVisible();
   });
 
   test('normal motion pulses the spotlight outline for the first seconds', async ({

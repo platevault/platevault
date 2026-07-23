@@ -182,11 +182,6 @@
   opacity: 0.5;
 }
 
-/* A completed row's tick is a live control, not decoration: the row is struck
-   through and greyed rather than hidden so the user can take it back, and a
-   click landing on a crossed-out row that did nothing would read as broken.
-   Muted at rest so the row still looks settled; full strength on hover/focus
-   so the affordance is discoverable. */
 .pv-onb-checklist__check--done {
   cursor: pointer;
   background: none;
@@ -199,9 +194,6 @@
   opacity: 1;
 }
 
-/* Round, not a rounded square: every row is now checkable (auto-tick items
-   included), and the circle reads as "tick this off" where the old inert
-   bullet read as decoration. */
 .pv-onb-checklist__checkbox {
   display: block;
   width: 14px;
@@ -209,6 +201,22 @@
   border: 1px solid var(--pv-border);
   border-radius: 50%;
   background: var(--pv-surface-raised);
+}
+
+.pv-onb-checklist__auto-marker {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.pv-onb-checklist__auto-marker::after {
+  width: 6px;
+  height: 6px;
+  content: '';
+  border-radius: 50%;
+  background: var(--pv-text-faint);
 }
 
 .pv-onb-checklist__check:hover .pv-onb-checklist__checkbox {
@@ -456,16 +464,27 @@
   background: var(--pv-hover-bg);
 }
 
+.pv-onb-checklist__dismiss {
+  color: var(--pv-text-faint);
+  border-radius: var(--pv-radius-sm);
+}
+
+.pv-onb-checklist__dismiss:hover,
+.pv-onb-checklist__dismiss:focus-visible {
+  color: var(--pv-text-secondary);
+  background: var(--pv-hover-bg);
+}
+
 /* ── Completion choreography (T024) ───────────────────────────────────────── */
 .pv-onb-checklist__item--completing {
   color: var(--pv-accent);
   font-weight: var(--pv-weight-medium);
-  animation: pv-onb-tick-pop var(--pv-transition-base) ease-out;
+  animation: pv-onb-tick-pop var(--pv-onb-motion-tick);
 }
 
 .pv-onb-checklist__progress--pulse .pv-onb-checklist__progress-fill,
 .pv-onb-ring--pulse .pv-onb-ring__fill {
-  animation: pv-onb-progress-pulse 0.6s ease-in-out 2;
+  animation: pv-onb-progress-pulse var(--pv-onb-motion-progress-pulse) 2;
 }
 
 @keyframes pv-onb-tick-pop {
@@ -503,7 +522,7 @@
 }
 
 html[data-onb-spotlight-pulse='on'] .react-joyride__spotlight {
-  animation: pv-onb-spotlight-pulse 1s ease-in-out infinite;
+  animation: pv-onb-spotlight-pulse var(--pv-onb-motion-spotlight-pulse) infinite;
 }
 
 @keyframes pv-onb-spotlight-pulse {
