@@ -9,6 +9,25 @@
 //! --workspace` job (ci.yml). The dedicated e2e.yml workflow runs them with
 //! `--run-ignored all` after standing that environment up.
 //!
+//! # `slow_` test naming convention
+//!
+//! **Threshold**: prefix a test with `slow_` when its average wall time on
+//! Windows CI exceeds 3× the suite median, measured on post-fix runs only.
+//! With a current median of ~7s, the threshold is ~21s. Pre-fix timings are
+//! invalid — they measure a bug, not the test. Re-evaluate the prefix after
+//! any fix that materially changes a test's runtime.
+//!
+//! `e2e.yml`'s Windows shards use LPT (longest-processing-time first)
+//! assignment: each `slow_` test is pinned to a separate shard, non-slow
+//! tests fill the remaining slots by greedy LPT. The shard filter expressions
+//! use `test(=slow_<name>)` with no `--partition` flag — nextest ANDs
+//! `--partition` and `-E filterset`, which would exclude an explicitly named
+//! test that doesn't hash to that bucket.
+//!
+//! Adding a new slow test: rename the function with `slow_`, measure its
+//! average over 2+ post-fix CI runs, add a row to the timing table in
+//! e2e.yml, re-run LPT, and update the shard `-E` expressions there.
+//!
 //! Mechanism (mirrors `.github/workflows/e2e.yml`, research D10):
 //! - `desktop_shell` is built with `cargo build -p desktop_shell --features
 //!   e2e`, which compiles in `tauri-plugin-webdriver` (Choochmeque) — an
@@ -1649,21 +1668,33 @@ impl E2eApp {
     /// 1. `firstrun.complete` (backend gate — the CALLER must already have
     ///    registered at least one raw and one project source, its real
     ///    preconditions);
-    /// 2. `guided.dismiss` — the guided coach auto-activates on the first
-    ///    Shell mount after setup and its react-joyride overlay would sit
-    ///    over the page; activation is a no-op on a dismissed flow
-    ///    (`crates/app/core/src/guided_flow.rs::activate_after_setup`);
-    /// 3. set `setupCompleted: true` in the `alm-preferences` localStorage
+    /// 2. set `setupCompleted: true` in the `alm-preferences` localStorage
     ///    blob (what `SetupWizard` does via `setPreference`);
-    /// 4. reload the page — the preferences module caches its localStorage
+    /// 3. reload the page — the preferences module caches its localStorage
     ///    read in module state (`apps/desktop/src/data/preferences.ts`), so
     ///    a direct localStorage write is invisible until a fresh page load.
     pub async fn complete_first_run_gate(&self) -> Result<()> {
+        self.complete_first_run_gate_impl(true).await
+    }
+
+    /// Like [`Self::complete_first_run_gate`] but LEAVES spec-056 onboarding
+    /// enabled, so the orientation walk auto-runs and the Getting-started
+    /// checklist renders. Only `onboarding_journey.rs` (VC-004) needs this;
+    /// every other journey suppresses onboarding so the walk's modal overlay
+    /// never intercepts its own UI interactions.
+    pub async fn complete_first_run_gate_onboarding(&self) -> Result<()> {
+        self.complete_first_run_gate_impl(false).await
+    }
+
+    /// Shared first-run gate completion. When `suppress_onboarding` is true the
+    /// deterministic onboarding suppression flag is set before the reload so
+    /// neither the walk nor the checklist renders (`isOnboardingSuppressed()`,
+    /// `apps/desktop/src/features/onboarding/store.ts`).
+    async fn complete_first_run_gate_impl(&self, suppress_onboarding: bool) -> Result<()> {
         let _: Value = self
             .invoke("firstrun_complete", json!({}))
             .await
             .context("firstrun.complete failed — were a raw AND a project source registered?")?;
-        let _: Value = self.invoke("guided_dismiss", json!({})).await?;
 
         let script = r#"
             var raw = localStorage.getItem('alm-preferences');
@@ -1676,6 +1707,36 @@ impl E2eApp {
             .execute(script, vec![])
             .await
             .context("failed to persist setupCompleted preference")?;
+
+        // Write the flag EXPLICITLY in both directions, before the reload so the
+        // onboarding store reads it at boot.
+        //
+        // Clearing it in the `false` branch is not redundant: on Windows the
+        // webview's localStorage is NOT isolated per test the way the DB and
+        // app-data dirs are. `InstanceEnv` redirects APPDATA/LOCALAPPDATA, but
+        // WebView2 does not resolve its user-data folder from those, so every
+        // test in a shard shares one localStorage origin. Each journey that
+        // calls the suppressing variant leaves the flag set, and whichever
+        // onboarding-enabled test runs after it inherits the suppression and
+        // silently renders no walk. That is exactly what made
+        // `orientation_walk_then_real_confirm_renders_live_auto_tick` fail on
+        // Windows shard 2/2 only, deterministically, while passing on every
+        // ubuntu shard (WebKitGTK honours the redirected XDG dirs, so each
+        // process really does get a clean profile).
+        //
+        // Diagnosed from the failure-path dump in `onboarding_journey.rs`:
+        // `suppressedFlag:"true"` with a healthy backend and a mounted shell.
+        let flag_script = if suppress_onboarding {
+            // Otherwise the spec-056 US1 walk auto-runs and its modal overlay
+            // intercepts every subsequent `goto_route`/click in the journey.
+            r#"localStorage.setItem('alm-onboarding-suppressed', 'true');"#
+        } else {
+            r#"localStorage.removeItem('alm-onboarding-suppressed');"#
+        };
+        self.driver
+            .execute(flag_script, vec![])
+            .await
+            .context("failed to write the onboarding suppression flag")?;
 
         // Clear the bridge marker on the PRE-refresh document before asking
         // for the reload (#1385-followup — CI run 29779614765 and local
@@ -1903,20 +1964,43 @@ impl E2eApp {
         let dir = lookup(&instance_env().vars, "WEBVIEW2_USER_DATA_FOLDER")
             .map(PathBuf::from)
             .context("WEBVIEW2_USER_DATA_FOLDER was not configured")?;
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(15);
         loop {
             if let Some(leveldb) = find_leveldb_dir(&dir) {
-                if std::fs::read_dir(&leveldb)
-                    .ok()
-                    .is_some_and(|entries| entries.flatten().any(|entry| entry.path().is_file()))
-                {
+                // Wait for a DATA file (.ldb) or a write-ahead log (.log with
+                // non-zero size). Structural files (LOCK, CURRENT, MANIFEST-*)
+                // appear before localStorage content is committed, so checking
+                // "any file exists" is insufficient — that's what caused the
+                // TRY-1-only "no persisted detailDock entry" on loaded runners
+                // (bead astro-plan-msdw).
+                if std::fs::read_dir(&leveldb).ok().is_some_and(|entries| {
+                    entries.flatten().any(|entry| {
+                        let path = entry.path();
+                        if !path.is_file() {
+                            return false;
+                        }
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        if ext == "ldb" {
+                            return true;
+                        }
+                        // LevelDB .log files are the WAL — a non-empty one
+                        // means data has been written (even if not yet
+                        // compacted into .ldb).
+                        if ext == "log" {
+                            return path.metadata().map_or(false, |m| m.len() > 0);
+                        }
+                        false
+                    })
+                }) {
                     return Ok(());
                 }
             }
             if Instant::now() >= deadline {
-                anyhow::bail!("WebView2 profile did not expose persisted LevelDB files");
+                anyhow::bail!(
+                    "WebView2 profile did not expose persisted LevelDB data files within 15s"
+                );
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
     }
 

@@ -15,6 +15,10 @@
     "$value": "#525a66",
     "$type": "color"
   },
+  "control-border": {
+    "$value": "#7b7f86",
+    "$type": "color"
+  },
   "rule": {
     "$value": "#cbd2dd",
     "$type": "color"
@@ -140,5 +144,12 @@
   },
   "shadow-sm": {
     "$value": "0 1px 2px rgba(0,0,0,0.08)"
+  },
+  "onb-spotlight-stroke": {
+    "$value": "#ffffff",
+    "$type": "color"
+  },
+  "shadow-lg": {
+    "$value": "0 8px 24px rgba(0,0,0,0.14)"
   }
 }

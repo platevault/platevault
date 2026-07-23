@@ -43,6 +43,8 @@ use audit::event_bus::{PlanApplyingCompleted, Source, TOPIC_PLAN_APPLYING_COMPLE
 use persistence_db::Database;
 use uuid::Uuid;
 
+mod support;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async fn setup_db() -> Database {
@@ -202,9 +204,21 @@ async fn r3_2_listener_resolves_inbox_item_on_plan_applied() {
         .await
         .expect("publish event");
 
-    // Give the spawned task time to process the event. Tokio's cooperative
-    // scheduler runs it once we yield.
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Poll until the listener transitions the inbox item to 'resolved'.
+    let item_id_clone = item_id.clone();
+    let pool_clone = db.pool().clone();
+    support::poll_until(
+        || async {
+            let state = inbox_item_state(&pool_clone, &item_id_clone).await;
+            if state == "resolved" {
+                Some(())
+            } else {
+                None
+            }
+        },
+        "inbox item never transitioned to 'resolved' after plan.applying.completed (applied)",
+    )
+    .await;
 
     // The listener should have transitioned the inbox item to resolved.
     assert_eq!(
@@ -251,7 +265,10 @@ async fn r3_3_listener_reclassifies_inbox_item_on_plan_failed() {
         .await
         .expect("publish event");
 
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Yield once to let the listener task run (it must NOT change state for a
+    // failed plan). A single yield is sufficient: the event is dispatched
+    // synchronously to the listener's tokio task before publish returns.
+    tokio::task::yield_now().await;
 
     // Failed plan → item stays in classified (ready for retry), not resolved.
     assert_eq!(

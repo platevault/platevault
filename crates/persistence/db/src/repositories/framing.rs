@@ -337,32 +337,7 @@ pub async fn set_session_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
-
-    async fn insert_project(pool: &SqlitePool, id: &str) {
-        sqlx::query(
-            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
-             VALUES (?,?,?,?,?,?,?,?,?)",
-        )
-        .bind(id)
-        .bind(format!("Project {id}"))
-        .bind("PixInsight")
-        .bind("ready")
-        .bind(format!("projects/{id}"))
-        .bind::<Option<String>>(None)
-        .bind(false)
-        .bind("2026-01-01T00:00:00Z")
-        .bind("2026-01-01T00:00:00Z")
-        .execute(pool)
-        .await
-        .unwrap();
-    }
+    use crate::test_support::{insert_project, setup_db};
 
     async fn insert_acquisition_session(pool: &SqlitePool, id: &str) {
         sqlx::query(
@@ -395,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn project_is_mosaic_defaults_to_false() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-mosaic-default").await;
 
         let is_mosaic: bool = sqlx::query_scalar("SELECT is_mosaic FROM projects WHERE id = ?")
@@ -410,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_and_get_framing_round_trips() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-1").await;
 
         insert_framing(db.pool(), &insert_data("framing-1", "proj-1")).await.unwrap();
@@ -426,14 +401,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_framing_not_found_for_unknown_id() {
-        let db = setup().await;
+        let db = setup_db().await;
         let err = get_framing(db.pool(), "missing").await.unwrap_err();
         assert!(matches!(err, DbError::NotFound(_)));
     }
 
     #[tokio::test]
     async fn list_framings_by_project_returns_only_that_projects_framings() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-a").await;
         insert_project(db.pool(), "proj-b").await;
 
@@ -448,7 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_framings_by_optic_train_key_returns_only_matching_rows_across_projects() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-a").await;
         insert_project(db.pool(), "proj-b").await;
 
@@ -473,7 +448,7 @@ mod tests {
 
     #[tokio::test]
     async fn membership_add_list_remove_round_trips() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-m").await;
         insert_acquisition_session(db.pool(), "sess-1").await;
         insert_acquisition_session(db.pool(), "sess-2").await;
@@ -497,7 +472,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_session_belongs_to_at_most_one_framing() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-u").await;
         insert_acquisition_session(db.pool(), "sess-u").await;
         insert_framing(db.pool(), &insert_data("framing-u1", "proj-u")).await.unwrap();
@@ -515,7 +490,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_framing_clustering_flips_to_user_adjusted() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-c").await;
         insert_framing(db.pool(), &insert_data("framing-c", "proj-c")).await.unwrap();
 
@@ -527,7 +502,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_framing_cascades_memberships() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_project(db.pool(), "proj-d").await;
         insert_acquisition_session(db.pool(), "sess-d").await;
         insert_framing(db.pool(), &insert_data("framing-d", "proj-d")).await.unwrap();
@@ -544,7 +519,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_framing_missing_id_is_not_an_error() {
-        let db = setup().await;
+        let db = setup_db().await;
         delete_framing(db.pool(), "no-such-framing").await.unwrap();
     }
 
@@ -552,7 +527,7 @@ mod tests {
 
     #[tokio::test]
     async fn new_session_has_null_geometry_until_populated() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_acquisition_session(db.pool(), "sess-legacy").await;
 
         let geo = get_session_geometry(db.pool(), "sess-legacy").await.unwrap().unwrap();
@@ -570,7 +545,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_session_geometry_round_trips_and_preserves_none_fields() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_acquisition_session(db.pool(), "sess-confirmed").await;
 
         set_session_geometry(
@@ -593,7 +568,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_session_geometry_returns_none_for_unknown_session() {
-        let db = setup().await;
+        let db = setup_db().await;
         let geo = get_session_geometry(db.pool(), "missing").await.unwrap();
         assert!(geo.is_none());
     }

@@ -17,7 +17,7 @@ import {
   test,
   expect,
   seedSetupComplete,
-  disableGuidedTourOverlay,
+  disableOnboarding,
 } from './support/harness';
 
 test.describe('Regression · Add target dialog focus (#856)', () => {
@@ -26,7 +26,7 @@ test.describe('Regression · Add target dialog focus (#856)', () => {
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/targets');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await page.getByRole('button', { name: 'Add target' }).click();
 

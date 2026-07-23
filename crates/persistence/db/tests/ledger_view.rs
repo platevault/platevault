@@ -52,8 +52,7 @@ async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     .unwrap();
 }
 
-/// Insert a project into the canonical `projects` table (spec-008 / migration 0018).
-/// After migration 0036, the ledger view reads project state from `projects.lifecycle`.
+/// Insert a project into the canonical `projects` table used by the baseline ledger view.
 async fn insert_project(
     pool: &sqlx::SqlitePool,
     id: &str,

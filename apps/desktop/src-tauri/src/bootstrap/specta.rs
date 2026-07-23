@@ -61,9 +61,6 @@ use crate::commands::equipment::{
 use crate::commands::firstrun::{
     firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
 };
-use crate::commands::guided::{
-    guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
-};
 use crate::commands::inbox::{
     inbox_attribution_suggest, inbox_classify, inbox_classify_source_group, inbox_confirm,
     inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply, inbox_plan_apply_all,
@@ -86,6 +83,10 @@ use crate::commands::manifests::{
     manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
+use crate::commands::onboarding::{
+    onboarding_item_set_state, onboarding_orientation_complete, onboarding_restore,
+    onboarding_section_set, onboarding_state_get,
+};
 use crate::commands::patterns::{
     pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
 };
@@ -140,7 +141,6 @@ use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
 };
-use crate::commands::tour::tour_complete_step;
 
 /// Shared base for specta builder — chain common config and all production
 /// commands.  Returns the builder before any feature-gated commands are added.
@@ -334,14 +334,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preferences_set,
         // search
         search_global,
-        // tour
-        tour_complete_step,
-        // guided first-project-flow (spec 010)
-        guided_state_get,
-        guided_step_complete,
-        guided_dismiss,
-        guided_restart,
-        guided_activate,
+        // onboarding (spec 056)
+        onboarding_state_get,
+        onboarding_item_set_state,
+        onboarding_orientation_complete,
+        onboarding_section_set,
+        onboarding_restore,
         // native filesystem controls (spec 004)
         native_directory_pick,
         native_file_pick,
@@ -587,14 +585,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preferences_set,
         // search
         search_global,
-        // tour
-        tour_complete_step,
-        // guided first-project-flow (spec 010)
-        guided_state_get,
-        guided_step_complete,
-        guided_dismiss,
-        guided_restart,
-        guided_activate,
+        // onboarding (spec 056)
+        onboarding_state_get,
+        onboarding_item_set_state,
+        onboarding_orientation_complete,
+        onboarding_section_set,
+        onboarding_restore,
         // native filesystem controls (spec 004)
         native_directory_pick,
         native_file_pick,

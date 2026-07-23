@@ -32,8 +32,8 @@ const foundationCssPath = join(
 /**
  * Parses the base `:root { ... }` block only. Anchored to the bare `:root`
  * selector: theme blocks use `[data-theme=...]` and the shared default-palette
- * block uses `:root, [data-theme=...]`, so neither matches `:root\s*{`. CSS
- * blocks here never nest, so `[^}]*` spans exactly one block.
+ * block uses `:root:not([data-theme]), [data-theme=...]`, so neither matches
+ * `:root\s*{`. CSS blocks here never nest, so `[^}]*` spans exactly one block.
  */
 function parseRootTokenPx(
   cssPath: string,

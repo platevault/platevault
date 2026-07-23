@@ -209,6 +209,7 @@
   "common_save": "Save",
   "common_saving": "Saving…",
   "common_save_failed": "Could not save.",
+  "common_selected": "Selected",
   "common_sessions": "Sessions",
   "common_sort_by_aria": "Sort by {col}",
   "common_sources": "Sources",
@@ -274,6 +275,8 @@
   "err_no_items_to_retry": "There are no items to retry.",
   "err_no_op": "Nothing to do.",
   "err_note_content_too_large": "This note is too long. Please shorten it.",
+  "err_onboarding_invalid_state": "That change to your getting-started progress isn't allowed.",
+  "err_onboarding_item_unknown": "That getting-started item is no longer available.",
   "err_operation_handler_duplicate": "This action is already registered.",
   "err_operation_not_found": "That action isn't available.",
   "err_os_command_failed": "The system command didn't complete.",
@@ -323,7 +326,6 @@
   "err_source_already_linked": "This source is already linked.",
   "err_source_invalid_organization_state": "This source isn't in a state that allows that change.",
   "err_source_not_found": "That source could not be found.",
-  "err_state_corrupted": "Some saved progress was reset due to a data issue. Please try again.",
   "err_target_invalid_id": "That target identifier isn't valid.",
   "err_target_not_found": "That target could not be found.",
   "err_resolve_offline": "Target lookup is unavailable offline.",
@@ -694,8 +696,6 @@
   "settings_advanced_log_level": "Log level",
   "settings_advanced_log_title": "Logging",
   "settings_advanced_log_warn": "Warn",
-  "settings_advanced_tour_label": "First project flow",
-  "settings_advanced_tour_title": "Guided Tour",
   "settings_attribution_note": "PlateVault identifies targets using the following astronomical data sources. We gratefully acknowledge their work.",
   "settings_attribution_title": "Data Sources & Attribution",
   "settings_auditlog_date_from": "From",
@@ -997,16 +997,134 @@
   "setup_kind_light_frames": "Light frames",
   "setup_kind_light_frames_help": "Raw light frames from your imaging sessions (FITS/XISF). PlateVault reads file headers to build your acquisition history — these files are never moved or copied without your approval.",
   "setup_kind_project_help": "Folders where your PixInsight/WBPP projects and processing outputs live. You'll create individual projects from these folders later, in a guided workflow — adding the folder now only registers where PlateVault should look.",
-  "setup_language_desc": "Pick the language you read. You can change it later in Settings.",
+  "setup_language_desc": "Pick your preferred language",
   "setup_language_heading": "Choose your language",
   "setup_language_label": "Language",
-  "setup_scan_classify_failed": "Could not read types",
+  "setup_language_review_notice": "This translation was generated automatically and awaits review by a fluent speaker.",
+"setup_theme_heading": "Choose how PlateVault looks",
+  "setup_theme_desc": "Pick a theme. Changes apply immediately; System follows your operating system.",
+  "setup_theme_preview_heading": "Observation record",
+  "setup_theme_preview_desc": "A compact sample of the surfaces, controls, and status language you will use in PlateVault.",
+  "setup_theme_preview_source_meta": "42 FITS · M31",
+  "setup_theme_preview_input": "Library name",
+  "setup_theme_preview_feedback": "Source ready to review",  "setup_scan_classify_failed": "Could not read types",
+  "setup_scan_classify_failed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file with an unreadable type",
+        "pp=other": "{count} files with unreadable types"
+      }
+    }
+  ],
   "setup_scan_col_files": "Files",
   "setup_scan_col_folder": "Folder / File",
   "setup_scan_col_format": "Format",
   "setup_scan_col_types": "Detected types",
+  "setup_scan_frame_count_bias": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} bias frame",
+        "pp=other": "{count} bias frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_dark": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} dark frame",
+        "pp=other": "{count} dark frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_flat": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} flat frame",
+        "pp=other": "{count} flat frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_light": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} light frame",
+        "pp=other": "{count} light frames"
+      }
+    }
+  ],
+  "setup_scan_frame_count_unknown": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} unknown frame type ({value})",
+        "pp=other": "{count} unknown frame types ({value})"
+      }
+    }
+  ],
+  "setup_scan_frame_type_bias": "Bias",
+  "setup_scan_frame_type_dark": "Dark",
+  "setup_scan_frame_type_flat": "Flat",
+  "setup_scan_frame_type_light": "Light",
+  "setup_scan_frame_type_unknown": "Unknown type ({value})",
   "setup_scan_master": "Master",
   "setup_scan_master_kind": "Master {kind}",
+  "setup_scan_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} master",
+        "pp=other": "{count} masters"
+      }
+    }
+  ],
   "setup_scan_no_sources": "No sources registered yet. Go back and add at least one folder.",
   "setup_scan_nothing_detected": "Nothing detected in this folder.",
   "setup_scan_resolution_failed": "Could not verify whether this source was already scanned. Go back to Confirm and try again.",
@@ -1015,6 +1133,9 @@
   "setup_scan_phase_done": "Done",
   "setup_scan_phase_pending": "Pending",
   "setup_scan_scanning": "Scanning…",
+  "setup_scan_source_unknown": "Unknown source ({value})",
+  "setup_scan_source_error": "{path}: {error}",
+  "setup_scan_source_status": "{path}: {status}",
   "setup_scan_summary_empty": "No folders detected. You can add more sources in Settings.",
   "setup_scan_summary_found": [
     {
@@ -1070,6 +1191,7 @@
   "setup_step_tools_heading": "Processing tools",
   "setup_step_tools_label": "Processing Tools",
   "setup_tools_detected": "Detected",
+  "setup_tools_detecting": "Detecting {name}…",
   "setup_tools_executable_label": "Executable",
   "setup_tools_intro": "Configure your processing tools so the app can prepare project inputs and suggest workflow profiles. Installed tools are detected automatically; you can override or set a path manually.",
   "setup_tools_invalid": "Invalid",
@@ -1257,14 +1379,63 @@
   "archive_delete_permanently_btn": "Delete permanently",
   "targetsearch_search_failed": "Could not search for targets.",
   "targetsearch_set_failed": "Could not set target.",
-  "guided_step_inbox_title": "Confirm your first inventory item",
-  "guided_step_inbox_body": "Select a folder in your Inbox and click Confirm to move it into Inventory.",
-  "guided_step_project_title": "Create your first project",
-  "guided_step_project_body": "Click \"+ New project\" to create a project from your confirmed inventory items.",
-  "guided_step_tool_title": "Open your project in a processing tool",
-  "guided_step_tool_body": "Click \"Open in {tool}\" to prepare your project for processing.",
-  "guided_coach_dismiss": "Dismiss",
-  "guided_coach_done": "Done",
+  "onboarding_section_title": "Getting started",
+  "onboarding_section_progress": "{done} of {total} done",
+  "onboarding_section_menu_remove": "Remove getting started",
+  "onboarding_section_remove_confirm": "Remove the getting-started checklist? You can restore it later from Settings.",
+  "onboarding_settings_restore_label": "Restore getting started",
+  "onboarding_settings_restore_description": "Bring back the getting-started checklist and re-check anything you have already done.",
+  "onboarding_settings_replay_label": "Replay the orientation walk",
+  "onboarding_walk_back": "Back",
+  "onboarding_walk_next": "Next",
+  "onboarding_walk_finish": "Done",
+  "onboarding_walk_skip": "Skip tour",
+  "onboarding_walk_close": "Close",
+  "onboarding_announcer_progress": "Step {current} of {total}",
+  "onboarding_announcer_tick": "{item} completed",
+  "onboarding_walk_stop_inbox_title": "Start in the Inbox",
+  "onboarding_walk_stop_inbox_body": "This is where new folders land. Confirm them to move files into your inventory.",
+  "onboarding_walk_stop_sessions_title": "See your sessions",
+  "onboarding_walk_stop_sessions_body": "Confirmed frames group into the nights you captured them, ready to review.",
+  "onboarding_walk_stop_calibration_title": "Reuse calibration",
+  "onboarding_walk_stop_calibration_body": "Match calibration masters to your light frames so you never redo the work.",
+  "onboarding_walk_stop_targets_title": "Resolve your targets",
+  "onboarding_walk_stop_targets_body": "Look up target names to attach catalog coordinates, aliases, and framing.",
+  "onboarding_walk_stop_projects_title": "Build a project",
+  "onboarding_walk_stop_projects_body": "Group inventory into a project and open it in your processing tool.",
+  "onboarding_walk_stop_getting_started_title": "Your getting-started checklist",
+  "onboarding_walk_stop_getting_started_body": "Each page has a short checklist here. Finish the steps at your own pace.",
+  "onboarding_item_inbox_confirm_first_label": "Confirm your first item",
+  "onboarding_item_inbox_confirm_first_tooltip": "Select an Inbox folder and confirm it to move its files into your inventory.",
+  "onboarding_item_inbox_apply_first_plan_label": "Apply your first plan",
+  "onboarding_item_inbox_apply_first_plan_tooltip": "Review an organize plan, then apply it to move confirmed files into place.",
+  "onboarding_item_sessions_review_first_label": "Review a session",
+  "onboarding_item_sessions_review_first_tooltip": "Open a session to see the frames you captured together on one night.",
+  "onboarding_item_sessions_add_note_label": "Add a session note",
+  "onboarding_item_sessions_add_note_tooltip": "Record sky conditions or gear notes on a session for later reference.",
+  "onboarding_item_calibration_match_master_label": "Match a calibration master",
+  "onboarding_item_calibration_match_master_tooltip": "Assign a calibration master to your light frames so it can be reused.",
+  "onboarding_item_calibration_review_masters_label": "Review your masters",
+  "onboarding_item_calibration_review_masters_tooltip": "Browse the calibration masters detected across your library.",
+  "onboarding_item_targets_resolve_first_label": "Resolve your first target",
+  "onboarding_item_targets_resolve_first_tooltip": "Look up a target name to attach catalog coordinates and aliases.",
+  "onboarding_item_targets_add_favourite_label": "Add a favourite target",
+  "onboarding_item_targets_add_favourite_tooltip": "Star a target to keep it handy in your planning views.",
+  "onboarding_item_projects_create_first_label": "Create your first project",
+  "onboarding_item_projects_create_first_tooltip": "Group confirmed inventory into a project you can prepare and process.",
+  "onboarding_item_projects_launch_tool_label": "Open a processing tool",
+  "onboarding_item_projects_launch_tool_tooltip": "Launch your project in a processing tool to prepare its inputs.",
+  "onboarding_item_projects_review_artifacts_label": "Review project artifacts",
+  "onboarding_item_projects_review_artifacts_tooltip": "Check the outputs a processing tool wrote back to your project.",
+  "onboarding_prerequisite_inbox_confirm_first": "Unlocks once you confirm an inventory item.",
+  "onboarding_prerequisite_targets_resolve_first": "Unlocks once you resolve a target.",
+  "onboarding_prerequisite_projects_create_first": "Unlocks once you create a project.",
+  "onboarding_prerequisite_projects_launch_tool": "Unlocks once you open your project in a tool.",
+  "onboarding_section_menu_aria": "Getting started options",
+  "onboarding_find_label": "Show me where: {item}",
+  "onboarding_find_unavailable": "Nothing to point at for \"{item}\" yet — its control appears once there is something on this page to act on.",
+  "onboarding_find_prerequisite_first": "\"{item}\" is required first — here's where to do it.",
+  "onboarding_item_dismiss_label": "Dismiss: {item}",
   "inbox_toast_plan_created": "Plan created ({count} items). Review below before applying.",
   "inbox_toast_invalid_destination_root": "That destination root is not valid.",
   "inbox_toast_no_destination_root": "No library root is registered for this frame type.",
@@ -1397,13 +1568,7 @@
   "projects_launching": "Launching…",
   "projects_mark_resolved": "Mark resolved",
   "projects_mark_resolved_aria": "Mark {file} as resolved",
-  "settings_advanced_guided_completed": "The guided flow has been completed. Restart to replay it from the beginning.",
-  "settings_advanced_guided_dismissed": "The guided flow is currently dismissed. Restart to resume from your last position.",
-  "settings_advanced_guided_active": "The guided flow is active.",
-  "settings_advanced_restart_guided": "Restart guided flow",
-  "settings_advanced_guided_restart_confirm_desc": "This restarts the guided first-project walkthrough from the beginning. Your library data is not affected.",
-  "settings_advanced_guided_restart_confirm_yes": "Yes, restart tour",
-  "settings_advanced_guided_restart_done": "Guided flow restarted.",
+  "sessions_singular": "session",
   "settings_advanced_firstrun_restart_title": "Source Setup Wizard",
   "settings_advanced_firstrun_restart_label": "Restart first-run setup",
   "settings_advanced_firstrun_restart_desc": "Reopens the source setup wizard, pre-filled with your current Raw, Calibration, Project, and Inbox folders, so you can add, remove, or correct them.",

@@ -25,6 +25,11 @@
  *   Seed it before navigating so the index redirect lands on /sessions, not /setup.
  */
 import { test, expect } from '@playwright/test';
+import { disableOnboarding } from './support/harness';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 function seedSetupComplete(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {

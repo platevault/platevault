@@ -300,7 +300,6 @@ export function InboxDetail({
           // control it activates, not only in the list's visual hint.
           aria-keyshortcuts="C"
           data-testid="inbox-confirm-btn"
-          data-guide-anchor="inbox.confirm-row"
         >
           {confirmBusy ? m.common_working() : confirmLabel}
         </Btn>

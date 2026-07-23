@@ -154,6 +154,38 @@ describe('Ingestion', () => {
     expect(select).toHaveValue('off');
   });
 
+  it('a slow initial fetch does not clobber an edit made before it resolves', async () => {
+    // Reproduces a real race, not just CI flakiness: the mount-time
+    // ingestionSettingsGet() fetch can still be in flight when the user's
+    // first edit fires. If the late resolution unconditionally overwrites
+    // state, the user's edit reverts.
+    let resolveGet!: (value: { status: 'ok'; data: typeof SETTINGS }) => void;
+    mockGet.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+
+    render(<Ingestion save={vi.fn()} />);
+
+    // Edit fires before the mount fetch has resolved.
+    const select = screen.getByLabelText('Hashing mode');
+    await act(async () => {
+      fireEvent.change(select, { target: { value: 'eager' } });
+      await Promise.resolve();
+    });
+    expect(select).toHaveValue('eager');
+
+    // Now let the slow initial fetch resolve with the stale "lazy" value.
+    await act(async () => {
+      resolveGet({ status: 'ok', data: SETTINGS });
+      await Promise.resolve();
+    });
+
+    // The user's edit must survive — the late fetch must not stomp it.
+    expect(select).toHaveValue('eager');
+  });
+
   it('restore defaults persists in-code defaults and re-hydrates the controls', async () => {
     render(<Ingestion save={vi.fn()} />);
     // Wait for the fetched (non-default) value to be applied, not merely for

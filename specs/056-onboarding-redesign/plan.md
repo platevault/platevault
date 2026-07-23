@@ -7,16 +7,16 @@
 ## Summary
 
 Replace the spec 010 sequential guided coach with three independent layers:
-(L1) a one-time modal orientation walk after the first-run wizard, (L2)
-per-page Getting Started checklists in one shared sidebar accordion with
-backend-authoritative auto-ticks from real bus events, and (L3) per-item
-non-modal find spotlights on the real controls. Old guided machinery is
-deleted wholesale. Technical approach: react-joyride v3 behind a thin adapter
-(headless Floating UI as pre-approved fallback), a Rust bus subscriber that
-persists ticks server-side (restore-filtered), a new migration for
-`onboarding_state`/`onboarding_flags`, new `onboarding_*` Tauri commands plus
-an `onboarding:state-changed` notification, Paraglide i18n throughout, and one
-parameterised checklist component.
+
+1. A one-time modal orientation walk after the first-run wizard.
+2. Per-page Getting Started checklists with backend-authoritative auto-ticks.
+3. Per-item non-modal find spotlights on real controls.
+
+The implementation uses react-joyride v3 behind a thin adapter, with headless
+Floating UI as the pre-approved fallback. A Rust bus subscriber persists ticks
+after filtering restore events. SQLite stores item and flag state. Tauri
+commands and `onboarding:state-changed` expose state to one parameterised,
+Paraglide-localized checklist component.
 
 ## Technical Context
 
@@ -24,7 +24,7 @@ parameterised checklist component.
 
 **Primary Dependencies**: react-joyride `^3.2.0` (pinned; already a direct dep — [research R1/R2](research.md)); shared UI + design tokens; Paraglide (spec 046); tauri-specta bindings. No new runtime dependencies. Pre-approved fallback: `@floating-ui/react` headless build (adapter-confined swap).
 
-**Storage**: SQLite via `crates/persistence/db` — new migration **0069** creating `onboarding_state` (per-item rows) + `onboarding_flags` (singleton), dropping `guided_flow_state` ([research R6](research.md)).
+**Storage**: SQLite via `crates/persistence/db` — migration **0080** creates `onboarding_state` (per-item rows) and `onboarding_flags` (singleton). Migration **0081** drops `guided_flow_state` ([research R6](research.md)).
 
 **Testing**: Layer-1 `cargo test --workspace` (real SQLite + real bus publisher→subscriber, first bus-subscribing Layer-1 tests in the repo); Playwright mock suite for UI semantics; one Layer-2 `tauri-driver` E2E journey (`crates/e2e-tests`); journey **J18** as behavioral contract.
 
@@ -88,7 +88,8 @@ crates/
 │   ├── onboarding.rs                    # NEW: onboarding DTOs
 │   └── guided.rs                        # DELETED
 └── persistence/db/
-    ├── migrations/0069_onboarding.sql   # NEW: onboarding_state + onboarding_flags, drop guided_flow_state
+    ├── migrations/0080_onboarding.sql   # onboarding_state + onboarding_flags
+    ├── migrations/0081_drop_guided_flow_state.sql # drop guided_flow_state
     └── src/repositories/onboarding.rs   # NEW: repository boundary
 
 apps/desktop/

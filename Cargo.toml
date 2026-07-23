@@ -32,6 +32,7 @@ members = [
   "crates/sessions",
   "crates/targeting",
   "crates/targeting/resolver",
+  "crates/tools/perf-bench",
   "crates/tools/seed-builder",
   "crates/workflow/artifacts",
   "crates/workflow/profiles",

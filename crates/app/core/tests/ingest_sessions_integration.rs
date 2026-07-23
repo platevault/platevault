@@ -211,7 +211,24 @@ async fn two_m31_frames_group_into_one_linked_session() {
         targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
     );
     publish_applied(&bus, "plan-1").await;
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // Poll until the session exists AND has both frames (the listener writes
+    // them one-by-one; polling for non-empty races on the first write).
+    support::poll_until(
+        || async {
+            let rows = session_rows(pool).await;
+            let ready = rows.iter().any(|(_id, frame_ids, _ct)| {
+                let frames: Vec<String> = serde_json::from_str(frame_ids).unwrap_or_default();
+                frames.len() >= 2
+            });
+            if ready {
+                Some(())
+            } else {
+                None
+            }
+        },
+        "acquisition_session with 2 frames never appeared after plan-1 apply-completed event",
+    )
+    .await;
 
     let sessions = session_rows(pool).await;
     assert_eq!(sessions.len(), 1, "two M31 aliases must group into ONE session");
@@ -265,7 +282,17 @@ async fn unknown_object_session_backfills_after_resolve() {
         targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
     );
     publish_applied(&bus, "plan-2").await;
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::poll_until(
+        || async {
+            if session_rows(pool).await.is_empty() {
+                None
+            } else {
+                Some(())
+            }
+        },
+        "acquisition_session row never appeared after plan-2 apply-completed event",
+    )
+    .await;
 
     let sessions = session_rows(pool).await;
     assert_eq!(sessions.len(), 1, "session created even when OBJECT unresolved");

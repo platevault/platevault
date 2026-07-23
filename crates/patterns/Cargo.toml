@@ -10,7 +10,6 @@ path = "src/lib.rs"
 [dependencies]
 safe-filename = { path = "../safe-filename" }
 serde.workspace = true
-serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

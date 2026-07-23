@@ -371,6 +371,29 @@ export function InboxPage() {
     ? filteredItems.find((it) => it.inboxItemId === selected)
     : undefined;
 
+  // Tracks the sourceGroupId of the last item that was actively selected.
+  // Updated via React's derived-state-from-render pattern (setState during render
+  // is permitted for local state driven by current props/state — the React docs'
+  // alternative to getDerivedStateFromProps). Written only when `selectedItem`
+  // is defined, so it always holds the most-recently-selected item's identity.
+  // When `selectedItem` disappears (classify-split purged the placeholder), this
+  // state still carries the sourceGroupId needed to find the successor — without
+  // touching a ref during render, which the react-hooks lint rule forbids.
+  const [prevSelectedInfo, setPrevSelectedInfo] = useState<{
+    inboxItemId: string;
+    sourceGroupId: string | null;
+  } | null>(null);
+  if (
+    selectedItem !== undefined &&
+    (prevSelectedInfo === null ||
+      prevSelectedInfo.inboxItemId !== selectedItem.inboxItemId)
+  ) {
+    setPrevSelectedInfo({
+      inboxItemId: selectedItem.inboxItemId,
+      sourceGroupId: selectedItem.sourceGroupId ?? null,
+    });
+  }
+
   // `reclassify_v2` operates at source-group scope and re-splits the group
   // into new single-type sub-items (R-14, issue #755) — the currently
   // selected item's id can stop existing mid-flight. Holds the post-split
@@ -382,6 +405,49 @@ export function InboxPage() {
   const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
     useState<string | null>(null);
 
+  // Classify-split handoff (issue #1038 / astro-plan-srz6): when
+  // `inbox.classify` materializes sub-items from a placeholder, the placeholder
+  // row disappears from the list without any `reclassify_v2` call.
+  // `pendingReclassifySelectionId` is never set, so `useStaleSelectionCleanup`
+  // would clear the selection instead of following the successor.
+  //
+  // Rule (CHK011 N=1 case, mirroring `resolveClassifiedGroupSelection`): if
+  // EXACTLY ONE item in the settled list shares the missing item's
+  // `sourceGroupId`, that is the unambiguous successor — navigate to it.
+  // Computed synchronously during render (pure state/props derivation) so its
+  // non-null value can gate `useStaleSelectionCleanup` on the SAME render that
+  // would otherwise clear the selection. Placed before the cleanup call.
+  const classifySplitSibling = useMemo(() => {
+    if (
+      listLoading ||
+      pendingReclassifySelectionId !== null ||
+      selected === undefined ||
+      selectedItem !== undefined
+    ) {
+      return null;
+    }
+    if (
+      !prevSelectedInfo ||
+      prevSelectedInfo.inboxItemId !== selected ||
+      !prevSelectedInfo.sourceGroupId
+    ) {
+      return null;
+    }
+    const decision = resolveClassifiedGroupSelection(
+      prevSelectedInfo.sourceGroupId,
+      items,
+      false,
+    );
+    return decision.action === 'select' ? decision.id : null;
+  }, [
+    listLoading,
+    pendingReclassifySelectionId,
+    selected,
+    selectedItem,
+    prevSelectedInfo,
+    items,
+  ]);
+
   // #735: `listLoading` joins the gate because on a cold reload the list cache
   // is empty and an unguarded `selectedItem === undefined` wipes a valid
   // `?selected=` before the list IPC resolves. This does NOT reopen the
@@ -392,7 +458,8 @@ export function InboxPage() {
     selected,
     listLoading ||
       selectedItem !== undefined ||
-      pendingReclassifySelectionId !== null,
+      pendingReclassifySelectionId !== null ||
+      classifySplitSibling !== null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),
@@ -491,6 +558,13 @@ export function InboxPage() {
     selected,
     navigate,
   ]);
+
+  useEffect(() => {
+    if (!classifySplitSibling) return;
+    void navigate({
+      search: (prev) => ({ ...prev, selected: classifySplitSibling }),
+    });
+  }, [classifySplitSibling, navigate]);
 
   // Each item carries its own root path — use it for classify / confirm calls.
   const selectedRootPath = selectedItem?.rootAbsolutePath ?? '';
@@ -1378,9 +1452,9 @@ export function InboxPage() {
                 count: bulkEligibleItems.length,
               })}
               data-testid="inbox-bulk-confirm-btn"
-              // Guided-tour target (spec 010/041). The redesign moved the
-              // page-level confirm to this bulk-confirm action; keep the
-              // `inbox.confirm-row` anchor on it so the tour still resolves.
+              // Onboarding find-it spotlight anchor (spec 056 FR-026). The
+              // canonical `inbox.confirm-row` anchor lives on this page-level
+              // bulk-confirm action so the spotlight resolves it.
               data-guide-anchor="inbox.confirm-row"
             >
               {bulkConfirmLoading

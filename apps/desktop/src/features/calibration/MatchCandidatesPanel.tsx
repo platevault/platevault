@@ -316,6 +316,9 @@ function AssignButton({
       variant="ghost"
       onClick={handleClick}
       data-testid={`assign-btn-${match.masterId}`}
+      // Onboarding find-it spotlight anchor (spec 056 FR-026). Renders once
+      // per candidate row; the spotlight resolves the first (querySelector).
+      data-guide-anchor="calibration.match-assign"
     >
       {m.calibration_assign_btn()}
     </Btn>

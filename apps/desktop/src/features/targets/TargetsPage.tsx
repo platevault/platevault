@@ -533,8 +533,17 @@ export function TargetsPage() {
           {/* US2/T024: plan an arbitrary future night — every table/detail
               computation reads this chosen date (SC-004). */}
           <PlannerDatePicker />
-          {/* #618: primary CTA — the page's one primary action. */}
-          <Btn size="sm" variant="primary" onClick={() => setAddOpen(true)}>
+          {/* #618: primary CTA — the page's one primary action. Also the
+              onboarding spotlight anchor for `targets.resolve_first`: this
+              button opens the SIMBAD resolve flow, so it is the control to
+              point at (not the dialog's own confirm, which does not exist
+              until the dialog is open). */}
+          <Btn
+            size="sm"
+            variant="primary"
+            data-guide-anchor="targets.resolve-cta"
+            onClick={() => setAddOpen(true)}
+          >
             {m.targets_add_target()}
           </Btn>
         </>

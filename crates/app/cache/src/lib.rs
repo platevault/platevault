@@ -223,11 +223,24 @@ where
     /// last call that returned `false` for this key). Otherwise records the
     /// emission (starting a fresh window) and returns `false`.
     pub fn should_suppress(&self, key: &K) -> bool {
-        if self.last_emitted.get(key).is_some() {
+        if self.is_suppressed(key) {
             return true;
         }
-        self.last_emitted.insert(key.clone(), ());
+        self.record(key);
         false
+    }
+
+    /// Return whether `key` is still inside its suppression window without
+    /// starting a new window.
+    #[must_use]
+    pub fn is_suppressed(&self, key: &K) -> bool {
+        self.last_emitted.get(key).is_some()
+    }
+
+    /// Start a suppression window after the caller successfully emits its
+    /// durable signal.
+    pub fn record(&self, key: &K) {
+        self.last_emitted.insert(key.clone(), ());
     }
 
     /// Force-expire the entry for `key`, so the next `should_suppress` for it

@@ -41,10 +41,10 @@ use desktop_shell::commands::search::search_global;
 use desktop_shell::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
 };
+use desktop_shell::commands::settings::{settings_get, settings_update};
 
 use contracts_core::error_code::ErrorCode;
 use desktop_shell::commands::targets::{targets_get, targets_list};
-use desktop_shell::commands::tour::tour_complete_step;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -787,6 +787,42 @@ async fn settings_scope_roundtrip_via_usecase() {
     assert_eq!(after_restore, serde_json::json!("info"), "logLevel must be back to default");
 }
 
+#[tokio::test]
+async fn settings_general_scope_roundtrips_locale_via_commands() {
+    let app = mock_lifecycle_app().await;
+
+    let defaults = settings_get(app.state::<AppState>(), "general".to_owned())
+        .await
+        .expect("read general defaults");
+    assert_eq!(defaults.values.0, serde_json::json!({"locale": "en-GB", "theme": "system"}));
+
+    settings_update(
+        app.state::<AppState>(),
+        "general".to_owned(),
+        contracts_core::JsonAny::from(serde_json::json!({"locale": "pt-BR"})),
+    )
+    .await
+    .expect("persist locale");
+
+    let persisted = settings_get(app.state::<AppState>(), "general".to_owned())
+        .await
+        .expect("read persisted locale");
+    assert_eq!(persisted.values.0, serde_json::json!({"locale": "pt-BR", "theme": "system"}));
+
+    settings_update(
+        app.state::<AppState>(),
+        "general".to_owned(),
+        contracts_core::JsonAny::from(serde_json::json!({"locale": "fr-FR"})),
+    )
+    .await
+    .expect("invalid locale is safely ignored");
+
+    let after_invalid = settings_get(app.state::<AppState>(), "general".to_owned())
+        .await
+        .expect("read locale after invalid update");
+    assert_eq!(after_invalid.values.0["locale"], serde_json::json!("pt-BR"));
+}
+
 // ─── Preferences (2 commands) ───────────────────────────────────────────────
 
 #[tokio::test]
@@ -827,14 +863,6 @@ async fn search_global_queries_real_db() {
         res.unwrap().is_empty(),
         "search_global must return empty on fresh DB (no fixture data injected)"
     );
-}
-
-// ─── Tour (1 command) ───────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn stub_tour_complete_step() {
-    let res = tour_complete_step("step1".to_owned()).await;
-    assert!(res.is_ok(), "tour_complete_step failed: {res:?}");
 }
 
 // ─── Lifecycle commands (4 commands) ─────────────────────────────────────────

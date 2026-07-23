@@ -1185,63 +1185,46 @@ export const commands = {
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("search_global", { query })),
 	/**
-	 *  `tour.complete_step` — mark a tour step as completed.
+	 *  `onboarding.state.get` — read the full projection for UI hydration.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	tourCompleteStep: (step: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("tour_complete_step", { step })),
+	onboardingStateGet: () => typedError<OnboardingStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_state_get")),
 	/**
-	 *  `guided.state.get` — read current coach state for UI hydration.
-	 * 
-	 *  Returns the current `GuidedFlowStateDto`.  On the first call after a
-	 *  corruption reset, returns `Err` with code `state_corrupted`; the row has
-	 *  already been reset to Idle server-side.  Retry to get the fresh state.
+	 *  `onboarding.item.set_state` — manual check-off or dismiss (FR-017).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on corruption (informational) or database failure.
+	 *  Returns `Err(ContractError)` on unknown item id or database failure.
 	 */
-	guidedStateGet: () => typedError<GuidedStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_state_get")),
+	onboardingItemSetState: (request: OnboardingItemSetStateRequest) => typedError<OnboardingItemSetStateResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_item_set_state", { request })),
 	/**
-	 *  `guided.step.complete` — mark a step complete and advance the coach.
-	 * 
-	 *  The step must be a known registry id (e.g. `inbox.confirm_first`).
-	 *  If the flow is dismissed, returns an error.
+	 *  `onboarding.orientation.complete` — mark the L1 walk finished/skipped
+	 *  (both set done-forever, FR-004). Idempotent.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_step_complete", { request })),
+	onboardingOrientationComplete: (request: OnboardingOrientationCompleteRequest) => typedError<OnboardingOrientationCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_orientation_complete", { request })),
 	/**
-	 *  `guided.dismiss` — dismiss the coach, hiding all hints.
-	 * 
-	 *  Idempotent: calling again on an already-dismissed flow returns the
-	 *  original `dismissedAt` timestamp.
+	 *  `onboarding.section.set` — explicit remove (FR-013) + collapse persistence
+	 *  (FR-012). `hidden` accepts only `true`; unhiding is exclusively
+	 *  `onboarding.restore`.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
+	 *  Returns `Err(ContractError)` on an empty/`hidden: false` request or database
+	 *  failure.
 	 */
-	guidedDismiss: () => typedError<GuidedDismissResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_dismiss")),
+	onboardingSectionSet: (request: OnboardingSectionSetRequest_Deserialize) => typedError<OnboardingSectionSetResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_section_set", { request })),
 	/**
-	 *  `guided.restart` — restart the coach from Settings.
-	 * 
-	 *  - `Dismissed → Active(lowest uncompleted step)`: retains completed steps.
-	 *  - `Completed → Idle`: resets all progress (A1 ratified 2026-05-22).
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	guidedRestart: () => typedError<GuidedRestartResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_restart")),
-	/**
-	 *  `guided.activate` — activate the flow after first-run setup completes.
-	 * 
-	 *  If the flow is Idle, transitions to `Active(first uncompleted step)`.
-	 *  Idempotent when already active or dismissed.
+	 *  `onboarding.restore` — the single Settings → Advanced restore/reset
+	 *  (FR-014). Re-derives AUTOMATIC items from recorded data; user progress is
+	 *  preserved. Idempotent.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	guidedActivate: () => typedError<GuidedFlowStateDto, ContractError_Serialize>(__TAURI_INVOKE("guided_activate")),
+	onboardingRestore: () => typedError<OnboardingRestoreResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_restore")),
 	/**
 	 *  `native.directory.pick` — open the OS directory picker.
 	 * 
@@ -2123,7 +2106,6 @@ export type AppPreferences = {
 	defaultProjectView: ViewMode,
 	sessionsGroupBy: SessionsGroupBy,
 	sessionsView: SessionsView,
-	tourCompleted: TourCompleted,
 	setupCompleted: boolean,
 	/**  Keyed by `dockId` (the adopting list page, e.g. `"sessions"`). */
 	detailDock: { [key in string]: DetailDockPref },
@@ -3924,13 +3906,17 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 /**  Referenced `file_record` id does not exist. */
 "frame.not_found" | 
 /**
- *  `guided.state.get` detected a corrupt `guided_flow_state` row, reset it
- *  to Idle, and is returning this informational code on the one call that
- *  observed the corruption. Distinct from `internal.database` (unrelated
- *  generic persistence failures) per the contract's closed `code` enum
- *  (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
+ *  `onboarding.item.set_state` referenced an `item_id` not in the
+ *  registry (contracts/onboarding-commands.md `unknown_item`).
  */
-"state_corrupted" | 
+"onboarding.item.unknown" | 
+/**
+ *  A request violated an onboarding state-shape rule: `item.set_state`
+ *  with an auto state (`unchecked`/`auto_checked`), or `section.set` with
+ *  `hidden: false` — unhiding is exclusively `onboarding.restore`
+ *  (contracts/onboarding-commands.md `invalid_state`).
+ */
+"onboarding.invalid_state" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
@@ -4412,64 +4398,6 @@ export type GenerationWarningCode =
 "capability_drift" | 
 /**  A destination path exceeds the Windows 260-char limit (FR-018). */
 "long_path";
-
-/**  Response from `guided.dismiss`. */
-export type GuidedDismissResponse = {
-	/**  RFC-3339 UTC timestamp the dismiss was recorded. */
-	dismissedAt: string,
-};
-
-/**  Current coach state returned by `guided.state.get` and after transitions. */
-export type GuidedFlowStateDto = {
-	/**  Id of the active step, or `null` when dismissed/idle/completed. */
-	currentStep: string | null,
-	/**  Ids of completed steps in order of completion. */
-	completedSteps: string[],
-	/**  True when the coach has been dismissed. */
-	dismissed: boolean,
-	/**  RFC-3339 UTC timestamp when dismissed, or `null`. */
-	dismissedAt: string | null,
-	/**  RFC-3339 UTC timestamp of the last transition. */
-	updatedAt: string,
-};
-
-/**
- *  Response from `guided.restart`.
- * 
- *  - If flow was `Dismissed`: resumes at the lowest uncompleted step; previously
- *    completed steps retained.
- *  - If flow was `Completed`: resets all progress to Idle (replay from step 1).
- */
-export type GuidedRestartResponse = {
-	/**  Updated state after restart. */
-	state: GuidedFlowStateDto,
-};
-
-/**
- *  Response from `guided.state.get`.
- * 
- *  On `state_corrupted` the row has already been reset to Idle server-side;
- *  the caller should display a non-blocking notice and retry.
- */
-export type GuidedStateGetResponse = {
-	state: GuidedFlowStateDto,
-};
-
-/**  Request for `guided.step.complete`. */
-export type GuidedStepCompleteRequest = {
-	/**  Stable id of the step to complete (e.g. `inbox.confirm_first`). */
-	stepId: string,
-};
-
-/**  Response from `guided.step.complete`. */
-export type GuidedStepCompleteResponse = {
-	/**  True when this call transitioned the step into `completedSteps`. */
-	completed: boolean,
-	/**  Id of the next uncompleted step, or `null` when the flow is complete. */
-	nextStep: string | null,
-	/**  Updated state after the transition. */
-	state: GuidedFlowStateDto,
-};
 
 /**  Response from `inbox.plan.apply_all` (spec 041, FR-003a). */
 export type InboxApplyAllResponse = {
@@ -6871,6 +6799,197 @@ export type NonBlockingSummary = {
 	normalCount: number,
 	unprotectedCount: number,
 };
+
+/**  Section-level flags (`onboarding_flags` singleton). */
+export type OnboardingFlagsDto = {
+	orientationDone: boolean,
+	/**
+	 *  Covers both explicit removal (FR-013) and completion auto-hide
+	 *  (FR-031).
+	 */
+	sectionHidden: boolean,
+	sidebarCollapsed: boolean,
+};
+
+/**  One onboarding item row for UI hydration. */
+export type OnboardingItemDto = {
+	itemId: string,
+	page: OnboardingPage,
+	state: OnboardingItemState,
+	/**  RFC-3339 UTC timestamp of the last state change. */
+	at: string,
+	source: OnboardingStateSource,
+	/**
+	 *  `None` when the item has no prerequisite in the registry. Present
+	 *  (with a live-computed `met`) whenever the item has one, regardless of
+	 *  current satisfaction — the UI decides what to render for `met: true`.
+	 */
+	prerequisite: OnboardingPrerequisiteDto | null,
+	/**
+	 *  True when this item has a `completion_topic` (auto-tick eligible) —
+	 *  lets the UI distinguish "will tick itself" from "check me manually".
+	 */
+	hasAutoTick: boolean,
+};
+
+/**  Request for `onboarding.item.set_state`. */
+export type OnboardingItemSetStateRequest = {
+	itemId: string,
+	state: OnboardingManualState,
+};
+
+/**  Response from `onboarding.item.set_state` — the updated item row. */
+export type OnboardingItemSetStateResponse = {
+	item: OnboardingItemDto,
+};
+
+/**
+ *  Per-item lifecycle state (data-model.md "State transitions").
+ * 
+ *  `AutoChecked`/`ManuallyChecked`/`Dismissed` are terminal: neither a live
+ *  event nor a repeat manual action ever downgrades a settled item.
+ */
+export type OnboardingItemState = "unchecked" | "auto_checked" | "manually_checked" | "dismissed";
+
+/**
+ *  Manual state a caller may request via `onboarding.item.set_state`
+ *  (FR-017). `auto_checked` is rejected — `invalid_state` — because only the
+ *  bus subscriber may assert that real work happened.
+ */
+export type OnboardingManualState = "manually_checked" | "dismissed" | 
+/**
+ *  Explicit un-check — the only transition that may clear a settled row.
+ * 
+ *  Settled states are otherwise terminal so re-derivation, live ticks and
+ *  repeat calls can never *silently* downgrade a user's decision. An
+ *  un-check is the user asking for exactly that, once, by hand, so it is
+ *  allowed from ANY state, automatic rows included.
+ * 
+ *  It does not let the checklist permanently contradict the library: the
+ *  item re-ticks when the underlying action happens again, and an explicit
+ *  restore re-derives it from real database state.
+ */
+"unchecked";
+
+/**  Request for `onboarding.orientation.complete`. */
+export type OnboardingOrientationCompleteRequest = {
+	outcome: OnboardingOrientationOutcome,
+};
+
+/**
+ *  Response from `onboarding.orientation.complete`. Idempotent — repeat
+ *  calls return the original timestamp.
+ */
+export type OnboardingOrientationCompleteResponse = {
+	orientationDoneAt: string,
+};
+
+/**  How the walk ended (both set done-forever, FR-004). */
+export type OnboardingOrientationOutcome = "finished" | "skipped";
+
+/**  The five FR-006 workflow pages that carry a Getting Started checklist. */
+export type OnboardingPage = "inbox" | "sessions" | "calibration" | "targets" | "projects";
+
+/**  Per-page item counts. */
+export type OnboardingPageProgressDto = {
+	page: OnboardingPage,
+	done: number,
+	total: number,
+};
+
+/**
+ *  Prerequisite presentation for an item whose upstream milestone is missing
+ *  (FR-010).
+ */
+export type OnboardingPrerequisiteDto = {
+	/**
+	 *  Registry id of the upstream item that must be done first.
+	 * 
+	 *  The UI needs the id itself, not just the rendered reason: a blocked
+	 *  item's find affordance spotlights the UPSTREAM item's control, which
+	 *  means resolving the upstream item's anchor and label. Recovering it by
+	 *  stripping a prefix off `reason_key` would couple the UI to a message-key
+	 *  format.
+	 */
+	upstreamItemId: string,
+	/**  Whether the upstream milestone is currently satisfied. */
+	met: boolean,
+	/**  Paraglide message key for the human-readable reason. */
+	reasonKey: string,
+	/**  Page to jump to in order to satisfy the prerequisite. */
+	jumpPage: OnboardingPage,
+};
+
+/**
+ *  Overall + per-page progress, derived from `onboarding_state` (never
+ *  stored).
+ */
+export type OnboardingProgressDto = {
+	done: number,
+	total: number,
+	perPage: OnboardingPageProgressDto[],
+};
+
+/**  Response from `onboarding.restore` — same shape as `onboarding.state.get`. */
+export type OnboardingRestoreResponse = {
+	state: OnboardingStateDto,
+};
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest = OnboardingSectionSetRequest_Serialize | OnboardingSectionSetRequest_Deserialize;
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest_Deserialize = {
+	hidden: boolean | null,
+	sidebarCollapsed: boolean | null,
+};
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest_Serialize = {
+	hidden?: boolean | null,
+	sidebarCollapsed?: boolean | null,
+};
+
+/**  Response from `onboarding.section.set` — the updated flags. */
+export type OnboardingSectionSetResponse = {
+	flags: OnboardingFlagsDto,
+};
+
+/**
+ *  Full onboarding projection — the response shape shared by
+ *  `onboarding.state.get` and `onboarding.restore`.
+ */
+export type OnboardingStateDto = {
+	items: OnboardingItemDto[],
+	flags: OnboardingFlagsDto,
+	progress: OnboardingProgressDto,
+};
+
+/**  Response from `onboarding.state.get`. */
+export type OnboardingStateGetResponse = {
+	state: OnboardingStateDto,
+};
+
+/**  What set the item's current state. */
+export type OnboardingStateSource = "seed" | "event" | "user";
 
 export type OperationEvent = {
 	contractVersion: string,
@@ -10164,13 +10283,6 @@ export type ToolProfileSummary = {
 	 *  `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS`.
 	 */
 	watchExtensions: string[],
-};
-
-/**  Tour completion state tracking. */
-export type TourCompleted = {
-	step1: boolean,
-	step2: boolean,
-	step3: boolean,
 };
 
 export type TransitionActor = "user" | "system";

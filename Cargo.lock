@@ -168,7 +168,6 @@ dependencies = [
 name = "app_core_inbox"
 version = "0.1.0"
 dependencies = [
- "app_core_cache",
  "app_core_calibration",
  "app_core_errors",
  "app_core_lifecycle",
@@ -181,9 +180,7 @@ dependencies = [
  "fs_pathsafe",
  "hex",
  "metadata_core",
- "metadata_fits",
  "metadata_video",
- "metadata_xisf",
  "patterns",
  "persistence_db",
  "serde",
@@ -278,7 +275,6 @@ name = "app_core_targets"
 version = "0.1.0"
 dependencies = [
  "app_core_cache",
- "app_core_errors",
  "audit",
  "contracts_core",
  "domain_core",
@@ -879,7 +875,6 @@ dependencies = [
  "serde_json",
  "skymath",
  "time",
- "uuid",
 ]
 
 [[package]]
@@ -1094,7 +1089,7 @@ dependencies = [
  "serde_json",
  "specta",
  "specta-typescript",
- "strum 0.27.2",
+ "strum",
  "thiserror 2.0.18",
  "time",
  "uuid",
@@ -1457,9 +1452,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-plugin-mcp-bridge",
- "tauri-plugin-notification",
  "tauri-plugin-opener",
- "tauri-plugin-prevent-default",
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
@@ -1467,7 +1460,6 @@ dependencies = [
  "tauri-plugin-window-state",
  "tauri-specta",
  "tempfile",
- "thiserror 2.0.18",
  "time",
  "tokio",
  "tracing",
@@ -1590,7 +1582,7 @@ dependencies = [
  "serde_json",
  "specta",
  "specta-typescript",
- "strum 0.27.2",
+ "strum",
  "thiserror 2.0.18",
  "time",
  "uuid",
@@ -1955,14 +1947,11 @@ dependencies = [
  "path-clean",
  "project_structure",
  "serde",
- "serde_json",
  "tempfile",
- "thiserror 2.0.18",
  "time",
  "tokio",
  "tracing",
  "trash",
- "uuid",
 ]
 
 [[package]]
@@ -3019,15 +3008,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3344,20 +3324,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
-name = "mac-notification-sys"
-version = "0.6.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd604973958ddcc11b561193c0fb96ba146506ef2f231ef2e7c35fd2cbc9beca"
-dependencies = [
- "cc",
- "log",
- "objc2 0.6.4",
- "objc2-foundation 0.3.2",
- "time",
- "uuid",
-]
-
-[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3424,7 +3390,6 @@ version = "0.1.0"
 dependencies = [
  "fits-header",
  "metadata_core",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3436,7 +3401,6 @@ name = "metadata_xisf"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
- "thiserror 2.0.18",
  "xisf-header",
 ]
 
@@ -3569,20 +3533,6 @@ dependencies = [
  "notify-types",
  "walkdir",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "notify-rust"
-version = "4.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5b4c1b4f2aa9f25f63a7a49d3dd0ed567b3670da15330a66b29434be899b891"
-dependencies = [
- "futures-lite",
- "log",
- "mac-notification-sys",
- "serde",
- "tauri-winrt-notification",
- "zbus",
 ]
 
 [[package]]
@@ -4259,6 +4209,21 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "perf-bench"
+version = "0.1.0"
+dependencies = [
+ "app_core_inbox",
+ "domain_core",
+ "persistence_db",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "persistence_db"
@@ -5360,10 +5325,8 @@ version = "0.1.0"
 dependencies = [
  "domain_core",
  "reqwest 0.13.4",
- "serde",
  "serde_json",
  "targeting_resolver",
- "time",
 ]
 
 [[package]]
@@ -6101,16 +6064,7 @@ version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
- "strum_macros 0.27.2",
-]
-
-[[package]]
-name = "strum"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
-dependencies = [
- "strum_macros 0.28.0",
+ "strum_macros",
 ]
 
 [[package]]
@@ -6118,18 +6072,6 @@ name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -6351,9 +6293,7 @@ dependencies = [
  "targeting",
  "tempfile",
  "thiserror 2.0.18",
- "time",
  "tokio",
- "tracing",
  "uuid",
 ]
 
@@ -6581,25 +6521,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-notification"
-version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01fc2c5ff41105bd1f7242d8201fdf3efd70749b82fa013a17f2126357d194cc"
-dependencies = [
- "log",
- "notify-rust",
- "rand 0.9.4",
- "serde",
- "serde_json",
- "serde_repr",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
- "time",
- "url",
-]
-
-[[package]]
 name = "tauri-plugin-opener"
 version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6619,20 +6540,6 @@ dependencies = [
  "url",
  "windows 0.61.3",
  "zbus",
-]
-
-[[package]]
-name = "tauri-plugin-prevent-default"
-version = "5.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "674bac5c9831f4ca7ae42840768ac968b76353dcbe30bb0aad149c56f0be1389"
-dependencies = [
- "bitflags 2.13.0",
- "itertools 0.15.0",
- "serde",
- "strum 0.28.0",
- "tauri",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6856,17 +6763,6 @@ dependencies = [
  "dunce",
  "embed-resource",
  "toml 1.1.2+spec-1.1.0",
-]
-
-[[package]]
-name = "tauri-winrt-notification"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ed071c670382e85fc2f48ae706492d8c338f4f89bf72520d32f8abfe880aade"
-dependencies = [
- "thiserror 2.0.18",
- "windows 0.61.3",
- "windows-version",
 ]
 
 [[package]]
@@ -8561,16 +8457,14 @@ version = "0.1.0"
 dependencies = [
  "globset",
  "serde",
- "serde_json",
  "time",
- "uuid",
 ]
 
 [[package]]
 name = "workflow_profiles"
 version = "0.1.0"
 dependencies = [
- "itertools 0.14.0",
+ "itertools",
  "winreg 0.56.0",
 ]
 

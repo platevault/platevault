@@ -12,10 +12,17 @@
  * scroll-position assertions.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { appendLog, resetLogStore } from '@/data/logStore';
 import { LogPanelProvider } from '@/app/LogPanelContext';
 import { LogPanel } from '@/app/LogPanel';
+import { commands } from '@/bindings/index';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -293,6 +300,58 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     await waitFor(() => {
       expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
     });
+  });
+
+  it('a follow toggle made before the persisted setting loads is not clobbered by it', async () => {
+    // Forces the race rather than waiting for a loaded machine to produce it.
+    // `LogPanelProvider` reads the persisted setting asynchronously on mount;
+    // if that read lands AFTER the user has toggled Follow, it used to
+    // overwrite their choice with a value that was stale the moment they
+    // clicked. Holding the promise open makes that deterministic.
+    let release!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(commands.settingsGet).mockReturnValueOnce(pending as never);
+
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Second entry')).toBeInTheDocument();
+    });
+
+    // The read has not resolved, so follow is still its initial off.
+    expect(getFollowButton().textContent).toBe('— Follow');
+
+    // The user deliberately turns it on.
+    fireEvent.click(getFollowButton());
+    await waitFor(() => {
+      expect(getFollowButton().textContent).toBe('↓ Follow');
+    });
+
+    // Only now does the stale read land, claiming follow should be off.
+    //
+    // Flushed inside `act` and asserted DIRECTLY afterwards, never via
+    // `waitFor`: waitFor succeeds on its first check, which here would run
+    // before the resolution had been applied, so the assertion would pass
+    // whether or not the clobber happens. Verified by deleting the guard in
+    // LogPanelContext and confirming this test then fails.
+    await act(async () => {
+      release({
+        status: 'ok',
+        data: {
+          scope: 'advanced',
+          values: { logLevel: 'info', rememberFollowLogs: false },
+        },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The click is the more recent intent and must win.
+    expect(getFollowButton().textContent).toBe('↓ Follow');
   });
 
   it('cancels the virtualizer scroll-debounce timer on unmount (astro-plan-99u)', async () => {

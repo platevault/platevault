@@ -36,6 +36,11 @@
  *   Reads `alm-preferences.setupCompleted` from localStorage.
  */
 import { test, expect } from '@playwright/test';
+import { disableOnboarding } from './support/harness';
+
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
 
 function seedSetupComplete(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {

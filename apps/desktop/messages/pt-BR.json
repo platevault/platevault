@@ -209,6 +209,7 @@
   "common_save": "Salvar",
   "common_saving": "Salvando…",
   "common_save_failed": "Não foi possível salvar.",
+  "common_selected": "Selecionado",
   "common_sessions": "Sessões",
   "common_sort_by_aria": "Ordenar por {col}",
   "common_sources": "Origens",
@@ -323,7 +324,6 @@
   "err_source_already_linked": "Esta fonte já está vinculada.",
   "err_source_invalid_organization_state": "Esta fonte não está em um estado que permita essa alteração.",
   "err_source_not_found": "Essa fonte não pôde ser encontrada.",
-  "err_state_corrupted": "Algum progresso salvo foi redefinido devido a um problema nos dados. Tente novamente.",
   "err_target_invalid_id": "Esse identificador de alvo não é válido.",
   "err_target_not_found": "Esse alvo não pôde ser encontrado.",
   "err_resolve_offline": "A busca de alvos não está disponível offline.",
@@ -694,8 +694,6 @@
   "settings_advanced_log_level": "Nível de log",
   "settings_advanced_log_title": "Registro de log",
   "settings_advanced_log_warn": "Warn",
-  "settings_advanced_tour_label": "Fluxo do primeiro projeto",
-  "settings_advanced_tour_title": "Tour guiado",
   "settings_attribution_note": "O PlateVault identifica alvos usando as seguintes fontes de dados astronômicos. Agradecemos pelo trabalho delas.",
   "settings_attribution_title": "Fontes de dados e atribuições",
   "settings_auditlog_date_from": "De",
@@ -994,19 +992,137 @@
   "setup_kind_calibration": "Quadros de calibração",
   "setup_kind_calibration_help": "Quadros de dark, flat e bias usados para calibrar seus lights. O tipo de quadro é detectado a partir dos metadados de cada arquivo, não da pasta em que está — esta categoria apenas indica ao PlateVault onde procurar.",
   "setup_kind_inbox_help": "Uma pasta de descarte opcional para arquivos recém-capturados ou baixados que você ainda não organizou. Arquivos não revisados em toda pasta registrada já aparecem na Caixa de entrada, então isso é uma conveniência, não uma exigência.",
-  "setup_kind_light_frames": "Quadros de light",
+  "setup_kind_light_frames": "Quadros de luz",
   "setup_kind_light_frames_help": "Quadros de light brutos das suas sessões de imageamento (FITS/XISF). O PlateVault lê os cabeçalhos dos arquivos para montar seu histórico de aquisição — esses arquivos nunca são movidos ou copiados sem sua aprovação.",
   "setup_kind_project_help": "Pastas onde ficam seus projetos do PixInsight/WBPP e as saídas de processamento. Você criará projetos individuais a partir dessas pastas depois, em um fluxo guiado — adicionar a pasta agora apenas registra onde o PlateVault deve procurar.",
-  "setup_language_desc": "Escolha o idioma que você lê. Você pode alterá-lo depois em Configurações.",
+  "setup_language_desc": "Escolha seu idioma preferido",
   "setup_language_heading": "Escolha seu idioma",
   "setup_language_label": "Idioma",
-  "setup_scan_classify_failed": "Não foi possível ler os tipos",
+  "setup_language_review_notice": "Esta tradução foi gerada automaticamente e aguarda a revisão de uma pessoa fluente.",
+"setup_theme_heading": "Escolha a aparência do PlateVault",
+  "setup_theme_desc": "Escolha um tema. As alterações são aplicadas imediatamente; Sistema acompanha o tema do seu sistema operacional.",
+  "setup_theme_preview_heading": "Registro de observação",
+  "setup_theme_preview_desc": "Uma amostra compacta das superfícies, controles e linguagem de status que você usará no PlateVault.",
+  "setup_theme_preview_source_meta": "42 FITS · M31",
+  "setup_theme_preview_input": "Nome da biblioteca",
+  "setup_theme_preview_feedback": "Origem pronta para revisão",  "setup_scan_classify_failed": "Não foi possível ler os tipos",
+  "setup_scan_classify_failed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} arquivo com tipo ilegível",
+        "pp=other": "{count} arquivos com tipos ilegíveis"
+      }
+    }
+  ],
   "setup_scan_col_files": "Arquivos",
   "setup_scan_col_folder": "Pasta / Arquivo",
   "setup_scan_col_format": "Formato",
   "setup_scan_col_types": "Tipos detectados",
-  "setup_scan_master": "Master",
-  "setup_scan_master_kind": "Master {kind}",
+  "setup_scan_frame_count_bias": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de viés",
+        "pp=other": "{count} quadros de viés"
+      }
+    }
+  ],
+  "setup_scan_frame_count_dark": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro escuro",
+        "pp=other": "{count} quadros escuros"
+      }
+    }
+  ],
+  "setup_scan_frame_count_flat": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro plano",
+        "pp=other": "{count} quadros planos"
+      }
+    }
+  ],
+  "setup_scan_frame_count_light": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de luz",
+        "pp=other": "{count} quadros de luz"
+      }
+    }
+  ],
+  "setup_scan_frame_count_unknown": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de tipo desconhecido ({value})",
+        "pp=other": "{count} quadros de tipo desconhecido ({value})"
+      }
+    }
+  ],
+  "setup_scan_frame_type_bias": "Viés",
+  "setup_scan_frame_type_dark": "Escuro",
+  "setup_scan_frame_type_flat": "Plano",
+  "setup_scan_frame_type_light": "Luz",
+  "setup_scan_frame_type_unknown": "Tipo desconhecido ({value})",
+  "setup_scan_master": "Mestre",
+  "setup_scan_master_kind": "Mestre {kind}",
+  "setup_scan_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} mestre",
+        "pp=other": "{count} mestres"
+      }
+    }
+  ],
   "setup_scan_no_sources": "Nenhuma origem registrada ainda. Volte e adicione pelo menos uma pasta.",
   "setup_scan_nothing_detected": "Nada detectado nesta pasta.",
   "setup_scan_resolution_failed": "Não foi possível verificar se esta origem já foi escaneada. Volte para Confirmar e tente novamente.",
@@ -1015,6 +1131,9 @@
   "setup_scan_phase_done": "Concluído",
   "setup_scan_phase_pending": "Pendente",
   "setup_scan_scanning": "Escaneando…",
+  "setup_scan_source_unknown": "Origem desconhecida ({value})",
+  "setup_scan_source_error": "{path}: {error}",
+  "setup_scan_source_status": "{path}: {status}",
   "setup_scan_summary_empty": "Nenhuma pasta detectada. Você pode adicionar mais origens em Configurações.",
   "setup_scan_summary_found": [
     {
@@ -1070,6 +1189,7 @@
   "setup_step_tools_heading": "Ferramentas de processamento",
   "setup_step_tools_label": "Ferramentas de processamento",
   "setup_tools_detected": "Detectado",
+  "setup_tools_detecting": "Detectando {name}…",
   "setup_tools_executable_label": "Executável",
   "setup_tools_intro": "Configure suas ferramentas de processamento para que a aplicação possa preparar as entradas do projeto e sugerir perfis de fluxo de trabalho. Ferramentas instaladas são detectadas automaticamente; você pode substituir ou definir um caminho manualmente.",
   "setup_tools_invalid": "Inválido",
@@ -1277,14 +1397,6 @@
   "archive_delete_permanently_btn": "Excluir permanentemente",
   "targetsearch_search_failed": "Não foi possível pesquisar alvos.",
   "targetsearch_set_failed": "Não foi possível definir o alvo.",
-  "guided_step_inbox_title": "Confirme seu primeiro item de inventário",
-  "guided_step_inbox_body": "Selecione uma pasta na sua Caixa de entrada e clique em Confirmar para movê-la para o Inventário.",
-  "guided_step_project_title": "Crie seu primeiro projeto",
-  "guided_step_project_body": "Clique em \"+ Novo projeto\" para criar um projeto a partir dos itens confirmados do seu inventário.",
-  "guided_step_tool_title": "Abra seu projeto em uma ferramenta de processamento",
-  "guided_step_tool_body": "Clique em \"Abrir no {tool}\" para preparar seu projeto para o processamento.",
-  "guided_coach_dismiss": "Dispensar",
-  "guided_coach_done": "Concluído",
   "inbox_toast_plan_created": "Plano criado ({count} itens). Revise abaixo antes de aplicar.",
   "inbox_toast_invalid_destination_root": "Essa raiz de destino não é válida.",
   "inbox_toast_no_destination_root": "Nenhuma raiz de biblioteca está registrada para este tipo de quadro.",
@@ -1417,13 +1529,6 @@
   "projects_launching": "Iniciando…",
   "projects_mark_resolved": "Marcar como resolvido",
   "projects_mark_resolved_aria": "Marcar {file} como resolvido",
-  "settings_advanced_guided_completed": "O fluxo guiado foi concluído. Reinicie para reproduzi-lo desde o início.",
-  "settings_advanced_guided_dismissed": "O fluxo guiado está dispensado no momento. Reinicie para retomar da sua última posição.",
-  "settings_advanced_guided_active": "O fluxo guiado está ativo.",
-  "settings_advanced_restart_guided": "Reiniciar fluxo guiado",
-  "settings_advanced_guided_restart_confirm_desc": "Isso reinicia o tutorial guiado do primeiro projeto desde o início. Os dados da sua biblioteca não são afetados.",
-  "settings_advanced_guided_restart_confirm_yes": "Sim, reiniciar tour",
-  "settings_advanced_guided_restart_done": "Fluxo guiado reiniciado.",
   "settings_advanced_firstrun_restart_title": "Assistente de configuração de origens",
   "settings_advanced_firstrun_restart_label": "Reiniciar configuração inicial",
   "settings_advanced_firstrun_restart_desc": "Reabre o assistente de configuração de origens, preenchido com suas pastas atuais de Bruto, Calibração, Projeto e Caixa de entrada, para que você possa adicionar, remover ou corrigi-las.",
@@ -2615,5 +2720,65 @@
   "sessions_rawcleanup_generate_btn": "Gerar plano de limpeza",
   "sessions_rawcleanup_generating": "Gerando…",
   "sessions_rawcleanup_review_title": "Revisar plano de limpeza de subquadros brutos",
-  "sessions_rawcleanup_select_aria": "Selecionar {path} para limpeza"
+  "sessions_rawcleanup_select_aria": "Selecionar {path} para limpeza",
+  "err_onboarding_invalid_state": "Essa alteração no seu progresso de primeiros passos não é permitida.",
+  "err_onboarding_item_unknown": "Esse item de primeiros passos não está mais disponível.",
+  "onboarding_section_title": "Primeiros passos",
+  "onboarding_section_progress": "{done} de {total} concluídos",
+  "onboarding_section_menu_remove": "Remover primeiros passos",
+  "onboarding_section_remove_confirm": "Remover a lista de primeiros passos? Você poderá restaurá-la depois em Configurações.",
+  "onboarding_settings_restore_label": "Restaurar primeiros passos",
+  "onboarding_settings_restore_description": "Reative a lista de primeiros passos e marque novamente o que você já concluiu.",
+  "onboarding_settings_replay_label": "Repetir o tour de orientação",
+  "onboarding_walk_back": "Voltar",
+  "onboarding_walk_next": "Avançar",
+  "onboarding_walk_finish": "Concluído",
+  "onboarding_walk_skip": "Pular tour",
+  "onboarding_walk_close": "Fechar",
+  "onboarding_announcer_progress": "Etapa {current} de {total}",
+  "onboarding_announcer_tick": "{item} concluído",
+  "onboarding_walk_stop_inbox_title": "Comece na Caixa de entrada",
+  "onboarding_walk_stop_inbox_body": "É aqui que novas pastas chegam. Confirme-as para mover os arquivos para o inventário.",
+  "onboarding_walk_stop_sessions_title": "Veja suas sessões",
+  "onboarding_walk_stop_sessions_body": "Os quadros confirmados são agrupados nas noites em que foram capturados, prontos para revisão.",
+  "onboarding_walk_stop_calibration_title": "Reutilize a calibração",
+  "onboarding_walk_stop_calibration_body": "Associe mestres de calibração aos seus quadros de luz para não repetir o trabalho.",
+  "onboarding_walk_stop_targets_title": "Resolva seus alvos",
+  "onboarding_walk_stop_targets_body": "Pesquise nomes de alvos para associar coordenadas de catálogo, aliases e enquadramento.",
+  "onboarding_walk_stop_projects_title": "Crie um projeto",
+  "onboarding_walk_stop_projects_body": "Agrupe o inventário em um projeto e abra-o na sua ferramenta de processamento.",
+  "onboarding_walk_stop_getting_started_title": "Sua lista de primeiros passos",
+  "onboarding_walk_stop_getting_started_body": "Cada página tem uma pequena lista de tarefas aqui. Conclua as etapas no seu ritmo.",
+  "onboarding_item_inbox_confirm_first_label": "Confirme seu primeiro item",
+  "onboarding_item_inbox_confirm_first_tooltip": "Selecione uma pasta da Caixa de entrada e confirme-a para mover os arquivos para o inventário.",
+  "onboarding_item_inbox_apply_first_plan_label": "Aplique seu primeiro plano",
+  "onboarding_item_inbox_apply_first_plan_tooltip": "Revise um plano de organização e aplique-o para mover os arquivos confirmados para o lugar certo.",
+  "onboarding_item_sessions_review_first_label": "Revise uma sessão",
+  "onboarding_item_sessions_review_first_tooltip": "Abra uma sessão para ver os quadros capturados juntos em uma noite.",
+  "onboarding_item_sessions_add_note_label": "Adicione uma nota à sessão",
+  "onboarding_item_sessions_add_note_tooltip": "Registre condições do céu ou notas sobre o equipamento para consultar depois.",
+  "onboarding_item_calibration_match_master_label": "Associe um mestre de calibração",
+  "onboarding_item_calibration_match_master_tooltip": "Atribua um mestre de calibração aos seus quadros de luz para reutilizá-lo.",
+  "onboarding_item_calibration_review_masters_label": "Revise seus mestres",
+  "onboarding_item_calibration_review_masters_tooltip": "Veja os mestres de calibração detectados na sua biblioteca.",
+  "onboarding_item_targets_resolve_first_label": "Resolva seu primeiro alvo",
+  "onboarding_item_targets_resolve_first_tooltip": "Pesquise um nome de alvo para associar coordenadas de catálogo e aliases.",
+  "onboarding_item_targets_add_favourite_label": "Adicione um alvo favorito",
+  "onboarding_item_targets_add_favourite_tooltip": "Marque um alvo com estrela para mantê-lo à mão nas suas visões de planejamento.",
+  "onboarding_item_projects_create_first_label": "Crie seu primeiro projeto",
+  "onboarding_item_projects_create_first_tooltip": "Agrupe o inventário confirmado em um projeto que você possa preparar e processar.",
+  "onboarding_item_projects_launch_tool_label": "Abra uma ferramenta de processamento",
+  "onboarding_item_projects_launch_tool_tooltip": "Abra seu projeto em uma ferramenta de processamento para preparar suas entradas.",
+  "onboarding_item_projects_review_artifacts_label": "Revise os artefatos do projeto",
+  "onboarding_item_projects_review_artifacts_tooltip": "Confira as saídas que a ferramenta de processamento gravou de volta no projeto.",
+  "onboarding_prerequisite_inbox_confirm_first": "Desbloqueia quando você confirmar um item do inventário.",
+  "onboarding_prerequisite_targets_resolve_first": "Desbloqueia quando você resolver um alvo.",
+  "onboarding_prerequisite_projects_create_first": "Desbloqueia quando você criar um projeto.",
+  "onboarding_prerequisite_projects_launch_tool": "Desbloqueia quando você abrir seu projeto em uma ferramenta.",
+  "onboarding_section_menu_aria": "Opções de primeiros passos",
+  "onboarding_find_label": "Mostre onde: {item}",
+  "onboarding_find_unavailable": "Ainda não há nada para indicar em \"{item}\" — o controle aparecerá quando houver algo nesta página para executar.",
+  "onboarding_find_prerequisite_first": "\"{item}\" precisa ser concluído primeiro — veja onde fazer isso.",
+  "onboarding_item_dismiss_label": "Dispensar: {item}",
+  "sessions_singular": "sessão"
 }

@@ -112,8 +112,6 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'source.already.linked': m.err_source_already_linked,
   'source.not_found': m.err_source_not_found,
   'source.invalid_organization_state': m.err_source_invalid_organization_state,
-  // Guided first-project flow (spec 010 FR-010, #723).
-  state_corrupted: m.err_state_corrupted,
   'root.has_dependents': m.err_root_has_dependents,
   'remap.not_verified': m.err_remap_not_verified,
   'tool.locked': m.err_tool_locked,
@@ -164,6 +162,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   // Inbox-confirm attribution (spec 008 Q27, F-Framing-5/10).
   'attribution.not_light_frame': m.err_attribution_not_light_frame,
   'attribution.geometry_unavailable': m.err_attribution_geometry_unavailable,
+  // Onboarding redesign (spec 056 contracts/onboarding-commands.md).
+  'onboarding.item.unknown': m.err_onboarding_item_unknown,
+  'onboarding.invalid_state': m.err_onboarding_invalid_state,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   'internal.error': m.err_generic_fallback,

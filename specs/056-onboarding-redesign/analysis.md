@@ -9,7 +9,7 @@ contracts/onboarding-commands.md, quickstart.md
 
 | ID | Category | Severity | Location(s) | Summary | Recommendation |
 |----|----------|----------|-------------|---------|----------------|
-| U1 | Underspecification | MEDIUM | spec.md §FR-015/FR-021; research R5 | Recovery for a milestone event MISSED by the subscriber (e.g. published during startup before subscription, or process kill between action and write) is not specified; seed/restore self-heals only when the user runs restore. | Accepted as v1 limitation with provisional answer — see PQ-005. Implementation should start the subscriber before the UI can trigger use cases (tasks.md T006 wiring note). |
+| U1 | Underspecification | MEDIUM | spec.md §FR-015/FR-021; research R5 | Recovery for a milestone event MISSED by the subscriber (e.g. published during startup before subscription, or process kill between action and write) is not specified; seed/restore self-heals only when the user runs restore. | RESOLVED 2026-07-19 (owner directive, overturns the accepted-limitation answer): subscriber still starts before the UI can invoke, AND a once-per-startup `reconcile_missed_events` pass re-derives AUTOMATIC items that are `unchecked` from a non-`user` source — see PQ-005 and tasks.md T006a. |
 | U2 | Underspecification | LOW | research R4; tasks T004 | `tool.launch` payload field `outcome == "spawned"` is taken from the decision record; the payload shape was not re-verified against `tool_launch.rs` during research. | Verify field name at T004 implementation; registry unit test pins it. |
 | A1 | Ambiguity | LOW | spec.md §SC-006 | "Locate ... in under 10 seconds" is a usability metric not directly automatable; the automatable half (dismissal paths, no timer) is separately stated. | Keep; treat the 10 s figure as a UX design target validated via journey review, not CI. |
 | A2 | Ambiguity | LOW | tasks T016/T021/T025/T028/T031 | Playwright spec file locations are given as the mock-suite home rather than exact filenames. | Acceptable — filenames are implementer's choice; harness conventions referenced. |
@@ -64,7 +64,10 @@ delta. The deliberate modal-walk exception is documented in plan.md
 
 - No CRITICAL/HIGH blockers — proceed toward implementation once the
   orchestrator's critique/security-review lanes (if scheduled) complete.
-- PQ-005 (missed-event recovery) awaits user review; provisional answer is
-  encoded and non-blocking.
+- PQ-005 (missed-event recovery) RESOLVED 2026-07-19, overturning U1's
+  accepted-limitation answer: a startup reconciliation pass
+  (`app_core::onboarding::reconcile_missed_events`, wired after the subscriber
+  in `run_app`) re-derives AUTOMATIC items that are `unchecked` from a
+  non-`user` source. See PQ-005.
 - Optional polish: settle C1 capitalization when authoring Paraglide keys
   (T011); decide C2 promotion during review.

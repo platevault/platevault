@@ -5,13 +5,8 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 //!
 //! Production backend: sqlx 0.9 + SQLite (ratified stack, wired T003).
-//! All migrations live in `./migrations/` and are consumed via `sqlx::migrate!()`.
-//! Migration 0048 added `canonical_target.notes` (spec 023 US4).
-//! Migration 0053 added `projects.archived_via_plan_id` + re-added `'archive'`
-//! to the `plans.origin` CHECK (spec 017 C5).
-//! Migration 0061 added `target_favourite` (spec 051 US2).
-//! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
-//! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
+//! The migrations directory contains one frozen `0001_initial_schema.sql`
+//! baseline. Future schema changes use append-only `0002+` migrations.
 
 use std::str::FromStr;
 
@@ -26,6 +21,10 @@ pub mod operation_state;
 mod query_builder_example;
 pub mod repositories;
 mod schema_cache;
+/// Shared in-process test fixtures (setup, insert helpers) for repository unit
+/// tests. Compiled only under `cfg(test)`.
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub const CRATE_NAME: &str = "persistence_db";
 
@@ -121,81 +120,27 @@ impl Database {
         Self::connect("sqlite::memory:").await
     }
 
-    /// Run all pending migrations from `./migrations/`.
+    /// Run all pending migrations from the frozen baseline and future append-only files.
     ///
     /// # Errors
     ///
     /// Returns [`DbError::Migration`] if any migration script fails.
-    // Touched for #773 (migration 0066), again for spec 008 Q27's migration
-    // 0067 (renumbered from a 0066 collision with #773's own
-    // 0066_session_notes.sql), and again for its renumber to 0068 (a second
-    // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
-    // main independently) — to force `sqlx::migrate!` re-embed each time
-    // (project memory: stale-embed guard).
-    //
-    // #745 (spec 049 CL-2): this used to also run the spec 026 T006a
-    // `kind_diverged` reconciliation scan on every start, force-flipping any
-    // view whose items carried more than one recorded kind. CL-2 amended
-    // FR-008 to make that state VALID (per-item kind authoritative — exactly
-    // what a cross-drive project's drive-scope resolution legitimately
-    // produces), so the scan's only remaining effect was auto-corrupting
-    // real cross-drive projects into the dead-end `kind_diverged` state on
-    // every reopen. Removed along with `reconcile_kind_diverged_views`.
-    //
-    // #1230: this now prefers a cross-process snapshot of the migrated
-    // database (see `schema_cache`). The snapshot is keyed on the embedded
-    // migrator's content, is only ever applied to an empty database, and falls
-    // back to the real chain on any failure, so `migrate()` stays
-    // observationally identical -- it just stops paying for 66 migrations in
-    // each of ~1069 test processes. Tests that exist to cover the chain itself
-    // call `migrate_uncached`.
     pub async fn migrate(&self) -> DbResult<()> {
-        if schema_cache::try_apply(&self.pool).await {
-            return Ok(());
-        }
         self.migrate_uncached().await
     }
 
-    /// Run the real migration chain, bypassing the snapshot cache.
-    ///
-    /// Migration tests must use this: replaying a snapshot would mean the
-    /// chain they exist to cover never actually executes (#1230).
+    /// Run the embedded migration set directly.
     ///
     /// # Errors
     ///
     /// Returns [`DbError::Migration`] if any migration script fails.
-    //
-    // #1307: 15 migrations rebuild a table that has children under `ON DELETE
-    // CASCADE` (e.g. `plans` -> `plan_items`) and open with `PRAGMA
-    // foreign_keys = OFF` to make their `DROP TABLE` safe. sqlx runs every
-    // migration inside its own transaction, and SQLite treats that pragma as
-    // a no-op once a transaction is open (sqlite.org/pragma.html#pragma_foreign_keys),
-    // so the in-file pragma never took effect and `DROP TABLE plans` cascaded
-    // through `plan_items.plan_id ON DELETE CASCADE`, silently deleting every
-    // plan item on each of those 15 migrations. The already-applied migration
-    // files can't be edited (their checksums are recorded in every deployed
-    // database and validated by sqlx), so the fix runs the whole chain over a
-    // single connection with FK enforcement disabled *before* any transaction
-    // opens on it — that setting isn't scoped to a transaction, so it survives
-    // every migration's own `BEGIN`/`COMMIT`, regardless of what that
-    // migration's own pragma lines attempt. This protects every rebuild in
-    // the chain, past and future, without touching the migration files.
     pub async fn migrate_uncached(&self) -> DbResult<()> {
         let mut conn = self.pool.acquire().await?;
-        sqlx::query("PRAGMA foreign_keys = OFF;").execute(&mut *conn).await?;
-        let migrate_result = schema_cache::MIGRATOR.run(&mut *conn).await;
-        // Always restore enforcement before the connection returns to the pool:
-        // ordinary repository queries and legitimate runtime deletes rely on
-        // FK cascade behaviour being active outside of migrations.
-        sqlx::query("PRAGMA foreign_keys = ON;").execute(&mut *conn).await?;
-        migrate_result?;
+        schema_cache::MIGRATOR.run(&mut *conn).await?;
         Ok(())
     }
 
-    /// The embedded migration chain, for tests that drive it directly.
-    ///
-    /// Exposed so a populated-database harness can run a prefix of the chain,
-    /// seed rows at that point, then apply the migration under test (#1231).
+    /// The embedded migration set, for tests that inspect migration metadata.
     #[must_use]
     pub fn migrator() -> &'static sqlx::migrate::Migrator {
         &schema_cache::MIGRATOR
@@ -208,6 +153,42 @@ impl Database {
     }
 }
 
+/// Describe a migration failure that means "this database file was written by a
+/// different revision of the app", or `None` for any other failure.
+///
+/// sqlx reports schema-history divergence as a bare `VersionMismatch(71)`.
+/// That is accurate but names neither the cause nor the fix, so a caller that
+/// `expect()`s it dies with a stack trace nobody can act on. Every variant
+/// matched here means the same thing in practice: the `_sqlx_migrations`
+/// history recorded in the file disagrees with the migration set embedded in
+/// the running binary.
+///
+/// This is overwhelmingly a *developer* condition — switching between branches
+/// that each claimed the same migration number, then reopening a database one
+/// of them already migrated. Callers pair the returned description with a
+/// recovery instruction naming the concrete database path.
+///
+/// Returns `None` for failures that are genuinely something else (a migration
+/// script that errored, a dropped connection); callers should keep surfacing
+/// those verbatim rather than blaming a stale file.
+#[must_use]
+pub fn migration_divergence_detail(error: &DbError) -> Option<String> {
+    let DbError::Migration(error) = error else { return None };
+    let detail = match error {
+        sqlx::migrate::MigrateError::VersionMismatch(version) => format!(
+            "migration {version} was already applied to this database, but its script differs from the one in this build"
+        ),
+        sqlx::migrate::MigrateError::VersionMissing(version) => format!(
+            "migration {version} was applied to this database but does not exist in this build"
+        ),
+        sqlx::migrate::MigrateError::VersionNotPresent(version) => format!(
+            "migration {version} is recorded in this database but is absent from this build's migration set"
+        ),
+        _ => return None,
+    };
+    Some(detail)
+}
+
 #[cfg(test)]
 mod tests {
     use super::CRATE_NAME;
@@ -215,6 +196,56 @@ mod tests {
     #[test]
     fn exposes_crate_name() {
         assert_eq!(CRATE_NAME, "persistence_db");
+    }
+
+    /// The three divergence variants each name the offending version, so the
+    /// operator can tell which migration the file disagrees on.
+    #[test]
+    fn divergence_detail_names_the_offending_migration() {
+        for error in [
+            sqlx::migrate::MigrateError::VersionMismatch(71),
+            sqlx::migrate::MigrateError::VersionMissing(71),
+            sqlx::migrate::MigrateError::VersionNotPresent(71),
+        ] {
+            let detail = super::migration_divergence_detail(&super::DbError::Migration(error))
+                .expect("divergence variant should produce a detail");
+            assert!(detail.contains("71"), "detail should name the version: {detail}");
+        }
+    }
+
+    /// A migration script that genuinely failed is not a stale-file problem —
+    /// telling the operator to delete their database would be wrong.
+    #[test]
+    fn divergence_detail_ignores_unrelated_failures() {
+        assert!(super::migration_divergence_detail(&super::DbError::NotImplemented).is_none());
+        assert!(super::migration_divergence_detail(&super::DbError::Migration(
+            sqlx::migrate::MigrateError::Dirty(71)
+        ))
+        .is_none());
+    }
+
+    /// End-to-end proof that the classifier matches the variant sqlx *actually*
+    /// emits, not merely the one we assumed. Hand-constructing
+    /// `VersionMismatch` in the tests above would pass even if sqlx reported
+    /// divergence some other way — this drives a genuine divergence by
+    /// rewriting an applied migration's recorded checksum, exactly as a
+    /// renumbered migration does to a developer's existing database.
+    #[tokio::test]
+    async fn real_sqlx_divergence_is_classified() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("first migrate");
+
+        // Corrupt one applied migration's checksum so the next run sees the
+        // script as modified since it was applied.
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
+            .execute(db.pool())
+            .await
+            .expect("tamper with recorded checksum");
+
+        let error = db.migrate().await.expect_err("divergent history must fail");
+        let detail = super::migration_divergence_detail(&error)
+            .expect("a real sqlx divergence must be classified, not fall through");
+        assert!(detail.contains('1'), "detail should name the version: {detail}");
     }
 
     /// Smoke-test: connect to in-memory SQLite, run migrations, verify the pool is alive.

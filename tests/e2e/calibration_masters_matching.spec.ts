@@ -68,7 +68,7 @@ import {
   test,
   expect,
   seedSetupComplete,
-  disableGuidedTourOverlay,
+  disableOnboarding,
 } from './support/harness';
 
 test.describe('calibration · masters listing + matching (spec 040 / 007)', () => {
@@ -80,7 +80,7 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/calibration');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
 
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
@@ -137,7 +137,7 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/calibration');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
     await expect(page.locator('.pv-calib-table')).toBeVisible({
       timeout: 8_000,
     });
@@ -194,7 +194,7 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/projects');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
     ).not.toBeVisible();
@@ -239,7 +239,7 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
   }) => {
     seedSetupComplete(page);
     await page.goto('/#/settings/cal');
-    await disableGuidedTourOverlay(page);
+    await disableOnboarding(page);
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
     ).not.toBeVisible();

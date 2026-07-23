@@ -1173,6 +1173,166 @@
   color: var(--pv-text-muted);
 }
 
+/* === SETUP STEP THEME === */
+
+.pv-locale-choices {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(var(--pv-control-h) * 5)), 1fr)
+  );
+  gap: var(--pv-sp-2);
+}
+
+.pv-locale-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--pv-sp-1);
+  min-width: 0;
+  padding: var(--pv-sp-3);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  color: var(--pv-text);
+  cursor: pointer;
+  text-align: start;
+  transition:
+    border-color var(--pv-transition-fast),
+    box-shadow var(--pv-transition-fast);
+}
+
+.pv-locale-choice:hover,
+.pv-locale-choice--active {
+  border-color: var(--pv-accent);
+}
+
+.pv-locale-choice--active {
+  box-shadow: 0 0 0 1px var(--pv-accent);
+}
+
+.pv-locale-choice:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}
+
+.pv-locale-choice__name {
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-semibold);
+}
+
+.pv-step-theme {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-5);
+}
+
+.pv-theme-specimen {
+  padding: var(--pv-sp-4);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface);
+  box-shadow: var(--pv-shadow-sm);
+}
+
+.pv-theme-specimen__heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pv-sp-3);
+}
+
+.pv-theme-specimen__eyebrow {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  letter-spacing: var(--pv-tracking-wide);
+  text-transform: uppercase;
+}
+
+.pv-theme-specimen__heading {
+  margin: var(--pv-sp-1) 0 0;
+  color: var(--pv-text);
+  font-size: var(--pv-text-lg);
+  font-weight: var(--pv-weight-semibold);
+  line-height: var(--pv-leading-tight);
+  text-wrap: balance;
+}
+
+.pv-theme-specimen__description {
+  margin: var(--pv-sp-2) 0 var(--pv-sp-4);
+  color: var(--pv-text-secondary);
+  font-size: var(--pv-text-sm);
+  line-height: var(--pv-leading-normal);
+  text-wrap: pretty;
+}
+
+.pv-theme-specimen__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-3);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-bg);
+}
+
+.pv-theme-specimen__source-row,
+.pv-theme-specimen__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+}
+
+.pv-theme-specimen__source-row {
+  justify-content: space-between;
+}
+
+.pv-theme-specimen__source-title {
+  color: var(--pv-text);
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-semibold);
+}
+
+.pv-theme-specimen__source-meta {
+  margin-top: var(--pv-sp-0);
+  color: var(--pv-text-muted);
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+}
+
+.pv-theme-specimen__input {
+  display: inline-flex;
+  flex: 1 1 calc(var(--pv-control-h) * 5);
+  align-items: center;
+  min-width: 0;
+  color: var(--pv-text-muted);
+  box-shadow: var(--pv-focus-ring);
+}
+
+.pv-theme-specimen__controls .pv-btn {
+  cursor: default;
+  pointer-events: none;
+}
+
+.pv-theme-specimen__feedback {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border: 1px solid var(--pv-ok-border);
+  border-radius: var(--pv-radius-sm);
+  background: var(--pv-ok-bg);
+  color: var(--pv-ok);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+}
+
+.pv-theme-specimen__feedback-mark {
+  font-weight: var(--pv-weight-semibold);
+}
+
 /* === SETUP STEP SOURCE FOLDERS === */
 
 /*
@@ -1203,7 +1363,14 @@
 .pv-step-sources__groups {
   display: flex;
   flex-direction: column;
+  gap: var(--pv-sp-3);
+}
+
+.pv-step-sources__section {
+  display: flex;
+  flex-direction: column;
   gap: var(--pv-sp-2);
+  min-width: 0;
 }
 
 /* ── Group card — neutral (optional or default) ── */
@@ -1229,12 +1396,22 @@
 /* ── Group header row ── */
 .pv-step-sources__group-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--pv-sp-2);
   padding: var(--pv-sp-1) var(--pv-sp-2);
   min-height: var(--pv-row-height);
   /* No bottom border when the group has no folder rows */
   border-bottom: none;
+}
+
+.pv-step-sources__group-summary {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  min-width: 0;
 }
 
 /* Header separator: shown only when folder rows exist below it */
@@ -1254,6 +1431,7 @@
 
 /* ── Header label (kind name) ── */
 .pv-step-sources__group-header-label {
+  margin: 0;
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
   color: var(--pv-text-secondary);
@@ -1265,29 +1443,14 @@
   color: var(--pv-text-muted);
 }
 
-/* ── "optional" label ── */
-.pv-step-sources__group-header-optional {
-  font-size: var(--pv-text-xs);
-  color: var(--pv-text-faint);
-}
-
-/* ── Header spacer (pushes Add button to the right) ── */
-.pv-step-sources__group-header-spacer {
-  flex: 1;
-}
-
 /* ── Required/Optional section heading above a run of group cards (#496) ── */
 .pv-step-sources__section-heading {
+  margin: 0;
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
   text-transform: uppercase;
   letter-spacing: var(--pv-tracking-normal);
   color: var(--pv-text-muted);
-  margin-top: var(--pv-sp-1);
-}
-
-.pv-step-sources__section-heading:first-child {
-  margin-top: 0;
 }
 
 /* ── Source row ── */
@@ -1304,6 +1467,7 @@
 /* ── Row main line (path + controls) ── */
 .pv-step-sources__row-main {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--pv-sp-2);
   min-height: var(--pv-row-height);
@@ -1311,7 +1475,7 @@
 
 /* ── Path text ── */
 .pv-step-sources__row-path {
-  flex: 1;
+  flex: 1 1 12rem;
   min-width: 0;
   font-size: var(--pv-text-sm);
   overflow: hidden;
@@ -1319,20 +1483,9 @@
   white-space: nowrap;
 }
 
-/* ── Org-state select ── */
+/* ── Org-state select layout; visuals come from shared .pv-select ── */
 .pv-step-sources__org-select {
-  font-size: var(--pv-text-xs);
-  background: var(--pv-surface);
-  color: var(--pv-text);
-  border: 1px solid var(--pv-border);
-  border-radius: var(--pv-radius-sm);
-  padding: 1px var(--pv-sp-1);
-  transition: border-color var(--pv-transition-fast);
-}
-
-.pv-step-sources__org-select:focus {
-  outline: none;
-  border-color: var(--pv-accent);
+  max-width: 100%;
 }
 
 /* ── Inline validation error ── */
@@ -1349,25 +1502,37 @@
 }
 
 /* ── Manual "add by path" row (#662) ── */
+.pv-step-sources__add-controls {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-direction: column;
+  gap: var(--pv-sp-1);
+  min-width: 0;
+}
+
+.pv-step-sources__add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--pv-sp-2);
+  min-width: 0;
+}
+
 .pv-step-sources__manual-add {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 16rem;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--pv-sp-1);
+  min-width: 0;
 }
 
+/* Visual treatment comes from shared .pv-input. */
 .pv-step-sources__manual-input {
-  font-size: var(--pv-text-xs);
-  background: var(--pv-surface);
-  color: var(--pv-text);
-  border: 1px solid var(--pv-border);
-  border-radius: var(--pv-radius-sm);
-  padding: 1px var(--pv-sp-1);
-  width: 12rem;
-}
-
-.pv-step-sources__manual-input:focus {
-  outline: none;
-  border-color: var(--pv-accent);
+  flex: 1 1 10rem;
+  min-width: 0;
+  width: auto;
 }
 
 /* === SETUP STEP SITE (spec 044 T016) === */
@@ -1599,6 +1764,8 @@
   padding: var(--pv-sp-4) var(--pv-sp-5);
   border-bottom: 1px solid var(--pv-border);
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* Step row inside the rail */
@@ -1606,9 +1773,10 @@
   display: flex;
   align-items: center;
   gap: var(--pv-sp-2);
+  flex: 0 0 auto;
 }
 
-/* Numbered badge — base geometry; color/background applied inline (dynamic per step state) */
+/* Numbered badge — base geometry */
 .pv-wizard__step-badge {
   display: inline-flex;
   align-items: center;
@@ -1618,6 +1786,22 @@
   border-radius: 50%;
   font-size: var(--pv-text-xs);
   font-weight: var(--pv-weight-semibold);
+}
+
+.pv-wizard__step[data-state='active'] .pv-wizard__step-badge {
+  background: var(--pv-ink);
+  color: var(--pv-on-accent);
+}
+
+.pv-wizard__step[data-state='completed'] .pv-wizard__step-badge {
+  background: var(--pv-chip);
+  color: var(--pv-text-secondary);
+}
+
+.pv-wizard__step[data-state='pending'] .pv-wizard__step-badge {
+  background: transparent;
+  border: 1.5px solid var(--pv-border);
+  color: var(--pv-text-faint);
 }
 
 /* Step label — muted (non-active steps) */
@@ -1671,6 +1855,7 @@
 }
 
 .pv-wizard__content--centered {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
 }
@@ -1679,20 +1864,83 @@
 .pv-wizard__steps-bar {
   display: flex;
   gap: var(--pv-sp-1);
-  margin-bottom: var(--pv-sp-6);
+  margin: -2px -2px calc(var(--pv-sp-6) - 2px);
+  padding: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: 2px;
 }
 
 /* Individual step card — future (default) */
 .pv-wizard__steps-card {
-  flex: 1;
-  padding: var(--pv-sp-2) var(--pv-sp-3);
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--pv-sp-2) var(--pv-sp-1);
   border: 1px solid var(--pv-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-xs);
+  line-height: var(--pv-leading-tight);
   text-align: center;
+  white-space: normal;
   background: var(--pv-bg);
   color: var(--pv-text-muted);
   font-weight: var(--pv-weight-normal);
+}
+
+.pv-wizard__steps-overflow-hint {
+  display: none;
+}
+
+/* Below the content-driven fit point, keep every label intact and expose the
+   horizontal scroll range with a token-coloured cue and scrollbar. */
+@media (max-width: 700px) {
+  .pv-wizard__steps-bar {
+    padding-block-end: var(--pv-sp-2);
+    padding-inline-end: calc(var(--pv-control-h) + var(--pv-sp-2));
+    scroll-padding-inline-end: calc(var(--pv-control-h) + var(--pv-sp-2));
+    scrollbar-color: var(--pv-text-muted) var(--pv-surface);
+    scrollbar-width: auto;
+  }
+
+  .pv-wizard__steps-overflow-hint {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    display: grid;
+    place-items: center;
+    inline-size: var(--pv-control-h);
+    block-size: var(--pv-control-h);
+    border: 1px solid var(--pv-border);
+    border-radius: var(--pv-radius-sm);
+    background: var(--pv-surface);
+    color: var(--pv-text);
+    font-size: var(--pv-text-md);
+    font-weight: var(--pv-weight-semibold);
+    pointer-events: none;
+  }
+
+  .pv-wizard__steps-bar::-webkit-scrollbar {
+    height: var(--pv-sp-2);
+  }
+
+  .pv-wizard__steps-bar::-webkit-scrollbar-track {
+    background: var(--pv-surface);
+    border-radius: var(--pv-radius-lg);
+  }
+
+  .pv-wizard__steps-bar::-webkit-scrollbar-thumb {
+    border: var(--pv-sp-0) solid var(--pv-surface);
+    border-radius: var(--pv-radius-lg);
+    background: var(--pv-text-muted);
+  }
+
+  .pv-wizard__steps-card {
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding-inline: var(--pv-sp-3);
+    white-space: nowrap;
+  }
 }
 
 /* Step card — past (visited) */
@@ -1722,8 +1970,8 @@ button.pv-wizard__steps-card:not(:disabled):hover {
 }
 
 button.pv-wizard__steps-card:focus-visible {
-  outline: 2px solid var(--pv-focus-ring);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
 }
 
 button.pv-wizard__steps-card:disabled {
@@ -1731,15 +1979,16 @@ button.pv-wizard__steps-card:disabled {
   opacity: 0.55;
 }
 
-/* Pinned navigation footer */
+/* Centered navigation footer in the setup wizard's scroll flow */
 .pv-wizard__footer {
+  margin-top: var(--pv-sp-5);
   border-top: 1px solid var(--pv-border);
   padding: var(--pv-sp-4) var(--pv-sp-5);
-  flex-shrink: 0;
   background: var(--pv-surface);
 }
 
 .pv-wizard__footer-inner {
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
   display: flex;
@@ -1757,3 +2006,5 @@ button.pv-wizard__steps-card:disabled {
   padding: var(--pv-sp-3);
   margin-bottom: var(--pv-sp-3);
 }
+
+/* end wizard-steps */
