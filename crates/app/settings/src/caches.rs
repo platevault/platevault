@@ -18,6 +18,48 @@ use std::sync::{Arc, OnceLock};
 use app_core_cache::SnapshotCache;
 use domain_core::settings::SettingsState;
 
+/// Per-instance settings-bag cache state.
+///
+/// Replaces the former process-global `SETTINGS_BAG` `OnceLock`. Wrap in `Arc`
+/// and thread alongside `SqlitePool`/`EventBus`; tests construct a fresh
+/// instance per test to eliminate cross-contamination without needing
+/// `invalidate_settings_bag()` or serialization mutexes.
+pub struct SettingsCaches {
+    bag: SnapshotCache<SettingsState>,
+}
+
+impl SettingsCaches {
+    /// Construct a fresh, empty instance.
+    #[must_use]
+    pub fn new() -> Self {
+        Self { bag: SnapshotCache::new() }
+    }
+
+    /// Return the cached settings bag, or `None` on a miss.
+    #[must_use]
+    pub fn load_bag(&self) -> Option<Arc<SettingsState>> {
+        self.bag.load()
+    }
+
+    /// Store a freshly loaded settings-bag snapshot.
+    pub fn store_bag(&self, value: Arc<SettingsState>) {
+        self.bag.store(value);
+    }
+
+    /// Clear the settings-bag snapshot so the next read reloads from the DB.
+    pub fn invalidate_bag(&self) {
+        self.bag.invalidate();
+    }
+}
+
+impl Default for SettingsCaches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Deprecated process-global accessors (migration shim) ─────────────────────
+
 /// The full v1 settings bag, hydrated with in-code defaults for missing rows
 /// (mirrors `get_settings`'s output). 1 slot.
 ///
@@ -46,6 +88,18 @@ pub fn invalidate_settings_bag() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_caches_instance_store_load_invalidate_round_trips() {
+        let caches = SettingsCaches::new();
+        assert!(caches.load_bag().is_none());
+
+        caches.store_bag(Arc::new(SettingsState::default()));
+        assert!(caches.load_bag().is_some());
+
+        caches.invalidate_bag();
+        assert!(caches.load_bag().is_none());
+    }
 
     #[test]
     fn settings_bag_cache_store_load_invalidate_round_trips() {
