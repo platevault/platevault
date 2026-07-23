@@ -15,7 +15,7 @@
     "lint:tests": "biome check tests"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.5",
     "typescript": "^5.9.3"
   }
 }

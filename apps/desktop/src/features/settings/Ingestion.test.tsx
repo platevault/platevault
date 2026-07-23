@@ -107,20 +107,19 @@ describe('Ingestion', () => {
 
   // Issue #878: only followSymlinks has a pipeline consumer. The other three
   // controls must not present themselves as working settings.
-  it.each([
-    ['Scan on startup'],
-    ['Follow NTFS junctions'],
-    ['Hashing mode'],
-  ])('%s is disabled because no pipeline reads it', async (label) => {
-    render(<Ingestion save={vi.fn()} />);
+  it.each([['Scan on startup'], ['Follow NTFS junctions'], ['Hashing mode']])(
+    '%s is disabled because no pipeline reads it',
+    async (label) => {
+      render(<Ingestion save={vi.fn()} />);
 
-    await screen.findByRole('checkbox', {
-      name: 'Follow symbolic links',
-      checked: true,
-    });
+      await screen.findByRole('checkbox', {
+        name: 'Follow symbolic links',
+        checked: true,
+      });
 
-    expect(screen.getByLabelText(label)).toBeDisabled();
-  });
+      expect(screen.getByLabelText(label)).toBeDisabled();
+    },
+  );
 
   it('a slow initial fetch does not clobber an edit made before it resolves', async () => {
     // Reproduces a real race, not just CI flakiness: the mount-time
