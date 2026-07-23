@@ -369,7 +369,7 @@ pub(crate) async fn generate_restore_generic(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::artifacts::{insert_artifact, InsertArtifact};
+    use persistence_db::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
     use persistence_db::repositories::plans as plans_repo;
     use persistence_db::repositories::projects::{insert_project, InsertProject};
     use persistence_db::Database;
@@ -406,7 +406,7 @@ mod tests {
         kind: &str,
         size: i64,
     ) {
-        insert_artifact(
+        insert_artifact_if_absent(
             db.pool(),
             InsertArtifact {
                 id,

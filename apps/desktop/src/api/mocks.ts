@@ -1071,7 +1071,7 @@ type MockRegistry = {
   ) => Promise<CommandPayload<(typeof commands)[K]>>;
 };
 
-export const mockHandlers = {
+const mockHandlers = {
   // ---------- Query Commands ----------
 
   sessions_list: async () => {

@@ -1,5 +1,6 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+// PR #1437: locale included in general settings reads.
 
 //! Settings Tauri commands (spec 018, T014/T015).
 //!
