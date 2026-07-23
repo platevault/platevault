@@ -32,7 +32,7 @@
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
@@ -371,22 +371,27 @@ export function InboxPage() {
     ? filteredItems.find((it) => it.inboxItemId === selected)
     : undefined;
 
-  // Tracks the last-known selected item's identity. Updated while
-  // `selectedItem` is defined so that when it disappears from the list
-  // (classify-split: placeholder purged, fresh-UUID sub-item appears with the
-  // same `sourceGroupId`) the classify-split handoff effect below can still
-  // read the `sourceGroupId` and find the successor — by the time the effect
-  // fires, `selectedItem` is already undefined. Plain ref mutation is safe
-  // here: the value is consumed only by the effect, not by render output.
-  const lastSelectedRef = useRef<{
+  // Tracks the sourceGroupId of the last item that was actively selected.
+  // Updated via React's derived-state-from-render pattern (setState during render
+  // is permitted for local state driven by current props/state — the React docs'
+  // alternative to getDerivedStateFromProps). Written only when `selectedItem`
+  // is defined, so it always holds the most-recently-selected item's identity.
+  // When `selectedItem` disappears (classify-split purged the placeholder), this
+  // state still carries the sourceGroupId needed to find the successor — without
+  // touching a ref during render, which the react-hooks lint rule forbids.
+  const [prevSelectedInfo, setPrevSelectedInfo] = useState<{
     inboxItemId: string;
     sourceGroupId: string | null;
   } | null>(null);
-  if (selectedItem !== undefined) {
-    lastSelectedRef.current = {
+  if (
+    selectedItem !== undefined &&
+    (prevSelectedInfo === null ||
+      prevSelectedInfo.inboxItemId !== selectedItem.inboxItemId)
+  ) {
+    setPrevSelectedInfo({
       inboxItemId: selectedItem.inboxItemId,
       sourceGroupId: selectedItem.sourceGroupId ?? null,
-    };
+    });
   }
 
   // `reclassify_v2` operates at source-group scope and re-splits the group
@@ -409,9 +414,9 @@ export function InboxPage() {
   // Rule (CHK011 N=1 case, mirroring `resolveClassifiedGroupSelection`): if
   // EXACTLY ONE item in the settled list shares the missing item's
   // `sourceGroupId`, that is the unambiguous successor — navigate to it.
-  // Computed synchronously during render so its non-null value can gate
-  // `useStaleSelectionCleanup` on the SAME render that would otherwise clear
-  // the selection. Placed before `useStaleSelectionCleanup` for that reason.
+  // Computed synchronously during render (pure state/props derivation) so its
+  // non-null value can gate `useStaleSelectionCleanup` on the SAME render that
+  // would otherwise clear the selection. Placed before the cleanup call.
   const classifySplitSibling = useMemo(() => {
     if (
       listLoading ||
@@ -421,12 +426,15 @@ export function InboxPage() {
     ) {
       return null;
     }
-    const last = lastSelectedRef.current;
-    if (!last || last.inboxItemId !== selected || !last.sourceGroupId) {
+    if (
+      !prevSelectedInfo ||
+      prevSelectedInfo.inboxItemId !== selected ||
+      !prevSelectedInfo.sourceGroupId
+    ) {
       return null;
     }
     const decision = resolveClassifiedGroupSelection(
-      last.sourceGroupId,
+      prevSelectedInfo.sourceGroupId,
       items,
       false,
     );
@@ -436,6 +444,7 @@ export function InboxPage() {
     pendingReclassifySelectionId,
     selected,
     selectedItem,
+    prevSelectedInfo,
     items,
   ]);
 
