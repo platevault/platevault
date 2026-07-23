@@ -83,10 +83,6 @@ function reasonLabel(reason: MismatchReason): string {
   }
 }
 
-function _mismatchVariant(reason: MismatchReason): PillVariant {
-  return reason === 'hard_rule_violation' ? 'danger' : 'warn';
-}
-
 function confidencePct(confidence: number): string {
   return `${Math.round(confidence * 100)}%`;
 }
@@ -206,7 +202,7 @@ function AssignButton({
   sessionId: _sessionId,
   onAssign,
   assigning,
-  prefill,
+  prefill: _prefill,
 }: AssignButtonProps) {
   const [pending, setPending] = useState<
     'idle' | 'confirming' | 'override_confirm'
@@ -239,12 +235,9 @@ function AssignButton({
       return;
     }
 
-    // First click: pre-fill or prompt
-    if (prefill) {
-      setPending('confirming');
-    } else {
-      setPending('confirming');
-    }
+    // First click — always enter confirm state (prefill controls whether the
+    // panel pre-opens this button row; the confirm step is always required).
+    setPending('confirming');
   };
 
   const handleCancel = () => {
