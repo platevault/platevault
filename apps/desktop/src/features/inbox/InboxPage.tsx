@@ -32,7 +32,7 @@
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
@@ -371,6 +371,24 @@ export function InboxPage() {
     ? filteredItems.find((it) => it.inboxItemId === selected)
     : undefined;
 
+  // Tracks the last-known selected item's identity. Updated while
+  // `selectedItem` is defined so that when it disappears from the list
+  // (classify-split: placeholder purged, fresh-UUID sub-item appears with the
+  // same `sourceGroupId`) the classify-split handoff effect below can still
+  // read the `sourceGroupId` and find the successor — by the time the effect
+  // fires, `selectedItem` is already undefined. Plain ref mutation is safe
+  // here: the value is consumed only by the effect, not by render output.
+  const lastSelectedRef = useRef<{
+    inboxItemId: string;
+    sourceGroupId: string | null;
+  } | null>(null);
+  if (selectedItem !== undefined) {
+    lastSelectedRef.current = {
+      inboxItemId: selectedItem.inboxItemId,
+      sourceGroupId: selectedItem.sourceGroupId ?? null,
+    };
+  }
+
   // `reclassify_v2` operates at source-group scope and re-splits the group
   // into new single-type sub-items (R-14, issue #755) — the currently
   // selected item's id can stop existing mid-flight. Holds the post-split
@@ -382,6 +400,45 @@ export function InboxPage() {
   const [pendingReclassifySelectionId, setPendingReclassifySelectionId] =
     useState<string | null>(null);
 
+  // Classify-split handoff (issue #1038 / astro-plan-srz6): when
+  // `inbox.classify` materializes sub-items from a placeholder, the placeholder
+  // row disappears from the list without any `reclassify_v2` call.
+  // `pendingReclassifySelectionId` is never set, so `useStaleSelectionCleanup`
+  // would clear the selection instead of following the successor.
+  //
+  // Rule (CHK011 N=1 case, mirroring `resolveClassifiedGroupSelection`): if
+  // EXACTLY ONE item in the settled list shares the missing item's
+  // `sourceGroupId`, that is the unambiguous successor — navigate to it.
+  // Computed synchronously during render so its non-null value can gate
+  // `useStaleSelectionCleanup` on the SAME render that would otherwise clear
+  // the selection. Placed before `useStaleSelectionCleanup` for that reason.
+  const classifySplitSibling = useMemo(() => {
+    if (
+      listLoading ||
+      pendingReclassifySelectionId !== null ||
+      selected === undefined ||
+      selectedItem !== undefined
+    ) {
+      return null;
+    }
+    const last = lastSelectedRef.current;
+    if (!last || last.inboxItemId !== selected || !last.sourceGroupId) {
+      return null;
+    }
+    const decision = resolveClassifiedGroupSelection(
+      last.sourceGroupId,
+      items,
+      false,
+    );
+    return decision.action === 'select' ? decision.id : null;
+  }, [
+    listLoading,
+    pendingReclassifySelectionId,
+    selected,
+    selectedItem,
+    items,
+  ]);
+
   // #735: `listLoading` joins the gate because on a cold reload the list cache
   // is empty and an unguarded `selectedItem === undefined` wipes a valid
   // `?selected=` before the list IPC resolves. This does NOT reopen the
@@ -392,7 +449,8 @@ export function InboxPage() {
     selected,
     listLoading ||
       selectedItem !== undefined ||
-      pendingReclassifySelectionId !== null,
+      pendingReclassifySelectionId !== null ||
+      classifySplitSibling !== null,
     () =>
       navigate({
         search: (prev) => ({ ...prev, selected: undefined }),
@@ -491,6 +549,13 @@ export function InboxPage() {
     selected,
     navigate,
   ]);
+
+  useEffect(() => {
+    if (!classifySplitSibling) return;
+    void navigate({
+      search: (prev) => ({ ...prev, selected: classifySplitSibling }),
+    });
+  }, [classifySplitSibling, navigate]);
 
   // Each item carries its own root path — use it for classify / confirm calls.
   const selectedRootPath = selectedItem?.rootAbsolutePath ?? '';
