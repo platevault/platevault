@@ -152,7 +152,11 @@ jobs:
             exit 0
           fi
 
-          current_sha="$(gh api "repos/${REPO}/git/ref/${encoded_ref}" --jq '.object.sha')"
+          current_sha="$(gh api "repos/${REPO}/git/ref/${encoded_ref}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -z "$current_sha" ]; then
+            echo "ref vanished concurrently: $HEAD_REF"
+            exit 0
+          fi
           if [ "$current_sha" != "$HEAD_SHA" ]; then
             echo "retaining $HEAD_REF: head moved after PR closure"
             exit 0
