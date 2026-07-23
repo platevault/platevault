@@ -2006,3 +2006,5 @@ button.pv-wizard__steps-card:disabled {
   padding: var(--pv-sp-3);
   margin-bottom: var(--pv-sp-3);
 }
+
+/* end wizard-steps */
