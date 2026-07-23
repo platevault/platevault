@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Flat↔light rotation applicability matcher (spec 041 T080, FR-040).
 //!
 //! Distinct from the *soft, tolerance-scored* `rotation` dimension used in

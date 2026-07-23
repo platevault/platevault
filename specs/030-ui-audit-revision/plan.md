@@ -39,6 +39,49 @@ via `VITE_USE_MOCKS=true`. Native Tauri builds required for OS file pickers.
 **Scale/Scope**: ~50 React components to modify or create, 7 feature
 directories, 11 settings panes, 1 app shell rewrite
 
+**Audit architecture (iteration 2026-07-14, Q15 / #647)**: Two disjoint
+stores exist today. The `EventBus` (`crates/audit/src/bus.rs:37-40`) is a
+hybrid tokio broadcast (live UI) + durable `events` topic stream
+(`crates/persistence/db/migrations/0003_events.sql:7`) — a topic+payload
+stream without outcome/refused semantics, not an audit record. The durable
+`audit_log_entry` table
+(`crates/persistence/db/migrations/0002_lifecycle.sql:154-167`) is
+lifecycle-transition-shaped (`crates/audit-types/src/event.rs:106+`) and is
+written only by lifecycle transitions
+(`crates/persistence/db/src/repositories/lifecycle.rs:423,511`) and the
+audit repository insert
+(`crates/persistence/db/src/repositories/audit.rs:216`). Bus-only mutation
+emitters: protection (`crates/app/core/src/protection.rs:227-228,404-419` —
+returns an `auditId` with no durable row), settings
+(`crates/app/settings/src/lib.rs:481,500,601,615,768`), source ops
+(`crates/app/core/src/first_run.rs:503,542,597`). Equipment CRUD
+(`crates/app/calibration/src/equipment.rs`) emits no audit at all. Phase G
+unifies these per FR-130–FR-134.
+
+**Metadata value path (iteration 2026-07-14, Q16 / #620)**: absence is
+lost mid-path today. Extraction preserves it
+(`crates/metadata/core/src/lib.rs:221,223` — `Option`-typed exposure/gain,
+~25 more optional fields) and so does persistence
+(`crates/persistence/db/src/repositories/q_calibration.rs:93-94` —
+`fp_gain`/`fp_exposure_s: Option<f64>`), but the application layer
+collapses missing to 0
+(`crates/app/calibration/src/matching.rs:739,741,794,796` —
+`unwrap_or(0.0)`) and the contract cannot carry absence
+(`crates/contracts/core/src/calibration.rs:96,99` — `exposure_s`/`gain`
+non-optional `f64`). Master size is zeroed one layer deeper: the SQL view
+hardcodes `0 AS size_bytes`
+(`crates/persistence/db/migrations/0041_calibration_fingerprint_indices.sql:51`)
+through a non-nullable row (`q_calibration.rs:92`) into non-optional
+`CalibrationMaster`/`MasterDetail.size_bytes: u64`; `matching.rs:748,803`
+is only a sign-conversion fallback, so fixing size requires a
+view-redefinition migration (see data-model.md). UI null-checks are therefore dead
+code (`apps/desktop/src/features/calibration/MastersTable.tsx:116,126`),
+and the shared `PropertyTable` renders `null` as `—` for both missing and
+not-applicable while showing the source badge regardless of value presence
+(`apps/desktop/src/components/PropertyTable.tsx:44-48,181-197`). Phase H
+fixes the model first (contract optionality, remove zero-defaulting), then
+routes all rendering through one shared renderer per FR-135–FR-140.
+
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
@@ -240,7 +283,7 @@ Phase 1 artifacts (data-model.md, contracts/) will document:
 
 ### Implementation Phases
 
-The implementation is organized into 6 phases, ordered by dependency:
+The implementation is organized into 8 phases (A–H), ordered by dependency:
 
 | Phase | Scope | Key Deliverables |
 |-------|-------|-----------------|
@@ -250,9 +293,16 @@ The implementation is organized into 6 phases, ordered by dependency:
 | **D. Inbox & Sessions** | Core review workflow + sessions | Inbox rename/rewrite, session review, calendar scroll |
 | **E. Calibration, Targets, Projects** | Remaining detail screens | Fingerprint section, coverage by train, lifecycle sidebar |
 | **F. Settings & Archive** | Configuration + archive | 11 panes, archive screen, audit log move |
+| **G. Audit Unification** *(iteration 2026-07-14, Q15 / #647)* | Durable audit coverage & store unification | Generalized audit entry model, durable writes for all bus-only mutation emitters (settings, protection, equipment, sources/roots), Activity/log panel reads durable audit + live event bus |
+| **H. Missing-Value Semantics & Detail-as-Delta** *(iteration 2026-07-14, Q16 / #620, #619)* | Three-state value model + shared renderer + detail-panel content model | Contract/model optionality sweep (no sentinel zeros), shared `renderValue` renderer with unresolved chip and presence-coupled source pills, adoption across all metadata surfaces, detail panels reworked to lead with non-row information |
 
 Each phase is independently testable and deployable. Phase A must come first
-as it provides the shared components used by all subsequent phases.
+as it provides the shared components used by all subsequent phases. Phase G
+depends only on existing audit plumbing and is independent of B–F. Phase H
+depends on the shipped metadata/contract plumbing and the shared components
+from Phase A only, and is independent of B–G *as applied to the shipped
+UI*: T133 reworks detail panels that Phases D/E build, so if any B–F panel
+work is still in flight, T133 lands after it.
 
 ---
 

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Manifest and notes helpers for spec 024.
  *
@@ -17,7 +20,11 @@ import type {
   ProjectNoteUpdateRequest,
   ProjectNoteUpdateResult,
 } from '@/bindings/index';
-import type { ManifestListRequest, ManifestListResponse, ManifestGetResponse } from '@/bindings/aliases';
+import type {
+  ManifestListRequest,
+  ManifestListResponse,
+  ManifestGetResponse,
+} from '@/bindings/aliases';
 
 // ── IPC helpers ───────────────────────────────────────────────────────────────
 // Migrated off the hand-written @/api/commands wrappers (spec 037) onto the
@@ -25,17 +32,23 @@ import type { ManifestListRequest, ManifestListResponse, ManifestGetResponse } f
 // throw-on-error contract ManifestsAccordion / ProjectNotesSection rely on.
 
 /** `project.manifest.list` — list manifest snapshots for a project (spec 024). */
-export async function listManifests(request: ManifestListRequest): Promise<ManifestListResponse> {
+export async function listManifests(
+  request: ManifestListRequest,
+): Promise<ManifestListResponse> {
   return unwrap(await commands.manifestList(request));
 }
 
 /** `project.manifest.get` — fetch one manifest with its full structured body (spec 024). */
-export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
+export async function getManifest(
+  request: ManifestGetRequest,
+): Promise<ManifestGetResponse> {
   return unwrap(await commands.manifestGet(request));
 }
 
 /** `project.note.get` — fetch current notes body for a project (spec 024). */
-export async function getProjectNote(req: ProjectNoteGetRequest): Promise<ProjectNoteGetResult> {
+export async function getProjectNote(
+  req: ProjectNoteGetRequest,
+): Promise<ProjectNoteGetResult> {
   return unwrap(await commands.noteGet(req));
 }
 
@@ -47,7 +60,9 @@ export async function updateProjectNote(
 }
 
 /** `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024). */
-export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
+export async function revealManifestInOs(
+  request: ManifestRevealRequest,
+): Promise<void> {
   unwrap(await commands.manifestRevealInOs(request));
 }
 
@@ -62,11 +77,15 @@ export type {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** Maximum note size enforced client-side (A5). */
-export const MAX_NOTE_BYTES = 16_384;
-
-/** Debounce delay in ms before issuing `project.note.update` (A5). */
-export const NOTE_DEBOUNCE_MS = 5_000;
+// Note constraints moved to the shared `@/lib/notes` module now that sessions
+// (#773) also drive a debounced-autosave note editor. Re-exported here so
+// existing project-side imports keep working unchanged.
+export {
+  MAX_NOTE_BYTES,
+  NOTE_DEBOUNCE_MS,
+  noteByteLength,
+  noteContentValid,
+} from '@/lib/notes';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -91,22 +110,9 @@ export function manifestReasonLabel(reason: string): string {
 /** Format an ISO-8601 UTC timestamp for display (e.g. "2026-04-12 18:01"). */
 export function formatManifestTimestamp(iso: string): string {
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
-}
-
-/**
- * Check whether note content exceeds the 16 384-byte cap.
- * Uses `TextEncoder` so the byte count matches the server-side UTF-8 check (A5).
- */
-export function noteByteLength(content: string): number {
-  return new TextEncoder().encode(content).length;
-}
-
-/** Returns `true` when content is within the allowed size. */
-export function noteContentValid(content: string): boolean {
-  return noteByteLength(content) <= MAX_NOTE_BYTES;
 }
 
 /**
@@ -125,7 +131,8 @@ export async function saveNote(
     });
     return { updatedAt: result.updatedAt };
   } catch (err: unknown) {
-    const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+    const code =
+      typeof err === 'string' ? err : ((err as Error)?.message ?? 'unknown');
     return { error: code };
   }
 }

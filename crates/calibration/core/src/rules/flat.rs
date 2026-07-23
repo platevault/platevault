@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Flat frame matching rule (spec 007 US2, FR-004, FR-008, FR-009).
 #![allow(
     clippy::collapsible_match,
@@ -32,70 +35,47 @@ pub fn evaluate(
     let mut confidence = 1.0_f64;
 
     // ── Hard rule: filter ─────────────────────────────────────────────────────
-    match (&session.filter, &master.filter) {
-        (Some(sf), Some(mf)) => {
-            if sf == mf {
-                matched.push(MatchedDim::exact_string(Dimension::Filter, sf));
-            } else {
-                return None;
-            }
+    match (session.filter.as_deref(), master.filter.as_deref()) {
+        (Some(sf), Some(mf)) if crate::rules::hard_rule_string(Some(sf), Some(mf)) => {
+            matched.push(MatchedDim::exact_string(Dimension::Filter, sf));
         }
-        (None, _) | (_, None) => {
-            // Missing filter metadata — hard rule cannot be satisfied.
-            mismatched.push(MismatchedDim::metadata_missing(Dimension::Filter));
-            return None;
-        }
+        _ => return None,
     }
 
     // ── Hard rule: binning ────────────────────────────────────────────────────
-    match (&session.binning, &master.binning) {
-        (Some(sb), Some(mb)) => {
-            if sb == mb {
-                matched.push(MatchedDim::exact_string(Dimension::Binning, sb));
-            } else {
-                return None;
-            }
+    match (session.binning.as_deref(), master.binning.as_deref()) {
+        (Some(sb), Some(mb)) if crate::rules::hard_rule_string(Some(sb), Some(mb)) => {
+            matched.push(MatchedDim::exact_string(Dimension::Binning, sb));
         }
-        _ => {
-            mismatched.push(MismatchedDim::metadata_missing(Dimension::Binning));
-            return None;
-        }
+        _ => return None,
     }
 
     // ── Hard rule: optic_train ────────────────────────────────────────────────
-    match (&session.optic_train, &master.optic_train) {
-        (Some(st), Some(mt)) => {
-            if st == mt {
-                matched.push(MatchedDim::exact_string(Dimension::OpticTrain, st));
-            } else {
-                return None;
-            }
+    match (session.optic_train.as_deref(), master.optic_train.as_deref()) {
+        (Some(st), Some(mt)) if crate::rules::hard_rule_string(Some(st), Some(mt)) => {
+            matched.push(MatchedDim::exact_string(Dimension::OpticTrain, st));
         }
-        _ => {
-            mismatched.push(MismatchedDim::metadata_missing(Dimension::OpticTrain));
-            return None;
-        }
+        _ => return None,
     }
 
     // ── Hard rule: gain (exact, no tolerance — 2026-05-23 decision) ───────────
-    match (session.gain, master.gain) {
-        (Some(sg), Some(mg)) => {
-            if (sg - mg).abs() < 1e-9 {
-                matched.push(MatchedDim::exact(Dimension::Gain));
-            } else {
-                return None;
-            }
-        }
-        _ => {
-            return None;
-        }
+    if crate::rules::hard_rule_numeric(session.gain, master.gain) {
+        matched.push(MatchedDim::exact(Dimension::Gain));
+    } else {
+        return None;
     }
 
     // ── Soft rule: rotation ───────────────────────────────────────────────────
     let rot_cfg = config.flat_rotation_config();
     match (session.rotation_deg, master.rotation_deg) {
         (Some(sr), Some(mr)) => {
-            let delta = (sr - mr).abs();
+            // Issue #921: rotator angles are circular — plain `.abs()` scored
+            // 359.9° vs 0.1° as 359.8° instead of the true 0.2° apart.
+            let delta = skymath::circular_distance(
+                skymath::Angle::from_degrees(sr),
+                skymath::Angle::from_degrees(mr),
+            )
+            .degrees();
             match rot_cfg.penalty(delta) {
                 Some(penalty) => {
                     matched.push(MatchedDim::soft(Dimension::Rotation, sr, mr, delta));
@@ -281,6 +261,108 @@ mod tests {
         );
         let r = r.unwrap();
         assert!(r.dimensions_mismatched.iter().any(|d| d.dimension == "rotation"));
+    }
+
+    #[test]
+    fn rotation_wraparound_across_0_360_seam_matched() {
+        // Issue #921: 359.9° vs 0.1° is truly 0.2° apart, not 359.8° — must
+        // match within the default ±0.5° tolerance, not be max-penalized.
+        let s = SessionInfo { rotation_deg: Some(359.9), ..session() };
+        let r = evaluate(
+            &s,
+            &master_flat("Ha", "1x1", "train-a", 100.0, 0.1, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        assert!(
+            r.dimensions_matched.iter().any(|d| d.dimension == "rotation"),
+            "359.9 vs 0.1 should match within tolerance, got mismatched={:?}",
+            r.dimensions_mismatched
+        );
+        assert!(!r.dimensions_mismatched.iter().any(|d| d.dimension == "rotation"));
+    }
+
+    #[test]
+    fn rotation_far_apart_delta_is_shortest_arc_not_naive_diff() {
+        // 45° vs 295°: circularly 110° apart (the short way, through 0/360°
+        // seam via 350°); a naive |a-b| would wrongly give 250°.
+        let s = SessionInfo { rotation_deg: Some(45.0), ..session() };
+        let r = evaluate(
+            &s,
+            &master_flat("Ha", "1x1", "train-a", 100.0, 295.0, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        let delta = r
+            .dimensions_mismatched
+            .iter()
+            .find(|d| d.dimension == "rotation")
+            .and_then(|d| d.delta)
+            .expect("rotation should be out of tolerance with a delta");
+        assert!((delta - 110.0).abs() < 1e-9, "expected 110.0, got {delta}");
+    }
+
+    #[test]
+    fn rotation_antipodal_boundary_delta_is_180() {
+        // 0° vs 180°: maximally distant on the circle either direction.
+        let r = evaluate(
+            &session(),
+            &master_flat("Ha", "1x1", "train-a", 100.0, 180.0, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        let delta = r
+            .dimensions_mismatched
+            .iter()
+            .find(|d| d.dimension == "rotation")
+            .and_then(|d| d.delta)
+            .expect("rotation should be out of tolerance with a delta");
+        assert!((delta - 180.0).abs() < 1e-9, "expected 180.0, got {delta}");
+    }
+
+    #[test]
+    fn rotation_circular_distance_property_bounded_and_correct() {
+        // Drives evaluate() itself (not skymath::circular_distance in
+        // isolation) so a regression that swaps evaluate()'s rotation delta
+        // for a naive `(a - b).abs()` — the bug issue #921 fixed — is caught
+        // here across a grid of angle pairs, not just the handful of fixed
+        // examples in the other rotation_* tests.
+        let angles = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
+        for &a in &angles {
+            for &b in &angles {
+                let s = SessionInfo { rotation_deg: Some(a), ..session() };
+                let r = evaluate(
+                    &s,
+                    &master_flat("Ha", "1x1", "train-a", 100.0, b, "2026-01-15"),
+                    &MatchingRuleConfig::default(),
+                )
+                .expect("hard rules all satisfied");
+                let matched_delta = r
+                    .dimensions_matched
+                    .iter()
+                    .find(|d| d.dimension == "rotation")
+                    .and_then(|d| d.delta);
+                let mismatched_delta = r
+                    .dimensions_mismatched
+                    .iter()
+                    .find(|d| d.dimension == "rotation")
+                    .and_then(|d| d.delta);
+                let delta = matched_delta
+                    .or(mismatched_delta)
+                    .expect("rotation dimension always carries a delta when both angles are Some");
+
+                assert!(
+                    (0.0..=180.0).contains(&delta),
+                    "evaluate() rotation delta {delta} out of [0,180] for ({a}, {b})"
+                );
+                let raw = (a - b).abs().rem_euclid(360.0);
+                let expected = raw.min(360.0 - raw);
+                assert!(
+                    (delta - expected).abs() < 1e-9,
+                    "({a}, {b}): evaluate() gave {delta}, expected {expected}"
+                );
+            }
+        }
     }
 
     #[test]

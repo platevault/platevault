@@ -74,7 +74,8 @@
             "plan.not_found",
             "archive.empty",
             "confirm.text.mismatch",
-            "path.permission.denied"
+            "path.permission_denied",
+            "archive.delete_failed"
           ]
         },
         "message": { "type": "string" },

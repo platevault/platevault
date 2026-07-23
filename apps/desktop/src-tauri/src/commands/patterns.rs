@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Pattern Tauri commands (spec 015, T3.8; spec 041 package P11).
 //!
 //! Four typed commands:

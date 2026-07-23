@@ -10,11 +10,11 @@
  * Token policy (spec 022, T011):
  * - All colors, shadows, and motion durations MUST reference a token in
  *   tokens.css. No raw hex / rgb / hsl / named colors, no raw `ms` values.
- * - Spacing/layout that maps to the scale uses --alm-sp-* / layout tokens.
+ * - Spacing/layout that maps to the scale uses --pv-sp-* / layout tokens.
  * - Raw px is permitted ONLY for component-intrinsic geometry that has no
  *   semantic token: icon/badge/mark sizes, hairline 1px borders, and fixed
  *   panel/column widths. It is NOT for padding/margin/gap/inset values that
- *   land on the spacing scale — those use --alm-sp-*.
+ *   land on the spacing scale — those use --pv-sp-*.
  */
 
 @import './components/app-shell.css';
@@ -33,3 +33,5 @@
 @import './components/merges-1.css';
 @import './components/merges-2.css';
 @import './components/merges-3.css';
+@import './components/skeleton.css';
+@import './components/logpanel.css';

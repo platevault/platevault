@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Acquisition and calibration session model.
 //! Spec 002 data-model.md §AcquisitionSession, §CalibrationSession.
 //!

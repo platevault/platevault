@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! DataSource (LibraryRoot) lifecycle state model (spec 002 data-model.md §LibraryRoot).
 
 use schemars::JsonSchema;

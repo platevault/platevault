@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Density study — same screen rendered at 3 densities. Wraps in custom frame, not AppFrame, so 3 fit side-by-side.
 
 function _MiniSessionTable({ density }) {

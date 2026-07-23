@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ContractsPage vitest unit tests (spec 021 T010).
  *
@@ -15,14 +18,19 @@ import { ContractsPage } from './ContractsPage';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const { mockGetSettings, mockDevContractsList, mockDevCallsList, mockDevExport, mockDevSchemaGet } =
-  vi.hoisted(() => ({
-    mockGetSettings: vi.fn(),
-    mockDevContractsList: vi.fn(),
-    mockDevCallsList: vi.fn(),
-    mockDevExport: vi.fn(),
-    mockDevSchemaGet: vi.fn(),
-  }));
+const {
+  mockGetSettings,
+  mockDevContractsList,
+  mockDevCallsList,
+  mockDevExport,
+  mockDevSchemaGet,
+} = vi.hoisted(() => ({
+  mockGetSettings: vi.fn(),
+  mockDevContractsList: vi.fn(),
+  mockDevCallsList: vi.fn(),
+  mockDevExport: vi.fn(),
+  mockDevSchemaGet: vi.fn(),
+}));
 
 // Adapt each hoisted mock's raw payload into the generated `{ status: 'ok', data }`
 // Result the real `unwrap` consumes (spec 037), so the mockResolvedValue sites
@@ -30,15 +38,30 @@ const { mockGetSettings, mockDevContractsList, mockDevCallsList, mockDevExport, 
 vi.mock('@/bindings/index', () => ({
   commands: {
     settingsGet: (...a: unknown[]) =>
-      Promise.resolve(mockGetSettings(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockGetSettings(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     devContractsList: (...a: unknown[]) =>
-      Promise.resolve(mockDevContractsList(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockDevContractsList(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     devCallsList: (...a: unknown[]) =>
-      Promise.resolve(mockDevCallsList(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockDevCallsList(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     devExport: (...a: unknown[]) =>
-      Promise.resolve(mockDevExport(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockDevExport(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     devSchemaGet: (...a: unknown[]) =>
-      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
@@ -51,7 +74,11 @@ beforeEach(() => {
   });
   mockDevContractsList.mockResolvedValue({ contracts: [] });
   mockDevCallsList.mockResolvedValue({ calls: [] });
-  mockDevExport.mockResolvedValue({ writtenPath: '/tmp/out.json', callCount: 0, contractCount: 0 });
+  mockDevExport.mockResolvedValue({
+    writtenPath: '/tmp/out.json',
+    callCount: 0,
+    contractCount: 0,
+  });
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

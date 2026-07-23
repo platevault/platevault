@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI smoke test (FR-007, coverage-matrix #21).
 //!
 //! Verifies that every top-level route loads without an uncaught React

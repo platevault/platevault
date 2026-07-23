@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Processing tool Tauri commands (spec 011 T006/T007/T014/T015).
 //!
 //! ## Commands

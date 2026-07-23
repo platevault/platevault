@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * MatchCandidatesPanel — spec 007 US1-US4 · spec 043 §4 (calibration hero).
  *
@@ -24,7 +27,7 @@
 
 import { useState } from 'react';
 import { Check, AlertTriangle } from 'lucide-react';
-import { Section, Table, Pill, EmptyState, Banner, Btn } from '@/ui';
+import { Section, Table, Pill, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import type { PillVariant } from '@/ui';
 import type {
   CalibrationMatchDto,
@@ -39,30 +42,44 @@ import { RotationWarningNotice, type RotationWarning } from './RotationWarning';
 
 function statusVariant(status: SuggestStatus | string): PillVariant {
   switch (status) {
-    case 'match': return 'ok';
-    case 'ambiguous': return 'warn';
-    case 'no_match': return 'neutral';
-    case 'observer_location_missing': return 'warn';
-    default: return 'neutral';
+    case 'match':
+      return 'ok';
+    case 'ambiguous':
+      return 'warn';
+    case 'no_match':
+      return 'neutral';
+    case 'observer_location_missing':
+      return 'warn';
+    default:
+      return 'neutral';
   }
 }
 
 function statusLabel(status: SuggestStatus | string): string {
   switch (status) {
-    case 'match': return m.calibration_status_match();
-    case 'ambiguous': return m.calibration_status_ambiguous();
-    case 'no_match': return m.calibration_status_no_match();
-    case 'observer_location_missing': return m.calibration_status_location_missing();
-    default: return status;
+    case 'match':
+      return m.calibration_status_match();
+    case 'ambiguous':
+      return m.calibration_status_ambiguous();
+    case 'no_match':
+      return m.calibration_status_no_match();
+    case 'observer_location_missing':
+      return m.calibration_status_location_missing();
+    default:
+      return status;
   }
 }
 
 function reasonLabel(reason: MismatchReason): string {
   switch (reason) {
-    case 'out_of_tolerance': return m.calibration_reason_out_of_tolerance();
-    case 'metadata_missing': return m.calibration_reason_metadata_missing();
-    case 'hard_rule_violation': return m.calibration_reason_hard_rule_violation();
-    default: return reason;
+    case 'out_of_tolerance':
+      return m.calibration_reason_out_of_tolerance();
+    case 'metadata_missing':
+      return m.calibration_reason_metadata_missing();
+    case 'hard_rule_violation':
+      return m.calibration_reason_hard_rule_violation();
+    default:
+      return reason;
   }
 }
 
@@ -79,18 +96,22 @@ function confidencePct(confidence: number): string {
 function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const barColor =
-    pct >= 90 ? 'var(--alm-ok)' : pct >= 70 ? 'var(--alm-warn)' : 'var(--alm-danger)';
+    pct >= 90
+      ? 'var(--pv-ok)'
+      : pct >= 70
+        ? 'var(--pv-warn)'
+        : 'var(--pv-danger)';
   return (
-    <div className="alm-match-candidates__conf-bar">
-      <div className="alm-match-candidates__conf-track">
+    <div className="pv-match-candidates__conf-bar">
+      <div className="pv-match-candidates__conf-track">
         <div
-          className="alm-match-candidates__conf-fill"
+          className="pv-match-candidates__conf-fill"
           // eslint-disable-next-line no-restricted-syntax -- dynamic: confidence bar width % and conditional token color
           style={{ width: `${pct}%`, background: barColor }}
           data-testid="confidence-bar"
         />
       </div>
-      <span className="alm-mono alm-match-candidates__conf-label">
+      <span className="pv-mono pv-match-candidates__conf-label">
         {confidencePct(value)}
       </span>
     </div>
@@ -104,49 +125,56 @@ function ConfidenceBar({ value }: { value: number }) {
  * T080 / FR-040). The suggest DTO does not yet carry this field; it is read
  * defensively so a future contract enrichment surfaces automatically.
  */
-type MatchWithRotation = CalibrationMatchDto & { rotationWarning?: RotationWarning | null };
+type MatchWithRotation = CalibrationMatchDto & {
+  rotationWarning?: RotationWarning | null;
+};
 
 function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
   return (
-    <div className="alm-match-candidates__dim-list">
+    <div className="pv-match-candidates__dim-list">
       <RotationWarningNotice warning={match.rotationWarning} />
 
       {match.dimensionsMatched.map((d) => (
-        <span
-          key={d.dimension}
-          className="alm-match-candidates__dim-matched"
-        >
+        <span key={d.dimension} className="pv-match-candidates__dim-matched">
           <Check
             size={12}
             role="img"
             aria-label={m.calibration_dim_matched_aria()}
-            className="alm-match-candidates__dim-check"
+            className="pv-match-candidates__dim-check"
           />{' '}
           {d.dimension}
+          {/* eslint-disable alm/no-user-string -- mathematical delta notation, not translatable prose */}
           {d.delta != null && d.delta > 0 && (
-            // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
-            <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
+            <span className="pv-match-candidates__dim-delta">
+              {' '}
+              (Δ{d.delta.toFixed(2)})
+            </span>
           )}
+          {/* eslint-enable alm/no-user-string */}
         </span>
       ))}
       {hasMismatches &&
         match.dimensionsMismatched.map((d) => (
           <span
             key={d.dimension}
-            className="alm-match-candidates__dim-mismatch"
+            className="pv-match-candidates__dim-mismatch"
             data-testid={`mismatch-${d.dimension}`}
           >
             <AlertTriangle
               size={12}
               aria-label={m.calibration_dim_mismatch_aria()}
-              className="alm-match-candidates__dim-mismatch-icon"
+              className="pv-match-candidates__dim-mismatch-icon"
             />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
+            {/* eslint-disable alm/no-user-string -- mathematical delta notation, not translatable prose */}
             {d.delta != null && (
-              // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
-              <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
+              <span className="pv-match-candidates__dim-delta">
+                {' '}
+                (Δ{d.delta.toFixed(2)})
+              </span>
             )}
+            {/* eslint-enable alm/no-user-string */}
           </span>
         ))}
     </div>
@@ -158,13 +186,31 @@ function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
 interface AssignButtonProps {
   match: CalibrationMatchDto;
   sessionId: string;
-  onAssign: (masterId: string, override: boolean) => Promise<{ status: string; error?: { code: string; message: string; details?: { dimensions: string[] } } }>;
+  onAssign: (
+    masterId: string,
+    override: boolean,
+  ) => Promise<{
+    status: string;
+    error?: {
+      code: string;
+      message: string;
+      details?: { dimensions: string[] };
+    };
+  }>;
   assigning: boolean;
   prefill: boolean;
 }
 
-function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefill }: AssignButtonProps) {
-  const [pending, setPending] = useState<'idle' | 'confirming' | 'override_confirm'>('idle');
+function AssignButton({
+  match,
+  sessionId: _sessionId,
+  onAssign,
+  assigning,
+  prefill,
+}: AssignButtonProps) {
+  const [pending, setPending] = useState<
+    'idle' | 'confirming' | 'override_confirm'
+  >('idle');
   const [errorMsg, setErrorMsg] = useState<string | undefined>(undefined);
   const [overrideDims, setOverrideDims] = useState<string[]>([]);
 
@@ -181,10 +227,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
         const dims = res.error.details?.dimensions ?? [];
         setOverrideDims(dims);
         setPending('override_confirm');
-        setErrorMsg(m.calibration_hard_rule_mismatch({ dims: dims.join(', ') }));
+        setErrorMsg(
+          m.calibration_hard_rule_mismatch({ dims: dims.join(', ') }),
+        );
       } else {
         setPending('idle');
-        setErrorMsg(res.error?.message ?? m.calibration_assignment_failed_fallback());
+        setErrorMsg(
+          res.error?.message ?? m.calibration_assignment_failed_fallback(),
+        );
       }
       return;
     }
@@ -204,8 +254,8 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
 
   if (pending === 'confirming') {
     return (
-      <div className="alm-match-candidates__assign-col">
-        <div className="alm-match-candidates__assign-row">
+      <div className="pv-match-candidates__assign-col">
+        <div className="pv-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="primary"
@@ -213,9 +263,16 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             disabled={assigning}
             data-testid="assign-confirm-btn"
           >
-            {assigning ? m.calibration_assign_assigning() : m.calibration_assign_confirm_btn()}
+            {assigning
+              ? m.calibration_assign_assigning()
+              : m.calibration_assign_confirm_btn()}
           </Btn>
-          <Btn size="sm" variant="ghost" onClick={handleCancel} data-testid="assign-cancel-btn">
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={handleCancel}
+            data-testid="assign-cancel-btn"
+          >
             {m.common_cancel()}
           </Btn>
         </div>
@@ -225,14 +282,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
 
   if (pending === 'override_confirm') {
     return (
-      <div className="alm-match-candidates__assign-col">
+      <div className="pv-match-candidates__assign-col">
         <span
-          className="alm-match-candidates__override-warning"
+          className="pv-match-candidates__override-warning"
           data-testid="override-warning"
         >
           {errorMsg}
         </span>
-        <div className="alm-match-candidates__assign-row">
+        <div className="pv-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="danger"
@@ -246,7 +303,7 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             {m.common_cancel()}
           </Btn>
         </div>
-        <div className="alm-match-candidates__override-dims">
+        <div className="pv-match-candidates__override-dims">
           {m.calibration_assign_violates({ dims: overrideDims.join(', ') })}
         </div>
       </div>
@@ -259,6 +316,9 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
       variant="ghost"
       onClick={handleClick}
       data-testid={`assign-btn-${match.masterId}`}
+      // Onboarding find-it spotlight anchor (spec 056 FR-026). Renders once
+      // per candidate row; the spotlight resolves the first (querySelector).
+      data-guide-anchor="calibration.match-assign"
     >
       {m.calibration_assign_btn()}
     </Btn>
@@ -272,7 +332,17 @@ export interface MatchCandidatesPanelProps {
   response: CalibrationMatchSuggestResponse | undefined;
   loading: boolean;
   error: string | undefined;
-  onAssign: (masterId: string, override: boolean) => Promise<{ status: string; error?: { code: string; message: string; details?: { dimensions: string[] } } }>;
+  onAssign: (
+    masterId: string,
+    override: boolean,
+  ) => Promise<{
+    status: string;
+    error?: {
+      code: string;
+      message: string;
+      details?: { dimensions: string[] };
+    };
+  }>;
   assigning: boolean;
   prefillSuggestion: boolean;
 }
@@ -289,11 +359,12 @@ export function MatchCandidatesPanel({
   if (loading) {
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
-        <div
-          className="alm-match-candidates__loading"
-          data-testid="suggest-loading"
-        >
-          {m.calibration_compatible_sessions_loading()}
+        <div className="pv-match-candidates__loading">
+          <Skeleton
+            count={4}
+            data-testid="suggest-loading"
+            label={m.calibration_compatible_sessions_loading()}
+          />
         </div>
       </Section>
     );
@@ -312,7 +383,10 @@ export function MatchCandidatesPanel({
   if (!response) {
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
-        <EmptyState title={m.calibration_compatible_sessions_no_selection_title()} desc={m.calibration_compatible_sessions_no_selection_desc()} />
+        <EmptyState
+          title={m.calibration_compatible_sessions_no_selection_title()}
+          desc={m.calibration_compatible_sessions_no_selection_desc()}
+        />
       </Section>
     );
   }
@@ -332,14 +406,18 @@ export function MatchCandidatesPanel({
         </Section>
       );
     }
-    const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
+    const isObserverMissing =
+      code === 'match.observer_location_missing' ||
+      response.suggestStatus === 'observer_location_missing';
 
     const isMixedState = response.error?.code === 'session.mixed_state';
     const guardMessage = isObserverMissing
       ? m.calibration_observer_missing_guard()
       : isMixedState
         ? m.calibration_session_mixed_state()
-        : m.calibration_suggest_error({ message: response.error?.message ?? code });
+        : m.calibration_suggest_error({
+            message: response.error?.message ?? code,
+          });
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-guard-error">
@@ -378,32 +456,55 @@ export function MatchCandidatesPanel({
       title={m.calibration_compatible_sessions_title()}
       count={matches.length}
     >
-      <div className="alm-match-candidates__status-row">
-        <Pill variant={statusVariant(suggestStatus)} data-testid="suggest-status-pill">
+      <div className="pv-match-candidates__status-row">
+        <Pill
+          variant={statusVariant(suggestStatus)}
+          data-testid="suggest-status-pill"
+        >
           {statusLabel(suggestStatus)}
         </Pill>
-        { }
+        {}
         {suggestStatus === 'ambiguous' && (
-          <span className="alm-match-candidates__ambiguous-hint">
+          <span className="pv-match-candidates__ambiguous-hint">
             {m.calibration_ambiguous_hint()}
           </span>
         )}
       </div>
       <Table
         columns={[
-          { key: 'session', label: m.calibration_col_session(), style: { width: 150 } },
-          { key: 'target', label: m.projects_create_target_label(), style: { width: 130 } },
+          {
+            key: 'session',
+            label: m.calibration_col_session(),
+            style: { width: 150 },
+          },
+          {
+            key: 'target',
+            label: m.projects_create_target_label(),
+            style: { width: 130 },
+          },
           { key: 'filter', label: m.common_filter(), style: { width: 64 } },
-          { key: 'night', label: m.sessions_col_night(), style: { width: 100 } },
-          { key: 'frames', label: m.projects_wizard_col_frames(), style: { width: 64 } },
-          { key: 'confidence', label: m.calibration_col_match(), style: { width: 120 } },
+          {
+            key: 'night',
+            label: m.sessions_col_night(),
+            style: { width: 100 },
+          },
+          {
+            key: 'frames',
+            label: m.projects_wizard_col_frames(),
+            style: { width: 64 },
+          },
+          {
+            key: 'confidence',
+            label: m.calibration_col_match(),
+            style: { width: 120 },
+          },
           { key: 'dimensions', label: m.calibration_col_dimensions() },
           { key: 'assign', label: '', style: { width: 120 } },
         ]}
         rows={matches.map((m) => ({
           session: (
             <span
-              className="alm-mono alm-match-candidates__session-id"
+              className="pv-mono pv-match-candidates__session-id"
               data-testid={`candidate-session-${m.sessionId}`}
             >
               {m.sessionId.slice(0, 12)}

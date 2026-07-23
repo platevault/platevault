@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * Spec 041 (T021) — user-configurable multi-level grouping. Spec 043: the
@@ -11,18 +14,25 @@
  *    with per-group item counts.
  * 2. Picking a SECOND dimension nests groups under the first ("then by").
  * 3. Selecting a row inside a group still calls onSelect with the row's
- *    ORIGINAL index in the unfiltered items array.
+ *    item id (issue #644 — selection is by identity, not list position).
  * 4. The chosen ordered dimensions are persisted to localStorage and restored
  *    on a fresh mount.
  */
 
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  cleanup,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InboxList } from '../InboxList';
 import { FilterToolbar } from '@/components';
 import { useGrouping } from '@/lib/use-grouping';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
 import type { InboxListItem } from '@/bindings/index';
+import { assertDefined } from '@/test/assertDefined';
 
 // ── Harness ───────────────────────────────────────────────────────────────────
 // Mirrors InboxPage's wiring: useGrouping owns the grouping state,
@@ -32,7 +42,7 @@ function Harness({
   onSelect = vi.fn(),
 }: {
   items: InboxListItem[];
-  onSelect?: (idx: number) => void;
+  onSelect?: (id: string) => void;
 }) {
   const { dims, setSlot } = useGrouping({
     storageKey: GROUPING_STORAGE_KEY,
@@ -43,14 +53,17 @@ function Harness({
     <>
       <FilterToolbar
         grouping={{
-          dimensions: GROUPING_DIMENSIONS.map((d) => ({ value: d.id, label: d.label() })),
+          dimensions: GROUPING_DIMENSIONS.map((d) => ({
+            value: d.id,
+            label: d.label(),
+          })),
           dims,
           setSlot,
         }}
       />
       <InboxList
         items={items}
-        selectedIdx={null}
+        selectedId={null}
         onSelect={onSelect}
         filterType="all"
         dims={dims}
@@ -61,7 +74,9 @@ function Harness({
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 
-function makeItem(over: Partial<InboxListItem> & { inboxItemId: string }): InboxListItem {
+function makeItem(
+  over: Partial<InboxListItem> & { inboxItemId: string },
+): InboxListItem {
   return {
     relativePath: over.inboxItemId,
     fileCount: 1,
@@ -89,7 +104,11 @@ function makeItem(over: Partial<InboxListItem> & { inboxItemId: string }): Inbox
 const items: InboxListItem[] = [
   makeItem({ inboxItemId: 'a', groupTarget: 'M31', groupFrameType: 'light' }),
   makeItem({ inboxItemId: 'b', groupTarget: 'M31', groupFrameType: 'dark' }),
-  makeItem({ inboxItemId: 'c', groupTarget: 'NGC 7000', groupFrameType: 'light' }),
+  makeItem({
+    inboxItemId: 'c',
+    groupTarget: 'NGC 7000',
+    groupFrameType: 'light',
+  }),
 ];
 
 beforeEach(() => {
@@ -106,7 +125,9 @@ describe('InboxList — configurable grouping', () => {
     expect(screen.queryByTestId(/^inbox-group-/)).not.toBeInTheDocument();
 
     // Choose "Target" in the first grouping slot.
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'target' },
+    });
 
     // Two target groups appear as collapsible headers.
     const m31 = screen.getByTestId('inbox-group-target-M31');
@@ -123,37 +144,49 @@ describe('InboxList — configurable grouping', () => {
   it('(2) adding a second dimension nests groups under the first', () => {
     render(<Harness items={items} />);
 
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
-    fireEvent.change(screen.getByLabelText('Then group by (level 2)'), { target: { value: 'frameType' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'target' },
+    });
+    fireEvent.change(screen.getByLabelText('Then group by (level 2)'), {
+      target: { value: 'frameType' },
+    });
 
     expect(screen.getByTestId('inbox-group-target-M31')).toBeInTheDocument();
 
     const frameTypeHeaders = screen.getAllByTestId(/^inbox-group-frameType-/);
     expect(frameTypeHeaders).toHaveLength(3);
     const labels = frameTypeHeaders.map((h) => h.getAttribute('data-testid'));
-    expect(labels.filter((l) => l === 'inbox-group-frameType-light')).toHaveLength(2);
-    expect(labels.filter((l) => l === 'inbox-group-frameType-dark')).toHaveLength(1);
+    expect(
+      labels.filter((l) => l === 'inbox-group-frameType-light'),
+    ).toHaveLength(2);
+    expect(
+      labels.filter((l) => l === 'inbox-group-frameType-dark'),
+    ).toHaveLength(1);
 
     expect(screen.getByTestId('inbox-item-a')).toBeInTheDocument();
     expect(screen.getByTestId('inbox-item-b')).toBeInTheDocument();
   });
 
-  it('(3) selecting a row inside a group reports the original item index', () => {
+  it('(3) selecting a row inside a group reports the item id', () => {
     const onSelect = vi.fn();
     render(<Harness items={items} onSelect={onSelect} />);
 
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'target' },
+    });
 
     fireEvent.click(screen.getByTestId('inbox-item-c'));
-    expect(onSelect).toHaveBeenCalledWith(2);
+    expect(onSelect).toHaveBeenCalledWith('c');
 
     fireEvent.click(screen.getByTestId('inbox-item-a'));
-    expect(onSelect).toHaveBeenLastCalledWith(0);
+    expect(onSelect).toHaveBeenLastCalledWith('a');
   });
 
   it('(3b) collapsing a group hides its leaf rows', () => {
     render(<Harness items={items} />);
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'target' },
+    });
 
     expect(screen.getByTestId('inbox-item-c')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('inbox-group-target-NGC 7000'));
@@ -170,9 +203,11 @@ describe('InboxList — configurable grouping', () => {
 
     // No grouping yet → no hint footer, and no legacy sidebar count.
     expect(screen.queryByTestId('inbox-grouping-hint')).toBeNull();
-    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__count')).toBeNull();
 
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'target' },
+    });
 
     const hint = screen.getByTestId('inbox-grouping-hint');
     expect(hint.textContent).toContain('Grouped by');
@@ -182,18 +217,26 @@ describe('InboxList — configurable grouping', () => {
   it('(5b) renders no duplicate search box or count footer (single search lives in the top bar)', () => {
     render(<Harness items={items} />);
 
-    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
-    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__search')).toBeNull();
+    expect(document.querySelector('.pv-list-sidebar__count')).toBeNull();
     expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
   });
 
   it('(4) persists the ordered dimensions to localStorage and restores them', () => {
     const { unmount } = render(<Harness items={items} />);
 
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
-    fireEvent.change(screen.getByLabelText('Then group by (level 2)'), { target: { value: 'frameType' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'target' },
+    });
+    fireEvent.change(screen.getByLabelText('Then group by (level 2)'), {
+      target: { value: 'frameType' },
+    });
 
-    expect(JSON.parse(localStorage.getItem(GROUPING_STORAGE_KEY)!)).toEqual(['target', 'frameType']);
+    const storedDims = assertDefined(
+      localStorage.getItem(GROUPING_STORAGE_KEY),
+      'GROUPING_STORAGE_KEY entry in localStorage',
+    );
+    expect(JSON.parse(storedDims)).toEqual(['target', 'frameType']);
 
     unmount();
     cleanup();
@@ -202,7 +245,11 @@ describe('InboxList — configurable grouping', () => {
     // without re-selecting dimensions.
     render(<Harness items={items} />);
     expect(screen.getByTestId('inbox-group-target-M31')).toBeInTheDocument();
-    expect(screen.getAllByTestId(/^inbox-group-frameType-/).length).toBeGreaterThan(0);
-    expect((screen.getByLabelText('Group by') as HTMLSelectElement).value).toBe('target');
+    expect(
+      screen.getAllByTestId(/^inbox-group-frameType-/).length,
+    ).toBeGreaterThan(0);
+    expect((screen.getByLabelText('Group by') as HTMLSelectElement).value).toBe(
+      'target',
+    );
   });
 });

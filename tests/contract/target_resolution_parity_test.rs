@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract parity tests for spec 035 SIMBAD target resolution (T009).
 //!
 //! Verifies that Rust DTOs in `contracts_core::targets` serialize/deserialize
@@ -435,6 +438,7 @@ fn search_response_required_fields_present() {
         contract_version: "1.0".to_owned(),
         request_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
         suggestions: vec![],
+        cache_warming: false,
     };
     let value = serde_json::to_value(&resp).expect("search response should serialize");
     let keys = object_keys(&value);
@@ -456,6 +460,7 @@ fn search_response_no_extra_keys_beyond_contract() {
         contract_version: "1.0".to_owned(),
         request_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
         suggestions: vec![],
+        cache_warming: false,
     };
     let value = serde_json::to_value(&resp).expect("search response should serialize");
 

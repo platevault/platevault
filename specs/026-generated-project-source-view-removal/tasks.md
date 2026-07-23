@@ -1,7 +1,9 @@
 # Tasks: Generated Project Source View Removal
 
 **Spec**: `specs/026-generated-project-source-view-removal/spec.md`  
-**Status**: IMPLEMENTED (core pipeline complete; see spec.md for deferred items)
+**Status**: IMPLEMENTED (all tasks closed; the former US1/US2 apply-path deferrals were
+unblocked once a real spec 025 executor + real end-to-end test existed — see T005/T008/T013
+for the two latent apply bugs that surfaced and were fixed in the process)
 
 Tasks are grouped by user story so each priority can be delivered and tested
 independently. Numbering is global to preserve cross-story dependencies.
@@ -24,18 +26,31 @@ independently. Numbering is global to preserve cross-story dependencies.
   so it immediately enters the spec 017/025 review pipeline (`plans.approve` → `plan.apply`).
 - [x] **T004**: Guard test `remove_plan_items_restricted_to_view_paths` verifies all plan item
   `from_relative_path` values come from the view's recorded paths and `linked_entity = view_id`.
-- [ ] **T005**: Cross-platform per-item apply deferred — plan `archive` action is already supported
-  by the spec 025 executor. Windows junction/reparse-point specifics deferred to v1.x.
+- [x] **T005**: Cross-platform per-item apply verified end-to-end with the real spec 025 executor
+  (POSIX; Windows junction/reparse-point specifics remain unverified on Linux dev, deferred to v1.x).
+  Writing the T008 e2e test surfaced and fixed a latent bug: `remove_prepared_view` left
+  `archive_path`/`to_relative_path` empty, so every archive item failed `source.missing` on
+  `rename(src, "")` — never previously exercised by a real apply. Fixed via
+  `compute_archive_destination` in `crates/app/projects/src/prepared_views.rs`. Evidence:
+  `remove_view_e2e_archives_links_and_marks_view_removed` in
+  `crates/app/core/tests/view_removal_regeneration_e2e.rs`.
 - [x] **T006**: `preparedview.remove` contract handler in `crates/contracts/core/src/prepared_views.rs`
   + Tauri command `preparedview.remove` in `apps/desktop/src-tauri/src/commands/prepared_views.rs`.
   All five error codes implemented: `view.not_found`, `view.in_use` (not_found path), `view.mixed_kind`,
   `view.unsupported_kind`, `lifecycle.read_only`.
-- [ ] **T006a**: Data-migration scan for pre-existing kind_diverged records deferred — no legacy
-  PreparedSourceView records exist in a fresh DB.
+- [x] **T006a**: `reconcile_kind_diverged_views` in
+  `crates/persistence/db/src/repositories/prepared_source_views.rs`, run once per
+  `Database::migrate()` call (no schema change, so no new migration number — pure data
+  reconciliation over existing rows, no-op on a fresh DB). Evidence:
+  `reconcile_flags_mismatched_legacy_view_kind_diverged`,
+  `reconcile_is_noop_on_fresh_db_with_no_views`.
 - [x] **T007**: `SourceViewsSection.tsx` in `apps/desktop/src/features/projects/` renders all views
   with state badge, Remove/Regenerate actions, kind_diverged affordance. Wired into `ProjectDetail.tsx`.
-- [ ] **T008**: End-to-end integration test (generate view → remove → assert inventory untouched)
-  deferred; requires spec 025 executor integration harness outside this agent's scope.
+- [x] **T008**: End-to-end integration test with the real spec 025 executor (no `simulateApply`):
+  generate → remove → apply asserts the link is archived off its original path and the view is
+  marked `removed` (A4 membership preserved). Evidence:
+  `remove_view_e2e_archives_links_and_marks_view_removed` in
+  `crates/app/core/tests/view_removal_regeneration_e2e.rs`.
 
 ## US2 - Regenerate a Removed Source View (P2)
 
@@ -52,24 +67,61 @@ independently. Numbering is global to preserve cross-story dependencies.
   Contract DTOs in `crates/contracts/core/src/prepared_views.rs`.
 - [x] **T012**: `SourceViewsSection.tsx` shows Regenerate button for `removed` and `stale` states.
   kind_diverged blocks regeneration with visible Banner.
-- [ ] **T013**: End-to-end integration test deferred (requires spec 025 executor integration).
+- [x] **T013**: End-to-end integration test with the real spec 025 executor: generate → remove →
+  apply → regenerate → apply. Writing it surfaced and fixed a second latent bug:
+  `regenerate_prepared_view` set `from_relative_path` to the raw `inventory_item_id` (a DB id, not
+  a path) and dropped `provenance_json`, so `link` items had no real source and always fell back to
+  `symlink` regardless of the view's recorded kind. Fixed by resolving each item's real absolute
+  source path via `source_view_verify::resolve_source` (promoted `pub(crate)`, no duplicated
+  `file_record`/`library_root` lookup) and carrying the item's own `materialization` through
+  `provenance_json`. Evidence: `regenerate_view_e2e_recreates_links_and_marks_view_current` in
+  `crates/app/core/tests/view_removal_regeneration_e2e.rs`.
 
 ## US3 - Detect Stale Source Views (P3)
 
-- [ ] **T014**: Stale-detection sweep deferred. Domain types (`ItemObservedState`, `ViewState`)
-  and DB schema (`last_observed_state` column) are in place.
-- [ ] **T015**: `update_item_observed_state` and `update_view_state` repo helpers exist and are
-  tested. Active sweep not implemented.
-- [ ] **T016**: `SourceViewsSection` shows `stale` badge; broken-reference detail not yet shown
-  (no sweep data to display). Deferred.
-- [ ] **T017**: Deferred with sweep implementation.
+- [x] **T014**: Stale-detection sweep implemented as `sweep_view_staleness` in
+  `crates/app/projects/src/source_view_verify.rs`, sharing the exact per-item classification logic
+  (`classify_item`, extracted) with the spec 049 US4 `verify_source_view` read-only check so the two
+  never diverge. Read-only on the filesystem (only `stat`s paths); persists observed state to DB as
+  an observation cache, same as inventory scan bookkeeping — not a filesystem mutation, so it stays
+  outside the reviewable-plan pipeline. Wired into `prepared_views::list_views` (T016's load path) so
+  every `preparedview.list` call refreshes staleness before reporting it. Also invoked from
+  `plan_apply.rs`'s `finalize_view_removal`/`finalize_view_regeneration` hooks (T017). Evidence:
+  `sweep_marks_clean_view_current`, `sweep_marks_partially_broken_view_stale`,
+  `sweep_marks_fully_broken_view_missing`, `sweep_skips_removed_view` in `source_view_verify.rs`.
+- [x] **T015**: `update_item_observed_state`/`update_view_state` repo helpers (pre-existing) are now
+  actually called by the T014 sweep. Evidence: same sweep tests as T014, asserting
+  `last_observed_state` and view `state` persist correctly.
+- [x] **T016**: `SourceViewsSection.tsx` renders the persisted broken-reference detail
+  (`lastObservedState !== 'present'`) inline per item, plus a stale-item-count summary banner for
+  `stale`/`missing` views — both driven by the T014 sweep data that's already fresh on load, no
+  Verify click required (distinct from the spec 049 US4 on-demand verify report, which is unchanged).
+  `canRegenerateView` extended to allow `missing` (the sweep can legitimately produce that state;
+  without this a sweep-observed `missing` view had no path back to `current`). Evidence:
+  `SourceViewsSection.test.tsx`, `source-views.test.ts`, Playwright
+  `tests/e2e/source_view_stale_audit.spec.ts`.
+- [x] **T017**: Rides the T014 sweep rather than hand-maintaining separate state transitions:
+  `finalize_view_regeneration` (`crates/app/core/src/plan_apply.rs`) always re-sweeps after a
+  regeneration apply (clearing a terminal `removed` state first, since the sweep intentionally skips
+  `removed`/`kind_diverged`); `finalize_view_removal` sweeps on a partial apply (a clean full apply
+  writes the explicit `removed` state directly — not derivable from a sweep, since archived-away
+  files look identical to independently-missing ones). Evidence: same e2e tests as T008/T013.
 
 ## US4 - Audit Source View Removal (P3)
 
-- [ ] **T018**: Per-item audit event emission deferred (applies when spec 025 executor is updated
-  to call the hook for `prepared_view_removal`/`prepared_view_regeneration` origins).
-- [ ] **T019**: UI audit history surface deferred.
-- [ ] **T020**: Deferred with T018.
+- [x] **T018**: Per-item audit event emission was already origin-agnostic in the spec 025 executor
+  (`plan_apply.rs`'s `on_item_progress` callback writes `plan_apply_events` for every plan item
+  regardless of origin) — no executor change needed, just verified it actually covers these plan
+  types now that a real apply exercises them. Evidence: `event_count(...) > 0` assertions in both
+  `view_removal_regeneration_e2e.rs` tests.
+- [x] **T019**: New `ViewAuditHistory.tsx` in `apps/desktop/src/features/projects/`: lists a view's
+  `prepared_view_removal`/`prepared_view_regeneration` plans (`plans.list` filtered client-side by
+  `originPath`, since the durable T018 audit trail is already there and a per-view server-side filter
+  doesn't exist) with a "View" action that reuses the existing shared `PlanReviewOverlay` via the
+  `onPlanCreated` callback `SourceViewsSection` already threads through — no new backend contract.
+  Wired into `SourceViewsSection.tsx` per view. Evidence: `ViewAuditHistory.test.tsx`, Playwright
+  `tests/e2e/source_view_stale_audit.spec.ts`.
+- [x] **T020**: Deferred-with-T018, now closed alongside it (see T018 evidence).
 
 ## Cross-Story Dependencies
 

@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for spec 035 US4 — ingest light frames into
 //! acquisition sessions grouped by resolved target (T045/T046, FR-016).
 //!
@@ -29,6 +32,7 @@ fn m31() -> ResolvedIdentity {
         object_type: ObjectType::Galaxy,
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: None,
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -201,7 +205,11 @@ async fn two_m31_frames_group_into_one_linked_session() {
 
     build_applied_plan(pool, "plan-1", root_id, &["a.fits", "b.fits"]).await;
 
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     publish_applied(&bus, "plan-1").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
@@ -218,6 +226,16 @@ async fn two_m31_frames_group_into_one_linked_session() {
     assert_eq!(listed[0].frame_count, 2);
     assert_eq!(listed[0].session_key.target, "M 31", "canonical name surfaced");
     assert!(listed[0].target_ids.contains(&target_id));
+    // Regression for #564: the real ingest-written session_key
+    // (`target|filter|binning|gain|night`) must round-trip through the read
+    // path, not just the target — filter/night previously came back empty
+    // because `parse_session_key` only understood a JSON shape nothing ever
+    // wrote.
+    assert_eq!(listed[0].session_key.filter, "Ha", "filter must surface from session_key");
+    assert_eq!(
+        listed[0].session_key.night, "2026-06-21",
+        "observing night must surface, not created_at"
+    );
 }
 
 // ── T046: unknown OBJECT → pending → back-fill ───────────────────────────────────
@@ -241,7 +259,11 @@ async fn unknown_object_session_backfills_after_resolve() {
     );
     build_applied_plan(pool, "plan-2", root_id, &["u.fits"]).await;
 
-    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    app_core::inbox::plan_listener::start_inbox_plan_listener(
+        pool.clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
     publish_applied(&bus, "plan-2").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 

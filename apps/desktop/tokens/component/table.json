@@ -1,0 +1,7 @@
+{
+  "row-height": {
+    "$value": "32px",
+    "$type": "dimension",
+    "$description": "Row density"
+  }
+}

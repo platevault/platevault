@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * TargetsPage tests — spec 043 shared list-page adoption (task #73).
@@ -26,8 +29,31 @@
  *  S1. Clicking a column header sorts the table.
  */
 
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import {
+  render as rtlRender,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
+
+// TargetsPage (list load + the nested TargetDetailV2/useFavourites) is now
+// TanStack-Query-backed — every render needs a QueryClientProvider ancestor.
+// Shadowing `render` keeps every call site in this file unchanged.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 
@@ -44,6 +70,8 @@ const {
   mockListTargetProjects,
   mockGetTargetNote,
   mockUpdateTargetNote,
+  mockAstroFormatBatch,
+  mockMoonOppositionBatch,
 } = vi.hoisted(() => ({
   mockListTargets: vi.fn(),
   mockGetTargetDetail: vi.fn(),
@@ -57,6 +85,9 @@ const {
   mockListTargetProjects: vi.fn(),
   mockGetTargetNote: vi.fn(),
   mockUpdateTargetNote: vi.fn(),
+  mockAstroFormatBatch: vi.fn(),
+  // #634: TargetsTable's batched Moon-separation/opposition call.
+  mockMoonOppositionBatch: vi.fn(),
 }));
 
 /** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
@@ -76,10 +107,14 @@ vi.mock('@/bindings/index', () => ({
     targetProjectsList: mockListTargetProjects,
     targetNoteGet: mockGetTargetNote,
     targetNoteUpdate: mockUpdateTargetNote,
+    targetAstroFormatBatch: mockAstroFormatBatch,
+    targetMoonOppositionBatch: mockMoonOppositionBatch,
   },
 }));
 
-mockAddTargetAlias.mockResolvedValue(ok({ alias: { id: 'a', alias: 'x', kind: 'user' } }));
+mockAddTargetAlias.mockResolvedValue(
+  ok({ alias: { id: 'a', alias: 'x', kind: 'user' } }),
+);
 mockRemoveTargetAlias.mockResolvedValue(ok({ removed: true }));
 mockSetDisplayAlias.mockResolvedValue(ok({}));
 mockClearDisplayAlias.mockResolvedValue(ok({}));
@@ -87,6 +122,21 @@ mockListTargetSessions.mockResolvedValue(ok([]));
 mockListTargetProjects.mockResolvedValue(ok([]));
 mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
 mockUpdateTargetNote.mockResolvedValue(ok({ notes: null }));
+mockAstroFormatBatch.mockResolvedValue(ok({ formatted: [] }));
+// #634: default to "no result yet" for every requested id — rows render the
+// existing explicit-unknown "—" state, matching the pre-#634 behavior these
+// tests already assert on (no test here depends on a specific separation/
+// opposition value).
+mockMoonOppositionBatch.mockImplementation(
+  async (req: { targets: Array<{ id: string }> }) =>
+    ok({
+      results: req.targets.map((t) => ({
+        id: t.id,
+        moonSeparationDeg: null,
+        opposition: null,
+      })),
+    }),
+);
 
 const mockNavigate = vi.fn();
 const mockSelectedId = { current: undefined as string | undefined };
@@ -97,7 +147,14 @@ vi.mock('@tanstack/react-router', () => ({
   // The no-site banner (spec 044 US3) links to Settings via `Link`, which
   // needs a router context this test doesn't provide. Stub it as a plain
   // anchor, consistent with TargetsTable.test.tsx/TargetDetailV2.test.tsx.
-  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+  Link: ({
+    children,
+    to,
+    ...rest
+  }: {
+    children?: import('react').ReactNode;
+    to: string;
+  }) => (
     <a href={to} {...rest}>
       {children}
     </a>
@@ -152,17 +209,29 @@ beforeEach(() => {
   mockSelectedId.current = undefined;
   mockListTargets.mockResolvedValue(ok(listItems));
   mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
-  mockSearchTargets.mockResolvedValue(ok({ contractVersion: '1.0', requestId: 'r', suggestions: [] }));
-  mockResolveTarget.mockResolvedValue(ok({ contractVersion: '1.0', requestId: 'r', status: 'unresolved', target: null, unresolvedReason: 'offline', error: null }));
+  mockSearchTargets.mockResolvedValue(
+    ok({ contractVersion: '1.0', requestId: 'r', suggestions: [] }),
+  );
+  mockResolveTarget.mockResolvedValue(
+    ok({
+      contractVersion: '1.0',
+      requestId: 'r',
+      status: 'unresolved',
+      target: null,
+      unresolvedReason: 'offline',
+      error: null,
+    }),
+  );
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('TargetsPage', () => {
-  it('1. shows a loading footer while listTargets is in flight', () => {
+  it('1. shows a loading skeleton while listTargets is in flight', () => {
     mockListTargets.mockReturnValue(new Promise(() => {}));
     render(<TargetsPage />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    // Loading now renders a skeleton (role="status") instead of a text footer.
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
   });
 
   it('2. renders target rows from backend response', async () => {
@@ -177,12 +246,16 @@ describe('TargetsPage', () => {
     const { rerender } = render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
     // No selection → no detail pane region.
-    expect(screen.queryByRole('complementary', { name: 'Target details' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('complementary', { name: 'Target details' }),
+    ).not.toBeInTheDocument();
 
     mockSelectedId.current = TARGET_ID;
     rerender(<TargetsPage />);
     await waitFor(() =>
-      expect(screen.getByRole('complementary', { name: 'Target details' })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('complementary', { name: 'Target details' }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -217,27 +290,43 @@ describe('TargetsPage', () => {
     mockListTargets.mockRejectedValue(new Error('db error'));
     render(<TargetsPage />);
     await waitFor(() =>
-      expect(screen.getByText('Failed to load targets.')).toBeInTheDocument(),
+      expect(screen.getByText('Could not load targets.')).toBeInTheDocument(),
     );
   });
 
   it('8. target count appears in the table footer', async () => {
     render(<TargetsPage />);
     // Default tab is Planner; both NGC 7000 and M 31 are allowed catalogs.
-    await waitFor(() => expect(screen.getByText('2 targets')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('2 targets')).toBeInTheDocument(),
+    );
   });
 
   // ── P: My Targets vs Planner filter (task #40, task #91) ────────────────────
 
   it('P1. "All targets" (default) filters to allowed planner catalogs', async () => {
-    mockListTargets.mockResolvedValue(ok([
-      ...listItems,
-      // double-star dump entries that must NOT show in the Planner
-      { id: 'hd1', effectiveLabel: 'HD 1', primaryDesignation: 'HD 1', objectType: 'double_star' },
-      { id: 'wds1', effectiveLabel: 'WDS J1', primaryDesignation: 'WDS J00057+4549', objectType: 'double_star' },
-    ]));
+    mockListTargets.mockResolvedValue(
+      ok([
+        ...listItems,
+        // double-star dump entries that must NOT show in the Planner
+        {
+          id: 'hd1',
+          effectiveLabel: 'HD 1',
+          primaryDesignation: 'HD 1',
+          objectType: 'double_star',
+        },
+        {
+          id: 'wds1',
+          effectiveLabel: 'WDS J1',
+          primaryDesignation: 'WDS J00057+4549',
+          objectType: 'double_star',
+        },
+      ]),
+    );
     render(<TargetsPage />);
-    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument(),
+    );
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
     expect(screen.queryByText('HD 1')).not.toBeInTheDocument();
@@ -266,7 +355,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'NGC' } });
 
     expect(screen.getByText('NGC 7000')).toBeInTheDocument();
@@ -277,7 +366,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('M 31'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'm 31' } });
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
@@ -288,7 +377,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'NGC' } });
     expect(screen.queryByText('M 31')).not.toBeInTheDocument();
 
@@ -301,7 +390,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('M 31'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'M31' } });
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
@@ -312,7 +401,7 @@ describe('TargetsPage', () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('M 31'));
 
-    const searchInput = screen.getByPlaceholderText('Search targets...');
+    const searchInput = screen.getByPlaceholderText('Search targets…');
     fireEvent.change(searchInput, { target: { value: 'm31' } });
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
@@ -337,7 +426,9 @@ describe('TargetsPage', () => {
 
     // Switch back to All — catalog rows return.
     fireEvent.change(showSelect, { target: { value: '' } });
-    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument(),
+    );
   });
 
   // ── G: Add target button ───────────────────────────────────────────────────
@@ -350,7 +441,9 @@ describe('TargetsPage', () => {
     fireEvent.click(addBtn);
 
     await waitFor(() =>
-      expect(screen.getByRole('dialog', { name: /Add target/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('dialog', { name: /Add target/i }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -361,7 +454,9 @@ describe('TargetsPage', () => {
     await waitFor(() => screen.getByText('NGC 7000'));
 
     const table = screen.getByRole('table');
-    const designationHeader = screen.getByRole('button', { name: 'Sort by Designation' });
+    const designationHeader = screen.getByRole('button', {
+      name: 'Sort by Designation',
+    });
 
     // Default sort is designation asc → "M 31" before "NGC 7000".
     let rowText = within(table).getAllByText(/NGC 7000|M 31/);
@@ -374,6 +469,11 @@ describe('TargetsPage', () => {
   });
 
   // ── Site gate (spec 047 D7) ───────────────────────────────────────────────
+
+  // #618: the Moon summary / site prompt moved from the pinned top bar into
+  // TargetsTable's own header zone (still unconditionally visible — required
+  // by the #450 dead-gate regression guard, which asserts the prompt/summary
+  // WITHOUT selecting any row).
 
   it('SG1. shows the observing-site prompt when no site exists (gated off)', async () => {
     __setSiteExistsForTest(false);
@@ -430,12 +530,166 @@ describe('TargetsPage', () => {
 
     const unknownCheckbox = screen.getByLabelText('Unknown');
     fireEvent.click(unknownCheckbox);
-    await waitFor(() => expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument(),
+    );
 
     fireEvent.click(unknownCheckbox);
     await waitFor(() => {
       expect(screen.getByText('NGC 7000')).toBeInTheDocument();
       expect(screen.getByText('M 31')).toBeInTheDocument();
     });
+  });
+});
+
+// ── Progressive reveal of a large catalogue (#573) ───────────────────────────
+//
+// TargetsTable's per-row astronomy pass over the WHOLE catalogue synchronously
+// froze the app. TargetsPage now caps what it hands the table to REVEAL_CHUNK
+// (300) rows on first paint, then grows the revealed set toward the full total
+// on setTimeout macrotask boundaries so the browser can paint between chunks.
+// The table footer ("{count} targets") reflects exactly the revealed count, so
+// these tests drive the reveal timers with fake timers and assert on it.
+// Valid Planner (NGC) rows so filterByCatalogues keeps them and the cap
+// actually engages (a 2-row fixture never exceeds REVEAL_CHUNK). Module-scoped
+// so the stale-selection suite can reuse it.
+function ngcItems(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `ngc-${i}`,
+    effectiveLabel: `NGC ${7000 + i}`,
+    primaryDesignation: `NGC ${7000 + i}`,
+    objectType: 'emission_nebula',
+  }));
+}
+
+describe('TargetsPage — progressive reveal (#573)', () => {
+  // Flush the listTargets promise chain (microtasks only) WITHOUT firing the
+  // reveal setTimeout, so the first-paint cap is observable before any growth.
+  async function flushLoad() {
+    await act(async () => {
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+  }
+
+  // Fire the delay-0 reveal timers (and their re-scheduled successors) while
+  // NOT advancing far enough to trip observing-night's hourly interval.
+  async function drainRevealTimers() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  }
+
+  it('caps first paint to REVEAL_CHUNK rows, then grows to the full catalogue on timers', async () => {
+    vi.useFakeTimers();
+    try {
+      mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+      render(<TargetsPage />);
+      await flushLoad();
+
+      // First paint is capped — never the full 350-row synchronous burst.
+      expect(screen.getByText('300 targets')).toBeInTheDocument();
+      expect(screen.queryByText('350 targets')).not.toBeInTheDocument();
+
+      // Draining the reveal timers grows the visible set to the full catalogue.
+      await drainRevealTimers();
+      expect(screen.getByText('350 targets')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #919: search must find a target that exists in the full catalogue but
+  // hasn't been revealed yet by the progressive-reveal loader — bypassing the
+  // reveal cap for search, the same carve-out "My Targets" already gets.
+  it('#919 search finds a target beyond the revealed prefix during the reveal window', async () => {
+    vi.useFakeTimers();
+    try {
+      mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+      render(<TargetsPage />);
+      await flushLoad();
+
+      // Confirm the reveal cap is still in effect (row 349 not yet revealed).
+      expect(screen.getByText('300 targets')).toBeInTheDocument();
+      expect(screen.queryByText('NGC 7349')).not.toBeInTheDocument();
+
+      // NGC 7349 is index 349 — past REVEAL_CHUNK (300) — but search must
+      // still find it immediately, not wait for reveal to catch up.
+      const search = screen.getByPlaceholderText('Search targets…');
+      fireEvent.change(search, { target: { value: 'NGC 7349' } });
+      await flushLoad();
+
+      expect(screen.getByText('NGC 7349')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reset the revealed count on a sort interaction', async () => {
+    vi.useFakeTimers();
+    try {
+      mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+      render(<TargetsPage />);
+      await flushLoad();
+      await drainRevealTimers();
+      expect(screen.getByText('350 targets')).toBeInTheDocument();
+
+      // A sort toggle re-renders but must NOT send the reveal back to the first
+      // chunk — only a fresh load() resets it.
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Sort by Designation' }),
+      );
+      await flushLoad();
+
+      expect(screen.getByText('350 targets')).toBeInTheDocument();
+      expect(screen.queryByText('300 targets')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── Stale-selection cleanup (#735 item 2) ─────────────────────────────────────
+
+/**
+ * Targets was the one ledger page never wired for stale-id cleanup — tasks.md
+ * T030 claimed all six were. Both directions are pinned: a valid id must
+ * survive the in-flight list load (the #735 item 1 cold-reload race), and a
+ * genuinely absent id must still be cleared once the list settles.
+ */
+describe('TargetsPage stale-selection cleanup (#735)', () => {
+  it('keeps a valid ?selected= while targetList is still in flight', () => {
+    mockListTargets.mockReturnValue(new Promise(() => {}));
+    mockSelectedId.current = TARGET_ID;
+
+    render(<TargetsPage />);
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a selection that is present but not yet progressively revealed', async () => {
+    // The page caps what reaches TargetsTable and grows it on a timer; an
+    // unrevealed target is present, not stale, so the gate matches against the
+    // FULL query data rather than the revealed slice.
+    mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+    mockSelectedId.current = 'ngc-349';
+
+    render(<TargetsPage />);
+
+    await waitFor(() => expect(mockListTargets).toHaveBeenCalled());
+    expect(mockNavigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ replace: true }),
+    );
+  });
+
+  it('clears a stale ?selected= once the list has settled without it', async () => {
+    mockSelectedId.current = '550e8400-e29b-41d4-a716-4466554409ff';
+
+    render(<TargetsPage />);
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.objectContaining({ replace: true }),
+      ),
+    );
   });
 });

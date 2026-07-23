@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 (T008): filesystem link-capability probe for source-view
 //! generation (FR-004/FR-004c).
 
@@ -30,25 +33,10 @@ fn probe_symlink(dir: &Utf8Path) -> bool {
     let target = dir.join(".astro-plan-symlink-probe-target");
     let link = dir.join(".astro-plan-symlink-probe-link");
     let wrote = std::fs::write(&target, b"probe").is_ok();
-    let ok = wrote && create_symlink_file(&target, &link).is_ok();
+    let ok = wrote && fs_pathsafe::create_symlink(target.as_std_path(), link.as_std_path()).is_ok();
     let _ = std::fs::remove_file(&link);
     let _ = std::fs::remove_file(&target);
     ok
-}
-
-#[cfg(unix)]
-fn create_symlink_file(target: &Utf8Path, link: &Utf8Path) -> std::io::Result<()> {
-    std::os::unix::fs::symlink(target, link)
-}
-
-#[cfg(windows)]
-fn create_symlink_file(target: &Utf8Path, link: &Utf8Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_file(target, link)
-}
-
-#[cfg(not(any(unix, windows)))]
-fn create_symlink_file(_target: &Utf8Path, _link: &Utf8Path) -> std::io::Result<()> {
-    Err(std::io::Error::other("symlink not supported on this platform"))
 }
 
 fn probe_hardlink(dir: &Utf8Path) -> bool {

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Remove stale relative-path speckit-dag-hooks dispatcher hooks left in
 .claude/settings.json by the 0.3.2->0.4.1 reinstall (apm added the new anchored
 entries but did not prune the old relative ones). Keep the anchored entries and

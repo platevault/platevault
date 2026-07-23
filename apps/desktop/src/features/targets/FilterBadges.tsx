@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * FilterBadges — parameterised per-band Moon-avoidance viability pills for the
  * Planner table and detail pane (spec 047, plan D4/T016, FR-009a).
@@ -10,7 +13,12 @@
  * single explicit "unknown" state — never a fabricated recommendation.
  */
 
-import { BANDS, bandTier, type Band, type Recommendation } from './astro/moon-avoidance';
+import {
+  BANDS,
+  bandTier,
+  type Band,
+  type Recommendation,
+} from './astro/moon-avoidance';
 import { m } from '@/lib/i18n';
 
 /** i18n label for each derived recommendation category (render-time thunks). */
@@ -18,7 +26,7 @@ const RECOMMENDATION_LABEL: Record<Recommendation, () => string> = {
   'broadband-ok': () => m.targets_filters_broadband_nb(),
   'narrowband-only': () => m.targets_filters_narrowband_only(),
   'avoid-tonight': () => m.targets_filters_avoid_tonight(),
-  unknown: () => m.targets_recommendation_unknown(),
+  unknown: () => m.common_unknown(),
 };
 
 /** Human label for a recommendation category. */
@@ -43,22 +51,26 @@ export function FilterBadges({ viability, recommendation }: Props) {
 
   if (viability === null) {
     return (
-      <span className="alm-filter-badges" title={label}>
-        <span className="alm-filter-badge alm-filter-badge--unknown">{label}</span>
+      <span className="pv-filter-badges" title={label}>
+        <span className="pv-filter-badge pv-filter-badge--unknown">
+          {label}
+        </span>
       </span>
     );
   }
 
   return (
-    <span className="alm-filter-badges" title={label}>
+    <span className="pv-filter-badges" title={label}>
       {BANDS.map((band) => {
         const viable = viability[band];
         return (
           <span
             key={band}
             className={
-              `alm-filter-badge alm-filter-badge--${bandTier(band)}` +
-              (viable ? ' alm-filter-badge--viable' : ' alm-filter-badge--not-viable')
+              `pv-filter-badge pv-filter-badge--${bandTier(band)}` +
+              (viable
+                ? ' pv-filter-badge--viable'
+                : ' pv-filter-badge--not-viable')
             }
             aria-label={
               viable

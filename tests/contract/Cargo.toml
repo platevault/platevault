@@ -34,6 +34,10 @@ name = "audit_first_run_completed_test"
 path = "audit_first_run_completed_test.rs"
 
 [[test]]
+name = "workflow_run_completed_test"
+path = "workflow_run_completed_test.rs"
+
+[[test]]
 name = "native_contracts_test"
 path = "native_contracts_test.rs"
 
@@ -45,11 +49,18 @@ path = "target_resolution_parity_test.rs"
 name = "envelope_specta_schemars_agreement"
 path = "envelope_specta_schemars_agreement.rs"
 
+[[test]]
+name = "project_tool_enum_parity"
+path = "project_tool_enum_parity.rs"
+
 [dev-dependencies]
+audit_types = { path = "../../crates/audit-types" }
 contracts_core = { path = "../../crates/contracts/core" }
+domain_core = { path = "../../crates/domain/core" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+time.workspace = true
 
 [lints]
 workspace = true

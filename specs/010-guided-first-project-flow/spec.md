@@ -6,8 +6,11 @@
 
 **Feature Branch**: `010-guided-first-project-flow`
 **Created**: 2026-05-09
-**Last Updated**: 2026-05-20
-**Status**: Draft
+**Last Updated**: 2026-07-18
+**Status**: Superseded — replaced by
+[Spec 056 — Onboarding Redesign](../056-onboarding-redesign/spec.md). The
+sequential coach specified here is deleted, not iterated; only FR-009 (no demo
+data) carries forward.
 **Input**: User description: "Specify the guided in-app coach that activates after first-run setup and walks a new user through Inbox confirmation, first-project creation, and first tool open using contextual overlay hints anchored to real UI elements."
 
 ## Implementation Status: NOT IMPLEMENTED

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! FR-005 / SC-004 — specta ↔ schemars agreement test (spec 042 CB2 / T116).
 //!
 //! This is the core deliverable of T116: a single automated check that FAILS

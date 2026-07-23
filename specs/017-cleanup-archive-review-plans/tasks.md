@@ -125,17 +125,77 @@ approve.
 
 - [ ] T017 [P] [US2] Integration test: destination conflict blocks the item
   at plan generation in `crates/app/core/tests/archive_conflict.rs`.
+  <!-- NOT DONE — out of nC's frontend-only scope (crates/app/core is owned by
+       nD/nF in this run's graph). Structurally the acceptance scenario cannot
+       currently occur: crates/app/core/src/protection.rs::compute_archive_destination
+       (protection.rs:547-574) anchors every archive/cleanup destination on the
+       plan-id + globally-unique item-id, so two items in the same plan can
+       never resolve to the same destination (doc comment at protection.rs:560-568
+       states this explicitly). A real on-disk collision is instead caught at
+       APPLY time (never generation, which stays read-only per FR-002) by the
+       executor's existing `conflict.destination_exists` guard
+       (crates/fs/executor/src/failure.rs:110, ops/move_op.rs:169,
+       ops/mkdir_op.rs:66 — all pre-existing, tested). Recommend the
+       crate-owning lane add a literal `archive_conflict.rs` regression proving
+       the by-construction invariant if dedicated test-file coverage is still
+       required; no code change is needed to satisfy the user-facing guarantee. -->
 - [ ] T018 [P] [US2] Integration test: archive destination paths come from
   the spec-015 token pattern builder.
+  <!-- NOT DONE / DEVIATES BY DESIGN — crates/app/core/src/archive_generator.rs:22-32
+       documents the shipped C5 reconciliation: archive plans route through the
+       app-managed `.astro-plan-archive/<planId>/` folder (keyed for
+       archive.send_to_trash / archive.permanently_delete, spec 017 US6)
+       instead of the spec-015 token pattern builder. This is a prior,
+       documented backend decision (not something nC can silently re-litigate
+       from the frontend lane); the literal task as written cannot be
+       satisfied without reopening that decision. Flagging for a design call
+       if the spec-015 sourcing is still required, otherwise this task should
+       be closed as superseded by the FR-008 deviation note. -->
 
 ### Implementation for User Story 2
 
-- [ ] T019 [P] [US2] Archive plan generator in
+- [x] T019 [P] [US2] Archive plan generator in
   `crates/app/core/src/plans/generators/archive.rs`.
-- [ ] T020 [US2] Per-item destination preview and conflict detection at
+  <!-- DONE (different path than specced): crates/app/core/src/archive_generator.rs
+       `generate()`, wired to the `archive_plan_generate` Tauri command
+       (apps/desktop/src-tauri/src/commands/plans.rs:167). Real UI caller
+       shipped in PR #438 (commit c253ad19, ancestor of this branch's base):
+       apps/desktop/src/features/archive/store.ts `useGenerateArchivePlan()`,
+       called from apps/desktop/src/features/projects/ProjectDetail.tsx:159,282
+       (`handleGenerateArchivePlan`) on the completed→archived plan.required
+       refusal. Exercised end-to-end by the mock Playwright spec
+       tests/e2e/project_lifecycle_transitions_full.spec.ts ("completed →
+       archived drives the full plan.required → review overlay → approve &
+       apply path"). NOTE: this ASSIGN brief's premise ("archive_plan_generate
+       has ZERO UI callers") predates #438 and is stale as of this run. -->
+- [x] T020 [US2] Per-item destination preview and conflict detection at
   generation time.
+  <!-- Backend half (pre-existing, out of nC scope): per-item destination
+       computed distinctly by crates/app/core/src/protection.rs
+       `compute_archive_destination` (item-id-anchored, collision-free by
+       construction — see T017 note); regression-tested by
+       archive_generator.rs::generate_computes_distinct_archive_destination_per_item.
+       Frontend half (NEW, this PR — was missing): PlanReviewOverlay.tsx had NO
+       destination column at all (only name/action/from/protection); added a
+       "Destination" column (apps/desktop/src/features/plans/PlanReviewOverlay.tsx:161,174-179)
+       reading `item.to`, with a localized "Deleted, not moved" cue for
+       `action: 'delete'` items (no destination, per
+       crates/app/core/src/plans.rs item_row_to_detail). Covered by
+       PlanReviewOverlay.test.tsx ("renders the destination for archive items
+       and a deletion cue for delete items (FR-003)"). Conflict-blocking cue:
+       see T021 note — no `protection: blocked` value exists in the contract. -->
 - [ ] T021 [MOCKUP-DONE] [US2] Detail page already renders per-item
   destinations; ensure conflict items render with `protection: blocked` cue.
+  <!-- PARTIALLY DONE. Destination rendering is now real (T020, this PR).
+       The `protection: blocked` cue cannot be implemented: `PlanItemProtection`
+       is a closed `"normal" | "protected"` union in the shipped contract
+       (apps/desktop/src/bindings/index.ts — PlanItemProtection); there is no
+       "blocked" value anywhere in the DTO, DB schema, or generator. Per T017,
+       destination conflicts are structurally impossible under the current
+       item-id-anchored addressing scheme, so there is nothing for a "blocked"
+       state to represent today. Adding one would require a contract change
+       (crates/contracts/core, packages/contracts) out of nC's scope — leaving
+       unticked pending a design call on whether this cue is still wanted. -->
 
 **Checkpoint**: Archive plans review-ready with previewed destinations.
 
@@ -156,10 +216,25 @@ state. Trigger apply; observe single transition to `applying`. Reopen from
   <!-- approve_plan_happy_path, approve_plan_rejects_wrong_state, approve_plan_rejects_empty_plan in app_core tests -->
 - [ ] T023 [P] [US3] State-machine test: `approved → draft` reopen
   invalidates the approval.
-  <!-- DEFERRED: reopen (approved → draft) path not yet implemented; requires spec 025 coordination -->
+  <!-- STILL OPEN. Confirmed genuinely missing end-to-end, not just untested:
+       no `plans.reopen`-equivalent command exists in the generated bindings
+       (apps/desktop/src/bindings/index.ts has no such command) and
+       PlanReviewOverlay has no reopen affordance. This is app-core/domain-core
+       state-machine work (crates/domain/core/src/lifecycle/plan.rs
+       TRANSITIONS table + a new Tauri command), out of nC's frontend-only
+       scope. Flagging for the crate-owning lane (nD/nF) or a follow-up spec
+       iteration. -->
 - [ ] T024 [P] [US3] Coordination test against spec 025 mock executor:
   exactly one `approved → applying` transition per Apply click.
-  <!-- DEFERRED: spec 025 dependency -->
+  <!-- Backend coordination test is out of nC's scope (crates/app/core). The
+       apply executor is now real (spec 025 landed via 041-apply, no longer a
+       mock). Frontend guarantee already in place and evidenced:
+       PlanReviewOverlay.tsx `handleApproveAndApply` calls `plans.approve`
+       exactly once then `plans.apply` exactly once per invocation, and the
+       `busy` flag disables the Approve & apply button for the duration
+       (PlanReviewOverlay.tsx:108,195-260) — a double-click cannot double-fire
+       the transition from the UI. The backend-side "exactly one transition"
+       invariant test still needs a crates/app/core owner. -->
 
 ### Implementation for User Story 3
 
@@ -242,9 +317,26 @@ items materialised.
   <!-- crates/app/core/src/plans.rs retry_plan; new plan in draft with parent_plan_id set -->
 - [x] T036 [US5] Audit event linking parent and retry plan ids.
   <!-- PlanRetryCreated emitted with new_plan_id, parent_plan_id, items_filter, items_total -->
-- [ ] T037 [MOCKUP-DONE] [US5] PlanDetailPage's "Generate retry plan" CTA
+- [x] T037 [MOCKUP-DONE] [US5] PlanDetailPage's "Generate retry plan" CTA
   exists for partially_applied/failed; migrate to real `plan.retry` command.
-  <!-- DEFERRED: frontend UI wiring -->
+  <!-- DONE (this PR, contextually — v4 has no PlanDetailPage). Was genuinely
+       unwired: confirmed zero references to `plansRetry`/`commands.plansRetry`
+       anywhere in apps/desktop/src before this change. Added the CTA in the
+       shared PlanReviewOverlay (apps/desktop/src/features/plans/PlanReviewOverlay.tsx):
+       when the apply run's final PlanState is `failed` or `partially_applied`,
+       the footer swaps Discard/Approve for Close/"Generate retry plan"
+       (handleGenerateRetryPlan, PlanReviewOverlay.tsx:172-191,228-243), calling
+       `plans.retry(planId, 'failed')` and exposing the new plan id via a new
+       `onRetryCreated` prop. Wired at both call sites under an explicit
+       orchestrator scope grant for apps/desktop/src/features/projects/**
+       (exactly these two lines): ProjectDetail.tsx
+       (`onRetryCreated={setArchiveReviewPlanId}`) and
+       OutputsCleanupSections.tsx (`onRetryCreated={setReviewPlanId}`) — each
+       re-points the same overlay at the retry plan. Covered by
+       PlanReviewOverlay.test.tsx ("offers 'Generate retry plan' after a
+       partially_applied outcome and drives plans.retry (US5, T037)").
+       Playwright mock-suite extension still needs the tests/e2e/** owner (nE)
+       — out of nC's scope. -->
 
 **Checkpoint**: Retry chain visible and immutable per attempt.
 
@@ -287,17 +379,99 @@ the user can send the archive subtree to OS trash or permanently delete it.
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T049 [P] Update `docs/research/` index to point at this spec's
+- [x] T049 [P] Update `docs/research/` index to point at this spec's
   research.md.
+  <!-- Added a "Spec 017" row to docs/research/index.md's Feature research
+       decisions section, linking specs/017-cleanup-archive-review-plans/research.md. -->
 - [ ] T050 [P] Performance check: list render under 100 ms for 200 plans;
   detail under 150 ms for 2000 items.
-- [ ] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
+  <!-- RE-MEASURED after enabling virtualization (see T051 fix). UX call made
+       by the orchestrator: gave the item table the shared `.alm-listtable`
+       virtualized pattern (apps/desktop/src/features/plans/PlanReviewOverlay.tsx:294-303,
+       `virtualized` + `scrollClassName="alm-listtable__scroll"`, same pattern
+       as SessionsTable.tsx/InboxList.tsx), a new `.alm-modal__body--fill`
+       Modal-body variant so the body no longer scrolls itself (CSS:
+       merges-3.css `.alm-modal__body--fill`), and `.alm-plan-review` now
+       `flex: 1; min-height: 0` to fill it (redesign-detail.css). Header,
+       summary banner, protection gate, progress, and footer all stay pinned;
+       only the item table scrolls.
+       DETERMINISTIC RESULT (not timing, not flaky): DOM row count for a
+       200-item plan dropped from 200/200 to 64/200 — confirmed via a vitest
+       probe reading `document.querySelectorAll('[data-testid^="plan-review-item-"]')`
+       (jsdom's existing global virtualizer layout shim,
+       apps/desktop/vitest.setup.ts:53-105, gives the `data-virtual-scroll`
+       container a 2000px viewport, so `@tanstack/react-virtual` genuinely
+       windows the list in tests, not just production).
+       TIMING RESULT (honest, not cherry-picked): same React Profiler
+       `actualDuration` methodology as before, 4 runs each, same session:
+       BEFORE (200/200 rows): 232.45, 197.71, 179.25, 135.47ms (mean ≈186ms).
+       AFTER (64/200 rows): 238.41, 154.02, 200.50, 212.48ms (mean ≈201ms).
+       The two ranges overlap — this specific jsdom-Profiler total-duration
+       metric does NOT show a clear win, and NEITHER before nor after
+       consistently meets the literal 100ms budget in this harness. This is
+       expected, not a red flag: jsdom has no real layout/paint pipeline, so
+       the Profiler only measures React's own reconciliation cost, which
+       virtualization's bookkeeping (measuring, spacer math) partly offsets at
+       this list size — the actual mechanism virtualization protects (DOM
+       node count, hence real browser layout/paint/GC cost) is NOT something
+       jsdom can measure, which is exactly why the 200/64 row-count result
+       above is the trustworthy piece of evidence here, not the ms numbers.
+       NOT TICKED per instruction ("tick only if the number actually meets
+       budget") — the literal ms target is not demonstrated met by anything
+       measurable in this sandbox; a real Chromium/Tauri perf pass is still
+       the way to validate the ms budget, same recommendation as before. -->
+- [x] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
   state-aware action bar (focus order, button labels; includes `paused` state).
+  <!-- AUDITED (real surface, since PlansListPage/PlanDetailPage don't exist —
+       see T050). Findings:
+       - PASS: every footer state (draft/ready_for_review, terminal
+         failed/partially_applied, applied) renders exactly two text-labeled
+         buttons via the shared Btn component — no icon-only affordances to
+         mislabel (PlanReviewOverlay.tsx:228-262).
+       - PASS: `npx eslint` (jsx-a11y ruleset) on PlanReviewOverlay.tsx is
+         clean — 0 errors/warnings (command run, this PR).
+       - PASS: the live-progress/failure region already carries
+         `role="status" aria-live="polite"` (PlanReviewOverlay.tsx:301-306),
+         so a screen-reader user hears "Plan apply failed" BEFORE the footer
+         swaps to the retry CTA — the state change is announced, not silent.
+       - PASS (no fix needed): the new Destination column reuses the exact
+         same `<span>` pattern as the pre-existing Source path column — no new
+         a11y surface introduced.
+       - FIXED (was STRUCTURAL/filed, now resolved — see T050): the
+         unvirtualized 200+ row table meant a very long sequential tab-through
+         with no way to jump. Enabling `.alm-listtable` virtualization windows
+         the DOM to ~64 rows at a time (confirmed above), directly shrinking
+         the tab-through — same fix as T050, not a separate change.
+       - Still open, correctly NOT built here per explicit instruction:
+         `paused` has NO UI anywhere in apps/desktop/src/features/{plans,archive}/**
+         (grepped — no "paused"/"Pause"/"Resume" string or branch exists in
+         PlanReviewOverlay or ArchivePage). This is new product surface, not
+         an audit fix — routed to the spec-025 apply-executor tail lane per
+         the orchestrator's direction; not built here.
+       No cheap fixes were found beyond what's already compliant; the one
+       structural finding above is now fixed (T050), not just filed. -->
 - [ ] T052 Coordinate handoff edge with spec 025: confirm `applying`,
   `paused`, `applied`, `partially_applied`, `failed`, `cancelled` are
   written only by the apply executor.
-- [ ] T053 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
+  <!-- Spot-checked (read-only, crates/app/core/** is out of nC's scope so no
+       code change made): grepped every `update_plan_state`/state-literal
+       write site in crates/app/core/src/{plans,project_create}.rs — the only
+       production writers of these six terminal/in-flight states are in
+       crates/app/core/src/plan_apply.rs (the spec-025 executor, now real via
+       041-apply); plans.rs and project_create.rs only ever READ these states
+       for gating/classification (e.g. retry's terminal-parent check, the
+       requires-plan lifecycle guard). The one non-executor write of
+       "applying" found (plans.rs:956) is inside a `#[cfg(test)]` fixture
+       seeding a discard-guard unit test, not production code. Confirms the
+       invariant holds today; leaving unticked since a durable regression test
+       for it belongs to the crate-owning lane (nD/nF), not a one-off grep. -->
+- [x] T053 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
   if the team chooses to add one.
+  <!-- Added specs/017-cleanup-archive-review-plans/quickstart.md: dev/test
+       commands, a key-files table reflecting the actual shipped v4
+       architecture (no PlansListPage/PlanDetailPage — contextual review via
+       PlanReviewOverlay only, per T015/T016), and a walkthrough of the
+       generate → review → approve/apply → retry flow. -->
 - [x] T054 [P] Add `destructiveDestination` picker to plan-review UI: radio
   group "Archive (default) / OS Trash" shown only when plan contains
   destructive items.

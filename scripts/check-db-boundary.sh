@@ -1,31 +1,36 @@
 #!/usr/bin/env bash
-# DB boundary ratchet — keystone guard for the persistence-layer hardening effort.
+# DB boundary guard — keystone enforcement for the persistence-layer boundary.
 #
-# Goal: all production SQL must live inside `crates/persistence/db`. This script
-# counts raw sqlx query/exec sites in PRODUCTION Rust code OUTSIDE that crate and
-# fails if any file EXCEEDS its checked-in baseline. Counts may only shrink (the
-# ratchet); brand-new files default to a baseline of 0, so any new leak fails CI.
+# Invariant: ALL production SQL lives inside `crates/persistence/db`. ZERO raw
+# sqlx query/exec sites are permitted in production Rust code outside that crate.
+# This script counts those sites and FAILS if any exist. The checked-in baseline
+# (db-boundary-baseline.txt) is sealed EMPTY and MUST stay empty — it is a locked
+# zero, not a tunable ratchet. Any new leak fails CI.
+#
+# History: this began as a shrink-only ratchet during the persistence-layer
+# hardening effort. Once every app-layer query was drained into
+# crates/persistence/db (run `db-boundary-zero`), the baseline was sealed at
+# zero. New SQL must be added as a persistence/db repository method — never as an
+# app-layer sqlx call.
 #
 # Why a script and not clippy `disallowed-methods`: clippy cannot path-scope a
 # lint to "everywhere except crates/persistence/db". clippy.toml here provides a
-# coarse secondary signal only; this ratchet is the real boundary enforcement.
+# coarse secondary signal only; this guard is the real boundary enforcement.
 #
 # "Production" = `*.rs` files, excluding:
 #   - crates/persistence/db/**         (the sanctioned home for SQL)
 #   - any path containing a `tests/` segment (integration tests)
 #   - the example reference module (query_builder_example.rs)
-#   - query sites that appear at/after the first `#[cfg(test)]` line in a file
-#     (inline unit-test modules are not production code)
+#   - query sites inside an inline `#[cfg(test)]` item (unit-test modules and
+#     test-only helpers are not production code). Only the item's own scope is
+#     exempt — production code following it in the same file is still counted.
+#   - entire files the compiler excludes from production builds, i.e. file-level
+#     test modules (see is_test_only_file)
 #
 # Usage:
-#   scripts/check-db-boundary.sh            # check against baseline (CI mode)
-#   scripts/check-db-boundary.sh --generate # (re)write the baseline file
+#   scripts/check-db-boundary.sh            # enforce zero (CI mode)
+#   scripts/check-db-boundary.sh --generate # re-seal the empty baseline; refuses if any leak exists
 #   scripts/check-db-boundary.sh --list     # print current per-file counts
-#
-# NOTE: the baseline is a snapshot of current leakage, not a target. Whenever a
-# refactor materially shuffles query sites outside crates/persistence/db
-# (renames, file splits, moving queries into/out of that crate), regenerate it
-# with `--generate` and review the diff before committing.
 
 set -euo pipefail
 
@@ -37,18 +42,99 @@ BASELINE="$SCRIPT_DIR/db-boundary-baseline.txt"
 # Patterns that denote a raw sqlx query/exec site.
 PATTERN='sqlx::query|query_as|query_scalar|\.fetch_(one|all|optional)|\.execute\('
 
-# Count production query sites in a single file (sites before first #[cfg(test)]).
+# True when the compiler excludes this ENTIRE file from production builds.
+#
+# Two ways a whole file can be test-only, both checked against the compiler's
+# actual rule rather than the file's name — a production file called `tests.rs`
+# is still counted, which is why this is not a name-based exemption:
+#
+#   1. The file declares the inner attribute `#![cfg(test)]` in its header
+#      region (blank/comment/attribute lines only). Note this is NOT matched by
+#      the inline `#[cfg(test)]` cutoff regex below: the `!` makes it an inner
+#      attribute applying to the whole file, not a cutoff for what follows.
+#   2. The file is a module whose parent declares it `#[cfg(test)] mod <name>;`.
+#      Extracting an inline `#[cfg(test)] mod tests { .. }` into its own file
+#      leaves the attribute on the parent's declaration, so the file itself
+#      contains no cfg(test) marker at all.
+is_test_only_file() {
+  local file="$1"
+  local first_item modname dir parent inner
+
+  # (1) Inner attribute in the header region. Restricted to the leading run of
+  # blank/comment/attribute lines so an `#![cfg(test)]` nested inside an inline
+  # `mod foo { .. }` (legal, but scopes to that module only) does not count.
+  first_item="$(grep -nvE '^[[:space:]]*(//.*)?$|^[[:space:]]*#!?\[' "$file" | head -1 | cut -d: -f1 || true)"
+  inner="$(grep -nE '^[[:space:]]*#!\[cfg\(test\)\]' "$file" | head -1 | cut -d: -f1 || true)"
+  if [[ -n "$inner" ]] && { [[ -z "$first_item" ]] || [[ "$inner" -lt "$first_item" ]]; }; then
+    return 0
+  fi
+
+  # (2) Parent declares this module under #[cfg(test)].
+  modname="$(basename "$file" .rs)"
+  dir="$(dirname "$file")"
+  if [[ "$modname" == "mod" ]]; then
+    # `foo/mod.rs` is module `foo`, declared by foo's own parent directory.
+    modname="$(basename "$dir")"
+    dir="$(dirname "$dir")"
+  elif [[ "$modname" == "lib" || "$modname" == "main" ]]; then
+    return 1 # crate roots have no parent module
+  fi
+  for parent in "$dir/mod.rs" "$dir.rs" "$dir/lib.rs" "$dir/main.rs"; do
+    [[ -f "$parent" ]] || continue
+    # `#[cfg(test)]` on the line immediately preceding the `mod <name>;` decl.
+    if grep -A1 -E '^[[:space:]]*#\[cfg\(test\)\][[:space:]]*$' "$parent" \
+      | grep -qE "^[[:space:]]*(pub[[:space:]]*(\([^)]*\))?[[:space:]]+)?mod[[:space:]]+${modname}[[:space:]]*;"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Count production query sites in a single file.
+#
+# An inline `#[cfg(test)]` item exempts ITS OWN SCOPE only, not the rest of the
+# file: production code may legally follow an inline test module, and SQL there
+# is a real leak. The item's extent is found by its closing brace at the
+# attribute's own indentation, which rustfmt guarantees. Brace *depth* counting
+# is deliberately avoided because braces inside string literals (multi-line SQL,
+# format strings) would desynchronise it; the indentation rule cannot be thrown
+# off that way, and its only failure mode — a string line starting `}` at
+# exactly that column — ends the exemption early, i.e. errs strict.
 count_file() {
   local file="$1"
-  local cutoff
-  # Line number of the first #[cfg(test)] (inline unit-test module marker).
-  cutoff="$(grep -nE '#\[cfg\(test\)\]' "$file" | head -1 | cut -d: -f1 || true)"
-  if [[ -n "$cutoff" ]]; then
-    # Production region is everything strictly before the cfg(test) marker.
-    head -n "$((cutoff - 1))" "$file" | grep -cE "$PATTERN" || true
-  else
-    grep -cE "$PATTERN" "$file" || true
+
+  if is_test_only_file "$file"; then
+    echo 0
+    return
   fi
+
+  PAT="$PATTERN" awk '
+    BEGIN { pat = ENVIRON["PAT"] }
+
+    # Inside a #[cfg(test)] item: nothing counts until its closing brace.
+    skipping {
+      if ($0 ~ ("^" indent "\\}")) { skipping = 0 }
+      next
+    }
+
+    # Line after a #[cfg(test)] attribute decides how far the exemption reaches.
+    pending {
+      if ($0 ~ /^[[:space:]]*#\[/) { next }        # stacked attributes
+      pending = 0
+      if ($0 ~ /\{/) { skipping = 1 }              # braced item: skip its scope
+      next                                         # else `mod x;` — just this line
+    }
+
+    /^[[:space:]]*#\[cfg\(test\)\]/ {
+      indent = $0
+      sub(/#.*$/, "", indent)
+      if ($0 ~ /\{/) { skipping = 1 } else { pending = 1 }
+      next
+    }
+
+    $0 ~ pat { n++ }
+    END { print n + 0 }
+  ' "$file"
 }
 
 # Enumerate candidate production files (sorted, repo-relative paths).
@@ -75,17 +161,24 @@ collect() {
 
 case "${1:-}" in
   --generate)
+    # Re-seal the baseline. The boundary is locked at ZERO, so this refuses to
+    # bake in any leakage: if production query sites exist, drain them into
+    # crates/persistence/db instead of recording a non-empty baseline.
+    total="$(collect | awk -F'\t' '{s+=$1} END{print s+0}')"
+    if [[ "$total" -ne 0 ]]; then
+      echo "ERROR: refusing to generate a non-empty baseline ($total production query site(s) found)." >&2
+      echo "The DB boundary is sealed at zero. Move these queries into crates/persistence/db:" >&2
+      collect >&2
+      exit 1
+    fi
     {
       echo "# DB boundary baseline — production sqlx query/exec sites OUTSIDE crates/persistence/db."
-      echo "# Format: <count><TAB><repo-relative path>. Generated by scripts/check-db-boundary.sh --generate."
-      echo "# Ratchet rule: a file may only DECREASE its count; new files default to 0."
-      echo "# Regenerate after any refactor that materially shuffles query sites (see script header)."
-      collect
+      echo "# SEALED AT ZERO: this file must contain no count rows. All production SQL lives in"
+      echo "# crates/persistence/db; new queries are added there as repository methods, never here."
+      echo "# Generated by scripts/check-db-boundary.sh --generate (refuses to record any leakage)."
     } > "$BASELINE"
-    total="$(collect | awk -F'\t' '{s+=$1} END{print s+0}')"
-    files="$(collect | wc -l | tr -d ' ')"
-    echo "Wrote baseline: $BASELINE"
-    echo "  files: $files   total production query sites: $total"
+    echo "Sealed baseline: $BASELINE"
+    echo "  files: 0   total production query sites: 0"
     ;;
 
   --list)
@@ -99,34 +192,31 @@ case "${1:-}" in
       exit 2
     fi
 
-    # Load baseline into an associative array: path -> allowed count.
-    declare -A allowed
-    while IFS=$'\t' read -r cnt path; do
-      [[ "$cnt" =~ ^#|^$ ]] && continue
-      [[ -z "${path:-}" ]] && continue
-      allowed["$path"]="$cnt"
-    done < <(grep -vE '^[[:space:]]*#' "$BASELINE" | grep -vE '^[[:space:]]*$')
-
+    # The boundary is sealed at zero. The baseline must contain no count rows,
+    # and there must be no production query sites outside crates/persistence/db.
     fail=0
+
+    # (1) Guard the seal itself: a non-empty baseline would silently re-open the
+    # boundary, so reject any count row hand-edited back in.
+    if grep -vE '^[[:space:]]*#' "$BASELINE" | grep -qE '[^[:space:]]'; then
+      echo "SEAL BROKEN: $BASELINE contains count rows; the baseline must stay empty (zero-tolerance)." >&2
+      fail=1
+    fi
+
+    # (2) Enforce zero production query sites.
     while IFS=$'\t' read -r cnt path; do
-      base="${allowed[$path]:-0}"
-      if [[ "$cnt" -gt "$base" ]]; then
-        echo "BOUNDARY REGRESSION: $path has $cnt production query site(s), baseline allows $base" >&2
-        fail=1
-      fi
+      echo "BOUNDARY VIOLATION: $path has $cnt production query site(s); zero allowed outside crates/persistence/db." >&2
+      fail=1
     done < <(collect)
 
     if [[ "$fail" -ne 0 ]]; then
       echo "" >&2
-      echo "DB boundary ratchet failed: new/raw SQL appeared outside crates/persistence/db." >&2
-      echo "Move the query into a persistence/db repository, or (if intentional and reviewed)" >&2
-      echo "regenerate the baseline with: scripts/check-db-boundary.sh --generate" >&2
+      echo "DB boundary guard failed: raw SQL is only allowed inside crates/persistence/db." >&2
+      echo "Add the query as a persistence/db repository method instead of an app-layer sqlx call." >&2
       exit 1
     fi
 
-    total="$(collect | awk -F'\t' '{s+=$1} END{print s+0}')"
-    files="$(collect | wc -l | tr -d ' ')"
-    echo "DB boundary OK — $files file(s), $total production query site(s) within baseline."
+    echo "DB boundary OK — 0 production query site(s) outside crates/persistence/db (sealed at zero)."
     ;;
 
   *)

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-catalog.test.ts — RESTRICT-catalog filter for the Target Planner
  * (task #40, spec 043 §4).
@@ -9,9 +12,15 @@
 
 import { describe, it, expect } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
-import { filterPlannerCatalog, isPlannerCatalogTarget } from './planner-catalog';
+import {
+  filterPlannerCatalog,
+  isPlannerCatalogTarget,
+} from './planner-catalog';
 
-function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
+function item(
+  primaryDesignation: string,
+  objectType = 'other',
+): TargetListItem {
   return {
     id: primaryDesignation,
     effectiveLabel: primaryDesignation,
@@ -20,6 +29,7 @@ function item(primaryDesignation: string, objectType = 'other'): TargetListItem 
     raDeg: 0,
     decDeg: 0,
     aliases: [],
+    sessionCount: 0,
   };
 }
 
@@ -69,7 +79,11 @@ describe('planner-catalog', () => {
       item('B 142', 'dark_nebula'),
     ];
     const result = filterPlannerCatalog(list);
-    expect(result.map((t) => t.primaryDesignation)).toEqual(['M 42', 'NGC 224', 'B 142']);
+    expect(result.map((t) => t.primaryDesignation)).toEqual([
+      'M 42',
+      'NGC 224',
+      'B 142',
+    ]);
   });
 
   it('matching is case-insensitive', () => {

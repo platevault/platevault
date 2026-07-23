@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * row-planning.ts — per-target planner astronomy derivation (spec 047).
  *
@@ -8,6 +11,18 @@
  *
  * `night === null` means the site gate is closed (no observing site yet); every
  * derived value is then the explicit unknown state, never a fabricated number.
+ *
+ * `geometryOverride` (#634): `TargetsTable`'s full-catalogue pass no longer
+ * computes lunar separation / opposition via the TS `astronomy-engine` calls
+ * below — it fetches them once per batch from the real Rust
+ * `target.moon_opposition.batch` command (never per-row round trips) and
+ * passes the looked-up result in explicitly (`null` = fetch not resolved yet
+ * / unknown coordinates, same "never fabricate" contract as everything else
+ * here). Every OTHER caller (`TargetDetailV2`'s single-target planner,
+ * `TargetsPage`'s synchronous full-catalogue filter-count pass, and this
+ * file's own tests) omits the 4th argument and keeps the original synchronous
+ * TS-ephemeris path unchanged — this is a purely additive, backward-compatible
+ * parameter, not a signature break.
  */
 
 import type { ObservingNight } from './moon-state';
@@ -26,6 +41,18 @@ import { nextOpposition } from './opposition';
 export interface RowCoords {
   raDeg: number | null;
   decDeg: number | null;
+}
+
+/**
+ * Real Moon geometry for one target (#634): lunar separation + next
+ * opposition, sourced from the batched Rust command instead of computed
+ * locally. `lunarSeparationDeg: null` mirrors the existing "unknown
+ * coordinates" convention (never a fabricated number).
+ */
+export interface RowMoonGeometry {
+  lunarSeparationDeg: number | null;
+  nextOppositionDate: string | null;
+  daysToOpposition: number | null;
 }
 
 /** Per-target planner astronomy (data-model.md §RowMoonPlanning). */
@@ -49,26 +76,58 @@ export interface RowMoonPlanning {
  * @param night - The shared observing night, or `null` when no site exists.
  * @param params - Active per-band Moon-avoidance parameters (Settings →
  *   Target Planner); defaults to the shipped table.
+ * @param geometryOverride - #634: when provided (even `null`), lunar
+ *   separation + opposition come from this pre-fetched batch result instead
+ *   of the local TS ephemeris — `TargetsTable`'s only call site. Omitted
+ *   (`undefined`, every other caller) preserves the original synchronous,
+ *   no-fetch TS computation.
  */
 export function deriveRowMoonPlanning(
   coords: RowCoords,
   night: ObservingNight | null,
   params: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
+  geometryOverride?: RowMoonGeometry | null,
 ): RowMoonPlanning {
   if (!night) return { ...UNKNOWN_ROW_PLANNING };
 
-  const separation = lunarSeparationDeg(coords.raDeg, coords.decDeg, night.moonVec);
-  const viability =
-    separation === null ? null : bandViability(separation, night.moonAgeFromFullDays, params);
-  const recommendation = deriveRecommendation(viability);
+  const geometry: RowMoonGeometry | null =
+    geometryOverride !== undefined
+      ? geometryOverride
+      : localGeometry(coords, night);
+  if (!geometry) return { ...UNKNOWN_ROW_PLANNING };
 
-  const opposition = nextOpposition(coords.raDeg, night.midnight);
+  const separation = geometry.lunarSeparationDeg;
+  const viability =
+    separation === null
+      ? null
+      : bandViability(separation, night.moonAgeFromFullDays, params);
+  const recommendation = deriveRecommendation(viability);
 
   return {
     lunarSeparationDeg: separation,
     bandViability: viability,
     recommendation,
-    nextOppositionDate: opposition ? opposition.date.toISOString().slice(0, 10) : null,
+    nextOppositionDate: geometry.nextOppositionDate,
+    daysToOpposition: geometry.daysToOpposition,
+  };
+}
+
+/** The original synchronous TS-ephemeris geometry (pre-#634 behavior). */
+function localGeometry(
+  coords: RowCoords,
+  night: ObservingNight,
+): RowMoonGeometry {
+  const separation = lunarSeparationDeg(
+    coords.raDeg,
+    coords.decDeg,
+    night.moonVec,
+  );
+  const opposition = nextOpposition(coords.raDeg, night.midnight);
+  return {
+    lunarSeparationDeg: separation,
+    nextOppositionDate: opposition
+      ? opposition.date.toISOString().slice(0, 10)
+      : null,
     daysToOpposition: opposition ? opposition.daysUntil : null,
   };
 }

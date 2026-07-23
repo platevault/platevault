@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * Regression test for the backlog defect: "Wizard duplicate-name error banner
@@ -17,11 +20,19 @@
  * it) so the remount/reset interaction actually reproduces the bug.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn().mockReturnValue(undefined),
+  useSearch: () => ({}),
 }));
 
 vi.mock('@/features/projects/store', () => ({
@@ -32,7 +43,10 @@ vi.mock('@/shared/toast', () => ({
   addToast: vi.fn(),
 }));
 
-const { mockListProjects } = vi.hoisted(() => ({ mockListProjects: vi.fn() }));
+const { mockListProjects, mockSessionsList } = vi.hoisted(() => ({
+  mockListProjects: vi.fn(),
+  mockSessionsList: vi.fn(),
+}));
 vi.mock('@/bindings/index', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/bindings/index')>();
   return {
@@ -40,6 +54,7 @@ vi.mock('@/bindings/index', async (importOriginal) => {
     commands: {
       ...original.commands,
       projectsList: mockListProjects,
+      sessionsList: mockSessionsList,
     },
   };
 });
@@ -47,9 +62,17 @@ vi.mock('@/bindings/index', async (importOriginal) => {
 // Stub every step EXCEPT StepName — the real StepName is what remounts and
 // fires the spurious reset()-driven onChange that caused the original bug.
 vi.mock('./StepSources', () => ({
-  StepSources: ({ onChange }: { onChange: (d: { selectedSessionIds: string[] }) => void }) => (
+  StepSources: ({
+    onChange,
+  }: {
+    onChange: (d: { selectedSessionIds: string[] }) => void;
+  }) => (
     <div data-testid="step-sources">
-      <button onClick={() => onChange({ selectedSessionIds: ['sess-001', 'sess-002'] })}>
+      <button
+        onClick={() =>
+          onChange({ selectedSessionIds: ['sess-001', 'sess-002'] })
+        }
+      >
         Select sessions
       </button>
     </div>
@@ -76,19 +99,34 @@ vi.mock('@/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/ui')>();
   return {
     ...actual,
-    WizardShell: ({ children, summary }: { children: React.ReactNode; summary?: React.ReactNode }) => (
+    WizardShell: ({
+      children,
+      summary,
+    }: {
+      children: React.ReactNode;
+      summary?: React.ReactNode;
+    }) => (
       <div data-testid="wizard-shell">
         <div data-testid="wizard-summary">{summary}</div>
         <div data-testid="wizard-content">{children}</div>
       </div>
     ),
-    Btn: ({ children, onClick, disabled, 'data-testid': testid }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 'data-testid'?: string }) => (
-      <button onClick={onClick} disabled={disabled} data-testid={testid}>{children}</button>
+    Btn: ({
+      children,
+      onClick,
+      disabled,
+      'data-testid': testid,
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+      'data-testid'?: string;
+    }) => (
+      <button onClick={onClick} disabled={disabled} data-testid={testid}>
+        {children}
+      </button>
     ),
   };
 });
 
-import React from 'react';
+import type React from 'react';
 import { WizardPage } from './WizardPage';
 
 const EXISTING_PROJECT = {
@@ -109,31 +147,58 @@ const EXISTING_PROJECT = {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.removeItem('alm-project-wizard-draft');
-  mockListProjects.mockResolvedValue({ status: 'ok', data: [EXISTING_PROJECT] });
+  mockListProjects.mockResolvedValue({
+    status: 'ok',
+    data: [EXISTING_PROJECT],
+  });
+  mockSessionsList.mockResolvedValue({ status: 'ok', data: [] });
 });
+
+function renderWizard() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <WizardPage />
+    </QueryClientProvider>,
+  );
+}
 
 async function advanceToReview(nameValue: string) {
   const nameInput = screen.getByLabelText('Project name');
   fireEvent.change(nameInput, { target: { value: nameValue } });
 
   fireEvent.click(screen.getByText(/Next: sources/i));
-  await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText('Select sessions'));
-  await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+  );
 
   fireEvent.click(screen.getByText(/Next: calibration/i));
-  await waitFor(() => expect(screen.getByTestId('step-calibration')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-calibration')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText(/Next: source views/i));
-  await waitFor(() => expect(screen.getByTestId('step-views')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-views')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText(/Next: naming/i));
-  await waitFor(() => expect(screen.getByTestId('step-layout')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-layout')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText(/Next: review/i));
-  await waitFor(() => expect(screen.getByTestId('step-review')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-review')).toBeInTheDocument(),
+  );
 }
 
 describe('WizardPage duplicate-name banner persistence (backlog defect)', () => {
   it('keeps the duplicate-name banner visible after StepName remounts on step 0, and only clears it once the name actually changes', async () => {
-    render(<WizardPage />);
+    renderWizard();
     // Same name, different case — the pre-check is case-insensitive.
     await advanceToReview('existing project');
 

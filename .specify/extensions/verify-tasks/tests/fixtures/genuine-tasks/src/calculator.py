@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """
 Calculator — T001, T002.
 All methods implemented and referenced by src/runner.py and src/app.py.

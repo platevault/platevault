@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Settings → Target Resolution (spec 035, T031).
 //
 // Replaces the old "Target Catalogs" pane (catalog manifest/minisign download

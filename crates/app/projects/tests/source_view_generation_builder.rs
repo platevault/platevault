@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 T011 — generation-plan builder integration test.
 //!
 //! `tasks.md` pointed at `crates/fs/planner/tests`, but the actual plan

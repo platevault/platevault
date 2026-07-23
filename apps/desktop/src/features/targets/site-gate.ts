@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * site-gate.ts — observing-site existence gate for the planner (spec 047, D7).
  *

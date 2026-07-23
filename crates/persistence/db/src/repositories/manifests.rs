@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for the `manifests` table (spec 024).
 //!
 //! Operates on the table from migration 0028.

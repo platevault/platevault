@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! One-time offline seed builder for spec 035 (SIMBAD Target Resolution, T015).
 //!
 //! Queries the SIMBAD TAP sync endpoint (CDS) and emits the bundled seed asset
@@ -256,16 +259,17 @@ fn ingest_prefix(
     by_oid: &mut BTreeMap<i64, SeedEntry>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let q = format!(
-        "SELECT DISTINCT b.oid, b.main_id, b.ra, b.dec, b.otype_txt \
+        "SELECT DISTINCT b.oid, b.main_id, b.ra, b.dec, b.otype_txt, f.V \
          FROM basic AS b JOIN ident AS i ON i.oidref = b.oid \
+         LEFT OUTER JOIN allfluxes AS f ON f.oidref = b.oid \
          WHERE i.id LIKE '{like}' AND b.ra IS NOT NULL AND b.dec IS NOT NULL"
     );
     let rows = tap_query(client, &q)?;
     let oids: Vec<i64> =
         rows.iter().filter_map(|r| parse_basic_row(r)).map(|(oid, ..)| oid).collect();
     for r in &rows {
-        if let Some((oid, main_id, ra, dec, otype)) = parse_basic_row(r) {
-            insert_base(by_oid, oid, &main_id, ra, dec, &otype);
+        if let Some((oid, main_id, ra, dec, otype, v_mag)) = parse_basic_row(r) {
+            insert_base(by_oid, oid, &main_id, ra, dec, &otype, v_mag);
         }
     }
     enrich_aliases(client, &oids, by_oid)?;
@@ -288,15 +292,16 @@ fn ingest_exact_ids(
             .collect::<Vec<_>>()
             .join(", ");
         let q = format!(
-            "SELECT DISTINCT b.oid, b.main_id, b.ra, b.dec, b.otype_txt \
+            "SELECT DISTINCT b.oid, b.main_id, b.ra, b.dec, b.otype_txt, f.V \
              FROM basic AS b JOIN ident AS i ON i.oidref = b.oid \
+             LEFT OUTER JOIN allfluxes AS f ON f.oidref = b.oid \
              WHERE i.id IN ({list}) AND b.ra IS NOT NULL AND b.dec IS NOT NULL"
         );
         let rows = tap_query(client, &q)?;
         let mut oids = Vec::new();
         for r in &rows {
-            if let Some((oid, main_id, ra, dec, otype)) = parse_basic_row(r) {
-                insert_base(by_oid, oid, &main_id, ra, dec, &otype);
+            if let Some((oid, main_id, ra, dec, otype, v_mag)) = parse_basic_row(r) {
+                insert_base(by_oid, oid, &main_id, ra, dec, &otype, v_mag);
                 oids.push(oid);
             }
         }
@@ -306,6 +311,7 @@ fn ingest_exact_ids(
 }
 
 /// Insert (or keep) the base row for an object.
+#[allow(clippy::too_many_arguments)]
 fn insert_base(
     by_oid: &mut BTreeMap<i64, SeedEntry>,
     oid: i64,
@@ -313,6 +319,7 @@ fn insert_base(
     ra: f64,
     dec: f64,
     otype: &str,
+    v_mag: Option<f64>,
 ) {
     let primary = collapse_spaces(main_id);
     by_oid.entry(oid).or_insert_with(|| SeedEntry {
@@ -322,6 +329,7 @@ fn insert_base(
         object_type: map_otype(otype),
         ra_deg: ra,
         dec_deg: dec,
+        v_mag,
         aliases: vec![SeedAlias { alias: primary, kind: AliasKind::Designation }],
     });
 }

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * DetailPanel unit tests — tasks #100/#99/#101, spec 043 §4.
@@ -41,7 +44,9 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
         body
       </DetailPanel>,
     );
-    expect(screen.getByText('Ha · 120 frames · 300s · 2026-01-15')).toBeDefined();
+    expect(
+      screen.getByText('Ha · 120 frames · 300s · 2026-01-15'),
+    ).toBeDefined();
   });
 
   it('3. renders titleExtra alongside the title', () => {
@@ -90,7 +95,11 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     const { container } = render(
       <DetailPanel
         title={<span data-testid="dp-title">NGC 7000</span>}
-        actions={<button type="button" data-testid="dp-action">Confirm</button>}
+        actions={
+          <button type="button" data-testid="dp-action">
+            Confirm
+          </button>
+        }
       >
         body
       </DetailPanel>,
@@ -123,49 +132,58 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     ).not.toThrow();
   });
 
-  it('10. facts prop: renders facts content', () => {
-    render(
-      <DetailPanel
-        title="NGC 7000"
-        facts={<span data-testid="facts-content">Facts KV here</span>}
-      >
+  // ── The scroll-region contract (#1107) ────────────────────────────────────
+  //
+  // These replace the old facts/aux slot tests. Those slots were withdrawn
+  // (spec 054): no caller ever passed one, so the wrapper they gated — the
+  // panel's ONLY scroll region — was never rendered in production and content
+  // overflowing a docked panel became unreachable. The tests passed anyway,
+  // because they exercised a code path the app never took. Pin the real
+  // contract instead: the content region is ALWAYS present.
+
+  it('10. always renders the content region, with no slots passed', () => {
+    const { container } = render(
+      <DetailPanel title="NGC 7000">
         <span data-testid="content-body">Content here</span>
       </DetailPanel>,
     );
-    expect(screen.getByTestId('facts-content')).toBeDefined();
-    expect(screen.getByTestId('content-body')).toBeDefined();
+    const content = container.querySelector('.pv-detailpanel__content');
+    expect(content).not.toBeNull();
+    expect(
+      content?.contains(
+        container.querySelector('[data-testid="content-body"]'),
+      ),
+    ).toBe(true);
   });
 
-  it('11. facts prop: facts column and children column are in separate DOM regions', () => {
+  it('11. the content region wraps children — it is not bypassed (#1107)', () => {
+    // The regression this pins: children rendered as a bare sibling of the
+    // header, with nothing establishing overflow, so the ancestor
+    // .pv-listpage__detail-body (overflow:hidden) silently clipped them.
     const { container } = render(
-      <DetailPanel
-        title="NGC 7000"
-        facts={<span data-testid="facts-node">Facts</span>}
-      >
+      <DetailPanel title="NGC 7000">
         <span data-testid="content-node">Content</span>
       </DetailPanel>,
     );
-    const factsEl = container.querySelector('[data-testid="facts-node"]');
-    const contentEl = container.querySelector('[data-testid="content-node"]');
-    expect(factsEl).not.toBeNull();
-    expect(contentEl).not.toBeNull();
-    // The cols wrapper must be present.
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols).not.toBeNull();
-    // Facts must be inside the facts aside; content must NOT be inside it.
-    const factsAside = container.querySelector('.alm-detailpanel__facts');
-    expect(factsAside).not.toBeNull();
-    expect(factsAside?.contains(factsEl)).toBe(true);
-    expect(factsAside?.contains(contentEl)).toBe(false);
+    const node = container.querySelector('[data-testid="content-node"]');
+    const content = container.querySelector('.pv-detailpanel__content');
+    expect(node).not.toBeNull();
+    expect(content?.contains(node)).toBe(true);
+    // Exactly one content region — a second would mean nested scrollbars.
+    expect(container.querySelectorAll('.pv-detailpanel__content')).toHaveLength(
+      1,
+    );
   });
 
-  it('12. without facts or aux prop, no cols wrapper is rendered', () => {
+  it('12. the withdrawn facts/aux grid is gone (#1107)', () => {
     const { container } = render(
       <DetailPanel title="NGC 7000">
         <span>just children</span>
       </DetailPanel>,
     );
-    expect(container.querySelector('.alm-detailpanel__cols')).toBeNull();
+    expect(container.querySelector('.pv-detailpanel__cols')).toBeNull();
+    expect(container.querySelector('.pv-detailpanel__facts')).toBeNull();
+    expect(container.querySelector('.pv-detailpanel__aux')).toBeNull();
     expect(screen.getByText('just children')).toBeDefined();
   });
 
@@ -179,111 +197,100 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     ).not.toThrow();
   });
 
-  it('16. aux prop: renders aux content', () => {
-    render(
-      <DetailPanel
-        title="NGC 7000"
-        aux={<span data-testid="aux-content">Aux here</span>}
-      >
-        <span data-testid="content-body">Content here</span>
-      </DetailPanel>,
-    );
-    expect(screen.getByTestId('aux-content')).toBeDefined();
-    expect(screen.getByTestId('content-body')).toBeDefined();
-  });
-
-  it('17. aux prop: aux column is structurally separate from content', () => {
+  it('16. variant modifier lands on the content region', () => {
     const { container } = render(
-      <DetailPanel
-        title="NGC 7000"
-        aux={<span data-testid="aux-node">Aux</span>}
-      >
+      <DetailPanel title="NGC 7000" variant="inbox">
         <span data-testid="content-node">Content</span>
       </DetailPanel>,
     );
-    const auxEl = container.querySelector('[data-testid="aux-node"]');
-    const contentEl = container.querySelector('[data-testid="content-node"]');
-    expect(auxEl).not.toBeNull();
-    expect(contentEl).not.toBeNull();
-    // The cols wrapper and aux aside must be present.
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols).not.toBeNull();
-    const auxAside = container.querySelector('.alm-detailpanel__aux');
-    expect(auxAside).not.toBeNull();
-    expect(auxAside?.contains(auxEl)).toBe(true);
-    // Content must NOT be inside the aux aside.
-    expect(auxAside?.contains(contentEl)).toBe(false);
+    const content = container.querySelector('.pv-detailpanel__content');
+    expect(content?.classList.contains('pv-detailpanel--inbox')).toBe(true);
   });
 
-  it('18. aux only (no facts): renders cols wrapper with has-aux modifier', () => {
+  it('17. fill mode still renders exactly one content region', () => {
     const { container } = render(
-      <DetailPanel
-        title="NGC 7000"
-        aux={<span data-testid="aux-node">Aux</span>}
-      >
+      <DetailPanel fill title="NGC 7000">
         <span data-testid="content-node">Content</span>
       </DetailPanel>,
     );
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols).not.toBeNull();
-    expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
-    expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(false);
-  });
-
-  it('19. 3-zone: facts + children + aux are all in separate DOM regions', () => {
-    const { container } = render(
-      <DetailPanel
-        title="NGC 7000"
-        facts={<span data-testid="facts-node">Facts</span>}
-        aux={<span data-testid="aux-node">Aux</span>}
-      >
-        <span data-testid="content-node">Content</span>
-      </DetailPanel>,
+    expect(container.querySelector('.pv-detail--fill')).not.toBeNull();
+    expect(container.querySelectorAll('.pv-detailpanel__content')).toHaveLength(
+      1,
     );
-    const factsEl = container.querySelector('[data-testid="facts-node"]');
-    const contentEl = container.querySelector('[data-testid="content-node"]');
-    const auxEl = container.querySelector('[data-testid="aux-node"]');
-    expect(factsEl).not.toBeNull();
-    expect(contentEl).not.toBeNull();
-    expect(auxEl).not.toBeNull();
-
-    const factsAside = container.querySelector('.alm-detailpanel__facts');
-    const contentDiv = container.querySelector('.alm-detailpanel__content');
-    const auxAside = container.querySelector('.alm-detailpanel__aux');
-
-    expect(factsAside).not.toBeNull();
-    expect(contentDiv).not.toBeNull();
-    expect(auxAside).not.toBeNull();
-
-    // Each node is in exactly its own region.
-    expect(factsAside?.contains(factsEl)).toBe(true);
-    expect(factsAside?.contains(contentEl)).toBe(false);
-    expect(factsAside?.contains(auxEl)).toBe(false);
-
-    expect(contentDiv?.contains(contentEl)).toBe(true);
-    expect(contentDiv?.contains(factsEl)).toBe(false);
-    expect(contentDiv?.contains(auxEl)).toBe(false);
-
-    expect(auxAside?.contains(auxEl)).toBe(true);
-    expect(auxAside?.contains(factsEl)).toBe(false);
-    expect(auxAside?.contains(contentEl)).toBe(false);
-
-    // Both modifiers present.
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(true);
-    expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
   });
 });
 
 describe('FactsKV', () => {
   it('14. renders label and value', () => {
-    render(<dl><FactsKV label="Target" value="NGC 7000" /></dl>);
+    render(
+      <dl>
+        <FactsKV label="Target" value="NGC 7000" />
+      </dl>,
+    );
     expect(screen.getByText('Target')).toBeDefined();
     expect(screen.getByText('NGC 7000')).toBeDefined();
   });
 
   it('15. renders optional provenance label', () => {
-    render(<dl><FactsKV label="Filter" value="Ha" provenance="Inferred" /></dl>);
+    render(
+      <dl>
+        <FactsKV label="Filter" value="Ha" provenance="Inferred" />
+      </dl>,
+    );
     expect(screen.getByText('Inferred')).toBeDefined();
+  });
+
+  // ── Scroll-containment contract — the #816 regression pin (T004, #1069) ───
+  //
+  // #816 was "Target detail panel: aliases/notes/coverage/links/back-button
+  // silently clipped by DetailPane fill-mode overflow:hidden". Its original fix
+  // was a DIRECT-CHILD CSS rule in redesign-detail.css:
+  //
+  //     .pv-detail--fill > .pv-planner__scroll { flex:1; min-height:0; overflow-y:auto }
+  //
+  // #1107 moved that contract OUT one level. The root cause of #816 was that
+  // DetailPanel rendered `children` as a bare sibling of the header with no
+  // scroll region, so each feature had to supply its own — Targets via
+  // .pv-planner__scroll, Inbox via .pv-inbox-detail__scroll. DetailPanel now
+  // always renders .pv-detailpanel__content and that region owns the scrolling
+  // for every page, so the per-feature rules were retired (keeping them would
+  // nest a second scroller inside the shared one).
+  //
+  // So the invariant is no longer "planner scroll is a direct child of fill",
+  // it is "SOME single region between the panel root and the content owns the
+  // scrolling". Pin that, and pin that it is exactly one.
+  //
+  // jsdom has no layout engine, so these assert the STRUCTURAL contract the CSS
+  // depends on, not actual pixel scrolling. Live measurement at a 390px side
+  // dock is in the #1107 PR: Calibration 191px, Sessions 522px, Projects 1216px
+  // of previously unreachable content, all 0 after.
+
+  it('19. fill-mode content is wrapped by the shared scroll region (#816 → #1107)', () => {
+    const { container } = render(
+      <DetailPanel fill title="Selected target">
+        <div className="pv-planner__scroll">tall unstructured content</div>
+      </DetailPanel>,
+    );
+    const content = container.querySelector(
+      '.pv-detail--fill > .pv-detailpanel__content',
+    );
+    // The shared region is a direct child of the fill pane, so it inherits the
+    // bounded flex height the old direct-child rule depended on.
+    expect(content).not.toBeNull();
+    // The feature's own wrapper still exists, but now INSIDE that region.
+    expect(content?.querySelector('.pv-planner__scroll')).not.toBeNull();
+  });
+
+  it('20. exactly one scroll region — no nested scrollbars (#1107)', () => {
+    const { container } = render(
+      <DetailPanel fill title="Selected target">
+        <div className="pv-planner__scroll">tall unstructured content</div>
+      </DetailPanel>,
+    );
+    // Regression guard: reinstating a per-feature scroll rule alongside the
+    // shared one is what would produce double scrollbars.
+    expect(container.querySelectorAll('.pv-detailpanel__content')).toHaveLength(
+      1,
+    );
   });
 });

@@ -109,6 +109,13 @@ UI-visible; verification is test-driven plus verify-on-windows).
 
 ### Source Code (repository root)
 
+> **Reconciliation note (2026-07-19, issue #764)**: the `SettingsState`
+> struct file path below was wrong — corrected to
+> `crates/domain/core/src/settings.rs` (`contracts_core::settings`
+> re-exports it; `crates/app/settings/` only holds the descriptor table
+> that operates on it, per `crates/app/settings/src/descriptors.rs`'s own
+> module doc).
+
 ```text
 apps/desktop/src/features/targets/
 ├── astro/                          # NEW — Track A astronomy (frontend-only)
@@ -128,8 +135,11 @@ apps/desktop/src/features/targets/
 apps/desktop/src/features/settings/
 └── PlannerSettings.tsx             # MODIFIED — compact per-band (distance,width) table + reset
 
-crates/app/settings/src/            # MODIFIED — descriptor + validation + SettingsState field
-crates/contracts/core/src/          # MODIFIED — SettingsState DTO field (serde default)
+crates/app/settings/src/            # MODIFIED — descriptor + validation
+crates/domain/core/src/settings.rs  # MODIFIED — SettingsState field (canonical
+                                     #   struct definition; NOT crates/app/settings/)
+crates/contracts/core/src/          # MODIFIED — re-exports SettingsState from domain_core
+
 specs/018-settings-configuration-model/contracts/
                                     # MODIFIED — key enum additions (get/update/restore-defaults)
 apps/desktop/messages/              # MODIFIED — new i18n strings
@@ -287,3 +297,11 @@ Checked against `docs/development/track-b-044-plan-handover-2026-07-04.md`
 ## Complexity Tracking
 
 No constitution violations; table not required.
+
+## Iterate 2026-07-15 — planner observability UX (pointer)
+
+Spec-side changes only (FR-015/FR-016 supersession, FR-020 consumer-side
+passband aggregation, FR-014 sizing annotation). All implementation lands
+under spec 044's Phase 10 (tasks T040–T049). Decision record:
+`docs/research/044-047-planner-observability-ux-iterate.md` (approved
+2026-07-14, PR #819).

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * AppErrorBoundary tests — spec 028 C2.
@@ -27,7 +30,11 @@ afterEach(() => {
 
 // A component that throws on render.
 // Returns `never` so TypeScript allows use as JSX.
-function ThrowingChild({ message = 'Test render error' }: { message?: string }): never {
+function ThrowingChild({
+  message = 'Test render error',
+}: {
+  message?: string;
+}): never {
   throw new Error(message);
 }
 
@@ -43,7 +50,9 @@ describe('AppErrorBoundary', () => {
         <ThrowingChild />
       </AppErrorBoundary>,
     );
-    expect(screen.getByTestId('app-error-boundary-fallback')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('app-error-boundary-fallback'),
+    ).toBeInTheDocument();
   });
 
   it('2. shows the error message in the fallback', () => {
@@ -70,7 +79,9 @@ describe('AppErrorBoundary', () => {
     );
 
     // Fallback is shown
-    expect(screen.getByTestId('app-error-boundary-fallback')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('app-error-boundary-fallback'),
+    ).toBeInTheDocument();
 
     // Fix the error condition before reset
     shouldThrow = false;
@@ -86,14 +97,18 @@ describe('AppErrorBoundary', () => {
     );
 
     expect(screen.getByTestId('recovered')).toBeInTheDocument();
-    expect(screen.queryByTestId('app-error-boundary-fallback')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('app-error-boundary-fallback'),
+    ).not.toBeInTheDocument();
   });
 
   it('4. uses custom fallback prop when provided', () => {
     const customFallback = (error: Error, reset: () => void) => (
       <div data-testid="custom-fallback">
         <span>{error.message}</span>
-        <button onClick={reset} data-testid="custom-reset">Reset</button>
+        <button onClick={reset} data-testid="custom-reset">
+          Reset
+        </button>
       </div>
     );
 
@@ -105,7 +120,9 @@ describe('AppErrorBoundary', () => {
 
     expect(screen.getByTestId('custom-fallback')).toBeInTheDocument();
     expect(screen.getByText('Custom error')).toBeInTheDocument();
-    expect(screen.queryByTestId('app-error-boundary-fallback')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('app-error-boundary-fallback'),
+    ).not.toBeInTheDocument();
   });
 
   it('5. non-throwing children render normally', () => {
@@ -115,6 +132,8 @@ describe('AppErrorBoundary', () => {
       </AppErrorBoundary>,
     );
     expect(screen.getByTestId('safe-child')).toBeInTheDocument();
-    expect(screen.queryByTestId('app-error-boundary-fallback')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('app-error-boundary-fallback'),
+    ).not.toBeInTheDocument();
   });
 });

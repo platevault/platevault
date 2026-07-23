@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Canonical `(entity_type, from, to) → requires_plan` table (spec 002 T044).
 //!
 //! Authored from data-model.md §Plan-Requirement Edge Table. Callers MUST NOT

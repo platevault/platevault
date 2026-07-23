@@ -371,3 +371,21 @@ apps/desktop/playwright-report/
 
 # Paraglide compiled message catalog (spec 046) — regenerated on build/typecheck
 apps/desktop/src/paraglide/
+
+# design-sync (claude.ai/design) — staged converter, build output, machine state
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+apps/desktop/.ds-css/
+.scratch.md
+
+# Orchestration run stores (journey campaigns)
+.orchestration/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/

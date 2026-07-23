@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // shell.jsx — Shared primitives + AppFrame (desktop window chrome + nav variants)
 // Mid-fi grayscale style. Tweak-aware (density, sketchy, annotations, nav pattern).
 

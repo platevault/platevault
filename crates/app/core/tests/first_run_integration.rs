@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! First-run integration tests — feature 037 (Layer-1 real-backend).
 //!
 //! Covers:
@@ -22,7 +25,7 @@ use tempfile::tempdir;
 
 #[tokio::test]
 async fn register_source_persists_and_reads_back() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let dir = tempdir().expect("tempdir");
     let path = dir.path().to_str().expect("utf8 path").to_owned();
@@ -35,7 +38,7 @@ async fn register_source_persists_and_reads_back() {
         organization_state: OrganizationState::Organized,
     };
 
-    let resp = first_run::register_source(db.pool(), &req)
+    let resp = first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source should succeed for a valid temp dir");
 
@@ -56,7 +59,7 @@ async fn register_source_persists_and_reads_back() {
 
 #[tokio::test]
 async fn register_source_rejects_duplicate_same_kind() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let dir = tempdir().expect("tempdir");
     let path = dir.path().to_str().expect("utf8 path").to_owned();
@@ -70,10 +73,10 @@ async fn register_source_rejects_duplicate_same_kind() {
     };
 
     // First registration must succeed.
-    first_run::register_source(db.pool(), &req).await.expect("first register should succeed");
+    first_run::register_source(db.pool(), &bus, &req).await.expect("first register should succeed");
 
     // Second registration of the same path + kind must fail.
-    let err = first_run::register_source(db.pool(), &req)
+    let err = first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect_err("duplicate registration must be rejected");
 
@@ -91,7 +94,7 @@ async fn register_source_rejects_duplicate_same_kind() {
 
 #[tokio::test]
 async fn register_source_rejects_nonexistent_path() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let req = RegisterSourceRequest {
         kind: SourceKind::Calibration,
@@ -102,7 +105,7 @@ async fn register_source_rejects_nonexistent_path() {
         organization_state: OrganizationState::Organized,
     };
 
-    let err = first_run::register_source(db.pool(), &req)
+    let err = first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect_err("register with non-existent path must fail");
 
@@ -117,7 +120,7 @@ async fn register_source_rejects_nonexistent_path() {
 
 #[tokio::test]
 async fn seed_source_protection_sets_protected_for_non_inbox() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let dir = tempdir().expect("tempdir");
     let path = dir.path().to_str().expect("utf8 path").to_owned();
@@ -130,7 +133,8 @@ async fn seed_source_protection_sets_protected_for_non_inbox() {
         scan_depth: ScanDepth::Recursive,
         organization_state: OrganizationState::Organized,
     };
-    let resp = first_run::register_source(db.pool(), &req).await.expect("register should succeed");
+    let resp =
+        first_run::register_source(db.pool(), &bus, &req).await.expect("register should succeed");
 
     // Seed the default protection for this (non-inbox) source.
     protection::seed_source_protection(db.pool(), &resp.source_id, "light_frames")
@@ -150,4 +154,96 @@ async fn seed_source_protection_sets_protected_for_non_inbox() {
         "non-inbox source protection level must default to 'protected', got: {}",
         protection_resp.level.as_str(),
     );
+}
+
+/// Issue #730 regression: `register_source` — the real add-source entry
+/// point, not a direct `seed_source_protection` call — must seed protection
+/// itself. Without the fix, an Inbox source falls through to the flat global
+/// default (`protected`) instead of `unprotected` per the Defaults Table.
+#[tokio::test]
+async fn register_source_seeds_unprotected_for_inbox() {
+    let (db, _repo, bus) = support::setup().await;
+
+    let dir = tempdir().expect("tempdir");
+    let path = dir.path().to_str().expect("utf8 path").to_owned();
+
+    let req = RegisterSourceRequest {
+        kind: SourceKind::Inbox,
+        path,
+        kind_subtype: None,
+        scan_depth: ScanDepth::Recursive,
+        organization_state: OrganizationState::Unorganized,
+    };
+    let resp =
+        first_run::register_source(db.pool(), &bus, &req).await.expect("register should succeed");
+
+    // No explicit seed_source_protection call here — `register_source` itself
+    // must have seeded it.
+    let get_req = SourceProtectionGetRequest { source_id: Some(resp.source_id.clone()) };
+    let protection_resp = protection::get_source_protection(db.pool(), &get_req)
+        .await
+        .expect("get_source_protection should succeed");
+
+    assert_eq!(
+        protection_resp.level.as_str(),
+        "unprotected",
+        "register_source must auto-seed an inbox source to 'unprotected', got: {}",
+        protection_resp.level.as_str(),
+    );
+    assert!(
+        !protection_resp.inherits_default,
+        "an explicit seed row must exist, not fall through to the global default"
+    );
+}
+
+/// Issue #730 regression: `register_source_batch` must also seed protection
+/// per successfully registered item, not only the single-register path.
+#[tokio::test]
+async fn register_source_batch_seeds_protection_per_item() {
+    let (db, _repo, bus) = support::setup().await;
+
+    let inbox_dir = tempdir().expect("tempdir");
+    let raw_dir = tempdir().expect("tempdir");
+
+    let batch_req = contracts_core::first_run::RegisterSourceBatchRequest {
+        sources: vec![
+            RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: inbox_dir.path().to_str().expect("utf8 path").to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            },
+            RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: raw_dir.path().to_str().expect("utf8 path").to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        ],
+    };
+
+    let resp = first_run::register_source_batch(db.pool(), &bus, &batch_req)
+        .await
+        .expect("batch register should succeed");
+
+    let inbox_id = resp.items[0].source_id.clone().expect("inbox item must have a source_id");
+    let raw_id = resp.items[1].source_id.clone().expect("raw item must have a source_id");
+
+    let inbox_level = protection::get_source_protection(
+        db.pool(),
+        &SourceProtectionGetRequest { source_id: Some(inbox_id) },
+    )
+    .await
+    .expect("get_source_protection should succeed");
+    assert_eq!(inbox_level.level.as_str(), "unprotected");
+
+    let raw_level = protection::get_source_protection(
+        db.pool(),
+        &SourceProtectionGetRequest { source_id: Some(raw_id) },
+    )
+    .await
+    .expect("get_source_protection should succeed");
+    assert_eq!(raw_level.level.as_str(), "protected");
 }

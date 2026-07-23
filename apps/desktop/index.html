@@ -3,37 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 16px favicon reduction (bold frame + 3-star asterism) per
+         handoff/assets/README.md: pv-mark-favicon.svg is for 16px ONLY,
+         single-tone #f0ebe2 to match the browser-tab treatment in
+         BrandAssets.dc.html §03. -->
     <link
       rel="icon"
-      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="5" fill="%232f4f43"/><text x="16" y="20" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="%23dff4eb">ALM</text></svg>'
+      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><g transform="rotate(-9 32 32)"><path d="M20 9 H49 A6 6 0 0 1 55 15 V49 A6 6 0 0 1 49 55 H15 A6 6 0 0 1 9 49 V20 Z" fill="none" stroke="%23f0ebe2" stroke-width="5" stroke-linejoin="round"/><path d="M23 26 L32 35 L43 26 M32 35 L29 45" fill="none" stroke="%23f0ebe2" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><g fill="%23f0ebe2"><path d="M31 27.6 l1.9 5 5 1.9 -5 1.9 -1.9 5 -1.9 -5 -5 -1.9 5 -1.9 z"/><circle cx="23" cy="26" r="3"/><circle cx="43" cy="26" r="3"/><circle cx="29" cy="45" r="2.6"/></g></g></svg>'
     />
-    <title>Astro Library Manager</title>
-
-    <!-- Font preconnect -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-
-    <!-- Inter — UI font -->
-    <link
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    <title>PlateVault</title>
+    <!-- Share-preview meta. og:image is generate-og-image.mjs's output
+         (public/brand/og-image.png, wired as the `og:generate` package
+         script) — a relative path since this app has no public hostname to
+         hardcode; a future hosted surface (docs site, release notes) should
+         resolve it against its own origin. -->
+    <meta property="og:title" content="PlateVault" />
+    <meta
+      property="og:description"
+      content="Organizes and documents an astrophotography library — acquisition, calibration, target, and project metadata — without replacing PixInsight or other processing tools."
     />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-    />
-
-    <!-- JetBrains Mono — paths / code font -->
-    <link
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
-    />
+    <meta property="og:image" content="/brand/og-image.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>

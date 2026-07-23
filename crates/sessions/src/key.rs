@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! T033a — `session_key` derivation + `observing_night` local-solar-noon
 //! algorithm.
 //!
@@ -7,7 +10,7 @@
 //! the spec-018 settings field rather than guessing.
 
 use thiserror::Error;
-use time::{Date, Month, OffsetDateTime, UtcOffset};
+use time::{Date, OffsetDateTime, UtcOffset};
 
 /// Observer location subset needed for the night calculation.
 #[derive(Clone, Debug)]
@@ -66,30 +69,46 @@ pub fn session_key(
     Ok(format!("{target_id}|{filter}|{binning}|{gain}|{night}"))
 }
 
+/// The fields encoded in a [`session_key`] string.
+///
+/// Blank segments are `None` so callers can layer their own fallbacks (e.g.
+/// `acquisition_fingerprint`) without re-checking for empty strings.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionKeyParts {
+    pub target: Option<String>,
+    pub filter: Option<String>,
+    pub binning: Option<String>,
+    pub gain: Option<String>,
+    pub night: Option<String>,
+}
+
+/// Split a stored session key back into its fields — the inverse of
+/// [`session_key`] and the single supported reader of that format.
+///
+/// A key with fewer than five segments yields `None` for the missing tail;
+/// any extra `|` beyond the fourth stays inside `night`. Legacy JSON-object
+/// keys are deliberately NOT handled here: that pre-035 shape is an app-layer
+/// compatibility concern, not part of this format.
+#[must_use]
+pub fn parse_session_key(key: &str) -> SessionKeyParts {
+    let mut parts =
+        key.splitn(5, '|').map(|s| if s.is_empty() { None } else { Some(s.to_owned()) });
+    SessionKeyParts {
+        target: parts.next().flatten(),
+        filter: parts.next().flatten(),
+        binning: parts.next().flatten(),
+        gain: parts.next().flatten(),
+        night: parts.next().flatten(),
+    }
+}
+
 fn previous_day(d: Date) -> Date {
     d.previous_day().unwrap_or(d)
 }
 
 fn format_date_iso(d: Date) -> String {
-    let month = month_number(d.month());
+    let month = u8::from(d.month());
     format!("{:04}-{:02}-{:02}", d.year(), month, d.day())
-}
-
-const fn month_number(m: Month) -> u8 {
-    match m {
-        Month::January => 1,
-        Month::February => 2,
-        Month::March => 3,
-        Month::April => 4,
-        Month::May => 5,
-        Month::June => 6,
-        Month::July => 7,
-        Month::August => 8,
-        Month::September => 9,
-        Month::October => 10,
-        Month::November => 11,
-        Month::December => 12,
-    }
 }
 
 #[cfg(test)]
@@ -158,6 +177,21 @@ mod tests {
         )
         .unwrap();
         assert_eq!(key, "M31|Lum|1x1|100|2026-03-15");
+    }
+
+    #[test]
+    fn parse_session_key_round_trips_and_blanks_are_none() {
+        let parts = parse_session_key("M31|Lum|1x1|100|2026-03-15");
+        assert_eq!(parts.target.as_deref(), Some("M31"));
+        assert_eq!(parts.filter.as_deref(), Some("Lum"));
+        assert_eq!(parts.night.as_deref(), Some("2026-03-15"));
+
+        // An unfiltered frame writes an empty segment, not a missing one.
+        let blank = parse_session_key("M31||1x1|100|2026-03-15");
+        assert_eq!(blank.filter, None);
+
+        // A short/foreign key yields None rather than panicking.
+        assert_eq!(parse_session_key("KEY").filter, None);
     }
 
     #[test]

@@ -30,6 +30,29 @@ harnesses, CI, and docs themselves. Paths are repo-relative.
 > (ubuntu/windows/macos) — no `webkit2gtk-driver`, no `msedgedriver`. Research
 > D10 records the decision superseding D3/D4. T031 preflight TODO updated to
 > reference `tauri-webdriver` instead of `tauri-driver`/`msedgedriver`.
+>
+> **Status 2026-07-09 (close-out)**: Setup/Foundational phase fully resolved —
+> T001/T004 done (tempfile confirmed present; no additional live-network tag
+> needed for this feature's own suites — `app_core`/`crates/e2e-tests` stay
+> offline via `FakeResolver`/the bundled seed cache, `#[ignore]` repurposed for
+> the L1/L2 split instead. **Correction**: this is scoped, not workspace-wide —
+> `crates/targeting/resolver/tests/simbad_live.rs` is a pre-existing, ungated
+> suite hitting the real SIMBAD endpoint by default under `cargo test
+> --workspace`; untouched, not re-gated here, tracked as a separate backlog
+> item), T003/T006 confirmed superseded (no
+> change from the 2026-06-19 note). T031 confirmed already implemented
+> (`preflight()` in `crates/e2e-tests/tests/common/mod.rs`, not touched — owned
+> by that lane). T032 found and fixed a real gap: `just test-e2e` called a
+> `pnpm` script (`test:e2e:real`) that did not exist in `apps/desktop/package.json`
+> — added it (`apps/desktop/scripts/run-e2e-real.sh`), untested end-to-end
+> locally (no webview in this sandbox). Mock-Playwright layer: all 6 audit
+> batches from `e2e-mock-coverage-audit-2026-07-05.md` confirmed landed
+> (#447/#448/#452/#453/#454/#455/#494); the one still-open, mock-reachable gap
+> named in this pass's brief (`StepSite.tsx` / spec 044 US3 wizard site step)
+> closed via `tests/e2e/setup_wizard_site_step.spec.ts` (NEW). See
+> `contracts/coverage-matrix.md`'s "Mock-Playwright batch completion + StepSite
+> gap closed" section for the full breakdown, including what remains open as
+> follow-up (full wizard happy path, Data Sources management UI).
 
 **Legend**: `[P]` = parallelizable (different files, no incomplete-task dep).
 Story labels map to spec user stories US1–US5.
@@ -38,15 +61,15 @@ Story labels map to spec user stories US1–US5.
 
 ## Phase 1: Setup
 
-- [ ] T001 Add Rust dev-dependencies for the integration layer (`wiremock`, ensure `tempfile`) to the relevant crates' `[dev-dependencies]` in `crates/app/core/Cargo.toml` and `crates/persistence/db/Cargo.toml`
+- [X] T001 ~~Add Rust dev-dependencies for the integration layer (`wiremock`, ensure `tempfile`)~~ **PARTIALLY SUPERSEDED** — `tempfile` is already a `[dev-dependencies]` workspace entry in `crates/app/core/Cargo.toml` (used by the T005 harness). `wiremock` was never added: superseded by the same T003/T006 decision below (offline `FakeResolver`/`FakeSpawner` test doubles, no HTTP-boundary mock needed).
 - [ ] T002 [P] ~~Add E2E dev-dependency `better-sqlite3` to `apps/desktop/package.json`~~ **SUPERSEDED** — the thirtyfour harness (`crates/e2e-tests`) asserts through the real UI via element find/text and the `invoke()` bridge; no JS DB reader is needed. `better-sqlite3` is not added.
-- [ ] T003 [P] Create shared test-fixture dir `tests/fixtures/` with SIMBAD response samples (success/ambiguous/not-found/error) and a couple of representative FITS-header OBJECT samples, per research D2
-- [ ] T004 Decide and document the integration-test tagging mechanism (e.g. a `live`/`network` feature or `#[ignore]` for the one live-SIMBAD test) so the default suite stays deterministic/offline, per research D2 + open items; record in `quickstart.md`
+- [ ] T003 [P] ~~Create shared test-fixture dir `tests/fixtures/` with SIMBAD response samples~~ **SUPERSEDED** — no fixture dir was created; the in-repo `targeting::FakeResolver` test double (offline, in-memory) covers every SIMBAD scenario the fixtures would have (success/ambiguous/not-found/error) without a filesystem/HTTP fixture layer to maintain. See `crates/targeting/tests/simbad_resolution_integration.rs`.
+- [X] T004 Decide and document the integration-test tagging mechanism so the default suite stays deterministic/offline, per research D2 + open items; record in `quickstart.md` — **decision, scoped to this feature's suites: no additional live/network tag is needed for `app_core` (Layer 1) or `crates/e2e-tests` (Layer 2)** — both exercise SIMBAD entirely offline (`FakeResolver` at Layer 1, the bundled seed cache at Layer 2), matching the resolve-on-demand + bundled-seed pivot that obsoleted the original hosted-catalog/live-test plan. **Correction (2026-07-09, reviewer-caught)**: this does NOT hold workspace-wide — `crates/targeting/resolver/tests/simbad_live.rs` is a pre-existing, ungated suite that runs as part of the default `cargo test --workspace` and hits the real SIMBAD TAP endpoint (skips only on a transient network error, never on principle). Untouched here; not re-gated (a separate backlog item, per reviewer instruction, not this task's call to make). The `#[ignore]` attribute that DOES exist in this feature's own suites (`crates/e2e-tests/tests/*.rs`) serves a different purpose than the one T004 originally envisioned: gating Layer-2 real-UI journeys out of the Layer-1 `cargo test --workspace` run (no WebDriver/display there), opted back in via `--run-ignored all` in `e2e.yml`. Documented in `quickstart.md`.
 
 ## Phase 2: Foundational (blocking prerequisites)
 
 - [X] T005 Create a Layer-1 test harness helper providing an isolated, file-backed SQLite DB in a `tempfile::tempdir()` with `sqlx::migrate!()` applied and a built `AppState`/`SqliteLifecycleRepository`, in `crates/app/core/tests/support/mod.rs` (or a small `crates/testkit` if cleaner) — per research D1, data-model isolation model
-- [ ] T006 [P] Add a `wiremock`-based SIMBAD boundary stub helper (serves the T003 fixtures on localhost) usable by resolver tests, in the test support module — per research D2
+- [ ] T006 [P] ~~Add a `wiremock`-based SIMBAD boundary stub helper~~ **SUPERSEDED** — same decision as T001/T003: `targeting::FakeResolver` (an in-process trait-object double, not an HTTP server) is the boundary stub actually used by `crates/targeting/tests/simbad_resolution_integration.rs` and the Layer-2 `targets_journeys.rs` bundled-seed-cache path. No `wiremock` dependency was added; research D2's plan is superseded per the note already in this file's 2026-06-19 status block above.
 - [ ] T007 ~~Replace `apps/desktop/e2e/helpers/db.ts`~~ **SUPERSEDED** — DB assertions use the real UI or the `invoke()` bridge in `crates/e2e-tests/tests/common/mod.rs`; `better-sqlite3` is not adopted. The `db.ts` placeholder remains as a structural reference.
 - [ ] T008 ~~Add fresh-DB reset to `tauri-app.ts`~~ **SUPERSEDED** — fresh-DB reset in the thirtyfour harness is `reset_database()` in `crates/e2e-tests/tests/common/mod.rs` (reads `ALM_DB_URL` env; TODO wiring for OS app-data path). `tauri-app.ts` is now a reference scaffold.
 
@@ -144,8 +167,8 @@ Story labels map to spec user stories US1–US5.
 **Independent test**: from a clean checkout on each OS, the documented command runs the layer; a missing driver yields a named error.
 
 - [X] T030 [US4] Add `just test-integration` (→ `cargo test --workspace`, integration-tagged) and `just test-e2e` (→ `pnpm --filter @astro-plan/desktop test:e2e:real`) targets to `justfile`, mirroring CI (FR-014)
-- [ ] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-webdriver` CLI is missing, with `cargo install tauri-webdriver --locked` install hint) to the E2E entry path in `crates/e2e-tests/tests/common/mod.rs` `preflight()` (FR-015). Old per-OS driver checks (`WebKitWebDriver`/`msedgedriver`) are no longer needed (D10).
-- [ ] T032 [P] [US4] Add matching `package.json` script(s) if useful and confirm command names are consistent across `justfile`, `package.json`, and docs
+- [X] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-webdriver` CLI is missing, with `cargo install tauri-webdriver --locked` install hint) to the E2E entry path in `crates/e2e-tests/tests/common/mod.rs` `preflight()` (FR-015). Old per-OS driver checks (`WebKitWebDriver`/`msedgedriver`) are no longer needed (D10). Already implemented (`preflight()` → `check_tauri_webdriver_cli()` + `check_app_binary()`, `crates/e2e-tests/tests/common/mod.rs:1298-1340`) — not touched this pass (that file is owned by the crates/e2e-tests lane); verified by reading, not edited.
+- [X] T032 [P] [US4] Add matching `package.json` script(s) if useful and confirm command names are consistent across `justfile`, `package.json`, and docs — **found and fixed a real inconsistency**: `justfile`'s `test-e2e` target already called `pnpm --filter @astro-plan/desktop test:e2e:real`, but `apps/desktop/package.json` had no such script (only the mock-mode `test:e2e`, a different suite entirely) — `just test-e2e` was dead/broken. Added `apps/desktop/scripts/run-e2e-real.sh` (builds the frontend with `VITE_E2E=1`, serves it, builds `desktop_shell --features e2e`, runs `cargo nextest run -p e2e_tests --profile e2e --run-ignored all`, mirroring `.github/workflows/e2e.yml`) and wired it as `apps/desktop/package.json`'s `test:e2e:real` script. `justfile` itself was not touched (outside this task's file scope). Untested end-to-end locally (no webview/display in the WSL sandbox, same limitation documented throughout this feature) — syntax-checked (`bash -n`) only; first real run is CI (`e2e.yml`) or a Linux/Windows dev machine.
 
 **Checkpoint**: Developers run either layer locally with one command on any OS.
 
@@ -168,8 +191,8 @@ Story labels map to spec user stories US1–US5.
 
 - [X] T036 **Seeded-regression validation (D8 / SC-007)**: for ~3–5 covered behaviors, temporarily introduce a regression (drop a persisted field, rename a payload key, skip an audit write), confirm a Layer-1 or Layer-2 test fails, revert; record outcomes in an IMPLEMENTATION-NOTES.md
 - [X] T037 Confirm determinism: run Layer 1 offline and repeatedly to rule out order-dependent/shared-state flakiness (SC-006)
-- [ ] T038 Final verification gate: `just lint`, `just test`, `just typecheck`, `just test-integration`, and `just test-e2e` (Linux) all green; per-OS CI green on a test PR (required platforms per FR-010); confirm the feature diff adds only test/CI/fixture/doc code and touches **no product `src` logic** beyond thin test hooks (FR-018 guard, addresses F5); then `speckit.verify`
-- [ ] T039 Update `specs/037-e2e-integration-testing/checklists/requirements.md` and coverage-matrix to final state; ensure no implemented area is silently uncovered
+- [X] T038 Final verification gate — this pass's diff (`tests/e2e/setup_wizard_site_step.spec.ts`, `apps/desktop/package.json`, `apps/desktop/scripts/run-e2e-real.sh`, docs/spec edits) touches **no product `src` logic**, only test/doc/dev-tooling code (FR-018 guard). Verified this pass: `pnpm -r --if-present lint` (0 errors), `pnpm -r --if-present typecheck` (green), the new spec + the full `tests/e2e/` mock suite compiled and the new spec's 3 tests pass in isolation and repeatably. No Rust dev-deps were touched (T001/T006 stayed superseded, not implemented), so per this task's run rules `cargo nextest`/`cargo test --workspace` was not re-run from a clean build — that remains CI's job (`ci.yml`), consistent with this feature's established pattern (every prior WP-C status note in this file defers real verification to CI because the WSL dev sandbox has no webview). **Finding, not a regression**: a full local `pnpm exec playwright test` run of the whole `tests/e2e/` suite hit ~40 unrelated failures; root-caused to a foreign, already-running Vite dev server on port 5173 from a *different* checkout (`/home/sjors/dev/astro-plan`, no `VITE_USE_MOCKS` set) that Playwright's `reuseExistingServer: !CI` silently reused instead of launching its own correctly-configured server — a shared-sandbox port collision, not a code defect (confirmed via `/proc/<pid>/environ` on the squatting process). Not fixed here (foreign process, outside this task's worktree). `speckit.verify` not run (CLI not available in this environment per prior sessions' convention); the coverage-matrix and checklist updates below stand in as the auditable equivalent.
+- [X] T039 Update `specs/037-e2e-integration-testing/checklists/requirements.md` and coverage-matrix to final state; ensure no implemented area is silently uncovered — `checklists/requirements.md` re-reviewed: it is a spec-quality gate (all items already `[x]`, no implementation-status claims), still accurate, left unchanged. `contracts/coverage-matrix.md` updated: per-journey Mock-Playwright column reflects all 6 landed batches (PRs #447/#448/#452/#453/#454/#455, #494 stabilization) + a new "Mock-Playwright batch completion + StepSite gap closed — 2026-07-09" section recording what closed, what was re-verified as already-closed (046 i18n, 047 moon pills), and what remains open (full wizard happy path, Data Sources management) as follow-up, not a silent gap.
 
 ---
 

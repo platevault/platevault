@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_cache = { path = "../cache" }
 audit = { path = "../../audit" }
 calibration_core = { path = "../../calibration/core" }
 contracts_core = { path = "../../contracts/core" }
@@ -16,7 +17,10 @@ persistence_db = { path = "../../persistence/db" }
 serde_json.workspace = true
 sqlx.workspace = true
 time = { workspace = true }
-uuid = { workspace = true }
+# "v5" beyond the workspace default ("v4"): deterministic audit `entity_id`
+# fallback for equipment ids that aren't real UUIDs (T124, spec 030 FR-133),
+# same pattern as `crates/targeting/Cargo.toml`.
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 tokio.workspace = true

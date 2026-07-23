@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * window.test.ts — regression coverage for spec 051 T008.
  *
@@ -55,8 +58,11 @@ describe('openInNewWindow', () => {
     await openInNewWindow('/targets');
 
     expect(webviewWindowCtor).toHaveBeenCalledTimes(1);
-    const [label, options] = webviewWindowCtor.mock.calls[0] as [string, { url: string }];
-    expect(label).toMatch(/^alm-win-/);
+    const [label, options] = webviewWindowCtor.mock.calls[0] as [
+      string,
+      { url: string },
+    ];
+    expect(label).toMatch(/^pv-win-/);
     expect(options.url).toContain('#/targets');
     expect(openSpy).not.toHaveBeenCalled();
   });

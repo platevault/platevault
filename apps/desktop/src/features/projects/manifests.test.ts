@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vitest unit tests for spec 024 manifest helpers.
  *
@@ -47,7 +50,9 @@ describe('manifestReasonLabel', () => {
   });
 
   it('returns human label for lifecycle_transition', () => {
-    expect(manifestReasonLabel('lifecycle_transition')).toBe('Lifecycle transition');
+    expect(manifestReasonLabel('lifecycle_transition')).toBe(
+      'Lifecycle transition',
+    );
   });
 
   it('returns human label for cleanup_applied', () => {
@@ -67,7 +72,9 @@ describe('manifestReasonLabel', () => {
 
 describe('formatManifestTimestamp', () => {
   it('formats a valid ISO-8601 timestamp', () => {
-    expect(formatManifestTimestamp('2026-04-12T18:01:00Z')).toBe('2026-04-12 18:01');
+    expect(formatManifestTimestamp('2026-04-12T18:01:00Z')).toBe(
+      '2026-04-12 18:01',
+    );
   });
 
   it('returns the raw string for invalid input', () => {
@@ -75,7 +82,9 @@ describe('formatManifestTimestamp', () => {
   });
 
   it('pads single-digit months and days', () => {
-    expect(formatManifestTimestamp('2026-01-05T09:03:00Z')).toBe('2026-01-05 09:03');
+    expect(formatManifestTimestamp('2026-01-05T09:03:00Z')).toBe(
+      '2026-01-05 09:03',
+    );
   });
 });
 

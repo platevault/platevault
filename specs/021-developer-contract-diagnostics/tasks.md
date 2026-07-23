@@ -140,12 +140,20 @@ activate the entry, and confirm the list matches the registry.
       required columns plus mismatch warning indicator._
 - [ ] T015 [US1] Compute the `ts_hash` vs `rust_hash` mismatch once at
       startup and feed it into `ContractMeta.mismatch` for FR-006.
-      _Deferred: hash computation requires a stable canonical serialization
-      of the specta-generated TS surface and Rust registry. The Rust
-      `ContractMeta` struct carries `ts_hash`/`rust_hash`/`mismatch` fields
-      but they are populated as `None` in v1. The mismatch warning renders
-      correctly when the field is set. Full hash wiring deferred to a
-      follow-up iteration._
+      RE-VERIFIED, still genuinely deferred — sharpened rationale after
+      checking for a reusable seam: `tests/contract/envelope_specta_schemars_agreement.rs`
+      is the closest existing pattern (schemars-generated JSON Schema vs
+      specta-generated TS, per Rust type, for the two enums that appear on
+      both sides), and R9 (research.md) settles the hash algorithm
+      (SHA-256 of canonical-JSON schema). What's still missing, and is real
+      implementation work rather than reconciliation: `dev_contracts.rs`'s
+      `REGISTRY` is a hand-curated list of ~13 operation *names*
+      (`"plans.approve"`, `"projects.create"`, ...) with no mapping from
+      each name to the concrete Rust request/response type(s) that back it —
+      that name→type registry doesn't exist anywhere in the codebase and
+      would need to be built (and kept in sync) before per-contract hashing
+      is possible. Not attempted in this pass; too large/novel to hand-roll
+      safely under this sweep's scope.
 
 **Checkpoint**: US1 fully functional behind `devMode`.
 
@@ -355,9 +363,18 @@ frame appears in the flame chart.
       to `/dev/contracts`, trigger five calls of mixed outcomes, view a
       schema, replay a read-only call, then disable `devMode` and
       confirm the surface and proxy are gone.
-      _Deferred: Manual E2E smoke pass requires a running Tauri app.
-      WSL/no-GUI constraint — Playwright visual smoke is also deferred.
-      All logic layers are unit-tested._
+      RE-VERIFIED, the manual click-through genuinely still requires a
+      running Tauri webview (unlike spec 012's watcher misconception this
+      isn't a headless-Rust-only concern — Tauri's window needs a real
+      compositor). Verified what CAN run here: `cargo build -p desktop_shell
+      --features dev-tools` compiles clean; `cargo nextest run -p desktop_shell
+      -p app_core --features dev-tools` — 398/398 pass, including the 14
+      dev-tools-specific tests (`dev_contracts::tests::*`,
+      `commands::dev::tests::*`); `pnpm vitest run src/dev` — 80/80 pass
+      across 12 files (ContractsPage, SchemaViewer, DevSettingsPage,
+      recorder redaction/perf/installation, command-palette devMode gating).
+      The "all logic layers are unit-tested" claim is now backed by an
+      actual green run, not just asserted.
 
 **Checkpoint**: US1-US4 work.
 

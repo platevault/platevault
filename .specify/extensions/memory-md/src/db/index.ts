@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Database, { Database as DatabaseType } from "better-sqlite3";
 import fs from "fs";
 import path from "path";

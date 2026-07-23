@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * usePlanApplyProgress — live plan-apply progress consumer (spec 042 US16 /
  * FR-021).
@@ -10,9 +13,29 @@
  * this hook surfaces a live item counter + terminal outcome to the UI.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { applyPlan } from './planApply';
-import type { OperationEvent, PlanApplyResponse } from '@/bindings/index';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type {
+  OperationEvent,
+  PlanApplyResponse,
+  PlanApplyStatus_Serialize as PlanApplyStatus,
+} from '@/bindings/index';
+
+/** `PlanApplyStatus.planState` values that mean the run is no longer active. */
+const TERMINAL_PLAN_STATES = new Set([
+  'applied',
+  'partially_applied',
+  'failed',
+  'cancelled',
+  'discarded',
+]);
+
+/** Poll interval for `plans.apply.status` while a resumed run has no live
+ * event channel (see `resume` below). Matches the Inbox review overlay's
+ * own open-plan poll cadence (InboxPage.tsx) for one consistent rhythm. */
+const RESUME_POLL_MS = 1000;
 
 export interface PlanApplyProgress {
   /** Whether an apply is currently streaming. */
@@ -27,6 +50,30 @@ export interface PlanApplyProgress {
   terminal: 'completed' | 'failed' | null;
   /** The most recent streamed event type, for fine-grained UI. */
   lastEventType: OperationEvent['eventType'] | null;
+  /**
+   * Whether the run has halted on a pause condition (R-Pause-1: volume
+   * unavailable, disk full, or a stale source file). Derived from the
+   * backend's `warning` long-op event, which carries `pauseReason`/`runId`
+   * (spec 042 US16). `plan.resume` re-validates the condition server-side;
+   * this hook only reflects what the backend reports.
+   */
+  paused: boolean;
+  /** Human-readable pause reason as reported by the backend, else null. */
+  pauseReason: string | null;
+  /** Run id needed to call `plan.resume`; set once a pause or the initial
+   * apply response reports one. */
+  runId: string | null;
+  /**
+   * `true` immediately after a successful `plan.resume` call, until the
+   * first `plans.apply.status` poll (below) lands. Issue #575 (backend
+   * `spawn_executor_run` shared by apply and resume) is fixed — the run DOES
+   * continue — but `plan.resume`'s response carries no event channel, so
+   * there is nothing to await for a "first real update" the way `run()` has.
+   * This is a brief, honest "reconnecting" placeholder, not a permanent
+   * dead-end: `running` flips true and polling starts in the same tick (see
+   * `resume` below).
+   */
+  resumeStalled: boolean;
 }
 
 const IDLE: PlanApplyProgress = {
@@ -36,6 +83,10 @@ const IDLE: PlanApplyProgress = {
   total: null,
   terminal: null,
   lastEventType: null,
+  paused: false,
+  pauseReason: null,
+  runId: null,
+  resumeStalled: false,
 };
 
 /** Extract a numeric `itemsTotal` from an event payload when present. */
@@ -47,13 +98,46 @@ function readItemsTotal(payload: unknown): number | null {
   return null;
 }
 
+/** Extract a string field from an event payload when present. */
+function readStringField(payload: unknown, field: string): string | null {
+  if (payload && typeof payload === 'object' && field in payload) {
+    const v = (payload as Record<string, unknown>)[field];
+    return typeof v === 'string' ? v : null;
+  }
+  return null;
+}
+
 export function usePlanApplyProgress() {
   const [progress, setProgress] = useState<PlanApplyProgress>(IDLE);
+  // Issue #744 (FR-002): `plan.resume` returns no event channel, so a
+  // resumed run's ongoing progress (which, since #575, genuinely continues)
+  // is only observable by polling `plans.apply.status`. Ref (not state) so
+  // `stopResumePolling` is stable across renders and effect cleanup always
+  // sees the current timer.
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const reset = useCallback(() => setProgress(IDLE), []);
+  const stopResumePolling = useCallback(() => {
+    if (pollTimerRef.current !== null) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  // Stop polling if the component unmounts mid-resume (e.g. the overlay
+  // closes) — never let an interval outlive its hook instance.
+  useEffect(() => stopResumePolling, [stopResumePolling]);
+
+  const reset = useCallback(() => {
+    stopResumePolling();
+    setProgress(IDLE);
+  }, [stopResumePolling]);
 
   const run = useCallback(
-    async (args: { id: string; approvalToken?: string }): Promise<PlanApplyResponse | null> => {
+    async (args: {
+      id: string;
+      approvalToken?: string;
+    }): Promise<PlanApplyResponse | null> => {
+      stopResumePolling();
       setProgress({ ...IDLE, running: true });
       try {
         const response = await applyPlan({
@@ -61,11 +145,16 @@ export function usePlanApplyProgress() {
           approvalToken: args.approvalToken,
           onEvent: (event: OperationEvent) => {
             setProgress((prev) => {
-              const next: PlanApplyProgress = { ...prev, lastEventType: event.eventType };
+              const next: PlanApplyProgress = {
+                ...prev,
+                lastEventType: event.eventType,
+              };
               switch (event.eventType) {
                 case 'item_started': {
                   const total = readItemsTotal(event.payload);
                   if (total != null) next.total = total;
+                  const runId = readStringField(event.payload, 'runId');
+                  if (runId != null) next.runId = runId;
                   break;
                 }
                 case 'item_applied':
@@ -74,6 +163,19 @@ export function usePlanApplyProgress() {
                 case 'item_failed':
                   next.failed = prev.failed + 1;
                   break;
+                case 'warning': {
+                  // Pause condition (R-Pause-1): volume unavailable, disk
+                  // full, or a stale source file. The run has halted; it
+                  // stays `running` (busy) until cancelled or resumed.
+                  next.paused = true;
+                  next.pauseReason = readStringField(
+                    event.payload,
+                    'pauseReason',
+                  );
+                  const runId = readStringField(event.payload, 'runId');
+                  if (runId != null) next.runId = runId;
+                  break;
+                }
                 case 'completed':
                   next.running = false;
                   next.terminal = 'completed';
@@ -90,15 +192,109 @@ export function usePlanApplyProgress() {
           },
         });
         // Ensure the running flag clears even if no terminal event arrived.
-        setProgress((prev) => (prev.running ? { ...prev, running: false } : prev));
+        setProgress((prev) =>
+          prev.running ? { ...prev, running: false } : prev,
+        );
         return response;
       } catch {
-        setProgress((prev) => ({ ...prev, running: false, terminal: 'failed' }));
+        setProgress((prev) => ({
+          ...prev,
+          running: false,
+          terminal: 'failed',
+        }));
         return null;
       }
     },
-    [],
+    [stopResumePolling],
   );
 
-  return { progress, run, reset };
+  /**
+   * Reduce one `plans.apply.status` poll tick into `progress`. Returns
+   * whether the plan has reached a terminal state (poll should stop).
+   */
+  const applyStatusTick = useCallback((status: PlanApplyStatus) => {
+    const isTerminal = TERMINAL_PLAN_STATES.has(status.planState);
+    setProgress((prev) => ({
+      ...prev,
+      running: !isTerminal,
+      applied: status.itemsApplied,
+      failed: status.itemsFailed,
+      total: status.itemsTotal,
+      runId: status.runId ?? prev.runId,
+      resumeStalled: false,
+      paused: status.planState === 'paused',
+      pauseReason:
+        status.planState === 'paused' ? (status.pauseReason ?? null) : null,
+      terminal: isTerminal
+        ? status.planState === 'applied'
+          ? 'completed'
+          : 'failed'
+        : null,
+    }));
+    return isTerminal;
+  }, []);
+
+  /**
+   * Resume a paused run (`plan.resume`, R-Pause-1). Calls the real backend
+   * command; the plan's DB state moves `paused -> applying` on success, and
+   * (since issue #575's `spawn_executor_run` fix) the executor genuinely
+   * continues applying the run's remaining items.
+   *
+   * `plan.resume`'s response carries no event channel (unlike the initial
+   * `run()`), so there is nothing to await for live `item_*` events. Instead
+   * poll `plans.apply.status` (issue #744 FR-002) — a DB-backed snapshot
+   * independent of any channel — until the plan reaches a terminal state.
+   */
+  const resume = useCallback(
+    async (planId: string): Promise<boolean> => {
+      if (progress.runId === null) return false;
+      try {
+        unwrap(await commands.plansResume(planId, progress.runId));
+        setProgress((prev) => ({
+          ...prev,
+          running: true,
+          paused: false,
+          pauseReason: null,
+          resumeStalled: true,
+        }));
+        stopResumePolling();
+        pollTimerRef.current = setInterval(() => {
+          void commands
+            .plansApplyStatus(planId)
+            .then(unwrap)
+            .then((status) => {
+              if (applyStatusTick(status)) stopResumePolling();
+            })
+            .catch(() => {
+              // A transient status-poll failure is not a terminal outcome —
+              // keep polling rather than freezing the UI on a dropped tick.
+            });
+        }, RESUME_POLL_MS);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [progress.runId, applyStatusTick, stopResumePolling],
+  );
+
+  /**
+   * Cancel an in-flight apply run (`plan.cancel`, US3/FR-009). Only needs the
+   * plan id — the backend signals the shared `CancellationToken` for the
+   * plan's currently-registered run, no `run_id` required. The channel
+   * already streaming this run's progress will still deliver the resulting
+   * terminal `completed` event (backend-emitted for a cancelled run too), so
+   * this function does not itself flip `progress` — the reducer above
+   * self-updates from that event.
+   */
+  const cancel = useCallback(async (planId: string): Promise<boolean> => {
+    try {
+      unwrap(await commands.plansCancel(planId));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  return { progress, run, resume, cancel, reset };
 }

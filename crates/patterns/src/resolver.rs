@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Pattern resolver (spec 015 T3.4 + T3.6).
 //!
 //! `resolve(pattern, metadata, config) -> Result<ResolveResult, ResolveError>`
@@ -17,8 +20,9 @@
 
 use std::collections::HashMap;
 
+use safe_filename::{sanitize_token_value, SanitizeError};
+
 use crate::registry::{TokenRegistry, TokenTransform};
-use crate::sanitize::{sanitize_token_value, SanitizeError};
 use crate::validator::{validate, ValidationWarning};
 use crate::V1_REGISTRY;
 
@@ -739,10 +743,14 @@ mod tests {
 
     #[test]
     fn pattern_str_date_iso_transform_applied() {
-        // Token transforms (frame_type lowercasing here) apply just like resolve().
-        let bundle = meta(&[("frame_type", "Light")]);
-        let r = resolve_pattern_str("{frame_type}/", &bundle).unwrap();
-        assert_eq!(r.relative_path, "light");
+        // The DateIso transform, exercised through the resolve_pattern_str
+        // string-pattern entry point (not resolve_v1/resolve() directly, and
+        // not frame_type's Lower transform, which is already covered by
+        // frame_type_lowercased above and pattern_str_light_default_full_metadata).
+        let bundle = meta(&[("date", "2026-04-12")]);
+        let r = resolve_pattern_str("{date}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "2026-04-12");
+        assert!(r.missing_tokens.is_empty());
     }
 
     #[test]

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 003 first-run wizard and batch registration Tauri commands.
 //!
 //! Delegates to `app_core::first_run` use cases. Commands are registered
@@ -87,5 +90,6 @@ pub async fn roots_register_batch(
         .collect();
     let enforced_request = RegisterSourceBatchRequest { sources: enforced_sources };
 
-    app_core::first_run::register_source_batch(state.repo.pool(), &enforced_request).await
+    app_core::first_run::register_source_batch(state.repo.pool(), &state.bus, &enforced_request)
+        .await
 }

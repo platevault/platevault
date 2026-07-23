@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * theme.test.ts — spec 051 US6 (T039): native window theme sync.
  *
@@ -42,6 +45,21 @@ async function waitForCall(fn: ReturnType<typeof vi.fn>): Promise<void> {
   }
 }
 
+function stubOsTheme(prefersDark: boolean): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(prefers-color-scheme: dark)' && prefersDark,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 describe('applyTheme — native window theme sync (spec 051 US6)', () => {
   beforeEach(() => {
     isTauriMock.mockReset();
@@ -59,6 +77,11 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
     { id: 'warm-slate', mode: 'light' },
     { id: 'observatory-dark', mode: 'dark' },
     { id: 'espresso-dark', mode: 'dark' },
+    // Handoff 03 — the two new cool-family canonical themes; warm-clay and
+    // espresso-dark stay above as proof a disabled (picker-hidden) variant
+    // still resolves/applies exactly as before.
+    { id: 'observatory-cool-light', mode: 'light' },
+    { id: 'observatory-cool', mode: 'dark' },
   ];
 
   for (const { id, mode } of CASES) {
@@ -89,7 +112,9 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
 
   it('degrades silently when native setTheme rejects (FR-020, US6 AS2)', async () => {
     isTauriMock.mockReturnValue(true);
-    setThemeMock.mockRejectedValue(new Error('unsupported on this desktop environment'));
+    setThemeMock.mockRejectedValue(
+      new Error('unsupported on this desktop environment'),
+    );
     setStoredChoice('warm-clay');
 
     const { applyTheme } = await import('./theme');
@@ -108,6 +133,75 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
     applyTheme();
     await waitForCall(setThemeMock);
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('observatory-dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe(
+      'observatory-dark',
+    );
   });
+});
+
+describe('first-run system theme policy', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    isTauriMock.mockReset();
+    isTauriMock.mockReturnValue(false);
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  const SYSTEM_CASES = [
+    { os: 'light', prefersDark: false, expected: 'warm-slate' },
+    { os: 'dark', prefersDark: true, expected: 'observatory-cool' },
+  ] as const;
+
+  for (const { os, prefersDark, expected } of SYSTEM_CASES) {
+    it(`applies ${expected} synchronously on first run when the OS is ${os}`, async () => {
+      stubOsTheme(prefersDark);
+
+      const { getThemeChoice, initAppearance, resolveTheme } = await import(
+        './theme'
+      );
+
+      expect(getThemeChoice()).toBe('system');
+      expect(resolveTheme()).toBe(expected);
+
+      initAppearance();
+
+      expect(document.documentElement.getAttribute('data-theme')).toBe(
+        expected,
+      );
+      expect(localStorage.getItem('alm.theme')).toBeNull();
+    });
+  }
+
+  const EXPLICIT_CASES = [
+    { os: 'dark', prefersDark: true, choice: 'warm-slate' },
+    { os: 'light', prefersDark: false, choice: 'observatory-cool' },
+  ] as const;
+
+  for (const { os, prefersDark, choice } of EXPLICIT_CASES) {
+    it(`boots with persisted ${choice} instead of the OS ${os} preference`, async () => {
+      stubOsTheme(prefersDark);
+      localStorage.setItem('alm.theme', choice);
+      document.documentElement.removeAttribute('data-theme');
+      vi.resetModules();
+
+      const { getThemeChoice, initAppearance, resolveTheme } = await import(
+        './theme'
+      );
+
+      initAppearance();
+
+      expect(localStorage.getItem('alm.theme')).toBe(choice);
+      expect(getThemeChoice()).toBe(choice);
+      expect(resolveTheme()).toBe(choice);
+      expect(document.documentElement.getAttribute('data-theme')).toBe(choice);
+    });
+  }
 });

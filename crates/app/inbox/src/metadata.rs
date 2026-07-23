@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.item.metadata` use case (spec 041 US2/FR-010, T017).
 //!
 //! Assembles the per-file metadata DTO for an inbox item by combining three
@@ -17,6 +20,7 @@
 
 use std::collections::HashMap;
 
+use app_core_errors::db_err;
 use patterns::{resolve_pattern_str, MetadataBundle};
 use persistence_db::repositories::inbox::{self as repo};
 use persistence_db::repositories::settings as settings_repo;
@@ -54,9 +58,8 @@ pub async fn get_inbox_item_metadata(
 
     // 2. Load the per-file metadata rows + evidence rows, then join in memory by
     //    relative path. Metadata rows are the spine (one per enumerated file).
-    let meta_rows =
-        repo::list_inbox_file_metadata(pool, inbox_item_id).await.map_err(|e| db_err(&e))?;
-    let evidence_rows = repo::list_evidence(pool, inbox_item_id).await.map_err(|e| db_err(&e))?;
+    let meta_rows = repo::list_inbox_file_metadata(pool, inbox_item_id).await.map_err(db_err)?;
+    let evidence_rows = repo::list_evidence(pool, inbox_item_id).await.map_err(db_err)?;
 
     // Index evidence by relative path for O(1) lookup while iterating metadata.
     let evidence_by_path: HashMap<&str, &repo::InboxEvidenceRow> =
@@ -66,9 +69,14 @@ pub async fn get_inbox_item_metadata(
     for m in &meta_rows {
         let ev = evidence_by_path.get(m.relative_file_path.as_str());
 
-        // frame_type_effective: override (if set) else extracted frame type.
-        let frame_type_effective =
-            ev.and_then(|e| e.manual_override.clone().or_else(|| e.frame_type.clone()));
+        // frame_type_effective: manual override → durable group-keyed
+        // frameType override (survives evidence rebuilds, #854) → extracted.
+        let frame_type_effective = ev.and_then(|e| {
+            e.manual_override
+                .clone()
+                .or_else(|| e.override_frame_type.clone())
+                .or_else(|| e.frame_type.clone())
+        });
 
         // image_typ: the raw IMAGETYP header value captured as evidence
         // raw_value (only header-sourced evidence carries it).
@@ -77,10 +85,17 @@ pub async fn get_inbox_item_metadata(
         // is_master: a single-file master item OR a per-file detected master.
         let is_master = item_is_master || ev.is_some_and(|e| e.is_master != 0);
 
-        // Non-type overrides: override_filter/exposure/binning take
+        // Non-type overrides: override_filter/exposure/binning/target take
         // precedence over the extracted header values when set.
         let filter = ev.and_then(|e| e.override_filter.clone()).or_else(|| m.filter.clone());
         let exposure_s = ev.and_then(|e| e.override_exposure_s).or(m.exposure_s);
+        // #1294: the `target` override written by `cone_search::confirm`
+        // (a coordinate-resolved match) becomes the effective OBJECT here,
+        // same precedence as the other non-type overrides above — otherwise
+        // confirm's write is never read back and the mandatory-attribute
+        // gate (compute_missing_mandatory's "target" check, below) keeps
+        // reporting the file as missing its target forever.
+        let object = ev.and_then(|e| e.override_target.clone()).or_else(|| m.object.clone());
         // Parse "NxN" binning string (e.g. "2x2") → (binning_x, binning_y).
         let (binning_x, binning_y) =
             ev.and_then(|e| e.override_binning.as_deref()).and_then(parse_binning).map_or_else(
@@ -106,7 +121,7 @@ pub async fn get_inbox_item_metadata(
             binning_x,
             binning_y,
             temperature_c: m.temperature_c,
-            object: m.object.clone(),
+            object,
             date_obs: m.date_obs.clone(),
             instrume: m.instrume.clone(),
             telescop: m.telescop.clone(),
@@ -143,16 +158,18 @@ pub async fn get_inbox_item_metadata(
         // T070 / FR-047: surface the mandatory-attribute gate per file so the UI
         // can prompt the user before the needs-review bucket blocks confirm.
         // Uses the same DTO values (override-applied) as missing_path_attributes.
-        entry.missing_mandatory = compute_missing_mandatory(&entry);
+        //
+        // `target_resolved` is pinned to `false` for the same reason as
+        // `classify::missing_mandatory_for_file`: nothing threads a resolved-target
+        // signal into this read path yet (#1132) — the parameter exists so the
+        // formula agrees with `check_mandatory_missing` by construction, not so a
+        // real value flows in today.
+        entry.missing_mandatory = compute_missing_mandatory(&entry, false);
 
         files.push(entry);
     }
 
     Ok(files)
-}
-
-fn db_err(e: &persistence_db::DbError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
 }
 
 /// Compute the mandatory-attribute gate for a file from the already-built DTO
@@ -161,28 +178,27 @@ fn db_err(e: &persistence_db::DbError) -> ContractError {
 /// Uses the same override-applied values as `missing_path_attributes` so that
 /// supplying a value via reclassify clears the gate on the next read.
 /// Returns an empty vec when all mandatory attributes are present.
-fn compute_missing_mandatory(m: &InboxFileMetadata) -> Vec<String> {
+///
+/// The mandatory set itself comes from [`crate::classify::mandatory_set_for`]
+/// (R-14) — the single definition this and the classify-time gate both read, so
+/// the list shown to the user cannot drift from the list promotion is gated on.
+/// Likewise the `target` key's absence formula comes from
+/// [`crate::classify::target_missing`] (#1132) rather than a hand-copied
+/// duplicate, so this gate and [`crate::classify::check_mandatory_missing`]
+/// cannot silently diverge on what "target missing" means.
+fn compute_missing_mandatory(m: &InboxFileMetadata, target_resolved: bool) -> Vec<String> {
     let Some(ft_str) = m.frame_type_effective.as_deref() else {
         // Unclassified files are implicitly needs-review; frameType is the gate.
         return vec!["frameType".to_owned()];
     };
-
-    // Derive mandatory set from the same R-14 table as classify::mandatory_set_for.
-    let mandatory: &[&str] = match ft_str {
-        "light" => &["frameType", "target", "filter", "exposureS"],
-        "dark" | "dark_flat" => &["frameType", "exposureS", "gain"],
-        "bias" => &["frameType", "gain"],
-        "flat" => &["frameType", "filter"],
-        _ => return Vec::new(), // unknown type: no gate
+    let Some(ft) = metadata_core::FrameType::from_str_ci(ft_str) else {
+        return Vec::new(); // unknown type: no gate
     };
 
     let mut missing = Vec::new();
-    for &key in mandatory {
+    for key in crate::classify::mandatory_set_for(ft) {
         let absent = match key {
-            "target" => {
-                // light: satisfied by OBJECT header (proxy for coord resolution).
-                m.object.as_deref().map_or("", str::trim).is_empty()
-            }
+            "target" => crate::classify::target_missing(m.object.as_deref(), target_resolved),
             "filter" => m.filter.as_deref().map_or("", str::trim).is_empty(),
             "exposureS" => !m.exposure_s.is_some_and(|v| v > 0.0),
             "gain" => m.gain.as_deref().map_or("", str::trim).is_empty(),
@@ -211,9 +227,8 @@ async fn missing_path_attributes(
     let Some(ft) = m.frame_type_effective.as_deref() else {
         return Ok(vec!["image type".to_owned()]);
     };
-    let pattern = settings_repo::effective_pattern_for(pool, ft, m.is_master)
-        .await
-        .map_err(|e| db_err(&e))?;
+    let pattern =
+        settings_repo::effective_pattern_for(pool, ft, m.is_master).await.map_err(db_err)?;
     let Some(pattern) = pattern else {
         return Ok(vec!["image type".to_owned()]);
     };
@@ -277,6 +292,91 @@ mod tests {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
+    }
+
+    /// R-14 drift guard (#1116): the mandatory set the user is *shown* must equal
+    /// the one promotion is *gated* on, for every frame type.
+    ///
+    /// A file with no attributes at all is missing exactly the mandatory set minus
+    /// `frameType` (which is satisfied by the type being known), so both consumers
+    /// must reproduce [`crate::classify::mandatory_set_for`] verbatim. Fails if a
+    /// key is added to the shared set but handled in only one consumer, or if
+    /// either consumer reintroduces its own copy of the table.
+    #[test]
+    fn r14_mandatory_gate_agrees_between_classify_and_metadata() {
+        use metadata_core::FrameType;
+
+        for ft in [
+            FrameType::Light,
+            FrameType::Dark,
+            FrameType::Bias,
+            FrameType::Flat,
+            FrameType::DarkFlat,
+        ] {
+            let expected: Vec<String> = crate::classify::mandatory_set_for(ft)
+                .into_iter()
+                .filter(|k| *k != "frameType")
+                .map(str::to_owned)
+                .collect();
+
+            let gate = crate::classify::check_mandatory_missing(ft, None, false);
+            assert_eq!(gate, expected, "classify gate for {ft} diverged from mandatory_set_for");
+
+            let shown = compute_missing_mandatory(
+                &InboxFileMetadata {
+                    frame_type_effective: Some(ft.as_str().to_owned()),
+                    ..Default::default()
+                },
+                false,
+            );
+            assert_eq!(
+                shown, expected,
+                "metadata missing_mandatory for {ft} diverged from mandatory_set_for"
+            );
+        }
+    }
+
+    /// Issue #1132: the `target` arm specifically must agree between the two
+    /// gates for the coordinate-resolved-but-no-`OBJECT` case, not just the
+    /// all-attributes-absent case above (which both branches satisfy trivially
+    /// since `target_resolved` is fixed at `false` on both sides). This is
+    /// constructible today only because both gates now delegate to the shared
+    /// [`crate::classify::target_missing`] predicate and expose the same
+    /// `target_resolved` knob — no production caller supplies `true` yet
+    /// (that wiring is the open R-17 product decision), but the formula
+    /// itself is proven identical.
+    #[test]
+    fn target_missing_agrees_between_classify_and_metadata_for_resolved_no_object() {
+        use metadata_core::{FrameType, RawFileMetadata};
+
+        // Coordinate-resolved (or user-picked), but no OBJECT header at all.
+        let raw = RawFileMetadata { object: None, ..Default::default() };
+        let gate = crate::classify::check_mandatory_missing(FrameType::Light, Some(&raw), true);
+        assert!(!gate.contains(&"target".to_owned()), "classify gate: {gate:?}");
+
+        let shown = compute_missing_mandatory(
+            &InboxFileMetadata {
+                frame_type_effective: Some(FrameType::Light.as_str().to_owned()),
+                object: None,
+                ..Default::default()
+            },
+            true,
+        );
+        assert!(!shown.contains(&"target".to_owned()), "metadata gate: {shown:?}");
+
+        // Unresolved + no OBJECT: both still flag target missing.
+        let gate_unresolved =
+            crate::classify::check_mandatory_missing(FrameType::Light, Some(&raw), false);
+        assert!(gate_unresolved.contains(&"target".to_owned()));
+        let shown_unresolved = compute_missing_mandatory(
+            &InboxFileMetadata {
+                frame_type_effective: Some(FrameType::Light.as_str().to_owned()),
+                object: None,
+                ..Default::default()
+            },
+            false,
+        );
+        assert!(shown_unresolved.contains(&"target".to_owned()));
     }
 
     #[tokio::test]
@@ -501,6 +601,117 @@ mod tests {
         assert_eq!(f.binning_y, Some(2), "parsed binning y from '2x2'");
         // A freshly-set override is not stale.
         assert!(!f.override_stale, "freshly-set override must not be stale");
+    }
+
+    /// #1294: the `target` override written by `cone_search::confirm` must
+    /// win over the extracted (missing) `object` header value in the
+    /// assembled metadata DTO, and clear the `target` mandatory-gate entry —
+    /// same override precedence as filter/exposure/binning above. Without the
+    /// `override_target` join in `list_evidence`, this override is a write
+    /// nobody reads and the file reports `target` missing forever.
+    #[tokio::test]
+    async fn target_override_surfaces_as_effective_object_and_clears_missing_mandatory() {
+        let db = test_db().await;
+        let item_id = "item-meta-target-1";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "lights",
+                file_count: 1,
+                content_signature: Some("sig-target-1"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Wire the item to a source group (as classify normally does) so a
+        // target override has somewhere to attach — inbox_file_overrides is
+        // FK-constrained to inbox_source_groups.
+        repo::upsert_inbox_source_group(
+            db.pool(),
+            &repo::UpsertSourceGroup {
+                id: "sg-meta-target-1",
+                root_id: "root-1",
+                relative_path: "lights",
+                content_signature: None,
+                format: Some("fits"),
+                lane: Some("move"),
+                // Spec 058 T013 added this field. The group is only an FK
+                // anchor for the override row here, so it is never asserted.
+                file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = ?")
+            .bind("sg-meta-target-1")
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        repo::insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-meta-target-1",
+                inbox_item_id: item_id,
+                relative_file_path: "lights/light_001.fits",
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // No OBJECT header, filter/exposure present so `target` is isolated
+        // as the only variable in the mandatory gate.
+        repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &UpsertFileMetadata {
+                inbox_item_id: item_id,
+                relative_file_path: "lights/light_001.fits",
+                filter: Some("Ha"),
+                exposure_s: Some(300.0),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let before = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert_eq!(before[0].object, None, "no OBJECT header extracted yet");
+        assert!(
+            before[0].missing_mandatory.iter().any(|k| k == "target"),
+            "sanity: target starts out missing"
+        );
+
+        repo::set_file_override(
+            db.pool(),
+            "sg-meta-target-1",
+            "lights/light_001.fits",
+            "target",
+            "M 31",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let after = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert_eq!(after[0].object.as_deref(), Some("M 31"), "target override must win");
+        assert!(
+            !after[0].missing_mandatory.iter().any(|k| k == "target"),
+            "target override must clear the mandatory gate"
+        );
     }
 
     /// When mark_override_stale has been called (simulating R-4 detection),

@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for the `target.resolve` use case (spec 035, #14).
 //!
 //! Uses a `FakeResolver` (offline, deterministic, no network, no SIMBAD calls)
@@ -13,7 +16,7 @@
 
 mod support;
 
-use app_core::target_resolve::resolve;
+use app_core::target_resolve::{resolve, resolve_explicit};
 use contracts_core::targets::{TargetResolveSimbadRequest, TargetResolveStatus};
 use targeting_resolver::{
     AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
@@ -31,6 +34,7 @@ fn m31_identity() -> ResolvedIdentity {
         object_type: ObjectType::Galaxy,
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: None,
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -137,4 +141,73 @@ async fn resolve_empty_fits_object_returns_unresolved() {
         resp.status
     );
     assert!(resp.target.is_none(), "no target should be fabricated for empty query");
+}
+
+// ── spec 052 P2: `target.resolve_explicit` reachability (FR-008/FR-009) ────────
+//
+// These prove the WIRING (Tauri-command-equivalent `app_core` entrypoint →
+// `resolve_explicit` → the Sesame-shaped fallback), not the TAP/Sesame
+// composition logic itself (already unit-tested with fakes/spies in
+// `targeting_resolver::simbad`). `FakeResolver::with_explicit_response`
+// models "TAP misses this designation, but Sesame carries it" — a canned
+// identity ONLY `resolve_explicit`'s path can reach.
+
+/// TC-P2.1: a designation the plain (TAP-only) path misses stays `Unresolved`
+/// via `resolve` (the debounced typeahead entrypoint) but resolves via
+/// `resolve_explicit` (Enter/confirm/"search harder") — proving the deliberate
+/// user action's command path actually reaches the fallback, end to end
+/// through the real SQLite-backed use case, not just the resolver unit.
+#[tokio::test]
+async fn resolve_explicit_reaches_sesame_fallback_that_typeahead_misses() {
+    let (db, _repo, _bus) = support::setup().await;
+    let resolver =
+        FakeResolver::new().with_explicit_response("Coarse Object", sesame_only_identity());
+
+    let typeahead_resp = resolve(db.pool(), &resolver, &make_req("Coarse Object")).await.unwrap();
+    assert_eq!(
+        typeahead_resp.status,
+        TargetResolveStatus::Unresolved,
+        "the debounced typeahead entrypoint must never reach the Sesame-only fallback"
+    );
+
+    let explicit_resp =
+        resolve_explicit(db.pool(), &resolver, &make_req("Coarse Object")).await.unwrap();
+    assert_eq!(
+        explicit_resp.status,
+        TargetResolveStatus::Resolved,
+        "the explicit resolve/confirm entrypoint must reach the Sesame-only fallback"
+    );
+    assert_eq!(explicit_resp.target.expect("resolved").primary_designation, "Coarse Object");
+}
+
+/// TC-P2.2: when the plain path already hits, `resolve_explicit` returns the
+/// same result (no need to consult a fallback) — asserted via the crate's
+/// call-count spies so this is a real reachability check, not a coincidence
+/// of canned data.
+#[tokio::test]
+async fn resolve_explicit_skips_fallback_on_a_tap_hit() {
+    let (db, _repo, _bus) = support::setup().await;
+    let resolver = FakeResolver::new().with_response("M 31", m31_identity());
+
+    let resp = resolve_explicit(db.pool(), &resolver, &make_req("M 31")).await.unwrap();
+
+    assert_eq!(resp.status, TargetResolveStatus::Resolved);
+    assert_eq!(resp.target.unwrap().primary_designation, "M 31");
+    assert_eq!(resolver.explicit_call_count(), 1);
+}
+
+/// A coarse identity registered ONLY as an explicit-only response (models a
+/// Sesame hit the TAP-only path never sees).
+fn sesame_only_identity() -> ResolvedIdentity {
+    ResolvedIdentity {
+        simbad_oid: None,
+        primary_designation: "Coarse Object".to_owned(),
+        common_name: None,
+        object_type: ObjectType::Other,
+        ra_deg: 5.0,
+        dec_deg: -3.0,
+        v_mag: None,
+        aliases: vec![ResolvedAlias::new("Coarse Object", AliasKind::Designation)],
+        source: TargetSource::Resolved,
+    }
 }

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750">
+  <rect width="1200" height="750" fill="#dcdcdc"/>
+  <rect x="1" y="1" width="1198" height="748" fill="none" stroke="#9a9a9a" stroke-width="2"/>
+  <text x="600" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" fill="#5a5a5a">Screenshot TODO</text>
+  <text x="600" y="405" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#7a7a7a">Inbox review and confirm</text>
+</svg>

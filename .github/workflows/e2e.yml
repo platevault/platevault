@@ -1,4 +1,4 @@
-# Real-UI E2E — thirtyfour + cargo-nextest + tauri-plugin-webdriver (all OS)
+# Real-UI E2E — thirtyfour + cargo-nextest + tauri-plugin-webdriver (Linux + Windows)
 #
 # Drives the built desktop_shell binary through its real webview UI using
 # tauri-plugin-webdriver (Choochmeque) — an embedded W3C WebDriver server
@@ -7,14 +7,30 @@
 #
 # Why plugin-everywhere instead of the old tauri-driver approach:
 # - tauri-driver is Linux+Windows only (no WKWebView WebDriver on macOS).
-# - tauri-plugin-webdriver works on Linux, Windows, AND macOS — one harness,
-#   one CI path, no msedgedriver version matching, no WebKitWebDriver apt dep.
+# - tauri-plugin-webdriver works on Linux and Windows — one harness, one CI
+#   path, no msedgedriver version matching, no WebKitWebDriver apt dep.
 # - The plugin is compile-gated behind the `e2e` feature on desktop_shell, so
 #   release binaries never include the automation surface (Constitution V).
 # - WebdriverIO has been retired; the Rust thirtyfour+nextest stack is the
 #   sole real-UI runner.
 #
-# Run conditions:
+# Two-tier L3 strategy (see issue #1203 and the original full-matrix motivation):
+#
+#   Tier 1 — L3 smoke (per-PR): a small, fast subset runs on every pull_request
+#     on ubuntu-latest only (the stable lane). Covers app boot + all top-level
+#     routes, one inbox flow, and one targets flow — three journeys, serial,
+#     targeting <8 min wall-clock. Required branch-protection check:
+#     "Real-UI smoke (L3) — ubuntu-latest". PRs get a real-UI signal without
+#     the ~25-min Windows full-suite cost or Windows L3 flake exposure.
+#
+#   Tier 2 — Full L3 matrix (main pushes + workflow_dispatch): the complete
+#     ubuntu (4 shards) + windows (2 shards) suite runs on every push to main
+#     and on manual dispatch. This is the gate that matters post-merge.
+#     Windows L3 is off PRs because it is the slow and historically flaky leg
+#     (runs 30013328940, 30008614669) that blocked merge trains without adding
+#     PR signal proportional to its cost. All full-matrix regressions surface
+#     before the next merge via the main-push run.
+#
 # - Journeys are real (spec 037 WP-C, 2026-07-04): first-run resolve+create,
 #   filesystem plan review->apply+durable-record, ingest->session->calibration
 #   ->search, lifecycle transition+ledger, cleanup plan review, and the
@@ -23,41 +39,134 @@
 #   tauri-webdriver CLI, no e2e-feature app build, and no served frontend —
 #   skips them; this workflow opts back in with `--run-ignored all`.
 #   `--no-tests=warn` is kept only as a defensive fallback; it should never
-#   actually trigger since every journey runs on all 3 OS uniformly.
-# - The 3-OS matrix proves the runner AND the journeys work on every platform.
+#   actually trigger since every journey runs on both Linux and Windows.
+# - The Linux + Windows matrix proves the runner AND the journeys work on the
+#   supported platforms.
 # - This workflow runs independently of ci.yml (Layer-1 integration). Ordering /
 #   merge-gating is enforced by branch-protection required checks, not a
 #   cross-workflow `needs` (which GitHub only supports for reusable workflows).
 #
-# macOS is best-effort, not required (see `docs/development/testing.md`'s
-# Layer-2 note: "Required on Windows + Linux; best-effort on macOS (no
-# official WKWebView WebDriver)"). In practice the embedded
-# `tauri-plugin-webdriver` server on `desktop_shell` never becomes reachable
-# on `macos-latest` GitHub runners: the app boots (build succeeds), but the
-# `tauri-webdriver` CLI proxy gets `Connection refused (os error 61)` against
-# the plugin's native port on every attempt until the 120s launch deadline —
-# reproduced identically on every open PR (e.g. CI runs 28712192291 and
-# 28712185403), never a per-PR regression. The plugin's own upstream E2E
-# workflow (Choochmeque/tauri-plugin-webdriver) fails its macos-latest leg on
-# essentially every recent run too, so this is an upstream/runner-side
-# limitation, not something fixable in this repo. `continue-on-error` keeps
-# the leg running — so coverage isn't silently dropped and a future upstream
-# fix is visible — without blocking every PR on it.
+# macOS leg REMOVED from the default matrix: tauri-plugin-webdriver has no
+# working macOS WebDriver on GitHub runners. The `tauri-webdriver` CLI proxy
+# receives `Connection refused (os error 61)` on every attempt until the 120s
+# session deadline — reproduced identically on every recent run (e.g. CI runs
+# 28712192291 and 28712185403), never a per-PR regression. The upstream
+# plugin's own CI (Choochmeque/tauri-plugin-webdriver) also fails its
+# macos-latest leg on essentially every recent run. This is an
+# upstream/runner-side limitation, not fixable in this repo (full audit:
+# issue #489). Linux + Windows is the supported matrix.
+#
+# A `workflow_dispatch` `run_macos` input can still add macos-latest back for
+# a one-off re-test, WITHOUT `continue-on-error` — a genuine red/green signal
+# so a future upstream fix is discoverable, instead of never re-checking.
+# Layer-1 `cargo test --workspace` (ci.yml) stays required on macOS; only this
+# real-UI WebDriver leg is affected.
+#
+# Job DAG — smoke (per-PR ubuntu only):
+#
+#   changes ── build-frontend ── build-app-ubuntu ── smoke-ubuntu ── smoke-gate-ubuntu
+#
+# Job DAG — full matrix (main push / workflow_dispatch, build-once, test-sharded):
+#
+#   changes ── build-frontend (ubuntu, once) ──┐          (per OS:)
+#          └── build-app-<os> ─────────────────┴─ shard 1/2 ┐
+#                                                 shard 2/2 ┴─ gate (<os>)
+#
+# - The frontend is built ONCE (VITE_E2E dist is OS-independent) and shared
+#   as an artifact; previously every matrix leg rebuilt it.
+# - The app binary + nextest test archive are built once per OS on dedicated
+#   builder runners, content-keyed-cached (Rust sources + lockfile) so a
+#   docs/frontend-only change skips the Rust build entirely, and consumed by
+#   the shards via artifacts (`ALM_E2E_APP_BIN` + `--archive-file`).
+# - Every journey still runs on every OS (no OS-splitting of tests); sharding
+#   is `--partition count:N/M` WITHIN each OS for Ubuntu (4 shards). Ubuntu was
+#   the critical path (~11.3m on 2 shards, run 29587590762) with NO single
+#   dominating test — shard 1/2 ran 16 journeys at 24-58s each (594s total) vs
+#   shard 2/2's 7 journeys (229s); nextest's `count:N/M` partitions each test
+#   BINARY's own tests round-robin starting at index 0, so every single-test
+#   binary (6 of them in this suite) always lands in shard 1 regardless of M —
+#   going 3-way or 4-way does not fix that (verified: `cargo nextest list
+#   -p e2e_tests --partition count:1/3` still returns 13/23 tests, vs 16/23 at
+#   count:1/2). 4-way was chosen for Ubuntu's raw parallelism headroom, not
+#   because it rebalances the count split.
+# - Windows runs 2 shards via `--partition hash:N/2` instead of `count:N/2`:
+#   the same per-binary round-robin skew hit Windows identically (16 vs 7
+#   tests, run 29660954581/29587590762), and 2-way count partitioning can't be
+#   rebalanced by raising M alone (see above). Hash-based partitioning assigns
+#   each test independently by a stable hash of its identity, landing 14/9
+#   (verified: `cargo nextest list -p e2e_tests --partition hash:1/2` vs
+#   `hash:2/2`) — evener than count's 16/7 with no extra windows-latest
+#   runner. macOS stays on `count:N/2` (best-effort, issue #489; not worth
+#   touching).
+# - Builder/shard/gate are written out PER OS instead of as one os-matrix:
+#   GitHub `needs` can only target a whole job (never a single matrix leg),
+#   so a matrixed builder would let one OS's build failure skip the other
+#   OS's shards too. Per-OS jobs restore the pre-DAG per-OS failure
+#   isolation. YAML anchors are unsupported by Actions, hence the
+#   duplication; keep the three chains textually in sync when editing.
+# - The per-OS gate jobs preserve the pre-DAG check names
+#   ("Real-UI journeys (L3) — <os>") and each gate depends only on its own
+#   OS's shards, so the names behave exactly like the old per-OS jobs.
 
 name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
 on:
   pull_request:
+  # Runs the shards on every main push, not just PRs (issue #1203: before
+  # this, main reported green from mock-mode Playwright alone while the
+  # real-UI suite never executed post-merge, so a merge-induced regression
+  # had no signal until the next unlucky PR hit it). Verified live: run
+  # 29740436232 (commit 44dbb69f, a normal main push) scheduled and ran the
+  # ubuntu + windows shards for real, not skipped.
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_macos:
+        description: >-
+          Also run the macOS Real-UI leg (best-effort re-test of issue #489 —
+          no continue-on-error, so this is a genuine signal).
+        type: boolean
+        default: false
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on branches, but never on `main` (#1208).
+  #
+  # `main` shares one concurrency group across every push, so with a blanket
+  # `true` each merge killed the previous main run. During a normal merge
+  # campaign, merges land seconds apart, and no main run ever survived to
+  # report: 0aced5f0's run was cancelled at 08:19:23, one second after
+  # 971e7b11's was created at 08:19:22, which was itself cancelled two seconds
+  # after the next push. Ten consecutive main runs went the same way.
+  #
+  # The E2E suite therefore never gated `main` at all, and main-side
+  # regressions were structurally invisible — the suite looked configured
+  # while reporting nothing.
+  #
+  # This does not serialise indefinitely: with `cancel-in-progress: false`
+  # GitHub keeps at most the in-flight run plus the newest queued one and
+  # discards intermediate pending runs, so the cost stays bounded at ~2 runs
+  # per group while guaranteeing that one actually completes.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CARGO_INCREMENTAL: 0
+  # Debuginfo is 53% of every compiled artifact and the runners have been
+  # exhausting disk on it: `target/debug` reaches 1.1 GB, the 11 e2e journey
+  # binaries total 356 MB (~32 MB each, 15.3 MB after `strip --strip-debug`),
+  # and that archive is then downloaded by six shard jobs. PR #1216's ubuntu
+  # leg died with `rustc-LLVM ERROR: IO failure on output stream: No space left
+  # on device`, which reads as a code failure and costs real triage time.
+  #
+  # `line-tables-only` keeps file/line information in panic backtraces -- the
+  # part that actually matters when a test or journey fails -- while dropping
+  # the type and variable debuginfo that dominates the size. A full strip would
+  # be smaller still but loses backtrace line numbers, a bad trade for a test
+  # suite. Set here rather than as a `[profile.*]` in Cargo.toml so local
+  # developer builds keep full debuginfo. See issue #1250.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
   # Fresh, disposable file-backed SQLite DB per run (FR-006). Relative to the
   # checkout root (the nextest working directory in this workflow). The app
   # binary itself creates the file + runs migrations on connect
@@ -68,24 +177,38 @@ env:
 jobs:
   # Cheap change-detection gate — mirrors ci.yml's `changes` job. Cross-workflow
   # `needs` is not supported, so each workflow detects changes itself. The E2E
-  # build (frontend + Rust app) is skipped when the change cannot affect either;
-  # the job still runs and reports success so its status check stays green.
-  # `run` is true when a frontend OR Rust change is present, or any full-suite
+  # build (frontend + Rust app) is skipped when the change cannot affect either.
+  # `run` is true when a frontend OR Rust change is present, any full-suite
   # trigger fires (workflows, Cargo/lockfiles, package manifests, justfile,
-  # scripts).
+  # scripts), or the run was dispatched by hand.
+  #
+  # `run` gates whole JOBS (`if:` at job level), never individual steps. A job
+  # skipped by `if:` concludes `skipped`, which branch protection accepts as
+  # satisfied but which is a DIFFERENT conclusion from `success` in the UI and
+  # in the checks API. Gating step-by-step instead produced a job full of
+  # skipped steps that still concluded `success`, making "the suite passed"
+  # and "the suite never ran" indistinguishable to humans and pollers alike
+  # (see the PR that introduced this comment: job 88177101061).
   changes:
-    name: Detect changes
+    name: Detect changes (E2E)
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.decide.outputs.run }}
+      run_macos: ${{ steps.macos.outputs.run_macos }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
+            # Deliberately NOT '.github/workflows/**': editing ci.yml or
+            # release-please.yml cannot change how e2e.yml runs its shards.
+            # The broad glob made every ci.yml touch — including one-line
+            # fixes like #1282 — force a full E2E run, which is a large part
+            # of the Windows/macOS runner contention. Mirrors the same
+            # narrowing ci.yml already applies (#1169).
             force_full:
-              - '.github/workflows/**'
+              - '.github/workflows/e2e.yml'
               - '**/Cargo.toml'
               - 'Cargo.lock'
               - '**/package.json'
@@ -107,35 +230,471 @@ jobs:
               - '**/*.css'
       - id: decide
         shell: bash
+        env:
+          DISPATCHED: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           run=false
-          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] \
+          if [ "$DISPATCHED" = "true" ] \
+            || [ "${{ steps.filter.outputs.force_full }}" = "true" ] \
             || [ "${{ steps.filter.outputs.rust }}" = "true" ] \
             || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
             run=true
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "e2e changes: run=$run"
+      # The macOS chain only runs on an explicit workflow_dispatch with
+      # run_macos=true (see header comment, issue #489) — never on
+      # pull_request/push.
+      - id: macos
+        shell: bash
+        env:
+          RUN_MACOS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_macos == true }}
+        run: echo "run_macos=$RUN_MACOS" >> "$GITHUB_OUTPUT"
 
-  real-ui-e2e:
-    name: Real-UI E2E — ${{ matrix.os }}
+  # Build the VITE_E2E frontend dist ONCE (it is OS-independent) and share it
+  # with every test shard as an artifact. Content-keyed cache: a run whose
+  # frontend inputs are unchanged restores the dist instead of rebuilding.
+  build-frontend:
+    name: Build frontend (once)
     needs: changes
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    # macOS is best-effort (see header comment): a runner-side
-    # tauri-plugin-webdriver connectivity issue, not a per-PR regression.
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
-
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore dist by content key
+        id: dist-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/dist
+          key: e2e-dist-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/package.json', 'apps/desktop/index.html', 'apps/desktop/vite.config.*', 'apps/desktop/tsconfig*.json', 'apps/desktop/src/**', 'apps/desktop/public/**', 'packages/**') }}
+
+      - uses: pnpm/action-setup@v4
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile
+
+      # VITE_E2E=1 enables CI-only typeable path inputs (the native folder
+      # picker cannot be driven by WebDriver).
+      - name: Build frontend (VITE_E2E)
+        if: steps.dist-cache.outputs.cache-hit != 'true'
+        env:
+          VITE_E2E: "1"
+        run: pnpm --filter @astro-plan/desktop build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Per-OS builder: e2e-feature app binary + nextest test archive on a
+  # dedicated runner. Content-keyed cache on the Rust inputs: a frontend/
+  # docs-only change restores both outputs and skips the whole Rust toolchain
+  # + build. The `e2e` feature MUST be absent from release builds.
+  #
+  # build-app-windows / build-app-macos are line-for-line copies of this job
+  # with only os-name/APP_BIN/Linux-deps differences (see header: why per-OS
+  # jobs instead of a matrix).
+  # ---------------------------------------------------------------------------
+  build-app-ubuntu:
+    name: Build app — ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app binary and the nextest archive have DIFFERENT inputs, so they
+      # get different keys. Keying both on every *.rs (as before) meant editing
+      # a journey under crates/e2e-tests — which is NOT in desktop_shell's
+      # dependency closure — forced a full app rebuild for a byte-identical
+      # binary: ~340s on ubuntu, ~600s on windows, every E2E-test-only PR.
+      #
+      # The app key is derived from `cargo metadata` (desktop_shell's resolved
+      # closure) rather than a hand-maintained exclude list, so a newly added
+      # dependency is picked up automatically. If the closure cannot be
+      # resolved the script falls back to a BROADER key, i.e. it fails towards
+      # rebuilding — a stale binary would produce a meaningless green.
+      # `scripts/e2e-app-cache-key.sh --self-test` asserts both directions.
+      # Guards the closure logic itself: asserts the key CHANGES for a source
+      # file inside desktop_shell's closure and does NOT change for a crate
+      # outside it. Without this the key could silently narrow and start
+      # serving a stale binary. Ubuntu only — the logic is OS-independent.
+      - name: Cache-key self-test
+        shell: bash
+        run: bash scripts/e2e-app-cache-key.sh --self-test
+
+      - name: Compute app cache key
+        id: appkey
+        shell: bash
+        run: |
+          key=$(bash scripts/e2e-app-cache-key.sh)
+          # An empty key would silently degrade to a bare prefix shared by
+          # every commit — the worst case, a permanent stale hit. Fail loudly.
+          if [ -z "$key" ]; then
+            echo "::error::e2e-app-cache-key.sh produced an empty key; refusing to cache" >&2
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app binary by closure key
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.APP_BIN }}
+          key: e2e-app-v2-ubuntu-latest-${{ steps.appkey.outputs.key }}
+
+      # The archive DOES depend on test sources, so it keeps the broad key.
+      - name: Restore nextest archive by content key
+        id: archive-cache
+        uses: actions/cache@v4
+        with:
+          path: e2e-archive.tar.zst
+          key: e2e-archive-v2-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
+
+      # A reported cache-hit is not proof the binary is actually there: run
+      # 29591042499 hit a corrupted/partial e2e-app-ubuntu-latest cache entry
+      # (restore claimed success, but the archive step's own upload later
+      # showed only 1 of 2 cached paths existed) and every downstream shard
+      # failed at `chmod`. Treat cache-hit as provisional and re-verify both
+      # paths on disk before trusting it, so a bad cache entry self-heals into
+      # a rebuild instead of a wall of red shards.
+      # A reported cache-hit is not proof the artifact is on disk (run
+      # 29591042499 restored a partial entry and every shard died at chmod), so
+      # each artifact is re-verified independently. Checked separately because
+      # they now have separate keys: an E2E-test-only change hits the app cache
+      # and misses the archive, and must rebuild only the archive.
+      - name: Verify cached artifacts are usable
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -x "${{ env.APP_BIN }}" ]; then
+            echo "app_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.archive-cache.outputs.cache-hit }}" = "true" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "archive_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "archive_usable=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Tauri needs system webview/GTK libs to build on Linux.
       # No webkit2gtk-driver — the plugin replaces the external driver.
       - name: Install Tauri Linux system deps
-        if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+
+      # cache-on-failure deliberately left at its default (false). Saving from a
+      # failed run persists whatever broken/partial state the failure produced,
+      # and every later run then restores it. A macOS leg failed with
+      # `build-script-build: cannot execute binary file` (exit 126) after
+      # restoring a bad entry — which reads as a source defect rather than a
+      # cache defect and cost real diagnostic time. A failed run should cost a
+      # rebuild, never poison the next one.
+      - uses: Swatinem/rust-cache@v2
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        with:
+          shared-key: "rust-e2e-ubuntu-latest"
+
+      - uses: taiki-e/install-action@nextest
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+
+      # Debug builds load the frontend from the Tauri devUrl at runtime, but
+      # tauri-build still wants the configured frontendDist directory present.
+      - name: Stub frontend dist for tauri-build
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        shell: bash
+        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
+
+      - name: Build desktop_shell with e2e feature
+        if: steps.verify-app-cache.outputs.app_usable != 'true'
+        run: cargo build -p desktop_shell --features e2e
+
+      # Package the compiled e2e_tests binaries so shards run them without a
+      # Rust rebuild (`cargo nextest run --archive-file`).
+      - name: Archive e2e test binaries
+        if: steps.verify-app-cache.outputs.archive_usable != 'true'
+        run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-build-ubuntu-latest
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          retention-days: 1
+
+  # Copy of build-app-ubuntu for Windows (no Linux system deps; .exe binary).
+  build-app-windows:
+    name: Build app — windows-latest
+    needs: changes
+    # Windows build only needed on main pushes and dispatch; the windows shards
+    # are skipped on pull_request, so no consumer would use this artifact on PRs.
+    if: needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      APP_BIN: target/debug/desktop_shell.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app binary and the nextest archive have DIFFERENT inputs, so they
+      # get different keys. Keying both on every *.rs (as before) meant editing
+      # a journey under crates/e2e-tests — which is NOT in desktop_shell's
+      # dependency closure — forced a full app rebuild for a byte-identical
+      # binary: ~340s on ubuntu, ~600s on windows, every E2E-test-only PR.
+      #
+      # The app key is derived from `cargo metadata` (desktop_shell's resolved
+      # closure) rather than a hand-maintained exclude list, so a newly added
+      # dependency is picked up automatically. If the closure cannot be
+      # resolved the script falls back to a BROADER key, i.e. it fails towards
+      # rebuilding — a stale binary would produce a meaningless green.
+      # `scripts/e2e-app-cache-key.sh --self-test` asserts both directions.
+      - name: Compute app cache key
+        id: appkey
+        shell: bash
+        run: |
+          key=$(bash scripts/e2e-app-cache-key.sh)
+          # An empty key would silently degrade to a bare prefix shared by
+          # every commit — the worst case, a permanent stale hit. Fail loudly.
+          if [ -z "$key" ]; then
+            echo "::error::e2e-app-cache-key.sh produced an empty key; refusing to cache" >&2
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app binary by closure key
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.APP_BIN }}
+          key: e2e-app-v2-windows-latest-${{ steps.appkey.outputs.key }}
+
+      # The archive DOES depend on test sources, so it keeps the broad key.
+      - name: Restore nextest archive by content key
+        id: archive-cache
+        uses: actions/cache@v4
+        with:
+          path: e2e-archive.tar.zst
+          key: e2e-archive-v2-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
+
+      # See the ubuntu chain's "Verify cached binary is usable" comment for
+      # why a reported cache-hit alone is not trusted.
+      # A reported cache-hit is not proof the artifact is on disk (run
+      # 29591042499 restored a partial entry and every shard died at chmod), so
+      # each artifact is re-verified independently. Checked separately because
+      # they now have separate keys: an E2E-test-only change hits the app cache
+      # and misses the archive, and must rebuild only the archive.
+      - name: Verify cached artifacts are usable
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ]; then
+            echo "app_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.archive-cache.outputs.cache-hit }}" = "true" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "archive_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "archive_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        with:
+          shared-key: "rust-e2e-windows-latest"
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@nextest
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+
+      - name: Stub frontend dist for tauri-build
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        shell: bash
+        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
+
+      - name: Build desktop_shell with e2e feature
+        if: steps.verify-app-cache.outputs.app_usable != 'true'
+        run: cargo build -p desktop_shell --features e2e
+
+      - name: Archive e2e test binaries
+        if: steps.verify-app-cache.outputs.archive_usable != 'true'
+        run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-build-windows-latest
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          retention-days: 1
+
+  # Copy of build-app-ubuntu for the dispatch-only macOS chain (issue #489).
+  build-app-macos:
+    name: Build app — macos-latest
+    needs: changes
+    if: needs.changes.outputs.run == 'true' && needs.changes.outputs.run_macos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app binary and the nextest archive have DIFFERENT inputs, so they
+      # get different keys. Keying both on every *.rs (as before) meant editing
+      # a journey under crates/e2e-tests — which is NOT in desktop_shell's
+      # dependency closure — forced a full app rebuild for a byte-identical
+      # binary: ~340s on ubuntu, ~600s on windows, every E2E-test-only PR.
+      #
+      # The app key is derived from `cargo metadata` (desktop_shell's resolved
+      # closure) rather than a hand-maintained exclude list, so a newly added
+      # dependency is picked up automatically. If the closure cannot be
+      # resolved the script falls back to a BROADER key, i.e. it fails towards
+      # rebuilding — a stale binary would produce a meaningless green.
+      # `scripts/e2e-app-cache-key.sh --self-test` asserts both directions.
+      - name: Compute app cache key
+        id: appkey
+        shell: bash
+        run: |
+          key=$(bash scripts/e2e-app-cache-key.sh)
+          # An empty key would silently degrade to a bare prefix shared by
+          # every commit — the worst case, a permanent stale hit. Fail loudly.
+          if [ -z "$key" ]; then
+            echo "::error::e2e-app-cache-key.sh produced an empty key; refusing to cache" >&2
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore app binary by closure key
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.APP_BIN }}
+          key: e2e-app-v2-macos-latest-${{ steps.appkey.outputs.key }}
+
+      # The archive DOES depend on test sources, so it keeps the broad key.
+      - name: Restore nextest archive by content key
+        id: archive-cache
+        uses: actions/cache@v4
+        with:
+          path: e2e-archive.tar.zst
+          key: e2e-archive-v2-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml') }}
+
+      # See the ubuntu chain's "Verify cached binary is usable" comment for
+      # why a reported cache-hit alone is not trusted.
+      # A reported cache-hit is not proof the artifact is on disk (run
+      # 29591042499 restored a partial entry and every shard died at chmod), so
+      # each artifact is re-verified independently. Checked separately because
+      # they now have separate keys: an E2E-test-only change hits the app cache
+      # and misses the archive, and must rebuild only the archive.
+      - name: Verify cached artifacts are usable
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ]; then
+            echo "app_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ steps.archive-cache.outputs.cache-hit }}" = "true" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "archive_usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "archive_usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        with:
+          shared-key: "rust-e2e-macos-latest"
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@nextest
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+
+      - name: Stub frontend dist for tauri-build
+        if: steps.verify-app-cache.outputs.app_usable != 'true' || steps.verify-app-cache.outputs.archive_usable != 'true'
+        shell: bash
+        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
+
+      - name: Build desktop_shell with e2e feature
+        if: steps.verify-app-cache.outputs.app_usable != 'true'
+        run: cargo build -p desktop_shell --features e2e
+
+      - name: Archive e2e test binaries
+        if: steps.verify-app-cache.outputs.archive_usable != 'true'
+        run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-build-macos-latest
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Tier-1 smoke (per-PR, ubuntu-latest only): a focused subset of real-UI
+  # journeys that boots the app and exercises the core surfaces. Runs on
+  # pull_request ONLY — the full matrix (both OSes, all shards) runs on push
+  # to main and workflow_dispatch instead (see the two-tier strategy in the
+  # header). No sharding: the filter selects 3 journeys, each serial, which
+  # completes in < 8 min on ubuntu-latest.
+  #
+  # Smoke subset (--filter-expr):
+  #   all_top_level_screens_load           — boots app + every top-level route
+  #   inbox_ui_mixed_folder_splits_into_single_type_items — scan + classify
+  #   targets_ui_add_target_no_duplicate_on_reconfirm     — add + dedup target
+  #
+  # The filter expression is an OR (`|`) over exact test names. Adding a new
+  # journey to the smoke set means extending this expression in both the job
+  # step and the comment above — there is no hidden implicit selection.
+  # ---------------------------------------------------------------------------
+  smoke-ubuntu:
+    name: Real-UI smoke (L3) — ubuntu-latest
+    needs: [changes, build-frontend, build-app-ubuntu]
+    # Smoke subset runs ONLY on pull_request. Main pushes and dispatch run the
+    # full matrix (real-ui-e2e-ubuntu shards) instead.
+    if: needs.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -143,66 +702,387 @@ jobs:
             libayatana-appindicator3-dev \
             xvfb
 
-      - uses: dtolnay/rust-toolchain@stable
-        if: needs.changes.outputs.run == 'true'
-
-      - uses: Swatinem/rust-cache@v2
-        if: needs.changes.outputs.run == 'true'
-        with:
-          shared-key: "rust-e2e-${{ matrix.os }}"
-          cache-on-failure: true
-
       - uses: taiki-e/install-action@nextest
-        if: needs.changes.outputs.run == 'true'
 
-      # Install the tauri-webdriver CLI proxy.
-      # It bridges W3C client (:4444) → plugin embedded server (:4445).
+      - uses: taiki-e/install-action@cargo-binstall
+
       - name: Install tauri-webdriver CLI
-        if: needs.changes.outputs.run == 'true'
-        run: cargo install tauri-webdriver --locked
+        run: cargo binstall tauri-webdriver --locked --no-confirm
 
       - uses: pnpm/action-setup@v4
-        if: needs.changes.outputs.run == 'true'
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
-        if: needs.changes.outputs.run == 'true'
         with:
           node-version: 20
           cache: pnpm
 
       - name: Install JS deps
-        if: needs.changes.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # Build the frontend with VITE_E2E=1 so CI-only typeable path inputs are
-      # enabled (the native folder picker cannot be driven by WebDriver).
-      - name: Build frontend (VITE_E2E)
-        if: needs.changes.outputs.run == 'true'
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-ubuntu-latest
+
+      - name: Make app binary executable
+        shell: bash
+        run: chmod +x "$APP_BIN"
+
+      - name: Serve frontend dist on :5173
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      - name: Run L3 smoke (3 journeys via filter-expr)
         env:
-          VITE_E2E: "1"
-        run: pnpm --filter @astro-plan/desktop build
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        # --filter-expr selects exactly the smoke subset by test name. The
+        # expression is an OR of exact name matches — no glob, no substring —
+        # so a new journey with a similar name does not silently join the smoke
+        # run. `--no-tests=warn` is a defensive fallback (the filter should
+        # always match at least one test).
+        run: >-
+          xvfb-run -s "-screen 0 1600x1200x24" -a
+          cargo nextest run
+          --archive-file e2e-archive.tar.zst
+          --workspace-remap .
+          --profile e2e
+          --run-ignored all
+          --no-tests=warn
+          --filter-expr 'test(all_top_level_screens_load) | test(inbox_ui_mixed_folder_splits_into_single_type_items) | test(targets_ui_add_target_no_duplicate_on_reconfirm)'
+
+  # Gate for the smoke job. Published as "Real-UI smoke (L3) — ubuntu-latest"
+  # — the context required by branch protection for PRs (replaces the old
+  # full-matrix "Real-UI journeys (L3) — ubuntu-latest" and "— windows-latest"
+  # required contexts). Only runs on pull_request; skipped on main push/dispatch
+  # because the full e2e-gate-ubuntu/-windows gates cover those events.
+  e2e-smoke-gate-ubuntu:
+    name: Real-UI smoke (L3) — ubuntu-latest
+    needs: [changes, smoke-ubuntu]
+    # `always()` keeps this gate reporting red instead of skipping when smoke-ubuntu
+    # or its upstream builders fail. The run=='true' guard prevents a false green
+    # on a docs-only PR where the whole chain (builders included) was skipped.
+    if: always() && needs.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check smoke result
+        env:
+          RESULT: ${{ needs.smoke-ubuntu.result }}
+        run: |
+          echo "smoke-ubuntu result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1
+
+  # ---------------------------------------------------------------------------
+  # Per-OS test shards: download the prebuilt frontend + app/test-archive
+  # artifacts and run each shard's fraction of the journeys
+  # (`--partition count:N/M`, M per-OS — see header) — no Rust compilation in
+  # these jobs. Depending only on their OWN OS's builder keeps a build failure
+  # on one OS from skipping the other OS's tests.
+  #
+  # real-ui-e2e-windows / -macos are copies of this job (see header) except
+  # for the shard COUNT (2, not 4) and OS-specific steps.
+  # ---------------------------------------------------------------------------
+  real-ui-e2e-ubuntu:
+    name: Real-UI journeys (L3) shard — ubuntu-latest ${{ matrix.shard }}/4
+    needs: [changes, build-frontend, build-app-ubuntu]
+    # Full ubuntu matrix only on main pushes and manual dispatch (not PRs).
+    # PRs run the lighter smoke-ubuntu job instead (see two-tier strategy above).
+    if: needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    # Backstop beyond nextest's own slow-timeout + the 120s app-launch
+    # deadline. Pre-DAG full-job durations were ~13-20min on ubuntu/windows
+    # including the build (CI runs 29031373925, 29033234950); a 4-way shard
+    # runs roughly a quarter of the journeys with no build, so 30min stays
+    # generous headroom.
+    timeout-minutes: 30
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runtime (not -dev) libs are enough to RUN the prebuilt binary, but the
+      # dev metapackages are what the runner image resolves fastest and the
+      # difference is seconds; keep the known-good set plus xvfb.
+      - name: Install Tauri Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev \
+            xvfb
+
+      - uses: taiki-e/install-action@nextest
+
+      # cargo-binstall fetches a prebuilt tauri-webdriver binary when the
+      # crate publishes one, falling back to `cargo install` (source build)
+      # automatically otherwise — never slower than the plain `cargo install`
+      # this replaces, often much faster.
+      - uses: taiki-e/install-action@cargo-binstall
+
+      # Install the tauri-webdriver CLI proxy.
+      # It bridges W3C client (:4444) → plugin embedded server (:4445).
+      - name: Install tauri-webdriver CLI
+        run: cargo binstall tauri-webdriver --locked --no-confirm
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # Only needed for `vite preview` (SPA fallback for deep links); the
+      # frontend itself arrives prebuilt from build-frontend.
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-ubuntu-latest
+
+      # Artifact download drops the execute bit on POSIX.
+      - name: Make app binary executable
+        shell: bash
+        run: chmod +x "$APP_BIN"
 
       # Serve built dist on :5173 in the background. The app binary reads the
       # Tauri devUrl (:5173) and loads its frontend from there — real IPC.
       - name: Serve frontend dist on :5173
-        if: needs.changes.outputs.run == 'true'
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
 
-      # Build the app binary WITH the embedded plugin so tauri-webdriver can
-      # connect. The `e2e` feature MUST be absent from release builds.
-      - name: Build desktop_shell with e2e feature
-        if: needs.changes.outputs.run == 'true'
-        run: cargo build -p desktop_shell --features e2e
+      # Run the Layer-2 harness (real journeys, serial per .config/nextest.toml)
+      # from the prebuilt archive, wrapped in xvfb-run for a headless display.
+      #
+      # WEBKIT_DISABLE_DMABUF_RENDERER / WEBKIT_DISABLE_COMPOSITING_MODE:
+      # experiment (PR #928) — Ubuntu's WebKitGTK under Xvfb has no GPU, so
+      # its default DMA-BUF/compositing render paths were suspected of adding
+      # ~25-30s of per-test overhead vs Windows. Linux-only; harmless no-op if
+      # the hypothesis is wrong.
+      #
+      # `-s "-screen 0 1600x1200x24"` overrides xvfb-run's built-in default of
+      # 1280x1024x24 (`XVFBARGS` in /usr/bin/xvfb-run). 1280 is NARROWER than
+      # the 1400px viewport the docked-layout journeys request via
+      # `E2eApp::set_viewport`, and a resize past the screen edge is clamped —
+      # which would silently yield a too-small viewport and a journey that
+      # passes while asserting nothing. The larger framebuffer is plain memory
+      # (1600*1200*4 = ~7.7MB), not GPU, so it costs nothing on a runner that
+      # already has none.
+      - name: Run E2E (xvfb)
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: xvfb-run -s "-screen 0 1600x1200x24" -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/4
 
-      # Run the Layer-2 harness (real journeys, serial per .config/nextest.toml).
-      # Linux wraps in xvfb-run for a headless display; Windows/macOS run natively.
-      - name: Run E2E (Linux — xvfb)
-        if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
-        run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
+  # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
+  real-ui-e2e-windows:
+    name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/2
+    needs: [changes, build-frontend, build-app-windows]
+    # Full windows matrix only on main pushes and manual dispatch (not PRs).
+    # Windows L3 is the slow/historically flaky leg (~25 min + flake, runs
+    # 30013328940, 30008614669); keeping it off PRs avoids blocking merge
+    # trains while preserving full coverage on every main push.
+    if: needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      APP_BIN: target/debug/desktop_shell.exe
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Run E2E (Windows / macOS)
-        if: runner.os != 'Linux' && needs.changes.outputs.run == 'true'
-        run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
+      - uses: taiki-e/install-action@nextest
+
+      - uses: taiki-e/install-action@cargo-binstall
+
+      - name: Install tauri-webdriver CLI
+        run: cargo binstall tauri-webdriver --locked --no-confirm
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-windows-latest
+
+      - name: Serve frontend dist on :5173
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      - name: Run E2E
+        shell: bash
+        env:
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/2
+
+  # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
+  # no xvfb (native display), longer timeout for the 120s-per-attempt
+  # launch-failure loop.
+  #
+  # This job's `needs: build-app-macos` is itself gated on run_macos=='true'
+  # (see that job's `if:`), and GitHub adds an implicit success() to a job's
+  # `if:` whenever it doesn't already reference always()/cancelled()/
+  # failure() — so this job inherits build-app-macos's skip on every normal
+  # run without needing its own run_macos check. Consequence worth knowing:
+  # GitHub can only substitute `${{ matrix.shard }}` in a job's `name:` once
+  # that job's matrix is actually scheduled. Skipped-before-scheduling (the
+  # normal case here) leaves the raw `${{ matrix.shard }}/2` template
+  # visible in the check name instead of an expanded `1/2`/`2/2` — a
+  # generic GitHub Actions display quirk for any matrix job skipped before
+  # expansion, reproduced identically by the ubuntu/windows shard jobs above
+  # whenever `changes.outputs.run` is false. It is cosmetic (the "skipped"
+  # conclusion is still accurate) and, unlike ubuntu/windows, permanently
+  # visible here because this leg only ever runs via explicit
+  # `workflow_dispatch(run_macos: true)` — where the matrix DOES expand
+  # correctly, so renaming this job to dodge the unexpanded string in the
+  # common (skipped) case would only make the dispatched case worse.
+  real-ui-e2e-macos:
+    name: Real-UI journeys (L3) shard — macos-latest ${{ matrix.shard }}/2
+    needs: [changes, build-frontend, build-app-macos]
+    if: needs.changes.outputs.run == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@nextest
+
+      - uses: taiki-e/install-action@cargo-binstall
+
+      - name: Install tauri-webdriver CLI
+        run: cargo binstall tauri-webdriver --locked --no-confirm
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-macos-latest
+
+      - name: Make app binary executable
+        shell: bash
+        run: chmod +x "$APP_BIN"
+
+      - name: Serve frontend dist on :5173
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      - name: Run E2E
+        shell: bash
+        env:
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/2
+
+  # ---------------------------------------------------------------------------
+  # Per-OS gates preserving the pre-DAG check names ("Real-UI E2E — <os>").
+  # Each gate depends ONLY on its own OS's shards, so a failure on one OS
+  # reds only that OS's gate — identical semantics to the old per-OS jobs.
+  # `always()` keeps the gate reporting (red) instead of skipping when a shard
+  # or upstream builder fails. The gate is itself gated on run=='true', so a
+  # green gate means the shards genuinely executed and passed — it is never
+  # reachable via the no-op path. When run=='false' the whole chain, gate
+  # included, concludes `skipped`, which branch protection accepts without
+  # ever claiming the suite passed.
+  # ---------------------------------------------------------------------------
+  e2e-gate-ubuntu:
+    name: Real-UI journeys (L3) — ubuntu-latest
+    needs: [changes, real-ui-e2e-ubuntu]
+    # Full gate only on main pushes and manual dispatch; skipped on PRs.
+    # PRs satisfy their real-UI requirement via e2e-smoke-gate-ubuntu instead.
+    if: always() && needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.real-ui-e2e-ubuntu.result }}
+        run: |
+          echo "real-ui-e2e-ubuntu result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1
+
+  e2e-gate-windows:
+    name: Real-UI journeys (L3) — windows-latest
+    needs: [changes, real-ui-e2e-windows]
+    # Full gate only on main pushes and manual dispatch; skipped on PRs.
+    if: always() && needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.real-ui-e2e-windows.result }}
+        run: |
+          echo "real-ui-e2e-windows result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1
+
+  # Skipped entirely unless the dispatch-only macOS chain was requested.
+  e2e-gate-macos:
+    name: Real-UI journeys (L3) — macos-latest
+    needs: [changes, real-ui-e2e-macos]
+    if: always() && needs.changes.outputs.run == 'true' && needs.changes.outputs.run_macos == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.real-ui-e2e-macos.result }}
+        run: |
+          echo "real-ui-e2e-macos result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1

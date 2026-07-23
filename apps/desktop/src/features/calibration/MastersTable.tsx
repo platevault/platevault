@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * MastersTable — spec 043 §4 Calibration redesign (shared-layout adoption, #73).
  *
@@ -5,7 +8,7 @@
  * sortable table — the same surface pattern as SessionsTable (shared `Table`
  * from `@/ui`). Like every list page, the table is FLAT by default (a single
  * sorted list); grouping is opt-in via the top-bar Group-by control (Kind,
- * Camera, Filter, …), sharing the `groupByDimensions` engine + `.alm-listgroup`
+ * Camera, Filter, …), sharing the `groupByDimensions` engine + `.pv-listgroup`
  * header rows. `dark_flat` and `bad_pixel_map` are never shown in v1 (FR-001),
  * regardless of grouping.
  *
@@ -23,10 +26,10 @@
  * on CalibrationPage; the per-master actions live in that detail panel's header.
  */
 
-import { useMemo } from 'react';
-import { Pill, Table, EmptyState } from '@/ui';
+import { useMemo, type ReactNode } from 'react';
+import { Btn, Pill, Table, EmptyState, Skeleton, tableIndent } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
-import { SortHeader, ariaSortFor } from '@/components';
+import { SortHeader, ariaSortFor, renderValue } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import {
@@ -35,6 +38,7 @@ import {
   type DimensionAccessor,
 } from '@/lib/grouping';
 import { useCollapsibleGroups } from '@/lib/use-grouping';
+import { masterFieldApplicability } from './master-applicability';
 
 // ── Kind model ──────────────────────────────────────────────────────────────
 
@@ -51,8 +55,22 @@ function shownKind(kind: string): Kind | null {
   return null;
 }
 
+/**
+ * Whether a master would ever reach this table (FR-001 v1 kinds).
+ * Exported so CalibrationPage can tell "library has masters, the filter hides
+ * them" from "library has nothing showable" (#669) — the page owns the
+ * unfiltered set, this table only ever receives the filtered one.
+ */
+export function isShownMasterKind(kind: string): boolean {
+  return shownKind(kind) !== null;
+}
+
 function kindVariant(kind: string): PillVariant {
-  const map: Record<string, PillVariant> = { dark: 'info', flat: 'accent', bias: 'neutral' };
+  const map: Record<string, PillVariant> = {
+    dark: 'info',
+    flat: 'accent',
+    bias: 'neutral',
+  };
   return map[kind.toLowerCase()] ?? 'neutral';
 }
 
@@ -77,50 +95,81 @@ export interface MasterSort {
 
 export const DEFAULT_MASTER_SORT: MasterSort = { col: 'created', dir: 'desc' };
 
-const EMPTY = '—';
-
 // ── Display helpers ──────────────────────────────────────────────────────────────
 
 /**
  * Human-readable master label: kind-capitalized + a discriminator
  * (exposure for darks, filter for flats). Mirrors the old MastersList title.
  */
-function masterLabel(m: CalibrationMaster): string {
-  const k = m.kind.toLowerCase();
+// The parameter is `master`, not `m`: `m` is the Paraglide message object, and
+// shadowing it here is what made this helper unable to reach the catalog at all.
+function masterLabel(master: CalibrationMaster): string {
+  const k = master.kind.toLowerCase();
   const kindCap = k.charAt(0).toUpperCase() + k.slice(1);
-  const fp = m.fingerprint;
+  const fp = master.fingerprint;
   const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
   const filterStr = fp?.filter ?? '';
   const discriminator = k === 'dark' ? expStr : k === 'flat' ? filterStr : '';
-  return discriminator ? `Master ${kindCap} · ${discriminator}` : `Master ${kindCap}`;
+  return discriminator
+    ? m.calibration_master_title_disc({ kind: kindCap, disc: discriminator })
+    : m.calibration_master_title({ kind: kindCap });
 }
 
-/** Filter only applies to flats; other kinds render the empty marker. */
-function filterCell(m: CalibrationMaster): string {
-  if (m.kind.toLowerCase() !== 'flat') return EMPTY;
-  return m.fingerprint?.filter ?? EMPTY;
+/**
+ * Kind-conditional cells go through the shared renderer (spec-030 Q16 /
+ * FR-135–FR-137, `@/components/RenderValue`): not-applicable to this kind
+ * (e.g. filter on a dark) renders blank, applicable-but-absent renders the
+ * unresolved chip — never the same "—" for both, which previously hid a
+ * missing filter on a real flat behind the same marker as "flats have no
+ * filter field."
+ */
+
+/** Filter only applies to flats (data-model.md matrix). */
+function filterCell(m: CalibrationMaster): ReactNode {
+  return renderValue(m.fingerprint?.filter ?? null, {
+    applicability: masterFieldApplicability(m.kind, 'filter'),
+  });
 }
 
-/** Exposure only applies to darks; other kinds render the empty marker. */
-function exposureCell(m: CalibrationMaster): string {
-  if (m.kind.toLowerCase() !== 'dark') return EMPTY;
-  return m.fingerprint?.exposureS != null ? `${m.fingerprint.exposureS}s` : EMPTY;
+/** Exposure applies to darks/flats, not bias (data-model.md matrix). */
+function exposureCell(m: CalibrationMaster): ReactNode {
+  return renderValue(
+    m.fingerprint?.exposureS ?? null,
+    { applicability: masterFieldApplicability(m.kind, 'exposure') },
+    (v) => `${v}s`,
+  );
 }
 
-function tempCell(m: CalibrationMaster): string {
-  return m.fingerprint?.tempC != null ? `${m.fingerprint.tempC}°C` : EMPTY;
+/** Set-temperature applies to darks (masters have no Light column, matrix §Set temperature). */
+function tempCell(m: CalibrationMaster): ReactNode {
+  return renderValue(
+    m.fingerprint?.tempC ?? null,
+    { applicability: masterFieldApplicability(m.kind, 'setTemp') },
+    (v) => `${v}°C`,
+  );
 }
 
-function gainCell(m: CalibrationMaster): string {
-  return m.fingerprint?.gain != null ? String(m.fingerprint.gain) : EMPTY;
+/** Gain applies to every master kind. */
+function gainCell(m: CalibrationMaster): ReactNode {
+  return renderValue(m.fingerprint?.gain ?? null, {
+    applicability: 'applicable',
+  });
 }
 
-function binningCell(m: CalibrationMaster): string {
-  return m.fingerprint?.binning ? m.fingerprint.binning.replace('x', '×') : EMPTY;
+/** Binning applies to every master kind. */
+function binningCell(m: CalibrationMaster): ReactNode {
+  return renderValue(
+    m.fingerprint?.binning ?? null,
+    { applicability: 'applicable' },
+    (v) => String(v).replace('x', '×'),
+  );
 }
 
-function cameraCell(m: CalibrationMaster): string {
-  return m.fingerprint?.camera ?? EMPTY;
+/** Camera applies to every master kind. */
+function cameraCell(m: CalibrationMaster): ReactNode {
+  return renderValue(m.fingerprint?.camera ?? null, {
+    applicability: 'applicable',
+  });
 }
 
 /**
@@ -132,8 +181,10 @@ function usageSummary(master: CalibrationMaster): string {
   const sessions = (master.usedBySessionIds ?? []).length;
   const projects = (master.usedByProjectIds ?? []).length;
   const parts: string[] = [];
-  if (sessions > 0) parts.push(m.calibration_usage_sessions({ count: sessions }));
-  if (projects > 0) parts.push(m.calibration_usage_projects({ count: projects }));
+  if (sessions > 0)
+    parts.push(m.calibration_usage_sessions({ count: sessions }));
+  if (projects > 0)
+    parts.push(m.calibration_usage_projects({ count: projects }));
   return parts.length > 0 ? parts.join(' · ') : 'unused';
 }
 
@@ -147,11 +198,18 @@ function createdDate(m: CalibrationMaster): string {
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
-function compareStr(a: string | null | undefined, b: string | null | undefined): number {
+function compareStr(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
   return (a ?? '').localeCompare(b ?? '');
 }
 
-function compareMasters(a: CalibrationMaster, b: CalibrationMaster, sort: MasterSort): number {
+function compareMasters(
+  a: CalibrationMaster,
+  b: CalibrationMaster,
+  sort: MasterSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'master':
@@ -164,13 +222,18 @@ function compareMasters(a: CalibrationMaster, b: CalibrationMaster, sort: Master
       cmp = compareStr(a.fingerprint?.filter, b.fingerprint?.filter);
       break;
     case 'gain':
-      cmp = (a.fingerprint?.gain ?? -Infinity) - (b.fingerprint?.gain ?? -Infinity);
+      cmp =
+        (a.fingerprint?.gain ?? -Infinity) - (b.fingerprint?.gain ?? -Infinity);
       break;
     case 'exposure':
-      cmp = (a.fingerprint?.exposureS ?? -Infinity) - (b.fingerprint?.exposureS ?? -Infinity);
+      cmp =
+        (a.fingerprint?.exposureS ?? -Infinity) -
+        (b.fingerprint?.exposureS ?? -Infinity);
       break;
     case 'temp':
-      cmp = (a.fingerprint?.tempC ?? -Infinity) - (b.fingerprint?.tempC ?? -Infinity);
+      cmp =
+        (a.fingerprint?.tempC ?? -Infinity) -
+        (b.fingerprint?.tempC ?? -Infinity);
       break;
     case 'binning':
       cmp = compareStr(a.fingerprint?.binning, b.fingerprint?.binning);
@@ -187,10 +250,14 @@ function compareMasters(a: CalibrationMaster, b: CalibrationMaster, sort: Master
 
 // ── Multi-level grouping accessors ────────────────────────────────────────────
 
-export const MASTER_ACCESSORS: Readonly<Record<string, DimensionAccessor<CalibrationMaster>>> = {
+export const MASTER_ACCESSORS: Readonly<
+  Record<string, DimensionAccessor<CalibrationMaster>>
+> = {
   kind: (m) => m.kind.toLowerCase(),
   camera: (m) => m.fingerprint?.camera,
-  instrument: (m) => m.fingerprint?.camera, // instrument = camera in the fingerprint
+  // #788: no separate instrument field on the fingerprint — "instrument" was
+  // a byte-identical duplicate of "camera" and has been dropped as a Group-by
+  // dimension (see CALIB_DIMENSIONS in CalibrationPage.tsx).
   // Filter is meaningful for flats (Ha/OIII/L/…); null for bias/dark.
   filter: (m) => m.fingerprint?.filter,
   // No source-night field on the master yet → group on the master's creation
@@ -202,16 +269,56 @@ export const MASTER_ACCESSORS: Readonly<Record<string, DimensionAccessor<Calibra
 // ── Column model ──────────────────────────────────────────────────────────────
 
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
-const COLUMNS: Array<{ key: string; label: () => string; sort: MasterSortCol; className?: string }> = [
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort: MasterSortCol;
+  className?: string;
+}> = [
   { key: 'master', label: () => m.calibration_col_master(), sort: 'master' },
-  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-calib-cell--muted' },
+  {
+    key: 'camera',
+    label: () => m.settings_calmatch_camera(),
+    sort: 'camera',
+    className: 'pv-calib-cell--muted',
+  },
   { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
-  { key: 'gain', label: () => m.settings_calmatch_gain(), sort: 'gain', className: 'alm-calib-cell--num' },
-  { key: 'exposure', label: () => m.calibration_fp_exposure(), sort: 'exposure', className: 'alm-calib-cell--mono' },
-  { key: 'temp', label: () => m.calibration_col_temp(), sort: 'temp', className: 'alm-calib-cell--mono' },
-  { key: 'binning', label: () => m.settings_calmatch_binning(), sort: 'binning', className: 'alm-calib-cell--mono' },
-  { key: 'usage', label: () => m.calibration_col_usage(), sort: 'usage', className: 'alm-calib-cell--muted' },
-  { key: 'created', label: () => m.archive_prop_date(), sort: 'created', className: 'alm-calib-cell--mono' },
+  {
+    key: 'gain',
+    label: () => m.settings_calmatch_gain(),
+    sort: 'gain',
+    className: 'pv-calib-cell--num',
+  },
+  {
+    key: 'exposure',
+    label: () => m.calibration_fp_exposure(),
+    sort: 'exposure',
+    className: 'pv-calib-cell--mono',
+  },
+  {
+    key: 'temp',
+    label: () => m.calibration_col_temp(),
+    sort: 'temp',
+    className: 'pv-calib-cell--mono',
+  },
+  {
+    key: 'binning',
+    label: () => m.settings_calmatch_binning(),
+    sort: 'binning',
+    className: 'pv-calib-cell--mono',
+  },
+  {
+    key: 'usage',
+    label: () => m.calibration_col_usage(),
+    sort: 'usage',
+    className: 'pv-calib-cell--muted',
+  },
+  {
+    key: 'created',
+    label: () => m.archive_prop_date(),
+    sort: 'created',
+    className: 'pv-calib-cell--mono',
+  },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────────
@@ -231,11 +338,18 @@ interface Props {
    * When empty the table renders a flat sorted list.
    */
   dims?: string[];
+  /**
+   * #669: describes the active search/kind filter when it is what emptied the
+   * table. Set by the caller ONLY while showable masters exist, so an empty
+   * library never gets the filter copy and a filter miss never gets the
+   * "run a scan" onboarding copy.
+   */
+  filterLabel?: string;
+  /** Clears the caller's filters — the empty state's CTA (#812). */
+  onClearFilters?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-
-const INDENT_PER_DEPTH = 12;
 
 export function MastersTable({
   masters,
@@ -247,11 +361,16 @@ export function MastersTable({
   onSort,
   agingThresholdDays,
   dims = [],
+  filterLabel,
+  onClearFilters,
 }: Props) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
   // FR-001: only dark/flat/bias masters are ever shown, flat or grouped.
-  const shown = useMemo(() => masters.filter((mm) => shownKind(mm.kind) !== null), [masters]);
+  const shown = useMemo(
+    () => masters.filter((mm) => shownKind(mm.kind) !== null),
+    [masters],
+  );
 
   const sorted = useMemo(
     () => [...shown].sort((a, b) => compareMasters(a, b, sort)),
@@ -262,7 +381,8 @@ export function MastersTable({
   const useMultiGroup = dims.length > 0;
 
   const tree = useMemo(
-    () => (useMultiGroup ? groupByDimensions(sorted, dims, MASTER_ACCESSORS) : []),
+    () =>
+      useMultiGroup ? groupByDimensions(sorted, dims, MASTER_ACCESSORS) : [],
     [sorted, dims, useMultiGroup],
   );
 
@@ -273,28 +393,54 @@ export function MastersTable({
 
   if (loading) {
     return (
-      <div className="alm-calib-table__status" data-testid="masters-loading">
-        {m.calibration_loading()}
+      <div className="pv-calib-table__status">
+        <Skeleton
+          variant="block"
+          count={6}
+          data-testid="masters-loading"
+          label={m.calibration_loading()}
+        />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="alm-calib-table__status">
-        <EmptyState title={m.calibration_load_error_title()} desc={error} data-testid="masters-error" />
+      <div className="pv-calib-table__status">
+        <EmptyState
+          title={m.calibration_load_error_title()}
+          desc={error}
+          data-testid="masters-error"
+        />
       </div>
     );
   }
 
   if (shown.length === 0) {
+    // #669: a filter miss must name the filter and never offer onboarding copy
+    // while masters exist. #812: first real consumer of EmptyState's `action`.
     return (
-      <div className="alm-calib-table__status">
-        <EmptyState
-          title={m.calibration_empty_title()}
-          desc={m.calibration_empty_desc()}
-          data-testid="masters-empty"
-        />
+      <div className="pv-calib-table__status">
+        {filterLabel ? (
+          <EmptyState
+            title={m.calibration_empty_filtered_title({ filter: filterLabel })}
+            desc={m.calibration_empty_filtered_desc()}
+            action={
+              onClearFilters && (
+                <Btn size="sm" onClick={onClearFilters}>
+                  {m.common_clear_filters()}
+                </Btn>
+              )
+            }
+            data-testid="masters-empty-filtered"
+          />
+        ) : (
+          <EmptyState
+            title={m.calibration_empty_title()}
+            desc={m.calibration_empty_desc()}
+            data-testid="masters-empty"
+          />
+        )}
       </div>
     );
   }
@@ -310,7 +456,7 @@ export function MastersTable({
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort)}
-        ariaLabel={m.calibration_sort_by_aria({ col: c.label() })}
+        ariaLabel={m.common_sort_by_aria({ col: c.label() })}
       />
     ),
   }));
@@ -326,23 +472,33 @@ export function MastersTable({
     created: '' as string,
   };
 
-  function masterItemRow(master: CalibrationMaster, indentPx = 0): TableRow {
+  function masterItemRow(
+    master: CalibrationMaster,
+    indentPx = 0,
+    guideAnchor = false,
+  ): TableRow {
     const isAging = master.ageDays > agingThresholdDays;
     const kindStr = master.kind.toLowerCase();
     return {
       _testid: `master-row-${master.id}`,
+      _guideAnchor: guideAnchor ? 'calibration.review-row' : undefined,
       _rowClassName:
-        'alm-calib-table__row' + (selected === master.id ? ' alm-calib-table__row--selected' : ''),
+        'pv-calib-table__row' +
+        (selected === master.id ? ' pv-calib-table__row--selected' : ''),
       _onClick: () => onSelect(master.id),
+      _selected: selected === master.id,
+      _indent: indentPx || undefined,
       master: (
-        <span
-          className="alm-calib-cell__master"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-          style={indentPx ? { paddingLeft: indentPx } : undefined}
-        >
+        <span className="pv-table__cell-inline">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-          <span className="alm-calib-cell__master-label">{masterLabel(master)}</span>
-          {isAging && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
+          <span className="pv-calib-cell__master-label">
+            {masterLabel(master)}
+          </span>
+          {isAging && (
+            <Pill variant="warn">
+              {m.calibration_aging_days({ days: master.ageDays })}
+            </Pill>
+          )}
         </span>
       ),
       camera: cameraCell(master),
@@ -351,7 +507,11 @@ export function MastersTable({
       exposure: exposureCell(master),
       temp: tempCell(master),
       binning: binningCell(master),
-      usage: <span data-testid={`master-usage-${master.id}`}>{usageSummary(master)}</span>,
+      usage: (
+        <span data-testid={`master-usage-${master.id}`}>
+          {usageSummary(master)}
+        </span>
+      ),
       created: createdDate(master),
     };
   }
@@ -360,41 +520,46 @@ export function MastersTable({
   const rows: TableRow[] = [];
 
   if (useMultiGroup) {
-    for (const vrow of visualRows) {
+    const firstItemIndex = visualRows.findIndex((row) => row.kind === 'item');
+    for (const [rowIndex, vrow] of visualRows.entries()) {
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
-          _rowClassName: 'alm-listgroup',
+          _rowClassName: 'pv-listgroup',
+          _indent: tableIndent(depth),
           master: (
             <button
               type="button"
-              className="alm-listgroup__cell"
+              className="pv-listgroup__cell"
               data-testid={`calibration-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-              style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
             >
-              <span className="alm-listgroup__caret" aria-hidden="true">
+              <span className="pv-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
               </span>
-              <span className="alm-listgroup__label">{node.label}</span>
-              <span className="alm-listgroup__count">{node.count}</span>
+              <span className="pv-listgroup__label">{node.label}</span>
+              <span className="pv-listgroup__count">{node.count}</span>
             </button>
           ),
           ...EMPTY_MASTER_CELLS,
         });
       } else {
-        const indentPx = 8 + vrow.depth * INDENT_PER_DEPTH;
-        rows.push(masterItemRow(vrow.item, indentPx));
+        rows.push(
+          masterItemRow(
+            vrow.item,
+            tableIndent(vrow.depth),
+            rowIndex === firstItemIndex,
+          ),
+        );
       }
     }
   } else {
     // Flat sorted list (default, dims empty).
-    for (const master of sorted) {
-      rows.push(masterItemRow(master));
+    for (const [index, master] of sorted.entries()) {
+      rows.push(masterItemRow(master, 0, index === 0));
     }
   }
 
-  return <Table className="alm-calib-table" columns={columns} rows={rows} />;
+  return <Table className="pv-calib-table" columns={columns} rows={rows} />;
 }

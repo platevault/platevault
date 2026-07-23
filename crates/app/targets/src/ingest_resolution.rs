@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Async ingest target-resolution queue (spec 035, US4 — group ingested images
 //! by resolved target).
 //!
@@ -31,6 +34,7 @@
 use audit::event_bus::{TargetResolveBatchCompleted, TargetResolved};
 use audit::{EventBus, Source};
 use domain_core::ids::Timestamp;
+use persistence_db::repositories::q_targets_ingest as repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -77,16 +81,6 @@ pub enum AssociateOutcome {
     Enqueued,
 }
 
-/// A pending ingest-resolution row (the drain's work item). The image is
-/// already linked on the row via `image_id`; the drain only needs the row `id`
-/// (to update state/target), the `object_raw` (to resolve), and `attempts`.
-#[derive(Clone, Debug)]
-struct PendingRow {
-    id: String,
-    object_raw: String,
-    attempts: i64,
-}
-
 // ── enqueue / inline association (T025 + T026 entry point) ──────────────────────
 
 /// Insert a `pending` ingest-resolution row for `(image_id, object_raw)`.
@@ -103,29 +97,16 @@ pub async fn enqueue(
     object_raw: &str,
 ) -> Result<String, ContractError> {
     // Reuse an existing non-terminal row for the same (image, object) if present.
-    let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT id FROM ingest_resolution WHERE image_id = ? AND object_raw = ? LIMIT 1",
-    )
-    .bind(image_id)
-    .bind(object_raw)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
-    if let Some((id,)) = existing {
+    if let Some(id) =
+        repo::find_ingest_resolution_id(pool, image_id, object_raw).await.map_err(db_err)?
+    {
         return Ok(id);
     }
 
     let id = Uuid::new_v4().to_string();
-    sqlx::query(
-        "INSERT INTO ingest_resolution (id, image_id, object_raw, state, target_id, attempts)
-         VALUES (?, ?, ?, 'pending', NULL, 0)",
-    )
-    .bind(&id)
-    .bind(image_id)
-    .bind(object_raw)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
+    repo::insert_ingest_resolution(pool, &id, image_id, object_raw, "pending", None)
+        .await
+        .map_err(db_err)?;
     Ok(id)
 }
 
@@ -177,32 +158,20 @@ async fn write_resolved_row(
     object_raw: &str,
     target_id: &str,
 ) -> Result<(), ContractError> {
-    let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT id FROM ingest_resolution WHERE image_id = ? AND object_raw = ? LIMIT 1",
-    )
-    .bind(image_id)
-    .bind(object_raw)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
+    let existing =
+        repo::find_ingest_resolution_id(pool, image_id, object_raw).await.map_err(db_err)?;
 
-    if let Some((id,)) = existing {
-        sqlx::query("UPDATE ingest_resolution SET state = 'resolved', target_id = ? WHERE id = ?")
-            .bind(target_id)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(db_err)?;
+    if let Some(id) = existing {
+        repo::mark_ingest_resolution_resolved(pool, &id, target_id).await.map_err(db_err)?;
     } else {
-        sqlx::query(
-            "INSERT INTO ingest_resolution (id, image_id, object_raw, state, target_id, attempts)
-             VALUES (?, ?, ?, 'resolved', ?, 0)",
+        repo::insert_ingest_resolution(
+            pool,
+            &Uuid::new_v4().to_string(),
+            image_id,
+            object_raw,
+            "resolved",
+            Some(target_id),
         )
-        .bind(Uuid::new_v4().to_string())
-        .bind(image_id)
-        .bind(object_raw)
-        .bind(target_id)
-        .execute(pool)
         .await
         .map_err(db_err)?;
     }
@@ -250,22 +219,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
     limit: usize,
 ) -> Result<DrainSummary, ContractError> {
     let limit_i = i64::try_from(limit.max(1)).unwrap_or(i64::MAX);
-    let rows: Vec<(String, String, i64)> = sqlx::query_as(
-        "SELECT id, object_raw, attempts
-         FROM ingest_resolution
-         WHERE state = 'pending'
-         ORDER BY rowid ASC
-         LIMIT ?",
-    )
-    .bind(limit_i)
-    .fetch_all(pool)
-    .await
-    .map_err(db_err)?;
-
-    let pending: Vec<PendingRow> = rows
-        .into_iter()
-        .map(|(id, object_raw, attempts)| PendingRow { id, object_raw, attempts })
-        .collect();
+    let pending = repo::list_pending_ingest_resolutions(pool, limit_i).await.map_err(db_err)?;
 
     let considered = pending.len();
     let mut num_resolved = 0usize;
@@ -295,8 +249,15 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
 
         match resolver.resolve(row.object_raw.trim()).await {
             Ok(identity) => {
-                let (id, _outcome) =
+                let (id, outcome) =
                     cache::upsert_resolved(pool, &identity).await.map_err(db_err)?;
+                // Invalidate after the write commits (never before); a
+                // `SkippedUserOverride` outcome means no row was actually
+                // written (sticky user-override lock kept precedence), so the
+                // catalog snapshot is not stale (mirrors `target_resolve::resolve`).
+                if outcome != cache::UpsertOutcome::SkippedUserOverride {
+                    crate::caches::invalidate_catalog();
+                }
                 let target_id = id.to_string();
                 mark_resolved(pool, &row.id, &target_id).await?;
                 if let Some(bus) = bus {
@@ -323,20 +284,27 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
         }
     }
 
+    // issue #668: the periodic drain (~30s cadence) runs continuously whether
+    // or not there's anything in the queue; publishing a completion event for
+    // an empty pass floods the activity log with a no-op heartbeat (~470/500
+    // rows in the reported sweep) that buries user-meaningful events. Only
+    // publish when the pass actually considered something.
     if let Some(bus) = bus {
-        let _ = bus
-            .publish(
-                audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
-                Source::System,
-                TargetResolveBatchCompleted {
-                    considered,
-                    resolved: num_resolved,
-                    unresolved: num_unresolved,
-                    pending: num_pending,
-                    at: Timestamp::now_iso(),
-                },
-            )
-            .await;
+        if considered > 0 {
+            let _ = bus
+                .publish(
+                    audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
+                    Source::System,
+                    TargetResolveBatchCompleted {
+                        considered,
+                        resolved: num_resolved,
+                        unresolved: num_unresolved,
+                        pending: num_pending,
+                        at: Timestamp::now_iso(),
+                    },
+                )
+                .await;
+        }
     }
 
     Ok(DrainSummary {
@@ -347,18 +315,62 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
     })
 }
 
+/// Build a [`targeting_resolver::simbad::SimbadResolver`] from the persisted
+/// `resolver_settings` row and run one full drain pass: [`resolve_pending`]
+/// then [`crate::ingest_sessions::backfill_session_targets`].
+///
+/// Shared by the spec-035 US4/T043 periodic backstop
+/// (`desktop_shell::bootstrap::background::spawn_ingest_resolution_drain`) and
+/// the spec-035 plan-applied path (`app_core_inbox::plan_listener::
+/// ingest_light_frames_if_applicable`, issue #1256): the latter calls this
+/// immediately after a plan's light frames are ingested so newly-enqueued
+/// `pending` rows (and any session left unlinked from an earlier pass) resolve
+/// promptly instead of waiting for the next ~30s periodic tick. Never returns
+/// an error — a failure to build the resolver, drain, or back-fill is logged
+/// and the caller (periodic tick or next plan-applied event) retries.
+pub async fn drain_and_backfill_once(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    resolve_cache: &targeting_resolver::simbad::ResolveCache,
+) {
+    use targeting_resolver::simbad::{SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT};
+
+    let settings =
+        persistence_db::repositories::q_desktop::get_resolver_settings(pool).await.unwrap_or(None);
+    let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
+        || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
+        |r| (r.online_enabled != 0, r.simbad_endpoint, r.request_timeout_secs),
+    );
+
+    // `SimbadResolver::new` never builds a reqwest/TLS client when
+    // `online_enabled` is false (mirrors target.resolve FIX-3); cache hits
+    // still resolve regardless.
+    let config =
+        SimbadConfig::from_settings(endpoint, u64::try_from(timeout_secs.max(1)).unwrap_or(10));
+    let resolver = match SimbadResolver::new(&config, resolve_cache, online_enabled) {
+        Ok(resolver) => resolver,
+        Err(e) => {
+            tracing::warn!("failed to build SimbadResolver for ingest drain: {e:?}");
+            return;
+        }
+    };
+
+    if let Err(e) = resolve_pending(pool, &resolver, Some(bus), online_enabled, 50).await {
+        tracing::warn!("ingest_resolution drain failed: {e:?}");
+        return;
+    }
+
+    if let Err(e) = crate::ingest_sessions::backfill_session_targets(pool).await {
+        tracing::warn!("acquisition_session target back-fill failed: {e:?}");
+    }
+}
+
 async fn mark_resolved(
     pool: &SqlitePool,
     row_id: &str,
     target_id: &str,
 ) -> Result<(), ContractError> {
-    sqlx::query("UPDATE ingest_resolution SET state = 'resolved', target_id = ? WHERE id = ?")
-        .bind(target_id)
-        .bind(row_id)
-        .execute(pool)
-        .await
-        .map_err(db_err)?;
-    Ok(())
+    repo::mark_ingest_resolution_resolved(pool, row_id, target_id).await.map_err(db_err)
 }
 
 async fn mark_unresolved(
@@ -366,13 +378,7 @@ async fn mark_unresolved(
     row_id: &str,
     attempts: i64,
 ) -> Result<(), ContractError> {
-    sqlx::query("UPDATE ingest_resolution SET state = 'unresolved', attempts = ? WHERE id = ?")
-        .bind(attempts + 1)
-        .bind(row_id)
-        .execute(pool)
-        .await
-        .map_err(db_err)?;
-    Ok(())
+    repo::mark_ingest_resolution_unresolved(pool, row_id, attempts).await.map_err(db_err)
 }
 
 async fn emit_resolved(bus: &EventBus, target: &CachedTarget, query: Option<&str>) {
@@ -441,6 +447,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -541,6 +548,52 @@ mod tests {
         // Associated, and cached for next time.
         assert!(target_id_of(&db, &img).await.is_some());
         assert!(cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().is_some());
+    }
+
+    /// issue #668: an empty drain pass (nothing pending — the common case for
+    /// the periodic ~30s heartbeat) must NOT publish `target.resolve_batch
+    /// .completed` at all, so it can't flood the activity log with no-op
+    /// events.
+    #[tokio::test]
+    async fn drain_with_nothing_pending_does_not_publish_batch_completed() {
+        let db = setup().await;
+        let bus = audit::EventBus::with_pool(db.pool().clone());
+        let resolver = FakeResolver::new();
+
+        let summary = resolve_pending(db.pool(), &resolver, Some(&bus), true, 50).await.unwrap();
+        assert_eq!(summary.considered, 0);
+
+        let events = persistence_db::repositories::events::list_since_by_topic(
+            db.pool(),
+            0,
+            audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
+        )
+        .await
+        .unwrap();
+        assert!(events.is_empty(), "empty drain pass must not publish a completion event");
+    }
+
+    /// A pass that actually considers rows — even if none resolve — is real
+    /// activity and must still publish the completion event.
+    #[tokio::test]
+    async fn drain_with_pending_rows_publishes_batch_completed() {
+        let db = setup().await;
+        let bus = audit::EventBus::with_pool(db.pool().clone());
+        let img = make_image(&db, "m31.fits").await;
+        associate_or_enqueue(db.pool(), None, &img, "M 31").await.unwrap();
+
+        let resolver = FakeResolver::new().with_response("M 31", m31());
+        let summary = resolve_pending(db.pool(), &resolver, Some(&bus), true, 50).await.unwrap();
+        assert_eq!(summary.considered, 1);
+
+        let events = persistence_db::repositories::events::list_since_by_topic(
+            db.pool(),
+            0,
+            audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
+        )
+        .await
+        .unwrap();
+        assert_eq!(events.len(), 1, "non-empty pass must publish exactly one completion event");
     }
 
     #[tokio::test]

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-OS processing-tool executable auto-discovery (spec 011 T015, R2).
 //!
 //! Discovery is a pure read operation — safe to call repeatedly, no writes.

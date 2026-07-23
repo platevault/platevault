@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Canonical error conversion helpers for `app_core`.
 //!
 //! Provides a single `db_to_contract` helper that replaces the scattered,
@@ -23,7 +26,24 @@
 //! byte-identical for every consumer.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
-use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, RecoveryAction};
+
+/// The `retry` recovery action attached to every `retryable=true` error this
+/// crate produces (bd `astro-plan-qnj0`).
+///
+/// `label`/`description` are diagnostic fallback text, not translated copy —
+/// the same convention `ContractError.message` already uses (see
+/// `apps/desktop/src/lib/errors.ts` FR-009: raw backend strings are never
+/// shown to the user). A future UI (issue #930) resolves display text from
+/// `code` via an i18n catalog, mirroring how `ContractError.code` already
+/// drives `ERROR_MESSAGES` today.
+fn retry_action() -> RecoveryAction {
+    RecoveryAction {
+        code: "retry".to_owned(),
+        label: "Retry the operation".to_owned(),
+        description: None,
+    }
+}
 
 /// Convert a `sqlx::Error` inline (command-handler shorthand).
 ///
@@ -62,6 +82,7 @@ where
         ErrorSeverity::Fatal,
         true,
     )
+    .with_recovery_action(retry_action())
 }
 
 /// Canonical generic `DbError` → `ContractError` mapper (US11 T142).
@@ -98,7 +119,8 @@ pub fn db_err(e: persistence_db::DbError) -> ContractError {
             format!("{other}"),
             ErrorSeverity::Fatal,
             true,
-        ),
+        )
+        .with_recovery_action(retry_action()),
     }
 }
 
@@ -118,6 +140,51 @@ pub fn db_to_contract(e: persistence_db::DbError) -> ContractError {
 #[allow(clippy::needless_pass_by_value)]
 pub fn bus_err(e: audit::bus::BusError) -> ContractError {
     ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
+        .with_recovery_action(retry_action())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// bd `astro-plan-qnj0`: every `retryable=true` error this crate produces
+    /// must carry a `recovery_actions` entry — before this change all three
+    /// mappers hardcoded `Vec::new()` via `ContractError::new`.
+    #[test]
+    fn db_err_fatal_branch_carries_retry_action() {
+        let err = db_err(persistence_db::DbError::CasFailed("stale version".to_owned()));
+        assert!(err.retryable);
+        assert_eq!(err.recovery_actions.len(), 1);
+        assert_eq!(err.recovery_actions[0].code, "retry");
+    }
+
+    /// `NotFound` stays `Blocking`/non-retryable and has no generic recovery
+    /// action to offer (the caller must supply a different reference) — this
+    /// path is intentionally left empty, not an oversight.
+    #[test]
+    fn db_err_not_found_branch_has_no_recovery_action() {
+        let err = db_err(persistence_db::DbError::NotFound("widget 1".to_owned()));
+        assert!(!err.retryable);
+        assert!(err.recovery_actions.is_empty());
+    }
+
+    #[test]
+    fn db_internal_ctx_carries_retry_action() {
+        let src = persistence_db::DbError::CasFailed("stale version".to_owned());
+        let err = db_internal_ctx(src, "insert widget");
+        assert_eq!(err.recovery_actions.len(), 1);
+        assert_eq!(err.recovery_actions[0].code, "retry");
+    }
+
+    #[test]
+    fn bus_err_carries_retry_action() {
+        let src = audit::bus::BusError::Database(persistence_db::DbError::CasFailed(
+            "stale version".to_owned(),
+        ));
+        let err = bus_err(src);
+        assert_eq!(err.recovery_actions.len(), 1);
+        assert_eq!(err.recovery_actions[0].code, "retry");
+    }
 }
 
 // NOTE (US11 T142): a `From<persistence_db::DbError> for ContractError` impl is

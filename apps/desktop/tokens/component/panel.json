@@ -1,0 +1,10 @@
+{
+  "list-width": {
+    "$value": "280px",
+    "$type": "dimension"
+  },
+  "rail-width": {
+    "$value": "300px",
+    "$type": "dimension"
+  }
+}

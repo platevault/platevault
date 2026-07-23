@@ -1,10 +1,15 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Seeded processing-tool profiles (spec 011 T002).
 //!
 //! Includes PixInsight and Siril with per-OS bundle IDs (R-BundleId) and
 //! args templates (R3).
 //!
 //! `all()` returns a fixed-size array of owned `ToolProfile` values.
-//! `validate_seeds()` is called once at app boot to assert seed integrity.
+//! `validate_seeds()` asserts seed integrity. The seeds are compile-time
+//! constants, so it is a test-time gate (`all_seeds_pass_validation`), not a
+//! runtime one; it has no caller outside this module's tests.
 
 use crate::{ArgsToken, DetachStrategy, ToolProfile, DEFAULT_SOURCE_VIEW_LAYOUT};
 
@@ -13,8 +18,15 @@ fn pixinsight_profile() -> ToolProfile {
         id: "pixinsight",
         name: "PixInsight",
         bundle_id: Some("com.pixinsight.PixInsight"),
-        args_template: vec![ArgsToken::Folder],
-        supports_open_folder: true,
+        // PixInsight cannot open a bare folder path (bug #778): the only
+        // robust path argument is a `.xosm` project file we never generate,
+        // and running WBPP's automationMode would violate the PixInsight
+        // processing boundary (Constitution III). Launch bare instead — the
+        // user opens their own files/project inside PixInsight. `cwd` is
+        // still anchored to the project folder (R-CwdContain), which is what
+        // drives the one-time "cwd anchored" hint (supports_open_folder=false).
+        args_template: vec![],
+        supports_open_folder: false,
         detach_strategy: DetachStrategy::OpenBundleId,
         // WBPP: session/night → filter → exposure grouping (spec 049 US2 T025).
         source_view_layout: Some(DEFAULT_SOURCE_VIEW_LAYOUT),
@@ -35,12 +47,28 @@ fn siril_profile() -> ToolProfile {
     }
 }
 
+fn planetary_suite_profile() -> ToolProfile {
+    ToolProfile {
+        id: "planetary_suite",
+        name: "Planetary Suite",
+        // No stable macOS bundle id is known for AutoStakkert! (research.md R2:
+        // "if present; else surface not found") — `open -b` dispatch stays
+        // unavailable until one is confirmed; Windows/Linux launch by path only.
+        bundle_id: None,
+        // AutoStakkert! opens its own dialog; cwd anchors it (spec 011 R3).
+        args_template: vec![],
+        supports_open_folder: false,
+        detach_strategy: DetachStrategy::Setsid,
+        // No Planetary-Suite-specific layout yet — falls back to
+        // DEFAULT_SOURCE_VIEW_LAYOUT like Siril.
+        source_view_layout: None,
+    }
+}
+
 /// Return all seeded processing-tool profiles as an owned `Vec`.
-///
-/// Call `validate_seeds()` at app boot to assert integrity.
 #[must_use]
 pub fn all() -> Vec<ToolProfile> {
-    vec![pixinsight_profile(), siril_profile()]
+    vec![pixinsight_profile(), siril_profile(), planetary_suite_profile()]
 }
 
 /// Validate all seed profiles.
@@ -104,9 +132,13 @@ mod tests {
     }
 
     #[test]
-    fn pixinsight_supports_open_folder() {
+    fn pixinsight_launches_bare_with_no_folder_arg() {
+        // PixInsight cannot open a bare folder path (bug #778): launch with
+        // no args and rely on `cwd` anchoring instead of {folder} (spec 011
+        // R-CwdContain, supports_open_folder=false path).
         let p = find("pixinsight").expect("pixinsight must be seeded");
-        assert!(p.supports_open_folder);
+        assert!(!p.supports_open_folder);
+        assert!(p.args_template.is_empty());
         assert_eq!(p.bundle_id, Some("com.pixinsight.PixInsight"));
     }
 
@@ -122,8 +154,16 @@ mod tests {
     }
 
     #[test]
-    fn two_seeds_are_registered() {
-        assert_eq!(all().len(), 2);
+    fn three_seeds_are_registered() {
+        assert_eq!(all().len(), 3);
+    }
+
+    #[test]
+    fn planetary_suite_is_seeded_and_launches_bare() {
+        let p = find("planetary_suite").expect("planetary_suite must be seeded");
+        assert_eq!(p.name, "Planetary Suite");
+        assert!(!p.supports_open_folder);
+        assert!(p.args_template.is_empty());
     }
 
     // ── Spec 049 US2 T023: WBPP layout groups by session/night → filter →
@@ -147,14 +187,19 @@ mod tests {
 
     #[test]
     fn resolve_source_view_layout_falls_back_to_default() {
-        // No profile, an unknown profile, and a seeded profile without an
-        // explicit layout (siril) all fall back to the WBPP/PixInsight default.
+        // No profile, an unmatched profile ref, and seeded profiles without an
+        // explicit layout of their own (siril, planetary_suite) all fall back
+        // to the WBPP/PixInsight default.
         assert_eq!(resolve_source_view_layout(None), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
+        assert_eq!(
+            resolve_source_view_layout(Some("photoshop")),
+            crate::DEFAULT_SOURCE_VIEW_LAYOUT
+        );
+        assert_eq!(resolve_source_view_layout(Some("siril")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
         assert_eq!(
             resolve_source_view_layout(Some("Planetary Suite")),
             crate::DEFAULT_SOURCE_VIEW_LAYOUT
         );
-        assert_eq!(resolve_source_view_layout(Some("siril")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
     }
 
     // ── Spec 049 US2 T024: changing the layout pattern only changes the

@@ -1,10 +1,15 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! LifecycleRepository — async trait for spec 002 lifecycle operations.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::sync::Arc;
 
-use audit::bus::EventBus;
-use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
+use audit_types::{
+    EventPublisher, LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+};
 use domain_core::ids::{AuditId, EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::lifecycle::provenance::{ProvenanceTag, ProvenancedValue};
@@ -169,6 +174,20 @@ fn table_for(entity_type: EntityType) -> &'static str {
         EntityType::ProcessingArtifact | EntityType::Projection => "processing_artifact",
         // DataSource and LibraryRoot both map to library_root table
         EntityType::DataSource | EntityType::LibraryRoot => "library_root",
+        // Spec 030 T120: Settings/Protection/Equipment are audit-only tags
+        // (no lifecycle state table) written via `EventBus::write_audit`,
+        // never through `record_transition`'s CAS state-column path. Framing
+        // (spec 008 Q27) and Calibration (#1120) join the same audit-only
+        // precedent.
+        EntityType::Settings
+        | EntityType::Protection
+        | EntityType::Equipment
+        | EntityType::Framing
+        | EntityType::Calibration => {
+            unreachable!(
+                "{entity_type:?} has no lifecycle state table; it never flows through record_transition"
+            )
+        }
     }
 }
 
@@ -181,18 +200,105 @@ fn state_column_for(entity_type: EntityType) -> &'static str {
     }
 }
 
+/// FR-003 (#713): resolve the project whose dependents (research.md §6 —
+/// `processing_artifact`/`prepared_source_view` rows sharing this
+/// `project_id`) the StalePropagator should recompute. Trivial for a Project
+/// transition (its own id); a lookup for entity types that themselves carry a
+/// `project_id` FK; `None` otherwise (no propagation redesign — session-level
+/// dependents are out of scope here).
+async fn resolve_transition_project_id(
+    pool: &sqlx::SqlitePool,
+    entity_type: EntityType,
+    id_str: &str,
+) -> Option<String> {
+    match entity_type {
+        EntityType::Project => Some(id_str.to_owned()),
+        EntityType::ProcessingArtifact | EntityType::Projection => {
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT project_id FROM processing_artifact WHERE id = ?",
+            )
+            .bind(id_str)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+        }
+        EntityType::PreparedSource => sqlx::query_scalar::<_, Option<String>>(
+            "SELECT project_id FROM prepared_source_view WHERE id = ?",
+        )
+        .bind(id_str)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .flatten(),
+        _ => None,
+    }
+}
+
+/// FR-003 (#713): marks a project's dependent `processing_artifact`/
+/// `prepared_source_view` rows stale (research.md §6 — `ProjectManifest
+/// depends_on Project`). DB-boundary home for
+/// `audit::stale_propagator::resolve_project_dependents_hook`, which has no
+/// raw-SQL access of its own (check-db-boundary.sh).
+///
+/// # Errors
+/// Returns `DbError` if either `UPDATE` fails.
+pub async fn mark_project_dependents_stale(
+    pool: &sqlx::SqlitePool,
+    project_id: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE processing_artifact SET staleness = 'stale' \
+         WHERE project_id = ? AND staleness != 'stale'",
+    )
+    .bind(project_id)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE prepared_source_view SET state = 'stale' \
+         WHERE project_id = ? AND state NOT IN ('stale', 'retired')",
+    )
+    .bind(project_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Raw `ledger_view` row, decoded by column name via `#[derive(FromRow)]`
+/// instead of a hand-rolled positional-tuple `query_as` + manual per-field
+/// map (Tier-3 dedup/abstraction audit). `entity_id`/`entity_type` are kept
+/// as plain strings here — parsing them into typed `EntityId`/`EntityType`
+/// is a separate domain concern handled in `list_assets_ledger`.
+#[derive(sqlx::FromRow)]
+struct RawLedgerRow {
+    entity_type: String,
+    entity_id: String,
+    state: String,
+    title: Option<String>,
+    path: Option<String>,
+    project_id: Option<String>,
+    updated_at: Option<String>,
+}
+
 // ── SQLite-backed implementation ──────────────────────────────────────────────
 
 /// SQLite-backed implementation of [`LifecycleRepository`].
 pub struct SqliteLifecycleRepository {
     pool: sqlx::SqlitePool,
-    bus: EventBus,
+    bus: Arc<dyn EventPublisher>,
 }
 
 impl SqliteLifecycleRepository {
+    /// `bus` is generic over [`EventPublisher`] (not the concrete `audit::EventBus`)
+    /// so this crate never depends on `audit` — `audit` depends on
+    /// `persistence_db` for its `events`-table SQL, so the reverse edge would
+    /// cycle. Callers pass their `EventBus` value unchanged; it implements
+    /// `EventPublisher`.
     #[must_use]
-    pub fn new(pool: sqlx::SqlitePool, bus: EventBus) -> Self {
-        Self { pool, bus }
+    pub fn new(pool: sqlx::SqlitePool, bus: impl EventPublisher + 'static) -> Self {
+        Self { pool, bus: Arc::new(bus) }
     }
 
     #[must_use]
@@ -299,19 +405,10 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         // AssertSqlSafe: every dynamic portion above is either a static
         // identifier, a fixed `?` placeholder, or an integer literal derived
         // from typed `u32` filter fields. User-supplied strings flow through
-        // `bind` calls below.
-        let mut q = sqlx::query_as::<
-            _,
-            (
-                String,
-                String,
-                String,
-                Option<String>,
-                Option<String>,
-                Option<String>,
-                Option<String>,
-            ),
-        >(sqlx::AssertSqlSafe(sql));
+        // `bind` calls below. Named-column `FromRow` decoding (vs. a
+        // positional tuple) keeps this immune to the SELECT list being
+        // reordered (T1-d Tier-3).
+        let mut q = sqlx::query_as::<_, RawLedgerRow>(sqlx::AssertSqlSafe(sql));
         for v in &string_binds {
             q = q.bind(v);
         }
@@ -319,26 +416,21 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         let raw = q.fetch_all(&self.pool).await?;
 
         let mut rows = Vec::with_capacity(raw.len());
-        for (et_str, id_str, state, title, path, project_id, updated_at) in raw {
-            let uuid = Uuid::parse_str(&id_str)
-                .map_err(|e| DbError::NotFound(format!("bad uuid {id_str}: {e}")))?;
-            let entity_id = EntityId::from_uuid(uuid);
-            let entity_type = parse_entity_type(&et_str);
-            let project_id = match project_id {
-                Some(s) => Some(EntityId::from_uuid(
-                    Uuid::parse_str(&s)
-                        .map_err(|e| DbError::NotFound(format!("bad project uuid {s}: {e}")))?,
-                )),
+        for r in raw {
+            let entity_id = EntityId::from_uuid(parse_stored_uuid(&r.entity_id)?);
+            let entity_type = parse_entity_type(&r.entity_type);
+            let project_id = match r.project_id {
+                Some(s) => Some(EntityId::from_uuid(parse_stored_uuid(&s)?)),
                 None => None,
             };
             rows.push(LedgerRow {
                 entity_id,
                 entity_type,
-                current_state: state,
-                title,
-                path,
+                current_state: r.state,
+                title: r.title,
+                path: r.path,
                 project_id,
-                updated_at,
+                updated_at: r.updated_at,
             });
         }
 
@@ -427,22 +519,22 @@ impl LifecycleRepository for SqliteLifecycleRepository {
 
         tx.commit().await?;
 
-        // Publish event after successful commit.
-        let _ = self
-            .bus
-            .publish(
-                TOPIC_LIFECYCLE_TRANSITION_APPLIED,
-                Source::System,
-                LifecycleTransitionApplied {
-                    entity_type: transition.entity_type,
-                    entity_id: transition.entity_id.to_string(),
-                    from_state: transition.from_state.clone(),
-                    to_state: transition.to_state.clone(),
-                    actor: transition.actor.clone(),
-                    at: applied_at,
-                },
-            )
-            .await;
+        let project_id =
+            resolve_transition_project_id(&self.pool, transition.entity_type, &id_str).await;
+
+        // Publish event after successful commit (fire-and-forget — publish
+        // failure must never roll back or fail an already-committed transition).
+        let event_payload = serde_json::to_value(LifecycleTransitionApplied {
+            entity_type: transition.entity_type,
+            entity_id: transition.entity_id.to_string(),
+            from_state: transition.from_state.clone(),
+            to_state: transition.to_state.clone(),
+            actor: transition.actor.clone(),
+            at: applied_at,
+            project_id,
+        })
+        .unwrap_or(Value::Null);
+        self.bus.publish(TOPIC_LIFECYCLE_TRANSITION_APPLIED, Source::System, event_payload).await;
 
         Ok(TransitionRecord {
             audit_id,
@@ -542,6 +634,18 @@ fn provenance_asset_type(entity_type: EntityType) -> &'static str {
         EntityType::LibraryRoot => "data_source",
         other => other.as_str(),
     }
+}
+
+/// Parses a UUID read back from a stored id column.
+///
+/// A malformed UUID here is row *corruption*, not a missing row — mapping it
+/// to `DbError::NotFound` (as this used to) mislabels a decode failure as
+/// "no such entity". `sqlx::Error::Decode` is the closest existing fit for a
+/// bad-value-in-storage error without adding a new `DbError` variant; the
+/// ideal long-term shape is a dedicated `DbError::Decode` variant (T1-d).
+fn parse_stored_uuid(s: &str) -> DbResult<Uuid> {
+    Uuid::parse_str(s)
+        .map_err(|e| DbError::Database(sqlx::Error::Decode(format!("bad uuid {s}: {e}").into())))
 }
 
 fn parse_entity_type(s: &str) -> EntityType {
@@ -667,5 +771,33 @@ mod tests {
         let repo = InMemoryLifecycleRepository;
         let rows = repo.list_assets_ledger(LedgerFilter::default()).await.unwrap();
         assert!(rows.is_empty());
+    }
+
+    /// T1-d: a malformed stored UUID is row corruption, not a missing row.
+    /// Previously this path mapped to `DbError::NotFound`, mislabeling a
+    /// decode failure as "no such entity"; it must now surface as a
+    /// non-`NotFound` variant instead.
+    #[tokio::test]
+    async fn list_assets_ledger_reports_corrupt_uuid_as_non_notfound() {
+        let db = crate::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("migrations");
+        let bus = audit::bus::EventBus::new(db.pool().clone(), 16);
+        let repo = super::SqliteLifecycleRepository::new(db.pool().clone(), bus);
+
+        sqlx::query(
+            "INSERT INTO library_root \
+             (id, label, current_path, kind, state, last_seen_at, created_at) \
+             VALUES ('not-a-uuid', 'lr', '/tmp/lr', 'local', 'active', \
+                     '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let err = repo.list_assets_ledger(LedgerFilter::default()).await.unwrap_err();
+        assert!(
+            !matches!(err, crate::DbError::NotFound(_)),
+            "corrupt uuid must not be reported as NotFound: {err:?}"
+        );
     }
 }

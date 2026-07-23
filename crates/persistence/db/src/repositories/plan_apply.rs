@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for plan apply runs and events (spec 025).
 //!
 //! Operates on the `plan_apply_runs` and `plan_apply_events` tables from
@@ -359,19 +362,37 @@ pub async fn item_failed(
     Ok(())
 }
 
-/// Transition an item to `stale` (R-FS-1) — no counter change; run pauses.
+/// Transition an item to `stale` (R-FS-1); increments `items_failed` (the
+/// item is terminally `failed` from the plan's perspective, matching
+/// [`item_failed`]) and the run pauses.
+///
+/// Previously this left `plans.items_failed` unchanged, which `pause_run`
+/// never read either — but `resume_plan`'s cumulative-counter reporting
+/// (issue #575, spec 025 R-Pause-1) and `get_apply_status` both surface
+/// `plans.items_failed` directly, so an under-count here would silently
+/// misreport a stale-paused plan as fully applied once its remaining items
+/// finish on resume.
 ///
 /// # Errors
 ///
 /// Returns [`DbError::Database`] on connection failure.
-pub async fn item_stale(pool: &SqlitePool, item_id: &str) -> DbResult<()> {
+pub async fn item_stale(pool: &SqlitePool, item_id: &str, plan_id: &str) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
     sqlx::query(
         "UPDATE plan_items SET item_state = 'failed', item_stale = 1, \
          failure_reason = 'item.stale: source file changed since approval' WHERE id = ?",
     )
     .bind(item_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+
+    sqlx::query("UPDATE plans SET items_failed = items_failed + 1 WHERE id = ?")
+        .bind(plan_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -484,6 +505,58 @@ pub async fn batch_cancel_pending_items(pool: &SqlitePool, plan_id: &str) -> DbR
     Ok(cancelled_count)
 }
 
+/// Cancel any items left in `applying` when a run ends `Cancelled`.
+///
+/// Under normal forward-loop execution no item is ever `applying` when
+/// `fs_executor::run::execute_plan` returns `Cancelled` — cancellation is
+/// checked strictly *between* items, so an item picked up for real always
+/// runs to a terminal state first. The one exception is a mid-run retry
+/// (`retry_plan_item`): it flips the DB row `failed -> applying` and queues
+/// the id *eagerly*, independent of whether the executor's retry-drain loop
+/// ever actually re-executes it before observing cancellation. Such an item
+/// is invisible to [`batch_cancel_pending_items`] (which only targets
+/// `pending`) and would otherwise stay `applying` forever with no terminal
+/// audit record (review fix for issues #742/#575 follow-up). Returns the
+/// cancelled item ids so the caller can emit a per-item audit row for each.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn cancel_orphaned_applying_items(
+    pool: &SqlitePool,
+    plan_id: &str,
+) -> DbResult<Vec<String>> {
+    let mut tx = pool.begin().await?;
+
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM plan_items WHERE plan_id = ? AND item_state = 'applying' \
+         ORDER BY item_index ASC",
+    )
+    .bind(plan_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    if !ids.is_empty() {
+        sqlx::query(
+            "UPDATE plan_items SET item_state = 'cancelled' \
+             WHERE plan_id = ? AND item_state = 'applying'",
+        )
+        .bind(plan_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let cancelled_count = i64::try_from(ids.len()).unwrap_or(i64::MAX);
+        sqlx::query("UPDATE plans SET items_cancelled = items_cancelled + ? WHERE id = ?")
+            .bind(cancelled_count)
+            .bind(plan_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(ids)
+}
+
 // ── Audit event writes ────────────────────────────────────────────────────────
 
 /// Append an audit event row (append-only; no UPDATE/DELETE allowed).
@@ -582,6 +655,56 @@ pub async fn list_events(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<PlanA
         .bind(plan_id)
         .fetch_all(pool)
         .await?)
+}
+
+/// Fetch the plan item whose CAS mismatch most recently triggered a pause
+/// (`item_state = 'failed'`, `item_stale = 1`).
+///
+/// The executor halts immediately on the first item that trips a pause
+/// condition (R-Pause-1), so the highest `item_index` among stale items is
+/// the one that caused the *current* pause. `resume_plan` re-probes this
+/// item's source path before allowing `paused -> applying` (spec 025
+/// T048/T049/T050).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_last_stale_item(
+    pool: &SqlitePool,
+    plan_id: &str,
+) -> DbResult<Option<crate::repositories::plans::PlanItemRow>> {
+    Ok(sqlx::query_as(
+        "SELECT * FROM plan_items WHERE plan_id = ? AND item_stale = 1 \
+         ORDER BY item_index DESC LIMIT 1",
+    )
+    .bind(plan_id)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// Fetch the plan item whose failure reason most recently began with
+/// `code_prefix` (e.g. `"volume.unavailable"`, `"disk.full"`).
+///
+/// Same "highest `item_index` among matching failures = the item that
+/// caused the current pause" reasoning as [`get_last_stale_item`].
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_last_item_with_failure_prefix(
+    pool: &SqlitePool,
+    plan_id: &str,
+    code_prefix: &str,
+) -> DbResult<Option<crate::repositories::plans::PlanItemRow>> {
+    let pattern = format!("{code_prefix}%");
+    Ok(sqlx::query_as(
+        "SELECT * FROM plan_items WHERE plan_id = ? AND item_state = 'failed' \
+         AND failure_reason LIKE ? ORDER BY item_index DESC LIMIT 1",
+    )
+    .bind(plan_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

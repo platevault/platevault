@@ -1,17 +1,24 @@
-//! `transition_lifecycle` use case — stub wiring for spec 002.
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! `transition_lifecycle` — the shared lifecycle write-primitive.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 //!
-//! Flow (full impl lands in T003/T044):
-//! 1. Load current state from repository.
-//! 2. Validate (entity_type, from, to) against the canonical edge table.
-//! 3. Perform atomic CAS via `repository.record_transition`.
-//! 4. Publish `lifecycle.transition.applied` on the event bus.
+//! This is intentionally a thin, **un-gated** primitive: it CAS-writes a
+//! lifecycle transition and publishes `lifecycle.transition.applied`. It does
+//! NOT enforce business rules.
 //!
-//! This file proves the wiring compiles. Business-rule enforcement (plan
-//! requirement checks, actor/blocked gate, provenance review gate) is
-//! deferred to T044/T045/T046.
-
-use std::collections::HashMap;
+//! Business-rule enforcement (edge legality, actor/blocked gate, provenance
+//! review gate, plan-requirement gate) lives one layer up in
+//! [`crate::transition_use_case::apply_transition`], which is what the
+//! `lifecycle.transition.apply` command calls. `apply_transition` runs every
+//! gate and only then reaches this primitive.
+//!
+//! The one caller that reaches this primitive directly, bypassing the gates,
+//! is the archive-closure path (`app_core::plan_apply::finalize_archive_lifecycle`):
+//! there the `completed → archived` plan was already reviewed, approved, and
+//! applied, so re-running the requires-plan gate would wrongly refuse it. That
+//! bypass is deliberate and documented at the call site.
 
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
@@ -20,39 +27,6 @@ use domain_core::lifecycle::data_asset::EntityType;
 use persistence_db::repositories::lifecycle::{
     LifecycleRepository, TransitionRecord, TransitionRequest,
 };
-
-/// Metadata carried on an allowed transition edge.
-#[derive(Clone, Debug)]
-pub struct EdgeMeta {
-    /// True when this edge requires a `FilesystemPlan` to be approved first.
-    pub requires_plan: bool,
-}
-
-/// Canonical transition edge table (spec 002 data-model.md §Plan-Requirement Edge Table).
-///
-/// Only edges that have special constraints are listed here.
-/// Unlisted edges default to `requires_plan = false` and are permitted.
-///
-/// TODO T044: wire the full table from data-model.md and enforce at runtime.
-#[must_use]
-pub fn build_edge_table() -> HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>> {
-    let mut m: HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>> = HashMap::new();
-
-    // project edges that require a plan
-    m.entry(EntityType::Project).or_default().extend([
-        (["ready", "prepared"], EdgeMeta { requires_plan: true }),
-        (["prepared", "ready"], EdgeMeta { requires_plan: true }),
-        (["completed", "archived"], EdgeMeta { requires_plan: true }),
-        (["blocked", "archived"], EdgeMeta { requires_plan: true }),
-    ]);
-
-    // prepared_source: all → retired requires plan
-    m.entry(EntityType::PreparedSource)
-        .or_default()
-        .push((["*", "retired"], EdgeMeta { requires_plan: true }));
-
-    m
-}
 
 /// Error type for the lifecycle use case.
 #[derive(Debug, thiserror::Error)]
@@ -79,30 +53,29 @@ pub struct TransitionCommand {
 
 /// Apply a lifecycle transition via the repository, then publish an event.
 ///
+/// Un-gated by design: this primitive assumes the caller already validated the
+/// transition (edge legality, actor, provenance, plan requirement). Callers
+/// reaching business rules must go through
+/// [`crate::transition_use_case::apply_transition`]; the archive-closure path
+/// is the one deliberate exception (see the module docs).
+///
 /// Returns `Ok(None)` when `from_state == to_state` (noop — no audit row, no event).
 ///
 /// # Errors
-/// - `LifecycleError::Refused` when the edge requires a plan that is not approved
-///   (full validation deferred to T044).
-/// - `LifecycleError::Persistence` on repository failure.
-pub async fn transition_lifecycle<R, S>(
+/// - `LifecycleError::Persistence` on repository failure (including the atomic
+///   CAS in `record_transition` rejecting a stale `from_state`).
+pub async fn transition_lifecycle<R>(
     repo: &R,
     bus: &EventBus,
     cmd: TransitionCommand,
-    _edge_table: &HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>, S>,
 ) -> Result<Option<TransitionRecord>, LifecycleError>
 where
     R: LifecycleRepository + Sync,
-    S: std::hash::BuildHasher,
 {
     // Noop: caller-requested next_state equals current_state.
     if cmd.from_state == cmd.to_state {
         return Ok(None);
     }
-
-    // TODO T044: validate edge against _edge_table; check plan-requirement gate.
-    // TODO T045: enforce actor/blocked gate (actor == system only on blocked edges).
-    // TODO T046: provenance.unreviewed gate for action-critical fields.
 
     let record = repo
         .record_transition(TransitionRequest {
@@ -116,6 +89,13 @@ where
         })
         .await?;
 
+    // FR-003 (#713): trivial project_id resolution — this primitive has no
+    // pool access to look up a non-Project entity's owning project (that
+    // lookup lives in `SqliteLifecycleRepository::record_transition`, which
+    // publishes its own `lifecycle.transition.applied` with the fully
+    // resolved value); `None` here is a StalePropagator no-op, not a bug.
+    let project_id = (cmd.entity_type == EntityType::Project).then(|| cmd.entity_id.to_string());
+
     // Publish event (durable write to `events` table + live broadcast).
     let _ = bus
         .publish(
@@ -128,6 +108,7 @@ where
                 to_state: cmd.to_state,
                 actor: cmd.actor,
                 at: record.applied_at,
+                project_id,
             },
         )
         .await;
@@ -162,7 +143,7 @@ mod tests {
     async fn noop_returns_none_without_persisting() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = build_edge_table();
+        let mut rx = bus.subscribe();
 
         let result = transition_lifecycle(
             &repo,
@@ -176,12 +157,20 @@ mod tests {
                 actor: "user".to_owned(),
                 request_id: EntityId::new(),
             },
-            &table,
         )
         .await
         .unwrap();
 
         assert!(result.is_none());
+        // "Without persisting": the noop guard must short-circuit before the
+        // repository write AND before the event publish. InMemoryLifecycleRepository
+        // has no inspectable state (it would even return Err for from==to if
+        // record_transition were reached), so the bus is the only observable
+        // side channel proving the guard fired before any write.
+        assert!(
+            rx.try_recv().is_err(),
+            "noop transition must not publish lifecycle.transition.applied"
+        );
     }
 
     #[tokio::test]
@@ -189,7 +178,6 @@ mod tests {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
         let mut rx = bus.subscribe();
-        let table = build_edge_table();
 
         let record = transition_lifecycle(
             &repo,
@@ -203,7 +191,6 @@ mod tests {
                 actor: "user".to_owned(),
                 request_id: EntityId::new(),
             },
-            &table,
         )
         .await
         .unwrap()
@@ -226,7 +213,6 @@ mod tests {
     async fn archive_closure_drives_completed_to_archived() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = build_edge_table();
 
         let record = transition_lifecycle(
             &repo,
@@ -240,7 +226,6 @@ mod tests {
                 actor: "user".to_owned(),
                 request_id: EntityId::new(),
             },
-            &table,
         )
         .await
         .expect("closure transition must not error")
