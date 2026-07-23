@@ -681,10 +681,13 @@
 
 .pv-inbox-inspector__label {
   font-size: var(--pv-text-xs);
-  font-weight: var(--pv-weight-semibold);
-  color: var(--pv-text-muted);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-faint);
   letter-spacing: var(--pv-tracking-normal);
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pv-inbox-inspector__filename {
@@ -814,14 +817,6 @@
 }
 .pv-inbox-inspector__row:hover {
   background: var(--pv-surface);
-}
-.pv-inbox-inspector__label {
-  font-size: var(--pv-text-xs);
-  color: var(--pv-text-faint);
-  font-weight: var(--pv-weight-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .pv-inbox-inspector__value {
   font-size: var(--pv-text-xs);
