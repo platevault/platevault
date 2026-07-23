@@ -176,7 +176,7 @@ pub async fn resolve_protection(
             Some(v) => v != 0,
         };
         return Ok(ResolvedProtection {
-            level: row.level.clone(),
+            level: row.level,
             block_permanent_delete: bpd,
             categories: effective_cats,
             inherits_default: false,
