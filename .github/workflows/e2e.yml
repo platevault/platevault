@@ -24,7 +24,7 @@
 #     the ~25-min Windows full-suite cost or Windows L3 flake exposure.
 #
 #   Tier 2 — Full L3 matrix (main pushes + workflow_dispatch): the complete
-#     ubuntu (4 shards) + windows (2 shards) suite runs on every push to main
+#     ubuntu (4 shards) + windows (3 shards) suite runs on every push to main
 #     and on manual dispatch. This is the gate that matters post-merge.
 #     Windows L3 is off PRs because it is the slow and historically flaky leg
 #     (runs 30013328940, 30008614669) that blocked merge trains without adding
@@ -934,6 +934,14 @@ jobs:
   # Adding a new slow_: measure on 2+ CI runs, add to the table (with run
   # IDs), re-run LPT, and update the -E expressions below.
   #
+  # Adding a new NON-slow_ test: tests in files that have a binary() catch-all
+  # in one shard's -E expression are picked up automatically; tests in files
+  # that are only covered by individual test(=...) terms — currently
+  # archive_journeys, inbox_ui_journeys, journeys, plan_review_overlay_journeys,
+  # settings_journeys, and targets_journeys — must be pinned explicitly.
+  # The shard-coverage CI check (step "Verify shard coverage" in shard 1) will
+  # catch any new test that lands in zero shards and turn CI red.
+  #
   # Per-test averages — post-fix runs 30020688075 and 30019274329 only:
   # | Test (short form)                               | Avg(s) | slow_? |
   # |-------------------------------------------------|--------|--------|
@@ -1036,6 +1044,63 @@ jobs:
       - name: Serve frontend dist on :5173
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      # Shard-coverage integrity check (shard 1 only — runs once per push).
+      # Lists all ignored tests from the archive, then lists the union of all
+      # three shard -E expressions from the same archive, and fails if any test
+      # is uncovered. A new test added to a file with no binary() catch-all
+      # (archive_journeys, inbox_ui_journeys, journeys,
+      # plan_review_overlay_journeys, settings_journeys, targets_journeys) but
+      # not pinned in an -E expression would produce count_total > count_union,
+      # turning CI red before the test silently disappears from all shards.
+      - name: Verify shard coverage
+        if: matrix.shard == 1
+        shell: bash
+        run: |
+          SHARD1='\
+            test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | \
+            test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | \
+            test(=inbox_ui_mixed_folder_splits_into_single_type_items) | \
+            test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | \
+            test(=settings_ui_theme_applies_live_and_persists_to_settings_db)'
+          SHARD2='\
+            test(=slow_archive_lifecycle_apply_trash_permanent_delete) | \
+            test(=targets_planner_real_astronomy_after_site_creation) | \
+            test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | \
+            binary(calibration_ui_journeys) | \
+            binary(lifecycle_ui_journeys) | \
+            binary(source_view_journeys) | \
+            test(=ingestion_sessions_search) | \
+            binary(sessions_journeys) | \
+            test(=plan_review_empty_archive_plan_refuses_apply) | \
+            test(=plan_review_apply_with_audit) | \
+            test(=lifecycle_integrity)'
+          SHARD3='\
+            test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | \
+            binary(smoke) | \
+            test(=targets_ui_add_target_no_duplicate_on_reconfirm) | \
+            binary(inventory_journeys) | \
+            test(=cleanup_plan_review) | \
+            test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | \
+            test(=plan_review_destructive_confirm_gate_and_apply) | \
+            test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | \
+            binary(onboarding_journey) | \
+            binary(cleanup_protection_gate_journey) | \
+            test(=first_run_resolve_create_project) | \
+            test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | \
+            test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
+          TOTAL=$(cargo nextest list \
+            --archive-file e2e-archive.tar.zst --workspace-remap . \
+            --run-ignored all --message-format oneline 2>/dev/null | wc -l)
+          UNION=$(cargo nextest list \
+            --archive-file e2e-archive.tar.zst --workspace-remap . \
+            --run-ignored all --message-format oneline \
+            -E "${SHARD1} | ${SHARD2} | ${SHARD3}" 2>/dev/null | wc -l)
+          echo "Total tests: ${TOTAL}, covered by shard union: ${UNION}"
+          if [ "${TOTAL}" != "${UNION}" ]; then
+            echo "::error::Shard coverage gap: ${TOTAL} tests in archive but only ${UNION} covered by the three shard filters. Add the missing test(s) to an -E expression."
+            exit 1
+          fi
 
       # Shard 1 (~104s): slow_dock_pin (81.1s) + 4 short tests.
       - name: Run E2E (shard 1/3)
