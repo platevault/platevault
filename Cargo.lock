@@ -4265,9 +4265,9 @@ name = "perf-bench"
 version = "0.1.0"
 dependencies = [
  "app_core_inbox",
+ "domain_core",
  "persistence_db",
  "serde_json",
- "sqlx",
  "tempfile",
  "tokio",
  "tracing",

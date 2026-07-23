@@ -41,6 +41,8 @@ use std::time::Instant;
 
 use app_core_inbox::classify::classify_source_group;
 use app_core_inbox::scan::{scan_root, ScanOptions};
+use domain_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
+use persistence_db::repositories::first_run::register_source;
 use persistence_db::repositories::inbox::{upsert_inbox_source_group, UpsertSourceGroup};
 use persistence_db::Database;
 use tracing_subscriber::prelude::*;
@@ -131,7 +133,7 @@ fn build_fixture(root: &Path, n: usize) {
 /// Counts tracing events whose target starts with `sqlx`.
 ///
 /// sqlx emits a tracing event per statement execution at the `debug` level
-/// under the `sqlx::query` target. Counting those events gives a
+/// under the `sqlx` target (target prefix `"sqlx"`). Counting those events gives a
 /// statement-count proxy for DB pressure without adding any instrumentation
 /// dependency inside the production crates.
 ///
@@ -217,18 +219,20 @@ async fn main() {
     db.migrate().await.expect("migrations");
 
     // Register a synthetic inbox source so the source-group FK resolves.
-    let root_id = Uuid::new_v4().to_string();
     let root_path = fixture_dir.path().to_str().expect("utf8 path");
-    sqlx::query(
-        "INSERT INTO registered_sources \
-         (id, kind, path, scan_depth, created_at, created_via) \
-         VALUES (?, 'inbox', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+    let reg = register_source(
+        db.pool(),
+        &RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: root_path.to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Unorganized,
+        },
     )
-    .bind(&root_id)
-    .bind(root_path)
-    .execute(db.pool())
     .await
-    .expect("insert registered_source");
+    .expect("register_source");
+    let root_id = reg.source_id;
 
     // ── Scenario A: scan_root ─────────────────────────────────────────────────
 
