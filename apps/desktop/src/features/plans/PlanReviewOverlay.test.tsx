@@ -811,19 +811,22 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     ['failed', 'Generate retry plan'],
     ['partially_applied', 'Generate retry plan'],
     ['cancelled', 'Generate retry plan'],
-  ] as const)('renders the persisted %s plan.state footer on reopen, without a session apply (issue #733)', async (state, expectedAction) => {
-    mockPlansGet.mockResolvedValue(ok(plan({ state })));
-    renderOverlay();
+  ] as const)(
+    'renders the persisted %s plan.state footer on reopen, without a session apply (issue #733)',
+    async (state, expectedAction) => {
+      mockPlansGet.mockResolvedValue(ok(plan({ state })));
+      renderOverlay();
 
-    await screen.findByText('light_001.xisf');
-    expect(screen.getByText(expectedAction)).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('plan-review-approve-apply'),
-    ).not.toBeInTheDocument();
-    if (expectedAction !== 'Close') {
-      expect(screen.getByText('Close')).toBeInTheDocument();
-    }
-  });
+      await screen.findByText('light_001.xisf');
+      expect(screen.getByText(expectedAction)).toBeInTheDocument();
+      expect(
+        screen.queryByTestId('plan-review-approve-apply'),
+      ).not.toBeInTheDocument();
+      if (expectedAction !== 'Close') {
+        expect(screen.getByText('Close')).toBeInTheDocument();
+      }
+    },
+  );
 
   // #876: a destination free-space estimate, surfaced at review time before
   // approval, rather than only discovering insufficient space after apply.

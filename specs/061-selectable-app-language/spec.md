@@ -111,7 +111,7 @@ in Portuguese.
 - A locale file is missing a key that the base locale has → the interface MUST
   fall back to the base locale for that string rather than showing a raw key or
   an empty region.
-- The saved language names a locale the app no longer ships → the app MUST fall
+- The saved language names a locale removed from the shipped set → the app MUST fall
   back to the base locale rather than failing to start.
 - The user cancels or skips the first-run wizard entirely → the app MUST still
   have a defined language.
@@ -159,9 +159,13 @@ in Portuguese.
 - **FR-012**: Keys that share an English value but differ in meaning MUST
   remain separate keys and MUST NOT be consolidated on the basis that their
   English text matches.
-- **FR-013**: Translations that have not been reviewed by a fluent speaker MUST
-  be identifiable as such, so review status is a known quantity rather than an
-  assumption.
+- **FR-013**: Each shipped locale MUST declare a review status. A translation
+  that has not been reviewed by a fluent speaker MUST be marked as
+  machine-generated or otherwise unreviewed, so review status is a known
+  quantity rather than an assumption.
+- **FR-014**: Each shipped locale MUST contain exactly the base locale's
+  message-key set. The CI locale-drift check MUST fail when a locale is missing
+  a base key or contains a key absent from the base locale.
 
 ### Key Entities
 
@@ -171,8 +175,8 @@ in Portuguese.
 - **Language preference**: the user's chosen locale, durable across restarts,
   sitting alongside the existing appearance preferences.
 - **Message catalog**: the per-locale set of user-facing strings. One catalog
-  is the base and defines the complete key set; others may be partial and fall
-  back to it.
+  is the base and defines the complete key set; every shipped catalog matches
+  that set, while runtime fallback protects the interface from malformed input.
 
 ## Success Criteria *(mandatory)*
 
@@ -191,7 +195,7 @@ in Portuguese.
 - **SC-006**: Count-bearing strings render the grammatically correct form in
   both locales at counts of 0, 1, and many.
 - **SC-007**: The application starts in a usable language even when the stored
-  preference names a locale that is no longer shipped.
+  preference names a locale removed from the shipped set.
 
 ## Assumptions
 

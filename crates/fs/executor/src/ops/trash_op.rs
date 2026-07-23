@@ -136,13 +136,18 @@ fn classify_trash_error(err: &trash::Error, path: &Utf8Path) -> (FailureCode, St
     let msg = format!("OS trash failed for '{path}': {err}");
     // `trash::Error` doesn't expose a rich enum in all versions; use Display
     // to detect common cases.
-    let err_str = err.to_string().to_lowercase();
+    let failure_code = classify_trash_error_message(&err.to_string());
+    (failure_code, msg)
+}
+
+fn classify_trash_error_message(message: &str) -> FailureCode {
+    let err_str = message.to_lowercase();
     if err_str.contains("permission") || err_str.contains("access denied") {
-        (FailureCode::OsTrashPermissionDenied, msg)
+        FailureCode::OsTrashPermissionDenied
     } else if err_str.contains("full") || err_str.contains("no space") {
-        (FailureCode::OsTrashFull, msg)
+        FailureCode::OsTrashFull
     } else {
-        (FailureCode::TrashUnavailable, msg)
+        FailureCode::TrashUnavailable
     }
 }
 
@@ -155,6 +160,21 @@ mod tests {
 
     fn utf8(p: &std::path::Path) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
+
+    #[test]
+    fn trash_error_messages_map_to_producible_codes() {
+        let cases = [
+            ("permission denied", FailureCode::OsTrashPermissionDenied),
+            ("access denied", FailureCode::OsTrashPermissionDenied),
+            ("trash is full", FailureCode::OsTrashFull),
+            ("no space left", FailureCode::OsTrashFull),
+            ("trash service unavailable", FailureCode::TrashUnavailable),
+        ];
+
+        for (message, expected) in cases {
+            assert_eq!(classify_trash_error_message(message), expected, "failed for {message}");
+        }
     }
 
     /// T014: trash destination moves to OS bin; archive fallback recorded when

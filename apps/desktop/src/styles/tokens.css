@@ -101,7 +101,7 @@
   --pv-sidebar-collapsed: 48px;
   --pv-action-sidebar-width: 220px;
   --pv-row-height: 32px; /** Row density */
-  --pv-text: var(--pv-ink); /** Semantic aliases — resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root, [data-theme="warm-slate"]` block below, so there is a single source of truth for the default light palette. */
+  --pv-text: var(--pv-ink); /** Semantic aliases — resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root:not([data-theme]), [data-theme="warm-slate"]` block below, so there is a single source of truth for the default light palette without overriding a named theme. */
   --pv-text-secondary: var(--pv-ink2);
   --pv-text-muted: var(--pv-ink3);
   --pv-text-faint: var(--pv-ink4);
@@ -346,7 +346,7 @@
  * Do not edit directly, this file was auto-generated.
  */
 
-:root,
+:root:not([data-theme]),
 [data-theme="warm-slate"] {
   --pv-ink: #20211f;
   --pv-ink2: #42433f;

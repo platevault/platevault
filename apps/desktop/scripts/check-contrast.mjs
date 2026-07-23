@@ -88,7 +88,7 @@ const CONTROL_SURFACES = ['bg', 'surface', 'bg3', 'surface-raised'];
 const css = readFileSync(SRC, 'utf8');
 
 // Collect raw hex token values per theme, merging blocks that share a selector
-// (":root, [data-theme=\"warm-slate\"]") — same approach as
+// (":root:not([data-theme]), [data-theme=\"warm-slate\"]") — same approach as
 // check-theme-completeness.mjs.
 const blockRe = /([^{}]*)\{([^{}]*)\}/g;
 const themeTokens = new Map(); // theme id -> Map<token name -> hex value>

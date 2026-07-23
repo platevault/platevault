@@ -648,14 +648,12 @@ export function WizardPage() {
         className="pv-wizard-page__flex-fill--noscroll"
       >
         {/* Step title + description */}
-        {currentStep < 5 && (
-          <div className="pv-wizard-page__step-header">
-            <h2 className="pv-wizard-page__step-title">
-              {m.projects_wizard_step_label()} {currentStep + 1} &middot;{' '}
-              {labels[currentStep]}
-            </h2>
-          </div>
-        )}
+        <div className="pv-wizard-page__step-header">
+          <h2 className="pv-wizard-page__step-title" data-wizard-step-heading>
+            {m.projects_wizard_step_label()} {currentStep + 1} &middot;{' '}
+            {labels[currentStep]}
+          </h2>
+        </div>
 
         {/* Step content */}
         {currentStep === 0 && (

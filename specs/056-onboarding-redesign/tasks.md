@@ -12,7 +12,7 @@ polish + cross-feature validation.
 
 ## Phase 1: Setup (persistence + contracts + core)
 
-- [X] T001 Create migration `crates/persistence/db/migrations/0072_onboarding.sql`: `onboarding_state` (item_id PK, state CHECK unchecked|auto_checked|manually_checked|dismissed, at, source CHECK seed|event|user), `onboarding_flags` singleton (orientation_done_at, section_removed_at, sidebar_collapsed), `DROP TABLE IF EXISTS guided_flow_state`; leave `0030_guided_flow.sql` untouched; renumber if 0069 is claimed by a parallel merge (research R6)
+- [X] T001 Create `0080_onboarding.sql` with `onboarding_state` (item_id PK, state CHECK unchecked|auto_checked|manually_checked|dismissed, at, source CHECK seed|event|user) and the `onboarding_flags` singleton (orientation_done_at, section_removed_at, sidebar_collapsed). Create `0081_drop_guided_flow_state.sql` to drop `guided_flow_state`; leave `0030_guided_flow.sql` untouched (research R6).
 - [X] T002 [P] Add onboarding DTOs in `crates/contracts/core/src/onboarding.rs` per `contracts/onboarding-commands.md` (state.get / item.set_state / orientation.complete / section.set / restore + notification payload) and register `pub mod onboarding` in `crates/contracts/core/src/lib.rs`
 - [X] T003 Add repository boundary `crates/persistence/db/src/repositories/onboarding.rs`: read projection, idempotent tick write (settled states never downgraded), flags upsert, seed/restore write path; unit tests against real migrations (touch `crates/persistence/db/src/lib.rs` for sqlx re-embed)
 - [X] T004 Add `crates/app/core/src/onboarding.rs`: item registry (item_id, page, completion_topic per research R4 verified table, payload_filter `tool.launch → outcome=="spawned"`, prerequisite, seed_query, anchor) + use cases (get_state, set_item_state, orientation_complete, section_set, restore) with the SINGLE seed/restore derivation reading real tables (FR-014 — re-derives AUTOMATIC items only; manually_checked/dismissed rows preserved) and the shared settle path that sets `section_hidden_at` when the last open item settles across all groups (FR-031 auto-hide); registry unit tests assert only verified topics appear
@@ -139,25 +139,13 @@ over with a tick.
   its steps S6/S14 describe the inline expanded-by-default accordion that the
   T018 pivot replaced. The journey needs amending to the flyout design plus a
   first validation run before this task can close.
-- **T035 — RESOLVED 2026-07-19. Was re-opened for a live WCAG 1.4.13 failure
-  (#1103), now fixed; kept here as the record of what the a11y pass missed.**
-  Checklist item tooltips reveal on pointer hover only. `ui/Tooltip.tsx` renders
-  the base-ui trigger as a bare `<span {...rest} />`, which is not focusable and
-  gets no `tabIndex` from base-ui, and `ChecklistSection.tsx` passes neither
-  `tabIndex` nor `aria-describedby` — so the per-item explanation is unavailable
-  to keyboard and screen-reader users. T017 explicitly required "tooltip on hover
-  AND focus (WCAG 1.4.13)". The regression arrived when the hand-rolled tooltip
-  (which had an `#onb-tt-<id>` element to reference) was delegated to the shared
-  base-ui component; the e2e guard had been passing against the old DOM and could
-  no longer pass, so it now asserts the real pointer behaviour. **The 1.4.13
-  guard is therefore currently absent** and restoring it is part of #1103.
-  RESOLVED: the checkbox now owns the reveal and carries `aria-describedby`, and
-  the e2e guard asserts hover AND keyboard focus AND Escape-without-losing-focus.
+- **T035 — Checklist tooltips satisfy WCAG 1.4.13 (#1103).** The checkbox owns
+  keyboard reveal and carries `aria-describedby`. The shared tooltip owns popup
+  positioning and pointer behavior. End-to-end coverage asserts hover, keyboard
+  focus, and Escape without moving focus.
 
-Documentation drift found during the same pass, not blocking: the Playwright
-spec files for T016, T025 and T031 carry stale docstrings claiming tests are
-`test.skip`'d pending a `mocks.ts` request-arg fix that has since landed — none
-of those tests are actually skipped.
+The Playwright spec files for T016, T025, and T031 contain stale docstrings that
+claim the tests use `test.skip`. The tests execute without that marker.
 
 ## Dependencies
 

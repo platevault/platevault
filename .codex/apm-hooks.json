@@ -48,6 +48,18 @@
       "hooks": [
         {
           "type": "command",
+          "command": ".codex/hooks/beads/scripts/beads-gh-issue-guard.sh",
+          "statusMessage": "Checking gh issue command against beads policy...",
+          "timeout": 10
+        }
+      ],
+      "_apm_source": "beads"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
           "command": ".codex/hooks/hooks-quality/scripts/quality-before-commit.sh",
           "timeout": 10
         }
@@ -96,18 +108,6 @@
         }
       ],
       "_apm_source": "agent-coder"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".codex/hooks/beads/scripts/beads-gh-issue-guard.sh",
-          "statusMessage": "Checking gh issue command against beads policy...",
-          "timeout": 10
-        }
-      ],
-      "_apm_source": "beads"
     }
   ],
   "PostToolUse": [
@@ -195,6 +195,18 @@
   ],
   "SubagentStart": [
     {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".codex/hooks/beads/scripts/beads-subagent-reminder.sh",
+          "statusMessage": "Injecting beads work contract...",
+          "timeout": 10
+        }
+      ],
+      "_apm_source": "beads"
+    },
+    {
       "hooks": [
         {
           "type": "command",
@@ -213,18 +225,6 @@
         }
       ],
       "_apm_source": "code-intelligence"
-    },
-    {
-      "matcher": "",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".codex/hooks/beads/scripts/beads-subagent-reminder.sh",
-          "statusMessage": "Injecting beads work contract...",
-          "timeout": 10
-        }
-      ],
-      "_apm_source": "beads"
     }
   ],
   "Stop": [

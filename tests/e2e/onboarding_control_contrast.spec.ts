@@ -31,6 +31,11 @@ test('shared form controls use the dedicated boundary token in every theme', asy
       <span data-token="border"></span>
       <span data-token="subtle"></span>
     `;
+for (const control of host.querySelectorAll<HTMLElement>(
+      '[data-control]',
+    )) {
+      control.style.transition = 'none';
+    }
     const controlProbe = host.querySelector<HTMLElement>(
       '[data-token="control"]',
     );

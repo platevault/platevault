@@ -426,3 +426,59 @@ describe('InboxDetail survives the involuntary id churn from the FIRST classify 
     );
   });
 });
+
+// ── #1038 (follow-up to #711): the selection handoff the block above stubbed ──
+//
+// The describe above deliberately hand-moved `selected` via `setSearch`,
+// calling the mechanism "out of scope". This block owns that mechanism.
+//
+// Selecting an unclassified folder PLACEHOLDER is what triggers the FIRST
+// `inbox.classify`, and classify materializes single-type sub-items. #1038 then
+// (correctly) hides the superseded placeholder from `inbox.list`, so the
+// selected id stops existing WITHOUT any reclassify having run —
+// `pendingReclassifySelectionId` cannot cover it. Pre-fix the selection was
+// simply dropped: the detail pane emptied and Confirm no-oped on a row the user
+// could still see (Real-UI casualty
+// `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`).
+describe('selection follows the classify-split successor (#1038)', () => {
+  it('moves selection to the sub-item sharing the placeholder sourceGroupId', async () => {
+    const { queryClient } = render(<InboxPage />);
+
+    await screen.findByTestId(`inbox-item-${OLD_ID}`);
+    screen.getByTestId(`inbox-item-${OLD_ID}`).click();
+    await waitFor(() => expect(getSearch().selected).toBe(OLD_ID));
+
+    // classify's split lands: the placeholder is deduped away and only its
+    // sub-item (same sourceGroupId, new id) remains listed. NOTHING here moves
+    // `selected` — that is exactly what is under test.
+    mockInboxList.mockResolvedValue(
+      ok({ items: [newItem], capped: false, limit: 500 }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['inbox', 'all'] });
+
+    await waitFor(() => expect(getSearch().selected).toBe(NEW_ID), {
+      timeout: 5000,
+    });
+    expect(await screen.findByTestId('inbox-confirm-btn')).toBeInTheDocument();
+  });
+
+  it('clears the selection when no sibling shares the source group', async () => {
+    const { queryClient } = render(<InboxPage />);
+
+    await screen.findByTestId(`inbox-item-${OLD_ID}`);
+    screen.getByTestId(`inbox-item-${OLD_ID}`).click();
+    await waitFor(() => expect(getSearch().selected).toBe(OLD_ID));
+
+    // The row is gone for an unrelated reason (resolved elsewhere, filtered
+    // out): the handoff must give up so `useStaleSelectionCleanup` is not
+    // gated open forever.
+    mockInboxList.mockResolvedValue(
+      ok({ items: [], capped: false, limit: 500 }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['inbox', 'all'] });
+
+    await waitFor(() => expect(getSearch().selected).toBeUndefined(), {
+      timeout: 5000,
+    });
+  });
+});

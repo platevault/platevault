@@ -22,6 +22,8 @@ pub use crate::provenance::ProvenanceOrigin;
 
 use crate::calibration::CalibrationKind;
 
+pub mod heterogeneity;
+
 /// Confidence level for inferred or reviewed metadata.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,

@@ -122,15 +122,15 @@ mod tests;
 pub use channels::{list_project_channels, replace_project_channels};
 pub use create_tx::{create_project_tx, CreateProjectInput};
 pub use crud::{
-    clear_archived_via_plan_id, get_project, get_project_canonical_target,
-    get_project_canonical_target_id, insert_project, list_archived_projects, list_projects,
-    list_projects_by_canonical_target_id, name_exists, path_exists, set_archived_via_plan_id,
-    set_channel_drift, set_project_canonical_target_id, update_project_fields,
-    update_project_lifecycle, update_project_lifecycle_blocked, update_project_lifecycle_unblock,
-    ArchivedProjectRow, ProjectCanonicalTargetRow,
+    apply_project_auto_block, clear_archived_via_plan_id, get_project,
+    get_project_canonical_target, get_project_canonical_target_id, insert_project,
+    list_archived_projects, list_projects, list_projects_by_canonical_target_id, name_exists,
+    path_exists, set_archived_via_plan_id, set_channel_drift, set_project_canonical_target_id,
+    update_project_fields, update_project_lifecycle, update_project_lifecycle_unblock,
+    ArchivedProjectRow, ProjectAutoBlockOutcome, ProjectCanonicalTargetRow,
 };
 pub use sources::{
-    delete_project_source, find_blockable_missing_sources, get_project_source,
-    has_archived_raw_frames_for_project, insert_project_source, list_project_ids_for_session,
-    list_project_sources,
+    begin_source_missing_health_check, clear_source_missing_health_check, delete_project_source,
+    find_blockable_missing_sources, get_project_source, has_archived_raw_frames_for_project,
+    insert_project_source, list_project_ids_for_session, list_project_sources,
 };

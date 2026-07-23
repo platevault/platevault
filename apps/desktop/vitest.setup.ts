@@ -8,13 +8,15 @@
  */
 import "@testing-library/jest-dom/vitest";
 
-// Node 22+ exposes an experimental `localStorage` global that is `undefined`
-// unless --localstorage-file is passed.  This shadows the Storage
-// implementation that jsdom injects on `window`, causing
-// `window.localStorage` to resolve to `undefined` in vitest's jsdom
-// environment.  Fix: if the global is broken, replace it with a minimal
-// in-memory Storage so component code that reads/writes localStorage works.
-if (typeof window !== "undefined" && typeof window.localStorage === "undefined") {
+// Node 22+ may shadow jsdom's Storage with an incomplete experimental global.
+// Replace it unless it provides the interface the tests exercise.
+if (
+  typeof window !== "undefined" &&
+  (typeof window.localStorage?.getItem !== "function" ||
+    typeof window.localStorage?.setItem !== "function" ||
+    typeof window.localStorage?.removeItem !== "function" ||
+    typeof window.localStorage?.clear !== "function")
+) {
   const store = new Map<string, string>();
   const storage: Storage = {
     get length() {
