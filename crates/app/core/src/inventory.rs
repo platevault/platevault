@@ -64,7 +64,7 @@ pub async fn list(
     // Registered equipment, loaded once for the whole ledger: every root's
     // rows resolve their raw header camera against the same set.
     let cameras =
-        app_core_calibration::equipment::list_cameras(pool).await.map_err(|e| e.message.clone())?;
+        app_core_calibration::equipment::list_cameras(pool).await.map_err(|e| e.message)?;
 
     let mut sources: Vec<InventorySource> = Vec::new();
 
