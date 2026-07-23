@@ -233,17 +233,11 @@ pub async fn update_item_observed_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     #[tokio::test]
     async fn insert_and_get_view_roundtrip() {
-        let db = setup().await;
+        let db = setup_db().await;
         // Need a project row first.
         sqlx::query(
             "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
@@ -269,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn mark_removed_sets_state_and_timestamp() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
              VALUES ('proj-2', 'Test2', 'PixInsight', 'ready', 'projects/test2', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
@@ -294,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_items_and_list() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
              VALUES ('proj-3', 'Test3', 'PixInsight', 'ready', 'projects/test3', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
@@ -343,14 +337,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_view_not_found() {
-        let db = setup().await;
+        let db = setup_db().await;
         let err = get_view(db.pool(), "nonexistent").await.unwrap_err();
         assert!(matches!(err, DbError::NotFound(_)));
     }
 
     #[tokio::test]
     async fn list_views_for_project_returns_all() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
              VALUES ('proj-4', 'Test4', 'PixInsight', 'ready', 'projects/test4', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
@@ -384,7 +378,7 @@ mod tests {
     /// dead-end `kind_diverged` state on every reopen.
     #[tokio::test]
     async fn migrate_does_not_flip_mixed_kind_views_to_kind_diverged() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
              VALUES ('proj-5', 'Test5', 'PixInsight', 'ready', 'projects/test5', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
