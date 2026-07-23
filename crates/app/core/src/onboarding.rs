@@ -292,6 +292,10 @@ pub enum OnboardingError {
     /// `item.set_state` referenced an `item_id` not in [`ITEM_REGISTRY`].
     #[error("unknown onboarding item id: {0}")]
     UnknownItem(String),
+    /// An automatic item was manually marked complete. Automatic completion
+    /// is reserved for recorded domain milestones.
+    #[error("automatic onboarding item cannot be manually completed: {0}")]
+    AutomaticItemManualCompletion(String),
     /// `section.set` was called with neither field set.
     #[error("onboarding.section.set request must set hidden or sidebarCollapsed")]
     SectionSetEmptyRequest,
@@ -313,14 +317,14 @@ impl From<OnboardingError> for ContractError {
                 ErrorSeverity::Blocking,
                 false,
             ),
-            OnboardingError::SectionSetEmptyRequest | OnboardingError::SectionUnhideNotAllowed => {
-                ContractError::new(
-                    ErrorCode::OnboardingInvalidState,
-                    e.to_string(),
-                    ErrorSeverity::Blocking,
-                    false,
-                )
-            }
+            OnboardingError::AutomaticItemManualCompletion(_)
+            | OnboardingError::SectionSetEmptyRequest
+            | OnboardingError::SectionUnhideNotAllowed => ContractError::new(
+                ErrorCode::OnboardingInvalidState,
+                e.to_string(),
+                ErrorSeverity::Blocking,
+                false,
+            ),
             OnboardingError::PersistenceUnavailable(msg) => {
                 ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
             }
@@ -478,10 +482,13 @@ async fn build_state_dto(pool: &SqlitePool) -> Result<OnboardingStateDto, Onboar
         // skip defensively rather than fail the whole read.
         let Some(row) = by_id.get(item.item_id) else { continue };
 
-        let settled = !matches!(parse_state(&row.state), OnboardingItemState::Unchecked);
+        let completed = matches!(
+            parse_state(&row.state),
+            OnboardingItemState::AutoChecked | OnboardingItemState::ManuallyChecked
+        );
         let entry = per_page.entry(item.page).or_insert((0, 0));
         entry.1 += 1;
-        if settled {
+        if completed {
             entry.0 += 1;
         }
 
@@ -519,7 +526,9 @@ pub async fn get_state(pool: &SqlitePool) -> Result<OnboardingStateGetResponse, 
 }
 
 /// `onboarding.item.set_state` — manual check-off or dismiss (FR-017). Auto
-/// states are structurally unreachable via [`OnboardingManualState`]. A
+/// states are structurally unreachable via [`OnboardingManualState`]. An
+/// automatic item rejects manual completion so its checked state always
+/// corresponds to a recorded domain milestone. A
 /// repeat call against an already-settled item is a no-op (manual states are
 /// permanent — PQ-002/FR-017); no per-item undo in v1.
 ///
@@ -538,14 +547,9 @@ pub async fn set_item_state(
 ) -> Result<OnboardingItemSetStateResponse, OnboardingError> {
     let item =
         find_item(&req.item_id).ok_or_else(|| OnboardingError::UnknownItem(req.item_id.clone()))?;
-    // An un-check is the one transition allowed to clear a settled row, so it
-    // takes the dedicated escape hatch: the terminality-respecting upsert would
-    // silently no-op against exactly the rows the user is trying to undo.
-    //
-    // It also deliberately skips the settle path. Un-checking moves an item
-    // AWAY from settled, so it can never complete a group — running the
-    // FR-031 auto-hide check here could only ever hide the section in response
-    // to the user re-opening work.
+    if item.is_automatic() && req.state == OnboardingManualState::ManuallyChecked {
+        return Err(OnboardingError::AutomaticItemManualCompletion(item.item_id.to_owned()));
+    }
     match req.state {
         OnboardingManualState::Unchecked => {
             repo::force_unchecked(pool, item.item_id).await.map_err(db_err)?;
@@ -674,15 +678,9 @@ pub async fn tick_from_event(pool: &SqlitePool, item_id: &str) -> Result<(), Onb
 /// item stays `unchecked` forever unless the user happens to run the Settings
 /// restore, which nothing prompts them to do.
 ///
-/// Re-derives AUTOMATIC items via [`target_state_for`], but ONLY for rows that
-/// are currently `unchecked` AND whose `source` is not `user`:
-/// - `unchecked` + `seed`/`event` = never ticked → eligible, this is the miss
-///   being recovered;
-/// - `unchecked` + `user` = the user deliberately un-checked it
-///   ([`repo::force_unchecked`], PQ-002). Re-ticking would silently undo that
-///   un-check on every launch and read as a broken checklist;
-/// - settled (`manually_checked`/`dismissed`) rows stay terminal, as
-///   everywhere else.
+/// Re-derives AUTOMATIC items via [`target_state_for`], but only for rows that
+/// are currently `unchecked` from a non-user source. A deliberate PQ-002
+/// un-check must survive startup reconciliation.
 ///
 /// Items with no row yet are skipped, not seeded: [`ensure_seeded`] derives
 /// those correctly on the next `state.get`, so there is nothing to recover.
@@ -900,6 +898,65 @@ mod tests {
 
         assert_eq!(resp.item.state, OnboardingItemState::ManuallyChecked);
         assert_eq!(resp.item.source, OnboardingStateSource::User);
+    }
+
+    #[tokio::test]
+    async fn set_item_state_rejects_manual_completion_for_automatic_item() {
+        let pool = setup_pool().await;
+        get_state(&pool).await.unwrap();
+
+        let err = set_item_state(
+            &pool,
+            &OnboardingItemSetStateRequest {
+                item_id: "inbox.confirm_first".to_owned(),
+                state: OnboardingManualState::ManuallyChecked,
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            OnboardingError::AutomaticItemManualCompletion("inbox.confirm_first".to_owned())
+        );
+        let item = get_state(&pool)
+            .await
+            .unwrap()
+            .state
+            .items
+            .into_iter()
+            .find(|item| item.item_id == "inbox.confirm_first")
+            .unwrap();
+        assert_eq!(item.state, OnboardingItemState::Unchecked);
+    }
+
+    #[tokio::test]
+    async fn dismissed_item_is_settled_but_not_completed_in_progress() {
+        let pool = setup_pool().await;
+        get_state(&pool).await.unwrap();
+
+        set_item_state(
+            &pool,
+            &OnboardingItemSetStateRequest {
+                item_id: "sessions.review_first".to_owned(),
+                state: OnboardingManualState::Dismissed,
+            },
+        )
+        .await
+        .unwrap();
+
+        let state = get_state(&pool).await.unwrap().state;
+        assert_eq!(state.progress.done, 0);
+        assert_eq!(
+            state
+                .progress
+                .per_page
+                .iter()
+                .find(|progress| progress.page == OnboardingPage::Sessions)
+                .unwrap()
+                .done,
+            0
+        );
     }
 
     #[tokio::test]

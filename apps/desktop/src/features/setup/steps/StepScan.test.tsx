@@ -27,6 +27,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { queryClient } from '@/data/queryClient';
+import { overwriteGetLocale } from '@/paraglide/runtime';
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -60,6 +61,7 @@ vi.mock('@/bindings/index', () => ({
 
 import { StepScan } from './StepScan';
 import type { StepScanProps } from './StepScan';
+import { sourceKindLabel } from '../sources-store';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -213,6 +215,7 @@ function expandSource(path: string) {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  overwriteGetLocale(() => 'en-GB');
   mockInboxScanFolder.mockReset();
   mockInboxClassify.mockReset();
   mockRootsList.mockReset();
@@ -441,6 +444,52 @@ describe('StepScan', () => {
   });
 
   describe('done state with detections', () => {
+    it.each([
+      ['en-GB', 1, '1 unknown frame type (science)'],
+      ['en-GB', 3, '3 unknown frame types (science)'],
+      ['pt-BR', 1, '1 quadro de tipo desconhecido (science)'],
+      ['pt-BR', 3, '3 quadros de tipo desconhecido (science)'],
+    ] as const)(
+      'renders unknown-kind count labels in %s for count %i',
+      async (locale, count, expected) => {
+        overwriteGetLocale(() => locale);
+        mockInboxScanFolder.mockResolvedValue({
+          status: 'ok',
+          data: {
+            ...SCAN_RESPONSE_WITH_ITEMS,
+            items: [{ ...SCAN_RESPONSE_WITH_ITEMS.items[0], fileCount: count }],
+          },
+        });
+        mockInboxClassify.mockResolvedValue({
+          status: 'ok',
+          data: {
+            ...CLASSIFY_RESPONSE,
+            breakdown: [
+              {
+                kind: 'science',
+                count,
+                destinationPreview: 'NGC7000/science/',
+                sampleFiles: [],
+              },
+            ],
+          },
+        });
+
+        renderStep({ sources: [SOURCES[0]] });
+
+        await waitFor(() =>
+          expect(
+            within(screen.getByTestId('scan-source-/astro/lights')).getByText(
+              /1 (folder|pasta)/,
+            ),
+          ).toBeInTheDocument(),
+        );
+        expandSource('/astro/lights');
+
+        expect(screen.getAllByText(expected)).toHaveLength(2);
+      },
+    );
+
     it('shows detected items and frame-type breakdown when scan completes (after expanding)', async () => {
       mockInboxScanFolder.mockResolvedValue({
         status: 'ok',
@@ -469,8 +518,8 @@ describe('StepScan', () => {
       // Item path visible
       expect(screen.getByText('2025-10-10/NGC7000')).toBeInTheDocument();
       // Breakdown kinds visible (light=16, dark=2)
-      expect(screen.getByText('16 light')).toBeInTheDocument();
-      expect(screen.getByText('2 dark')).toBeInTheDocument();
+      expect(screen.getByText('16 light frames')).toBeInTheDocument();
+      expect(screen.getByText('2 dark frames')).toBeInTheDocument();
     });
 
     it('renders a Master pill and the frame type for individual masters (spec 040 FR-006)', async () => {
@@ -528,7 +577,7 @@ describe('StepScan', () => {
       const row = screen.getByTestId('scan-item-item-002');
       // 1 flat + 1 light + 1 unknown = 3, matching fileCount.
       expect(
-        within(row).getByText('1 flat, 1 light, 1 unknown'),
+        within(row).getByText('1 flat frame, 1 light frame, 1 unknown'),
       ).toBeInTheDocument();
       expect(within(row).getByText('3')).toBeInTheDocument();
     });
@@ -594,7 +643,7 @@ describe('StepScan', () => {
 
       const sourceEl = screen.getByTestId('scan-source-/astro/lights');
       expect(within(sourceEl).getByText('1 master')).toBeInTheDocument();
-      expect(within(sourceEl).getByText('1 unclassified')).toBeInTheDocument();
+      expect(within(sourceEl).getByText('1 unknown')).toBeInTheDocument();
     });
 
     it('shows the scan summary when all sources are done', async () => {
@@ -678,7 +727,11 @@ describe('StepScan', () => {
       renderStep({ sources: [SOURCES[0]] });
 
       await waitFor(() => {
-        expect(screen.getByText(/disk read error/i)).toBeInTheDocument();
+        const alert = within(
+          screen.getByTestId('scan-source-/astro/lights'),
+        ).getByRole('alert');
+        expect(alert).toHaveTextContent('/astro/lights');
+        expect(alert).toHaveTextContent(/disk read error/i);
       });
     });
 
@@ -732,6 +785,47 @@ describe('StepScan', () => {
       await waitFor(() => {
         expect(onAllDoneChange).toHaveBeenCalledWith(true);
       });
+    });
+  });
+
+  describe('screen-reader status', () => {
+    it('announces source and final scan status politely', async () => {
+      mockInboxScanFolder.mockResolvedValue({
+        status: 'ok',
+        data: SCAN_RESPONSE_WITH_ITEMS,
+      });
+      mockInboxClassify.mockResolvedValue({
+        status: 'ok',
+        data: CLASSIFY_RESPONSE,
+      });
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      const source = screen.getByTestId('scan-source-/astro/lights');
+      await waitFor(() =>
+        expect(within(source).getByRole('status')).toHaveTextContent('Done'),
+      );
+      expect(within(source).getByRole('status')).toHaveAttribute(
+        'aria-live',
+        'polite',
+      );
+      expect(screen.getByTestId('scan-summary')).toHaveAttribute(
+        'aria-atomic',
+        'true',
+      );
+    });
+
+    it('uses a localized source label instead of formatting the enum', () => {
+      mockInboxScanFolder.mockReturnValue(new Promise(() => {}));
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      expect(screen.getByText('Light frames')).toBeInTheDocument();
+      expect(screen.queryByText('light frames')).not.toBeInTheDocument();
+    });
+
+    it('keeps unknown source kinds diagnostic instead of reading prototype keys', () => {
+      expect(sourceKindLabel('toString')).toBe('Unknown source (toString)');
     });
   });
 

@@ -14,10 +14,9 @@
 //!
 //! The scope groups keys by workflow area:
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
-//! - `"general"`  → `theme` (theme-settings-db: durable source of truth for
-//!   the UI theme; the frontend still keeps a synchronous localStorage boot
-//!   cache to avoid a flash of the wrong theme, reconciled from this scope
-//!   at startup)
+//! - `"general"`  → `theme`, `locale` (durable sources of truth for UI
+//!   appearance and language; the frontend keeps synchronous localStorage
+//!   boot mirrors, reconciled from this scope at startup)
 //! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`,
 //!   `protectedCategories`, `cleanupTypeOverrides`
 //! - `"naming"`   → `pattern`, `autoApplyPattern`, `patternsByType`
@@ -67,7 +66,7 @@ use contracts_core::ContractError;
 fn scope_keys(scope: &str) -> &'static [&'static str] {
     match scope {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
-        "general" => &["theme"],
+        "general" => &["theme", "locale"],
         "cleanup" => &[
             "blockPermanentDelete",
             "defaultProtection",
@@ -275,6 +274,11 @@ mod tests {
     #[test]
     fn cleanup_scope_resolves_the_per_type_action_overrides() {
         assert!(scope_keys("cleanup").contains(&"cleanupTypeOverrides"));
+    }
+
+    #[test]
+    fn general_scope_resolves_theme_and_locale() {
+        assert_eq!(scope_keys("general"), &["theme", "locale"]);
     }
 
     /// Guards the other direction: a typo or a key deleted from the descriptor

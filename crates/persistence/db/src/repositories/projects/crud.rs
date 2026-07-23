@@ -4,6 +4,7 @@
 //! `projects` table CRUD.
 
 use domain_core::ids::Timestamp;
+use domain_core::lifecycle::project::{is_allowed, ProjectState};
 use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::{DbError, DbResult};
@@ -416,33 +417,102 @@ pub async fn update_project_lifecycle(
     Ok(now)
 }
 
-/// Update a project's lifecycle to "blocked" and persist the typed blocked reason.
+fn project_state(value: &str) -> Option<ProjectState> {
+    match value {
+        "setup_incomplete" => Some(ProjectState::SetupIncomplete),
+        "ready" => Some(ProjectState::Ready),
+        "prepared" => Some(ProjectState::Prepared),
+        "processing" => Some(ProjectState::Processing),
+        "completed" => Some(ProjectState::Completed),
+        "archived" => Some(ProjectState::Archived),
+        "blocked" => Some(ProjectState::Blocked),
+        _ => None,
+    }
+}
+
+/// Result of a canonical automatic project-block mutation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProjectAutoBlockOutcome {
+    /// The lifecycle change and audit row committed atomically.
+    Applied,
+    /// The requested edge is not canonical for the expected lifecycle.
+    Rejected,
+    /// The selected lifecycle changed before the compare-and-swap.
+    CasLost {
+        /// Lifecycle observed after losing the compare-and-swap, if the row
+        /// still exists.
+        current_lifecycle: Option<String>,
+        /// Whether the observed lifecycle still has a canonical edge to
+        /// `blocked` and therefore needs a durable retry.
+        still_blockable: bool,
+    },
+}
+
+/// Atomically apply a canonical project auto-block transition and its required
+/// audit row when the lifecycle still matches `expected_from_state`.
 ///
-/// FR-020 / T053: stores `blocked_reason_kind` and `blocked_reason_note` so the
-/// `BlockedBanner` DTO can surface the real reason instead of a hardcoded value.
+/// Returns [`ProjectAutoBlockOutcome::Rejected`] when the edge is forbidden,
+/// or [`ProjectAutoBlockOutcome::CasLost`] when the compare-and-swap loses a
+/// concurrent lifecycle change.
 ///
 /// # Errors
 ///
-/// Returns [`DbError::Database`] on query failure.
-pub async fn update_project_lifecycle_blocked(
+/// Returns [`DbError::Database`] on update, audit, or transaction failure.
+pub async fn apply_project_auto_block(
     pool: &SqlitePool,
     id: &str,
+    expected_from_state: &str,
     reason_kind: &str,
-    reason_note: Option<&str>,
-) -> DbResult<String> {
+    reason_note: &str,
+    trigger: &str,
+) -> DbResult<ProjectAutoBlockOutcome> {
+    let Some(from_state) = project_state(expected_from_state) else {
+        return Ok(ProjectAutoBlockOutcome::Rejected);
+    };
+    if !is_allowed(from_state, ProjectState::Blocked) {
+        return Ok(ProjectAutoBlockOutcome::Rejected);
+    }
+
     let now = Timestamp::now_iso();
-    sqlx::query(
-        "UPDATE projects SET lifecycle = 'blocked', \
-         blocked_reason_kind = ?, blocked_reason_note = ?, updated_at = ? \
-         WHERE id = ?",
+    let mut tx = pool.begin().await?;
+    let rows_affected = sqlx::query(
+        "UPDATE projects SET lifecycle = 'blocked', blocked_reason_kind = ?,
+         blocked_reason_note = ?, updated_at = ?
+         WHERE id = ? AND lifecycle = ?",
     )
     .bind(reason_kind)
     .bind(reason_note)
     .bind(&now)
     .bind(id)
-    .execute(pool)
+    .bind(expected_from_state)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        let current_lifecycle =
+            sqlx::query_scalar::<_, String>("SELECT lifecycle FROM projects WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let still_blockable = current_lifecycle
+            .as_deref()
+            .and_then(project_state)
+            .is_some_and(|state| is_allowed(state, ProjectState::Blocked));
+        tx.commit().await?;
+        return Ok(ProjectAutoBlockOutcome::CasLost { current_lifecycle, still_blockable });
+    }
+
+    crate::repositories::audit::insert_project_auto_transition_conn(
+        &mut tx,
+        id,
+        expected_from_state,
+        "blocked",
+        trigger,
+    )
     .await?;
-    Ok(now)
+    tx.commit().await?;
+    Ok(ProjectAutoBlockOutcome::Applied)
 }
 
 /// Update a project's lifecycle state and clear the blocked reason columns.
