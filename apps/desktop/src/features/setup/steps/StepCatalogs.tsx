@@ -13,7 +13,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
 import { usePreference } from '@/data/preferences';
-import { useThemeChoice, THEMES, type ThemeChoice } from '@/data/theme';
 import { m } from '@/lib/i18n';
 import type { Density } from '@/bindings/types';
 import { commands } from '@/bindings/index';
@@ -124,29 +123,6 @@ function DensityControl() {
   );
 }
 
-// ── Appearance / theme (data/theme.ts runtime; applied globally via `data-theme`
-// on <html>, so it is already live outside the wizard — this control just wires
-// the setup step's select to the same source of truth as Settings > General) ──
-
-function ThemeControl() {
-  const [choice, setChoice] = useThemeChoice();
-  return (
-    <select
-      className="pv-select"
-      value={choice}
-      aria-label={m.settings_general_theme()}
-      onChange={(e) => setChoice(e.target.value as ThemeChoice)}
-    >
-      <option value="system">{m.settings_general_theme_system()}</option>
-      {THEMES.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 // ── A labelled config row: title + control on one line, description below ──────
 
 function ConfigOption({
@@ -172,7 +148,7 @@ function ConfigOption({
 // ── StepCatalogs (Configuration) ──────────────────────────────────────────────
 
 /**
- * Step 3 — Configuration.
+ * Configuration step.
  *
  * A few first-run defaults: online SIMBAD resolution, display density, default
  * source protection, and default scan depth. All are changeable later in
@@ -194,12 +170,6 @@ export function StepCatalogs(_props: StepCatalogsProps) {
         title={m.setup_config_default_protection_title()}
         description={m.setup_config_default_protection_desc()}
         control={<DefaultProtectionControl />}
-      />
-
-      <ConfigOption
-        title={m.setup_config_appearance_title()}
-        description={m.setup_config_appearance_desc()}
-        control={<ThemeControl />}
       />
     </div>
   );

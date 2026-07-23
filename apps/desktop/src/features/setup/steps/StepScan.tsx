@@ -14,13 +14,14 @@ import type { PillVariant } from '@/ui/Pill';
 import { Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
 import { m } from '@/lib/i18n';
-import { masterLabel } from '@/lib/master-label';
+import { frameTypeCountLabel, masterLabel } from '@/lib/master-label';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { InboxItemSummary } from '@/bindings/index';
 import type { InboxClassifyResponse } from '@/bindings/aliases';
 import type { SourceEntry } from '../sources-store';
 import type { FlushResult } from '../sources-store';
+import { sourceKindLabel } from '../sources-store';
 import { errMessage } from '@/lib/errors';
 import { RootDetectionConfig } from '@/features/inventory/RootDetectionConfig';
 
@@ -95,6 +96,19 @@ function getRootId(flushResult: FlushResult, path: string): string {
   const row = flushResult.results.find((r) => r.path === path);
   // Successful rows carry the assigned rootId; fall back to the path if absent.
   return row?.rootId ?? path;
+}
+
+function scanKindCountLabel(kind: string, count: number): string {
+  switch (kind) {
+    case 'master':
+      return m.setup_scan_master_count({ count });
+    case 'unclassified':
+      return m.setup_scan_unclassified_count({ count });
+    case 'failed':
+      return m.setup_scan_classify_failed_count({ count });
+    default:
+      return frameTypeCountLabel(kind, count);
+  }
 }
 
 // ── Per-source detection summary ──────────────────────────────────────────────
@@ -186,7 +200,9 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
   const rows: TableRow[] = sortedItems.map((item) => {
     const cls = classifications.get(item.inboxItemId);
-    const typeParts = (cls?.breakdown ?? []).map((b) => `${b.count} ${b.kind}`);
+    const typeParts = (cls?.breakdown ?? []).map((b) =>
+      frameTypeCountLabel(b.kind, b.count),
+    );
     // Reconcile against fileCount (issue #513): files with no IMAGETYP (or an
     // unmapped one) don't appear in the classify breakdown at all, so the type
     // list previously undercounted the row's file total with no indication why.
@@ -270,7 +286,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
         {/* Kind label (muted, small) */}
         <span className="pv-setup-scan__kind">
-          {source.kind.replace('_', ' ')}
+          {sourceKindLabel(source.kind)}
         </span>
 
         {/* Compact count summary */}
@@ -279,8 +295,24 @@ function SourceSummary({ state }: SourceSummaryProps) {
         )}
 
         {/* Phase pill */}
-        <Pill variant={phasePillVariant(phase)}>{phaseLabel(phase)}</Pill>
+        <span aria-hidden="true">
+          <Pill variant={phasePillVariant(phase)}>{phaseLabel(phase)}</Pill>
+        </span>
       </div>
+
+      {phase !== 'error' && (
+        <span
+          className="pv-visually-hidden"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {m.setup_scan_source_status({
+            path: source.path,
+            status: phaseLabel(phase),
+          })}
+        </span>
+      )}
 
       {/* Spec 048 US4 T035: per-root reconcile mode + detection triggers,
           set up at add-time with documented defaults pre-selected. */}
@@ -291,12 +323,11 @@ function SourceSummary({ state }: SourceSummaryProps) {
       {/* ── Always-visible transient states (below header, outside collapse) ── */}
       {/* These are small/short and don't benefit from collapse. */}
       {phase === 'error' && error && (
-        <p className="pv-setup-scan__msg pv-setup-scan__msg--error">{error}</p>
-      )}
-
-      {phase === 'scanning' && (
-        <p className="pv-setup-scan__msg pv-setup-scan__msg--scanning">
-          {m.setup_scan_scanning()}
+        <p
+          className="pv-setup-scan__msg pv-setup-scan__msg--error"
+          role="alert"
+        >
+          {m.setup_scan_source_error({ path: source.path, error })}
         </p>
       )}
 
@@ -317,7 +348,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
             <div className="pv-setup-scan__chips">
               {Array.from(kindCounts.entries()).map(([kind, count]) => (
                 <span key={kind} className="pv-setup-scan__chip">
-                  {count} {kind}
+                  {scanKindCountLabel(kind, count)}
                 </span>
               ))}
             </div>
@@ -599,7 +630,13 @@ export function StepScan({
 
           {/* Summary line (shown when all sources are complete) */}
           {allDone && (
-            <p data-testid="scan-summary" className="pv-setup-scan__summary">
+            <p
+              data-testid="scan-summary"
+              className="pv-setup-scan__summary"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {totalDetected > 0
                 ? m.setup_scan_summary_found({ count: totalDetected })
                 : m.setup_scan_summary_empty()}

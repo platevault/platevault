@@ -1,8 +1,3 @@
-[mcp_servers.codebase-memory-mcp]
-command = "codebase-memory-mcp"
-args = []
-id = ""
-
 [mcp_servers.context7]
 command = "npx"
 args = [ "-y", "@upstash/context7-mcp",]
@@ -23,18 +18,6 @@ command = "npx"
 args = [ "-y", "repomix", "--mcp",]
 id = ""
 
-[mcp_servers.serena]
-command = "bash"
-args = [ "-lc", "ctx=\"${SERENA_MCP_CONTEXT:-}\"; if [ -z \"$ctx\" ]; then parent=\"$(ps -o args= -p \"$PPID\" 2>/dev/null | tr \"[:upper:]\" \"[:lower:]\")\"; case \"$parent\" in *claude*) ctx=\"claude-code\" ;; *codex*) ctx=\"codex\" ;; *) ctx=\"agent\" ;; esac; fi; exec serena start-mcp-server --context \"$ctx\" --project-from-cwd",]
-id = ""
-
-[mcp_servers.tauri]
-command = "npx"
-args = [ "-y", "@hypothesi/tauri-mcp-server",]
-id = ""
-
-[mcp_servers.codebase-memory-mcp.env]
-
 [mcp_servers.context7.env]
 
 [mcp_servers.mcp-package-version.env]
@@ -42,13 +25,6 @@ id = ""
 [mcp_servers.playwright.env]
 
 [mcp_servers.repomix.env]
-
-[mcp_servers.serena.env]
-
-[mcp_servers.tauri.env]
-
-[mcp_servers.codebase-memory-mcp.tools.index_status]
-approval_mode = "approve"
 
 [mcp_servers.playwright.tools.browser_resize]
 approval_mode = "approve"

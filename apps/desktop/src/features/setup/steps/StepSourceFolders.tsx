@@ -1,9 +1,8 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import { Btn } from '@/ui/Btn';
-import { Pill } from '@/ui/Pill';
 import { InfoTip } from '@/ui/InfoTip';
 import { m } from '@/lib/i18n';
 import { useDirectoryPicker } from '@/shared/native';
@@ -20,6 +19,7 @@ import {
   SOURCE_KIND_LABELS,
   REQUIRED_KINDS,
 } from '../sources-store';
+import { RequirementStatus } from '../RequirementStatus';
 
 export interface StepSourceFoldersProps {
   entries: SourceEntry[];
@@ -57,6 +57,8 @@ const ORDERED_SOURCE_KINDS: SourceKind[] = [...ALL_SOURCE_KINDS].sort(
   (a, b) =>
     Number(!REQUIRED_KINDS.includes(a)) - Number(!REQUIRED_KINDS.includes(b)),
 );
+
+const REQUIREMENT_SECTIONS = [true, false] as const;
 
 /** Normalize a path for cross-platform prefix/equality comparison. */
 function normalizePathForCompare(path: string): string {
@@ -149,31 +151,35 @@ export function StepSourceFolders({
       <p className="pv-step-sources__intro">{m.setup_sources_intro()}</p>
 
       <div className="pv-step-sources__groups">
-        {ORDERED_SOURCE_KINDS.map((kind, i) => {
-          const rows = indexed.filter(({ entry }) => entry.kind === kind);
-          const isRequired = REQUIRED_KINDS.includes(kind);
-          const prevKind = ORDERED_SOURCE_KINDS[i - 1];
-          const isSectionStart =
-            i === 0 || isRequired !== REQUIRED_KINDS.includes(prevKind);
+        {REQUIREMENT_SECTIONS.map((isRequired) => {
+          const sectionName = isRequired ? 'required' : 'optional';
+          const headingId = `source-section-${sectionName}-heading`;
           return (
-            <Fragment key={kind}>
-              {isSectionStart && (
-                <div className="pv-step-sources__section-heading">
-                  {isRequired
-                    ? m.setup_sources_section_required()
-                    : m.setup_sources_section_optional()}
-                </div>
-              )}
-              <SourceGroup
-                kind={kind}
-                rows={rows}
-                allEntries={entries}
-                errors={errors}
-                onAdd={onAdd}
-                onRemove={onRemove}
-                onOrganizationStateChange={onOrganizationStateChange}
-              />
-            </Fragment>
+            <section
+              key={sectionName}
+              className="pv-step-sources__section"
+              aria-labelledby={headingId}
+            >
+              <h2 id={headingId} className="pv-step-sources__section-heading">
+                {isRequired
+                  ? m.setup_sources_section_required()
+                  : m.setup_sources_section_optional()}
+              </h2>
+              {ORDERED_SOURCE_KINDS.filter(
+                (kind) => REQUIRED_KINDS.includes(kind) === isRequired,
+              ).map((kind) => (
+                <SourceGroup
+                  key={kind}
+                  kind={kind}
+                  rows={indexed.filter(({ entry }) => entry.kind === kind)}
+                  allEntries={entries}
+                  errors={errors}
+                  onAdd={onAdd}
+                  onRemove={onRemove}
+                  onOrganizationStateChange={onOrganizationStateChange}
+                />
+              ))}
+            </section>
           );
         })}
       </div>
@@ -203,6 +209,7 @@ function SourceGroup({
   const isMet = rows.length > 0;
   const hasRows = rows.length > 0;
   const [addError, setAddError] = useState<string | null>(null);
+  const headingId = `source-group-${kind}-heading`;
 
   // Add-time validation (#502, #662): reject duplicates/overlaps and a
   // nonexistent path here, before the path ever reaches the wizard's
@@ -233,39 +240,32 @@ function SourceGroup({
   // Requirement highlight is driven entirely by CSS data-attribute selectors
   // (data-required, data-requirement-met) — no inline style needed.
   return (
-    <div
+    <section
       className="pv-step-sources__group"
       data-testid={`source-group-${kind}`}
       data-required={isRequired ? 'true' : 'false'}
       data-requirement-met={isRequired ? (isMet ? 'true' : 'false') : undefined}
+      aria-labelledby={headingId}
     >
       {/* Single compact header row: label + count + status + add button.
           When empty this is the entire card height. */}
       <div className="pv-step-sources__group-header">
-        <span className="pv-step-sources__group-header-label">
-          {SOURCE_KIND_LABELS[kind]()}
-        </span>
-        <InfoTip tip={SOURCE_KIND_HELP[kind]()} />
-        {hasRows && (
-          <span className="pv-step-sources__group-header-count">
-            {rows.length}
-          </span>
-        )}
-        {isRequired ? (
-          <Pill
-            variant={isMet ? 'ok' : 'warn'}
+        <div className="pv-step-sources__group-summary">
+          <h3 id={headingId} className="pv-step-sources__group-header-label">
+            {SOURCE_KIND_LABELS[kind]()}
+          </h3>
+          <InfoTip tip={SOURCE_KIND_HELP[kind]()} />
+          {hasRows && (
+            <span className="pv-step-sources__group-header-count">
+              {rows.length}
+            </span>
+          )}
+          <RequirementStatus
+            required={isRequired}
+            met={isMet}
             data-testid={`requirement-status-${kind}`}
-          >
-            {isMet
-              ? `${m.setup_sources_required()} ✓`
-              : m.setup_sources_required()}
-          </Pill>
-        ) : (
-          <span className="pv-step-sources__group-header-optional">
-            {m.setup_sources_optional()}
-          </span>
-        )}
-        <span className="pv-step-sources__group-header-spacer" />
+          />
+        </div>
         <AddFolderButton
           kind={kind}
           onAdd={handleAdd}
@@ -290,7 +290,7 @@ function SourceGroup({
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -318,7 +318,7 @@ function SourceRow({
         {!isInbox && (
           <>
             <select
-              className="pv-step-sources__org-select"
+              className="pv-select pv-step-sources__org-select"
               value={entry.organizationState}
               onChange={(e) =>
                 onOrganizationStateChange(e.target.value as OrganizationState)
@@ -379,56 +379,58 @@ function AddFolderButton({
   };
 
   return (
-    <>
-      <Btn
-        size="sm"
-        variant="primary"
-        onClick={handleChoose}
-        disabled={loading}
-        aria-label={m.setup_sources_add_folder_aria({
-          kind: SOURCE_KIND_LABELS[kind](),
-        })}
-      >
-        {loading ? m.setup_choosing() : m.setup_add_folder()}
-      </Btn>
-      {/*
-        Manual path entry (#662): the native picker guarantees an existing
-        directory but can't be scripted (WebDriver can't drive OS dialogs) and
-        can't produce inputs the journey's add-time validation needs to reject
-        (duplicate/overlap/nonexistent path) — those require typing/pasting a
-        path. Reuses the exact same `onAdd` (→ findAddTimeConflict +
-        checkPathExists) registration path as the picker, so both entry points
-        get identical validation.
-      */}
-      <span
-        className="pv-step-sources__manual-add"
-        data-testid={`manual-add-by-path-${kind}`}
-      >
-        <input
-          className="pv-step-sources__manual-input pv-mono"
-          data-testid={`manual-path-input-${kind}`}
-          aria-label={m.setup_sources_manual_path_aria({
-            kind: SOURCE_KIND_LABELS[kind](),
-          })}
-          value={manualPath}
-          onChange={(ev) => setManualPath(ev.target.value)}
-          onKeyDown={(ev) => {
-            if (ev.key === 'Enter') {
-              ev.preventDefault();
-              void handleAddManualPath();
-            }
-          }}
-        />
+    <div className="pv-step-sources__add-controls">
+      <div className="pv-step-sources__add-actions">
         <Btn
           size="sm"
-          variant="ghost"
-          data-testid={`manual-add-path-btn-${kind}`}
-          onClick={() => void handleAddManualPath()}
-          disabled={!manualPath.trim()}
+          variant="primary"
+          onClick={handleChoose}
+          disabled={loading}
+          aria-label={m.setup_sources_add_folder_aria({
+            kind: SOURCE_KIND_LABELS[kind](),
+          })}
         >
-          {m.setup_sources_add_by_path()}
+          {loading ? m.setup_choosing() : m.setup_add_folder()}
         </Btn>
-      </span>
+        {/*
+          Manual path entry (#662): the native picker guarantees an existing
+          directory but can't be scripted (WebDriver can't drive OS dialogs) and
+          can't produce inputs the journey's add-time validation needs to reject
+          (duplicate/overlap/nonexistent path) — those require typing/pasting a
+          path. Reuses the exact same `onAdd` (→ findAddTimeConflict +
+          checkPathExists) registration path as the picker, so both entry points
+          get identical validation.
+        */}
+        <span
+          className="pv-step-sources__manual-add"
+          data-testid={`manual-add-by-path-${kind}`}
+        >
+          <input
+            className="pv-input pv-step-sources__manual-input pv-mono"
+            data-testid={`manual-path-input-${kind}`}
+            aria-label={m.setup_sources_manual_path_aria({
+              kind: SOURCE_KIND_LABELS[kind](),
+            })}
+            value={manualPath}
+            onChange={(ev) => setManualPath(ev.target.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === 'Enter') {
+                ev.preventDefault();
+                void handleAddManualPath();
+              }
+            }}
+          />
+          <Btn
+            size="sm"
+            variant="ghost"
+            data-testid={`manual-add-path-btn-${kind}`}
+            onClick={() => void handleAddManualPath()}
+            disabled={!manualPath.trim()}
+          >
+            {m.setup_sources_add_by_path()}
+          </Btn>
+        </span>
+      </div>
       {error && (
         <span className="pv-step-sources__picker-error">{error.message}</span>
       )}
@@ -438,6 +440,6 @@ function AddFolderButton({
           {validationError}
         </span>
       )}
-    </>
+    </div>
   );
 }
