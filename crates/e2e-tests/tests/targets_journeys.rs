@@ -308,21 +308,29 @@ async fn wait_for_title_count_at_least(
     }
 }
 
-/// Ensure the Targets list has at least one entry via the IPC back-channel,
-/// then invalidate the TanStack Query so the UI reflects the data immediately.
+/// Wait for the Targets list to be ready in the UI: confirms ≥1 target
+/// exists via IPC, then drives the TanStack Query to reflect that data in
+/// the DOM via a retry-invalidation loop.
 ///
-/// Why IPC-backed rather than DOM-polling:
-/// `TargetsTable` renders a loading skeleton (which includes `planner-site-
-/// prompt`) while `count === 0 && loading === true`. DOM-polling for
-/// `.pv-targets-table__row` therefore stalls until TanStack Query finishes
-/// the `target_list` IPC round-trip — and on Windows CI cold boots, that
-/// round-trip can take 30-60s because it serialises and transfers ~13k rows.
-/// Polling `target_list` via the E2E invoke bridge gives the same signal but
-/// decouples it from TanStack Query's lifecycle, so the wait scales with the
-/// actual IPC latency rather than with the UI's query-result-to-DOM path.
-/// After the IPC confirms data is present, `invalidate_query` forces the UI
-/// to refetch and render rows immediately, regardless of `staleTime`.
+/// Three-stage design:
+/// 1. `invoke_until target_list` (TARGETS_TABLE_TIMEOUT): proves the backend
+///    has at least one target. Decoupled from TanStack Query — measures real
+///    IPC latency, not the UI's internal query state. Resolves the cold-start
+///    timing gap on Windows runners (bead h182).
+/// 2. `invalidate_query(["targets"])`: forces TanStack Query to refetch;
+///    awaits the refetch completion. This should bring `count ≥ 1` into
+///    React state and trigger a render with rows.
+/// 3. Retry loop (up to TARGETS_TABLE_TIMEOUT): if rows still absent after
+///    the first invalidation, re-invalidates every 10s. Covers:
+///    - Race between `invalidateQueries` Promise resolution and React's
+///      async commit (rows exist in cache but haven't hit the DOM yet);
+///    - `useStaleSelectionCleanup` mid-invalidation navigation that can
+///      cause the component to re-enter loading state;
+///    - Any in-flight concurrent `load()` refetch that returns before the
+///      invalidation and sets `data=[]`, leaving `count=0` until
+///      re-invalidated.
 async fn wait_targets_in_ipc_then_invalidate(app: &E2eApp) -> anyhow::Result<()> {
+    // Stage 1: wait for backend to have data.
     app.invoke_until("target_list", json!({}), TARGETS_TABLE_TIMEOUT, |v: &Value| {
         v.as_array().is_some_and(|a| !a.is_empty())
     })
@@ -331,11 +339,42 @@ async fn wait_targets_in_ipc_then_invalidate(app: &E2eApp) -> anyhow::Result<()>
         "target_list IPC never returned ≥1 target within TARGETS_TABLE_TIMEOUT — \
          the add or the DB write may have silently failed",
     )?;
-    // Force the UI's TanStack Query to refetch so the DOM reflects the IPC
-    // result immediately — without this the query may still be in its stale-
-    // time window and serve a cached empty list.
-    app.invalidate_query(r#"["targets"]"#).await.context("failed to invalidate targets query")?;
-    Ok(())
+
+    // Stage 2+3: invalidate + retry until rows are in the DOM.
+    let outer_deadline = tokio::time::Instant::now() + TARGETS_TABLE_TIMEOUT;
+    loop {
+        // Invalidate TanStack Query and await the refetch (blocks until
+        // the query has fresh data or SCRIPT_TIMEOUT elapses).
+        app.invalidate_query(r#"["targets"]"#)
+            .await
+            .context("failed to invalidate targets query")?;
+
+        // Poll DOM for up to 10s after each invalidation.
+        let poll_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let mut found = false;
+        while tokio::time::Instant::now() < poll_deadline {
+            if app.driver.find(By::Css(".pv-targets-table__row")).await.is_ok() {
+                found = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        if found {
+            return Ok(());
+        }
+
+        if tokio::time::Instant::now() >= outer_deadline {
+            let url = app
+                .driver
+                .current_url()
+                .await
+                .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
+            anyhow::bail!(
+                "no .pv-targets-table__row appeared within TARGETS_TABLE_TIMEOUT \
+                 after repeated invalidate-and-poll cycles; current URL: {url}"
+            );
+        }
+    }
 }
 
 /// Diagnostics for a `wait_for_title_count_at_least` timeout: the first real
