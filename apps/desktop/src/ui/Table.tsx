@@ -102,6 +102,8 @@ export type TableRow = {
   _indent?: number;
   /** Optional `data-testid` applied to the <tr> element. Not rendered as a cell. */
   _testid?: string;
+  /** Optional onboarding spotlight anchor applied to the interactive row. */
+  _guideAnchor?: string;
 };
 
 export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
@@ -209,6 +211,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
         aria-selected={row._selected}
         data-row-clickable={clickable ? 'true' : undefined}
         data-testid={row._testid}
+        data-guide-anchor={row._guideAnchor}
       >
         {columns.map((c, ci) => (
           // eslint-disable-next-line no-restricted-syntax -- dynamic: Table cell style passthrough from caller (cellStyle)

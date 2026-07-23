@@ -89,7 +89,10 @@ test.describe('setup wizard · Observing Site step (spec 044 US3/T016)', () => {
     await skipBtn.click();
 
     // Still on the site step, now with the cost of skipping spelled out.
-    await expect(page.getByTestId('setup-site-skip-warning')).toBeVisible();
+    const skipWarning = page.getByTestId('setup-site-skip-warning');
+    await expect(skipWarning).toBeVisible();
+    await expect(skipWarning).toHaveAttribute('role', 'status');
+    await expect(skipWarning).toHaveAttribute('aria-live', 'polite');
     await expect(
       page.getByRole('heading', { name: 'Where do you observe from?' }),
     ).toBeVisible();
@@ -118,9 +121,16 @@ test.describe('setup wizard · Observing Site step (spec 044 US3/T016)', () => {
     await page.locator('#setup-site-lon').fill('10');
     await page.locator('#setup-site-lat').fill('200');
 
-    await expect(
-      page.getByText('Latitude must be a number between -90 and 90.'),
-    ).toBeVisible();
+    const latitude = page.locator('#setup-site-lat');
+    await expect(latitude).toHaveAttribute('aria-invalid', 'true');
+    await expect(latitude).toHaveAttribute(
+      'aria-describedby',
+      'setup-site-lat-error',
+    );
+    await expect(page.locator('#setup-site-lat-error')).toHaveText(
+      'Latitude must be a number between -90 and 90.',
+    );
+    await expect(latitude).toBeFocused();
   });
 
   test("a valid site's field values are retained across Back/Continue navigation", async ({

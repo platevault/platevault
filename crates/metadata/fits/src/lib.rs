@@ -66,11 +66,10 @@ impl MetadataExtractor for FitsExtractor {
             msg: e.to_string(),
         })?;
 
-        // fits_header::parse never actually errs (parsing is lenient by design);
+        // Header::parse never actually errs (parsing is lenient by design);
         // propagate defensively rather than unwrap.
-        let header = fits_header::parse(&bytes).map_err(|e| MetadataExtractError::Parse {
-            path: path.display().to_string(),
-            msg: e.to_string(),
+        let header = fits_header::Header::parse(&bytes).map_err(|e| {
+            MetadataExtractError::Parse { path: path.display().to_string(), msg: e.to_string() }
         })?;
 
         Ok(Some(parse_header(&header)))
@@ -262,11 +261,11 @@ mod tests {
     }
 
     /// Parse a set of 80-char card strings into [`RawFileMetadata`] via the
-    /// real `fits_header::parse` + [`parse_header`] path.
+    /// real [`fits_header::Header::parse`] + [`parse_header`] path.
     fn parse(cards: &[String]) -> RawFileMetadata {
         let refs: Vec<&str> = cards.iter().map(String::as_str).collect();
         let block = build_fits_header(&refs);
-        let header = fits_header::parse(&block).unwrap();
+        let header = fits_header::Header::parse(&block).unwrap();
         parse_header(&header)
     }
 

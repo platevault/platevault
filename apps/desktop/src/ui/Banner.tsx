@@ -11,14 +11,29 @@ export interface BannerProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
-  { variant = 'warn', className, children, ...rest },
+  {
+    variant = 'warn',
+    className,
+    children,
+    role,
+    'aria-live': ariaLive,
+    ...rest
+  },
   ref,
 ) {
   const cls = ['pv-banner', `pv-banner--${variant}`, className]
     .filter(Boolean)
     .join(' ');
+  const defaultRole =
+    variant === 'danger' ? 'alert' : variant === 'warn' ? 'status' : undefined;
   return (
-    <div ref={ref} className={cls} {...rest}>
+    <div
+      ref={ref}
+      className={cls}
+      role={role ?? defaultRole}
+      aria-live={ariaLive ?? (variant === 'warn' ? 'polite' : undefined)}
+      {...rest}
+    >
       {children}
     </div>
   );

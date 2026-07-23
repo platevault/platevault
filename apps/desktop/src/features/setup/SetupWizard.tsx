@@ -18,6 +18,7 @@ import {
 } from '@/data/locale';
 import {
   StepLanguage,
+  StepTheme,
   StepSourceFolders,
   StepTools,
   StepCatalogs,
@@ -68,8 +69,10 @@ function newSiteId(): string {
 }
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
+const CURRENT_WIZARD_STATE_VERSION = 2;
 
 interface WizardState {
+  version: number;
   currentStep: number;
   sources: SourcesState;
   catalogSettings: CatalogSettings;
@@ -84,6 +87,11 @@ const STEPS = [
     label: () => m.setup_language_label(),
     heading: () => m.setup_language_heading(),
     description: () => m.setup_language_desc(),
+  },
+  {
+    label: () => m.settings_general_theme(),
+    heading: () => m.setup_theme_heading(),
+    description: () => m.setup_theme_desc(),
   },
   {
     label: () => m.setup_step_sources_label(),
@@ -123,14 +131,35 @@ const STEPS = [
 // of these constants, never a bare literal, so a future insertion can't
 // silently point validation/rendering at the wrong step again).
 const LANGUAGE_STEP = 0;
-const SOURCES_STEP = 1;
-const TOOLS_STEP = 2;
-const CATALOGS_STEP = 3;
-const SITE_STEP = 4;
+const THEME_STEP = 1;
+const SOURCES_STEP = 2;
+const TOOLS_STEP = 3;
+const CATALOGS_STEP = 4;
+const SITE_STEP = 5;
 
 // Index of the Scan step (last step) and its predecessor, Confirm.
 const SCAN_STEP = STEPS.length - 1;
 const CONFIRM_STEP = SCAN_STEP - 1;
+
+/**
+ * The Theme step was inserted after Language in state version 2. Preserve the
+ * semantic step for an in-progress version-1 wizard by shifting every legacy
+ * step after Language forward once. A legacy Scan position is then handled by
+ * the existing fresh-scan guard below and reopens on Confirm.
+ */
+function migrateCurrentStep(parsed: Partial<WizardState>): number {
+  const persisted =
+    typeof parsed.currentStep === 'number' &&
+    Number.isInteger(parsed.currentStep) &&
+    parsed.currentStep >= 0
+      ? parsed.currentStep
+      : 0;
+  const migrated =
+    parsed.version === CURRENT_WIZARD_STATE_VERSION || persisted === 0
+      ? persisted
+      : persisted + 1;
+  return Math.min(migrated, SCAN_STEP);
+}
 
 function loadWizardState(): WizardState {
   try {
@@ -142,11 +171,11 @@ function loadWizardState(): WizardState {
       const parsed = JSON.parse(raw) as Partial<WizardState>;
       // If persisted state had the wizard already at the scan step, reset to
       // confirm so the scan always starts fresh (avoids stale scan guard).
+      const migratedStep = migrateCurrentStep(parsed);
       const currentStep =
-        parsed.currentStep === SCAN_STEP
-          ? SCAN_STEP - 1
-          : (parsed.currentStep ?? 0);
+        migratedStep === SCAN_STEP ? CONFIRM_STEP : migratedStep;
       return {
+        version: CURRENT_WIZARD_STATE_VERSION,
         currentStep,
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
         // Guard: accept persisted catalogSettings only if it matches the current
@@ -165,6 +194,7 @@ function loadWizardState(): WizardState {
     // corrupt or stale state -- start fresh
   }
   return {
+    version: CURRENT_WIZARD_STATE_VERSION,
     currentStep: 0,
     sources: loadSources(),
     catalogSettings: DEFAULT_CATALOG_SETTINGS,
@@ -485,7 +515,8 @@ function SetupWizardBody() {
   // Confirm step require all required folder kinds; the Observing Site step
   // (T016) must be internally consistent (FR-025 never blocks, but a partially
   // filled-in, out-of-range site can't silently proceed). Every other step —
-  // including the Language step — advances freely. Used both for "Continue"
+  // including the Language and Theme steps — advances freely. Used both for
+  // "Continue"
   // and for validation-gated forward step-tab jumps (issue #512).
   const isStepValid = useCallback(
     (i: number): boolean => {
@@ -644,7 +675,9 @@ function SetupWizardBody() {
         <div className="pv-setup-wizard__step-label">
           {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
         </div>
-        <h1 className="pv-setup-wizard__heading">{stepMeta.heading()}</h1>
+        <h1 className="pv-setup-wizard__heading" data-wizard-step-heading>
+          {stepMeta.heading()}
+        </h1>
         {stepMeta.description && (
           <p className="pv-setup-wizard__description">
             {stepMeta.description()}
@@ -660,6 +693,7 @@ function SetupWizardBody() {
 
         {/* Step body */}
         {step === LANGUAGE_STEP && <StepLanguage />}
+        {step === THEME_STEP && <StepTheme />}
         {step === SOURCES_STEP && (
           <StepSourceFolders
             entries={state.sources}

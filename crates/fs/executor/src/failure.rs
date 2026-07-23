@@ -261,6 +261,33 @@ mod tests {
     }
 
     #[test]
+    fn remaining_io_kinds_map_to_producible_codes() {
+        let cases = [
+            (io::ErrorKind::WouldBlock, FailureCode::SourceLocked),
+            (io::ErrorKind::StorageFull, FailureCode::DiskFull),
+            (io::ErrorKind::InvalidFilename, FailureCode::PathInvalid),
+            (io::ErrorKind::Other, FailureCode::Unknown),
+        ];
+
+        for (kind, expected) in cases {
+            let failure = PlanItemFailure::from_io(&io::Error::from(kind), "test operation");
+            assert_eq!(failure.code, expected, "failed for {kind:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unavailable_volume_os_errors_map_correctly() {
+        for raw_os_error in [6, 19] {
+            let failure = PlanItemFailure::from_io(
+                &io::Error::from_raw_os_error(raw_os_error),
+                "test operation",
+            );
+            assert_eq!(failure.code, FailureCode::VolumeUnavailable);
+        }
+    }
+
+    #[test]
     fn item_stale_triggers_pause() {
         assert!(FailureCode::ItemStale.triggers_pause());
         assert!(FailureCode::VolumeUnavailable.triggers_pause());
@@ -276,6 +303,11 @@ mod tests {
             FailureCode::CopySucceededDeleteFailedRollbackFailed.as_str(),
             "copy.succeeded.delete.failed.rollback.failed"
         );
+    }
+
+    #[test]
+    fn os_trash_unavailable_compatibility_alias_retains_its_wire_value() {
+        assert_eq!(FailureCode::OsTrashUnavailable.as_str(), "os_trash.unavailable");
     }
 
     #[test]
