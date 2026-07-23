@@ -27,12 +27,12 @@ pub mod operation_state;
 /// `docs/development/persistence-layer-hardening.md`.
 #[cfg(test)]
 mod query_builder_example;
+pub mod repositories;
+mod schema_cache;
 /// Shared in-process test fixtures (setup, insert helpers) for repository unit
 /// tests. Compiled only under `cfg(test)`.
 #[cfg(test)]
 pub(crate) mod test_support;
-pub mod repositories;
-mod schema_cache;
 
 pub const CRATE_NAME: &str = "persistence_db";
 
