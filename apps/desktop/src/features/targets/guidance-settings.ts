@@ -125,19 +125,35 @@ export async function loadGuidanceParams(): Promise<MoonAvoidanceParams> {
 /**
  * Persist a new per-band params set and update the live cache so dependent
  * pills/recommendations recompute immediately (SC-008).
+ *
+ * The cache is updated optimistically before the backend round-trip so pill
+ * recalculation and recommendations reflect the change immediately (SC-008
+ * instant-derivation). On backend failure the pre-change snapshot is restored
+ * so the UI and DB stay consistent; a stale rollback is suppressed if a newer
+ * write has since committed (writeGen guard).
  */
 export async function saveGuidanceParams(
   params: MoonAvoidanceParams,
 ): Promise<void> {
   const clean = coerceParams(params);
+  const prev = current;
   writeGen += 1;
-  unwrap(
-    await commands.settingsUpdate(PLANNER_SCOPE, {
-      [MOON_AVOIDANCE_KEY]: clean,
-    }),
-  );
+  const gen = writeGen;
   current = clean;
   emit();
+  try {
+    unwrap(
+      await commands.settingsUpdate(PLANNER_SCOPE, {
+        [MOON_AVOIDANCE_KEY]: clean,
+      }),
+    );
+  } catch (err) {
+    if (writeGen === gen) {
+      current = prev;
+      emit();
+    }
+    throw err;
+  }
 }
 
 /**

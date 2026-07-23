@@ -682,17 +682,11 @@ pub async fn session_history(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     #[tokio::test]
     async fn frame_ids_absent_session_returns_none() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert!(get_acquisition_session_frame_ids(db.pool(), "no-such").await.unwrap().is_none());
         assert!(get_calibration_session_frame_ids_and_kind(db.pool(), "no-such")
             .await
@@ -702,14 +696,14 @@ mod tests {
 
     #[tokio::test]
     async fn file_records_by_ids_empty_short_circuits() {
-        let db = setup().await;
+        let db = setup_db().await;
         let rows = file_records_by_ids(db.pool(), &[]).await.unwrap();
         assert!(rows.is_empty());
     }
 
     #[tokio::test]
     async fn active_frame_summary_empty_ids_short_circuits() {
-        let db = setup().await;
+        let db = setup_db().await;
         let (count, total) = active_frame_summary(db.pool(), &[]).await.unwrap();
         assert_eq!((count, total), (0, 0));
     }
@@ -717,7 +711,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)] // 0.0 is exactly representable; no accumulated arithmetic
     async fn active_frame_exposure_seconds_empty_ids_short_circuits() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert_eq!(active_frame_exposure_seconds(db.pool(), &[]).await.unwrap(), 0.0);
     }
 
@@ -780,7 +774,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)] // seeded SUM of exact literal inputs; no rounding involved
     async fn active_frame_exposure_seconds_sums_real_per_frame_values() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_frame_with_exposure(db.pool(), "f-a", "root-x", "a.fits", "classified", 180.0).await;
         insert_frame_with_exposure(db.pool(), "f-b", "root-x", "b.fits", "classified", 180.0).await;
 
@@ -793,7 +787,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)] // seeded SUM of exact literal inputs; no rounding involved
     async fn active_frame_exposure_seconds_excludes_missing_frames() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_frame_with_exposure(db.pool(), "f-present", "root-y", "p.fits", "classified", 300.0)
             .await;
         insert_frame_with_exposure(db.pool(), "f-gone", "root-y", "g.fits", "missing", 9999.0)
@@ -811,7 +805,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)] // 0.0 is exactly representable; no accumulated arithmetic
     async fn active_frame_exposure_seconds_defaults_to_zero_without_metadata() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
              VALUES ('root-z', 'root-z', '/tmp', 'local', 'active', datetime('now'))",
@@ -844,7 +838,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)] // exact literal input, no rounding involved
     async fn active_frame_exposure_seconds_collapses_duplicate_inbox_item_fan_out() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
              VALUES ('root-dup', 'root-dup', '/tmp', 'local', 'active', datetime('now'))",
@@ -893,7 +887,7 @@ mod tests {
 
     #[tokio::test]
     async fn mark_file_record_missing_updates_state() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
              VALUES ('root-1', 'root-1', '/tmp', 'local', 'active', datetime('now'))",
@@ -919,7 +913,7 @@ mod tests {
 
     #[tokio::test]
     async fn search_and_recent_targets_roundtrip() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO canonical_target
                 (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at) \
@@ -940,7 +934,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_and_get_session_joined_roundtrip() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
              VALUES ('s-1', '{}', '[]', '2026-01-01T00:00:00Z')",
@@ -960,7 +954,7 @@ mod tests {
 
     #[tokio::test]
     async fn project_ids_for_session_empty_when_unlinked() {
-        let db = setup().await;
+        let db = setup_db().await;
         let ids = project_ids_for_session(db.pool(), "no-such").await.unwrap();
         assert!(ids.is_empty());
     }

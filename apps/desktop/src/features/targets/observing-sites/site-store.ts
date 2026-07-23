@@ -177,17 +177,31 @@ export async function saveActiveSiteId(
  * Settings-pane edits reflect instantly (SC-003) rather than waiting on IPC
  * latency; the backend write still happens (durability, SC-006), it just
  * isn't gating the UI update.
+ *
+ * On backend failure the snapshot is restored so the UI and DB stay
+ * consistent; a stale rollback is suppressed if a newer write has since
+ * committed (writeGen guard).
  */
 export async function saveUsableAltitude(degrees: number): Promise<void> {
   const clamped = clampThreshold(degrees);
+  const prev = current;
   writeGen += 1;
+  const gen = writeGen;
   current = { ...current, usableAltitudeDeg: clamped };
   emit();
-  unwrap(
-    await commands.settingsUpdate(OBSERVING_SCOPE, {
-      [USABLE_ALTITUDE_KEY]: clamped,
-    }),
-  );
+  try {
+    unwrap(
+      await commands.settingsUpdate(OBSERVING_SCOPE, {
+        [USABLE_ALTITUDE_KEY]: clamped,
+      }),
+    );
+  } catch (err) {
+    if (writeGen === gen) {
+      current = prev;
+      emit();
+    }
+    throw err;
+  }
 }
 
 /** Non-hook read of the current cached state (comparators, tests). */
