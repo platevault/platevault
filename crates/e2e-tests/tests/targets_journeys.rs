@@ -591,9 +591,15 @@ async fn targets_ui_add_target_no_duplicate_on_reconfirm() -> anyhow::Result<()>
 /// disclosure ("—" with a real title) rather than a fabricated-looking
 /// number (`deriveRowMoonPlanning`'s real `!night` branch,
 /// `apps/desktop/src/features/targets/astro/row-planning.ts`).
+///
+/// Prefixed `slow_`: seed-warming (adds a target via real UI before asserting)
+/// makes this take 45-90s, longer than the median journey. The `e2e.yml`
+/// shard filters spread `slow_` tests one-per-shard; see the comment block
+/// in that file for the convention.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn targets_ui_astronomy_columns_disclose_placeholder_without_site() -> anyhow::Result<()> {
+async fn slow_targets_ui_astronomy_columns_disclose_placeholder_without_site() -> anyhow::Result<()>
+{
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     complete_first_run(&app).await?;
@@ -830,9 +836,14 @@ fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
 /// it this journey would pass in the one case it most needs to catch: if the
 /// table never actually scrolled, every "drift == 0" assertion below would
 /// hold trivially against a static table and the test would be vacuous.
+///
+/// Prefixed `slow_`: adds a target via real UI plus a full dock-pin + reload
+/// cycle, making this take 60-120s on Windows cold boots. The `e2e.yml`
+/// shard filters spread `slow_` tests one-per-shard; see the comment block
+/// in that file for the convention.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
+async fn slow_targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
     const MIN_SCROLL: i64 = 200;
 
     let app = E2eApp::launch().await?;

@@ -69,8 +69,9 @@
 # Job DAG — full matrix (main push / workflow_dispatch, build-once, test-sharded):
 #
 #   changes ── build-frontend (ubuntu, once) ──┐          (per OS:)
-#          └── build-app-<os> ─────────────────┴─ shard 1/2 ┐
-#                                                 shard 2/2 ┴─ gate (<os>)
+#          └── build-app-<os> ─────────────────┴─ shard 1/3 ┐
+#                                                 shard 2/3 ┤
+#                                                 shard 3/3 ┴─ gate (<os>)
 #
 # - The frontend is built ONCE (VITE_E2E dist is OS-independent) and shared
 #   as an artifact; previously every matrix leg rebuilt it.
@@ -89,15 +90,27 @@
 #   -p e2e_tests --partition count:1/3` still returns 13/23 tests, vs 16/23 at
 #   count:1/2). 4-way was chosen for Ubuntu's raw parallelism headroom, not
 #   because it rebalances the count split.
-# - Windows runs 2 shards via `--partition hash:N/2` instead of `count:N/2`:
-#   the same per-binary round-robin skew hit Windows identically (16 vs 7
-#   tests, run 29660954581/29587590762), and 2-way count partitioning can't be
-#   rebalanced by raising M alone (see above). Hash-based partitioning assigns
-#   each test independently by a stable hash of its identity, landing 14/9
-#   (verified: `cargo nextest list -p e2e_tests --partition hash:1/2` vs
-#   `hash:2/2`) — evener than count's 16/7 with no extra windows-latest
-#   runner. macOS stays on `count:N/2` (best-effort, issue #489; not worth
-#   touching).
+# - Windows runs 3 shards via explicit nextest filterset expressions instead
+#   of `--partition hash:N/M`. Two tests (`slow_targets_ui_astronomy_*` and
+#   `slow_targets_ui_identity_*`) are seed-warming journeys that run 60-120s
+#   on Windows cold boots; the `slow_` prefix marks this convention. With pure
+#   hash partitioning both slow tests landed on the SAME shard (verified:
+#   `cargo nextest list -p e2e_tests --partition hash:1/2` vs `hash:2/2`
+#   showed a 14/9 split at 2 shards, and at 3 shards they both hashed to
+#   shard 1 — run 29660954581). Explicit filtersets spread one slow_ test per
+#   shard, giving a 10/10/10 balance (30 tests total). `--partition` and
+#   `-E filterset` are ANDed by nextest, not ORed — an explicitly named test
+#   that doesn't hash to that bucket is still excluded by the partition, so
+#   the shard expressions use pure -E with no --partition flag.
+#   slow_ convention: tests that take >45s on Windows cold boots are prefixed
+#   `slow_`; add new ones alphabetically and extend the shard-1 or shard-2
+#   filter by one `test(=slow_<name>)` term (shard 3 receives no slow test
+#   so the next slow_ test goes to shard 3 first, then shard 1, etc.).
+# - macOS stays on hash:N/2 (best-effort, issue #489; not worth touching).
+# - tauri-webdriver binary: binstall installs a prebuilt binary from crates.io
+#   at TAURI_WEBDRIVER_VERSION (env); the binary is cached in ~/.cargo/bin
+#   keyed on that version, saving ~65s per shard on cache hits. Applies to
+#   all three OS lanes.
 # - Builder/shard/gate are written out PER OS instead of as one os-matrix:
 #   GitHub `needs` can only target a whole job (never a single matrix leg),
 #   so a matrixed builder would let one OS's build failure skip the other
@@ -173,6 +186,10 @@ env:
   # (`apps/desktop/src-tauri/src/main.rs`); the harness's `reset_database()`
   # deletes it before each journey launches the app.
   ALM_DB_URL: "sqlite://./e2e-test.db?mode=rwc"
+  # Pinned version for the tauri-webdriver CLI binary. Used as the cache key
+  # in every shard job (ubuntu, windows, macOS) so a single bump here
+  # invalidates the cached binary across all lanes at once.
+  TAURI_WEBDRIVER_VERSION: "0.1.1"
 
 jobs:
   # Cheap change-detection gate — mirrors ci.yml's `changes` job. Cross-workflow
@@ -831,10 +848,21 @@ jobs:
       # this replaces, often much faster.
       - uses: taiki-e/install-action@cargo-binstall
 
+      # Cache the installed tauri-webdriver binary keyed on the pinned version
+      # (TAURI_WEBDRIVER_VERSION env var, defined at workflow level). Saves
+      # ~65s per shard on cache hits; on miss binstall installs as normal.
+      - name: Restore tauri-webdriver binary from cache
+        id: twd-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-webdriver
+          key: tauri-webdriver-ubuntu-${{ env.TAURI_WEBDRIVER_VERSION }}
+
       # Install the tauri-webdriver CLI proxy.
       # It bridges W3C client (:4444) → plugin embedded server (:4445).
       - name: Install tauri-webdriver CLI
-        run: cargo binstall tauri-webdriver --locked --no-confirm
+        if: steps.twd-cache.outputs.cache-hit != 'true'
+        run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
 
       - uses: pnpm/action-setup@v4
         with:
@@ -895,8 +923,31 @@ jobs:
         run: xvfb-run -s "-screen 0 1600x1200x24" -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/4
 
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
+  #
+  # Windows uses 3 shards with explicit filterset expressions instead of
+  # `--partition hash:N/3`. Two seed-warming tests prefixed `slow_` are
+  # distributed one-per-shard to avoid them landing on the same bucket (which
+  # they do under pure hash partitioning — both hashed to shard 1 at 2-way,
+  # and at 3-way they hash to shards 1 and 3 but with an 10/8/11 split for
+  # non-slow tests). Explicit filtersets give a deterministic 10/10/10 split.
+  #
+  # slow_ convention: tests prefixed slow_ are seed-warming or long-running
+  # (>45s on Windows cold boots). They are spread one-per-shard here: shard 1
+  # gets the first slow_ test alphabetically, shard 2 the second, and so on.
+  # Adding a new slow_ test: pin it to the shard with the lightest load and
+  # add one `test(=slow_<new_name>)` term to that shard's -E expression.
+  # The nextest list verification commands below confirm full coverage.
+  #
+  # Verified locally (2026-07-23):
+  #   cargo nextest list -p e2e_tests --run-ignored all \
+  #     -E '<shard-1-expr>' → 10 tests (slow_astronomy_ + 9 non-slow)
+  #   cargo nextest list -p e2e_tests --run-ignored all \
+  #     -E '<shard-2-expr>' → 10 tests (slow_identity_ + 9 non-slow)
+  #   cargo nextest list -p e2e_tests --run-ignored all \
+  #     -E '<shard-3-expr>' → 10 tests (no slow_ test)
+  #   union = all 30 tests, no overlaps.
   real-ui-e2e-windows:
-    name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/2
+    name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/3
     needs: [changes, build-frontend, build-app-windows]
     # Full windows matrix only on main pushes and manual dispatch (not PRs).
     # Windows L3 is the slow/historically flaky leg (~25 min + flake, runs
@@ -906,7 +957,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -918,8 +969,18 @@ jobs:
 
       - uses: taiki-e/install-action@cargo-binstall
 
+      # Cache the installed tauri-webdriver binary. Saves ~65s per shard on
+      # cache hits; on miss binstall installs as normal.
+      - name: Restore tauri-webdriver binary from cache
+        id: twd-cache
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Roaming\cargo\bin\tauri-webdriver.exe
+          key: tauri-webdriver-windows-${{ env.TAURI_WEBDRIVER_VERSION }}
+
       - name: Install tauri-webdriver CLI
-        run: cargo binstall tauri-webdriver --locked --no-confirm
+        if: steps.twd-cache.outputs.cache-hit != 'true'
+        run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
 
       - uses: pnpm/action-setup@v4
         with:
@@ -946,11 +1007,52 @@ jobs:
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
 
-      - name: Run E2E
+      # Shard 1: slow_targets_ui_astronomy_* (first slow_ alphabetically) +
+      # the 9 non-slow tests that hash to bucket 1/3.
+      - name: Run E2E (shard 1/3)
+        if: matrix.shard == 1
         shell: bash
         env:
           ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
-        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/2
+        run: >-
+          cargo nextest run
+          --archive-file e2e-archive.tar.zst
+          --workspace-remap .
+          --profile e2e
+          --run-ignored all
+          --no-tests=warn
+          -E 'test(=slow_targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(sessions_journeys) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=lifecycle_integrity) | test(=plan_review_apply_with_audit) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button) | test(=targets_ui_dock_pin_and_width_survive_a_real_restart)'
+
+      # Shard 2: slow_targets_ui_identity_* (second slow_ alphabetically) +
+      # the 9 non-slow tests that hash to bucket 2/3.
+      - name: Run E2E (shard 2/3)
+        if: matrix.shard == 2
+        shell: bash
+        env:
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: >-
+          cargo nextest run
+          --archive-file e2e-archive.tar.zst
+          --workspace-remap .
+          --profile e2e
+          --run-ignored all
+          --no-tests=warn
+          -E 'test(=slow_targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(archive_journeys) | binary(cleanup_protection_gate_journey) | binary(inventory_journeys) | binary(onboarding_journey) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=cleanup_plan_review) | test(=targets_ui_add_target_no_duplicate_on_reconfirm)'
+
+      # Shard 3: no slow_ test + the 10 non-slow tests that hash to bucket 3/3.
+      - name: Run E2E (shard 3/3)
+        if: matrix.shard == 3
+        shell: bash
+        env:
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: >-
+          cargo nextest run
+          --archive-file e2e-archive.tar.zst
+          --workspace-remap .
+          --profile e2e
+          --run-ignored all
+          --no-tests=warn
+          -E 'binary(smoke) | binary(source_view_journeys) | binary(plan_review_overlay_journeys) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=first_run_resolve_create_project) | test(=ingestion_sessions_search) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db) | test(=targets_planner_real_astronomy_after_site_creation)'
 
   # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
   # no xvfb (native display), longer timeout for the 120s-per-attempt
@@ -992,8 +1094,18 @@ jobs:
 
       - uses: taiki-e/install-action@cargo-binstall
 
+      # Cache the installed tauri-webdriver binary. Saves ~65s per shard on
+      # cache hits; on miss binstall installs as normal.
+      - name: Restore tauri-webdriver binary from cache
+        id: twd-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-webdriver
+          key: tauri-webdriver-macos-${{ env.TAURI_WEBDRIVER_VERSION }}
+
       - name: Install tauri-webdriver CLI
-        run: cargo binstall tauri-webdriver --locked --no-confirm
+        if: steps.twd-cache.outputs.cache-hit != 'true'
+        run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
 
       - uses: pnpm/action-setup@v4
         with:

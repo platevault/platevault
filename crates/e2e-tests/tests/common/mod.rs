@@ -9,6 +9,21 @@
 //! --workspace` job (ci.yml). The dedicated e2e.yml workflow runs them with
 //! `--run-ignored all` after standing that environment up.
 //!
+//! # `slow_` test naming convention
+//!
+//! Tests that take more than ~45s on Windows CI cold boots (seed-warming
+//! journeys, multiple app launches, or full reload cycles) are named with a
+//! `slow_` prefix. `e2e.yml`'s Windows shard filter expressions spread them
+//! one-per-shard so no shard accumulates two long-running tests. The shard
+//! expressions use `test(=slow_<name>)` terms pinned per shard — no
+//! `--partition` flag, which would AND with the explicit test name and exclude
+//! it if it doesn't hash to that bucket.
+//!
+//! Adding a new slow test: prefix the function with `slow_`, pick the shard
+//! with the lightest load (check `cargo nextest list -p e2e_tests
+//! --run-ignored all -E '<shardN-expr>'` counts), and add one
+//! `test(=slow_<name>)` term to that shard's `-E` expression in e2e.yml.
+//!
 //! Mechanism (mirrors `.github/workflows/e2e.yml`, research D10):
 //! - `desktop_shell` is built with `cargo build -p desktop_shell --features
 //!   e2e`, which compiles in `tauri-plugin-webdriver` (Choochmeque) — an
