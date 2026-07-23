@@ -495,6 +495,16 @@ export function useInboxReclassify(inboxItemId: string) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.inbox.metadata(inboxItemId),
         });
+        // The per-file metadata DTO is override-derived too
+        // (`frame_type_effective`, `missing_path_attributes`,
+        // `missing_mandatory` all read the evidence overrides reclassify just
+        // wrote) — without invalidating it, `InboxPage`'s
+        // `hasMissingRequiredMeta` confirm gate keeps judging the PRE-override
+        // state and Confirm never re-enables after a reclassify (spec 037
+        // Layer-2 Inbox journey regression, PR #457).
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.metadata(inboxItemId),
+        });
         return result;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
