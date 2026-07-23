@@ -631,4 +631,28 @@ mod tests {
         invalidate_protection_defaults();
         assert!(protection_defaults().load().is_none());
     }
+
+    // ── Per-instance isolation tests ─────────────────────────────────────
+
+    #[test]
+    fn protection_defaults_caches_instances_are_isolated() {
+        use super::ProtectionDefaultsCaches;
+
+        let a = ProtectionDefaultsCaches::new();
+        let b = ProtectionDefaultsCaches::new();
+
+        a.store(Arc::new(ProtectionDefaultsSnapshot {
+            level: "protected".to_owned(),
+            block_permanent_delete: true,
+            categories: vec!["lights".to_owned()],
+        }));
+
+        assert!(b.load().is_none(), "instance B must not see A's store");
+        assert_eq!(a.epoch(), 0, "A epoch starts at 0");
+        assert_eq!(b.epoch(), 0, "B epoch starts at 0");
+
+        a.invalidate();
+        assert_eq!(a.epoch(), 1);
+        assert_eq!(b.epoch(), 0, "B epoch must be independent of A");
+    }
 }
