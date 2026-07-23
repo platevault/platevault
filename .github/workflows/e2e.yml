@@ -91,21 +91,16 @@
 #   count:1/2). 4-way was chosen for Ubuntu's raw parallelism headroom, not
 #   because it rebalances the count split.
 # - Windows runs 3 shards via explicit nextest filterset expressions instead
-#   of `--partition hash:N/M`. Two tests (`slow_targets_ui_astronomy_*` and
-#   `slow_targets_ui_identity_*`) are seed-warming journeys that run 60-120s
-#   on Windows cold boots; the `slow_` prefix marks this convention. With pure
-#   hash partitioning both slow tests landed on the SAME shard (verified:
-#   `cargo nextest list -p e2e_tests --partition hash:1/2` vs `hash:2/2`
-#   showed a 14/9 split at 2 shards, and at 3 shards they both hashed to
-#   shard 1 — run 29660954581). Explicit filtersets spread one slow_ test per
-#   shard, giving a 10/10/10 balance (30 tests total). `--partition` and
-#   `-E filterset` are ANDed by nextest, not ORed — an explicitly named test
-#   that doesn't hash to that bucket is still excluded by the partition, so
-#   the shard expressions use pure -E with no --partition flag.
-#   slow_ convention: tests that take >45s on Windows cold boots are prefixed
-#   `slow_`; add new ones alphabetically and extend the shard-1 or shard-2
-#   filter by one `test(=slow_<name>)` term (shard 3 receives no slow test
-#   so the next slow_ test goes to shard 3 first, then shard 1, etc.).
+#   of `--partition hash:N/M`. Tests prefixed `slow_` (avg >3x median on
+#   Windows CI post-fix) are pinned one per shard; the rest are distributed
+#   by LPT. Measured post-fix: dock_pin 81.1s, archive 25.5s — both > 21s
+#   threshold. Astronomy (7.0s) and identity (8.4s) are below threshold.
+#   `--partition` and `-E filterset` are ANDed by nextest, not ORed — an
+#   explicitly named test that doesn't hash to a bucket is still excluded,
+#   so shard expressions use pure -E with no --partition flag.
+#   Timing table and LPT procedure: see the comment block on real-ui-e2e-windows.
+#   LPT totals: shard 1 ~104s / shard 2 ~103s / shard 3 ~104s, max = 104s.
+#   (Previous count-balanced: 159s / 97s / 74s, max = 159s.)
 # - macOS stays on hash:N/2 (best-effort, issue #489; not worth touching).
 # - tauri-webdriver binary: binstall installs a prebuilt binary from crates.io
 #   at TAURI_WEBDRIVER_VERSION (env); the binary is cached in ~/.cargo/bin
@@ -925,26 +920,61 @@ jobs:
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
   #
   # Windows uses 3 shards with explicit filterset expressions instead of
-  # `--partition hash:N/3`. Two seed-warming tests prefixed `slow_` are
-  # distributed one-per-shard to avoid them landing on the same bucket (which
-  # they do under pure hash partitioning — both hashed to shard 1 at 2-way,
-  # and at 3-way they hash to shards 1 and 3 but with an 10/8/11 split for
-  # non-slow tests). Explicit filtersets give a deterministic 10/10/10 split.
+  # `--partition hash:N/3`. Two tests prefixed `slow_` are pinned one per
+  # shard; the rest are distributed by LPT (longest-processing-time first)
+  # to minimise max-shard wall time. `--partition` and `-E filterset` are
+  # ANDed by nextest, not ORed, so an explicitly named test that doesn't
+  # hash to a bucket is still excluded — shard expressions use pure `-E`
+  # with no `--partition` flag.
   #
-  # slow_ convention: tests prefixed slow_ are seed-warming or long-running
-  # (>45s on Windows cold boots). They are spread one-per-shard here: shard 1
-  # gets the first slow_ test alphabetically, shard 2 the second, and so on.
-  # Adding a new slow_ test: pin it to the shard with the lightest load and
-  # add one `test(=slow_<new_name>)` term to that shard's -E expression.
-  # The nextest list verification commands below confirm full coverage.
+  # slow_ CONVENTION: prefix when avg wall time on Windows CI exceeds
+  # 3x the suite median (threshold ~21s; median ~7s post-fix). Use only
+  # post-fix samples — timings that measure a bug are invalid. Re-evaluate
+  # after any fix that changes a test's runtime.
+  # Adding a new slow_: measure on 2+ CI runs, add to the table (with run
+  # IDs), re-run LPT, and update the -E expressions below.
   #
-  # Verified locally (2026-07-23):
-  #   cargo nextest list -p e2e_tests --run-ignored all \
-  #     -E '<shard-1-expr>' → 10 tests (slow_astronomy_ + 9 non-slow)
-  #   cargo nextest list -p e2e_tests --run-ignored all \
-  #     -E '<shard-2-expr>' → 10 tests (slow_identity_ + 9 non-slow)
-  #   cargo nextest list -p e2e_tests --run-ignored all \
-  #     -E '<shard-3-expr>' → 10 tests (no slow_ test)
+  # Per-test averages — post-fix runs 30020688075 and 30019274329 only:
+  # | Test (short form)                               | Avg(s) | slow_? |
+  # |-------------------------------------------------|--------|--------|
+  # | slow_dock_pin_and_width_survive_a_real_restart  |  81.1s |   yes  |
+  # | slow_archive_lifecycle_apply_trash_perm_delete  |  25.5s |   yes  |
+  # | inbox_ui_confirm_does_not_move_..._destination  |  15.3s |        |
+  # | all_top_level_screens_load                      |  10.3s |        |
+  # | targets_planner_real_astronomy_after_site_...   |  10.2s |        |
+  # | targets_ui_add_target_no_duplicate_...          |   9.1s |        |
+  # | reconcile_drops_externally_deleted_frame_...    |   8.5s |        |
+  # | targets_ui_identity_columns_stay_pinned_...     |   8.4s |        |
+  # | cleanup_plan_review                             |   8.3s |        |
+  # | calibration_ui_confirmed_master_...             |   8.1s |        |
+  # | inbox_ui_catalogue_in_place_zero_moves_...      |   7.7s |        |
+  # | projects_ui_wizard_creates_real_folders_...     |   7.5s |        |
+  # | plan_review_destructive_confirm_gate_and_...    |   7.3s |        |
+  # | generate_source_view_creates_reviewable_...     |   7.3s |        |
+  # | targets_ui_astronomy_columns_disclose_...       |   7.0s |        |
+  # | ingestion_sessions_search                       |   7.0s |        |
+  # | orientation_walk_then_real_confirm_renders_...  |   7.0s |        |
+  # | sessions_ui_derived_view_invariants             |   6.9s |        |
+  # | cleanup_ui_protected_item_blocks_...            |   6.7s |        |
+  # | plan_review_empty_archive_plan_refuses_apply    |   6.3s |        |
+  # | inbox_ui_missing_path_attribute_banner_...      |   5.9s |        |
+  # | inbox_ui_mixed_folder_splits_into_single_...    |   5.8s |        |
+  # | calibration_ui_masters_ingest_as_individual_... |   5.7s |        |
+  # | first_run_resolve_create_project                |   5.6s |        |
+  # | inbox_ui_unsplit_unclassified_folder_badge_...  |   5.5s |        |
+  # | inbox_ui_unclassified_gate_bulk_reclassify_...  |   5.5s |        |
+  # | plan_review_apply_with_audit                    |   5.4s |        |
+  # | settings_ui_theme_applies_live_and_persists_... |   5.4s |        |
+  # | settings_ui_ingestion_toggle_autosaves_...      |   5.3s |        |
+  # | lifecycle_integrity                             |   4.2s |        |
+  #
+  # LPT assignment -> shard totals 104s / 103s / 104s, max = 104s.
+  # (Previous count-balanced assignment: 159s / 97s / 74s, max = 159s.)
+  #
+  # Verified locally (2026-07-23, cargo-nextest 0.9.132):
+  #   -E '<shard-1-expr>' ->  5 tests (slow_dock_ + 4 short, ~104s)
+  #   -E '<shard-2-expr>' -> 12 tests (slow_archive_ + 11, ~103s)
+  #   -E '<shard-3-expr>' -> 13 tests (no slow_, ~104s)
   #   union = all 30 tests, no overlaps.
   real-ui-e2e-windows:
     name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/3
@@ -1007,8 +1037,7 @@ jobs:
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
 
-      # Shard 1: slow_targets_ui_astronomy_* (first slow_ alphabetically) +
-      # the 9 non-slow tests that hash to bucket 1/3.
+      # Shard 1 (~104s): slow_dock_pin (81.1s) + 4 short tests.
       - name: Run E2E (shard 1/3)
         if: matrix.shard == 1
         shell: bash
@@ -1021,10 +1050,9 @@ jobs:
           --profile e2e
           --run-ignored all
           --no-tests=warn
-          -E 'test(=slow_targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(sessions_journeys) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=lifecycle_integrity) | test(=plan_review_apply_with_audit) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button) | test(=targets_ui_dock_pin_and_width_survive_a_real_restart)'
+          -E 'test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db)'
 
-      # Shard 2: slow_targets_ui_identity_* (second slow_ alphabetically) +
-      # the 9 non-slow tests that hash to bucket 2/3.
+      # Shard 2 (~103s): slow_archive (25.5s) + 11 mid-range tests.
       - name: Run E2E (shard 2/3)
         if: matrix.shard == 2
         shell: bash
@@ -1037,9 +1065,9 @@ jobs:
           --profile e2e
           --run-ignored all
           --no-tests=warn
-          -E 'test(=slow_targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(archive_journeys) | binary(cleanup_protection_gate_journey) | binary(inventory_journeys) | binary(onboarding_journey) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=cleanup_plan_review) | test(=targets_ui_add_target_no_duplicate_on_reconfirm)'
+          -E 'test(=slow_archive_lifecycle_apply_trash_permanent_delete) | test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | test(=ingestion_sessions_search) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply) | test(=plan_review_apply_with_audit) | test(=lifecycle_integrity)'
 
-      # Shard 3: no slow_ test + the 10 non-slow tests that hash to bucket 3/3.
+      # Shard 3 (~104s): no slow_ test, 13 mid-range tests.
       - name: Run E2E (shard 3/3)
         if: matrix.shard == 3
         shell: bash
@@ -1052,7 +1080,7 @@ jobs:
           --profile e2e
           --run-ignored all
           --no-tests=warn
-          -E 'binary(smoke) | binary(source_view_journeys) | binary(plan_review_overlay_journeys) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=first_run_resolve_create_project) | test(=ingestion_sessions_search) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db) | test(=targets_planner_real_astronomy_after_site_creation)'
+          -E 'test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=cleanup_plan_review) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=first_run_resolve_create_project) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
 
   # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
   # no xvfb (native display), longer timeout for the 120s-per-attempt

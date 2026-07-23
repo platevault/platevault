@@ -592,14 +592,11 @@ async fn targets_ui_add_target_no_duplicate_on_reconfirm() -> anyhow::Result<()>
 /// number (`deriveRowMoonPlanning`'s real `!night` branch,
 /// `apps/desktop/src/features/targets/astro/row-planning.ts`).
 ///
-/// Prefixed `slow_`: seed-warming (adds a target via real UI before asserting)
-/// makes this take 45-90s, longer than the median journey. The `e2e.yml`
-/// shard filters spread `slow_` tests one-per-shard; see the comment block
-/// in that file for the convention.
+/// Post-fix measured time (runs 30020688075, 30019274329): 7.0s avg — below
+/// the `slow_` threshold (>3× median ≈ 21s post-fix). Not prefixed `slow_`.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn slow_targets_ui_astronomy_columns_disclose_placeholder_without_site() -> anyhow::Result<()>
-{
+async fn targets_ui_astronomy_columns_disclose_placeholder_without_site() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     complete_first_run(&app).await?;
@@ -837,13 +834,12 @@ fn px(m: &serde_json::Value, key: &str) -> anyhow::Result<i64> {
 /// table never actually scrolled, every "drift == 0" assertion below would
 /// hold trivially against a static table and the test would be vacuous.
 ///
-/// Prefixed `slow_`: adds a target via real UI plus a full dock-pin + reload
-/// cycle, making this take 60-120s on Windows cold boots. The `e2e.yml`
-/// shard filters spread `slow_` tests one-per-shard; see the comment block
-/// in that file for the convention.
+/// Measured on Windows CI: 8-11s (warm), stable across runs. Not prefixed
+/// `slow_` — see `slow_targets_ui_dock_pin_and_width_survive_a_real_restart`
+/// for the convention and timing threshold.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn slow_targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
+async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow::Result<()> {
     const MIN_SCROLL: i64 = 200;
 
     let app = E2eApp::launch().await?;
@@ -1100,9 +1096,15 @@ const DRAG_PX: i64 = 140;
 /// restart is gone afterwards and a fresh one is added to give the dock
 /// something to render. That is fine here: the dock preference lives in
 /// `localStorage`, which is the thing under test.
+///
+/// Prefixed `slow_`: two full app launches plus a graceful-shutdown +
+/// WebView2 storage-flush cycle, consistently 75-88s on Windows CI
+/// (5 measured runs: 74.2, 75.0, 75.9, 78.2, 88.0s). The `e2e.yml`
+/// shard filters pin each `slow_` test to a separate shard; see the
+/// comment block in that file for the convention and rebalance procedure.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
-async fn targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Result<()> {
+async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Result<()> {
     const DEFAULT_WIDTH: i64 = 420;
 
     let app = E2eApp::launch().await?;
