@@ -106,7 +106,11 @@ pub async fn insert_artifact_if_absent(
     .bind(data.content_hash)
     .execute(pool)
     .await?;
-    if result.rows_affected() == 0 { Ok(None) } else { Ok(Some(data.id.to_owned())) }
+    if result.rows_affected() == 0 {
+        Ok(None)
+    } else {
+        Ok(Some(data.id.to_owned()))
+    }
 }
 
 /// Insert a new `processing_artifacts` row.

@@ -57,9 +57,7 @@ async fn detach_during_attach_leaves_no_zombie() {
     let registry = new_artifact_watcher_registry();
 
     // Step 1: attach completes fully (no race here — establishes baseline).
-    attach_project_watcher(&pool, &bus, &registry, &project_id)
-        .await
-        .expect("first attach");
+    attach_project_watcher(&pool, &bus, &registry, &project_id).await.expect("first attach");
 
     // Verify it's live.
     {
