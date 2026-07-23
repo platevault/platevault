@@ -387,6 +387,7 @@ fn scan_dir(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use metadata_core::{v1_normalization_table, FrameType};
     use std::fs;
     use std::io::Write;
 
@@ -398,6 +399,217 @@ mod tests {
         let path = dir.join(name);
         let mut f = fs::File::create(path).unwrap();
         f.write_all(content).unwrap();
+    }
+
+    fn write_realistic_fits(
+        dir: &Path,
+        name: &str,
+        imagetyp: Option<&str>,
+        stack_count: Option<(&str, u32)>,
+    ) {
+        let mut cards = vec![
+            "SIMPLE  =                    T".to_owned(),
+            "BITPIX  =                    8".to_owned(),
+            "NAXIS   =                    2".to_owned(),
+            "NAXIS1  =                    1".to_owned(),
+            "NAXIS2  =                    1".to_owned(),
+            "INSTRUME= 'ZWO ASI2600MM Pro'".to_owned(),
+            "TELESCOP= 'Esprit 100ED'".to_owned(),
+            "DATE-OBS= '2026-07-09T22:14:31.125'".to_owned(),
+            "EXPTIME =                300.0".to_owned(),
+            "GAIN    =                  100".to_owned(),
+            "OFFSET  =                   50".to_owned(),
+            "FILTER  = 'Ha'".to_owned(),
+            "OBJECT  = 'M42'".to_owned(),
+            "XBINNING=                    1".to_owned(),
+            "YBINNING=                    1".to_owned(),
+        ];
+        if let Some(value) = imagetyp {
+            cards.push(format!("IMAGETYP= '{value}'"));
+        }
+        if let Some((key, value)) = stack_count {
+            cards.push(format!("{key:<8}= {value:>20}"));
+        }
+
+        let mut block = vec![b' '; 2880];
+        for (idx, card) in cards.iter().enumerate() {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+        }
+        let end = cards.len() * 80;
+        block[end..end + 3].copy_from_slice(b"END");
+        block.extend_from_slice(&[0; 2880]);
+        write_file(dir, name, &block);
+    }
+
+    struct PipelineCase {
+        name: String,
+        imagetyp: Option<&'static str>,
+        stack_count: Option<(&'static str, u32)>,
+        expected_type: Option<FrameType>,
+        expected_master: bool,
+        expected_detector: Option<&'static str>,
+    }
+
+    #[allow(clippy::too_many_lines)] // Keep each type's precedence cases adjacent for review.
+    fn master_pipeline_cases() -> Vec<PipelineCase> {
+        let types = [
+            ("light", "LIGHT", "Master Light", FrameType::Light, "flat"),
+            ("dark", "DARK", "Master Dark", FrameType::Dark, "flat"),
+            ("flat", "FLAT", "Master Flat", FrameType::Flat, "dark"),
+            ("bias", "BIAS", "Master Bias", FrameType::Bias, "light"),
+            ("darkflat", "DARKFLAT", "Master DarkFlat", FrameType::DarkFlat, "bias"),
+        ];
+        let mut cases = Vec::with_capacity(types.len() * 8 + 4);
+
+        for (idx, (token, imagetyp, master_imagetyp, frame_type, conflicting_token)) in
+            types.into_iter().enumerate()
+        {
+            cases.push(PipelineCase {
+                name: format!("capture_{token}_001.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: false,
+                expected_detector: None,
+            });
+            cases.push(PipelineCase {
+                name: format!("integration_{token}_030.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: Some((if idx % 2 == 0 { "STACKCNT" } else { "NCOMBINE" }, 30)),
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("siril"),
+            });
+            cases.push(PipelineCase {
+                name: format!("master_{token}.fits"),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+            cases.push(PipelineCase {
+                name: format!("master_{conflicting_token}_header_{token}.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+            cases.push(PipelineCase {
+                name: format!("{token}_sub_0001.fits"),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            });
+            cases.push(PipelineCase {
+                name: format!("master_{token}_stackcnt_one.fits"),
+                imagetyp: Some(imagetyp),
+                stack_count: Some(("STACKCNT", 1)),
+                expected_type: Some(frame_type),
+                expected_master: false,
+                expected_detector: Some("siril"),
+            });
+            cases.push(PipelineCase {
+                name: format!("combined_header_{token}.fits"),
+                imagetyp: Some(master_imagetyp),
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+            cases.push(PipelineCase {
+                name: format!("{token}_LUM_stacked.fits"),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: Some(frame_type),
+                expected_master: true,
+                expected_detector: Some("pixinsight"),
+            });
+        }
+
+        cases.extend([
+            PipelineCase {
+                name: "integration_stackcnt_only.fits".to_owned(),
+                imagetyp: None,
+                stack_count: Some(("STACKCNT", 30)),
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+            PipelineCase {
+                name: "integration_ncombine_only.fits".to_owned(),
+                imagetyp: None,
+                stack_count: Some(("NCOMBINE", 30)),
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+            PipelineCase {
+                name: "unknown_header_neutral_name.fits".to_owned(),
+                imagetyp: Some("JUNKTYPE"),
+                stack_count: None,
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+            PipelineCase {
+                name: "neutral_no_header.fits".to_owned(),
+                imagetyp: None,
+                stack_count: None,
+                expected_type: None,
+                expected_master: false,
+                expected_detector: None,
+            },
+        ]);
+
+        cases
+    }
+
+    #[test]
+    fn realistic_headers_cover_master_permutations_through_scan_and_classify() {
+        let cases = master_pipeline_cases();
+        assert_eq!(
+            cases.len(),
+            44,
+            "five frame types must exercise eight evidence paths plus four global negatives"
+        );
+
+        for case in cases {
+            let tmp = tmpdir();
+            write_realistic_fits(tmp.path(), &case.name, case.imagetyp, case.stack_count);
+            let path = tmp.path().join(&case.name);
+
+            let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+            assert_eq!(items.len(), 1, "{}: scan must return its FITS folder", case.name);
+            assert_eq!(
+                items[0].masters.len(),
+                usize::from(case.expected_master),
+                "{}: scan-time master result",
+                case.name
+            );
+            if let Some(master) = items[0].masters.first() {
+                assert_eq!(Some(master.detection.frame_type), case.expected_type, "{}", case.name);
+                assert_eq!(
+                    master.detection.detector,
+                    case.expected_detector.unwrap(),
+                    "{}",
+                    case.name
+                );
+            }
+
+            let classified =
+                crate::classify::classify_one_file(&path, tmp.path(), &v1_normalization_table());
+            assert_eq!(classified.frame_type, case.expected_type, "{}", case.name);
+            assert_eq!(classified.is_master, case.expected_master, "{}", case.name);
+            if let Some(detector) = case.expected_detector {
+                assert_eq!(classified.master_detector, Some(detector), "{}", case.name);
+            }
+        }
     }
 
     #[test]

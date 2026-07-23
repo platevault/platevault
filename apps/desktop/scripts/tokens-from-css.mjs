@@ -152,9 +152,9 @@ for (const { selector, body } of rules) {
   }
 
   // Every other block is one theme's raw palette. Warm Slate is declared as
-  // `:root, [data-theme="warm-slate"]` so the default light palette has a
-  // single source of truth; it is stored as a normal theme and the build
-  // re-emits the dual selector.
+  // `:root:not([data-theme]), [data-theme="warm-slate"]` so the default light
+  // palette has a single source of truth without overriding a named theme. It
+  // is stored as a normal theme and the build re-emits the dual selector.
   const ids = [...selector.matchAll(/\[data-theme="([a-z-]+)"\]/g)].map((m) => m[1]);
   if (ids.length === 0) {
     console.error(`ERROR: unrecognised selector "${selector}" — it would be dropped silently.`);

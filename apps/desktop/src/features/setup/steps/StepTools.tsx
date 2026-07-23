@@ -196,6 +196,25 @@ function ToolCard({
   const pathValid = config.path !== null && looksExecutable(config.path);
   const [redetecting, setRedetecting] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const noInstallationFound = notFound;
+  const statusLabel = redetecting
+    ? m.setup_tools_detecting({ name: def.name() })
+    : noInstallationFound
+      ? m.setup_tools_no_installation()
+      : config.path === null
+        ? m.setup_tools_not_detected()
+        : pathValid
+          ? m.setup_tools_detected()
+          : m.setup_tools_invalid();
+  const statusVariant = redetecting
+    ? 'warn'
+    : noInstallationFound
+      ? 'neutral'
+      : config.path === null
+        ? 'neutral'
+        : pathValid
+          ? 'ok'
+          : 'danger';
 
   const handleRedetect = async () => {
     setRedetecting(true);
@@ -205,20 +224,24 @@ function ToolCard({
     if (!found) setNotFound(true);
   };
 
+  const handlePathChange = (path: string | null) => {
+    setNotFound(false);
+    onPathChange(path);
+  };
+
   return (
     <div className="pv-step-tools__card" data-testid={`tool-card-${def.key}`}>
       {/* Header row: name + status pill + description + enable toggle */}
       <div className="pv-step-tools__header">
         <div className="pv-step-tools__tool-info">
-          <div className="pv-step-tools__name-row">
+          <div
+            className="pv-step-tools__name-row"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <span className="pv-step-tools__tool-name">{def.name()}</span>
-            {config.path === null ? (
-              <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
-            ) : pathValid ? (
-              <Pill variant="ok">{m.setup_tools_detected()}</Pill>
-            ) : (
-              <Pill variant="danger">{m.setup_tools_invalid()}</Pill>
-            )}
+            <Pill variant={statusVariant}>{statusLabel}</Pill>
           </div>
           <span className="pv-step-tools__tool-desc">{def.description()}</span>
         </div>
@@ -229,6 +252,7 @@ function ToolCard({
               size="sm"
               onClick={handleRedetect}
               disabled={redetecting}
+              aria-busy={redetecting}
               aria-label={m.setup_tools_redetect_binary_aria({
                 name: def.name(),
               })}
@@ -251,11 +275,6 @@ function ToolCard({
               aria-label={m.settings_tools_enable_aria({ name: def.name() })}
             />
           </div>
-          {notFound && (
-            <span className="pv-step-tools__not-found">
-              {m.setup_tools_no_installation()}
-            </span>
-          )}
         </div>
       </div>
 
@@ -266,7 +285,7 @@ function ToolCard({
             <ToolPathPicker
               toolName={def.name()}
               path={config.path}
-              onPathChange={onPathChange}
+              onPathChange={handlePathChange}
             />
           </div>
           {config.path !== null && !pathValid && (

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 export { StepLanguage } from './StepLanguage';
+export { StepTheme } from './StepTheme';
 export { StepSourceFolders } from './StepSourceFolders';
 export type { StepSourceFoldersProps } from './StepSourceFolders';
 export { StepTools } from './StepTools';

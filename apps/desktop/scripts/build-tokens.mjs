@@ -49,8 +49,9 @@ const TYPES_OUT = join(APP_DIR, 'src/styles/tokens.d.ts');
 // src/styles/theme.css, so renaming it here costs that repo nothing.
 const DOCS_OUT = resolve(APP_DIR, '../../packages/tokens/tokens-docs.css');
 
-// Warm Slate doubles as the bare `:root` default so the default light palette
-// (pre-hydration, vitest, no data-theme) has a single source of truth.
+// Warm Slate doubles as the no-data-theme :root default so the default light
+// palette (pre-hydration, vitest) has a single source of truth without
+// competing in the cascade when another named theme is set on <html>.
 const DEFAULT_THEME = 'warm-slate';
 
 const themeIds = readdirSync(join(TOKENS_DIR, 'themes'))
@@ -158,7 +159,9 @@ blocks.push(
 
 for (const id of themeIds) {
   const selector =
-    id === DEFAULT_THEME ? `:root,\n[data-theme="${id}"]` : `[data-theme="${id}"]`;
+    id === DEFAULT_THEME
+      ? `:root:not([data-theme]),\n[data-theme="${id}"]`
+      : `[data-theme="${id}"]`;
   blocks.push(
     await buildBlock({
       sources: [semanticSrc, themeSrc(id)],
