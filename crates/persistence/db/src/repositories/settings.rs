@@ -415,24 +415,18 @@ pub async fn list_source_overrides(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     #[tokio::test]
     async fn get_raw_returns_none_for_missing_key() {
-        let db = setup().await;
+        let db = setup_db().await;
         let result = get_raw(db.pool(), "nonexistent_key").await.unwrap();
         assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn set_and_get_raw_roundtrip() {
-        let db = setup().await;
+        let db = setup_db().await;
         let value = serde_json::json!("info");
         set_raw(db.pool(), "logLevel", &value).await.unwrap();
         let loaded = get_raw(db.pool(), "logLevel").await.unwrap();
@@ -443,7 +437,7 @@ mod tests {
     /// column codec (spec `n4_jsoncodec`) — not just a JSON scalar.
     #[tokio::test]
     async fn set_and_get_raw_roundtrip_nested_value() {
-        let db = setup().await;
+        let db = setup_db().await;
         let value = serde_json::json!({
             "patterns": ["a/{target}/", "b/{filter}/"],
             "nested": { "enabled": true, "count": 3 },
@@ -460,7 +454,7 @@ mod tests {
     /// `equipment.rs`/`artifacts.rs`).
     #[tokio::test]
     async fn get_raw_propagates_on_corrupt_cell() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
             .bind("corrupt")
             .bind("not valid json")
@@ -475,7 +469,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_raw_upserts_on_conflict() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_raw(db.pool(), "logLevel", &serde_json::json!("info")).await.unwrap();
         set_raw(db.pool(), "logLevel", &serde_json::json!("debug")).await.unwrap();
         let loaded = get_raw(db.pool(), "logLevel").await.unwrap();
@@ -490,7 +484,7 @@ mod tests {
         // silently keeping the in-code default (found via the US3
         // regeneration integration test, which needs a non-default kind to
         // exercise the "hardlink unsupported" refusal path).
-        let db = setup().await;
+        let db = setup_db().await;
         set_raw(db.pool(), "sourceViewLinkKindIntraDrive", &serde_json::json!("symlink"))
             .await
             .unwrap();
@@ -505,7 +499,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_key_removes_stored_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_raw(db.pool(), "logLevel", &serde_json::json!("debug")).await.unwrap();
         delete_key(db.pool(), "logLevel").await.unwrap();
         let loaded = get_raw(db.pool(), "logLevel").await.unwrap();
@@ -514,7 +508,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_settings_returns_defaults_when_empty() {
-        let db = setup().await;
+        let db = setup_db().await;
         let state = load_settings(db.pool()).await.unwrap();
         let defaults = SettingsState::default();
         assert_eq!(state.log_level, defaults.log_level);
@@ -524,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_settings_applies_stored_values() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_raw(db.pool(), "logLevel", &serde_json::json!("debug")).await.unwrap();
         set_raw(db.pool(), "followSymlinks", &serde_json::json!(true)).await.unwrap();
         let state = load_settings(db.pool()).await.unwrap();
@@ -538,7 +532,7 @@ mod tests {
     /// `apply_key_to_state` catch-all.
     #[tokio::test]
     async fn load_settings_applies_stored_framing_tolerance_overrides() {
-        let db = setup().await;
+        let db = setup_db().await;
         let defaults = SettingsState::default();
         let state = load_settings(db.pool()).await.unwrap();
         assert!(
@@ -565,7 +559,7 @@ mod tests {
 
     #[tokio::test]
     async fn patterns_by_type_defaults_when_unset() {
-        let db = setup().await;
+        let db = setup_db().await;
         // No overrides stored → every class resolves to its built-in default,
         // reached via the raw (frame_type, is_master) inputs confirm.rs passes.
         for (raw_type, is_master, class) in raw_inputs_per_class() {
@@ -577,7 +571,7 @@ mod tests {
 
     #[tokio::test]
     async fn patterns_by_type_override_read_back() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_pattern_for(db.pool(), FrameTypeClass::Dark, "custom/{gain}/").await.unwrap();
         let got = effective_pattern_for(db.pool(), "dark", false).await.unwrap();
         assert_eq!(got.as_deref(), Some("custom/{gain}/"));
@@ -588,7 +582,7 @@ mod tests {
 
     #[tokio::test]
     async fn patterns_by_type_master_routing() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_pattern_for(db.pool(), FrameTypeClass::MasterDark, "m/{exposure}/").await.unwrap();
         // is_master = true selects the master class.
         let master = effective_pattern_for(db.pool(), "dark", true).await.unwrap();
@@ -600,7 +594,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_pattern_rejects_invalid() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert!(set_pattern_for(db.pool(), FrameTypeClass::Bias, "{telescope}/").await.is_err());
         assert!(set_pattern_for(db.pool(), FrameTypeClass::Bias, "").await.is_err());
         // Nothing persisted on rejection → still the default.
@@ -612,7 +606,7 @@ mod tests {
     async fn stored_invalid_override_falls_back_on_read() {
         // Defensive read-side fallback: a malformed value written out-of-band
         // (e.g. hand-edited DB) must not surface a broken pattern.
-        let db = setup().await;
+        let db = setup_db().await;
         let mut map = BTreeMap::new();
         map.insert("bias".to_owned(), "{telescope}/".to_owned());
         set_raw(db.pool(), PATTERNS_BY_TYPE_KEY, &serde_json::to_value(&map).unwrap())
@@ -624,7 +618,7 @@ mod tests {
 
     #[tokio::test]
     async fn reset_pattern_restores_default() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_pattern_for(db.pool(), FrameTypeClass::Light, "{target}/x/").await.unwrap();
         reset_pattern_for(db.pool(), FrameTypeClass::Light).await.unwrap();
         let got = effective_pattern_for(db.pool(), "light", false).await.unwrap();
@@ -635,13 +629,13 @@ mod tests {
 
     #[tokio::test]
     async fn effective_pattern_for_unknown_type_is_none() {
-        let db = setup().await;
+        let db = setup_db().await;
         assert!(effective_pattern_for(db.pool(), "unclassified", false).await.unwrap().is_none());
     }
 
     #[tokio::test]
     async fn load_settings_applies_patterns_by_type() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_pattern_for(db.pool(), FrameTypeClass::Flat, "f/{filter}/").await.unwrap();
         let state = load_settings(db.pool()).await.unwrap();
         assert_eq!(state.patterns_by_type.get("flat").map(String::as_str), Some("f/{filter}/"));
@@ -663,7 +657,7 @@ mod tests {
 
     #[tokio::test]
     async fn source_override_roundtrip() {
-        let db = setup().await;
+        let db = setup_db().await;
         let value = serde_json::json!("eager");
         set_source_override(db.pool(), "source-abc", "hashOnScan", &value).await.unwrap();
         let loaded = get_source_override_raw(db.pool(), "source-abc", "hashOnScan").await.unwrap();
@@ -672,7 +666,7 @@ mod tests {
 
     #[tokio::test]
     async fn source_override_upsert_updates_value() {
-        let db = setup().await;
+        let db = setup_db().await;
         set_source_override(db.pool(), "src-1", "followSymlinks", &serde_json::json!(false))
             .await
             .unwrap();
