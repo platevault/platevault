@@ -133,26 +133,7 @@ pub async fn set_target_notes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
-
-    // Helper: insert a bare canonical_target row (no aliases, no notes).
-    async fn insert_target(pool: &SqlitePool, id: &str) {
-        sqlx::query(
-            "INSERT INTO canonical_target
-             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
-             VALUES (?, NULL, 'Test Target', 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .expect("insert_target failed");
-    }
+    use crate::test_support::{insert_target, setup_db};
 
     // Helper: insert an acquisition_session linked to a canonical_target.
     async fn insert_linked_session(
@@ -202,7 +183,7 @@ mod tests {
 
     #[tokio::test]
     async fn sessions_list_returns_linked_sessions_only() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-001").await;
         insert_target(db.pool(), "t-002").await;
 
@@ -219,7 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn sessions_list_empty_when_no_sessions_linked() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-010").await;
         let rows = list_sessions_for_target(db.pool(), "t-010").await.unwrap();
         assert!(rows.is_empty());
@@ -227,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn sessions_list_empty_for_unknown_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         let rows = list_sessions_for_target(db.pool(), "00000000-0000-0000-0000-000000000000")
             .await
             .unwrap();
@@ -238,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn projects_list_returns_linked_projects_only() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-100").await;
         insert_target(db.pool(), "t-101").await;
 
@@ -255,7 +236,7 @@ mod tests {
 
     #[tokio::test]
     async fn projects_list_empty_when_no_projects_linked() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-110").await;
         let rows = list_projects_for_target(db.pool(), "t-110").await.unwrap();
         assert!(rows.is_empty());
@@ -265,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn notes_get_returns_none_when_not_set() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-200").await;
         let notes = get_target_notes(db.pool(), "t-200").await.unwrap();
         assert!(notes.is_none());
@@ -273,7 +254,7 @@ mod tests {
 
     #[tokio::test]
     async fn notes_get_returns_none_for_unknown_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         let notes =
             get_target_notes(db.pool(), "00000000-0000-0000-0000-000000000099").await.unwrap();
         assert!(notes.is_none());
@@ -281,7 +262,7 @@ mod tests {
 
     #[tokio::test]
     async fn notes_roundtrip_set_and_get() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-300").await;
 
         let updated =
@@ -294,7 +275,7 @@ mod tests {
 
     #[tokio::test]
     async fn notes_set_null_clears_note() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-301").await;
 
         set_target_notes(db.pool(), "t-301", Some("Initial note.")).await.unwrap();
@@ -306,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn notes_set_returns_false_for_unknown_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         let updated =
             set_target_notes(db.pool(), "00000000-0000-0000-0000-000000000099", Some("x"))
                 .await

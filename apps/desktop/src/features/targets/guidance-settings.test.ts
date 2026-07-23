@@ -105,6 +105,52 @@ describe('saveGuidanceParams (live propagation, SC-008)', () => {
     });
     expect(getGuidanceParams().L).toEqual({ distanceDeg: 100, widthDays: 12 });
   });
+
+  it('restores the pre-write value when the backend write rejects', async () => {
+    settingsUpdate.mockRejectedValue(new Error('backend unavailable'));
+    const original = getGuidanceParams();
+    const next = {
+      ...DEFAULT_MOON_AVOIDANCE,
+      L: { distanceDeg: 100, widthDays: 12 },
+    };
+
+    await expect(saveGuidanceParams(next)).rejects.toThrow(
+      'backend unavailable',
+    );
+
+    // The optimistic update must be rolled back.
+    expect(getGuidanceParams().L).toEqual(original.L);
+  });
+
+  it('does not roll back when a newer write has committed after the failing one', async () => {
+    let rejectFirst!: (e: unknown) => void;
+    settingsUpdate
+      .mockReturnValueOnce(
+        new Promise<null>((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+      )
+      .mockResolvedValueOnce(null);
+
+    const first = {
+      ...DEFAULT_MOON_AVOIDANCE,
+      L: { distanceDeg: 90, widthDays: 8 },
+    };
+    const second = {
+      ...DEFAULT_MOON_AVOIDANCE,
+      L: { distanceDeg: 120, widthDays: 14 },
+    };
+
+    const firstWrite = saveGuidanceParams(first);
+    // Second write commits before the first backend call resolves.
+    await saveGuidanceParams(second);
+    expect(getGuidanceParams().L).toEqual({ distanceDeg: 120, widthDays: 14 });
+
+    rejectFirst(new Error('stale failure'));
+    await expect(firstWrite).rejects.toThrow('stale failure');
+    // Second write's state must not be reverted.
+    expect(getGuidanceParams().L).toEqual({ distanceDeg: 120, widthDays: 14 });
+  });
 });
 
 describe('loadGuidanceParams vs saveGuidanceParams race (#836)', () => {

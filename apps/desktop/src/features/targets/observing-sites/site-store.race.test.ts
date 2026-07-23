@@ -144,3 +144,39 @@ describe('loadObservingState vs saveSites race', () => {
     expect(getObservingState().activeSiteId).toBe(SITE.id);
   });
 });
+
+describe('saveUsableAltitude backend-failure rollback', () => {
+  it('restores the pre-write value when the backend write rejects', async () => {
+    __setObservingStateForTest({ usableAltitudeDeg: 20 });
+    settingsUpdate.mockRejectedValue(new Error('backend unavailable'));
+
+    await expect(saveUsableAltitude(55)).rejects.toThrow('backend unavailable');
+
+    // The optimistic update must be rolled back.
+    expect(getUsableAltitude()).toBe(20);
+  });
+
+  it('does not roll back when a newer write has committed after the failing one', async () => {
+    __setObservingStateForTest({ usableAltitudeDeg: 20 });
+
+    let rejectFirst!: (e: unknown) => void;
+    settingsUpdate
+      .mockReturnValueOnce(
+        new Promise<null>((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+      )
+      .mockResolvedValueOnce(null);
+
+    // First write (will fail) starts optimistically at 55...
+    const firstWrite = saveUsableAltitude(55);
+    // ...then a second write commits at 60.
+    await saveUsableAltitude(60);
+    expect(getUsableAltitude()).toBe(60);
+
+    // The first write's backend call now rejects — must not roll back 60.
+    rejectFirst(new Error('stale failure'));
+    await expect(firstWrite).rejects.toThrow('stale failure');
+    expect(getUsableAltitude()).toBe(60);
+  });
+});

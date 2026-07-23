@@ -249,25 +249,7 @@ pub async fn insert_resolution_audit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
-
-    async fn insert_target(pool: &SqlitePool, id: &str) {
-        sqlx::query(
-            "INSERT INTO canonical_target
-             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
-             VALUES (?, NULL, 'Test Target', 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
-        )
-        .bind(id)
-        .execute(pool)
-        .await
-        .expect("insert_target failed");
-    }
+    use crate::test_support::{insert_target, setup_db};
 
     async fn insert_alias(pool: &SqlitePool, id: &str, target_id: &str, alias: &str, kind: &str) {
         sqlx::query(
@@ -287,7 +269,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolver_settings_seeded_row_is_readable() {
-        let db = setup().await;
+        let db = setup_db().await;
         let row = get_resolver_settings(db.pool()).await.unwrap();
         assert!(row.is_some(), "migration 0031 seeds the singleton row");
 
@@ -297,7 +279,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolver_settings_upsert_round_trips() {
-        let db = setup().await;
+        let db = setup_db().await;
         upsert_resolver_settings(db.pool(), 0, "https://example.test/tap", 500, 20).await.unwrap();
 
         let row = get_resolver_settings(db.pool()).await.unwrap().unwrap();
@@ -311,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn target_exists_true_and_false() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-001").await;
         assert!(target_exists(db.pool(), "t-001").await.unwrap());
         assert!(!target_exists(db.pool(), "t-missing").await.unwrap());
@@ -319,7 +301,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_target_aliases_orders_by_alias_asc() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-001").await;
         insert_alias(db.pool(), "a-1", "t-001", "Zeta", "user").await;
         insert_alias(db.pool(), "a-2", "t-001", "Alpha", "user").await;
@@ -332,7 +314,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_alias_kind_scopes_by_target() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-001").await;
         insert_target(db.pool(), "t-002").await;
         insert_alias(db.pool(), "a-1", "t-001", "Alpha", "user").await;
@@ -349,7 +331,7 @@ mod tests {
 
     #[tokio::test]
     async fn session_counts_by_target_prefers_legacy_and_falls_back_to_canonical() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "canon-1").await;
         sqlx::query(
             "INSERT INTO target (id, primary_designation, created_at)
@@ -401,7 +383,7 @@ mod tests {
     /// so the two read paths can never disagree about which target owns it.
     #[tokio::test]
     async fn session_counts_by_target_prefers_legacy_target_id_when_both_columns_set() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "canon-both").await;
         sqlx::query(
             "INSERT INTO target (id, primary_designation, created_at)
@@ -441,7 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_resolution_audit_writes_row() {
-        let db = setup().await;
+        let db = setup_db().await;
         insert_target(db.pool(), "t-001").await;
         insert_resolution_audit(
             db.pool(),
