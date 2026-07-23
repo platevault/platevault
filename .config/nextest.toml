@@ -135,11 +135,15 @@ failure-output = "immediate-final"
 [profile.ci.junit]
 path = "junit.xml"
 
-# Retry ONLY the real-SQLite integration-test binaries. These live in the
-# `tests/` dirs (kind(test)) of the DB-touching crates and can flake under
-# parallel SQLite file/pool access on loaded CI runners. Unit tests
-# (kind(lib)) are deliberately NOT retried — a red unit test is a real failure
-# and must not be masked by re-running.
-[[profile.ci.overrides]]
-filter = 'kind(test) & (package(persistence_db) | package(app_core) | package(targeting_resolver))'
-retries = 2
+# The persistence_db/app_core/targeting_resolver integration tests previously
+# carried retries=2 to mask two timing-race flake sources:
+#   1. persistence_db/tests/wal_journal_mode.rs: the WAL unblocked-reader test
+#      used a wall-time assertion (elapsed < 300 ms) that Tokio scheduler
+#      latency on loaded CI runners could exceed. Fixed by asserting ordering
+#      (reader_finished_at < writer_released_at) instead of wall time.
+#   2. app_core/tests: ~39 fixed sleep() calls used as synchronization barriers
+#      after apply_plan / resume_plan / publish_applied. Fixed by replacing each
+#      with support::wait_plan_terminal / support::poll_until (25 ms poll, 2 s cap).
+# With both root causes removed, retries are no longer needed here.
+# Unit tests (kind(lib)) are still deliberately NOT retried.
+# See: PR test/replace-timing-race-assertions-with-observable-condition-waits

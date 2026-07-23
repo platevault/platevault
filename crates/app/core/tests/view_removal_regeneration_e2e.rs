@@ -178,7 +178,7 @@ async fn generate_and_apply_view(
     )
     .await
     .expect("apply_plan should start");
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &gen_resp.plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &gen_resp.plan_id, false).await.unwrap();
     assert_eq!(plan_row.state, "applied", "generation plan should fully apply");
@@ -214,7 +214,7 @@ async fn remove_view_e2e_archives_links_and_marks_view_removed() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &remove_resp.plan_id, "tok-remove", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &remove_resp.plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &remove_resp.plan_id, false).await.unwrap();
     assert_eq!(plan_row.state, "applied", "removal plan should fully apply");
@@ -268,7 +268,7 @@ async fn regenerate_view_e2e_recreates_links_and_marks_view_current() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &remove_resp.plan_id, "tok-remove2", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &remove_resp.plan_id).await;
     assert_eq!(views_repo::get_view(db.pool(), &view_id).await.unwrap().state, "removed");
 
     let regen_resp =
@@ -281,7 +281,7 @@ async fn regenerate_view_e2e_recreates_links_and_marks_view_current() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &regen_resp.plan_id, "tok-regen", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &regen_resp.plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &regen_resp.plan_id, false).await.unwrap();
     assert_eq!(plan_row.state, "applied", "regeneration plan should fully apply");

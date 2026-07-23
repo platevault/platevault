@@ -131,7 +131,7 @@ async fn applied_generation_plan_creates_real_link_and_recorded_view() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &gen_resp.plan_id, "tok-us1", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &gen_resp.plan_id).await;
 
     // T012: the plan reached a successful terminal state.
     let plan_row = plans_repo::get_plan(db.pool(), &gen_resp.plan_id, false).await.unwrap();

@@ -139,7 +139,7 @@ async fn regenerate_reflects_removed_selection_with_zero_dangling_links() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &gen_resp.plan_id, "tok-us3", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &gen_resp.plan_id).await;
 
     let views = views_repo::list_views_for_project(db.pool(), "proj-1").await.unwrap();
     assert_eq!(views.len(), 1, "US1/US2 generation must record exactly one current view");

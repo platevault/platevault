@@ -155,8 +155,7 @@ async fn apply_plan_moves_file_and_writes_audit_events() {
     assert_eq!(resp.new_state, "applying");
     assert!(!resp.run_id.is_empty(), "run_id should be non-empty");
 
-    // Wait for the background executor task to complete.
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // (a) FS side effect: source gone, destination present.
     assert!(!src.exists(), "source file should have been moved away");
@@ -289,7 +288,7 @@ async fn archive_plan_apply_drives_project_to_archived() {
         .await
         .expect("apply_plan should succeed");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // Plan reached 'applied'.
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
@@ -377,7 +376,7 @@ async fn non_archive_plan_apply_leaves_project_lifecycle_untouched() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply");
-    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let project =
         persistence_db::repositories::projects::get_project(db.pool(), &project_id).await.unwrap();
@@ -411,8 +410,7 @@ async fn apply_plan_refuses_to_overwrite_existing_destination() {
         .expect("apply_plan should succeed (apply start, not item execution)");
     assert_eq!(resp.new_state, "applying");
 
-    // Wait for background executor to complete.
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // Source must be untouched — no silent overwrite.
     assert!(src.exists(), "source file must remain when destination already exists");
@@ -444,7 +442,7 @@ async fn apply_plan_persists_source_missing_failure_code() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
     assert_eq!(item_state, "failed");
@@ -470,7 +468,7 @@ async fn apply_plan_persists_protected_source_failure_code() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
     assert_eq!(item_state, "failed");
@@ -496,7 +494,7 @@ async fn apply_plan_persists_destructive_unconfirmed_failure_code() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
     assert_eq!(item_state, "refused");
@@ -522,7 +520,7 @@ async fn apply_plan_persists_item_stale_failure_code() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let (item_state, failure_code) = persisted_item_failure(db.pool(), &plan_id).await;
     assert_eq!(item_state, "stale");
@@ -612,7 +610,7 @@ async fn apply_resolves_root_id_from_registered_sources() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan");
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // The file must have moved to the root-anchored destination.
     assert!(!root.join("capture.fits").exists(), "source should be moved away");
@@ -708,7 +706,7 @@ async fn full_review_to_apply_audit_round_trip() {
     assert_eq!(apply_resp.new_state, "applying");
 
     // Wait for background executor task.
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // 5. FS side effect.
     assert!(!src.exists(), "source should be moved");
@@ -812,8 +810,7 @@ async fn apply_plan_channel_free_auto_approves_and_moves_file() {
     assert_eq!(resp.new_state, "applying");
     assert!(!resp.run_id.is_empty(), "run_id should be non-empty");
 
-    // Wait for the background executor task to complete.
-    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // FS side effect: real move to the archive destination (never a silent
     // overwrite — constitution §II).
@@ -884,7 +881,7 @@ async fn apply_plan_channel_free_reuses_existing_approval() {
         .expect("apply_plan_channel_free should reuse the existing approval");
     assert_eq!(resp.new_state, "applying");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     assert!(!src.exists(), "source should have been moved");
     assert!(dst.exists(), "destination should exist");

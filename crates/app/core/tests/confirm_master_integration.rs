@@ -30,6 +30,8 @@ use persistence_db::repositories::inbox::{
 };
 use persistence_db::Database;
 
+mod support;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async fn test_db(dest_root: &Path) -> Database {
@@ -179,10 +181,28 @@ async fn insert_master_inbox_item(
 /// Drive apply to completion. The plan listener (started by the caller before
 /// apply) consumes `plan.applying.completed` and registers the master.
 async fn apply_and_register(db: &Database, bus: &EventBus, item_id: &str) {
-    apply_inbox_plan(db.pool(), bus, item_id).await.unwrap();
-    // Let the spawned executor finish + publish, and the listener consume the
-    // plan.applying.completed event (which triggers master registration).
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let resp = apply_inbox_plan(db.pool(), bus, item_id).await.unwrap();
+    // The executor finishes, publishes TOPIC_PLAN_APPLYING_COMPLETED, then the
+    // plan listener runs its registration callback asynchronously. Poll for the
+    // observable side effect (a calibration_session row) rather than wall time,
+    // so the test waits exactly as long as registration actually takes.
+    let pool = db.pool().clone();
+    support::poll_until(
+        || async {
+            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calibration_session")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            if count > 0 {
+                Some(())
+            } else {
+                None
+            }
+        },
+        "calibration_session row never appeared after plan apply-completed event",
+    )
+    .await;
+    let _ = resp; // plan_id captured via closure above
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

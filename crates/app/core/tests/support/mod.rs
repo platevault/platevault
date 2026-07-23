@@ -9,6 +9,9 @@
 //! Layer-1 tests use this instead of re-declaring `setup()` per file.
 #![allow(dead_code)]
 
+use std::future::Future;
+use std::time::Duration;
+
 use audit::bus::EventBus;
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use persistence_db::Database;
@@ -88,4 +91,61 @@ pub async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, st
     .execute(pool)
     .await
     .unwrap();
+}
+
+// ── Observable-condition poll helpers ─────────────────────────────────────────
+//
+// These replace fixed `tokio::time::sleep` calls that were used to wait for
+// background executor or EventBus listener tasks to finish. Fixed sleeps are
+// fragile on loaded CI runners where Tokio scheduler latency can cause the
+// background task to miss the window. Polling every 25 ms with a 2 s cap
+// makes each test wait only as long as the work actually takes.
+
+/// Poll `check` every 25 ms until it returns `Some(T)` or the 2-second
+/// deadline expires (which panics with `deadline_msg`).
+///
+/// Use this for conditions other than plan-terminal state (e.g. a row count,
+/// a file existing, an inbox-item state). For plan executor completion use
+/// [`wait_plan_terminal`], which polls the same way but requires no closure.
+pub async fn poll_until<F, Fut, T>(mut check: F, deadline_msg: &str) -> T
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Option<T>>,
+{
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Some(v) = check().await {
+            return v;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "poll_until timed out after 2 s: {deadline_msg}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+/// Wait for a plan's `state` column to leave `"applying"` (i.e. reach any
+/// terminal state: `applied`, `partially_applied`, `failed`, `paused`,
+/// `cancelled`). Polls every 25 ms, panics after 2 s.
+///
+/// Replaces fixed `sleep(300 ms)` / `sleep(200 ms)` waits that followed
+/// `apply_plan()` or `resume_plan()` calls and were fragile under parallel
+/// nextest runs on loaded CI runners.
+pub async fn wait_plan_terminal(pool: &sqlx::SqlitePool, plan_id: &str) {
+    poll_until(
+        || async {
+            let row: Option<(String,)> = sqlx::query_as("SELECT state FROM plans WHERE id = ?")
+                .bind(plan_id)
+                .fetch_optional(pool)
+                .await
+                .expect("poll plan state");
+            match row {
+                Some((s,)) if s != "applying" => Some(()),
+                _ => None,
+            }
+        },
+        &format!("plan {plan_id} never left 'applying' state"),
+    )
+    .await;
 }

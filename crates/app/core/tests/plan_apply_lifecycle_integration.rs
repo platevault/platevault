@@ -103,7 +103,7 @@ async fn apply_multi_item_all_succeed_reaches_applied() {
         .expect("apply_plan should succeed");
     assert_eq!(resp.new_state, "applying");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     for (src, dst) in &paths {
         assert!(!src.exists(), "source {src:?} should have been moved away");
@@ -141,7 +141,7 @@ async fn apply_partial_failure_reaches_partially_applied() {
         .expect("apply_plan should succeed (apply start, not item execution)");
     assert_eq!(resp.new_state, "applying");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // Items 0 and 2 succeeded.
     for idx in [0usize, 2usize] {
@@ -204,7 +204,7 @@ async fn apply_pauses_on_stale_item_cas_mismatch() {
         .await
         .expect("apply_plan should succeed (apply start, not item execution)");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // Source untouched — the executor must not mutate a stale item.
     assert!(src.exists(), "source must remain untouched when its CAS snapshot is stale");
@@ -363,7 +363,7 @@ async fn apply_counts_refused_item_as_failed_not_silently_applied() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // The refused delete must not have touched the file.
     assert!(delete_src.exists(), "a refused destructive item must not be deleted");
