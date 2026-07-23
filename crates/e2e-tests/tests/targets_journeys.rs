@@ -308,31 +308,34 @@ async fn wait_for_title_count_at_least(
     }
 }
 
-/// Wait for the Targets table to render at least one row, proving the list
-/// query resolved and the table component mounted its data. Uses the extended
-/// `TARGETS_TABLE_TIMEOUT` because on Windows CI cold boots the bundled
-/// 13k-row seed load can take 30-60s after launch, and the table won't render
-/// until that completes.
-async fn wait_targets_table_row(app: &E2eApp) -> anyhow::Result<()> {
-    let deadline = tokio::time::Instant::now() + TARGETS_TABLE_TIMEOUT;
-    loop {
-        if app.driver.find(By::Css(".pv-targets-table__row")).await.is_ok() {
-            return Ok(());
-        }
-        if tokio::time::Instant::now() >= deadline {
-            let url = app
-                .driver
-                .current_url()
-                .await
-                .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
-            anyhow::bail!(
-                "no .pv-targets-table__row appeared within {TARGETS_TABLE_TIMEOUT:?} — \
-                 the targets list query likely never resolved (seed load still in progress \
-                 on a cold Windows boot?); current URL: {url}"
-            );
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
+/// Ensure the Targets list has at least one entry via the IPC back-channel,
+/// then invalidate the TanStack Query so the UI reflects the data immediately.
+///
+/// Why IPC-backed rather than DOM-polling:
+/// `TargetsTable` renders a loading skeleton (which includes `planner-site-
+/// prompt`) while `count === 0 && loading === true`. DOM-polling for
+/// `.pv-targets-table__row` therefore stalls until TanStack Query finishes
+/// the `target_list` IPC round-trip — and on Windows CI cold boots, that
+/// round-trip can take 30-60s because it serialises and transfers ~13k rows.
+/// Polling `target_list` via the E2E invoke bridge gives the same signal but
+/// decouples it from TanStack Query's lifecycle, so the wait scales with the
+/// actual IPC latency rather than with the UI's query-result-to-DOM path.
+/// After the IPC confirms data is present, `invalidate_query` forces the UI
+/// to refetch and render rows immediately, regardless of `staleTime`.
+async fn wait_targets_in_ipc_then_invalidate(app: &E2eApp) -> anyhow::Result<()> {
+    app.invoke_until("target_list", json!({}), TARGETS_TABLE_TIMEOUT, |v: &Value| {
+        v.as_array().is_some_and(|a| !a.is_empty())
+    })
+    .await
+    .context(
+        "target_list IPC never returned ≥1 target within TARGETS_TABLE_TIMEOUT — \
+         the add or the DB write may have silently failed",
+    )?;
+    // Force the UI's TanStack Query to refetch so the DOM reflects the IPC
+    // result immediately — without this the query may still be in its stale-
+    // time window and serve a cached empty list.
+    app.invalidate_query(r#"["targets"]"#).await.context("failed to invalidate targets query")?;
+    Ok(())
 }
 
 /// Diagnostics for a `wait_for_title_count_at_least` timeout: the first real
@@ -567,7 +570,7 @@ async fn targets_ui_astronomy_columns_disclose_placeholder_without_site() -> any
     // 30-60s, and without this gate the 20s title-element poll below fires
     // against an empty table — producing the TRY-1-only failures tracked by
     // bead astro-plan-h182.
-    wait_targets_table_row(&app).await?;
+    wait_targets_in_ipc_then_invalidate(&app).await?;
 
     app.wait_testid("planner-site-prompt", UI_TIMEOUT).await.map_err(|e| {
         anyhow::anyhow!("expected the real site-setup prompt with no observing site: {e}")
@@ -825,7 +828,7 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // Wait for the table to populate before asserting on scroll geometry. On
     // Windows cold boots the seed load can take 30-60s, and
     // DEFAULT_FIND_TIMEOUT (20s) is insufficient (bead astro-plan-h182).
-    wait_targets_table_row(&app).await?;
+    wait_targets_in_ipc_then_invalidate(&app).await?;
     app.find_waiting(
         By::Css(".pv-targets-table__scroll"),
         "the loaded Targets table scroll container",
