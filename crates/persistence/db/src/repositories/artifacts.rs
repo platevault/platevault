@@ -64,17 +64,21 @@ pub struct InsertArtifact<'a> {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
-/// Insert a new `processing_artifacts` row, returning `None` if the
-/// `(project_id, path)` UNIQUE constraint fires (concurrent racer already
-/// inserted the same path).
+/// Insert a new `processing_artifacts` row, returning `None` when the row was
+/// silently skipped by `INSERT OR IGNORE` (any constraint violation — UNIQUE,
+/// CHECK, or NOT NULL — causes SQLite to ignore the row rather than error).
 ///
 /// Callers that must detect the duplicate case (e.g. `detect` to avoid
 /// emitting a double `artifact.detected` bus event) should use this variant.
 /// All other callers can use [`insert_artifact`] and let the DB error surface.
 ///
+/// # Returns
+/// - `Ok(Some(id))` — row was inserted.
+/// - `Ok(None)` — constraint violation silenced the insert (no row written).
+///
 /// # Errors
-/// Returns [`crate::DbError::Database`] on any failure other than a UNIQUE
-/// conflict on `(project_id, path)`.
+/// Returns [`crate::DbError::Database`] on any DB failure that is not a
+/// constraint violation (e.g. I/O errors, schema mismatches).
 pub async fn insert_artifact_if_absent(
     pool: &SqlitePool,
     data: InsertArtifact<'_>,

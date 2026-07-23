@@ -110,10 +110,13 @@ pub async fn detect(
     .map_err(|e| format!("DB insert failed: {e}"))?;
 
     let Some(id) = inserted_id else {
-        // Concurrent reconcile already inserted this path; the first-writer's
-        // events are authoritative.  Return Ok so the caller treats this path
-        // as handled.
-        return Ok(id);
+        // Concurrent reconcile already inserted this path; return the winner's
+        // id so the contract is honest — our candidate UUID was never persisted.
+        let winner = repo::get_artifact_by_path(pool, project_id, path)
+            .await
+            .map_err(|e| format!("DB lookup failed after conflict: {e}"))?
+            .ok_or_else(|| format!("artifact row missing after conflict insert for {path}"))?;
+        return Ok(winner.id);
     };
 
     let _ = bus

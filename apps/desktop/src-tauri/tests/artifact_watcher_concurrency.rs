@@ -10,8 +10,8 @@
 //! 2. `concurrent_racer_loses`: two `attach_project_watcher` calls for the same
 //!    project interleave; exactly one live entry survives in the registry.
 //!
-//! Both tests use an in-memory SQLite database and a real tempdir project root
-//! so the attach path's DB and filesystem work executes normally.
+//! Both tests use an in-memory `SQLite` database and a real `tempdir` project
+//! root so the attach path's DB and filesystem work executes normally.
 
 use audit::bus::EventBus;
 use persistence_db::Database;
@@ -36,13 +36,13 @@ async fn insert_projects_row(pool: &sqlx::SqlitePool, path: &str) -> String {
     id
 }
 
-/// detach_project_watcher called between the attach idempotency check and the
+/// `detach_project_watcher` called between the attach idempotency check and the
 /// final insert must leave no live entry in the registry.
 ///
 /// Simulated sequence:
-///   1. attach() — passes idempotency check, releases lock, begins reconcile
-///   2. detach() — finds no entry, writes tombstone
-///   3. attach() — final insert: sees tombstone, discards watcher
+///   1. `attach()` — passes idempotency check, releases lock, begins reconcile
+///   2. `detach()` — finds no entry, writes tombstone
+///   3. `attach()` — final insert: sees tombstone, discards watcher
 #[tokio::test]
 async fn detach_during_attach_leaves_no_zombie() {
     let db = Database::in_memory().await.expect("in-memory db");
@@ -120,6 +120,6 @@ async fn concurrent_attach_racer_loses() {
     assert!(r2.is_ok(), "second (losing racer) attach must also return Ok: {r2:?}");
 
     let reg = registry.lock().await;
-    let entry_count = if reg.entries.contains_key(&project_id) { 1usize } else { 0usize };
+    let entry_count = usize::from(reg.entries.contains_key(&project_id));
     assert_eq!(entry_count, 1, "exactly one live entry must survive concurrent attaches");
 }
