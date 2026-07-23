@@ -112,12 +112,55 @@ pub mod sessions;
 pub mod tool_launch;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use contracts_core::{
     error_code::ErrorCode, ContractError, ErrorSeverity, OperationName, RequestEnvelope, RequestId,
     ResponseEnvelope,
 };
 use serde_json::Value;
+
+// ── Unified per-instance cache state ─────────────────────────────────────────
+
+/// All per-instance app-layer caches bundled into one `Arc`-shareable struct.
+///
+/// Thread a single `Arc<AppCaches>` alongside `SqlitePool`/`EventBus` instead
+/// of passing per-crate cache structs separately. Tests construct a fresh
+/// `AppCaches::new()` per test to eliminate cross-contamination from
+/// process-global statics.
+pub struct AppCaches {
+    pub core: caches::CoreCaches,
+    pub settings: app_core_settings::caches::SettingsCaches,
+    pub targets: app_core_targets::caches::TargetsCaches,
+    pub calibration: app_core_calibration::caches::CalibrationCaches,
+    pub protection_defaults: app_core_cache::ProtectionDefaultsCaches,
+}
+
+impl AppCaches {
+    /// Construct a fresh, empty set of caches (all slots start as misses).
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            core: caches::CoreCaches::new(),
+            settings: app_core_settings::caches::SettingsCaches::new(),
+            targets: app_core_targets::caches::TargetsCaches::new(),
+            calibration: app_core_calibration::caches::CalibrationCaches::new(),
+            protection_defaults: app_core_cache::ProtectionDefaultsCaches::new(),
+        }
+    }
+
+    /// Wrap in an `Arc` for sharing across async tasks and Tauri state.
+    #[must_use]
+    pub fn shared() -> Arc<Self> {
+        Arc::new(Self::new())
+    }
+}
+
+impl Default for AppCaches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 pub const CRATE_NAME: &str = "app_core";
 

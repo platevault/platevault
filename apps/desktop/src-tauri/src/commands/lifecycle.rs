@@ -30,6 +30,10 @@ use uuid::Uuid;
 pub struct AppState {
     pub repo: Arc<SqliteLifecycleRepository>,
     pub bus: EventBus,
+    /// Per-instance in-memory caches (replaces process-global statics for
+    /// testability). Shared via `Arc` with background tasks that lack a
+    /// `Tauri::State` handle.
+    pub caches: Arc<app_core::AppCaches>,
     /// Spec 052 P1 (D2): the shared SIMBAD resolve cache — one global redb
     /// file, opened once at app startup. Readers clone the cheap `Arc`-backed
     /// handle out from under a short-lived read lock; `target.cache.clear`
@@ -60,6 +64,7 @@ impl AppState {
     pub fn new(
         repo: Arc<SqliteLifecycleRepository>,
         bus: EventBus,
+        caches: Arc<app_core::AppCaches>,
         resolve_cache: targeting_resolver::simbad::ResolveCache,
         resolve_cache_path: std::path::PathBuf,
         cache_warming: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -67,6 +72,7 @@ impl AppState {
         Self {
             repo,
             bus,
+            caches,
             resolve_cache: tokio::sync::RwLock::new(resolve_cache),
             resolve_cache_path,
             cache_warming,

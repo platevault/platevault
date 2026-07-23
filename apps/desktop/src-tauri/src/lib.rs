@@ -556,8 +556,10 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     // the Inbox scan/classify pipeline only ever worked under mock mode.
     app.manage(pool.clone());
 
+    let caches = app_core::AppCaches::shared();
+
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming);
+    let state = AppState::new(repo, bus, caches, resolve_cache, resolve_cache_path, cache_warming);
 
     app.manage(state);
 
