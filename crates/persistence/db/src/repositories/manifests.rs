@@ -155,31 +155,13 @@ pub async fn get_manifest(pool: &SqlitePool, manifest_id: &str) -> DbResult<Mani
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::insert_project;
     use sqlx::SqlitePool;
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
         pool
-    }
-
-    async fn insert_project(pool: &SqlitePool, id: &str) {
-        sqlx::query(
-            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
-             VALUES (?,?,?,?,?,?,?,?,?)",
-        )
-        .bind(id)
-        .bind("Test")
-        .bind("PixInsight")
-        .bind("ready")
-        .bind("projects/test")
-        .bind::<Option<String>>(None)
-        .bind(false)
-        .bind("2026-01-01T00:00:00Z")
-        .bind("2026-01-01T00:00:00Z")
-        .execute(pool)
-        .await
-        .unwrap();
     }
 
     #[tokio::test]

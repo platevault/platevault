@@ -120,16 +120,31 @@ pub struct ArtifactWatcherEntry {
     forward_task: JoinHandle<()>,
 }
 
-/// Registry of per-project artifact watchers, keyed by `project_id`.
+/// Inner state guarded by the registry Mutex.
+///
+/// `entries` holds the live watcher per project. `detach_requested` is a
+/// tombstone set: `detach_project_watcher` writes here when the project has
+/// no live entry yet (race: detach arrived while attach was reconciling
+/// unlocked). `attach_project_watcher` consumes the tombstone at final-insert
+/// time and discards the watcher instead of inserting it.
+pub struct WatcherRegistryInner {
+    pub entries: HashMap<String, ArtifactWatcherEntry>,
+    pub detach_requested: std::collections::HashSet<String>,
+}
+
+/// Registry of per-project artifact watchers.
 ///
 /// Managed as Tauri state so `artifact_watcher_attach`/`artifact_watcher_detach`
 /// commands can look up and mutate it.
-pub type ArtifactWatcherRegistry = Arc<Mutex<HashMap<String, ArtifactWatcherEntry>>>;
+pub type ArtifactWatcherRegistry = Arc<Mutex<WatcherRegistryInner>>;
 
 /// Construct an empty registry (call once at app startup and `app.manage()` it).
 #[must_use]
 pub fn new_artifact_watcher_registry() -> ArtifactWatcherRegistry {
-    Arc::new(Mutex::new(HashMap::new()))
+    Arc::new(Mutex::new(WatcherRegistryInner {
+        entries: HashMap::new(),
+        detach_requested: std::collections::HashSet::new(),
+    }))
 }
 
 /// Derive the stable `[a-z][a-z0-9_]*` tool id from a project's display `tool`
@@ -370,6 +385,15 @@ async fn run_attach_reconciliation(
 /// `artifact.detected`/`artifact.missing` for the reconciliation results
 /// exactly as the live watcher would.
 ///
+/// # Lock discipline (audit kyo7.1)
+/// The registry lock is held only for the two O(1) map operations (idempotency
+/// check and final insert). All blocking work — DB queries, directory walk,
+/// OS-watcher startup — runs outside the lock so concurrent attach/detach
+/// calls for other projects are never serialised behind one project's
+/// reconciliation. A second lock acquisition at the end re-checks the key to
+/// detect a concurrent racer that inserted the same `project_id` while we were
+/// reconciling; if detected, the duplicate watcher is discarded cleanly.
+///
 /// # Errors
 /// Returns `Err(String)` if the project cannot be loaded or the watcher
 /// cannot be started. An unavailable output folder (e.g. a removed external
@@ -381,11 +405,15 @@ pub async fn attach_project_watcher(
     registry: &ArtifactWatcherRegistry,
     project_id: &str,
 ) -> Result<(), String> {
-    let mut reg = registry.lock().await;
-    if reg.contains_key(project_id) {
-        return Ok(());
+    // ── Fast idempotency check — drop the lock before the slow path ────────
+    {
+        let reg = registry.lock().await;
+        if reg.entries.contains_key(project_id) {
+            return Ok(());
+        }
     }
 
+    // ── All slow work runs without holding the registry lock ───────────────
     let project = persistence_db::repositories::projects::get_project(pool, project_id)
         .await
         .map_err(|e| format!("{e}"))?;
@@ -472,8 +500,33 @@ pub async fn attach_project_watcher(
         }
     });
 
+    // ── Re-acquire lock briefly to insert; handle racer and zombie guard ───
+    let mut reg = registry.lock().await;
+
+    if reg.entries.contains_key(project_id) {
+        // A concurrent attach completed while we were reconciling. Discard our
+        // duplicate: abort the forwarding task and drop the guard so the OS
+        // watcher shuts down cleanly.
+        forward_task.abort();
+        tracing::debug!(
+            "artifact watcher: concurrent attach for {project_id}, discarding duplicate"
+        );
+        return Ok(());
+    }
+
+    if reg.detach_requested.remove(project_id) {
+        // detach_project_watcher was called while we were reconciling unlocked.
+        // Discard the watcher we just built so no zombie entry is left in the
+        // registry for a project the user already detached.
+        forward_task.abort();
+        tracing::debug!(
+            "artifact watcher: detach arrived during attach for {project_id}, discarding"
+        );
+        return Ok(());
+    }
+
     tracing::info!("artifact watcher: attached for project {project_id} ({})", project.path);
-    reg.insert(project_id.to_owned(), ArtifactWatcherEntry { _guard: guard, forward_task });
+    reg.entries.insert(project_id.to_owned(), ArtifactWatcherEntry { _guard: guard, forward_task });
     Ok(())
 }
 
@@ -481,12 +534,20 @@ pub async fn attach_project_watcher(
 ///
 /// Idempotent: detaching an unattached (or already-detached) project is a
 /// silent no-op.
+///
+/// If no live entry is present (attach is in-flight, unlocked), a tombstone
+/// is written to `detach_requested` so the finishing attach discards its
+/// watcher instead of inserting a zombie entry.
 pub async fn detach_project_watcher(registry: &ArtifactWatcherRegistry, project_id: &str) {
     let mut reg = registry.lock().await;
-    if let Some(entry) = reg.remove(project_id) {
+    if let Some(entry) = reg.entries.remove(project_id) {
         entry.forward_task.abort();
         // Dropping `_guard` here (end of scope) stops the OS watcher.
         tracing::info!("artifact watcher: detached for project {project_id}");
+    } else {
+        // No live entry — record the intent so a racing attach discards its
+        // watcher at final-insert time rather than leaving a zombie.
+        reg.detach_requested.insert(project_id.to_owned());
     }
 }
 

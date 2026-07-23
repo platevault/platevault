@@ -64,15 +64,25 @@ pub struct InsertArtifact<'a> {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
-/// Insert a new `processing_artifacts` row.
+/// Insert a new `processing_artifacts` row, returning `None` when the row was
+/// silently skipped by `INSERT OR IGNORE` (any constraint violation — UNIQUE,
+/// CHECK, or NOT NULL — causes SQLite to ignore the row rather than error).
+///
+/// # Returns
+/// - `Ok(Some(id))` — row was inserted.
+/// - `Ok(None)` — constraint violation silenced the insert (no row written).
 ///
 /// # Errors
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn insert_artifact(pool: &SqlitePool, data: InsertArtifact<'_>) -> DbResult<String> {
+/// Returns [`crate::DbError::Database`] on any DB failure that is not a
+/// constraint violation (e.g. I/O errors, schema mismatches).
+pub async fn insert_artifact_if_absent(
+    pool: &SqlitePool,
+    data: InsertArtifact<'_>,
+) -> DbResult<Option<String>> {
     let now = data.detected_at.to_owned();
-    sqlx::query(
+    let result = sqlx::query(
         "\
-        INSERT INTO processing_artifacts
+        INSERT OR IGNORE INTO processing_artifacts
             (id, project_id, tool_launch_id, path, kind, tool,
              detected_at, last_seen_at, state,
              classification_confidence, classification_source,
@@ -87,7 +97,7 @@ pub async fn insert_artifact(pool: &SqlitePool, data: InsertArtifact<'_>) -> DbR
     .bind(data.kind)
     .bind(data.tool)
     .bind(&now)
-    .bind(&now) // last_seen_at = detected_at on insert
+    .bind(&now)
     .bind(data.state)
     .bind(data.classification_confidence)
     .bind(data.classification_source)
@@ -96,7 +106,11 @@ pub async fn insert_artifact(pool: &SqlitePool, data: InsertArtifact<'_>) -> DbR
     .bind(data.content_hash)
     .execute(pool)
     .await?;
-    Ok(data.id.to_owned())
+    if result.rows_affected() == 0 {
+        Ok(None)
+    } else {
+        Ok(Some(data.id.to_owned()))
+    }
 }
 
 /// Lookup an artifact by `(project_id, path)`.
@@ -488,7 +502,7 @@ mod tests {
         db.migrate().await.unwrap();
         let pool = db.pool();
 
-        insert_artifact(pool, art("art-1", "proj-1", "output/MasterDark.xisf", "master"))
+        insert_artifact_if_absent(pool, art("art-1", "proj-1", "output/MasterDark.xisf", "master"))
             .await
             .unwrap();
 
@@ -507,8 +521,10 @@ mod tests {
         db.migrate().await.unwrap();
         let pool = db.pool();
 
-        insert_artifact(pool, art("a1", "p1", "out/a.xisf", "intermediate")).await.unwrap();
-        insert_artifact(pool, art("a2", "p1", "out/b.xisf", "master")).await.unwrap();
+        insert_artifact_if_absent(pool, art("a1", "p1", "out/a.xisf", "intermediate"))
+            .await
+            .unwrap();
+        insert_artifact_if_absent(pool, art("a2", "p1", "out/b.xisf", "master")).await.unwrap();
 
         // Transition a2 to missing.
         mark_artifact_missing(pool, "a2").await.unwrap();
@@ -527,7 +543,9 @@ mod tests {
         db.migrate().await.unwrap();
         let pool = db.pool();
 
-        insert_artifact(pool, art("a1", "p1", "out/img.xisf", "intermediate")).await.unwrap();
+        insert_artifact_if_absent(pool, art("a1", "p1", "out/img.xisf", "intermediate"))
+            .await
+            .unwrap();
         upsert_override(pool, "a1", "final", Some("manual inspection")).await.unwrap();
 
         let ov = get_override(pool, "a1").await.unwrap().expect("override should exist");
@@ -551,7 +569,9 @@ mod tests {
         db.migrate().await.unwrap();
         let pool = db.pool();
 
-        insert_artifact(pool, art("a1", "p1", "out/img.xisf", "intermediate")).await.unwrap();
+        insert_artifact_if_absent(pool, art("a1", "p1", "out/img.xisf", "intermediate"))
+            .await
+            .unwrap();
         mark_artifact_missing(pool, "a1").await.unwrap();
 
         let row = get_artifact_by_path(pool, "p1", "out/img.xisf").await.unwrap().unwrap();
