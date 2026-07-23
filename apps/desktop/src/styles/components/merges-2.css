@@ -182,8 +182,7 @@
 
 .pv-calib-detail {
   display: grid;
-  /* Facts compact (fixed-ish), matches take the rest.
-   * Overridden below by calib-compact merge: 0.9fr/1.1fr column ratio. */
+  /* Facts compact (fixed-ish, ~0.9fr), matches take the rest (1.1fr). */
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: var(--pv-sp-5);
   align-items: start;
@@ -225,9 +224,8 @@
 /* === merged from .cssblocks/calib-compact.css (spec-043, task #97) ===
  * Compact the master fingerprint: flow the fingerprint + reuse KV pairs into a
  * 2-column grid and widen the facts column so the whole calibration detail fits
- * the wide-short bottom panel without inner scroll. Must follow the
- * calibration-detail.css block above so the .pv-calib-detail column override
- * wins on source order. */
+ * the wide-short bottom panel without inner scroll.
+ * (.pv-calib-detail column ratio absorbed into the base block above.) */
 .pv-calib-kvgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
