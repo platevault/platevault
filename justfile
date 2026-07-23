@@ -183,6 +183,5 @@ test-e2e:
 # Set PERF_N to control fixture size (default 500; use 5000 for a deeper run).
 # Output is machine-readable JSON — one line per scenario — suitable for
 # pasting before/after numbers into PR descriptions.
-# Tests are marked #[ignore] so `cargo test --workspace` skips them.
 perf-bench:
     cargo run --release -p perf-bench
