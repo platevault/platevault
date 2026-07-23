@@ -41,8 +41,7 @@ async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     .unwrap();
 }
 
-/// Insert a project into the canonical `projects` table (spec-008 / migration 0018).
-/// After migration 0036, `EntityType::Project` transitions read/write `projects.lifecycle`.
+/// Insert a project into the canonical `projects` table used by lifecycle transitions.
 async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, state: &str) {
     sqlx::query(
         "INSERT INTO projects \
