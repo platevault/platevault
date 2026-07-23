@@ -32,6 +32,14 @@ use thirtyfour::{By, WebElement};
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Extended timeout for waits that depend on the Targets table rendering its
+/// first row. On Windows CI cold boots the 13k-row bundled seed load can take
+/// 30-60s after the app process starts, and the targets list TanStack Query
+/// won't resolve until the seed is loaded. TRY-1 failures at exactly 20s
+/// (standard `UI_TIMEOUT`) that pass on TRY-2 in <8s are the signature of a
+/// warm-disk-cache dependency, not a product bug.
+const TARGETS_TABLE_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Real, per-target disclosure titles (spec 047) — asserted verbatim against
 /// `apps/desktop/messages/en.json` so a copy change fails this test loudly
 /// instead of silently drifting.
@@ -300,6 +308,33 @@ async fn wait_for_title_count_at_least(
     }
 }
 
+/// Wait for the Targets table to render at least one row, proving the list
+/// query resolved and the table component mounted its data. Uses the extended
+/// `TARGETS_TABLE_TIMEOUT` because on Windows CI cold boots the bundled
+/// 13k-row seed load can take 30-60s after launch, and the table won't render
+/// until that completes.
+async fn wait_targets_table_row(app: &E2eApp) -> anyhow::Result<()> {
+    let deadline = tokio::time::Instant::now() + TARGETS_TABLE_TIMEOUT;
+    loop {
+        if app.driver.find(By::Css(".pv-targets-table__row")).await.is_ok() {
+            return Ok(());
+        }
+        if tokio::time::Instant::now() >= deadline {
+            let url = app
+                .driver
+                .current_url()
+                .await
+                .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
+            anyhow::bail!(
+                "no .pv-targets-table__row appeared within {TARGETS_TABLE_TIMEOUT:?} — \
+                 the targets list query likely never resolved (seed load still in progress \
+                 on a cold Windows boot?); current URL: {url}"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
 /// Diagnostics for a `wait_for_title_count_at_least` timeout: the first real
 /// target row's outerHTML (does the row even exist? does it carry the
 /// expected muted/unknown cells?) plus a page-wide count for both disclosure
@@ -526,6 +561,13 @@ async fn targets_ui_astronomy_columns_disclose_placeholder_without_site() -> any
     // Guarantee at least one real target row exists regardless of whether the
     // bundled seed catalog is pre-listed on a fresh DB.
     add_target_via_ui(&app, "M 1").await?;
+
+    // Wait for the table to actually render a row before asserting on
+    // row-level cell content. On a Windows cold boot the seed load can take
+    // 30-60s, and without this gate the 20s title-element poll below fires
+    // against an empty table — producing the TRY-1-only failures tracked by
+    // bead astro-plan-h182.
+    wait_targets_table_row(&app).await?;
 
     app.wait_testid("planner-site-prompt", UI_TIMEOUT).await.map_err(|e| {
         anyhow::anyhow!("expected the real site-setup prompt with no observing site: {e}")
@@ -780,6 +822,10 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // render, so the table keeps full width and barely overflows at all.
     app.goto_route(&format!("/targets?selected={target_id}")).await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    // Wait for the table to populate before asserting on scroll geometry. On
+    // Windows cold boots the seed load can take 30-60s, and
+    // DEFAULT_FIND_TIMEOUT (20s) is insufficient (bead astro-plan-h182).
+    wait_targets_table_row(&app).await?;
     app.find_waiting(
         By::Css(".pv-targets-table__scroll"),
         "the loaded Targets table scroll container",
@@ -1031,7 +1077,15 @@ async fn targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::Resul
     app.graceful_shutdown().await?;
 
     #[cfg(target_os = "windows")]
-    E2eApp::wait_for_webview_storage_flush().await?;
+    {
+        E2eApp::wait_for_webview_storage_flush().await?;
+        // WebView2's LevelDB commit is asynchronous: the directory and
+        // structural files appear before the actual localStorage key/value
+        // data is committed. On a loaded Windows runner this lag is
+        // non-trivial — the TRY-1-only "no persisted detailDock entry"
+        // failure (bead astro-plan-msdw) is this race.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
 
     // Cold start: new process, empty module cache, storage read from disk.
     let app = E2eApp::relaunch().await?;

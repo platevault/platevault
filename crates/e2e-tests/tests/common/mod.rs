@@ -1903,20 +1903,43 @@ impl E2eApp {
         let dir = lookup(&instance_env().vars, "WEBVIEW2_USER_DATA_FOLDER")
             .map(PathBuf::from)
             .context("WEBVIEW2_USER_DATA_FOLDER was not configured")?;
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(15);
         loop {
             if let Some(leveldb) = find_leveldb_dir(&dir) {
-                if std::fs::read_dir(&leveldb)
-                    .ok()
-                    .is_some_and(|entries| entries.flatten().any(|entry| entry.path().is_file()))
-                {
+                // Wait for a DATA file (.ldb) or a write-ahead log (.log with
+                // non-zero size). Structural files (LOCK, CURRENT, MANIFEST-*)
+                // appear before localStorage content is committed, so checking
+                // "any file exists" is insufficient — that's what caused the
+                // TRY-1-only "no persisted detailDock entry" on loaded runners
+                // (bead astro-plan-msdw).
+                if std::fs::read_dir(&leveldb).ok().is_some_and(|entries| {
+                    entries.flatten().any(|entry| {
+                        let path = entry.path();
+                        if !path.is_file() {
+                            return false;
+                        }
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        if ext == "ldb" {
+                            return true;
+                        }
+                        // LevelDB .log files are the WAL — a non-empty one
+                        // means data has been written (even if not yet
+                        // compacted into .ldb).
+                        if ext == "log" {
+                            return path.metadata().map_or(false, |m| m.len() > 0);
+                        }
+                        false
+                    })
+                }) {
                     return Ok(());
                 }
             }
             if Instant::now() >= deadline {
-                anyhow::bail!("WebView2 profile did not expose persisted LevelDB files");
+                anyhow::bail!(
+                    "WebView2 profile did not expose persisted LevelDB data files within 15s"
+                );
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
     }
 
