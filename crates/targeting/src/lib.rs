@@ -34,7 +34,9 @@
 pub mod astro_format;
 pub mod coords;
 pub mod identity;
+pub mod matching;
 pub mod normalize;
+pub mod relations;
 
 pub use skymath::{separation, Angle, Epoch, Equatorial};
 pub use target_match::Field;

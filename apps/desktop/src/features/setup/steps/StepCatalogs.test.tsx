@@ -7,8 +7,7 @@
  *
  * The step no longer downloads catalogs (spec-014 backend removed). It is now a
  * small Configuration screen: SIMBAD online-resolution toggle, display density,
- * default source protection, default scan depth, and a live theme control
- * (#504 — wired to the same `data/theme.ts` runtime as Settings > General).
+ * and default source protection.
  */
 
 import {
@@ -57,10 +56,7 @@ beforeEach(() => {
   mockUpdate.mockReset();
   mockSettingsGet.mockReset();
   mockSettingsUpdate.mockReset();
-  // useThemeChoice is backed by localStorage (data/theme.ts) — reset between
-  // tests so each case starts from the 'system' default.
   localStorage.clear();
-  document.documentElement.removeAttribute('data-theme');
   mockGet.mockResolvedValue({
     contractVersion: '1.0',
     requestId: 'r',
@@ -106,40 +102,6 @@ describe('StepCatalogs (Configuration)', () => {
       screen.getByLabelText('Default source protection'),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Display density')).toBeInTheDocument();
-  });
-
-  it('shows a live theme control listing all app themes (#504)', () => {
-    renderStep();
-    const theme = screen.getByLabelText('Theme') as HTMLSelectElement;
-    expect(theme).not.toBeDisabled();
-    const optionValues = Array.from(theme.options).map((o) => o.value);
-    // The wizard's ThemeControl deliberately maps over the full THEMES
-    // registry (unfiltered by `enabled`) — handoff 03's canonical/variant
-    // split only hides Warm Clay/Espresso from the Settings > Appearance
-    // picker, not this first-run control (#504's "all app themes" intent).
-    expect(optionValues).toEqual([
-      'system',
-      'warm-clay',
-      'warm-slate',
-      'observatory-dark',
-      'espresso-dark',
-      'observatory-cool-light',
-      'observatory-cool',
-    ]);
-  });
-
-  it('defaults the theme control to the current choice and applies changes live (#504)', () => {
-    localStorage.setItem('alm.theme', 'observatory-dark');
-    renderStep();
-    const theme = screen.getByLabelText('Theme') as HTMLSelectElement;
-    expect(theme.value).toBe('observatory-dark');
-
-    fireEvent.change(theme, { target: { value: 'warm-clay' } });
-
-    expect(theme.value).toBe('warm-clay');
-    expect(document.documentElement.getAttribute('data-theme')).toBe(
-      'warm-clay',
-    );
   });
 
   it('shows no catalog-download affordance', () => {

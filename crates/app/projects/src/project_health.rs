@@ -189,6 +189,20 @@ pub struct BlockTransitionRecord {
     pub condition: BlockCondition,
 }
 
+enum BlockTransitionOutcome {
+    Applied(BlockTransitionRecord),
+    Noop,
+    RetryableCasLoss,
+}
+
+/// Whether a source-missing invariant pass completed or must be retried after
+/// losing a lifecycle compare-and-swap to another blockable state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SourceMissingCheckOutcome {
+    Complete,
+    RetryRequired,
+}
+
 /// Check the `source_missing` block invariant (US4, FR-020) across every
 /// project whose linked acquisition sessions reference a `missing` frame
 /// record, and apply the `* → blocked` transition to each.
@@ -208,20 +222,25 @@ pub async fn check_project_source_missing_invariant(
     pool: &SqlitePool,
     bus: &EventBus,
     debounce: &DebounceCache<DebounceKey>,
-) -> Result<Vec<BlockTransitionRecord>, HealthError> {
+) -> Result<SourceMissingCheckOutcome, HealthError> {
     let pairs =
         repo::find_blockable_missing_sources(pool).await.map_err(HealthError::Persistence)?;
 
-    let mut applied = Vec::new();
+    let mut retry_required = false;
     for (project_id, inventory_id) in pairs {
         let condition = BlockCondition::SourceMissing { inventory_id };
-        if let Some(record) =
-            emit_block_transition(pool, bus, debounce, &project_id, &condition).await?
-        {
-            applied.push(record);
+        if matches!(
+            emit_block_transition_outcome(pool, bus, debounce, &project_id, &condition).await?,
+            BlockTransitionOutcome::RetryableCasLoss
+        ) {
+            retry_required = true;
         }
     }
-    Ok(applied)
+    Ok(if retry_required {
+        SourceMissingCheckOutcome::RetryRequired
+    } else {
+        SourceMissingCheckOutcome::Complete
+    })
 }
 
 /// Emit a system-driven `* → blocked` transition for the given project.
@@ -245,46 +264,55 @@ pub async fn emit_block_transition(
     project_id: &str,
     condition: &BlockCondition,
 ) -> Result<Option<BlockTransitionRecord>, HealthError> {
+    Ok(match emit_block_transition_outcome(pool, bus, debounce, project_id, condition).await? {
+        BlockTransitionOutcome::Applied(record) => Some(record),
+        BlockTransitionOutcome::Noop | BlockTransitionOutcome::RetryableCasLoss => None,
+    })
+}
+
+async fn emit_block_transition_outcome(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    debounce: &DebounceCache<DebounceKey>,
+    project_id: &str,
+    condition: &BlockCondition,
+) -> Result<BlockTransitionOutcome, HealthError> {
     let condition_kind = condition.kind_str();
 
-    // Debounce check (P7). `DebounceCache` is `Clone`/`&self` (moka handle is
-    // internally `Arc`-backed), so no external `Arc<Mutex<_>>` is needed.
-    if debounce.should_suppress(&DebounceKey::new(project_id, condition_kind)) {
-        return Ok(None);
+    let debounce_key = DebounceKey::new(project_id, condition_kind);
+    if debounce.is_suppressed(&debounce_key) {
+        return Ok(BlockTransitionOutcome::Noop);
     }
 
     let row = repo::get_project(pool, project_id)
         .await
         .map_err(|e| HealthError::NotFound(format!("project {project_id}: {e}")))?;
 
-    // Already blocked → nothing to do.
-    if row.lifecycle == "blocked" {
-        return Ok(None);
-    }
-
     let from_state = row.lifecycle.clone();
     let message = condition.message();
+    let trigger = format!("auto block: {condition_kind} — {message}");
 
-    // FR-020: persist typed blocked reason alongside the lifecycle transition.
-    repo::update_project_lifecycle_blocked(
-        pool,
-        project_id,
-        condition_kind,
-        Some(message.as_str()),
-    )
-    .await
-    .map_err(HealthError::Persistence)?;
-
-    // FR-021: write an audit row for this auto block transition.
-    write_auto_transition_audit(
+    let outcome = repo::apply_project_auto_block(
         pool,
         project_id,
         &from_state,
-        "blocked",
-        &format!("auto block: {condition_kind} — {message}"),
+        condition_kind,
+        &message,
+        &trigger,
     )
     .await
     .map_err(HealthError::Persistence)?;
+    match outcome {
+        repo::ProjectAutoBlockOutcome::Applied => {}
+        repo::ProjectAutoBlockOutcome::CasLost { still_blockable: true, .. } => {
+            return Ok(BlockTransitionOutcome::RetryableCasLoss);
+        }
+        repo::ProjectAutoBlockOutcome::Rejected
+        | repo::ProjectAutoBlockOutcome::CasLost { still_blockable: false, .. } => {
+            return Ok(BlockTransitionOutcome::Noop);
+        }
+    }
+    debounce.record(&debounce_key);
 
     let now = domain_core::ids::Timestamp::now_utc();
 
@@ -317,7 +345,7 @@ pub async fn emit_block_transition(
         )
         .await;
 
-    Ok(Some(BlockTransitionRecord {
+    Ok(BlockTransitionOutcome::Applied(BlockTransitionRecord {
         project_id: project_id.to_owned(),
         from_state,
         condition: condition.clone(),

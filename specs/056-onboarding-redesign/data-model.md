@@ -1,6 +1,6 @@
 # Data Model: Onboarding Redesign (Spec 056)
 
-**Date**: 2026-07-18 | **Plan**: [plan.md](plan.md) | **Migration**: `0072_onboarding.sql` ([research R6](research.md))
+**Date**: 2026-07-18 | **Plan**: [plan.md](plan.md) | **Migrations**: `0080_onboarding.sql`, `0081_drop_guided_flow_state.sql` ([research R6](research.md))
 
 ## Tables
 
@@ -28,7 +28,7 @@ Unknown `item_id`s (from a future registry shrink) are ignored on read.
 
 ### Dropped
 
-`guided_flow_state` — `DROP TABLE IF EXISTS` in 0069. Migration
+`guided_flow_state` — `DROP TABLE IF EXISTS` in `0081_drop_guided_flow_state.sql`. Migration
 `0030_guided_flow.sql` itself is shipped and untouched (FR-027, greenfield:
 no data migrated).
 
@@ -55,8 +55,8 @@ in the registry — they are Paraglide message keys derived from `item_id`
 
 ```text
 unchecked ── live event (topic match, payload filter, envelope source != "restore") ──▶ auto_checked   [source=event]
-unchecked ── user checks off ──▶ manually_checked                                                      [source=user]
-unchecked ── user dismisses ──▶ dismissed                                                              [source=user]
+MANUAL unchecked ── user checks off ──▶ manually_checked                                               [source=user]
+MANUAL unchecked ── user dismisses ──▶ dismissed                                                       [source=user]
 AUTOMATIC items (unchecked | auto_checked) ── restore/reset (Settings → Advanced) ──▶ re-derived: auto_checked [source=seed] if milestone exists in DB, else unchecked
 manually_checked | dismissed ── restore/reset ──▶ UNCHANGED (user progress is never discarded)
 ```

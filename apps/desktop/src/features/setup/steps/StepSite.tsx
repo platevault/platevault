@@ -44,6 +44,9 @@ export interface StepSiteProps {
   onChange: (state: SiteStepState) => void;
 }
 
+type SiteField = 'name' | 'latitude' | 'longitude' | 'elevation';
+type SiteStepErrors = Partial<Record<SiteField, string>>;
+
 /** True when enough fields are filled in to create a site from this step (name/lat/lon; matches T016's "required" fields plus timezone, which always has a value). */
 export function siteStepHasSite(state: SiteStepState): boolean {
   return (
@@ -53,8 +56,8 @@ export function siteStepHasSite(state: SiteStepState): boolean {
   );
 }
 
-/** Validate the (optional) site step; `null` when the step is empty (skipped) or valid. */
-export function siteStepError(state: SiteStepState): string | null {
+/** Validate the optional site and return localized errors keyed by field. */
+export function siteStepErrors(state: SiteStepState): SiteStepErrors {
   const nameFilled = state.name.trim() !== '';
   const coordsFilled =
     state.latitudeDegText.trim() !== '' && state.longitudeDegText.trim() !== '';
@@ -63,24 +66,30 @@ export function siteStepError(state: SiteStepState): string | null {
   // the Settings -> Target Planner site editor, which requires it
   // (`ObservingSites.tsx`) — otherwise Continue silently accepted an
   // anonymous site that then got dropped entirely at Finish (#516).
-  if (!nameFilled && !coordsFilled) return null;
+  if (!nameFilled && !coordsFilled) return {};
+  const errors: SiteStepErrors = {};
   if (!nameFilled) {
-    return m.settings_observing_sites_error_name();
+    errors.name = m.settings_observing_sites_error_name();
   }
-  if (!coordsFilled) return null;
+  if (!coordsFilled) return errors;
   const lat = Number(state.latitudeDegText.trim());
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-    return m.settings_observing_sites_error_latitude();
+    errors.latitude = m.settings_observing_sites_error_latitude();
   }
   const lon = Number(state.longitudeDegText.trim());
   if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
-    return m.settings_observing_sites_error_longitude();
+    errors.longitude = m.settings_observing_sites_error_longitude();
   }
   const elevRaw = state.elevationMText.trim();
   if (elevRaw !== '' && !Number.isFinite(Number(elevRaw))) {
-    return m.settings_observing_sites_error_elevation();
+    errors.elevation = m.settings_observing_sites_error_elevation();
   }
-  return null;
+  return errors;
+}
+
+/** Validate the optional site using the first field error for the wizard gate. */
+export function siteStepError(state: SiteStepState): string | null {
+  return Object.values(siteStepErrors(state))[0] ?? null;
 }
 
 /**
@@ -101,7 +110,7 @@ function parsedCoord(text: string): number | null {
 
 export function StepSite({ state, onChange }: StepSiteProps) {
   const timezones = ianaTimezones();
-  const error = siteStepError(state);
+  const errors = siteStepErrors(state);
 
   return (
     <div className="pv-step-site">
@@ -132,9 +141,16 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             type="text"
             className="pv-input"
             aria-label={m.settings_observing_sites_field_name()}
+            aria-invalid={errors.name ? 'true' : undefined}
+            aria-describedby={errors.name ? 'setup-site-name-error' : undefined}
             value={state.name}
             onChange={(e) => onChange({ ...state, name: e.target.value })}
           />
+          {errors.name && (
+            <span id="setup-site-name-error" className="pv-field-error">
+              {errors.name}
+            </span>
+          )}
         </div>
         <div className="pv-stack-1">
           <label className="pv-field-label" htmlFor="setup-site-lat">
@@ -146,11 +162,20 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             inputMode="decimal"
             className="pv-input"
             aria-label={m.settings_observing_sites_field_latitude()}
+            aria-invalid={errors.latitude ? 'true' : undefined}
+            aria-describedby={
+              errors.latitude ? 'setup-site-lat-error' : undefined
+            }
             value={state.latitudeDegText}
             onChange={(e) =>
               onChange({ ...state, latitudeDegText: e.target.value })
             }
           />
+          {errors.latitude && (
+            <span id="setup-site-lat-error" className="pv-field-error">
+              {errors.latitude}
+            </span>
+          )}
         </div>
         <div className="pv-stack-1">
           <label className="pv-field-label" htmlFor="setup-site-lon">
@@ -162,11 +187,20 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             inputMode="decimal"
             className="pv-input"
             aria-label={m.settings_observing_sites_field_longitude()}
+            aria-invalid={errors.longitude ? 'true' : undefined}
+            aria-describedby={
+              errors.longitude ? 'setup-site-lon-error' : undefined
+            }
             value={state.longitudeDegText}
             onChange={(e) =>
               onChange({ ...state, longitudeDegText: e.target.value })
             }
           />
+          {errors.longitude && (
+            <span id="setup-site-lon-error" className="pv-field-error">
+              {errors.longitude}
+            </span>
+          )}
         </div>
         <div className="pv-stack-1">
           <label className="pv-field-label" htmlFor="setup-site-elevation">
@@ -178,11 +212,20 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             inputMode="decimal"
             className="pv-input"
             aria-label={m.settings_observing_sites_field_elevation()}
+            aria-invalid={errors.elevation ? 'true' : undefined}
+            aria-describedby={
+              errors.elevation ? 'setup-site-elevation-error' : undefined
+            }
             value={state.elevationMText}
             onChange={(e) =>
               onChange({ ...state, elevationMText: e.target.value })
             }
           />
+          {errors.elevation && (
+            <span id="setup-site-elevation-error" className="pv-field-error">
+              {errors.elevation}
+            </span>
+          )}
         </div>
         <div className="pv-stack-1">
           <label className="pv-field-label" htmlFor="setup-site-tz">
@@ -203,8 +246,6 @@ export function StepSite({ state, onChange }: StepSiteProps) {
           </select>
         </div>
       </div>
-
-      {error && <span className="pv-field-error">{error}</span>}
 
       <p className="pv-step-site__note">{m.setup_site_skip_note()}</p>
     </div>

@@ -1,0 +1,14 @@
+{
+  "onb-motion-tick": {
+    "$value": "150ms ease-out",
+    "$description": "Checklist item completion animation."
+  },
+  "onb-motion-progress-pulse": {
+    "$value": "600ms ease-in-out",
+    "$description": "Checklist progress pulse animation."
+  },
+  "onb-motion-spotlight-pulse": {
+    "$value": "1000ms ease-in-out",
+    "$description": "Checklist spotlight pulse animation."
+  }
+}

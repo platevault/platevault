@@ -44,8 +44,27 @@ describe('StepLanguage', () => {
     });
     expect(english).toHaveAttribute('aria-pressed', 'true');
     expect(portuguese).toHaveAttribute('aria-pressed', 'false');
+    expect(english).toHaveAttribute('lang', 'en-GB');
+    expect(portuguese).toHaveAttribute('lang', 'pt-BR');
     expect(english).toHaveTextContent('🇬🇧');
     expect(portuguese).toHaveTextContent('🇧🇷');
+  });
+
+  it('shows the localized machine-translation review notice without disabling the option', () => {
+    renderStep();
+
+    const portuguese = screen.getByRole('button', {
+      name: 'Português (Brasil)',
+    });
+    const notice = screen.getByText(
+      'This translation was generated automatically and awaits review by a fluent speaker.',
+    );
+    expect(portuguese).toBeEnabled();
+    expect(portuguese).toHaveAttribute('aria-describedby', notice.id);
+    expect(notice).toHaveAttribute('lang', 'en-GB');
+    expect(
+      screen.getByRole('button', { name: 'English (UK)' }),
+    ).not.toHaveAttribute('aria-describedby');
   });
 
   it('is keyboard operable: selecting via click flips the pressed state and mirror', () => {
@@ -62,6 +81,11 @@ describe('StepLanguage', () => {
     expect(
       screen.getByRole('button', { name: 'English (UK)' }),
     ).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      screen.getByText(
+        'Esta tradução foi gerada automaticamente e aguarda a revisão de uma pessoa fluente.',
+      ),
+    ).toHaveAttribute('lang', 'pt-BR');
     // changeLocale writes the localStorage mirror synchronously (research D3)
     // — the persistence spec 061 depends on for the choice to survive a
     // subsequent hydration read.

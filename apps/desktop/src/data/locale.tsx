@@ -176,7 +176,22 @@ export function registerLocaleStrategy(): void {
 
 /** The currently resolved locale, per the full strategy chain. */
 export function getCurrentLocale(): Locale {
-  return paraglideGetLocale();
+  return canonicalLocale(paraglideGetLocale());
+}
+
+/** Keep browser language metadata constrained to the shipped locale set. */
+function canonicalLocale(candidate: unknown): Locale {
+  return typeof candidate === 'string' && isLocale(candidate)
+    ? candidate
+    : BASE_LOCALE;
+}
+
+function syncDocumentLanguage(candidate: unknown): Locale {
+  const locale = canonicalLocale(candidate);
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
+  return locale;
 }
 
 /**
@@ -210,6 +225,7 @@ export async function hydrateLocaleFromSettings(): Promise<Locale | undefined> {
       // locale resolution, and this hydration step never diverge in how a
       // locale gets applied.
       await paraglideSetLocale(stored, { reload: false });
+      syncDocumentLanguage(stored);
       return stored;
     }
     return undefined;
@@ -235,7 +251,9 @@ const LocaleContext = createContext<LocaleContextValue | undefined>(undefined);
  * and cancels its own state update if unmounted first.
  */
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => getCurrentLocale());
+  const [locale, setLocaleState] = useState<Locale>(() =>
+    syncDocumentLanguage(getCurrentLocale()),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -248,8 +266,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const changeLocale = useCallback((next: Locale) => {
-    void paraglideSetLocale(next, { reload: false });
-    setLocaleState(next);
+    const canonical = canonicalLocale(next);
+    void paraglideSetLocale(canonical, { reload: false });
+    syncDocumentLanguage(canonical);
+    setLocaleState(canonical);
   }, []);
 
   const value = useMemo(

@@ -92,13 +92,16 @@
   --pv-control-h: 26px; /** Control height (#616) — single source of truth for toolbar-adjacent controls (buttons, text inputs, selects, SegControl) so they line up in the same row instead of drifting per-component (measured: input 27px, select 25px, button 24px, Settings select 28px, all in one chrome). */
   --pv-control-h-sm: 24px;
   --pv-control-h-xs: 20px; /** Dense filter chips (log panel, dev lists) — below this the 4px text padding stops clearing the --pv-text-xs cap height. */
+  --pv-onb-motion-tick: 150ms ease-out; /** Checklist item completion animation. */
+  --pv-onb-motion-progress-pulse: 600ms ease-in-out; /** Checklist progress pulse animation. */
+  --pv-onb-motion-spotlight-pulse: 1000ms ease-in-out; /** Checklist spotlight pulse animation. */
   --pv-list-width: 280px;
   --pv-rail-width: 300px;
   --pv-sidebar-width: 220px; /** #962: was 200px with ZERO slack against the header's own content sum (mark + brand-name + version chip + collapse button + gaps/padding measured at exactly 199px) — any platform font-metric variance (Windows subpixel rendering, non-1.0 DPR) tips "PlateVault" into its ellipsis safety net. +20px gives real headroom. */
   --pv-sidebar-collapsed: 48px;
   --pv-action-sidebar-width: 220px;
   --pv-row-height: 32px; /** Row density */
-  --pv-text: var(--pv-ink); /** Semantic aliases — resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root, [data-theme="warm-slate"]` block below, so there is a single source of truth for the default light palette. */
+  --pv-text: var(--pv-ink); /** Semantic aliases — resolve at use-site against the active theme's raw palette. The default palette (no data-theme set, e.g. pre-hydration or vitest) is Warm Slate: its raw values are declared once in the shared `:root:not([data-theme]), [data-theme="warm-slate"]` block below, so there is a single source of truth for the default light palette without overriding a named theme. */
   --pv-text-secondary: var(--pv-ink2);
   --pv-text-muted: var(--pv-ink3);
   --pv-text-faint: var(--pv-ink4);
@@ -118,6 +121,7 @@
   --pv-ink2: #cabfae;
   --pv-ink3: #9b9384;
   --pv-ink4: #9c947f;
+  --pv-control-border: #726f6a;
   --pv-rule: #332e28;
   --pv-rule2: #272320;
   --pv-bg: #161412;
@@ -163,6 +167,7 @@
   --pv-ink2: #c5cdd8;
   --pv-ink3: #98a2b0;
   --pv-ink4: #8592a1;
+  --pv-control-border: #6f7379;
   --pv-rule: #303845;
   --pv-rule2: #252c37;
   --pv-bg: #12151b;
@@ -208,6 +213,7 @@
   --pv-ink2: #3a414b;
   --pv-ink3: #565e6a;
   --pv-ink4: #525a66;
+  --pv-control-border: #7b7f86;
   --pv-rule: #cbd2dd;
   --pv-rule2: #dce1ea;
   --pv-bg: #f2f4f8;
@@ -253,6 +259,7 @@
   --pv-ink2: #cfc7b8;
   --pv-ink3: #a59c8a;
   --pv-ink4: #9a9180;
+  --pv-control-border: #76736b;
   --pv-rule: #3a352b;
   --pv-rule2: #2e2a22;
   --pv-bg: #1b1916;
@@ -298,6 +305,7 @@
   --pv-ink2: #433e35;
   --pv-ink3: #5b544a;
   --pv-ink4: #625b50;
+  --pv-control-border: #817d77;
   --pv-rule: #d8d1c4;
   --pv-rule2: #e8e2d6;
   --pv-bg: #f6f4ef;
@@ -338,12 +346,13 @@
  * Do not edit directly, this file was auto-generated.
  */
 
-:root,
+:root:not([data-theme]),
 [data-theme="warm-slate"] {
   --pv-ink: #20211f;
   --pv-ink2: #42433f;
   --pv-ink3: #5a5b54;
   --pv-ink4: #606159;
+  --pv-control-border: #7d7d7a;
   --pv-rule: #d5d3cb;
   --pv-rule2: #e6e4dd;
   --pv-bg: #f5f4f1;

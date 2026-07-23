@@ -11,9 +11,15 @@ dependencies:
   - srobroek/agentic-packages/packages/release-please#main
   - srobroek/agentic-packages/packages/speckit#main
   - srobroek/agentic-packages/packages/steering-speckit#main
-  - srobroek/agentic-packages/packages/language-rust#main
-  - srobroek/agentic-packages/packages/language-typescript#main
-  - srobroek/agentic-packages/packages/language-shell#main
+  # Serena is intentionally global-only. Keep language quality/steering and
+  # specialists without installing standalone LSP MCP packages.
+  - srobroek/agentic-packages/packages/rust-quality#main
+  - srobroek/agentic-packages/packages/language-steering-rust#main
+  - wshobson/agents/plugins/systems-programming
+  - srobroek/agentic-packages/packages/typescript-quality#main
+  - srobroek/agentic-packages/packages/language-steering-typescript#main
+  - wshobson/agents/plugins/javascript-typescript
+  - wshobson/agents/plugins/shell-scripting
   - srobroek/agentic-packages/packages/frontend#main
   - srobroek/agentic-packages/packages/hooks-quality#main
   - srobroek/agentic-packages/packages/docs-architecture#main
@@ -22,13 +28,11 @@ dependencies:
   - srobroek/agentic-packages/packages/steering-infrastructure#main
   - srobroek/agentic-packages/packages/steering-data#main
   - srobroek/agentic-packages/packages/mcp-playwright#main
-  - srobroek/agentic-packages/packages/mcp-codebase-memory#main
   - srobroek/agentic-packages/packages/mcp-context7#main
   - srobroek/agentic-packages/packages/mcp-package-version#main
   - srobroek/agentic-packages/packages/mcp-repomix#main
   - srobroek/agentic-packages/packages/mcp-tauri#main
   - wshobson/agents/plugins/database-design
-  - srobroek/agentic-packages/packages/mcp-serena#main
   - srobroek/agentic-packages/packages/user-journeys#main
 includes: auto
 targets:

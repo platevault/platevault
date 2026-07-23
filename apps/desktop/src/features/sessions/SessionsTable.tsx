@@ -264,84 +264,85 @@ export function SessionsTable({
     ),
   }));
 
-  const rows: TableRow[] = useMemo(
-    () =>
-      visualRows.map((row) => {
-        if (row.kind === 'header') {
-          const { node, depth, path, collapsed: isCollapsed } = row;
-          return {
-            _rowClassName: 'pv-listgroup',
-            _indent: tableIndent(depth),
-            target: (
-              <button
-                type="button"
-                className="pv-listgroup__cell"
-                data-testid={`sessions-group-${node.dimension}-${node.key}`}
-                aria-expanded={!isCollapsed}
-                onClick={() => toggle(path)}
-              >
-                <span className="pv-listgroup__caret" aria-hidden="true">
-                  {isCollapsed ? '▸' : '▾'}
-                </span>
-                <span className="pv-listgroup__label">{node.label}</span>
-                <span className="pv-listgroup__count">{node.count}</span>
-              </button>
-            ),
-            ...EMPTY_CELLS,
-          };
-        }
-
-        // Flat item or grouped leaf. The session's TARGET IDENTITY is the row
-        // headline (spec 043 §4) — rendered in the Target cell whether the
-        // table is flat (the default) or a grouped leaf (indented under its
-        // header). Inbox-parity: rows carry a stable per-row testid.
-        const s = row.item;
-        const indentPx = grouped ? tableIndent(row.depth) : 0;
-        const projects = s.linked?.projects ?? [];
-        const sourceState = sourceStateById.get(s.sourceId);
-        const connLabel = sourceState ? connectivityLabel(sourceState) : null;
+  const rows: TableRow[] = useMemo(() => {
+    const firstItemIndex = visualRows.findIndex((row) => row.kind === 'item');
+    return visualRows.map((row, rowIndex) => {
+      if (row.kind === 'header') {
+        const { node, depth, path, collapsed: isCollapsed } = row;
         return {
-          _testid: `sessions-row-${s.id}`,
-          _rowClassName:
-            'pv-sessions-table__row' +
-            (selected === s.id ? ' pv-sessions-table__row--selected' : ''),
-          _onClick: () => onSelect(s.id),
-          _selected: selected === s.id,
-          _indent: indentPx || undefined,
+          _rowClassName: 'pv-listgroup',
+          _indent: tableIndent(depth),
           target: (
-            <span className="pv-sessions-cell--target">
-              {sessionDisplayName(s)}
-              {connLabel && sourceState && (
-                <Pill
-                  variant={connectivityVariant(sourceState)}
-                  data-testid={`sessions-row-connectivity-${s.id}`}
-                >
-                  {connLabel}
-                </Pill>
-              )}
-            </span>
-          ),
-          filter: s.filter ?? '—',
-          frames: s.frames,
-          integration: integrationLabel(s),
-          night: s.capturedOn ?? '—',
-          camera: s.camera ?? '—',
-          projects:
-            projects.length > 0 ? (
-              <span className="pv-sessions-cell__projects">
-                {projects.map((p) => (
-                  <Pill key={p.id} variant="info">
-                    {p.name}
-                  </Pill>
-                ))}
+            <button
+              type="button"
+              className="pv-listgroup__cell"
+              data-testid={`sessions-group-${node.dimension}-${node.key}`}
+              aria-expanded={!isCollapsed}
+              onClick={() => toggle(path)}
+            >
+              <span className="pv-listgroup__caret" aria-hidden="true">
+                {isCollapsed ? '▸' : '▾'}
               </span>
-            ) : (
-              <span className="pv-cell--muted">—</span>
-            ),
+              <span className="pv-listgroup__label">{node.label}</span>
+              <span className="pv-listgroup__count">{node.count}</span>
+            </button>
+          ),
+          ...EMPTY_CELLS,
         };
-      }),
-    [visualRows, grouped, sourceStateById, selected, toggle, onSelect],
-  );
+      }
+
+      // Flat item or grouped leaf. The session's TARGET IDENTITY is the row
+      // headline (spec 043 §4) — rendered in the Target cell whether the
+      // table is flat (the default) or a grouped leaf (indented under its
+      // header). Inbox-parity: rows carry a stable per-row testid.
+      const s = row.item;
+      const indentPx = grouped ? tableIndent(row.depth) : 0;
+      const projects = s.linked?.projects ?? [];
+      const sourceState = sourceStateById.get(s.sourceId);
+      const connLabel = sourceState ? connectivityLabel(sourceState) : null;
+      return {
+        _testid: `sessions-row-${s.id}`,
+        _guideAnchor:
+          rowIndex === firstItemIndex ? 'sessions.review-row' : undefined,
+        _rowClassName:
+          'pv-sessions-table__row' +
+          (selected === s.id ? ' pv-sessions-table__row--selected' : ''),
+        _onClick: () => onSelect(s.id),
+        _selected: selected === s.id,
+        _indent: indentPx || undefined,
+        target: (
+          <span className="pv-sessions-cell--target">
+            {sessionDisplayName(s)}
+            {connLabel && sourceState && (
+              <Pill
+                variant={connectivityVariant(sourceState)}
+                data-testid={`sessions-row-connectivity-${s.id}`}
+              >
+                {connLabel}
+              </Pill>
+            )}
+          </span>
+        ),
+        filter: s.filter ?? '—',
+        frames: s.frames,
+        integration: integrationLabel(s),
+        night: s.capturedOn ?? '—',
+        camera: s.camera ?? '—',
+        projects:
+          projects.length > 0 ? (
+            <span className="pv-sessions-cell__projects">
+              {projects.map((p) => (
+                <Pill key={p.id} variant="info">
+                  {p.name}
+                </Pill>
+              ))}
+            </span>
+          ) : (
+            <span className="pv-cell--muted">—</span>
+          ),
+      };
+    });
+  }, [visualRows, grouped, sourceStateById, selected, toggle, onSelect]);
 
   // Inbox-parity: grouping-state hint footer under the table when grouped.
   const groupingHint = grouped
