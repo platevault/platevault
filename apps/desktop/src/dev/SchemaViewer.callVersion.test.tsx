@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SchemaViewer call-version pinning tests (spec 021 T025).
  *
@@ -16,7 +19,10 @@ const { mockDevSchemaGet } = vi.hoisted(() => ({ mockDevSchemaGet: vi.fn() }));
 vi.mock('@/bindings/index', () => ({
   commands: {
     devSchemaGet: (...a: unknown[]) =>
-      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
@@ -75,7 +81,9 @@ describe('SchemaViewer call-version pinning (T025)', () => {
     );
 
     await waitFor(() => screen.getByTestId('schema-content'));
-    expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: '/v1/schema.json' });
+    expect(mockDevSchemaGet).toHaveBeenCalledWith({
+      schemaPath: '/v1/schema.json',
+    });
 
     rerender(
       <SchemaViewer
@@ -87,7 +95,9 @@ describe('SchemaViewer call-version pinning (T025)', () => {
     );
 
     await waitFor(() => {
-      expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: '/v2/schema.json' });
+      expect(mockDevSchemaGet).toHaveBeenCalledWith({
+        schemaPath: '/v2/schema.json',
+      });
     });
     expect(mockDevSchemaGet).toHaveBeenCalledTimes(2);
   });

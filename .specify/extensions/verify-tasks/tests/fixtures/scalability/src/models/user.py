@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """User model — T001, T004, T005."""
 from dataclasses import dataclass, field, asdict
 from datetime import datetime

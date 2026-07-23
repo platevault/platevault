@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Session contract DTOs for the Tauri IPC surface.
 //!
 //! These types mirror the hand-written TypeScript `AcquisitionSession` in
@@ -18,6 +21,8 @@ use specta::Type;
 pub use crate::provenance::ProvenanceOrigin;
 
 use crate::calibration::CalibrationKind;
+
+pub mod heterogeneity;
 
 /// Confidence level for inferred or reviewed metadata.
 #[derive(
@@ -100,6 +105,10 @@ pub struct SessionCalibrationMatch {
     pub kind: CalibrationKind,
     pub score: f64,
     pub soft_mismatches: Vec<String>,
+    /// Whether this assignment was made via the hard-rule override path
+    /// (spec 007 SC-003) — persisted so the UI can distinguish an override
+    /// from a normal match on reopen instead of losing the distinction.
+    pub was_override: bool,
 }
 
 /// A history entry for a session detail view.

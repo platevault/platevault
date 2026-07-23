@@ -5,12 +5,17 @@ paths:
 
 # Astro Agentic Ownership
 
-APM owns project-local agentic runtime files for this repository.
+APM owns package-provided agentic runtime files for this repository (agents,
+skills, package steering, and the compiled `AGENTS.md` / `CLAUDE.md` bodies).
+Regenerate those with APM; do not hand-edit them except for explicit repair.
 
-Keep project-specific steering in `.apm/instructions/`, `.apm/context/`, or
-`PRODUCT.md`, then regenerate runtime files with APM. Do not hand-edit compiled
-`AGENTS.md`, `CLAUDE.md`, `.claude/rules`, `.claude/agents`, `.codex/agents`, or
-`.agents/skills` except for explicit repair work.
+Project-specific steering is hand-maintained, NOT APM-compiled. It lives as
+plain markdown rules in `.claude/rules/` (for example
+`05-astro-library-manager.md`, `21-astro-monorepo.md`, `22-astro-build-run.md`,
+`76-astro-specs.md`, and this file). Edit these directly — they are not sourced
+from `.apm/instructions/` and `apm compile` leaves them untouched as unmanaged
+local files. Keep any new project-specific steering here rather than adding it
+back into APM.
 
 Project-scoped Codex overrides live in `.codex/config.toml`. Keep
 global/shared Codex behavior in `~/.codex/config.toml` and the chezmoi-managed

@@ -15,9 +15,13 @@ repos:
       # Generated outputs (specta bindings, seed catalog) must keep their
       # generator-emitted bytes — CI's `just check-generated` drift gate
       # regenerates and `git diff --exit-code`s them, so whitespace "fixes"
-      # here would fail CI.
+      # here would fail CI. signatures/cla.json is written by the CLA
+      # Assistant GitHub Action, not by humans; it ships without a trailing
+      # newline, and the bot rewrites it without one on every signature, so
+      # a locally-added newline would never stick — excluded rather than
+      # "fixed" once.
       - id: end-of-file-fixer
-        exclude: '^(apps/desktop/src/bindings/|assets/seed/)'
+        exclude: '^(apps/desktop/src/bindings/|assets/seed/|signatures/cla\.json)'
       - id: trailing-whitespace
         exclude: '^(apps/desktop/src/bindings/|assets/seed/)'
 
@@ -37,3 +41,17 @@ repos:
     hooks:
       - id: cocogitto-verify
         stages: [commit-msg]
+
+  # `cargo fmt --all` only walks `mod` declarations, so it structurally cannot
+  # reach bootstrap/specta.rs, which is `include!`d (see that file's header).
+  # A writer running bare `cargo fmt --all --check` therefore gets a green that
+  # CI contradicts, on identical bytes — this happened on spec 058 and cost a
+  # round trip. CI and `just lint` both add the standalone call; mirror it here
+  # so the gap closes at commit time rather than on a CI red.
+  - repo: local
+    hooks:
+      - id: rustfmt-included-sources
+        name: rustfmt (include!d sources cargo fmt cannot reach)
+        entry: rustfmt --edition 2021 --check
+        language: system
+        files: '^apps/desktop/src-tauri/src/bootstrap/specta\.rs$'

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Log stream subscription (spec 019, T020).
  *
@@ -13,7 +16,12 @@
  * the subscription is a no-op and the mock invoker seeds the initial entries.
  */
 
-import { appendLog, getLogSnapshot, markTruncated, type LogEntry } from './logStore';
+import {
+  appendLog,
+  getLogSnapshot,
+  markTruncated,
+  type LogEntry,
+} from './logStore';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 

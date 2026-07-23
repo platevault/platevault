@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * SessionsTable + FilterToolbar + SessionDetail inventory wiring tests —
@@ -29,6 +32,7 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { InventorySource, InventorySession } from '@/bindings/index';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
@@ -63,7 +67,10 @@ vi.stubEnv('VITE_USE_MOCKS', 'true');
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-import { INVENTORY_SOURCES, INVENTORY_LIST_RESPONSE } from '@/data/fixtures/inventory';
+import {
+  INVENTORY_SOURCES,
+  INVENTORY_LIST_RESPONSE,
+} from '@/data/fixtures/inventory';
 
 // Build a minimal session for use in specific tests.
 function makeSession(overrides: Partial<InventorySession>): InventorySession {
@@ -81,7 +88,9 @@ import { SessionDetail } from '../SessionDetail';
 
 const noop = () => undefined;
 
-function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> = {}) {
+function renderList(
+  props: Partial<React.ComponentProps<typeof SessionsTable>> = {},
+) {
   return render(
     <SessionsTable
       sources={INVENTORY_LIST_RESPONSE.sources}
@@ -98,10 +107,9 @@ function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> =
 
 // Mirror the FilterToolbar configuration SessionsPage builds: a search box.
 // Spec 041 FR-051 (T076): the review filter field is removed.
-function renderToolbar(opts: {
-  search?: string;
-  onSearch?: (v: string) => void;
-} = {}) {
+function renderToolbar(
+  opts: { search?: string; onSearch?: (v: string) => void } = {},
+) {
   return render(
     <FilterToolbar
       search={{
@@ -115,15 +123,20 @@ function renderToolbar(opts: {
 }
 
 // SessionDetail no longer accepts review-action callbacks — only Reveal (FR-007).
+// SessionDetail now mounts SessionFrameInventory/RawFrameCleanupSection
+// (spec 048 T014/US3), which call useMutation — a QueryClientProvider is
+// required in the tree even though neither fires an IPC call on mount.
 function renderDetail(
   session: InventorySession | null,
   props: Partial<React.ComponentProps<typeof SessionDetail>> = {},
 ) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <SessionDetail
-      session={session}
-      {...props}
-    />,
+    <QueryClientProvider client={queryClient}>
+      <SessionDetail session={session} {...props} />
+    </QueryClientProvider>,
   );
 }
 
@@ -131,10 +144,17 @@ function renderDetail(
 
 describe('SessionsTable — target group headers and rows', () => {
   it('1. renders a target group header for each distinct target', () => {
-    renderList();
-    // Sessions are grouped by target identity; each distinct target heads a group.
+    const { container } = renderList();
+    // Scoped to the actual group-header label cell (SessionsTable.tsx's
+    // `.pv-listgroup__label`, `data-testid="sessions-group-target-<key>"`)
+    // rather than "this text appears anywhere on the page" — the prior
+    // version would still pass even if grouping broke entirely and targets
+    // only ever rendered in the per-row `.pv-sessions-cell--target` cell.
+    const groupLabels = Array.from(
+      container.querySelectorAll('.pv-listgroup__label'),
+    ).map((el) => el.textContent);
     for (const target of ['NGC 7000', 'IC 1396', 'M31', 'M42']) {
-      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
+      expect(groupLabels.some((label) => label?.includes(target))).toBe(true);
     }
   });
 
@@ -151,7 +171,9 @@ describe('SessionsTable — target group headers and rows', () => {
 
   it('4. sortable column headers are rendered as buttons', () => {
     renderList();
-    expect(screen.getByRole('button', { name: /Sort by Target/ })).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: /Sort by Target/ }),
+    ).toBeDefined();
     expect(screen.getByRole('button', { name: /Sort by Night/ })).toBeDefined();
   });
 
@@ -193,7 +215,9 @@ describe('FilterToolbar (Sessions toolbar) — search', () => {
     );
     // The grouping control renders multiple slots; the first has aria-label "Group by".
     // getAllByRole to handle multiple grouping selects in the toolbar.
-    const groupBySelects = screen.getAllByRole('combobox', { name: /Group by/i });
+    const groupBySelects = screen.getAllByRole('combobox', {
+      name: /Group by/i,
+    });
     expect(groupBySelects.length).toBeGreaterThan(0);
   });
 });
@@ -228,24 +252,36 @@ describe('SessionDetail — contextual header actions (task #79)', () => {
 
   it('11. Reveal is absent when revealVisible is not set (no source path)', () => {
     renderDetail(makeSession({}));
-    expect(screen.queryByRole('button', { name: /show in file manager/i })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /show in file manager/i }),
+    ).toBeNull();
   });
 
   it('11b. Reveal label follows the platform (Windows and macOS)', () => {
     // Mock the platform source both ways: revealLabel() reads
     // navigator.platform (jsdom exposes no userAgentData).
     const setPlatform = (v: string) =>
-      Object.defineProperty(window.navigator, 'platform', { value: v, configurable: true });
+      Object.defineProperty(window.navigator, 'platform', {
+        value: v,
+        configurable: true,
+      });
 
     try {
       setPlatform('Win32');
-      const { unmount } = renderDetail(makeSession({}), { revealVisible: true, onReveal: vi.fn() });
-      expect(screen.getByRole('button', { name: 'Show in File Explorer' })).toBeDefined();
+      const { unmount } = renderDetail(makeSession({}), {
+        revealVisible: true,
+        onReveal: vi.fn(),
+      });
+      expect(
+        screen.getByRole('button', { name: 'Show in File Explorer' }),
+      ).toBeDefined();
       unmount();
 
       setPlatform('MacIntel');
       renderDetail(makeSession({}), { revealVisible: true, onReveal: vi.fn() });
-      expect(screen.getByRole('button', { name: 'Reveal in Finder' })).toBeDefined();
+      expect(
+        screen.getByRole('button', { name: 'Reveal in Finder' }),
+      ).toBeDefined();
     } finally {
       // Drop the instance override so later tests see jsdom's prototype default.
       delete (window.navigator as unknown as Record<string, unknown>).platform;
@@ -254,15 +290,19 @@ describe('SessionDetail — contextual header actions (task #79)', () => {
 });
 
 describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance merge)', () => {
-  it('12. renders em-dash for missing fact values', () => {
+  // spec-030 Q16 (#620, #619, FR-135/FR-137): every fact field here is
+  // applicable to a light session (data-model.md matrix — the Light column
+  // is all-✓), so a missing value now renders the unresolved chip, not a
+  // silent em-dash indistinguishable from "field doesn't apply here".
+  it('12. renders the unresolved chip (not a bare em-dash) for missing fact values', () => {
     const session = makeSession({
       filter: null,
       exposure: null,
       camera: undefined,
     });
     renderDetail(session);
-    const dashes = screen.getAllByText('—');
-    expect(dashes.length).toBeGreaterThan(0);
+    const chips = screen.getAllByTestId('unresolved-chip');
+    expect(chips.length).toBeGreaterThan(0);
   });
 
   // Task #79: the standalone Provenance section was removed. Inference is now
@@ -312,17 +352,25 @@ describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance 
 
 describe('SessionsTable — live inventory fixture data (T106)', () => {
   it('16. renders sessions from every fixture target', () => {
-    renderList({ sources: INVENTORY_LIST_RESPONSE.sources });
-    // Distinct targets from the fixture all appear as group headers.
+    const { container } = renderList({
+      sources: INVENTORY_LIST_RESPONSE.sources,
+    });
+    // Scoped to the group-header label cell — see test 1's comment above for
+    // why "appears anywhere on the page" isn't sufficient here.
+    const groupLabels = Array.from(
+      container.querySelectorAll('.pv-listgroup__label'),
+    ).map((el) => el.textContent);
     for (const target of ['NGC 7000', 'M31', 'M42']) {
-      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
+      expect(groupLabels.some((label) => label?.includes(target))).toBe(true);
     }
   });
 
   it('17. selected session row has selected styling marker', () => {
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ selected: session.id });
-    const selectedRow = container.querySelector('.alm-sessions-table__row--selected');
+    const selectedRow = container.querySelector(
+      '.pv-sessions-table__row--selected',
+    );
     expect(selectedRow).not.toBeNull();
   });
 
@@ -330,7 +378,7 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     const onSelect = vi.fn();
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ onSelect });
-    const row = container.querySelector('.alm-sessions-table__row');
+    const row = container.querySelector('.pv-sessions-table__row');
     expect(row).not.toBeNull();
     fireEvent.click(row as Element);
     expect(onSelect).toHaveBeenCalled();
@@ -344,16 +392,20 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
       sources: INVENTORY_LIST_RESPONSE.sources,
       loading: true,
     });
-    expect(container.querySelector('.alm-sessions-table__footer')).toBeNull();
+    expect(container.querySelector('.pv-sessions-table__footer')).toBeNull();
     expect(screen.queryByText('Loading…')).toBeNull();
   });
 
   it('20. dims=["camera"] headlines groups by camera instead of target', () => {
-    const camera = INVENTORY_LIST_RESPONSE.sources[0].sessions.find((s) => s.camera)?.camera;
+    const camera = INVENTORY_LIST_RESPONSE.sources[0].sessions.find(
+      (s) => s.camera,
+    )?.camera;
     expect(camera).toBeTruthy();
     renderList({ sources: INVENTORY_LIST_RESPONSE.sources, dims: ['camera'] });
     // The camera value heads a group row (data-testid sessions-group-camera-<camera>).
-    expect(screen.getAllByText(new RegExp(camera as string)).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(new RegExp(camera as string)).length,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -363,7 +415,9 @@ describe('SessionsTable — Inbox-parity (spec 043 §4)', () => {
   it('21. FLAT (default) rows show the target identity in the Target cell', () => {
     const { container } = renderList({ dims: [] });
     // No group headers in flat mode…
-    expect(container.querySelector('[data-testid^="sessions-group-"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid^="sessions-group-"]'),
+    ).toBeNull();
     // …yet every distinct target is still readable per row (the row headline).
     for (const target of ['NGC 7000', 'M31', 'M42']) {
       expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
@@ -373,10 +427,12 @@ describe('SessionsTable — Inbox-parity (spec 043 §4)', () => {
   it('22. rows carry a stable per-row testid (sessions-row-<id>)', () => {
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     renderList({ dims: [] });
-    expect(screen.getByTestId(`sessions-row-${session.id}`)).toBeInTheDocument();
+    expect(
+      screen.getByTestId(`sessions-row-${session.id}`),
+    ).toBeInTheDocument();
   });
 
-  it('23. renders inside the shared .alm-listtable viewport with a windowed scroll container', () => {
+  it('23. renders inside the shared .pv-listtable viewport with a windowed scroll container', () => {
     renderList({ dims: [] });
     expect(screen.getByTestId('sessions-list')).toBeInTheDocument();
     // The shared Table's virtualized scroll wrapper (padding-spacer windowing).
@@ -400,7 +456,10 @@ describe('SessionsTable — Inbox-parity (spec 043 §4)', () => {
 
 describe('SessionsTable — aria-sort on the column header <th>', () => {
   it('26. exactly one th carries aria-sort: the active column, with its direction', () => {
-    const { container } = renderList({ dims: [], sort: { col: 'night', dir: 'desc' } });
+    const { container } = renderList({
+      dims: [],
+      sort: { col: 'night', dir: 'desc' },
+    });
     const marked = container.querySelectorAll('th[aria-sort]');
     expect(marked.length).toBe(1);
     expect(marked[0].getAttribute('aria-sort')).toBe('descending');
@@ -408,7 +467,10 @@ describe('SessionsTable — aria-sort on the column header <th>', () => {
   });
 
   it('27. ascending sort maps to aria-sort="ascending"', () => {
-    const { container } = renderList({ dims: [], sort: { col: 'frames', dir: 'asc' } });
+    const { container } = renderList({
+      dims: [],
+      sort: { col: 'frames', dir: 'asc' },
+    });
     const th = container.querySelector('th[aria-sort]');
     expect(th).not.toBeNull();
     expect(th?.getAttribute('aria-sort')).toBe('ascending');
@@ -423,14 +485,16 @@ import { filterSources, fieldOptions } from '../SessionsPage';
 describe('SessionsPage — field-filter helpers (Inbox-parity toolbar)', () => {
   it('28. filterSources narrows by optical filter and camera', () => {
     const all = INVENTORY_LIST_RESPONSE.sources;
-    const somefilter = all.flatMap((s) => s.sessions).find((s) => s.filter)?.filter as string;
+    const somefilter = all.flatMap((s) => s.sessions).find((s) => s.filter)
+      ?.filter as string;
     const filtered = filterSources(all, '', somefilter, '');
     expect(filtered.length).toBeGreaterThan(0);
     for (const src of filtered) {
       for (const s of src.sessions) expect(s.filter).toBe(somefilter);
     }
     // A camera value that exists must keep only its sessions.
-    const someCamera = all.flatMap((s) => s.sessions).find((s) => s.camera)?.camera as string;
+    const someCamera = all.flatMap((s) => s.sessions).find((s) => s.camera)
+      ?.camera as string;
     const byCam = filterSources(all, '', '', someCamera);
     for (const src of byCam) {
       for (const s of src.sessions) expect(s.camera).toBe(someCamera);

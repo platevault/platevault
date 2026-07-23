@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Conformance: the per-catalog `<slug>.json` entry-file format (spec 033 F3)
 //! must round-trip identically through BOTH the backend reader
 //! (`targeting_catalogs::loader`) AND the language-neutral contract DTO

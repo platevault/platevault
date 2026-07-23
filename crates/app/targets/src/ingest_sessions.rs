@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Ingest light frames → acquisition sessions grouped by capture identity
 //! (spec 035 US4, FR-016).
 //!
@@ -61,10 +64,12 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use audit::EventBus;
-use metadata_core::{MetadataExtractor, RawFileMetadata};
-use metadata_fits::FitsExtractor;
-use metadata_xisf::XisfExtractor;
+use metadata_core::RawFileMetadata;
+use persistence_db::repositories::framing as framing_repo;
+use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as repo_projects;
+use persistence_db::repositories::q_targets_ingest as repo;
+use persistence_db::repositories::{first_run, inventory};
 use sessions::{session_key, ObserverContext};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
@@ -125,33 +130,22 @@ pub async fn ingest_light_frames(
     // Applied move/catalogue items with a destination root + path. Item type is
     // filtered to light frames below (by reading the FITS header), so calibration
     // moves are excluded even though they share the `move` action.
-    let rows: Vec<(Option<String>, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT to_root_id, to_relative_path, from_root_id, from_relative_path
-         FROM plan_items
-         WHERE plan_id = ?
-           AND action IN ('move', 'catalogue')
-           AND item_state = 'succeeded'
-         ORDER BY item_index ASC",
-    )
-    .bind(plan_id)
-    .fetch_all(pool)
-    .await
-    .map_err(db_err)?;
+    let rows = repo::list_applied_light_plan_items(pool, plan_id).await.map_err(db_err)?;
 
     let mut summary = IngestSummary::default();
 
-    for (to_root_id, to_rel, from_root_id, from_rel) in rows {
+    for row in rows {
         // Catalogue-in-place keeps the file at its source; a move lands it at the
         // destination. Prefer the destination, falling back to the source root
         // when the item carries no `to_root_id` (older/catalogue rows).
-        let (root_id, relative_path) = match (to_root_id, from_root_id) {
-            (Some(r), _) if !to_rel.is_empty() => (r, to_rel),
-            (_, Some(r)) => (r, from_rel),
+        let (root_id, relative_path) = match (row.to_root_id, row.from_root_id) {
+            (Some(r), _) if !row.to_relative_path.is_empty() => (r, row.to_relative_path),
+            (_, Some(r)) => (r, row.from_relative_path),
             _ => continue,
         };
         let item = AppliedItem { root_id, relative_path };
 
-        match ingest_light_frame(pool, bus, &item).await? {
+        match ingest_light_frame(pool, bus, plan_id, &item).await? {
             FrameOutcome::NotLight => {}
             FrameOutcome::Skipped => summary.skipped += 1,
             FrameOutcome::Ingested => {
@@ -177,6 +171,7 @@ enum FrameOutcome {
 async fn ingest_light_frame(
     pool: &SqlitePool,
     bus: Option<&EventBus>,
+    plan_id: &str,
     item: &AppliedItem,
 ) -> Result<FrameOutcome, ContractError> {
     // R9: ensure a `library_root` row for the destination root before the
@@ -240,10 +235,128 @@ async fn ingest_light_frame(
 
     let (key, has_observer_location) = derive_session_key(&key_target, &meta);
 
-    upsert_session(pool, &key, has_observer_location, canonical_target_id.as_deref(), &image_id)
-        .await?;
+    let session_id = upsert_session(
+        pool,
+        &key,
+        has_observer_location,
+        canonical_target_id.as_deref(),
+        &image_id,
+        &item.root_id,
+    )
+    .await?;
+
+    // F-Framing-5: populate the durable session-level clustering key from
+    // this frame's real header data — the "populated at confirm" (loosely,
+    // the confirm-driven ingest pipeline) counterpart to the staged geometry
+    // the Inbox-confirm attribution pass matches against. Q16 null semantics:
+    // fields missing from this frame's header fill in only where the
+    // session's existing snapshot is also missing (never regress a known
+    // value to NULL because a later frame's header happened to omit it).
+    //
+    // Logged, never propagated (module docs: "one bad file cannot abort the
+    // whole ingest") — a `?` here would abort `ingest_light_frames`'s loop
+    // for every remaining frame in the plan, not just this one.
+    if let Err(e) = backfill_session_geometry(pool, &session_id, &meta).await {
+        tracing::warn!(session_id, "ingest: failed to backfill session geometry: {e:?}");
+    }
+
+    // F-Framing-10: bind this session to the attribution pick recorded on
+    // the confirming plan, if any — the earliest point a real session id
+    // exists to add as a framing member. Logged, never propagated (same
+    // reasoning as above).
+    if let Err(e) = bind_chosen_framing(pool, plan_id, &session_id).await {
+        tracing::warn!(plan_id, session_id, "ingest: failed to bind chosen framing: {e:?}");
+    }
 
     Ok(FrameOutcome::Ingested)
+}
+
+/// Fill in the session's durable geometry columns from `meta`, preserving any
+/// already-known field (mirrors `upsert_session`'s `root_id` COALESCE
+/// precedent) rather than overwriting a good value with a later frame's
+/// missing header data.
+async fn backfill_session_geometry(
+    pool: &SqlitePool,
+    session_id: &str,
+    meta: &RawFileMetadata,
+) -> Result<(), ContractError> {
+    let existing = framing_repo::get_session_geometry(pool, session_id).await.map_err(db_err)?;
+    let optic_train_key = sessions::optic_train_key(
+        meta.telescop.as_deref(),
+        meta.instrume.as_deref(),
+        meta.focal_length_mm,
+    );
+
+    let (pointing_ra_deg, pointing_dec_deg, rotation_deg, optic_train_key) = match &existing {
+        Some(row) => (
+            row.pointing_ra_deg.or(meta.ra_deg),
+            row.pointing_dec_deg.or(meta.dec_deg),
+            row.rotation_deg.or(meta.rotator_angle_deg),
+            row.optic_train_key.clone().or(optic_train_key),
+        ),
+        None => (meta.ra_deg, meta.dec_deg, meta.rotator_angle_deg, optic_train_key),
+    };
+
+    // Every light frame in a session runs this (`ingest_light_frame`'s
+    // per-frame hook), but a session's geometry is only ever WRITTEN ONCE in
+    // practice: the COALESCE-with-existing merge above means frame 2+ of an
+    // already-backfilled session recomputes the exact same tuple it read.
+    // Skipping the no-op write avoids an avoidable `UPDATE` (and its
+    // exclusive lock) on every subsequent frame of a session — real
+    // contention on the shared, non-WAL-mode pool this background task
+    // shares with foreground UI reads (`plan_listener` runs on the same
+    // connection pool as every other command).
+    let unchanged = existing.as_ref().is_some_and(|row| {
+        row.pointing_ra_deg == pointing_ra_deg
+            && row.pointing_dec_deg == pointing_dec_deg
+            && row.rotation_deg == rotation_deg
+            && row.optic_train_key.as_deref() == optic_train_key.as_deref()
+    });
+    if unchanged {
+        return Ok(());
+    }
+
+    framing_repo::set_session_geometry(
+        pool,
+        session_id,
+        pointing_ra_deg,
+        pointing_dec_deg,
+        rotation_deg,
+        optic_train_key.as_deref(),
+    )
+    .await
+    .map_err(db_err)
+}
+
+/// Add `session_id` to the plan's chosen attribution framing, if one was
+/// recorded at confirm time (F-Framing-10). No-op when the plan carries no
+/// pick, or when this session was already a member of some framing (a
+/// reasonable outcome on repeat ingest — the executor's own
+/// `add_session_to_framing` UNIQUE(session_id) constraint would otherwise
+/// reject it) — logged, never propagated, matching this module's existing
+/// per-frame error posture.
+async fn bind_chosen_framing(
+    pool: &SqlitePool,
+    plan_id: &str,
+    session_id: &str,
+) -> Result<(), ContractError> {
+    let Some(framing_id) =
+        plans_repo::get_chosen_framing_id(pool, plan_id).await.map_err(db_err)?
+    else {
+        return Ok(());
+    };
+    if framing_repo::get_framing_id_for_session(pool, session_id).await.map_err(db_err)?.is_some() {
+        return Ok(());
+    }
+    if let Err(e) = framing_repo::add_session_to_framing(pool, &framing_id, session_id).await {
+        tracing::warn!(
+            plan_id,
+            session_id,
+            framing_id,
+            "ingest: failed to bind session to chosen attribution framing: {e:?}"
+        );
+    }
+    Ok(())
 }
 
 // ── R9: library_root mirroring ──────────────────────────────────────────────────
@@ -268,36 +381,21 @@ pub async fn ensure_library_root(
     pool: &SqlitePool,
     root_id: &str,
 ) -> Result<Option<String>, ContractError> {
-    if let Some((path,)) =
-        sqlx::query_as::<_, (String,)>("SELECT current_path FROM library_root WHERE id = ?")
-            .bind(root_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(db_err)?
-    {
+    if let Some(path) = inventory::get_library_root_path(pool, root_id).await.map_err(db_err)? {
         return Ok(Some(path));
     }
 
-    let Some((path,)) =
-        sqlx::query_as::<_, (String,)>("SELECT path FROM registered_sources WHERE id = ?")
-            .bind(root_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(db_err)?
-    else {
+    let Some(path) = first_run::get_source_path(pool, root_id).await.map_err(db_err)? else {
         return Ok(None);
     };
 
     // Mirror into library_root with the SAME id so the file_record FK holds.
-    sqlx::query(
-        "INSERT OR IGNORE INTO library_root (id, label, current_path, kind, state, created_at)
-         VALUES (?, ?, ?, 'local', 'active', ?)",
+    repo::insert_library_root_mirror(
+        pool,
+        root_id,
+        &path,
+        &OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default(),
     )
-    .bind(root_id)
-    .bind(root_id)
-    .bind(&path)
-    .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
-    .execute(pool)
     .await
     .map_err(db_err)?;
 
@@ -364,72 +462,81 @@ fn parse_date_obs(raw: Option<&str>) -> OffsetDateTime {
 ///
 /// Idempotent (R12): the SELECT-by-`session_key` lookup keeps grouping
 /// single-row, and a repeat append of the same frame id is dropped (set-dedup).
+///
+/// `root_id` (R9/T036/FR-012 — spec 006's `acquisition_session.root_id`,
+/// migration 0021) is set on every insert and back-filled with
+/// `COALESCE(root_id, ?)` on every append so a session's first-known root
+/// sticks even across repeat ingests. This closed a real gap (found via
+/// #470's Layer-2 journeys, round 6): `root_id` was never written by this
+/// function at all — the column existed and `persistence_db::repositories::
+/// inventory::update_acquisition_session_root_id` existed to set it (its own
+/// doc comment: "Called when the inbox confirm pipeline resolves the root
+/// for a session"), but nothing ever called it, so every real ingested
+/// session's `root_id` stayed `NULL`. Sqlx-sqlite (this project's version)
+/// silently decodes a `NULL` `TEXT` column into a plain (non-`Option`)
+/// `String` as `""` rather than erroring, so downstream readers that assume
+/// `root_id` is always populated (`app_core_projects::source_view_generate`)
+/// got a real-looking-but-empty id and failed with a confusing
+/// `no_link_kind`/"source root  could not be resolved" (note the double
+/// space) instead of a clear "root never set" error.
+/// Returns the session's id (new or existing) so callers can write
+/// per-session follow-up state — the durable geometry snapshot (F-Framing-5)
+/// and the attribution apply-path's framing binding (F-Framing-10) both need
+/// it and no session exists before this call returns.
 async fn upsert_session(
     pool: &SqlitePool,
     key: &str,
     has_observer_location: bool,
     canonical_target_id: Option<&str>,
     image_id: &str,
-) -> Result<(), ContractError> {
-    if let Some((id, frame_ids_json, existing_target)) = sqlx::query_as::<
-        _,
-        (String, String, Option<String>),
-    >(
-        "SELECT id, frame_ids, canonical_target_id FROM acquisition_session WHERE session_key = ?",
-    )
-    .bind(key)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?
+    root_id: &str,
+) -> Result<String, ContractError> {
+    if let Some(existing) =
+        repo::find_acquisition_session_by_key(pool, key).await.map_err(db_err)?
     {
         let mut frames: BTreeSet<String> =
-            serde_json::from_str(&frame_ids_json).unwrap_or_default();
+            serde_json::from_str(&existing.frame_ids).unwrap_or_default();
         frames.insert(image_id.to_owned());
         let frames_json =
             serde_json::to_string(&frames.into_iter().collect::<Vec<_>>()).map_err(db_err)?;
 
         // Back-fill the link if it resolved this pass and the row had none.
-        if existing_target.is_none() && canonical_target_id.is_some() {
-            sqlx::query(
-                "UPDATE acquisition_session SET frame_ids = ?, canonical_target_id = ? WHERE id = ?",
-            )
-            .bind(&frames_json)
-            .bind(canonical_target_id)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(db_err)?;
-            // T075/FR-052: newly resolved on this session → propagate to any
-            // linked project.
-            if let Some(target_id) = canonical_target_id {
-                propagate_target_to_projects(pool, &id, target_id).await?;
-            }
-        } else {
-            sqlx::query("UPDATE acquisition_session SET frame_ids = ? WHERE id = ?")
-                .bind(&frames_json)
-                .bind(&id)
-                .execute(pool)
+        match (existing.canonical_target_id.is_none(), canonical_target_id) {
+            (true, Some(target_id)) => {
+                repo::append_acquisition_session_frames_with_target(
+                    pool,
+                    &existing.id,
+                    &frames_json,
+                    target_id,
+                    root_id,
+                )
                 .await
                 .map_err(db_err)?;
+                // T075/FR-052: newly resolved on this session → propagate to any
+                // linked project.
+                propagate_target_to_projects(pool, &existing.id, target_id).await?;
+            }
+            _ => {
+                repo::append_acquisition_session_frames(pool, &existing.id, &frames_json, root_id)
+                    .await
+                    .map_err(db_err)?;
+            }
         }
-        return Ok(());
+        return Ok(existing.id);
     }
 
     let id = Uuid::new_v4().to_string();
     let frames_json = serde_json::to_string(&[image_id]).map_err(db_err)?;
-    sqlx::query(
-        "INSERT INTO acquisition_session
-            (id, session_key, target_id, canonical_target_id, has_observer_location,
-             frame_ids, observer_location, created_at)
-         VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
+    repo::insert_acquisition_session(
+        pool,
+        &id,
+        key,
+        canonical_target_id,
+        has_observer_location,
+        &frames_json,
+        root_id,
+        &OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default(),
     )
-    .bind(&id)
-    .bind(key)
-    .bind(canonical_target_id)
-    .bind(i64::from(has_observer_location))
-    .bind(&frames_json)
-    .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
-    .execute(pool)
     .await
     .map_err(db_err)?;
 
@@ -437,7 +544,7 @@ async fn upsert_session(
     if let Some(target_id) = canonical_target_id {
         propagate_target_to_projects(pool, &id, target_id).await?;
     }
-    Ok(())
+    Ok(id)
 }
 
 // ── Target propagation (T075) ─────────────────────────────────────────────────
@@ -489,43 +596,26 @@ async fn propagate_target_to_projects(
 /// Returns [`ContractError`] (`internal.database`) on a query failure.
 pub async fn backfill_session_targets(pool: &SqlitePool) -> Result<usize, ContractError> {
     // Map of image_id → resolved canonical target id (only resolved rows).
-    let resolved: Vec<(String, String)> = sqlx::query_as(
-        "SELECT image_id, target_id
-         FROM ingest_resolution
-         WHERE state = 'resolved' AND target_id IS NOT NULL",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(db_err)?;
+    let resolved = repo::list_resolved_ingest_resolutions(pool).await.map_err(db_err)?;
     if resolved.is_empty() {
         return Ok(0);
     }
-    let resolved: std::collections::HashMap<String, String> = resolved.into_iter().collect();
+    let resolved: std::collections::HashMap<String, String> =
+        resolved.into_iter().map(|r| (r.image_id, r.target_id)).collect();
 
-    let unlinked: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, frame_ids FROM acquisition_session WHERE canonical_target_id IS NULL",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(db_err)?;
+    let unlinked = repo::list_unlinked_acquisition_sessions(pool).await.map_err(db_err)?;
 
     let mut linked = 0usize;
-    for (session_id, frame_ids_json) in unlinked {
-        let frames: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
+    for session in unlinked {
+        let frames: Vec<String> = serde_json::from_str(&session.frame_ids).unwrap_or_default();
         let Some(target_id) = frames.iter().find_map(|f| resolved.get(f)) else {
             continue;
         };
-        sqlx::query(
-            "UPDATE acquisition_session SET canonical_target_id = ?
-             WHERE id = ? AND canonical_target_id IS NULL",
-        )
-        .bind(target_id)
-        .bind(&session_id)
-        .execute(pool)
-        .await
-        .map_err(db_err)?;
+        repo::set_acquisition_session_canonical_target_if_null(pool, &session.id, target_id)
+            .await
+            .map_err(db_err)?;
         // T075/FR-052: newly resolved via back-fill → propagate.
-        propagate_target_to_projects(pool, &session_id, target_id).await?;
+        propagate_target_to_projects(pool, &session.id, target_id).await?;
         linked += 1;
     }
     Ok(linked)
@@ -535,14 +625,12 @@ pub async fn backfill_session_targets(pool: &SqlitePool) -> Result<usize, Contra
 
 /// Read FITS/XISF header metadata for a file, or `None` when unreadable /
 /// unsupported (treated as "not an ingestable light", never an error).
+///
+/// Served through [`crate::metadata_cache::cached_extract`] (in-memory caching
+/// layer F0), memoized by `(path, mtime, size)` — a burst of reads for the
+/// same file during a scan does not re-parse the header once per caller.
 fn read_metadata(abs_path: &Path) -> Option<RawFileMetadata> {
-    if let Ok(Some(m)) = FitsExtractor.extract(abs_path) {
-        return Some(m);
-    }
-    if let Ok(Some(m)) = XisfExtractor.extract(abs_path) {
-        return Some(m);
-    }
-    None
+    crate::metadata_cache::cached_extract(abs_path).ok()
 }
 
 /// True when the frame's `IMAGETYP` normalizes to a light frame. Calibration
@@ -646,6 +734,22 @@ mod tests {
         .unwrap();
     }
 
+    /// Insert a minimal `library_root` row so `acquisition_session.root_id`'s
+    /// FK (migration 0021) is satisfiable in tests that pass a `root_id` to
+    /// `upsert_session`.
+    async fn seed_library_root(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
+             VALUES (?, ?, ?, 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(id)
+        .bind(id)
+        .bind(format!("/tmp/{id}"))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     async fn seed_project(pool: &SqlitePool, id: &str) {
         repo_projects::insert_project(
             pool,
@@ -657,6 +761,7 @@ mod tests {
                 path: &format!("projects/{id}"),
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -729,13 +834,16 @@ mod tests {
     async fn upsert_session_insert_branch_with_no_linked_project_does_not_error() {
         let db = test_db().await;
         seed_canonical_target(db.pool(), "target-1", "M 31").await;
+        seed_library_root(db.pool(), "root-1").await;
 
         // A brand-new session (INSERT branch of upsert_session) resolves a
         // target immediately; `project_sources` cannot yet reference this
         // session's id (a project can only link an *existing* session in the
         // real UI flow), so there is no linked project. The INSERT-branch
         // propagation call must be a safe no-op, not a panic/error.
-        upsert_session(db.pool(), "sk-1", false, Some("target-1"), "image-1").await.unwrap();
+        upsert_session(db.pool(), "sk-1", false, Some("target-1"), "image-1", "root-1")
+            .await
+            .unwrap();
 
         let (canonical_target_id,): (Option<String>,) = sqlx::query_as(
             "SELECT canonical_target_id FROM acquisition_session WHERE session_key = 'sk-1'",
@@ -746,14 +854,73 @@ mod tests {
         assert_eq!(canonical_target_id.as_deref(), Some("target-1"));
     }
 
+    /// Regression test for #470 round 6: `acquisition_session.root_id`
+    /// (migration 0021) was never written by real ingest — `upsert_session`'s
+    /// INSERT/UPDATE statements simply omitted the column, and the
+    /// `update_acquisition_session_root_id` repo fn that existed specifically
+    /// to set it (T036/FR-012) was never called from anywhere. Every
+    /// downstream reader that assumes `root_id` is populated
+    /// (`app_core_projects::source_view_generate`) got sqlx's silent
+    /// NULL-into-`String` coercion to `""` instead, and failed with a
+    /// confusing `no_link_kind`/"source root  could not be resolved" (double
+    /// space) rather than a clear error.
+    ///
+    /// Registers the root through the REAL `roots.register` repo path
+    /// (`persistence_db::repositories::first_run::register_source`) — a
+    /// `registered_sources` row, NOT a hand-seeded `library_root` row — and
+    /// mirrors it via the same `ensure_library_root` (R9) call the real
+    /// `ingest_light_frame` pipeline makes, so this test exercises the actual
+    /// production root-resolution path rather than a `library_root`-only
+    /// fixture shortcut that would mask the same gap the backend unit test
+    /// for `source_view_generate` originally did.
+    #[tokio::test]
+    async fn upsert_session_persists_root_id_from_a_really_registered_source() {
+        let db = test_db().await;
+
+        let register_req = domain_core::first_run::RegisterSourceRequest {
+            kind: domain_core::first_run::SourceKind::LightFrames,
+            path: "/tmp/e2e-lights".to_owned(),
+            kind_subtype: None,
+            scan_depth: domain_core::first_run::ScanDepth::Recursive,
+            organization_state: domain_core::first_run::OrganizationState::Organized,
+        };
+        let registered =
+            persistence_db::repositories::first_run::register_source(db.pool(), &register_req)
+                .await
+                .unwrap();
+
+        // R9: the same mirroring `ingest_light_frame` performs before ever
+        // calling `upsert_session` — real users hit this via the applied
+        // plan's `to_root_id`, which is a `registered_sources` id.
+        let mirrored_path = ensure_library_root(db.pool(), &registered.source_id).await.unwrap();
+        assert_eq!(mirrored_path.as_deref(), Some("/tmp/e2e-lights"));
+
+        upsert_session(db.pool(), "sk-root-real", false, None, "image-1", &registered.source_id)
+            .await
+            .unwrap();
+
+        let (root_id,): (String,) =
+            sqlx::query_as("SELECT root_id FROM acquisition_session WHERE session_key = ?")
+                .bind("sk-root-real")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            root_id, registered.source_id,
+            "acquisition_session.root_id must be set to the real registered source id, not left \
+             empty/unset"
+        );
+    }
+
     #[tokio::test]
     async fn upsert_session_backfill_branch_propagates_when_project_prelinked() {
         let db = test_db().await;
         seed_canonical_target(db.pool(), "target-1", "M 31").await;
         seed_project(db.pool(), "proj-1").await;
+        seed_library_root(db.pool(), "root-1").await;
 
         // First frame arrives with no resolvable target — session created NULL.
-        upsert_session(db.pool(), "sk-2", false, None, "image-1").await.unwrap();
+        upsert_session(db.pool(), "sk-2", false, None, "image-1", "root-1").await.unwrap();
         let (session_id,): (String,) =
             sqlx::query_as("SELECT id FROM acquisition_session WHERE session_key = 'sk-2'")
                 .fetch_one(db.pool())
@@ -763,7 +930,9 @@ mod tests {
 
         // Second frame in the same session resolves — back-fill branch runs and
         // must propagate to the now-linked project.
-        upsert_session(db.pool(), "sk-2", false, Some("target-1"), "image-2").await.unwrap();
+        upsert_session(db.pool(), "sk-2", false, Some("target-1"), "image-2", "root-1")
+            .await
+            .unwrap();
 
         let got =
             repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
@@ -797,7 +966,7 @@ mod tests {
         .unwrap();
 
         // A session with an unresolved (NULL) target, one frame.
-        upsert_session(db.pool(), "sk-3", false, None, "image-1").await.unwrap();
+        upsert_session(db.pool(), "sk-3", false, None, "image-1", "root-1").await.unwrap();
         let (session_id,): (String,) =
             sqlx::query_as("SELECT id FROM acquisition_session WHERE session_key = 'sk-3'")
                 .fetch_one(db.pool())
@@ -822,5 +991,173 @@ mod tests {
         let got =
             repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
         assert_eq!(got.as_deref(), Some("target-1"));
+    }
+
+    // ── backfill_session_geometry (F-Framing-5) ────────────────────────────────
+
+    #[tokio::test]
+    async fn backfill_session_geometry_populates_from_first_frame() {
+        let db = test_db().await;
+        seed_library_root(db.pool(), "root-geo").await;
+        let session_id = upsert_session(db.pool(), "sk-geo-1", false, None, "image-1", "root-geo")
+            .await
+            .unwrap();
+
+        let meta = RawFileMetadata {
+            telescop: Some("RASA 8".to_owned()),
+            instrume: Some("ASI2600MM".to_owned()),
+            focal_length_mm: Some(400.0),
+            ra_deg: Some(83.633),
+            dec_deg: Some(22.0145),
+            rotator_angle_deg: Some(1.5),
+            ..RawFileMetadata::default()
+        };
+        backfill_session_geometry(db.pool(), &session_id, &meta).await.unwrap();
+
+        let geo =
+            framing_repo::get_session_geometry(db.pool(), &session_id).await.unwrap().unwrap();
+        assert_eq!(geo.pointing_ra_deg, Some(83.633));
+        assert_eq!(geo.pointing_dec_deg, Some(22.0145));
+        assert_eq!(geo.rotation_deg, Some(1.5));
+        assert_eq!(geo.optic_train_key.as_deref(), Some("rasa 8|asi2600mm|400"));
+    }
+
+    /// Q16 null semantics: a later frame's missing header data must never
+    /// regress an already-known geometry field to NULL (mirrors
+    /// `upsert_session`'s `root_id` COALESCE precedent).
+    #[tokio::test]
+    async fn backfill_session_geometry_never_regresses_a_known_field_to_null() {
+        let db = test_db().await;
+        seed_library_root(db.pool(), "root-geo2").await;
+        let session_id = upsert_session(db.pool(), "sk-geo-2", false, None, "image-1", "root-geo2")
+            .await
+            .unwrap();
+
+        let complete = RawFileMetadata {
+            telescop: Some("RASA 8".to_owned()),
+            instrume: Some("ASI2600MM".to_owned()),
+            focal_length_mm: Some(400.0),
+            ra_deg: Some(83.633),
+            dec_deg: Some(22.0145),
+            rotator_angle_deg: Some(1.5),
+            ..RawFileMetadata::default()
+        };
+        backfill_session_geometry(db.pool(), &session_id, &complete).await.unwrap();
+
+        // A second frame in the same session with a blank header.
+        let empty = RawFileMetadata::default();
+        backfill_session_geometry(db.pool(), &session_id, &empty).await.unwrap();
+
+        let geo =
+            framing_repo::get_session_geometry(db.pool(), &session_id).await.unwrap().unwrap();
+        assert_eq!(geo.pointing_ra_deg, Some(83.633), "known RA must not regress to NULL");
+        assert_eq!(geo.optic_train_key.as_deref(), Some("rasa 8|asi2600mm|400"));
+    }
+
+    // ── bind_chosen_framing (F-Framing-10) ──────────────────────────────────────
+
+    async fn seed_project_row(pool: &SqlitePool, id: &str) {
+        repo_projects::insert_project(
+            pool,
+            &repo_projects::InsertProject {
+                id,
+                name: id,
+                tool: "PixInsight",
+                lifecycle: "ready",
+                path: &format!("projects/{id}"),
+                notes: None,
+                canonical_target_id: None,
+                is_mosaic: false,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn seed_framing_row(pool: &SqlitePool, id: &str, project_id: &str) {
+        framing_repo::insert_framing(
+            pool,
+            &framing_repo::InsertFraming {
+                id,
+                project_id,
+                target_id: None,
+                optic_train_key: "rasa 8|asi2600mm|400",
+                pointing_ra_deg: 83.633,
+                pointing_dec_deg: 22.0145,
+                rotation_deg: 0.0,
+                tolerance_pointing: 0.1,
+                tolerance_rotation_deg: 3.0,
+                clustering: "suggested",
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn bind_chosen_framing_adds_the_session_when_the_plan_has_a_pick() {
+        let db = test_db().await;
+        seed_project_row(db.pool(), "proj-bind").await;
+        seed_framing_row(db.pool(), "framing-bind", "proj-bind").await;
+        plans_repo::insert_plan(
+            db.pool(),
+            &plans_repo::InsertPlan {
+                id: "plan-bind",
+                title: "test",
+                origin: "inbox",
+                origin_path: None,
+                plan_type: "split",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        plans_repo::set_chosen_framing_id(db.pool(), "plan-bind", "framing-bind").await.unwrap();
+
+        seed_library_root(db.pool(), "root-bind").await;
+        let session_id = upsert_session(db.pool(), "sk-bind", false, None, "image-1", "root-bind")
+            .await
+            .unwrap();
+
+        bind_chosen_framing(db.pool(), "plan-bind", &session_id).await.unwrap();
+
+        assert_eq!(
+            framing_repo::get_framing_id_for_session(db.pool(), &session_id).await.unwrap(),
+            Some("framing-bind".to_owned())
+        );
+    }
+
+    #[tokio::test]
+    async fn bind_chosen_framing_is_a_noop_when_the_plan_has_no_pick() {
+        let db = test_db().await;
+        plans_repo::insert_plan(
+            db.pool(),
+            &plans_repo::InsertPlan {
+                id: "plan-nopick",
+                title: "test",
+                origin: "inbox",
+                origin_path: None,
+                plan_type: "split",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        seed_library_root(db.pool(), "root-nopick").await;
+        let session_id =
+            upsert_session(db.pool(), "sk-nopick", false, None, "image-1", "root-nopick")
+                .await
+                .unwrap();
+
+        bind_chosen_framing(db.pool(), "plan-nopick", &session_id).await.unwrap();
+
+        assert_eq!(
+            framing_repo::get_framing_id_for_session(db.pool(), &session_id).await.unwrap(),
+            None
+        );
     }
 }

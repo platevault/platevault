@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Lifecycle transition, ledger, provenance, and artifact use cases.
 //!
 //! Groups the lifecycle-domain use-case modules (spec 002 / spec 012). Each

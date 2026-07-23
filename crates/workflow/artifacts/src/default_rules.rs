@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Default PixInsight + Siril artifact classification rule sets (spec 012 T012).
 //!
 //! Rules are based on research item R-2 (naming conventions per tool).

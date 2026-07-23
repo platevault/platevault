@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Developer Contract Diagnostics use cases (spec 021).
 //!
 //! This module is only compiled when the `dev-tools` Cargo feature is active.

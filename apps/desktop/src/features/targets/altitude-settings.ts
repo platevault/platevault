@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * altitude-settings.ts — user-configurable usable-altitude threshold (spec 044).
  *
@@ -15,7 +18,11 @@
  * threshold now survives relaunch and is not device-local-only).
  */
 
-import { useUsableAltitude, getUsableAltitude, saveUsableAltitude } from './observing-sites/site-store';
+import {
+  useUsableAltitude,
+  getUsableAltitude,
+  saveUsableAltitude,
+} from './observing-sites/site-store';
 import { USABLE_ALT_DEG } from './planner-altitude';
 
 /** Minimum allowed threshold value (degrees). */

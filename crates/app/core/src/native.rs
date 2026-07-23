@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Native filesystem control use cases (spec 004).
 //!
 //! Thin orchestration layer providing input validation, error mapping to

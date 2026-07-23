@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project-create orchestration: create + mkdir-only scaffolding auto-apply.
 //!
 //! Lives in `app_core` (not `app_core_projects`) because it orchestrates
@@ -49,9 +52,10 @@ const TERMINAL_POLL_INTERVAL_MS: u64 = 25;
 pub async fn create(
     pool: &SqlitePool,
     bus: &EventBus,
+    redb_cache: &dyn simbad_resolver::Cache,
     req: &ProjectCreateRequest,
 ) -> Result<ProjectCreateResult, ContractError> {
-    let mut result = project_setup::create(pool, bus, req).await?;
+    let mut result = project_setup::create(pool, bus, redb_cache, req).await?;
 
     let Some(plan_id) = result.plan_id.clone() else {
         return Ok(result);
@@ -126,7 +130,14 @@ mod tests {
             initial_sources: vec![],
             notes: None,
             canonical_target_id: None,
+            is_mosaic: false,
         }
+    }
+
+    /// These tests create projects with no `canonical_target_id`, so
+    /// `create`'s promotion never touches the cache.
+    fn empty_cache() -> simbad_resolver::RedbCache {
+        simbad_resolver::Store::in_memory().unwrap().cache()
     }
 
     /// Happy path: the scaffolding plan auto-applies and the tool folders
@@ -137,7 +148,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let project_path = format!("{}/m31", root.path().to_str().unwrap());
 
-        let result = create(db.pool(), &bus, &make_req("M31 LRGB", &project_path)).await.unwrap();
+        let result = create(db.pool(), &bus, &empty_cache(), &make_req("M31 LRGB", &project_path))
+            .await
+            .unwrap();
 
         assert_eq!(result.scaffold_applied, Some(true), "mkdir-only plan must auto-apply");
 
@@ -150,6 +163,53 @@ mod tests {
         let plan_id = result.plan_id.expect("plan_id present");
         let plan = plans_repo::get_plan(db.pool(), &plan_id, false).await.unwrap();
         assert_eq!(plan.state, "applied");
+    }
+
+    /// astro-plan-l3y0: the `write_manifest` plan item previously fell
+    /// through to `ExecutorItemAction::NoOp` (`plan_apply/paths.rs`), so
+    /// auto-apply reported the whole plan "applied" while the app-owned
+    /// project marker file was never written to disk. Proves the marker is a
+    /// real file with the correct project id — not just that the executor
+    /// was invoked — and that its own durable `audit_log_entry` row exists
+    /// (constitution §II: an audit record per attempted action and outcome).
+    #[tokio::test]
+    async fn create_auto_apply_writes_project_marker_to_disk_with_audit() {
+        let (db, bus) = setup().await;
+        let root = tempfile::tempdir().unwrap();
+        let project_path = format!("{}/ngc7000", root.path().to_str().unwrap());
+
+        let result = create(db.pool(), &bus, &empty_cache(), &make_req("NGC 7000", &project_path))
+            .await
+            .unwrap();
+
+        assert_eq!(result.scaffold_applied, Some(true), "mkdir + marker plan must auto-apply");
+
+        let marker_path = format!("{project_path}/.astro-plan-project.json");
+        let marker_content = std::fs::read_to_string(&marker_path).unwrap_or_else(|e| {
+            panic!("project marker file must exist on disk at {marker_path}: {e}")
+        });
+        let parsed = project_structure::parse_marker(&marker_content)
+            .expect("marker file must be valid, versioned marker JSON");
+        assert_eq!(parsed.project_id, result.project_id, "marker must record the project's own id");
+
+        // The per-item audit trail (constitution §II) must cover the marker
+        // write specifically, not just the sibling mkdir items.
+        let plan_id = result.plan_id.expect("plan_id present");
+        let items = plans_repo::list_plan_items(db.pool(), &plan_id).await.unwrap();
+        let marker_item = items
+            .iter()
+            .find(|i| i.action == "write_manifest")
+            .expect("plan must contain the write_manifest item");
+
+        let (payload,): (String,) = sqlx::query_as(
+            "SELECT payload FROM audit_log_entry \
+             WHERE payload LIKE '%' || ? || '%' AND to_state = 'succeeded' LIMIT 1",
+        )
+        .bind(&marker_item.id)
+        .fetch_one(db.pool())
+        .await
+        .expect("a durable audit_log_entry row must record the write_manifest item's outcome");
+        assert!(payload.contains(&marker_item.id));
     }
 
     /// Failure path: a file blocking a scaffolding folder makes the apply
@@ -165,7 +225,9 @@ mod tests {
         std::fs::write(format!("{project_path}/lights"), b"in the way").unwrap();
 
         let result =
-            create(db.pool(), &bus, &make_req("Blocked Project", &project_path)).await.unwrap();
+            create(db.pool(), &bus, &empty_cache(), &make_req("Blocked Project", &project_path))
+                .await
+                .unwrap();
 
         assert_eq!(
             result.scaffold_applied,

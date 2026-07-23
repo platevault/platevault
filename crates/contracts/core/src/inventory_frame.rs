@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-frame inventory contract DTOs (spec 048 T006).
 //!
 //! Covers `inventory.frame.list`, `inventory.reconcile.run`,

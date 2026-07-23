@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Compare-and-swap (CAS) check for per-item FS revalidation (R-FS-1).
 //!
 //! Before each item mutation the executor checks that the source file's
@@ -95,6 +98,28 @@ pub fn check_cas(path: &Utf8Path, snapshot: &CasSnapshot) -> Result<(), PlanItem
     Ok(())
 }
 
+/// Capture the current `(mtime, size)` of a real file on disk as a fresh
+/// [`CasSnapshot`] (R-FS-1). Meant to be called at plan-approval time
+/// (`approve_plan`) to stamp `approved_mtime`/`approved_size_bytes`, so the
+/// *later* `check_cas` call at apply time has something to compare against
+/// instead of silently skipping (permissive mode — #829).
+///
+/// Returns `None` if the path cannot be stat'd (already gone, or the mtime
+/// cannot be represented as RFC 3339) — callers should treat this the same
+/// as "no snapshot" rather than fail the approval outright: a missing source
+/// will be caught for real at apply time (`SourceMissing`).
+#[must_use]
+pub fn snapshot_from_metadata(path: &Utf8Path) -> Option<CasSnapshot> {
+    let meta = std::fs::metadata(path).ok()?;
+    let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
+    let mtime = meta.modified().ok().and_then(system_time_to_iso);
+    Some(CasSnapshot { approved_mtime: mtime, approved_size_bytes: Some(size) })
+}
+
+fn system_time_to_iso(st: SystemTime) -> Option<String> {
+    time::OffsetDateTime::from(st).format(&time::format_description::well_known::Rfc3339).ok()
+}
+
 fn parse_iso_to_system_time(iso: &str) -> Option<SystemTime> {
     // Use time crate for RFC3339 parsing.
     let odt =
@@ -179,5 +204,42 @@ mod tests {
         };
         let err = check_cas(&file, &snapshot).unwrap_err();
         assert_eq!(err.code, FailureCode::ItemStale);
+    }
+
+    // ── #829: snapshot_from_metadata (approval-time stamping) ─────────────────
+
+    #[test]
+    fn snapshot_from_metadata_round_trips_through_check_cas() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = utf8(dir.path()).join("approved.fits");
+        std::fs::write(&file, b"approved contents").unwrap();
+
+        let snapshot = snapshot_from_metadata(&file).expect("stat must succeed for a real file");
+        assert!(snapshot.approved_mtime.is_some());
+        assert_eq!(snapshot.approved_size_bytes, Some(17));
+
+        // Unchanged file: the snapshot taken "at approval" must still pass.
+        assert!(check_cas(&file, &snapshot).is_ok());
+    }
+
+    #[test]
+    fn snapshot_from_metadata_then_check_cas_catches_a_later_size_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = utf8(dir.path()).join("modified.fits");
+        std::fs::write(&file, b"original").unwrap();
+
+        let snapshot = snapshot_from_metadata(&file).unwrap();
+
+        // Source modified after approval (#829's exact repro: content changes
+        // between approve and apply).
+        std::fs::write(&file, b"modified-longer-content").unwrap();
+
+        let err = check_cas(&file, &snapshot).unwrap_err();
+        assert_eq!(err.code, FailureCode::ItemStale);
+    }
+
+    #[test]
+    fn snapshot_from_metadata_returns_none_for_missing_file() {
+        assert!(snapshot_from_metadata(Utf8Path::new("/absolutely/does/not/exist.fits")).is_none());
     }
 }

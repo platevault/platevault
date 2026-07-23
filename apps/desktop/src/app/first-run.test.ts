@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 020 — first-run index gate test (T052) + redirect-loop-fix coverage.
  * When setup is incomplete the index route redirects to /setup; when complete
@@ -7,16 +10,20 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGetPreferences, mockSetPreference, mockFirstrunState } = vi.hoisted(() => ({
-  mockGetPreferences: vi.fn(),
-  mockSetPreference: vi.fn(),
-  mockFirstrunState: vi.fn(),
-}));
+const { mockGetPreferences, mockSetPreference, mockFirstrunState } = vi.hoisted(
+  () => ({
+    mockGetPreferences: vi.fn(),
+    mockSetPreference: vi.fn(),
+    mockFirstrunState: vi.fn(),
+  }),
+);
 vi.mock('@/data/preferences', () => ({
   getPreferences: mockGetPreferences,
   setPreference: mockSetPreference,
 }));
-vi.mock('@/bindings/index', () => ({ commands: { firstrunState: mockFirstrunState } }));
+vi.mock('@/bindings/index', () => ({
+  commands: { firstrunState: mockFirstrunState },
+}));
 
 import { checkFirstRunComplete } from '@/app/first-run';
 
@@ -59,7 +66,10 @@ describe('checkFirstRunComplete — real backend (DB is source of truth)', () =>
   it('returns false when the DB has no completedAt and corrects a stale-true cache', async () => {
     // The redirect-loop scenario: cache says done, DB says not done.
     mockGetPreferences.mockReturnValue({ setupCompleted: true });
-    mockFirstrunState.mockResolvedValue({ status: 'ok', data: { completedAt: null } });
+    mockFirstrunState.mockResolvedValue({
+      status: 'ok',
+      data: { completedAt: null },
+    });
     await expect(checkFirstRunComplete()).resolves.toBe(false);
     expect(mockSetPreference).toHaveBeenCalledWith('setupCompleted', false);
   });

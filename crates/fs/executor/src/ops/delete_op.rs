@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Permanent delete primitive (spec 025, FR-004, FR-017).
 //!
 //! Requires `confirm_required = true` on the plan item. If the caller does

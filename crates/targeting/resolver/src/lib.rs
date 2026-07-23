@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Target resolution module (spec 035: SIMBAD Target Resolution).
 //!
 //! Resolves astronomical target identities on demand against SIMBAD, backed by
@@ -27,6 +30,7 @@
 
 pub mod cache;
 pub mod caldwell;
+pub mod cone_search;
 pub mod seed;
 pub mod simbad;
 
@@ -256,11 +260,16 @@ pub struct ResolvedAlias {
 }
 
 impl ResolvedAlias {
-    /// Build a [`ResolvedAlias`], computing the normalized form from `alias`.
+    /// Build a [`ResolvedAlias`], computing the normalized form from `alias`
+    /// via [`simbad_resolver::normalize::normalize`] — the single
+    /// normalization choke-point (spec 052 P1 T004, FR-007): every identity
+    /// string that ends up cached/persisted (TAP, Sesame, Caldwell, user
+    /// query, seed) passes through this one function, so alias variants of
+    /// one physical object dedup identically regardless of source.
     #[must_use]
     pub fn new(alias: impl Into<String>, kind: AliasKind) -> Self {
         let alias = alias.into();
-        let normalized = targeting::normalize::normalize(&alias);
+        let normalized = simbad_resolver::normalize::normalize(&alias);
         Self { alias, normalized, kind }
     }
 }
@@ -287,6 +296,12 @@ pub struct ResolvedIdentity {
     pub ra_deg: f64,
     /// ICRS J2000 declination in decimal degrees, `[-90, 90]`.
     pub dec_deg: f64,
+    /// Johnson V-band apparent magnitude (SIMBAD `allfluxes.V`, 0.2.0) when the
+    /// object has V photometry; `None` for objects without it (many extended /
+    /// dark objects) or for seed/override-only entries. Feeds
+    /// `canonical_target.magnitude` at the in-use write (spec 052 P1); never
+    /// fabricated.
+    pub v_mag: Option<f64>,
     /// All designations + common names for this object (the typeahead surface).
     pub aliases: Vec<ResolvedAlias>,
     /// Provenance of this identity.
@@ -383,6 +398,26 @@ pub trait Resolver: Send + Sync {
     }
 }
 
+// ── ExplicitResolver seam (spec 052 P2, FR-008/FR-009) ──────────────────────────
+
+/// The deliberate resolve/confirm entrypoint (Enter, confirm, "search harder")
+/// — distinct from [`Resolver::resolve`], which the debounced typeahead path
+/// uses and MUST stay TAP+cache only.
+///
+/// Kept as a separate trait (rather than a second parameter on
+/// [`Resolver::resolve`]) so a call site generic over `Resolver` alone (e.g.
+/// the ingest queue, typeahead) has no way to reach the Sesame fallback even
+/// by mistake — only code that explicitly asks for `ExplicitResolver` can.
+/// Implemented by the production `targeting_resolver::simbad::SimbadResolver`
+/// (TAP-first, Sesame-fallback-on-miss) and, for tests, [`FakeResolver`].
+#[async_trait::async_trait]
+pub trait ExplicitResolver: Resolver {
+    /// Same contract as [`Resolver::resolve`], but permitted to consult a
+    /// broader/slower fallback (production: SIMBAD Sesame) on a primary-path
+    /// miss.
+    async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError>;
+}
+
 // ── FakeResolver (test double) ──────────────────────────────────────────────────
 
 /// In-memory test double for [`Resolver`] (spec 035 R7).
@@ -410,6 +445,13 @@ pub struct FakeResolver {
     default_error: Option<ResolveError>,
     /// Number of times [`Resolver::resolve`] has been called.
     call_count: std::sync::atomic::AtomicUsize,
+    /// [`ExplicitResolver::resolve_explicit`]-only canned identity (spec 052
+    /// P2): models a Sesame hit the plain `resolve()` path (TAP-only) misses.
+    /// Falls back to [`Resolver::resolve`]'s own canned data when a query has
+    /// no explicit-only override registered.
+    explicit_responses: std::collections::HashMap<String, ResolvedIdentity>,
+    /// Number of times [`ExplicitResolver::resolve_explicit`] has been called.
+    explicit_call_count: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(any(test, feature = "test-fixture"))]
@@ -451,6 +493,22 @@ impl FakeResolver {
     pub fn call_count(&self) -> usize {
         self.call_count.load(std::sync::atomic::Ordering::Relaxed)
     }
+
+    /// Register a canned identity returned ONLY by
+    /// [`ExplicitResolver::resolve_explicit`] — models a Sesame-fallback hit
+    /// the plain (TAP-only) `resolve()` path misses (spec 052 P2, FR-008).
+    #[must_use]
+    pub fn with_explicit_response(mut self, query: &str, identity: ResolvedIdentity) -> Self {
+        self.explicit_responses.insert(targeting::normalize::normalize(query), identity);
+        self
+    }
+
+    /// Return the number of times [`ExplicitResolver::resolve_explicit`] has
+    /// been called.
+    #[must_use]
+    pub fn explicit_call_count(&self) -> usize {
+        self.explicit_call_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 // `FakeResolver` cannot derive `Clone` because `AtomicUsize` does not implement
@@ -464,6 +522,8 @@ impl Clone for FakeResolver {
             errors: self.errors.clone(),
             default_error: self.default_error.clone(),
             call_count: std::sync::atomic::AtomicUsize::new(0),
+            explicit_responses: self.explicit_responses.clone(),
+            explicit_call_count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
@@ -484,6 +544,31 @@ impl Resolver for FakeResolver {
     }
 }
 
+#[cfg(any(test, feature = "test-fixture"))]
+#[async_trait::async_trait]
+impl ExplicitResolver for FakeResolver {
+    async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        self.explicit_call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let key = targeting::normalize::normalize(query);
+        if let Some(identity) = self.explicit_responses.get(&key) {
+            return Ok(identity.clone());
+        }
+        // No explicit-only override registered: same canned data as resolve()
+        // (does not double-count against `call_count`, which tracks `resolve`
+        // specifically).
+        if let Some(err) = self.errors.get(&key) {
+            Err(err.clone())
+        } else if let Some(identity) = self.responses.get(&key) {
+            Ok(identity.clone())
+        } else {
+            Err(self
+                .default_error
+                .clone()
+                .unwrap_or_else(|| ResolveError::NotFound(query.to_owned())))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,6 +581,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: Some(3.44),
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -503,6 +589,28 @@ mod tests {
             ],
             source: TargetSource::Resolved,
         }
+    }
+
+    // ── Normalization choke-point (spec 052 P1 T004, FR-007) ──────────────────
+
+    /// Alias spellings as they'd arrive from different sources — a TAP
+    /// cross-ID (compact, no space), a seed/Caldwell canonical designation
+    /// (space-separated), and a raw user query (extra whitespace) — must all
+    /// normalize to the identical key through the single choke-point
+    /// ([`ResolvedAlias::new`], which calls
+    /// [`simbad_resolver::normalize::normalize`]), so they dedup onto one
+    /// physical object regardless of which path produced them.
+    #[test]
+    fn resolved_alias_normalizes_identically_across_sources() {
+        let tap_style = ResolvedAlias::new("M31", AliasKind::Designation);
+        let seed_style = ResolvedAlias::new("M 31", AliasKind::Designation);
+        let caldwell_style = ResolvedAlias::new("M  31", AliasKind::Designation);
+        let user_query_style = ResolvedAlias::new("  m31  ", AliasKind::User);
+
+        assert_eq!(tap_style.normalized, "m 31");
+        assert_eq!(tap_style.normalized, seed_style.normalized);
+        assert_eq!(tap_style.normalized, caldwell_style.normalized);
+        assert_eq!(tap_style.normalized, user_query_style.normalized);
     }
 
     // ── ObjectType mapping (T005) ──────────────────────────────────────────────

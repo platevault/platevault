@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Migration 0045 integration tests (spec 041, T003).
 #![allow(clippy::doc_markdown)]
 //!
@@ -9,6 +12,8 @@
 //!   - inbox_classification_evidence has the new override columns.
 //!   - plan_items accepts 'catalogue' as a valid action value.
 
+mod common;
+
 use persistence_db::Database;
 use uuid::Uuid;
 
@@ -18,8 +23,15 @@ fn new_id() -> String {
 
 async fn setup() -> Database {
     let db = Database::in_memory().await.expect("in-memory db");
-    db.migrate().await.expect("migrations should apply cleanly");
+    // Uncached: this file exists to cover the migration chain, so replaying a
+    // schema snapshot would mean the thing under test never ran (#1230).
+    db.migrate_uncached().await.expect("migrations should apply cleanly");
     db
+}
+
+/// A database migrated to 0044 -- the last version before 0045.
+async fn setup_pre_0045() -> Database {
+    common::migrated_to(44).await
 }
 
 /// Seed a registered_source row with the given kind (bypassing the ORM so we
@@ -49,64 +61,57 @@ async fn migration_0045_applies_on_fresh_db() {
 
 // ── Backfill: non-inbox → organized, inbox → unorganized ─────────────────────
 
+/// The backfill is exercised by running migration 0045 against rows that
+/// existed before it (#1231).
+///
+/// These tests used to seed a fully-migrated database and then run a
+/// hand-copied duplicate of the migration's own UPDATE, which meant they
+/// asserted only that SQLite executes a CASE expression -- they passed
+/// regardless of what 0045 did, and would still have passed if 0045 were
+/// deleted outright.
 #[tokio::test]
-async fn backfill_non_inbox_source_gets_organized() {
-    let db = setup().await;
-    let id = new_id();
-    // After migration the column already exists with the DEFAULT 'unorganized',
-    // so we insert a light_frames row and verify backfill set it to 'organized'.
-    seed_source(db.pool(), &id, "light_frames").await;
+async fn backfill_sets_organization_state_from_source_kind() {
+    let db = setup_pre_0045().await;
 
-    // Update to mimic what the backfill UPDATE would have done for a pre-existing row.
-    // (In a fresh DB the INSERT fires after migration, so the backfill already ran;
-    // the INSERT uses the DEFAULT. But the backfill step corrects kind != 'inbox'
-    // rows that existed *before* the migration. Here we confirm the value is correct
-    // by running the same UPDATE and reading it back.)
-    sqlx::query(
-        "UPDATE registered_sources SET organization_state = CASE \
-             WHEN kind = 'inbox' THEN 'unorganized' ELSE 'organized' END \
-         WHERE id = ?",
-    )
-    .bind(&id)
-    .execute(db.pool())
-    .await
-    .expect("apply backfill logic");
+    let inbox_id = new_id();
+    let light_id = new_id();
+    seed_source(db.pool(), &inbox_id, "inbox").await;
+    seed_source(db.pool(), &light_id, "light_frames").await;
 
-    let (state,): (String,) =
+    // The column does not exist yet, so these rows are genuinely pre-0045.
+    let pre_existing: Result<(String,), _> =
         sqlx::query_as("SELECT organization_state FROM registered_sources WHERE id = ?")
-            .bind(&id)
+            .bind(&inbox_id)
             .fetch_one(db.pool())
-            .await
-            .expect("fetch organization_state");
+            .await;
+    assert!(
+        pre_existing.is_err(),
+        "organization_state must not exist before 0045, or this test is not testing the backfill"
+    );
 
-    assert_eq!(state, "organized", "non-inbox source must be 'organized' after backfill");
-}
+    common::migrate_through(&db, 45).await;
 
-#[tokio::test]
-async fn backfill_inbox_source_stays_unorganized() {
-    let db = setup().await;
-    let id = new_id();
-    seed_source(db.pool(), &id, "inbox").await;
+    let state_of = async |id: &str| -> String {
+        sqlx::query_as::<_, (String,)>(
+            "SELECT organization_state FROM registered_sources WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_one(db.pool())
+        .await
+        .expect("fetch organization_state")
+        .0
+    };
 
-    // Apply the same backfill logic (inbox → unorganized).
-    sqlx::query(
-        "UPDATE registered_sources SET organization_state = CASE \
-             WHEN kind = 'inbox' THEN 'unorganized' ELSE 'organized' END \
-         WHERE id = ?",
-    )
-    .bind(&id)
-    .execute(db.pool())
-    .await
-    .expect("apply backfill logic");
-
-    let (state,): (String,) =
-        sqlx::query_as("SELECT organization_state FROM registered_sources WHERE id = ?")
-            .bind(&id)
-            .fetch_one(db.pool())
-            .await
-            .expect("fetch organization_state");
-
-    assert_eq!(state, "unorganized", "inbox source must be 'unorganized' after backfill");
+    assert_eq!(
+        state_of(&inbox_id).await,
+        "unorganized",
+        "0045 must backfill a pre-existing inbox source to 'unorganized'"
+    );
+    assert_eq!(
+        state_of(&light_id).await,
+        "organized",
+        "0045 must backfill a pre-existing non-inbox source to 'organized'"
+    );
 }
 
 // ── inbox_file_metadata table exists ─────────────────────────────────────────

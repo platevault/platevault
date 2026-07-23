@@ -142,3 +142,25 @@ new crate, no new IPC command.
   step components) — coordinate with spec 048's wizard hook to avoid conflicting edits (FR-025).
 - **RA/Dec**: already available — `target.list`'s `TargetListItem` carries `raDeg`/`decDeg` (verified;
   integration test `crates/app/targets/src/target_management.rs:612–629`). No plumbing needed.
+
+## Iterate 2026-07-15 — planner observability UX (FR-029–FR-039)
+
+Presentation-layer + one equipment field; no ephemeris/rule math changes.
+Decision record: `docs/research/044-047-planner-observability-ux-iterate.md`.
+File impact (tasks T040–T049):
+
+- `apps/desktop/src/features/targets/planner-derive.ts` — expose dark/uptime
+  windows, binding-blocker reason (darkness > altitude > moon), actionable-
+  moon-limiter boolean, OSC strictest-band aggregation + per-line windows.
+- `apps/desktop/src/features/targets/TargetsTable.tsx` — drop sparkline +
+  visible-tonight columns, glyph cell; stays on the existing sort/group
+  engine (T036's deferral assessment stands).
+- `apps/desktop/src/styles/components/merges-3.css:323-355` — content-driven
+  survivor-column widths (#792).
+- `apps/desktop/src/features/targets/TargetDetailV2.tsx:140-243` — no-dark
+  rendering (#817), twilight/threshold/moon-excluded overlays, three-quantity
+  breakdown, OSC per-line list.
+- Planner toolbar — "Computed for: site · lat · twilight · ≥N° · change".
+- `apps/desktop/src/features/settings/Equipment.tsx` + equipment contract in
+  `packages/contracts` (+ Rust DTO/persistence) — `sensorType`/`passband`.
+- `astro/moon-avoidance.ts` — consumed verbatim, unchanged (047-owned).

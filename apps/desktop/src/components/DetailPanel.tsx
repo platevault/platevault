@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * DetailPanel — tasks #100/#99/#101, spec 043 §4.
  *
@@ -8,27 +11,34 @@
  *     left  — title (item identity) + optional titleExtra (pills) +
  *              optional subtitle (one prose context line)
  *     right — actions (per-item buttons)
- *   BODY — up to 3 balanced zones when slots are provided:
- *     FACTS (left rail, BOUNDED): col `minmax(220px, 0.26fr)`.
- *       Dense identity KV. Does NOT scroll on its own.
- *       Omit to collapse to 2-zone or content-only.
- *     CONTENT (center, always present): `minmax(0, 1fr)`.
- *       The page's PRIMARY table/list. This is THE ONLY scroll region.
- *     AUX (right rail, BOUNDED, only when `aux` provided): col `minmax(240px, 0.30fr)`.
- *       Secondary blocks (review state, linked projects, usage stats).
+ *   BODY — a single CONTENT region (`.pv-detailpanel__content`), ALWAYS
+ *     rendered. It is THE ONLY scroll region in the panel: the header stays
+ *     pinned and everything below it scrolls as one.
  *
- * Grid template per slot combination:
- *   facts + children + aux  → 3-zone: [0.26fr]  [1fr]  [0.30fr]
- *   facts + children        → 2-zone: [0.26fr]  [1fr]
- *   children + aux          → 2-zone: [1fr]  [0.30fr]
- *   children only           → 1-zone: [1fr]   (no wrapper)
- *
- * Auto-expand behavior: the dock (.alm-listpage__detail) is height:fit-content
+ * Auto-expand behavior: the dock (.pv-listpage__detail) is height:fit-content
  * capped at clamp(220px, 40vh, 52vh). The dock DOES NOT scroll — only the
- * CONTENT column scrolls (overflow-y:auto, scrollbar-gutter:stable). Remove
+ * CONTENT region scrolls (overflow-y:auto, scrollbar-gutter:stable). Remove
  * any overflow on the outer detail-body to avoid double scrollbars.
  *
- * The close ✕ lives in ListPageLayout (onCloseDetail), NOT here.
+ * #1107 — why CONTENT is unconditional. This component used to render the
+ * content wrapper only when a `facts` or `aux` rail slot was passed. NO caller
+ * ever passed one — they existed solely in this component's own tests — so in
+ * production the wrapper was NEVER rendered and the "only scroll region" did
+ * not exist. Details fell back to the ancestor `.pv-listpage__detail-body`,
+ * which is `overflow:hidden`, making overflowing content unreachable rather
+ * than merely unscrolled. Three features hit this and each patched it locally
+ * (#553 Inbox, #816 Targets, #1107 Calibration) while Sessions (522px) and
+ * Projects (1216px) stayed silently broken at a 390px side dock. The rails are
+ * withdrawn (spec 054); this single region replaces all three local fixes.
+ * Do NOT make the wrapper conditional again.
+ *
+ * The close ✕ lives in ListPageLayout (onCloseDetail), NOT here — as does
+ * Escape-to-close (#771/#906): ListPageLayout owns a document-level Escape
+ * listener that calls onCloseDetail/onCloseBottomDetail, and explicitly
+ * checks the DOM for an open Base UI overlay (Dialog/Select/Combobox/Menu)
+ * before firing — `stopPropagation()` on a same-target sibling `document`
+ * listener does NOT block this one, so Base UI's own Escape dismissal can't
+ * be relied on alone to keep this listener from also closing the panel.
  * Per-item contextual actions (Review / Assign / …) go in the `actions` slot.
  *
  * Row-data de-duplication contract (#100):
@@ -59,14 +69,14 @@ export interface FactsKVProps {
 
 export function FactsKV({ label, value, provenance }: FactsKVProps) {
   return (
-    <div className="alm-detailpanel__kv">
-      <dt className="alm-detailpanel__kv-label">
+    <div className="pv-detailpanel__kv">
+      <dt className="pv-detailpanel__kv-label">
         {label}
         {provenance && (
-          <span className="alm-detailpanel__kv-prov">{provenance}</span>
+          <span className="pv-detailpanel__kv-prov">{provenance}</span>
         )}
       </dt>
-      <dd className="alm-detailpanel__kv-value">{value}</dd>
+      <dd className="pv-detailpanel__kv-value">{value}</dd>
     </div>
   );
 }
@@ -89,22 +99,10 @@ export interface DetailPanelProps {
   /** Per-item contextual action buttons (act on THIS item, not the page). */
   actions?: ReactNode;
   /**
-   * Left rail — identity KV. When provided the body renders with a bounded
-   * left column (minmax(220px, 0.26fr)). When omitted, content spans from left.
-   * Typically a <dl> of <FactsKV> rows, or a RailCard wrapping them.
-   */
-  facts?: ReactNode;
-  /**
-   * Center column — the page's PRIMARY table/list. Always present when any
-   * slot is provided. This is THE ONLY scroll region inside the panel body.
+   * Panel body — the page's PRIMARY table/list. Rendered inside
+   * `.pv-detailpanel__content`, THE ONLY scroll region inside the panel.
    */
   children?: ReactNode;
-  /**
-   * Right rail — secondary blocks (review state, linked projects, usage stats,
-   * FileInspector). When provided the body gains a bounded right column
-   * (minmax(240px, 0.30fr)). When omitted, content spans to the right edge.
-   */
-  aux?: ReactNode;
   /**
    * Modifier applied to the outer element. Used to scope density overrides
    * per feature (e.g. 'sessions', 'calibration', 'inbox').
@@ -124,28 +122,13 @@ export function DetailPanel({
   titleExtra,
   subtitle,
   actions,
-  facts,
   children,
-  aux,
   variant,
   fill,
 }: DetailPanelProps) {
-  const hasFacts = facts != null;
-  const hasAux = aux != null;
-  // Only render the grid wrapper when at least one rail slot is provided.
-  // content-only → no wrapper (children render directly, as before).
-  const hasSlots = hasFacts || hasAux;
-
-  // Build modifier classes for CSS grid-template selection.
-  const modifiers = [
-    variant ? `alm-detailpanel--${variant}` : '',
-    hasFacts ? 'alm-detailpanel--has-facts' : '',
-    hasAux ? 'alm-detailpanel--has-aux' : '',
-  ].filter(Boolean).join(' ');
-
-  const colsClass = modifiers
-    ? `alm-detailpanel__cols ${modifiers}`
-    : 'alm-detailpanel__cols';
+  const contentClass = variant
+    ? `pv-detailpanel__content pv-detailpanel--${variant}`
+    : 'pv-detailpanel__content';
 
   return (
     <DetailPane fill={fill}>
@@ -155,19 +138,7 @@ export function DetailPanel({
         subtitle={subtitle}
         actions={actions}
       />
-      {hasSlots ? (
-        <div className={colsClass}>
-          {hasFacts && (
-            <aside className="alm-detailpanel__facts">{facts}</aside>
-          )}
-          <div className="alm-detailpanel__content">{children}</div>
-          {hasAux && (
-            <aside className="alm-detailpanel__aux">{aux}</aside>
-          )}
-        </div>
-      ) : (
-        children
-      )}
+      <div className={contentClass}>{children}</div>
     </DetailPane>
   );
 }

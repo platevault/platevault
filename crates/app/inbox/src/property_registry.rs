@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Typed property registry for the field-agnostic inbox reclassifier (spec 041
 //! R-13 / FR-044).
 //!
@@ -354,11 +357,10 @@ pub fn property_registry() -> Vec<PropertyRegistryEntry> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn registry_is_non_empty() {
-        let reg = property_registry();
-        assert!(!reg.is_empty(), "registry must have at least one entry");
-    }
+    // `registry_is_non_empty` removed: `!reg.is_empty()` has no discriminating
+    // power (any non-empty registry passes regardless of content) and is
+    // fully subsumed by `required_r13_keys_present` below, which already
+    // implies non-emptiness while also verifying every mandated key exists.
 
     #[test]
     fn all_keys_are_unique() {

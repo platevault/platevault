@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vitest unit tests for spec 026 source-views helpers.
  *
@@ -15,9 +18,13 @@ import {
   viewStateVariant,
   canRemoveView,
   canRegenerateView,
+  canVerifyView,
+  brokenItemStateLabel,
+  observedStateLabel,
   listPreparedViews,
   removePreparedView,
   regeneratePreparedView,
+  verifySourceView,
 } from './source-views';
 import type { PreparedViewSummary } from './source-views';
 
@@ -25,10 +32,11 @@ import type { PreparedViewSummary } from './source-views';
 // source-views now calls commands.preparedview* + unwrap; mock the bindings'
 // Result envelope and let the real unwrap run.
 
-const { mockList, mockRemove, mockRegenerate } = vi.hoisted(() => ({
+const { mockList, mockRemove, mockRegenerate, mockVerify } = vi.hoisted(() => ({
   mockList: vi.fn(),
   mockRemove: vi.fn(),
   mockRegenerate: vi.fn(),
+  mockVerify: vi.fn(),
 }));
 
 vi.mock('@/bindings/index', () => ({
@@ -36,6 +44,7 @@ vi.mock('@/bindings/index', () => ({
     preparedviewList: mockList,
     preparedviewRemove: mockRemove,
     preparedviewRegenerate: mockRegenerate,
+    sourceviewVerify: mockVerify,
   },
 }));
 
@@ -73,7 +82,9 @@ describe('viewStateLabel', () => {
 
   it('falls back to the raw state string for unknown values', () => {
     // Cast to bypass TypeScript to test the default branch
-    expect(viewStateLabel('unknown_future_state' as never)).toBe('unknown_future_state');
+    expect(viewStateLabel('unknown_future_state' as never)).toBe(
+      'unknown_future_state',
+    );
   });
 });
 
@@ -142,6 +153,10 @@ describe('canRegenerateView', () => {
     expect(canRegenerateView('stale')).toBe(true);
   });
 
+  it('allows regeneration for missing (T014 sweep: whole view folder gone)', () => {
+    expect(canRegenerateView('missing')).toBe(true);
+  });
+
   it('blocks regeneration for current', () => {
     expect(canRegenerateView('current')).toBe(false);
   });
@@ -152,6 +167,84 @@ describe('canRegenerateView', () => {
 
   it('blocks regeneration for kind_diverged', () => {
     expect(canRegenerateView('kind_diverged')).toBe(false);
+  });
+});
+
+// ── canVerifyView / brokenItemStateLabel (spec 049 US4) ───────────────────────
+
+describe('canVerifyView', () => {
+  it('allows verification for current', () => {
+    expect(canVerifyView('current')).toBe(true);
+  });
+
+  it('allows verification for stale', () => {
+    expect(canVerifyView('stale')).toBe(true);
+  });
+
+  it('blocks verification for removed', () => {
+    expect(canVerifyView('removed')).toBe(false);
+  });
+
+  it('blocks verification for failed', () => {
+    expect(canVerifyView('failed')).toBe(false);
+  });
+
+  it('blocks verification for kind_diverged', () => {
+    expect(canVerifyView('kind_diverged')).toBe(false);
+  });
+});
+
+describe('brokenItemStateLabel', () => {
+  it('describes missing', () => {
+    expect(brokenItemStateLabel('missing')).toContain('missing');
+  });
+
+  it('describes moved', () => {
+    expect(brokenItemStateLabel('moved')).toContain('moved');
+  });
+
+  it('describes unresolved_link', () => {
+    expect(brokenItemStateLabel('unresolved_link')).toContain('resolve');
+  });
+
+  it('describes changed_kind', () => {
+    expect(brokenItemStateLabel('changed_kind')).toContain('kind');
+  });
+
+  it('falls back to the raw state string for unknown values', () => {
+    expect(brokenItemStateLabel('unknown_future_state' as never)).toBe(
+      'unknown_future_state',
+    );
+  });
+});
+
+// ── observedStateLabel (spec 026 T014/T015/T016 stale-detection sweep) ────────
+
+describe('observedStateLabel', () => {
+  it('describes present', () => {
+    expect(observedStateLabel('present')).toBe('present');
+  });
+
+  it('describes missing', () => {
+    expect(observedStateLabel('missing')).toContain('missing');
+  });
+
+  it('describes changed_kind', () => {
+    expect(observedStateLabel('changed_kind')).toContain('kind');
+  });
+
+  it('describes diverged', () => {
+    expect(observedStateLabel('diverged')).toContain('diverged');
+  });
+
+  it('describes hash_diverged', () => {
+    expect(observedStateLabel('hash_diverged')).toContain('content');
+  });
+
+  it('falls back to the raw state string for unknown values', () => {
+    expect(observedStateLabel('unknown_future_state')).toBe(
+      'unknown_future_state',
+    );
   });
 });
 
@@ -167,7 +260,7 @@ const sampleView: PreparedViewSummary = {
   items: [],
 };
 
-const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+const ok = <T>(data: T) => ({ status: 'ok' as const, data });
 
 describe('listPreparedViews', () => {
   it('calls preparedview.list with projectId and returns views', async () => {
@@ -199,7 +292,10 @@ describe('removePreparedView', () => {
   });
 
   it('propagates errors from the backend', async () => {
-    mockRemove.mockRejectedValueOnce({ code: 'lifecycle.read_only', message: 'archived' });
+    mockRemove.mockRejectedValueOnce({
+      code: 'lifecycle.read_only',
+      message: 'archived',
+    });
 
     await expect(removePreparedView('view-arch')).rejects.toMatchObject({
       code: 'lifecycle.read_only',
@@ -209,7 +305,9 @@ describe('removePreparedView', () => {
 
 describe('regeneratePreparedView', () => {
   it('calls preparedview.regenerate with viewId and returns planId + unresolvedCount', async () => {
-    mockRegenerate.mockResolvedValueOnce(ok({ planId: 'plan-xyz', unresolvedItemCount: 2 }));
+    mockRegenerate.mockResolvedValueOnce(
+      ok({ planId: 'plan-xyz', unresolvedItemCount: 2 }),
+    );
 
     const result = await regeneratePreparedView('view-removed');
 
@@ -219,9 +317,55 @@ describe('regeneratePreparedView', () => {
   });
 
   it('surfaces view.not_found error', async () => {
-    mockRegenerate.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
+    mockRegenerate.mockRejectedValueOnce({
+      code: 'view.not_found',
+      message: 'missing',
+    });
 
     await expect(regeneratePreparedView('gone')).rejects.toMatchObject({
+      code: 'view.not_found',
+    });
+  });
+});
+
+describe('verifySourceView', () => {
+  it('calls sourceview.verify with viewId and returns a clean result', async () => {
+    mockVerify.mockResolvedValueOnce(ok({ clean: true, brokenItems: [] }));
+
+    const result = await verifySourceView('view-1');
+
+    expect(mockVerify).toHaveBeenCalledWith('view-1');
+    expect(result.clean).toBe(true);
+    expect(result.brokenItems).toEqual([]);
+  });
+
+  it('returns broken items without throwing (read-only check)', async () => {
+    mockVerify.mockResolvedValueOnce(
+      ok({
+        clean: false,
+        brokenItems: [
+          {
+            inventoryItemId: 'frame-1',
+            viewRelativePath: '/dest/light1.fits',
+            state: 'moved',
+          },
+        ],
+      }),
+    );
+
+    const result = await verifySourceView('view-broken');
+    expect(result.clean).toBe(false);
+    expect(result.brokenItems).toHaveLength(1);
+    expect(result.brokenItems?.[0].state).toBe('moved');
+  });
+
+  it('surfaces view.not_found error', async () => {
+    mockVerify.mockRejectedValueOnce({
+      code: 'view.not_found',
+      message: 'missing',
+    });
+
+    await expect(verifySourceView('gone')).rejects.toMatchObject({
       code: 'view.not_found',
     });
   });

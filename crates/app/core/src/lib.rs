@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Application use-case orchestration boundary.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
@@ -46,17 +49,28 @@ pub use lifecycle::{
 };
 pub use projects::{
     prepared_views, project_health, project_manifests, project_notes, project_setup,
-    source_view_generate,
+    source_view_generate, source_view_verify,
 };
 pub use targets::{
-    ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_management,
-    target_resolve, target_search,
+    ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_favourites,
+    target_management, target_resolve, target_search,
 };
 
 // In-crate modules (file layout under `src/`). These live in `app_core` itself
 // and may reference the extracted domain crates as `crate::errors`,
 // `crate::lifecycle`, etc. via the re-exports above.
 pub mod archive_generator;
+/// Deterministic `entity_id` derivation for audit rows keyed by a plain
+/// string (source id, attempted path) rather than a real UUID (T123/T125).
+mod audit_ids;
+/// Process-global in-memory cache statics for `app_core`-owned domain types
+/// (in-memory caching layer, F0 foundation): `library_root` path lookups and
+/// `source_protection_state`/defaults. See each accessor's doc comment for
+/// its owning write-site invalidation calls.
+pub mod caches;
+/// #886 calibration master archive plan generator (mirrors
+/// [`archive_generator`] for a single master instead of a whole project).
+pub mod calibration_archive_generator;
 pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
@@ -64,13 +78,20 @@ pub mod first_run;
 /// Per-frame inventory use cases (spec 048): `inventory.frame.list` and the
 /// on-demand `inventory.reconcile.run` pass.
 pub mod frame_inventory;
-pub mod guided_flow;
+/// `framing.list` / `framing.merge` / `framing.split` / `framing.reassign`
+/// use cases (spec 008 Q27, F-Framing-3).
+pub mod framing;
 /// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
 /// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
 pub mod inbox_plan;
+/// Resolves scan traversal options from persisted ingestion settings.
+pub mod inbox_scan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;
+/// Onboarding use cases and item registry (spec 056) — successor to the
+/// removed spec-010 first-project coach.
+pub mod onboarding;
 /// Path-set overlap comparison for the cross-plan concurrency guard
 /// (spec 025 FR-017 / R-Concur-1). Pure, camino-only helper consumed by
 /// [`plan_apply`]; relocated here after the vestigial `fs/planner` crate was
@@ -78,6 +99,10 @@ pub mod native;
 pub mod path_set;
 pub mod patterns;
 pub mod plan_apply;
+/// `plans.free_space_estimate` (issue #876) — split out of `plans.rs` to stay
+/// clear of the in-flight #979 split on that file; depends only on
+/// `plans::get_plan`.
+pub mod plan_free_space;
 pub mod plans;
 /// Project-create orchestration (create + mkdir-only scaffolding auto-apply,
 /// user decision 2026-07-04). Lives in `app_core` (not `app_core_projects`)
@@ -277,7 +302,12 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "app_core");
+        // CRATE_NAME has no consumers today (nothing reads it outside this
+        // test): assert against the real source of truth (Cargo.toml's
+        // `name`, via CARGO_PKG_NAME) instead of mirroring the same literal
+        // the constant is defined with, so a Cargo.toml rename that forgets
+        // to update CRATE_NAME is caught.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 
     #[test]

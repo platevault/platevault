@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Inbox plan-state listener (spec 005, T030).
 //!
 //! Subscribes to the audit event bus and transitions `InboxItem.state` when a
@@ -6,16 +9,20 @@
 //! - `plan.applying.completed` with `terminal_state = "applied"` →
 //!   `InboxItem.state = "resolved"` + delete `inbox_plan_links` row.
 //! - `plan.applying.completed` with any other terminal
-//!   (`partially_applied`, `failed`, `cancelled`) →
-//!   `InboxItem.state = "classified"` + delete `inbox_plan_links` row.
-//! - `plan.discarded` →
-//!   `InboxItem.state = "classified"` + delete `inbox_plan_links` row.
+//!   (`partially_applied`, `failed`, `cancelled`) → back to unconfirmed +
+//!   delete `inbox_plan_links` row.
+//! - `plan.discarded` → back to unconfirmed + delete `inbox_plan_links` row.
+//!
+//! "Back to unconfirmed" is `classified` or `pending_classification` depending
+//! on whether the row carries its own `frame_type` (spec 058 SC-003); it is
+//! derived in SQL by `reset_inbox_item_to_unconfirmed`, never asserted here.
 //!
 //! The listener is started once at application startup via
 //! [`start_inbox_plan_listener`] which spawns a detached `tokio::task`. It is
-//! NOT the only safety mechanism — [`crate::inbox::repair::run_repair`]
-//! provides a periodic background sweep for items whose plan closed while the
-//! listener was not running (crash, restart, missed event).
+//! NOT the only safety mechanism — [`crate::repair::run_repair`] provides a
+//! periodic background sweep for items whose plan closed while the listener was
+//! not running (crash, restart, missed event). Both halves of R-PlanOpen are
+//! started by [`start_inbox_plan_listener`].
 //!
 //! # Event bus limitations
 //!
@@ -30,8 +37,17 @@ use audit::event_bus::{
     PlanApplyingCompleted, PlanDiscarded, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_DISCARDED,
 };
 use persistence_db::repositories::inbox as inbox_repo;
+use persistence_db::repositories::plans as plans_repo;
+use persistence_db::repositories::q_inbox::{
+    self, InsertCalibrationFingerprint, InsertCalibrationSession,
+};
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
+use targeting_resolver::simbad::ResolveCache;
+use tokio::sync::{broadcast, Mutex};
+
+/// Serializes applied-plan side effects shared by the event listener and repair
+/// sweep. Both can observe the same plan link before either path removes it.
+static PLAN_COMPLETION_LOCK: Mutex<()> = Mutex::const_new(());
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -42,12 +58,44 @@ use tokio::sync::broadcast;
 ///
 /// The `EventBus` is cloned into the task so the spec-035 light-frame ingest
 /// (`handle_plan_completed` → `ingest_light_frames`) can emit `target.resolved`
-/// events for inline cache hits.
-pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus) {
+/// events for inline cache hits. `resolve_cache` (also cheap to clone — an
+/// `Arc` handle) is threaded through to
+/// [`ingest_light_frames_if_applicable`], which uses it to trigger an
+/// immediate ingest-resolution drain pass after a plan's light frames are
+/// ingested (issue #1256) instead of waiting on the periodic backstop.
+pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus, resolve_cache: ResolveCache) {
     let mut rx = bus.subscribe();
     let bus = bus.clone();
+    spawn_repair_sweep(pool.clone(), bus.clone(), resolve_cache.clone());
     tokio::spawn(async move {
-        run_listener_loop(pool, bus, &mut rx).await;
+        run_listener_loop(pool, bus, resolve_cache, &mut rx).await;
+    });
+}
+
+/// Interval between repair sweeps (Ref: R-PlanOpen).
+const REPAIR_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_mins(5);
+
+/// Spawn the periodic [`crate::repair::run_repair`] sweep — the safety-net half
+/// of R-PlanOpen, started alongside its event-driven counterpart because the
+/// two are only correct together.
+///
+/// `tokio::time::interval` fires its first tick immediately, which is wanted: a
+/// plan that closed while the app was down is repaired at startup rather than
+/// five minutes into the session.
+///
+/// `bus` and `resolve_cache` are the same handles the event path uses: the
+/// sweep runs the identical applied-plan side effects via
+/// [`complete_applied_plan`], and those emit `target.resolved` events and drain
+/// the ingest-resolution queue.
+fn spawn_repair_sweep(pool: SqlitePool, bus: EventBus, resolve_cache: ResolveCache) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(REPAIR_SWEEP_INTERVAL);
+        loop {
+            ticker.tick().await;
+            if let Err(e) = crate::repair::run_repair(&pool, &bus, &resolve_cache).await {
+                tracing::warn!("inbox repair sweep: {e}");
+            }
+        }
     });
 }
 
@@ -56,12 +104,13 @@ pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus) {
 async fn run_listener_loop(
     pool: SqlitePool,
     bus: EventBus,
+    resolve_cache: ResolveCache,
     rx: &mut broadcast::Receiver<audit::event_bus::EventEnvelope<serde_json::Value>>,
 ) {
     loop {
         match rx.recv().await {
             Ok(envelope) => {
-                if let Err(e) = handle_event(&pool, &bus, &envelope).await {
+                if let Err(e) = handle_event(&pool, &bus, &resolve_cache, &envelope).await {
                     tracing::warn!("inbox plan_listener: error handling event: {e}");
                 }
             }
@@ -86,6 +135,7 @@ async fn run_listener_loop(
 async fn handle_event(
     pool: &SqlitePool,
     bus: &EventBus,
+    resolve_cache: &ResolveCache,
     envelope: &audit::event_bus::EventEnvelope<serde_json::Value>,
 ) -> Result<(), String> {
     match envelope.topic.as_str() {
@@ -93,7 +143,7 @@ async fn handle_event(
             if let Ok(payload) =
                 serde_json::from_value::<PlanApplyingCompleted>(envelope.payload.clone())
             {
-                handle_plan_completed(pool, bus, &payload).await?;
+                handle_plan_completed(pool, bus, resolve_cache, &payload).await?;
             }
         }
         TOPIC_PLAN_DISCARDED => {
@@ -110,30 +160,54 @@ async fn handle_event(
 async fn handle_plan_completed(
     pool: &SqlitePool,
     bus: &EventBus,
+    resolve_cache: &ResolveCache,
     payload: &PlanApplyingCompleted,
 ) -> Result<(), String> {
-    let new_state = if payload.terminal_state == "applied" {
-        // spec 041 US4/T032: master registration is relocated here from the old
-        // confirm-time fast path. When the applied plan belongs to a detected
-        // calibration master inbox item, register the master now — this applies
-        // whether the master was catalogued (organized source) or moved
-        // (unorganized source). Registration happens before the resolved
-        // transition so a failure leaves the item recoverable.
-        register_master_if_applicable(pool, &payload.plan_id).await?;
-        // spec 035 US4/T042: fold the plan's applied light frames into
-        // acquisition sessions grouped by capture identity, linking the resolved
-        // canonical target (FR-016). Calibration frames are excluded (handled by
-        // the master path above). Idempotent (R12); a failure here is logged but
-        // does not block the inbox item's resolved transition — the frames can be
-        // re-ingested by re-applying or a future repair sweep.
-        ingest_light_frames_if_applicable(pool, bus, &payload.plan_id).await;
-        "resolved"
+    if payload.terminal_state == "applied" {
+        complete_applied_plan(pool, bus, resolve_cache, &payload.plan_id).await
     } else {
-        // partially_applied, failed, cancelled → allow re-split
-        "classified"
-    };
+        // partially_applied, failed, cancelled → allow re-split, back to
+        // whatever unconfirmed state the row's own frame type supports.
+        transition_via_plan_id(pool, &payload.plan_id, None).await
+    }
+}
 
-    transition_via_plan_id(pool, &payload.plan_id, new_state).await
+/// Run the applied-plan side effects, then resolve the linked inbox item.
+///
+/// Shared by the event path ([`handle_plan_completed`]) and the crash-recovery
+/// sweep ([`crate::repair::run_repair`]); the sweep re-derives "this plan is
+/// applied" from committed state instead of from an event, but must produce the
+/// identical outcome, so both call this rather than duplicating the sequence.
+///
+/// Ordering invariant: [`transition_via_plan_id`] deletes the
+/// `inbox_plan_links` row, which is the only work queue the sweep has. It
+/// therefore runs strictly after [`register_master_if_applicable`] returns
+/// `Ok` — a propagated registration error leaves both the link and the
+/// `plan_open` state in place so the next sweep retries.
+///
+/// [`ingest_light_frames_if_applicable`] deliberately does not participate in
+/// that guard: it logs and swallows its errors (spec 035 US4/T042, R12), so a
+/// per-frame metadata/IO problem never strands the inbox item.
+pub(crate) async fn complete_applied_plan(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    resolve_cache: &ResolveCache,
+    plan_id: &str,
+) -> Result<(), String> {
+    let _completion_guard = PLAN_COMPLETION_LOCK.lock().await;
+
+    // spec 041 US4/T032: master registration is relocated here from the old
+    // confirm-time fast path. When the applied plan belongs to a detected
+    // calibration master inbox item, register the master now — this applies
+    // whether the master was catalogued (organized source) or moved
+    // (unorganized source).
+    register_master_if_applicable(pool, plan_id).await?;
+    // spec 035 US4/T042: fold the plan's applied light frames into acquisition
+    // sessions grouped by capture identity, linking the resolved canonical
+    // target (FR-016). Calibration frames are excluded (handled by the master
+    // path above).
+    ingest_light_frames_if_applicable(pool, bus, plan_id, resolve_cache).await;
+    transition_via_plan_id(pool, plan_id, Some("resolved")).await
 }
 
 /// Ingest the applied light frames of a completed plan into acquisition sessions
@@ -143,7 +217,23 @@ async fn handle_plan_completed(
 /// header marks them as light frames, so non-inbox and calibration plans are
 /// no-ops. Errors are logged rather than propagated so a metadata/IO problem on
 /// one frame never blocks the inbox lifecycle transition.
-async fn ingest_light_frames_if_applicable(pool: &SqlitePool, bus: &EventBus, plan_id: &str) {
+///
+/// issue #1256: on success, spawns a detached ingest-resolution drain pass
+/// ([`app_core_targets::ingest_resolution::drain_and_backfill_once`])
+/// immediately afterward, rather than leaving newly-`pending` rows (a cache
+/// miss enqueued by `ingest_light_frames` above) to wait for the ~30s
+/// periodic backstop (`desktop_shell::bootstrap::background::
+/// spawn_ingest_resolution_drain`). Spawned (not awaited) so a slow/offline
+/// SIMBAD lookup never blocks this listener's event loop from processing the
+/// next bus event; it is safe to spawn after the `.await` above because the
+/// enqueue it depends on has already committed by then — no read-before-write
+/// race with the drain's own query.
+async fn ingest_light_frames_if_applicable(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    plan_id: &str,
+    resolve_cache: &ResolveCache,
+) {
     match app_core_targets::ingest_sessions::ingest_light_frames(pool, Some(bus), plan_id).await {
         Ok(summary) if summary.ingested > 0 || summary.skipped > 0 => {
             tracing::info!(
@@ -156,8 +246,17 @@ async fn ingest_light_frames_if_applicable(pool: &SqlitePool, bus: &EventBus, pl
         Ok(_) => {}
         Err(e) => {
             tracing::warn!(plan_id, "inbox plan_listener: light-frame ingest failed: {e:?}");
+            return;
         }
     }
+
+    let pool = pool.clone();
+    let bus = bus.clone();
+    let resolve_cache = resolve_cache.clone();
+    tokio::spawn(async move {
+        app_core_targets::ingest_resolution::drain_and_backfill_once(&pool, &bus, &resolve_cache)
+            .await;
+    });
 }
 
 /// Register a calibration master at plan-apply completion (spec 041 US4/T032).
@@ -187,13 +286,10 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     }
 
     // Idempotency guard: skip if a session already references this inbox item.
-    let existing: Option<(String,)> =
-        sqlx::query_as("SELECT id FROM calibration_session WHERE source_inbox_item_id = ? LIMIT 1")
-            .bind(&item.id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| format!("check existing calibration_session: {e}"))?;
-    if existing.is_some() {
+    let exists = q_inbox::calibration_session_exists_for_inbox_item(pool, &item.id)
+        .await
+        .map_err(|e| format!("check existing calibration_session: {e}"))?;
+    if exists {
         return Ok(());
     }
 
@@ -213,9 +309,21 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     // `frame_ids` instead of the historical `'[]'` placeholder. A resolution
     // failure (destination path not found / stat failure) is logged and
     // leaves `frame_ids` empty — never blocks master registration.
+    //
+    // `resolved_root_id` (spec 006's `calibration_session.root_id`, migration
+    // 0021) is captured from the same lookup and written below — this table
+    // had the identical gap as `acquisition_session` (#470 round 6): the
+    // column existed, `persistence_db::repositories::inventory::
+    // update_calibration_session_root_id` existed to set it, but nothing
+    // ever called the setter or wrote the column at insert time, so every
+    // real calibration master's `root_id` stayed `NULL` (silently decoded as
+    // `""` by sqlx-sqlite, masking the gap from a plain string comparison).
+    let mut resolved_root_id: Option<String> = None;
     let frame_id = match resolve_applied_frame_path(pool, plan_id).await {
         Ok(Some((root_id, relative_path))) => {
-            match write_calibration_frame_record(pool, &root_id, &relative_path).await {
+            let outcome = write_calibration_frame_record(pool, &root_id, &relative_path).await;
+            resolved_root_id = Some(root_id);
+            match outcome {
                 Ok(id) => Some(id),
                 Err(e) => {
                     tracing::warn!(
@@ -244,32 +352,38 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
         None => "[]".to_owned(),
     };
 
-    sqlx::query(
-        "INSERT INTO calibration_session
-            (id, session_key, frame_ids, kind, created_at, source_inbox_item_id)
-         VALUES (?, ?, ?, ?, datetime('now'), ?)",
+    q_inbox::insert_calibration_session(
+        pool,
+        &InsertCalibrationSession {
+            id: &session_id,
+            session_key: &session_key,
+            frame_ids_json: &frame_ids_json,
+            kind: cal_kind,
+            root_id: resolved_root_id.as_deref(),
+            source_inbox_item_id: &item.id,
+        },
     )
-    .bind(&session_id)
-    .bind(&session_key)
-    .bind(&frame_ids_json)
-    .bind(cal_kind)
-    .bind(&item.id)
-    .execute(pool)
     .await
     .map_err(|e| format!("insert calibration_session: {e}"))?;
 
-    sqlx::query(
-        "INSERT INTO calibration_fingerprint
-            (id, calibration_type, exposure_s, filter_name)
-         VALUES (?, ?, ?, ?)",
+    q_inbox::insert_calibration_fingerprint(
+        pool,
+        &InsertCalibrationFingerprint {
+            calibration_session_id: &session_id,
+            calibration_type: cal_kind,
+            exposure_s: item.master_exposure_s,
+            filter_name: item.master_filter.as_deref(),
+        },
     )
-    .bind(&session_id)
-    .bind(cal_kind)
-    .bind(item.master_exposure_s)
-    .bind(item.master_filter.as_deref())
-    .execute(pool)
     .await
     .map_err(|e| format!("insert calibration_fingerprint: {e}"))?;
+
+    // F0 invalidate-after-commit contract (crates/app/cache/src/lib.rs): both
+    // inserts above have committed (sqlx pool auto-commits per statement; no
+    // explicit transaction wraps them), so the masters snapshot cache is safe
+    // to clear now — never before, to avoid a reader repopulating it with a
+    // stale pre-commit value.
+    app_core_calibration::caches::invalidate_calibration_masters();
 
     tracing::info!(
         inbox_item_id = %item.id,
@@ -292,26 +406,21 @@ async fn resolve_applied_frame_path(
     pool: &SqlitePool,
     plan_id: &str,
 ) -> Result<Option<(String, String)>, String> {
-    let row: Option<(Option<String>, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT to_root_id, to_relative_path, from_root_id, from_relative_path
-         FROM plan_items
-         WHERE plan_id = ?
-           AND action IN ('move', 'catalogue')
-           AND item_state = 'succeeded'
-         ORDER BY item_index ASC
-         LIMIT 1",
-    )
-    .bind(plan_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| format!("query plan_items: {e}"))?;
-
-    let Some((to_root_id, to_rel, from_root_id, from_rel)) = row else {
+    // `list_plan_items` already orders by item_index ASC; find the first
+    // successful move/catalogue item (same ORDER BY + LIMIT 1 semantics as
+    // the original inline query).
+    let items = plans_repo::list_plan_items(pool, plan_id)
+        .await
+        .map_err(|e| format!("query plan_items: {e}"))?;
+    let Some(row) = items.into_iter().find(|it| {
+        matches!(it.action.as_str(), "move" | "catalogue") && it.item_state == "succeeded"
+    }) else {
         return Ok(None);
     };
-    Ok(match (to_root_id, from_root_id) {
-        (Some(r), _) if !to_rel.is_empty() => Some((r, to_rel)),
-        (_, Some(r)) => Some((r, from_rel)),
+
+    Ok(match (row.to_root_id, row.from_root_id) {
+        (Some(r), _) if !row.to_relative_path.is_empty() => Some((r, row.to_relative_path)),
+        (_, Some(r)) => Some((r, row.from_relative_path)),
         _ => None,
     })
 }
@@ -349,15 +458,19 @@ async fn write_calibration_frame_record(
 
 /// Called when a plan is discarded (any state → discarded).
 async fn handle_plan_discarded(pool: &SqlitePool, plan_id: &str) -> Result<(), String> {
-    transition_via_plan_id(pool, plan_id, "classified").await
+    transition_via_plan_id(pool, plan_id, None).await
 }
 
-/// Find the InboxItem linked to `plan_id`, transition it to `new_state`,
-/// and delete the plan link row.
-async fn transition_via_plan_id(
+/// Find the InboxItem linked to `plan_id`, transition it, and delete the plan
+/// link row.
+///
+/// `new_state = None` means "back to unconfirmed": the state is then derived
+/// from the row's own `frame_type` instead of being asserted, so a row with no
+/// frame type cannot be sent to `classified` (spec 058 SC-003).
+pub(crate) async fn transition_via_plan_id(
     pool: &SqlitePool,
     plan_id: &str,
-    new_state: &str,
+    new_state: Option<&str>,
 ) -> Result<(), String> {
     // Find the inbox item linked to this plan.
     let link = inbox_repo::get_plan_link_by_plan_id(pool, plan_id)
@@ -370,9 +483,11 @@ async fn transition_via_plan_id(
     };
 
     // Update inbox item state.
-    inbox_repo::update_inbox_item_state(pool, &link.inbox_item_id, new_state)
-        .await
-        .map_err(|e| format!("update_inbox_item_state({}): {e}", link.inbox_item_id))?;
+    match new_state {
+        Some(state) => inbox_repo::update_inbox_item_state(pool, &link.inbox_item_id, state).await,
+        None => inbox_repo::reset_inbox_item_to_unconfirmed(pool, &link.inbox_item_id).await,
+    }
+    .map_err(|e| format!("update_inbox_item_state({}): {e}", link.inbox_item_id))?;
 
     // Delete the plan link so the item can accept a new plan in the future.
     inbox_repo::delete_plan_link(pool, &link.inbox_item_id)
@@ -392,15 +507,19 @@ async fn transition_via_plan_id(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use audit::bus::EventBus;
     use audit::event_bus::{PlanApplyingCompleted, Source};
     use persistence_db::repositories::inbox::InsertInboxItem;
     use persistence_db::repositories::plans;
     use persistence_db::Database;
+    use targeting_resolver::cache::upsert_resolved;
+    use targeting_resolver::{
+        AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
+    };
 
-    async fn test_db() -> Database {
+    pub(crate) async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
@@ -438,6 +557,14 @@ mod tests {
         .await
         .unwrap();
 
+        // A confirmable item carries its own frame type (spec 058 SC-003);
+        // `insert_inbox_item` leaves it NULL, which would model an illegal row.
+        sqlx::query("UPDATE inbox_items SET frame_type = 'light' WHERE id = ?")
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
         inbox_repo::update_inbox_item_state(db.pool(), item_id, "plan_open").await.unwrap();
 
         let plan = plans::InsertPlan {
@@ -461,7 +588,7 @@ mod tests {
         let bus = make_bus(&db);
         setup_item_with_plan(&db, "item-t1", "plan-t1").await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = PlanApplyingCompleted {
             plan_id: "plan-t1".to_owned(),
@@ -486,13 +613,108 @@ mod tests {
         assert!(link.is_none(), "plan link should be deleted after resolution");
     }
 
+    /// issue #1256: a `plan.applying.completed`("applied") event must trigger
+    /// prompt resolution of pending `ingest_resolution` rows on its own — no
+    /// periodic backstop task is running in this test at all, so if the event
+    /// path didn't drain-and-backfill immediately, this row would never
+    /// resolve within the test's short sleep window (it previously only
+    /// resolved on a ~30s timer this test doesn't run).
+    #[tokio::test]
+    async fn applied_plan_triggers_prompt_target_resolution() {
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        setup_item_with_plan(&db, "item-t9", "plan-t9").await;
+
+        // A `library_root` + `file_record` so the `ingest_resolution` FK holds,
+        // plus a `pending` row left over from an earlier (unrelated) ingest —
+        // mirrors `app_core_targets::ingest_resolution`'s own
+        // `drain_cache_hit_resolves_without_resolver` test fixture.
+        let root_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
+             VALUES (?, 'test', '/tmp/test', 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&root_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        let image_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO file_record
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
+             VALUES (?, ?, 'pending.fits', 1, '2026-01-01T00:00:00Z', 'observed',
+                     '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&image_id)
+        .bind(&root_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Seed a resolvable canonical target (cache/seed hit — no network
+        // needed) and force a `pending` row directly, bypassing the inline
+        // cache-hit path in `associate_or_enqueue`.
+        upsert_resolved(
+            db.pool(),
+            &ResolvedIdentity {
+                simbad_oid: Some(1_575_544),
+                primary_designation: "M 31".to_owned(),
+                common_name: Some("Andromeda Galaxy".to_owned()),
+                object_type: ObjectType::Galaxy,
+                ra_deg: 10.684_708,
+                dec_deg: 41.268_75,
+                v_mag: None,
+                aliases: vec![
+                    ResolvedAlias::new("M 31", AliasKind::Designation),
+                    ResolvedAlias::new("NGC 224", AliasKind::Designation),
+                ],
+                source: TargetSource::Resolved,
+            },
+        )
+        .await
+        .unwrap();
+        app_core_targets::ingest_resolution::enqueue(db.pool(), &image_id, "NGC 224")
+            .await
+            .unwrap();
+
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
+
+        let payload = PlanApplyingCompleted {
+            plan_id: "plan-t9".to_owned(),
+            run_id: "run-t9".to_owned(),
+            terminal_state: "applied".to_owned(),
+            items_applied: 1,
+            items_failed: 0,
+            items_skipped: 0,
+            items_cancelled: 0,
+            at: "2026-07-20T00:00:00Z".to_owned(),
+        };
+        bus.publish(TOPIC_PLAN_APPLYING_COMPLETED, Source::System, payload).await.unwrap();
+
+        // Well under the 30s periodic backstop interval — proves the event
+        // path itself resolves promptly rather than depending on the timer.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let (state, target_id): (String, Option<String>) =
+            sqlx::query_as("SELECT state, target_id FROM ingest_resolution WHERE image_id = ?")
+                .bind(&image_id)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            state, "resolved",
+            "plan-applied event must trigger prompt resolution, not wait on a 30s backstop"
+        );
+        assert!(target_id.is_some());
+    }
+
     #[tokio::test]
     async fn failed_plan_transitions_back_to_classified() {
         let db = test_db().await;
         let bus = make_bus(&db);
         setup_item_with_plan(&db, "item-t2", "plan-t2").await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = PlanApplyingCompleted {
             plan_id: "plan-t2".to_owned(),
@@ -519,7 +741,7 @@ mod tests {
         let bus = make_bus(&db);
         setup_item_with_plan(&db, "item-t3", "plan-t3").await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = audit::event_bus::PlanDiscarded {
             plan_id: "plan-t3".to_owned(),
@@ -535,12 +757,42 @@ mod tests {
         assert_eq!(item.state, "classified");
     }
 
+    /// spec 058 SC-003 on the `plan.discarded` listener — the sibling writer to
+    /// `cancel_inbox_plan`. Both used to stamp the literal `classified`, so a
+    /// guard on either one alone leaves the other lying about the row.
+    #[tokio::test]
+    async fn discarded_plan_does_not_report_classified_without_a_frame_type_sc003() {
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        setup_item_with_plan(&db, "item-sc003", "plan-sc003").await;
+        sqlx::query("UPDATE inbox_items SET frame_type = NULL WHERE id = 'item-sc003'")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
+
+        let payload = audit::event_bus::PlanDiscarded {
+            plan_id: "plan-sc003".to_owned(),
+            prior_state: "ready_for_review".to_owned(),
+            discarded_at: "2025-10-10T22:00:00Z".to_owned(),
+        };
+        bus.publish(TOPIC_PLAN_DISCARDED, Source::User, payload).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let item = inbox_repo::get_inbox_item(db.pool(), "item-sc003").await.unwrap();
+        assert_eq!(
+            item.state, "pending_classification",
+            "an item with no frame type must not report `classified` after its plan is discarded"
+        );
+    }
+
     // ── spec 048 US1/T012: calibration master frame_ids population ─────────────
 
     /// Set up a real-file, applied (`item_state='succeeded'`) master-item plan
     /// linked to `item_id`/`plan_id`, with the master file written under
     /// `tmp`/`rel` at `size` bytes. Returns `(root_id, rel)`.
-    async fn setup_master_item_plan(
+    pub(crate) async fn setup_master_item_plan(
         db: &Database,
         tmp: &std::path::Path,
         item_id: &str,
@@ -644,7 +896,7 @@ mod tests {
         let size: usize = 4096;
         let (root_id, rel) = setup_master_item_plan(&db, tmp.path(), item_id, plan_id, size).await;
 
-        start_inbox_plan_listener(db.pool().clone(), &bus);
+        start_inbox_plan_listener(db.pool().clone(), &bus, ResolveCache::in_memory().unwrap());
 
         let payload = PlanApplyingCompleted {
             plan_id: plan_id.to_owned(),
@@ -680,5 +932,23 @@ mod tests {
         assert_eq!(size_bytes, expected_size, "real on-disk size, never 0");
         assert_eq!(stored_root, root_id);
         assert_eq!(stored_rel, rel);
+
+        // Regression for #470 round 6's twin bug: `calibration_session.root_id`
+        // (migration 0021) had the identical never-written gap as
+        // `acquisition_session.root_id` — this test already drives the real
+        // registered_sources → plan-apply → plan_listener path, so it is the
+        // right place to lock the fix in rather than adding a parallel test.
+        let (session_root_id,): (String,) = sqlx::query_as(
+            "SELECT root_id FROM calibration_session WHERE source_inbox_item_id = ?",
+        )
+        .bind(item_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            session_root_id, root_id,
+            "calibration_session.root_id must be set to the real registered source id, not left \
+             empty/unset"
+        );
     }
 }

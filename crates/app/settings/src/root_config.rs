@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-root reconcile/detection configuration (spec 048 T005).
 //!
 //! Per `research.md` R1, this reuses the existing generic `(scope, key,

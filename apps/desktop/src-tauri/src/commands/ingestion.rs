@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 ingestion settings commands (package P12: real persistence).
 //!
 //! Values are persisted through `app_core::settings::ingestion` — a thin

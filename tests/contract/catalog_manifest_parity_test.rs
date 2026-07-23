@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Conformance: the signed catalog manifest wire format must round-trip
 //! identically through BOTH the backend download parser
 //! (`targeting_catalogs::download`) AND the language-neutral contract DTO

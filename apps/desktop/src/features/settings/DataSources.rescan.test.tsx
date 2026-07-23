@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * DataSources "Rescan" flow tests (P6a).
@@ -20,8 +23,17 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { DataSources } from './DataSources';
+import { queryClient } from '@/data/queryClient';
 import type { LibraryRoot } from '@/bindings/types';
+
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+}
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
@@ -65,11 +77,12 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryClient.clear();
   mockSourceProtectionGet.mockResolvedValue({
     status: 'ok',
     data: {
       sourceId: 'root-1',
-      level: 'normal',
+      level: 'unprotected',
       blockPermanentDelete: false,
       categories: [],
       inheritsDefault: true,
@@ -77,32 +90,40 @@ beforeEach(() => {
   });
   mockOverridableKeys.mockResolvedValue({
     status: 'ok',
-    data: ['hashOnScan', 'followSymlinks'],
+    data: ['defaultProtection'],
   });
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+/** Issue #562: per-source actions live inside the kebab (⋯) menu now. */
+function openKebab() {
+  fireEvent.click(screen.getByRole('button', { name: /Source actions/i }));
+}
+
 describe('DataSources — Rescan', () => {
   it('calls the real inbox.scan_folder command and reloads roots on completion', async () => {
     mockRootsList
-      .mockResolvedValueOnce({ status: 'ok', data: [makeRoot({ lastScanned: null })] })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: [makeRoot({ lastScanned: null })],
+      })
       .mockResolvedValueOnce({
         status: 'ok',
         data: [makeRoot({ lastScanned: '2026-07-03T12:00:00Z' })],
       });
     mockScanFolder.mockResolvedValue({ status: 'ok', data: { items: [] } });
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Rescan$/i }));
 
     await waitFor(() => {
       expect(mockScanFolder).toHaveBeenCalledWith({
         rootId: 'root-1',
         rootAbsolutePath: '/astro/raw',
-        followSymlinks: false,
       });
     });
 
@@ -124,19 +145,26 @@ describe('DataSources — Rescan', () => {
       }),
     );
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Rescan$/i }));
 
+    // The kebab menu stays open across a Rescan click (unlike other items)
+    // so the disabled/relabeled state remains visible.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Rescanning/i })).toBeDisabled();
+      expect(
+        screen.getByRole('menuitem', { name: /Rescanning/i }),
+      ).toBeDisabled();
     });
 
     resolveScan?.({ status: 'ok', data: { items: [] } });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^Rescan$/i })).not.toBeDisabled();
+      expect(
+        screen.getByRole('menuitem', { name: /^Rescan$/i }),
+      ).not.toBeDisabled();
     });
   });
 
@@ -144,10 +172,11 @@ describe('DataSources — Rescan', () => {
     mockRootsList.mockResolvedValue({ status: 'ok', data: [makeRoot()] });
     mockScanFolder.mockResolvedValue({ status: 'ok', data: { items: [] } });
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Rescan$/i }));
 
     await waitFor(() => expect(mockScanFolder).toHaveBeenCalled());
     // `scan_start` was never wired into the mocked commands object at all —

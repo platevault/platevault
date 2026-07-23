@@ -371,6 +371,14 @@ and one runbook step, with no unmatched rows on either side.
 
 **Catalog integrity (US7)**
 
+> **Reconciliation note (2026-07-19, issue #764)**: US7/FR-026–FR-029 and
+> `tasks.md` T064–T071 describe the pre-spec-035 catalog-download signature
+> and licensing pipeline (spec 014). Spec 035's SIMBAD-resolution pivot
+> removed it entirely — no `catalogs.rs`, no `minisign` usage remain in the
+> tree. `tasks.md` still marks T064–T071 `[X]`; treat that as historical
+> (work that shipped and was later deleted wholesale), not current
+> functionality.
+
 - **FR-026**: The system MUST cryptographically verify a catalog manifest's signature against the trusted key
   before accepting it, and MUST reject a tampered or invalid signature.
 - **FR-027**: The system MUST reject catalog entries with unrecognized license codes rather than silently
@@ -391,6 +399,16 @@ and one runbook step, with no unmatched rows on either side.
 - **FR-033**: The command palette MUST provide a working "show ignored items" entry, mixed frame-type MUST be
   derived from content rather than a fixed value, and inventory references MUST be shown per item where the
   spec requires.
+  *(Reconciliation note, 2026-07-19, issue #764: the "show ignored items"
+  clause is genuinely unresolved, not a one-sided drift — `CommandPalette.tsx`
+  has no such entry today and its own comment claims sessions "no longer
+  have an `ignored` state," but `domain_core::SessionState::Ignored` still
+  exists and spec 006's 2026-07-09 amendment says the Ignore/recover flow
+  (FR-010, route `/sessions?reviewFilter=ignored`) deliberately shipped.
+  `CommandPalette.tsx` (owned outside this spec's scope) is stale either way
+  — it should either add the entry or its comment's reasoning needs
+  correcting; flagging rather than fixing since that file isn't owned by
+  this reconciliation pass.)*
 
 **Verification deliverables (US9)**
 

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Platform-native file-manager Reveal label — the SINGLE shared helper for
  * the product convention:

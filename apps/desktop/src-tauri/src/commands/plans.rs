@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Plan review Tauri commands (spec 017).
 //!
 //! Implements the five JSON-Schema contracts under
@@ -12,15 +15,21 @@
 //! The `plans.apply` stub is retained for spec 025 compatibility — it returns
 //! `unimplemented` and will be replaced when spec 025 lands.
 
-use app_core::archive_generator::{generate as generate_archive_plan, list_archived};
+use app_core::archive_generator::{
+    generate as generate_archive_plan, generate_restore as generate_restore_plan, list_archived,
+};
+use app_core::plan_free_space::estimate_free_space;
 use app_core::plans::{
     approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
     send_archive_to_trash,
 };
-use contracts_core::archive::{ArchiveListResponse, GenerateArchivePlanResult};
+use contracts_core::archive::{
+    ArchiveListResponse, GenerateArchivePlanResult, GenerateRestorePlanResult,
+};
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
-    PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
+    PlanDiscardResponse, PlanFreeSpaceEstimate, PlanListRequest, PlanListResponse,
+    PlanRetryResponse, RetryItemsFilter,
 };
 use tauri::State;
 
@@ -61,6 +70,24 @@ pub async fn plans_get(
     id: String,
 ) -> Result<PlanDetail, ContractError> {
     get_plan(state.repo.pool(), &id).await
+}
+
+// ── plans.free_space_estimate ─────────────────────────────────────────────────
+
+/// `plans.free_space_estimate` — advisory destination free-space estimate for
+/// a plan under review, before approval (issue #876). Never blocks approval;
+/// see `app_core::plans::estimate_free_space`.
+///
+/// # Errors
+///
+/// Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+#[tauri::command]
+#[specta::specta]
+pub async fn plans_free_space_estimate(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<PlanFreeSpaceEstimate, ContractError> {
+    estimate_free_space(state.repo.pool(), &id).await
 }
 
 // ── plans.approve ─────────────────────────────────────────────────────────────
@@ -138,9 +165,13 @@ pub async fn plans_retry(
 
 // ── archive.list ────────────────────────────────────────────────────────────
 
-/// `archive.list` — list projects currently in the `archived` lifecycle state
-/// (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
-/// so the management commands act on the owning plan.
+/// `archive.list` — list archived projects (spec 017 C5) AND archived
+/// calibration masters (#886), each row carrying `archivedViaPlanId` so the
+/// management commands (`archive.send_to_trash`/`archive.permanently_delete`,
+/// already entity-agnostic — they act purely on a plan's items) work on
+/// either kind. The two listings are composed here rather than folded into
+/// one generator function, keeping each generator scoped to the entity it
+/// owns (`app_core::archive_generator` / `app_core::calibration_archive_generator`).
 ///
 /// # Errors
 ///
@@ -150,7 +181,10 @@ pub async fn plans_retry(
 pub async fn archive_list(
     state: State<'_, AppState>,
 ) -> Result<ArchiveListResponse, ContractError> {
-    list_archived(state.repo.pool()).await
+    let pool = state.repo.pool();
+    let mut entries = list_archived(pool).await?.entries;
+    entries.extend(app_core::calibration_archive_generator::list_archived(pool).await?);
+    Ok(ArchiveListResponse { entries })
 }
 
 // ── archive.plan.generate ─────────────────────────────────────────────────────
@@ -170,6 +204,27 @@ pub async fn archive_plan_generate(
     title: Option<String>,
 ) -> Result<GenerateArchivePlanResult, ContractError> {
     generate_archive_plan(state.repo.pool(), &project_id, title.as_deref()).await
+}
+
+// ── archive.plan.generate_restore ─────────────────────────────────────────────
+
+/// `archive.plan.generate_restore` — build a reviewable restore (un-archive)
+/// plan from a previously applied archive plan (#885, decision D15). Creates
+/// a `ready_for_review` plan; performs NO filesystem mutation and never
+/// auto-applies (constitution II / FR-002).
+///
+/// # Errors
+///
+/// Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+/// applied archive plan), or `"archive.empty"` (nothing to restore).
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_plan_generate_restore(
+    state: State<'_, AppState>,
+    archived_plan_id: String,
+    title: Option<String>,
+) -> Result<GenerateRestorePlanResult, ContractError> {
+    generate_restore_plan(state.repo.pool(), &archived_plan_id, title.as_deref()).await
 }
 
 // ── archive.send_to_trash ─────────────────────────────────────────────────────

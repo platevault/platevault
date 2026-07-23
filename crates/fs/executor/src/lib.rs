@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Filesystem plan apply executor (spec 025).
 //!
 //! This crate owns the per-item executor loop, filesystem operation

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Typed enumeration of every `ContractError.code` string produced by the
 //! application.
 //!
@@ -92,6 +95,12 @@ pub enum ErrorCode {
     PathCollision,
     #[serde(rename = "path.invalid")]
     PathInvalid,
+    /// `roots.register`/`roots.register.batch`: a candidate root path is a
+    /// parent of, or nested within, an already-registered root (issue #501).
+    /// Cross-cutting across categories — an inbox root inside a light-frames
+    /// root is still an overlap.
+    #[serde(rename = "path.overlaps_existing")]
+    PathOverlapsExisting,
 
     // ── Inbox ───────────────────────────────────────────────────────────────
     #[serde(rename = "inbox.item.not_found")]
@@ -185,10 +194,51 @@ pub enum ErrorCode {
     RunNotFound,
     #[serde(rename = "run.not_paused")]
     RunNotPaused,
+    /// `plan.resume` re-validated the pause condition (R-Pause-1, R-Env-1)
+    /// and found the paused item's source is still stale; resume is
+    /// refused and the plan stays `paused` (spec 025 T048/T049/T050).
+    #[serde(rename = "item.still.stale")]
+    ItemStillStale,
+    /// `plan.resume` re-validated and the paused item's volume is still
+    /// unreachable.
+    #[serde(rename = "volume.still.unavailable")]
+    VolumeStillUnavailable,
+    /// `plan.resume` re-validated and the destination volume is still full.
+    #[serde(rename = "disk.still.full")]
+    DiskStillFull,
 
     // ── Archive ──────────────────────────────────────────────────────────────
     #[serde(rename = "archive.empty")]
     ArchiveEmpty,
+    /// OS trash unavailable or failed for every item in an
+    /// `archive.send_to_trash` run (spec 017 US6, spec 025 `FailureCode::OsTrashUnavailable`).
+    #[serde(rename = "os_trash.unavailable")]
+    OsTrashUnavailable,
+    /// OS trash denied permission for every item in an
+    /// `archive.send_to_trash` run.
+    #[serde(rename = "os_trash.permission.denied")]
+    OsTrashPermissionDenied,
+    /// Non-permission delete failure (e.g. the file vanished mid-run, its
+    /// volume went unavailable, or the destination disk filled) for every
+    /// item in an `archive.permanently_delete` run. Permission failures use
+    /// the more specific `path.permission_denied`.
+    #[serde(rename = "archive.delete_failed")]
+    ArchiveDeleteFailed,
+    /// #886: `calibration_archive_generator::generate` refuses to archive a
+    /// master currently assigned to one or more sessions unless the caller
+    /// re-calls with `confirm_in_use = true` (decisions.md: warn + require
+    /// confirm before archiving an in-use master).
+    #[serde(rename = "calibration.master_in_use")]
+    CalibrationMasterInUse,
+    /// #886: the master has no `root_id`/`relative_path` resolved to a real
+    /// `file_record` (legacy master, or the applied-frame write at
+    /// master-confirm time failed) — nothing to archive.
+    #[serde(rename = "calibration.master_untracked")]
+    CalibrationMasterUntracked,
+    /// #886: `calibration.masters.get`/`.archive` target id has no matching
+    /// `calibration_session` row.
+    #[serde(rename = "master.not_found")]
+    MasterNotFound,
 
     // ── Confirm ──────────────────────────────────────────────────────────────
     #[serde(rename = "confirm.text.mismatch")]
@@ -217,6 +267,30 @@ pub enum ErrorCode {
     ProjectNotFound,
     #[serde(rename = "project.read_only")]
     ProjectReadOnly,
+
+    // ── Framing (spec 008 Q27, F-Framing-3) ────────────────────────────────────
+    #[serde(rename = "framing.not_found")]
+    FramingNotFound,
+    #[serde(rename = "framing.project_mismatch")]
+    FramingProjectMismatch,
+    #[serde(rename = "framing.merge.requires_two")]
+    FramingMergeRequiresTwo,
+    #[serde(rename = "framing.merge.duplicate_id")]
+    FramingMergeDuplicateId,
+    #[serde(rename = "framing.split.empty_selection")]
+    FramingSplitEmptySelection,
+    #[serde(rename = "framing.split.invalid_session")]
+    FramingSplitInvalidSession,
+    #[serde(rename = "framing.split.would_empty_source")]
+    FramingSplitWouldEmptySource,
+    #[serde(rename = "framing.reassign.empty_selection")]
+    FramingReassignEmptySelection,
+
+    // ── Attribution (spec 008 Q27, F-Framing-5/10) ──────────────────────────
+    #[serde(rename = "attribution.not_light_frame")]
+    AttributionNotLightFrame,
+    #[serde(rename = "attribution.geometry_unavailable")]
+    AttributionGeometryUnavailable,
 
     // ── View ────────────────────────────────────────────────────────────────
     #[serde(rename = "view.mixed_kind")]
@@ -264,6 +338,10 @@ pub enum ErrorCode {
     /// root; deletion is blocked rather than cascade-nullified.
     #[serde(rename = "root.has_dependents")]
     RootHasDependents,
+    /// `roots.remap.apply` (issue #707): the two-step Verify → Apply flow
+    /// requires a successful Verify before Apply may mutate the root's path.
+    #[serde(rename = "remap.not_verified")]
+    RemapNotVerified,
 
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]
@@ -296,9 +374,10 @@ pub enum ErrorCode {
     #[serde(rename = "plan.required")]
     PlanRequired,
 
-    // ── Target / alias codes that flow through ContractError in some paths ────
-    /// Appears in `TargetOpError.code: String` (`target_management.rs`).
-    /// Included per task instruction ("include when unsure — superset is safe").
+    // ── Target / alias codes ───────────────────────────────────────────────────
+    /// `target.alias.add` (#751, FR-008): the normalized alias already belongs
+    /// to a *different* canonical target. A same-target duplicate stays
+    /// idempotent (no error) — only a cross-target collision returns this.
     #[serde(rename = "alias.duplicate")]
     AliasDuplicate,
     #[serde(rename = "alias.blank")]
@@ -311,6 +390,23 @@ pub enum ErrorCode {
     TargetNotFound,
     #[serde(rename = "target.invalid_id")]
     TargetInvalidId,
+
+    // ── Cone-search (spec 052 P3) ─────────────────────────────────────────────
+    /// Online resolution disabled or network unavailable — non-blocking
+    /// degraded state (FR-018), not a failure; ingest proceeds without a
+    /// suggestion.
+    #[serde(rename = "resolve.offline")]
+    ResolveOffline,
+    #[serde(rename = "frameset.not_found")]
+    FramesetNotFound,
+    /// Equivalent to a pointing `source = "none"` response; kept as a named
+    /// code for callers that prefer an error over an empty-suggestions 200.
+    #[serde(rename = "pointing.unavailable")]
+    PointingUnavailable,
+    /// A `target.cone_search.confirm` candidate no longer resolves (e.g. the
+    /// object vanished from SIMBAD between suggest and confirm).
+    #[serde(rename = "candidate.invalid")]
+    CandidateInvalid,
 
     // ── Launch ───────────────────────────────────────────────────────────────
     /// Appears in `ToolLaunchError.code: String` (`tool_launch.rs`).
@@ -357,6 +453,18 @@ pub enum ErrorCode {
     /// Referenced `file_record` id does not exist.
     #[serde(rename = "frame.not_found")]
     FrameNotFound,
+
+    // ── Onboarding (spec 056) ──────────────────────────────────────────────────
+    /// `onboarding.item.set_state` referenced an `item_id` not in the
+    /// registry (contracts/onboarding-commands.md `unknown_item`).
+    #[serde(rename = "onboarding.item.unknown")]
+    OnboardingItemUnknown,
+    /// A request violated an onboarding state-shape rule: `item.set_state`
+    /// with an auto state (`unchecked`/`auto_checked`), or `section.set` with
+    /// `hidden: false` — unhiding is exclusively `onboarding.restore`
+    /// (contracts/onboarding-commands.md `invalid_state`).
+    #[serde(rename = "onboarding.invalid_state")]
+    OnboardingInvalidState,
 
     // ── Generic fallback ─────────────────────────────────────────────────────
     /// Used when a legacy `String` error is wrapped into `ContractError`.

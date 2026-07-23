@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 equipment Tauri commands (T018).
 //!
 //! CRUD commands for cameras, telescopes, optical trains, and filters.
@@ -38,7 +41,7 @@ pub async fn equipment_cameras_create(
     request: CreateCamera,
 ) -> Result<Camera, ContractError> {
     tracing::debug!("equipment.cameras.create name={}", request.name);
-    app_core::equipment::create_camera(state.repo.pool(), &request).await
+    app_core::equipment::create_camera(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.cameras.update` — update an existing camera.
@@ -52,7 +55,7 @@ pub async fn equipment_cameras_update(
     request: UpdateCamera,
 ) -> Result<Camera, ContractError> {
     tracing::debug!("equipment.cameras.update id={}", request.id);
-    app_core::equipment::update_camera(state.repo.pool(), &request).await
+    app_core::equipment::update_camera(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.cameras.delete` — delete a camera by ID.
@@ -66,7 +69,7 @@ pub async fn equipment_cameras_delete(
     id: String,
 ) -> Result<(), ContractError> {
     tracing::debug!("equipment.cameras.delete id={id}");
-    app_core::equipment::delete_camera(state.repo.pool(), &id).await
+    app_core::equipment::delete_camera(state.repo.pool(), &state.bus, &id).await
 }
 
 // ── Telescope commands ──────────────────────────────────────────────────────
@@ -95,7 +98,7 @@ pub async fn equipment_telescopes_create(
     request: CreateTelescope,
 ) -> Result<Telescope, ContractError> {
     tracing::debug!("equipment.telescopes.create name={}", request.name);
-    app_core::equipment::create_telescope(state.repo.pool(), &request).await
+    app_core::equipment::create_telescope(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.telescopes.update` — update an existing telescope.
@@ -109,7 +112,7 @@ pub async fn equipment_telescopes_update(
     request: UpdateTelescope,
 ) -> Result<Telescope, ContractError> {
     tracing::debug!("equipment.telescopes.update id={}", request.id);
-    app_core::equipment::update_telescope(state.repo.pool(), &request).await
+    app_core::equipment::update_telescope(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.telescopes.delete` — delete a telescope by ID.
@@ -123,7 +126,7 @@ pub async fn equipment_telescopes_delete(
     id: String,
 ) -> Result<(), ContractError> {
     tracing::debug!("equipment.telescopes.delete id={id}");
-    app_core::equipment::delete_telescope(state.repo.pool(), &id).await
+    app_core::equipment::delete_telescope(state.repo.pool(), &state.bus, &id).await
 }
 
 // ── Optical Train commands ──────────────────────────────────────────────────
@@ -152,7 +155,7 @@ pub async fn equipment_trains_create(
     request: CreateOpticalTrain,
 ) -> Result<OpticalTrain, ContractError> {
     tracing::debug!("equipment.trains.create name={}", request.name);
-    app_core::equipment::create_optical_train(state.repo.pool(), &request).await
+    app_core::equipment::create_optical_train(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.trains.update` — update an existing optical train.
@@ -166,7 +169,7 @@ pub async fn equipment_trains_update(
     request: UpdateOpticalTrain,
 ) -> Result<OpticalTrain, ContractError> {
     tracing::debug!("equipment.trains.update id={}", request.id);
-    app_core::equipment::update_optical_train(state.repo.pool(), &request).await
+    app_core::equipment::update_optical_train(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.trains.delete` — delete an optical train by ID.
@@ -180,7 +183,7 @@ pub async fn equipment_trains_delete(
     id: String,
 ) -> Result<(), ContractError> {
     tracing::debug!("equipment.trains.delete id={id}");
-    app_core::equipment::delete_optical_train(state.repo.pool(), &id).await
+    app_core::equipment::delete_optical_train(state.repo.pool(), &state.bus, &id).await
 }
 
 // ── Filter commands ─────────────────────────────────────────────────────────
@@ -209,7 +212,7 @@ pub async fn equipment_filters_create(
     request: CreateFilter,
 ) -> Result<Filter, ContractError> {
     tracing::debug!("equipment.filters.create name={}", request.name);
-    app_core::equipment::create_filter(state.repo.pool(), &request).await
+    app_core::equipment::create_filter(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.filters.update` — update an existing filter.
@@ -223,7 +226,7 @@ pub async fn equipment_filters_update(
     request: UpdateFilter,
 ) -> Result<Filter, ContractError> {
     tracing::debug!("equipment.filters.update id={}", request.id);
-    app_core::equipment::update_filter(state.repo.pool(), &request).await
+    app_core::equipment::update_filter(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `equipment.filters.delete` — delete a filter by ID.
@@ -237,5 +240,5 @@ pub async fn equipment_filters_delete(
     id: String,
 ) -> Result<(), ContractError> {
     tracing::debug!("equipment.filters.delete id={id}");
-    app_core::equipment::delete_filter(state.repo.pool(), &id).await
+    app_core::equipment::delete_filter(state.repo.pool(), &state.bus, &id).await
 }

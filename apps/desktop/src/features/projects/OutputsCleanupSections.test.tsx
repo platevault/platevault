@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * OutputsCleanupSections tests — spec 043 §4 (task #44) + spec 017 WP-E.
@@ -20,31 +23,43 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CleanupScanResult } from '@/bindings/index';
 
-const { mockScanMutate, mockGenerateMutate, scanState, generateState } = vi.hoisted(() => ({
-  mockScanMutate: vi.fn(),
-  mockGenerateMutate: vi.fn(),
-  scanState: {
-    data: undefined as CleanupScanResult | undefined,
-    isPending: false,
-    isError: false,
-  },
-  generateState: { isPending: false, isError: false },
-}));
+const { mockScanMutate, mockGenerateMutate, scanState, generateState } =
+  vi.hoisted(() => ({
+    mockScanMutate: vi.fn(),
+    mockGenerateMutate: vi.fn(),
+    scanState: {
+      data: undefined as CleanupScanResult | undefined,
+      isPending: false,
+      isError: false,
+    },
+    generateState: { isPending: false, isError: false },
+  }));
 
 vi.mock('./cleanupStore', () => ({
   useCleanupScan: () => ({ ...scanState, mutate: mockScanMutate }),
-  useGenerateCleanupPlan: () => ({ ...generateState, mutate: mockGenerateMutate }),
+  useGenerateCleanupPlan: () => ({
+    ...generateState,
+    mutate: mockGenerateMutate,
+  }),
 }));
 
 // The shared overlay has its own test file; stub it to observe the handoff.
 vi.mock('@/features/plans/PlanReviewOverlay', () => ({
-  PlanReviewOverlay: ({ planId, open }: { planId: string | null; open: boolean }) =>
+  PlanReviewOverlay: ({
+    planId,
+    open,
+  }: {
+    planId: string | null;
+    open: boolean;
+  }) =>
     open ? <div data-testid="plan-review-overlay-stub">{planId}</div> : null,
 }));
 
 import { OutputsSection, CleanupSection } from './OutputsCleanupSections';
 
-function scanResult(overrides: Partial<CleanupScanResult> = {}): CleanupScanResult {
+function scanResult(
+  overrides: Partial<CleanupScanResult> = {},
+): CleanupScanResult {
   return {
     projectId: 'p1',
     candidates: [
@@ -90,15 +105,27 @@ describe('OutputsSection (spec 043 §4)', () => {
     render(
       <OutputsSection
         outputs={[
-          { id: 'o1', name: 'NGC7000_HOO.xisf', format: 'XISF', verified: true },
-          { id: 'o2', name: 'NGC7000_draft.tif', format: 'TIFF', verified: false },
+          {
+            id: 'o1',
+            name: 'NGC7000_HOO.xisf',
+            format: 'XISF',
+            verified: true,
+          },
+          {
+            id: 'o2',
+            name: 'NGC7000_draft.tif',
+            format: 'TIFF',
+            verified: false,
+          },
         ]}
       />,
     );
     expect(screen.getByText('NGC7000_HOO.xisf')).toBeInTheDocument();
     expect(screen.getByText('verified')).toBeInTheDocument();
     expect(screen.getByText('unverified')).toBeInTheDocument();
-    expect(screen.queryByText('No accepted outputs yet')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('No accepted outputs yet'),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -111,7 +138,9 @@ describe('CleanupSection (spec 017 WP-E)', () => {
     // Protected categories documented (constitution II).
     expect(screen.getByTestId('cleanup-protected')).toBeInTheDocument();
     // No candidates invented pre-scan.
-    expect(screen.queryByTestId('cleanup-group-intermediate')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('cleanup-group-intermediate'),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('cleanup-scan-btn'));
     expect(mockScanMutate).toHaveBeenCalledWith('p1');
@@ -123,16 +152,24 @@ describe('CleanupSection (spec 017 WP-E)', () => {
 
     // Groups in classification order with subtotals.
     const intermediates = screen.getByTestId('cleanup-group-intermediate');
-    expect(within(intermediates).getByText('Intermediates')).toBeInTheDocument();
-    expect(within(intermediates).getByText('calibrated/light_001.xisf')).toBeInTheDocument();
+    expect(
+      within(intermediates).getByText('Intermediates'),
+    ).toBeInTheDocument();
+    expect(
+      within(intermediates).getByText('calibrated/light_001.xisf'),
+    ).toBeInTheDocument();
     expect(within(intermediates).getByText('90%')).toBeInTheDocument();
 
     const masters = screen.getByTestId('cleanup-group-master');
-    expect(within(masters).getByText('masters/master_dark.xisf')).toBeInTheDocument();
+    expect(
+      within(masters).getByText('masters/master_dark.xisf'),
+    ).toBeInTheDocument();
     expect(within(masters).getByText('95%')).toBeInTheDocument();
 
     // Total reclaimable bytes surfaced.
-    expect(screen.getByTestId('cleanup-reclaimable')).toHaveTextContent('reclaimable');
+    expect(screen.getByTestId('cleanup-reclaimable')).toHaveTextContent(
+      'reclaimable',
+    );
   });
 
   it('marks protected candidates and offers no selection affordance', () => {
@@ -141,7 +178,7 @@ describe('CleanupSection (spec 017 WP-E)', () => {
 
     const masters = screen.getByTestId('cleanup-group-master');
     const protectedRow = within(masters).getByTestId('cleanup-candidate-0');
-    expect(protectedRow).toHaveClass('alm-cleanup-scan__row--protected');
+    expect(protectedRow).toHaveClass('pv-cleanup-scan__row--protected');
     expect(within(protectedRow).getByText('Protected')).toBeInTheDocument();
 
     // NOT selectable (constitution II): no checkboxes/switches anywhere in the
@@ -155,10 +192,18 @@ describe('CleanupSection (spec 017 WP-E)', () => {
       (
         _vars: unknown,
         opts?: {
-          onSuccess?: (r: { planId: string; itemCount: number; protectedItemCount: number }) => void;
+          onSuccess?: (r: {
+            planId: string;
+            itemCount: number;
+            protectedItemCount: number;
+          }) => void;
         },
       ) => {
-        opts?.onSuccess?.({ planId: 'plan-9', itemCount: 2, protectedItemCount: 1 });
+        opts?.onSuccess?.({
+          planId: 'plan-9',
+          itemCount: 2,
+          protectedItemCount: 1,
+        });
       },
     );
     render(<CleanupSection projectId="p1" />);
@@ -170,7 +215,9 @@ describe('CleanupSection (spec 017 WP-E)', () => {
       expect.anything(),
     );
     // Handoff to the shared review overlay with the created plan.
-    expect(screen.getByTestId('plan-review-overlay-stub')).toHaveTextContent('plan-9');
+    expect(screen.getByTestId('plan-review-overlay-stub')).toHaveTextContent(
+      'plan-9',
+    );
 
     // Switching to system trash flows through on the next generate.
     fireEvent.click(screen.getByText('System trash'));
@@ -185,6 +232,8 @@ describe('CleanupSection (spec 017 WP-E)', () => {
     scanState.data = scanResult({ candidates: [], totalReclaimableBytes: 0 });
     render(<CleanupSection projectId="p1" />);
     expect(screen.getByText('No cleanup candidates')).toBeInTheDocument();
-    expect(screen.queryByTestId('cleanup-generate-btn')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('cleanup-generate-btn'),
+    ).not.toBeInTheDocument();
   });
 });

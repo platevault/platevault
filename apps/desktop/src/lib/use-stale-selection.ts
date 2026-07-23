@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Spec 020 — Router & URL State (desktop rescope), US3 stale-id fallback.
 //
 // When a ledger route carries `?selected=<id>` but the entity is missing

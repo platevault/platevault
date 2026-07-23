@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract DTOs for spec 026 — generated source view removal/regeneration.
 //!
 //! Mirrors `specs/026-generated-project-source-view-removal/contracts/`.

@@ -79,7 +79,7 @@ jobs:
           MANIFEST=$(jq -r '.["."]' .release-please-manifest.json)
           TAURI=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json)
           PKG=$(jq -r '.version' apps/desktop/package.json)
-          CARGO=$(awk '/^\[package\]/{p=1} p&&/^version[[:space:]]*=/{gsub(/[" ]/,"",$3); split($0,a,"\""); print a[2]; exit}' apps/desktop/src-tauri/Cargo.toml)
+          CARGO=$(awk '/^\[package\]/{p=1} p&&/^version[[:space:]]*=/{split($0,a,"\""); print a[2]; exit}' apps/desktop/src-tauri/Cargo.toml)
           echo "manifest=$MANIFEST tauri=$TAURI package=$PKG cargo=$CARGO"
           DETAIL="tauri=$TAURI pkg=$PKG cargo=$CARGO manifest=$MANIFEST"
           echo "detail=$DETAIL" >> "$GITHUB_OUTPUT"

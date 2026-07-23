@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Confidence scoring, ranking utilities, and `MatchingRuleConfig`.
 #![allow(clippy::must_use_candidate)]
 //!
@@ -212,7 +215,7 @@ pub fn flat_selection_reason(
 #[must_use]
 pub fn night_distance(date_a: &str, date_b: &str) -> Option<f64> {
     // Zero-padded `YYYY-MM-DD`, matching the DB-stored observing-night format.
-    let format = time::format_description::parse("[year]-[month]-[day]").ok()?;
+    let format = time::format_description::parse_borrowed::<2>("[year]-[month]-[day]").ok()?;
     let parse = |s: &str| -> Option<time::Date> { time::Date::parse(s, &format).ok() };
 
     let da = parse(date_a)?.to_julian_day();

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Path → project attribution (spec 012, package WP-012-A).
 //!
 //! The retired global artifact watcher (spec 033 T028, removed by #400 in

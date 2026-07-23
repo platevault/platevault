@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Calibration matching tolerances use cases (spec 007 / spec 043 P8).
 //!
 //! Bridges the `calibration_tolerances` singleton row (migration 0008 + 0051,

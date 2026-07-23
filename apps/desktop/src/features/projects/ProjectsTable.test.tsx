@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * ProjectsTable tests — spec 043 (tasks #73/#43/#105).
@@ -13,7 +16,7 @@
  *   6. Rich columns: Tool, State (now a dot+text tag, not a pill), Sources, Updated.
  *   7. Selected row carries the selected CSS class.
  *   8. Clicking a sortable header calls onSort with the column.
- *   9. (#105) State column renders a ProjectStatusTag (dot + label, no pill).
+ *   9. (#105) State column renders a StatusTag (dot + label, no pill).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -46,7 +49,9 @@ const mockProjects: ProjectSummaryDto[] = [
   },
 ];
 
-function renderTable(overrides: Partial<React.ComponentProps<typeof ProjectsTable>> = {}) {
+function renderTable(
+  overrides: Partial<React.ComponentProps<typeof ProjectsTable>> = {},
+) {
   return render(
     <ProjectsTable
       projects={mockProjects}
@@ -68,12 +73,20 @@ describe('ProjectsTable', () => {
 
   it('shows empty state when no projects', () => {
     renderTable({ projects: [] });
-    expect(screen.getByText(/no projects found/i)).toBeInTheDocument();
+    expect(screen.getByText(/no projects yet/i)).toBeInTheDocument();
+  });
+
+  it('shows filtered-empty state when a filter yields no projects', () => {
+    renderTable({ projects: [], isFiltered: true });
+    expect(
+      screen.getByText(/no projects match the current filters/i),
+    ).toBeInTheDocument();
   });
 
   it('shows loading state when loading and no projects', () => {
     renderTable({ projects: [], loading: true });
-    expect(screen.getByText(/loading projects/i)).toBeInTheDocument();
+    // Loading now renders a skeleton (role="status") instead of text.
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
   });
 
   it('calls onSelect with the project id on row click', () => {
@@ -99,25 +112,29 @@ describe('ProjectsTable', () => {
     // Source count.
     expect(screen.getByText('3')).toBeInTheDocument();
     // Updated date formatted as "yyyy-MM-dd HH:mm" (local).
-    expect(screen.getAllByText(/2026-06-1[09] \d{2}:\d{2}/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/2026-06-1[09] \d{2}:\d{2}/).length,
+    ).toBeGreaterThan(0);
   });
 
-  it('(#105) state column uses ProjectStatusTag: dot+text, not a filled pill', () => {
+  it('(#105) state column uses StatusTag: dot+text, not a filled pill', () => {
     const { container } = renderTable();
-    // alm-status-tag class present in the state column — no alm-pill class.
-    const tags = container.querySelectorAll('.alm-status-tag');
+    // pv-status-tag class present in the state column — no pv-pill class.
+    const tags = container.querySelectorAll('.pv-status-tag');
     expect(tags.length).toBeGreaterThan(0);
     // Each tag contains a dot span and the label text.
     tags.forEach((tag) => {
-      expect(tag.querySelector('.alm-status-tag__dot')).toBeInTheDocument();
+      expect(tag.querySelector('.pv-status-tag__dot')).toBeInTheDocument();
     });
     // No filled-background pill class from the old implementation.
-    expect(container.querySelector('.alm-pill')).toBeNull();
+    expect(container.querySelector('.pv-pill')).toBeNull();
   });
 
   it('marks the selected row with the selected CSS class', () => {
     const { container } = renderTable({ selectedId: 'proj-001' });
-    const selected = container.querySelectorAll('.alm-projects-table__row--selected');
+    const selected = container.querySelectorAll(
+      '.pv-projects-table__row--selected',
+    );
     expect(selected).toHaveLength(1);
     expect(selected[0]).toHaveTextContent('NGC 7000 Narrowband');
   });
@@ -127,5 +144,32 @@ describe('ProjectsTable', () => {
     renderTable({ onSort });
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Name' }));
     expect(onSort).toHaveBeenCalledWith('name');
+  });
+
+  it('(#720 SC-001) a blocked row carries the real blocked reason as title + aria-label, not a bare icon', () => {
+    const blockedProjects: ProjectSummaryDto[] = [
+      {
+        id: 'proj-blocked',
+        name: 'Cave Nebula attempt',
+        tool: 'Siril',
+        lifecycle: 'blocked',
+        path: 'projects/Cave_attempt',
+        blockedReasonKind: 'calibration_unmatched',
+        blockedReasonNote: 'Missing calibration masters for SII filter',
+        channelDrift: false,
+        sourceCount: 1,
+        createdAt: '2026-06-01T00:00:00Z',
+        updatedAt: '2026-06-10T00:00:00Z',
+      },
+    ];
+    renderTable({ projects: blockedProjects });
+    const icon = screen.getByRole('img', {
+      name: 'Blocked: Calibration set missing',
+    });
+    expect(icon).toBeInTheDocument();
+    expect(icon.closest('span[title]')).toHaveAttribute(
+      'title',
+      'Calibration set missing',
+    );
   });
 });

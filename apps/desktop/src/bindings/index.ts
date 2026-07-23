@@ -17,6 +17,12 @@ export const commands = {
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
 	 * 
+	 *  #665: on a successful `Project` entity transition, fires the
+	 *  `LifecycleTransition` manifest trigger — this and the source add/remove
+	 *  trigger were the last of the 4 unwired manifest emitters (project create
+	 *  and source add/remove are wired in `app_core_projects`; `workflow_run` was
+	 *  the only one that ever existed).
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
@@ -136,6 +142,41 @@ export const commands = {
 	 */
 	calibrationMatchSuggestBatch: (req: CalibrationMatchBatchRequest_Deserialize) => typedError<CalibrationMatchBatchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_suggest_batch", { req })),
 	/**
+	 *  `calibration.match.unassign` — remove a session's assignment for one
+	 *  calibration type (#875: previously there was no way back to "no master
+	 *  assigned"). Emits `calibration.assignment.removed` on success.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database error.
+	 */
+	calibrationMatchUnassign: (req: CalibrationMatchUnassignRequest) => typedError<CalibrationMatchUnassignResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_unassign", { req })),
+	/**
+	 *  `calibration.masters.archive_plan_generate` — build a reviewable
+	 *  single-master archive plan (#886). Creates a `ready_for_review` plan;
+	 *  performs NO filesystem mutation and never auto-applies (constitution
+	 *  §II / FR-002). A master currently assigned to one or more sessions
+	 *  requires `confirm_in_use: true` — a first call without it returns
+	 *  `"calibration.master_in_use"` so the UI can show a confirm dialog before
+	 *  retrying.
+	 * 
+	 *  # Errors
+	 *  Returns `Err` with `"master.not_found"`, `"plan.invalid_state"` (already
+	 *  archived), `"calibration.master_untracked"` (no tracked file), or
+	 *  `"calibration.master_in_use"` (needs confirm).
+	 */
+	calibrationMastersArchivePlanGenerate: (masterId: string, title: string | null, confirmInUse: boolean | null) => typedError<GenerateArchivePlanResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_archive_plan_generate", { masterId, title, confirmInUse })),
+	/**
+	 *  `calibration.masters.archive_plan_generate_restore` — build a reviewable
+	 *  restore (un-archive) plan from a previously applied master-archive plan
+	 *  (#886). Creates a `ready_for_review` plan; performs NO filesystem
+	 *  mutation and never auto-applies (constitution §II / FR-002).
+	 * 
+	 *  # Errors
+	 *  Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+	 *  applied master-archive plan), or `"archive.empty"` (nothing to restore).
+	 */
+	calibrationMastersArchivePlanGenerateRestore: (archivedPlanId: string, title: string | null) => typedError<GenerateRestorePlanResult, ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_archive_plan_generate_restore", { archivedPlanId, title })),
+	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
 	 * 
 	 *  # Errors
@@ -154,27 +195,27 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_get", { req })),
+	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_get", { req })),
 	/**
 	 *  `target.list` — list all canonical targets ordered by primary designation.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `internal.database`.
+	 *  Returns `Err(ContractError)` with code `internal.database`.
 	 */
-	targetList: () => typedError<TargetListItem_Serialize[], TargetOpError_Serialize>(__TAURI_INVOKE("target_list")),
+	targetList: () => typedError<TargetListItem_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("target_list")),
 	/**
 	 *  `target.alias.add` — add a user alias to a canonical target (gen-3).
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`, `alias.blank`,
 	 *  or `internal.database`.
 	 */
-	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_add", { req })),
+	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, ContractError_Serialize>(__TAURI_INVOKE("target_alias_add", { req })),
 	/**
 	 *  `target.alias.remove` — remove a user alias from a canonical target (gen-3).
 	 * 
@@ -183,10 +224,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `alias.not_found`,
+	 *  Returns `Err(ContractError)` with code `alias.not_found`,
 	 *  `alias.not_removable`, or `internal.database`.
 	 */
-	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_remove", { req })),
+	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, ContractError_Serialize>(__TAURI_INVOKE("target_alias_remove", { req })),
 	/**
 	 *  `target.display_alias.set` — set the user presentation label (FR-012).
 	 * 
@@ -195,10 +236,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_set", { req })),
+	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_display_alias_set", { req })),
 	/**
 	 *  `target.display_alias.clear` — clear the user presentation label (FR-012).
 	 * 
@@ -207,10 +248,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
+	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
 	/**
 	 *  `target.sessions.list` — list acquisition sessions linked to a canonical target.
 	 * 
@@ -219,10 +260,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetSessionsList: (req: TargetSessionsListRequest) => typedError<TargetSessionItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_sessions_list", { req })),
+	targetSessionsList: (req: TargetSessionsListRequest) => typedError<TargetSessionItem[], ContractError_Serialize>(__TAURI_INVOKE("target_sessions_list", { req })),
 	/**
 	 *  `target.projects.list` — list projects linked to a canonical target.
 	 * 
@@ -231,10 +272,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetProjectsList: (req: TargetProjectsListRequest) => typedError<TargetProjectItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_projects_list", { req })),
+	targetProjectsList: (req: TargetProjectsListRequest) => typedError<TargetProjectItem[], ContractError_Serialize>(__TAURI_INVOKE("target_projects_list", { req })),
 	/**
 	 *  `target.note.get` — read observing notes for a canonical target.
 	 * 
@@ -242,10 +283,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetNoteGet: (req: TargetNoteGetRequest) => typedError<TargetNoteGetResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_get", { req })),
+	targetNoteGet: (req: TargetNoteGetRequest) => typedError<TargetNoteGetResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_note_get", { req })),
 	/**
 	 *  `target.note.update` — write observing notes for a canonical target.
 	 * 
@@ -253,20 +294,51 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_update", { req })),
+	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_note_update", { req })),
 	/**
-	 *  `target.resolve` — cache-first resolution of a designation / common name (or
-	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
-	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
+	 *  `targets.favourites.list` — list the ids of every currently-favourited
+	 *  canonical target.
 	 * 
-	 *  The live `SimbadResolver` is built on demand from the persisted
-	 *  `resolver_settings` (endpoint + timeout). Cache hits never re-query SIMBAD
-	 *  (FR-006); offline / unknown / ambiguous outcomes return `unresolved` and
-	 *  never fabricate coordinates (FR-009). The manual `override` write path is
-	 *  T032.
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `internal.database`.
+	 */
+	targetFavouritesList: () => typedError<TargetFavouritesListResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_list")),
+	/**
+	 *  `targets.favourites.add` — favourite a canonical target. Idempotent.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `target.not_found` or
+	 *  `internal.database`.
+	 */
+	targetFavouritesAdd: (req: TargetFavouriteRequest) => typedError<TargetFavouriteAddResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_add", { req })),
+	/**
+	 *  `targets.favourites.remove` — unfavourite a canonical target. Idempotent.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `internal.database`.
+	 */
+	targetFavouritesRemove: (req: TargetFavouriteRequest) => typedError<TargetFavouriteRemoveResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_remove", { req })),
+	/**
+	 *  `target.resolve` — resolve a designation / common name (or FITS OBJECT
+	 *  value) against the shared redb resolve cache, falling back to SIMBAD's
+	 *  tabular (TAP) path on a miss when online resolution is enabled (spec 035).
+	 *  The debounced typeahead entrypoint — TAP + cache only, never the Sesame
+	 *  fallback (spec 052 P2 FR-009; see `target_resolve_explicit` for that).
+	 *  Never writes `canonical_target` itself (spec 052 P1 FR-004) except via the
+	 *  manual `override` path (T032) — see `app_core::target_resolve` for the
+	 *  in-use promotion commit points.
+	 * 
+	 *  The live `SimbadResolver` facade is built on demand from the persisted
+	 *  `resolver_settings` (endpoint + timeout) plus the app-lifetime shared
+	 *  redb cache. Cache hits never re-query SIMBAD (FR-006); offline / unknown /
+	 *  ambiguous outcomes return `unresolved` and never fabricate coordinates
+	 *  (FR-009).
 	 * 
 	 *  # Errors
 	 * 
@@ -275,18 +347,93 @@ export const commands = {
 	 */
 	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_resolve", { req })),
 	/**
-	 *  `target.search` — as-you-type target suggestions from local seed + cache.
-	 * 
-	 *  Served purely from the local resolution cache / bundled seed (no network);
-	 *  long-tail SIMBAD enrichment is a separate `target.resolve` call. Returns
-	 *  ranked, de-duplicated [`TargetSuggestion`]s for the project-creation /
-	 *  target-selection typeahead (spec 035 FR-005).
+	 *  `target.resolve_explicit` — the deliberate resolve/confirm entrypoint
+	 *  (Enter with no typeahead match, "search more", or an Add/Confirm submit).
+	 *  Same request/response contract as `target.resolve`; consults
+	 *  [`targeting_resolver::simbad::SimbadResolver::resolve_explicit`]
+	 *  (TAP-first, Sesame-fallback-on-a-miss) instead of the TAP+cache-only path
+	 *  `target.resolve` uses — the frontend MUST NOT call this per keystroke
+	 *  (FR-009).
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(String)` on an unexpected internal (database) failure.
+	 *  Returns `Err(String)` only on a local database failure. Resolver outcomes
+	 *  (offline / unknown / ambiguous) are encoded in the response status.
+	 */
+	targetResolveExplicit: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_resolve_explicit", { req })),
+	/**
+	 *  `target.search` — as-you-type target suggestions from the shared redb
+	 *  resolve cache (seed + anything resolved/warmed so far).
+	 * 
+	 *  Served purely from the local cache (no network); long-tail SIMBAD
+	 *  enrichment is a separate `target.resolve` call. Returns ranked,
+	 *  de-duplicated [`TargetSuggestion`](contracts_core::targets::TargetSuggestion)s
+	 *  for the project-creation / target-selection typeahead (spec 035 FR-005).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on an unexpected internal (cache) failure.
 	 */
 	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_search", { req })),
+	/**
+	 *  `target.adopt` — promote a redb-cache-only target into the durable
+	 *  `canonical_target` table. The explicit in-use commit for UI flows with no
+	 *  other natural commit point (e.g. the Targets-page "Add Target" dialog).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on an invalid `target_id` or a local backend failure.
+	 */
+	targetAdopt: (req: TargetAdoptRequest) => typedError<TargetAdoptResponse, ContractError_Serialize>(__TAURI_INVOKE("target_adopt", { req })),
+	/**
+	 *  `target.cache.clear` — wipe the redb resolve cache and schedule its
+	 *  re-warm (bundled seed + existing durable `canonical_target` rows) as a
+	 *  background task, returning as soon as the swap is done. Never touches
+	 *  `canonical_target` itself (§V — the redb cache is a reproducible
+	 *  projection, never canonical).
+	 * 
+	 *  Best-effort on the underlying file swap: a transient failure to remove the
+	 *  old redb file (e.g. a concurrent read still has it open) is reported as an
+	 *  internal error rather than silently leaving a stale cache in place.
+	 * 
+	 *  Fix for #695: this used to await the full re-warm (bundled seed +
+	 *  durable rows — up to ~14k individually fsync'd redb writes) inline,
+	 *  freezing the caller for minutes on a debug build. `rewarmed_count` is
+	 *  therefore always `0` now — "re-warm scheduled in the background, count
+	 *  not known synchronously" rather than "0 entries re-warmed" — kept as a
+	 *  response-meaning change instead of widening the contract.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` if the cache file cannot be removed/reopened.
+	 */
+	targetCacheClear: () => typedError<TargetCacheClearResponse, ContractError_Serialize>(__TAURI_INVOKE("target_cache_clear")),
+	/**
+	 *  `target.cone_search.suggest` — cone-search a light-frameset's derived
+	 *  pointing (WCS → mount → none, FR-012) and return ranked,
+	 *  confidence-carrying target suggestions. Advisory only — creates nothing;
+	 *  requires online resolution (offline reports `resolve.offline`, FR-018).
+	 * 
+	 *  # Errors
+	 * 
+	 *  `frameset.not_found` for an unknown `frameset_id`; `resolve.offline` when
+	 *  online resolution is disabled or the cone-search fails (non-blocking,
+	 *  FR-018); `internal.database` on a local query failure.
+	 */
+	targetConeSearchSuggest: (req: ConeSearchSuggestRequest) => typedError<ConeSearchSuggestResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_cone_search_suggest", { req })),
+	/**
+	 *  `target.cone_search.confirm` — the single point at which a cone-search
+	 *  suggestion becomes durable (FR-016, SC-006): adopts the candidate via the
+	 *  existing in-use promotion path (spec 052 P1) and links it to the
+	 *  frameset.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `frameset.not_found` for an unknown `frameset_id`; `candidate.invalid`
+	 *  when the candidate no longer resolves; `internal.database` on a local
+	 *  query failure.
+	 */
+	targetConeSearchConfirm: (req: ConeSearchConfirmRequest_Deserialize) => typedError<ConeSearchConfirmResponse, ContractError_Serialize>(__TAURI_INVOKE("target_cone_search_confirm", { req })),
 	/**
 	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
 	 * 
@@ -303,6 +450,33 @@ export const commands = {
 	 *  Returns `Err(String)` on a local database failure.
 	 */
 	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, ContractError_Serialize>(__TAURI_INVOKE("target_resolution_settings_update", { req })),
+	/**
+	 *  `target.astro_format.batch` — sexagesimal RA/Dec formatting for N targets
+	 *  in one call (never per-row round trips). Pure geometry (`targeting::astro_format`,
+	 *  backed by `skymath::Equatorial`'s carry-safe sexagesimal formatting) —
+	 *  no database access, so this never fails on a well-formed request.
+	 * 
+	 *  Targets whose RA/Dec is non-finite are omitted from `formatted` (never a
+	 *  fabricated string); callers key results by `id`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  This command does not fail; the `Result` shape matches the rest of the
+	 *  command surface for a consistent IPC error contract.
+	 */
+	targetAstroFormatBatch: (req: TargetAstroFormatBatchRequest) => typedError<TargetAstroFormatBatchResponse, ContractError_Serialize>(__TAURI_INVOKE("target_astro_format_batch", { req })),
+	/**
+	 *  `target.moon_opposition.batch` — batched Moon-separation + next-opposition
+	 *  computation for N targets in one call (never per-row round trips, #634).
+	 *  Pure geometry/ephemeris — no database access, so this never fails on a
+	 *  well-formed request; a malformed `at` is the only error case.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `"value.invalid"` when `at` is not
+	 *  a valid RFC3339 instant.
+	 */
+	targetMoonOppositionBatch: (req: TargetMoonOppositionBatchRequest) => typedError<TargetMoonOppositionBatchResponse, ContractError_Serialize>(__TAURI_INVOKE("target_moon_opposition_batch", { req })),
 	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
@@ -374,6 +548,47 @@ export const commands = {
 	 */
 	projectsChannelsDismissDrift: (req: ProjectChannelsDismissDriftRequest) => typedError<ProjectChannelsDismissDriftResult, ContractError_Serialize>(__TAURI_INVOKE("projects_channels_dismiss_drift", { req })),
 	/**
+	 *  `projects.framing.list` — list a project's framings.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"project.not_found"` when the project does not
+	 *  exist.
+	 */
+	projectsFramingList: (req: FramingListRequest) => typedError<FramingListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_list", { req })),
+	/**
+	 *  `projects.framing.merge` — fold one or more framings into a primary
+	 *  framing; membership-only, flips the primary to `user_adjusted`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure (e.g.
+	 *  `"framing.merge.requires_two"`) or when a referenced framing is not found.
+	 */
+	projectsFramingMerge: (req: FramingMergeRequest) => typedError<FramingMergeResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_merge", { req })),
+	/**
+	 *  `projects.framing.split` — move a subset of a framing's sessions into a
+	 *  brand-new framing; membership-only, flips both framings to
+	 *  `user_adjusted`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure (e.g.
+	 *  `"framing.split.would_empty_source"`) or when the framing is not found.
+	 */
+	projectsFramingSplit: (req: FramingSplitRequest) => typedError<FramingSplitResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_split", { req })),
+	/**
+	 *  `projects.framing.reassign` — move sessions into a target framing;
+	 *  membership-only, flips every touched framing to `user_adjusted`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure (e.g.
+	 *  `"framing.reassign.empty_selection"`) or when the target framing is not
+	 *  found.
+	 */
+	projectsFramingReassign: (req: FramingReassignRequest) => typedError<FramingReassignResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_reassign", { req })),
+	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
 	 * 
 	 *  This stub is retained for UI compatibility until spec 025 folder-plan
@@ -402,6 +617,16 @@ export const commands = {
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_get", { id })),
+	/**
+	 *  `plans.free_space_estimate` — advisory destination free-space estimate for
+	 *  a plan under review, before approval (issue #876). Never blocks approval;
+	 *  see `app_core::plans::estimate_free_space`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+	 */
+	plansFreeSpaceEstimate: (id: string) => typedError<PlanFreeSpaceEstimate_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_free_space_estimate", { id })),
 	/**
 	 *  `plans.approve` — move a plan to `approved`; snapshot item FS metadata (US3, T025).
 	 * 
@@ -451,15 +676,19 @@ export const commands = {
 	 */
 	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_permanently_delete", { planId, confirmText })),
 	/**
-	 *  `archive.list` — list projects currently in the `archived` lifecycle state
-	 *  (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
-	 *  so the management commands act on the owning plan.
+	 *  `archive.list` — list archived projects (spec 017 C5) AND archived
+	 *  calibration masters (#886), each row carrying `archivedViaPlanId` so the
+	 *  management commands (`archive.send_to_trash`/`archive.permanently_delete`,
+	 *  already entity-agnostic — they act purely on a plan's items) work on
+	 *  either kind. The two listings are composed here rather than folded into
+	 *  one generator function, keeping each generator scoped to the entity it
+	 *  owns (`app_core::archive_generator` / `app_core::calibration_archive_generator`).
 	 * 
 	 *  # Errors
 	 * 
 	 *  Returns `Err` with the contract error code on database failure.
 	 */
-	archiveList: () => typedError<ArchiveListResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
+	archiveList: () => typedError<ArchiveListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
 	/**
 	 *  `archive.plan.generate` — build a reviewable whole-project archive plan
 	 *  (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
@@ -469,7 +698,19 @@ export const commands = {
 	 * 
 	 *  Returns `Err` with the contract error code on database failure.
 	 */
-	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
+	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
+	/**
+	 *  `archive.plan.generate_restore` — build a reviewable restore (un-archive)
+	 *  plan from a previously applied archive plan (#885, decision D15). Creates
+	 *  a `ready_for_review` plan; performs NO filesystem mutation and never
+	 *  auto-applies (constitution II / FR-002).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err` with `"plan.not_found"`, `"plan.invalid_state"` (not an
+	 *  applied archive plan), or `"archive.empty"` (nothing to restore).
+	 */
+	archivePlanGenerateRestore: (archivedPlanId: string, title: string | null) => typedError<GenerateRestorePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate_restore", { archivedPlanId, title })),
 	/**
 	 *  `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
 	 * 
@@ -499,10 +740,11 @@ export const commands = {
 	 *  Auto-approves the plan if it is still `ready_for_review`, then runs the
 	 *  same background executor and writes the same durable audit trail as
 	 *  `plans_apply_real` — it just takes no `tauri::ipc::Channel`, so it can be
-	 *  invoked directly by the Layer-2 `WebDriver` E2E bridge (which cannot
-	 *  construct a `Channel` from a test script) or by any UI surface that only
-	 *  needs a fire-and-poll apply (poll `plans.apply.status` for the durable
-	 *  terminal counts) rather than a live progress stream.
+	 *  invoked directly by the Layer-2 `WebDriver` E2E bridge (which could build
+	 *  a `Channel`, but should not have to reach into Tauri internals to do it)
+	 *  or by any UI surface that only needs a fire-and-poll apply (poll
+	 *  `plans.apply.status` for the durable terminal counts) rather than a live
+	 *  progress stream.
 	 * 
 	 *  Intended for archive/cleanup plans, which — unlike inbox plans — have no
 	 *  `inbox.plan.apply` channel-free equivalent to route through.
@@ -577,6 +819,21 @@ export const commands = {
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_status", { planId })),
+	/**
+	 *  `plans.confirm.destructive` — confirm every delete/trash item in a plan
+	 *  (FR-003, D9, issue #741).
+	 * 
+	 *  Persists `destructive_confirmed = 1` on the plan's destructive items so a
+	 *  subsequent apply does not refuse them at the executor's
+	 *  destructive-confirm gate. Plan-level, not per-item — see
+	 *  `confirm_plan_destructive_items`'s doc comment for why.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with `"plan.not_found"` if the plan does not
+	 *  exist.
+	 */
+	plansConfirmDestructive: (planId: string) => typedError<PlanDestructiveConfirmResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_confirm_destructive", { planId })),
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
@@ -928,63 +1185,46 @@ export const commands = {
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("search_global", { query })),
 	/**
-	 *  `tour.complete_step` — mark a tour step as completed.
+	 *  `onboarding.state.get` — read the full projection for UI hydration.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	tourCompleteStep: (step: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("tour_complete_step", { step })),
+	onboardingStateGet: () => typedError<OnboardingStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_state_get")),
 	/**
-	 *  `guided.state.get` — read current coach state for UI hydration.
-	 * 
-	 *  Returns the current `GuidedFlowStateDto`.  On the first call after a
-	 *  corruption reset, returns `Err` with code `state_corrupted`; the row has
-	 *  already been reset to Idle server-side.  Retry to get the fresh state.
+	 *  `onboarding.item.set_state` — manual check-off or dismiss (FR-017).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on corruption (informational) or database failure.
+	 *  Returns `Err(ContractError)` on unknown item id or database failure.
 	 */
-	guidedStateGet: () => typedError<GuidedStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_state_get")),
+	onboardingItemSetState: (request: OnboardingItemSetStateRequest) => typedError<OnboardingItemSetStateResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_item_set_state", { request })),
 	/**
-	 *  `guided.step.complete` — mark a step complete and advance the coach.
-	 * 
-	 *  The step must be a known registry id (e.g. `inbox.confirm_first`).
-	 *  If the flow is dismissed, returns an error.
+	 *  `onboarding.orientation.complete` — mark the L1 walk finished/skipped
+	 *  (both set done-forever, FR-004). Idempotent.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_step_complete", { request })),
+	onboardingOrientationComplete: (request: OnboardingOrientationCompleteRequest) => typedError<OnboardingOrientationCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_orientation_complete", { request })),
 	/**
-	 *  `guided.dismiss` — dismiss the coach, hiding all hints.
-	 * 
-	 *  Idempotent: calling again on an already-dismissed flow returns the
-	 *  original `dismissedAt` timestamp.
+	 *  `onboarding.section.set` — explicit remove (FR-013) + collapse persistence
+	 *  (FR-012). `hidden` accepts only `true`; unhiding is exclusively
+	 *  `onboarding.restore`.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
+	 *  Returns `Err(ContractError)` on an empty/`hidden: false` request or database
+	 *  failure.
 	 */
-	guidedDismiss: () => typedError<GuidedDismissResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_dismiss")),
+	onboardingSectionSet: (request: OnboardingSectionSetRequest_Deserialize) => typedError<OnboardingSectionSetResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_section_set", { request })),
 	/**
-	 *  `guided.restart` — restart the coach from Settings.
-	 * 
-	 *  - `Dismissed → Active(lowest uncompleted step)`: retains completed steps.
-	 *  - `Completed → Idle`: resets all progress (A1 ratified 2026-05-22).
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	guidedRestart: () => typedError<GuidedRestartResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_restart")),
-	/**
-	 *  `guided.activate` — activate the flow after first-run setup completes.
-	 * 
-	 *  If the flow is Idle, transitions to `Active(first uncompleted step)`.
-	 *  Idempotent when already active or dismissed.
+	 *  `onboarding.restore` — the single Settings → Advanced restore/reset
+	 *  (FR-014). Re-derives AUTOMATIC items from recorded data; user progress is
+	 *  preserved. Idempotent.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	guidedActivate: () => typedError<GuidedFlowStateDto, ContractError_Serialize>(__TAURI_INVOKE("guided_activate")),
+	onboardingRestore: () => typedError<OnboardingRestoreResponse, ContractError_Serialize>(__TAURI_INVOKE("onboarding_restore")),
 	/**
 	 *  `native.directory.pick` — open the OS directory picker.
 	 * 
@@ -1171,6 +1411,29 @@ export const commands = {
 	 */
 	cleanupPlanGenerate: (request: GenerateCleanupPlanRequest) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_plan_generate", { request })),
 	/**
+	 *  `cleanup.raw_frames.scan` — pure, read-only raw sub-frame cleanup preview
+	 *  for a root or session (spec 048 US3). Distinct from `cleanup.scan`, which
+	 *  enumerates a project's processing artifacts; this enumerates present,
+	 *  non-protected per-frame inventory entries. Creates NO plan and performs
+	 *  NO filesystem mutation.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure or an invalid/empty scope.
+	 */
+	cleanupRawFramesScan: (request: RawFrameCleanupScanRequest_Deserialize) => typedError<RawFrameCleanupScanResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("cleanup_raw_frames_scan", { request })),
+	/**
+	 *  `cleanup.raw_frames.generate` — materialise a reviewable cleanup plan for
+	 *  user-selected raw sub-frames (spec 048 US3). Reuses the same protection
+	 *  generator tail as `cleanup.plan.generate` (PR #408 overlap guard,
+	 *  `.astro-plan-archive/<planId>/` destination). Performs NO filesystem
+	 *  mutation (FR-019).
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure or when no selected frame id
+	 *  resolves to a present `file_record` row.
+	 */
+	cleanupRawFramesGenerate: (request: RawFrameCleanupGenerateRequest_Deserialize) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_raw_frames_generate", { request })),
+	/**
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
 	 * 
 	 *  # Errors
@@ -1211,6 +1474,27 @@ export const commands = {
 	 */
 	inboxClassify: (req: InboxClassifyRequest) => typedError<InboxClassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_classify", { req })),
 	/**
+	 *  `inbox.classify.sourceGroup` — classify a scanned folder that has no
+	 *  `inbox_items` row yet, materializing its sub-items directly from the group
+	 *  (spec 058 FR-015/FR-016, T012).
+	 * 
+	 *  This is the entry point that makes a source-group row actionable. Without
+	 *  it, removing the scan-time placeholder (T020) leaves every scanned folder
+	 *  permanently unclassifiable: `inbox.classify` is keyed on `inboxItemId` and
+	 *  fails `inbox.item.not_found` without one, and `inbox.reclassify` v2 rebuilds
+	 *  its file records from evidence rows that are only ever written against an
+	 *  item id. No item ⇒ no evidence ⇒ no item.
+	 * 
+	 *  Mints nothing confirmable — it returns a count, not a plan and not an id.
+	 *  Confirmation continues to happen only against the materialized item rows,
+	 *  which preserves the source-group row's structural non-confirmability.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` (no such source group) | `metadata.unreadable` (the
+	 *  folder holds no readable FITS/XISF files)
+	 */
+	inboxClassifySourceGroup: (req: InboxClassifySourceGroupRequest) => typedError<InboxClassifySourceGroupResponse, ContractError_Serialize>(__TAURI_INVOKE("inbox_classify_source_group", { req })),
+	/**
 	 *  `inbox.confirm` — generate a reviewable plan from a classified Inbox item.
 	 * 
 	 *  # Errors
@@ -1222,7 +1506,10 @@ export const commands = {
 	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 	 * 
 	 *  # Errors
-	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
+	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, `"file.not_found"`,
+	 *  or `"internal.database"` — the re-aggregation's writes (classification,
+	 *  needs-review sentinel, breakdown rows) surface a persistence failure rather
+	 *  than returning a response that describes state which was never saved.
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
@@ -1251,8 +1538,10 @@ export const commands = {
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
 	 * 
-	 *  Results are capped at 500 items (FR-006). Each item carries its root's
-	 *  absolute path so the UI can group/label by root without a second call.
+	 *  Each of the two result arrays is capped at 500 rows (FR-006); `capped` is
+	 *  true when either hit its limit, so the UI never silently drops folders.
+	 *  Each item carries its root's absolute path so the UI can group/label by
+	 *  root without a second call.
 	 * 
 	 *  # Errors
 	 *  Returns a string error on database failure.
@@ -1364,12 +1653,28 @@ export const commands = {
 	 *  header is returned only as a display hint, never used for matching. The
 	 *  chosen target is written separately via `inbox.reclassify` (T068).
 	 * 
-	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+	 *  Identify the sub-group by `inboxItemId`. The request's legacy
+	 *  `sourceGroupId` is no longer accepted (spec 058 D-002).
 	 * 
 	 *  # Errors
 	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
 	 */
 	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
+	/**
+	 *  `inbox.attribution.suggest` — ranked framing/project attribution candidates
+	 *  for a light-frame Inbox item (spec 008 US7/FR-019, F-Framing-5).
+	 * 
+	 *  Read-only: suggests, never merges (FR-020). The user picks one and the pick
+	 *  travels as `inbox.confirm`'s `chosenAttribution` (FR-022) on a **single**
+	 *  confirm — the candidates must be readable before that confirm, because
+	 *  confirm creates the plan that blocks any second confirm on the item.
+	 * 
+	 *  Returns an empty list for non-light items.
+	 * 
+	 *  # Errors
+	 *  `internal.database` — a query failed.
+	 */
+	inboxAttributionSuggest: (inboxItemId: string) => typedError<IngestionAttributionCandidateDto_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("inbox_attribution_suggest", { inboxItemId })),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
@@ -1377,6 +1682,15 @@ export const commands = {
 	 *  Returns `Err(String)` on database error.
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
+	/**
+	 *  `inventory.session.notes.update` — write post-hoc notes for an inventory
+	 *  session. Empty/whitespace-only `notes` clears the field.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` (mapped to `ContractError::internal`) on
+	 *  `session.not_found`, `note.content_too_large`, or a database error.
+	 */
+	inventorySessionNotesUpdate: (req: SessionNotesUpdateRequest) => typedError<SessionNotesUpdateResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_session_notes_update", { req })),
 	/**
 	 *  `inventory.frame.list` — list per-frame inventory entries for a session
 	 *  or root.
@@ -1397,11 +1711,9 @@ export const commands = {
 	 *  `inventory.frame.relink` — relink a surfaced missing frame to a candidate
 	 *  file under the same root, confirmed by sha256 content hash.
 	 * 
-	 *  Stub (US2 T025 not yet implemented): always returns `internal.error`
-	 *  rather than silently claiming a match. Contract shape only.
-	 * 
 	 *  # Errors
-	 *  Always returns `ContractError` until T025 lands.
+	 *  Returns `ContractError` (`frame.not_found`, `root.unavailable`,
+	 *  `file.not_found`, `hash.mismatch`) per `app_core::frame_inventory::relink_frame`.
 	 */
 	inventoryFrameRelink: (req: InventoryFrameRelinkRequest) => typedError<InventoryFrameRelinkResponse, ContractError_Serialize>(__TAURI_INVOKE("inventory_frame_relink", { req })),
 	/**
@@ -1567,9 +1879,11 @@ export const commands = {
 	 *  `project.manifest.reveal_in_os` — open the manifest file's folder in the
 	 *  OS file manager.
 	 * 
-	 *  Delegates to `tauri-plugin-opener::reveal_item_in_dir`. On Linux, if the
-	 *  opener plugin fails, falls back to `xdg-open` on the parent directory
-	 *  (matching the pattern from `native.reveal`).
+	 *  #716: routes through the shared spec-004 `native.reveal` core
+	 *  (`reveal_with_audit`) instead of reimplementing the opener/xdg-open
+	 *  fallback independently — path validation and `native.reveal.failed`
+	 *  audit-on-failure now apply here too, which the standalone reimplementation
+	 *  never had. The external `Result<(), String>` contract is unchanged.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
@@ -1641,6 +1955,40 @@ export const commands = {
 	 */
 	sourceviewGenerate: (req: SourceViewGenerateRequest) => typedError<SourceViewGenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_generate", { req })),
 	/**
+	 *  `sourceview.verify` — read-only check that every link in a generated
+	 *  source view still resolves to a present canonical source.
+	 * 
+	 *  Never mutates the filesystem and never auto-repairs (FR-014/FR-015);
+	 *  repair is via explicit `preparedview.regenerate`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `view.not_found` when the view does
+	 *  not exist, or an `internal.*` error on failure.
+	 */
+	sourceviewVerify: (viewId: string) => typedError<SourceViewVerifyResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_verify", { viewId })),
+	/**
+	 *  `sourceview.destination.get` — read the persisted per-project destination
+	 *  override (FR-021b). `destination: null` means no override is persisted and
+	 *  the project-envelope default applies.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	sourceviewDestinationGet: (projectId: string) => typedError<SourceViewDestinationGetResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_destination_get", { projectId })),
+	/**
+	 *  `sourceview.destination.set` — persist (or clear, with `destination: null`)
+	 *  the per-project destination override (FR-021b). Applied at the next
+	 *  `sourceview.generate` call for this project unless a per-generation
+	 *  `destinationOverride` is also given (per-generation wins).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	sourceviewDestinationSet: (req: SourceViewDestinationSetRequest) => typedError<SourceViewDestinationSetResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_destination_set", { req })),
+	/**
 	 *  `dev.contracts.list` — list all registered contracts (spec 021 US1).
 	 * 
 	 *  Returns `dev_mode.disabled` when the runtime `devMode` setting is off.
@@ -1658,6 +2006,19 @@ export const commands = {
 	 *  Returns `Err(String)` when `devMode` is disabled or on database failure.
 	 */
 	devCallsList: (request: DevCallsListRequest_Deserialize) => typedError<DevCallsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_list", { request })),
+	/**
+	 *  `dev.calls.push` — record a call captured by the JS-side recording proxy
+	 *  (spec 021 US2 / follow-up #736) into the shared ring buffer, so
+	 *  `dev.calls.list` and `dev.export` observe live calls too. The frontend
+	 *  recorder (`apps/desktop/src/dev/recorder.ts`) keeps its own buffer for
+	 *  instant, reactive rendering; this is a best-effort mirror for backend
+	 *  consumers (export). The call is already redacted client-side before this
+	 *  is invoked.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled.
+	 */
+	devCallsPush: (call: ContractCall_Deserialize) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_push", { call })),
 	/**
 	 *  `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
 	 * 
@@ -1745,40 +2106,135 @@ export type AppPreferences = {
 	defaultProjectView: ViewMode,
 	sessionsGroupBy: SessionsGroupBy,
 	sessionsView: SessionsView,
-	tourCompleted: TourCompleted,
 	setupCompleted: boolean,
+	/**  Keyed by `dockId` (the adopting list page, e.g. `"sessions"`). */
+	detailDock: { [key in string]: DetailDockPref },
 };
 
-/**  One archived entity row for the Archive page (C5 design: projects only). */
-export type ArchiveEntry = {
-	/**  Archived entity id (a project id in the current design). */
+/**
+ *  One archived entity row for the Archive page. `"project"` (C5 design) or
+ *  `"master"` (#886) today — no session/target tabs until a real archival
+ *  model for them is designed.
+ */
+export type ArchiveEntry = ArchiveEntry_Serialize | ArchiveEntry_Deserialize;
+
+/**
+ *  One archived entity row for the Archive page. `"project"` (C5 design) or
+ *  `"master"` (#886) today — no session/target tabs until a real archival
+ *  model for them is designed.
+ */
+export type ArchiveEntry_Deserialize = {
+	/**  Archived entity id (a project or calibration-master id). */
 	id: string,
-	/**  Display name (project name). */
-	name: string,
 	/**
-	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
-	 *  tabs until a real archival model for them is designed).
+	 *  Display name (project name, or the master's file name for `"master"`
+	 *  rows).
 	 */
+	name: string,
+	/**  Entity kind: `"project"` or `"master"`. */
 	entityType: string,
-	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	/**
+	 *  When the entity was archived (ISO-8601). For a project, when it
+	 *  reached the `archived` lifecycle state; masters have no lifecycle
+	 *  state machine, so this is the plan-apply finalize timestamp.
+	 */
 	archivedAt: string,
-	/**  Human-readable reason (the archive plan title when available). */
-	reason: string,
-	/**  The entity's original on-disk location (project-relative library path). */
+	/**
+	 *  Human-readable reason (the archive plan title). `None` when the owning
+	 *  plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+	 *  sentinel standing in for absence).
+	 */
+	reason: string | null,
+	/**
+	 *  The entity's original on-disk location (project-relative library path
+	 *  for a project row; root-relative file path for a master row).
+	 */
 	originalPath: string,
-	/**  Bytes moved into the app-managed archive by the owning plan. */
-	sizeBytes: number,
+	/**
+	 *  Bytes moved into the app-managed archive by the owning plan. `None`
+	 *  when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+	 */
+	sizeBytes: number | null,
 	/**
 	 *  Plan that archived this entity. Drives the management operations
 	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
 	 *  for legacy rows archived before this column existed.
 	 */
 	archivedViaPlanId: string | null,
+	/**
+	 *  Absolute on-disk path to the app-managed archive folder holding this
+	 *  entity's files (`<parent-of-first-item>/.astro-plan-archive/
+	 *  <planId>/`, #874). Derived from the owning plan's first archived item
+	 *  at read time; `None` when the owning plan is missing or has no
+	 *  archived items to derive a folder from — never a fabricated path.
+	 */
+	archiveFolderPath: string | null,
+};
+
+/**
+ *  One archived entity row for the Archive page. `"project"` (C5 design) or
+ *  `"master"` (#886) today — no session/target tabs until a real archival
+ *  model for them is designed.
+ */
+export type ArchiveEntry_Serialize = {
+	/**  Archived entity id (a project or calibration-master id). */
+	id: string,
+	/**
+	 *  Display name (project name, or the master's file name for `"master"`
+	 *  rows).
+	 */
+	name: string,
+	/**  Entity kind: `"project"` or `"master"`. */
+	entityType: string,
+	/**
+	 *  When the entity was archived (ISO-8601). For a project, when it
+	 *  reached the `archived` lifecycle state; masters have no lifecycle
+	 *  state machine, so this is the plan-apply finalize timestamp.
+	 */
+	archivedAt: string,
+	/**
+	 *  Human-readable reason (the archive plan title). `None` when the owning
+	 *  plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+	 *  sentinel standing in for absence).
+	 */
+	reason?: string | null,
+	/**
+	 *  The entity's original on-disk location (project-relative library path
+	 *  for a project row; root-relative file path for a master row).
+	 */
+	originalPath: string,
+	/**
+	 *  Bytes moved into the app-managed archive by the owning plan. `None`
+	 *  when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+	 */
+	sizeBytes?: number | null,
+	/**
+	 *  Plan that archived this entity. Drives the management operations
+	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
+	 *  for legacy rows archived before this column existed.
+	 */
+	archivedViaPlanId: string | null,
+	/**
+	 *  Absolute on-disk path to the app-managed archive folder holding this
+	 *  entity's files (`<parent-of-first-item>/.astro-plan-archive/
+	 *  <planId>/`, #874). Derived from the owning plan's first archived item
+	 *  at read time; `None` when the owning plan is missing or has no
+	 *  archived items to derive a folder from — never a fabricated path.
+	 */
+	archiveFolderPath?: string | null,
 };
 
 /**  Response for `archive.list` — every project currently in `archived`. */
-export type ArchiveListResponse = {
-	entries: ArchiveEntry[],
+export type ArchiveListResponse = ArchiveListResponse_Serialize | ArchiveListResponse_Deserialize;
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse_Deserialize = {
+	entries: ArchiveEntry_Deserialize[],
+};
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse_Serialize = {
+	entries: ArchiveEntry_Serialize[],
 };
 
 /**  Response for `archive.permanently_delete`. */
@@ -1947,6 +2403,57 @@ export type AssignedDto_Serialize = {
 	wasOverride: boolean,
 	mismatchedDimensions?: string[] | null,
 	assignedAt: string,
+};
+
+/**
+ *  Outcome of applying a [`ChosenAttributionDto`] at confirm time
+ *  (F-Framing-10/6). Returned alongside the confirm response so the UI can
+ *  surface the reopen/warning without a follow-up read.
+ */
+export type AttributionAppliedDto = AttributionAppliedDto_Serialize | AttributionAppliedDto_Deserialize;
+
+/**
+ *  Outcome of applying a [`ChosenAttributionDto`] at confirm time
+ *  (F-Framing-10/6). Returned alongside the confirm response so the UI can
+ *  surface the reopen/warning without a follow-up read.
+ */
+export type AttributionAppliedDto_Deserialize = {
+	projectId: string,
+	/**  `None` for `unassigned`. */
+	framingId: string | null,
+	/**
+	 *  `true` when this pick triggered a `completed -> processing` reopen
+	 *  (F-Framing-6, spec-009's existing edge).
+	 */
+	reopened: boolean,
+	/**
+	 *  `true` when `reopened` and the project's raw subs have already been
+	 *  archived via a cleanup plan (Q25 raw-subs-archived reopen warning) —
+	 *  a degraded reopen the user should be aware of.
+	 */
+	rawSubsArchivedWarning: boolean,
+};
+
+/**
+ *  Outcome of applying a [`ChosenAttributionDto`] at confirm time
+ *  (F-Framing-10/6). Returned alongside the confirm response so the UI can
+ *  surface the reopen/warning without a follow-up read.
+ */
+export type AttributionAppliedDto_Serialize = {
+	projectId: string,
+	/**  `None` for `unassigned`. */
+	framingId?: string | null,
+	/**
+	 *  `true` when this pick triggered a `completed -> processing` reopen
+	 *  (F-Framing-6, spec-009's existing edge).
+	 */
+	reopened: boolean,
+	/**
+	 *  `true` when `reopened` and the project's raw subs have already been
+	 *  archived via a cleanup plan (Q25 raw-subs-archived reopen warning) —
+	 *  a degraded reopen the user should be aware of.
+	 */
+	rawSubsArchivedWarning: boolean,
 };
 
 /**  Actor that triggered the audited action. */
@@ -2123,6 +2630,37 @@ export type BatchSessionResultDto_Serialize = {
 /**  Overall batch operation status. */
 export type BatchStatus = "success" | "partial" | "failure";
 
+/**  One broken/missing/stale item in a verified view. */
+export type BrokenItem = {
+	inventoryItemId: string,
+	viewRelativePath: string,
+	state: BrokenItemState,
+};
+
+/**  Why a single item failed verification (contract `brokenItems[].state`). */
+export type BrokenItemState = 
+/**  The destination path itself no longer exists on disk. */
+"missing" | 
+/**  The canonical source (inventory reference) no longer resolves. */
+"moved" | 
+/**
+ *  The destination link is present but does not resolve to a live source
+ *  (a dangling symlink, or its target no longer matches the canonical
+ *  source path).
+ */
+"unresolved_link" | 
+/**
+ *  The on-disk materialization kind no longer matches the kind recorded
+ *  for this item (spec 026 FR-008 mixed-kind concept, per-item).
+ */
+"changed_kind" | 
+/**
+ *  A copy-kind item's destination content no longer matches the
+ *  canonical source (a real file copy, unlike a symlink/hardlink, can
+ *  silently drift — spec 026 FR-009 / #746).
+ */
+"hash_diverged";
+
 /**  Calendar data for the sessions calendar view. */
 export type CalendarData = {
 	months: CalendarMonth[],
@@ -2148,28 +2686,52 @@ export type CalendarSessionStub = {
 	filter: string,
 };
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint = CalibrationFingerprint_Serialize | CalibrationFingerprint_Deserialize;
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint_Deserialize = {
-	camera: string,
+	camera: string | null,
 	sensorMode: string | null,
 	exposureS: number | null,
 	tempC: number | null,
 	gain: number | null,
-	binning: string,
+	binning: string | null,
 	filter: string | null,
 };
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint_Serialize = {
-	camera: string,
+	camera?: string | null,
 	sensorMode?: string | null,
-	exposureS: number | null,
+	exposureS?: number | null,
 	tempC?: number | null,
-	gain: number | null,
-	binning: string,
+	gain?: number | null,
+	binning?: string | null,
 	filter?: string | null,
 };
 
@@ -2184,12 +2746,34 @@ export type CalibrationMaster_Deserialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Deserialize,
-	sourceSessionId: string,
+	/**
+	 *  `None` when the originating session is unresolved (Q16 / FR-136) —
+	 *  never self-referentially defaulted to this master's own id.
+	 */
+	sourceSessionId: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	/**
+	 *  `None` when file size is unresolved (Q16 / FR-136) — never a
+	 *  sentinel 0.
+	 */
+	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	/**
+	 *  #642: the master's owning library root id. `None` alongside
+	 *  `relative_path` when the master frame was never resolved to a
+	 *  `file_record` (legacy/unresolved masters) — never guessed.
+	 */
+	rootId: string | null,
+	/**
+	 *  #642: root-relative path of the master's own file, for Reveal /
+	 *  archive-plan generation. Resolve to an absolute path by joining with
+	 *  the `root_id`'s current library root path (roots stay modeled
+	 *  separately per Constitution I, so a moved/remapped root still
+	 *  resolves correctly).
+	 */
+	relativePath: string | null,
 };
 
 /**  A calibration master as seen in list views. */
@@ -2197,12 +2781,34 @@ export type CalibrationMaster_Serialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Serialize,
-	sourceSessionId: string,
+	/**
+	 *  `None` when the originating session is unresolved (Q16 / FR-136) —
+	 *  never self-referentially defaulted to this master's own id.
+	 */
+	sourceSessionId?: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	/**
+	 *  `None` when file size is unresolved (Q16 / FR-136) — never a
+	 *  sentinel 0.
+	 */
+	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	/**
+	 *  #642: the master's owning library root id. `None` alongside
+	 *  `relative_path` when the master frame was never resolved to a
+	 *  `file_record` (legacy/unresolved masters) — never guessed.
+	 */
+	rootId?: string | null,
+	/**
+	 *  #642: root-relative path of the master's own file, for Reveal /
+	 *  archive-plan generation. Resolve to an absolute path by joining with
+	 *  the `root_id`'s current library root path (roots stay modeled
+	 *  separately per Constitution I, so a moved/remapped root still
+	 *  resolves correctly).
+	 */
+	relativePath?: string | null,
 };
 
 /**  Request DTO for `calibration.match.assign`. */
@@ -2330,6 +2936,24 @@ export type CalibrationMatchDto_Serialize = {
 	frameCount?: number | null,
 };
 
+/**
+ *  Derived "source missing / unverifiable" flag on a calibration match
+ *  (spec 048 US5, FR-024/025). Computed live from current presence state —
+ *  never persisted — so it clears automatically once the referenced
+ *  frame/artifact returns to present. The match itself is NEVER
+ *  auto-invalidated or removed when this is set (FR-024).
+ * 
+ *  Two distinct trigger paths carry distinct user-facing wording because
+ *  they point the user at different problems:
+ *  - `MasterMissing`: the generated master file this match relies on
+ *    (tracked via `calibration_master.artifact_id` → spec-012
+ *    `processing_artifacts.state`) is gone.
+ *  - `SourceSubsMissing`: a raw calibration sub-frame that makes up this
+ *    master's own session is missing, so the master's provenance can't be
+ *    verified even though nothing about the master file itself changed.
+ */
+export type CalibrationMatchMissingFlag = "master_missing" | "source_subs_missing";
+
 /**  Request DTO for `calibration.match.suggest`. */
 export type CalibrationMatchSuggestRequest = CalibrationMatchSuggestRequest_Serialize | CalibrationMatchSuggestRequest_Deserialize;
 
@@ -2374,6 +2998,37 @@ export type CalibrationMatchSuggestResponse_Serialize = {
 	error?: SuggestErrorDto | null,
 };
 
+/**
+ *  Request DTO for `calibration.match.unassign` — removes a session's
+ *  assignment for one calibration type, returning it to "no master
+ *  assigned" (#875: un-assign was previously impossible).
+ */
+export type CalibrationMatchUnassignRequest = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	calibrationType: CalibrationType,
+};
+
+/**  Response DTO for `calibration.match.unassign`. */
+export type CalibrationMatchUnassignResponse = CalibrationMatchUnassignResponse_Serialize | CalibrationMatchUnassignResponse_Deserialize;
+
+/**  Response DTO for `calibration.match.unassign`. */
+export type CalibrationMatchUnassignResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	error: UnassignErrorDto | null,
+};
+
+/**  Response DTO for `calibration.match.unassign`. */
+export type CalibrationMatchUnassignResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	error?: UnassignErrorDto | null,
+};
+
 export type CalibrationTolerances = {
 	temperatureToleranceC: number | null,
 	exposureToleranceS: number | null,
@@ -2401,6 +3056,23 @@ export type Camera = {
 	name: string,
 	aliases: string[],
 	autoDetected: boolean,
+	/**  FR-035: `None` = unknown (behaves as mono, FR-038). */
+	sensorType: SensorType | null,
+	/**
+	 *  FR-035: narrowband set for an OSC dual/tri-band filter (e.g.
+	 *  `["Ha","OIII"]`); `None` = plain color camera (`rgb` default). Only
+	 *  meaningful when `sensor_type` is `Osc`.
+	 */
+	passband: string[] | null,
+	/**
+	 *  Pixel pitch in micrometres; `None` = not recorded. Square pixels are
+	 *  assumed on both axes, matching [`sessions::fov_diagonal_deg`].
+	 */
+	pixelSizeUm?: number | null,
+	/**  Unbinned sensor width in pixels (FITS `NAXIS1`); `None` = not recorded. */
+	sensorWidthPx?: number | null,
+	/**  Unbinned sensor height in pixels (FITS `NAXIS2`); `None` = not recorded. */
+	sensorHeightPx?: number | null,
 };
 
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
@@ -2426,6 +3098,43 @@ export type ChannelDriftDto = {
 	/**  `"re_infer"` or `"dismiss"` — only meaningful when `has_new_sources == true`. */
 	suggestedAction: string,
 };
+
+/**  Request payload for the attribution apply-path (data-model.md `chosenAttribution?`). */
+export type ChosenAttributionDto = ChosenAttributionDto_Serialize | ChosenAttributionDto_Deserialize;
+
+/**  Request payload for the attribution apply-path (data-model.md `chosenAttribution?`). */
+export type ChosenAttributionDto_Deserialize = {
+	kind: ChosenAttributionKind,
+	/**
+	 *  Required for `new_framing` / `flag_optic_difference` (the existing
+	 *  project to create the new framing under). Ignored for `new_project`
+	 *  (a project is created) and `unassigned`.
+	 */
+	projectId: string | null,
+	/**  Required for `add_to_framing`. */
+	framingId: string | null,
+};
+
+/**  Request payload for the attribution apply-path (data-model.md `chosenAttribution?`). */
+export type ChosenAttributionDto_Serialize = {
+	kind: ChosenAttributionKind,
+	/**
+	 *  Required for `new_framing` / `flag_optic_difference` (the existing
+	 *  project to create the new framing under). Ignored for `new_project`
+	 *  (a project is created) and `unassigned`.
+	 */
+	projectId?: string | null,
+	/**  Required for `add_to_framing`. */
+	framingId?: string | null,
+};
+
+/**
+ *  The user's attribution pick (data-model.md §Apply-path, FR-022) — an
+ *  additive field on the Inbox confirm request. `Unassigned` (or omitting
+ *  this field entirely) leaves the confirmed session's framing membership
+ *  unset, attributable later via `framing.reassign`.
+ */
+export type ChosenAttributionKind = "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project" | "unassigned";
 
 export type CleanupAction = "keep" | "archive" | "delete";
 
@@ -2457,6 +3166,189 @@ export type CompatibleSessionEntry = {
 	sessionId: string,
 	score: number | null,
 	softMismatches: string[],
+};
+
+/**  One candidate object, resolved from cache/online but not yet adopted. */
+export type ConeSearchCandidateTarget = ConeSearchCandidateTarget_Serialize | ConeSearchCandidateTarget_Deserialize;
+
+/**  One candidate object, resolved from cache/online but not yet adopted. */
+export type ConeSearchCandidateTarget_Deserialize = {
+	/**
+	 *  `None` until the candidate is confirmed (FR-004/FR-016) — cone-search
+	 *  itself never writes `canonical_target`.
+	 */
+	canonicalTargetId: string | null,
+	primaryDesignation: string,
+	commonName: string | null,
+	objectType: TargetObjectType,
+	raDeg: number | null,
+	decDeg: number | null,
+	magnitude: number | null,
+	constellation: string | null,
+};
+
+/**  One candidate object, resolved from cache/online but not yet adopted. */
+export type ConeSearchCandidateTarget_Serialize = {
+	/**
+	 *  `None` until the candidate is confirmed (FR-004/FR-016) — cone-search
+	 *  itself never writes `canonical_target`.
+	 */
+	canonicalTargetId?: string | null,
+	primaryDesignation: string,
+	commonName?: string | null,
+	objectType: TargetObjectType,
+	raDeg: number | null,
+	decDeg: number | null,
+	magnitude?: number | null,
+	constellation?: string | null,
+};
+
+/**
+ *  Explicit confidence for a cone-search suggestion (FR-014). `High` is the
+ *  only tier that may carry `preselected: true`; the system never sets it
+ *  without a qualifying confidence, and never applies a link itself.
+ */
+export type ConeSearchConfidence = "high" | "medium" | "low";
+
+/**  The candidate a `target.cone_search.confirm` call binds to the frameset. */
+export type ConeSearchConfirmCandidate = ConeSearchConfirmCandidate_Serialize | ConeSearchConfirmCandidate_Deserialize;
+
+/**  The candidate a `target.cone_search.confirm` call binds to the frameset. */
+export type ConeSearchConfirmCandidate_Deserialize = {
+	canonicalTargetId: string | null,
+	primaryDesignation: string,
+	simbadOid: number | null,
+};
+
+/**  The candidate a `target.cone_search.confirm` call binds to the frameset. */
+export type ConeSearchConfirmCandidate_Serialize = {
+	canonicalTargetId?: string | null,
+	primaryDesignation: string,
+	simbadOid?: number | null,
+};
+
+/**
+ *  Request for `target.cone_search.confirm` — the single point at which a
+ *  cone-search suggestion becomes durable (FR-016, SC-006).
+ */
+export type ConeSearchConfirmRequest = ConeSearchConfirmRequest_Serialize | ConeSearchConfirmRequest_Deserialize;
+
+/**
+ *  Request for `target.cone_search.confirm` — the single point at which a
+ *  cone-search suggestion becomes durable (FR-016, SC-006).
+ */
+export type ConeSearchConfirmRequest_Deserialize = {
+	framesetId: string,
+	candidate: ConeSearchConfirmCandidate_Deserialize,
+};
+
+/**
+ *  Request for `target.cone_search.confirm` — the single point at which a
+ *  cone-search suggestion becomes durable (FR-016, SC-006).
+ */
+export type ConeSearchConfirmRequest_Serialize = {
+	framesetId: string,
+	candidate: ConeSearchConfirmCandidate_Serialize,
+};
+
+/**  Response for `target.cone_search.confirm`. */
+export type ConeSearchConfirmResponse = {
+	canonicalTargetId: string,
+	/**
+	 *  `true` when a new durable row was written, `false` when an existing
+	 *  dedup match was reused.
+	 */
+	created: boolean,
+	linked: boolean,
+};
+
+/**  The derived sky pointing a cone-search ran against. */
+export type ConeSearchPointing = ConeSearchPointing_Serialize | ConeSearchPointing_Deserialize;
+
+/**  The derived sky pointing a cone-search ran against. */
+export type ConeSearchPointing_Deserialize = {
+	source: PointingSource,
+	centerRaDeg: number | null,
+	centerDecDeg: number | null,
+	radiusDeg: number | null,
+	opticsKnown: boolean,
+};
+
+/**  The derived sky pointing a cone-search ran against. */
+export type ConeSearchPointing_Serialize = {
+	source: PointingSource,
+	centerRaDeg?: number | null,
+	centerDecDeg?: number | null,
+	radiusDeg: number | null,
+	opticsKnown: boolean,
+};
+
+/**  What triggered this cone-search run (FR-017). */
+export type ConeSearchReason = "ingest" | "on_demand";
+
+/**
+ *  Request for `target.cone_search.suggest`. The backend derives the
+ *  pointing from the frameset's frames; the client never supplies
+ *  coordinates.
+ */
+export type ConeSearchSuggestRequest = {
+	framesetId: string,
+	reason: ConeSearchReason,
+};
+
+/**
+ *  Response for `target.cone_search.suggest`. Read-only — produces no
+ *  filesystem mutation and no `canonical_target` write.
+ */
+export type ConeSearchSuggestResponse = ConeSearchSuggestResponse_Serialize | ConeSearchSuggestResponse_Deserialize;
+
+/**
+ *  Response for `target.cone_search.suggest`. Read-only — produces no
+ *  filesystem mutation and no `canonical_target` write.
+ */
+export type ConeSearchSuggestResponse_Deserialize = {
+	pointing: ConeSearchPointing_Deserialize,
+	suggestions: ConeSearchSuggestion_Deserialize[],
+};
+
+/**
+ *  Response for `target.cone_search.suggest`. Read-only — produces no
+ *  filesystem mutation and no `canonical_target` write.
+ */
+export type ConeSearchSuggestResponse_Serialize = {
+	pointing: ConeSearchPointing_Serialize,
+	suggestions: ConeSearchSuggestion_Serialize[],
+};
+
+/**  A ranked, confidence-carrying cone-search suggestion. */
+export type ConeSearchSuggestion = ConeSearchSuggestion_Serialize | ConeSearchSuggestion_Deserialize;
+
+/**  A ranked, confidence-carrying cone-search suggestion. */
+export type ConeSearchSuggestion_Deserialize = {
+	candidate: ConeSearchCandidateTarget_Deserialize,
+	separationDeg: number | null,
+	confidence: ConeSearchConfidence,
+	/**  `true` only for `confidence = High` (FR-014); never implies a link. */
+	preselected: boolean,
+	/**
+	 *  `true` when the candidate is in the OQ-2 default exclusion set; still
+	 *  returned so the UI can show it for manual override (FR-015).
+	 */
+	excluded: boolean,
+};
+
+/**  A ranked, confidence-carrying cone-search suggestion. */
+export type ConeSearchSuggestion_Serialize = {
+	candidate: ConeSearchCandidateTarget_Serialize,
+	separationDeg: number | null,
+	confidence: ConeSearchConfidence,
+	/**  `true` only for `confidence = High` (FR-014); never implies a link. */
+	preselected: boolean,
+	/**
+	 *  `true` when the candidate is in the OQ-2 default exclusion set; still
+	 *  returned so the UI can show it for manual override (FR-015).
+	 */
+	excluded: boolean,
 };
 
 /**  Confidence level for inferred or reviewed metadata. */
@@ -2608,6 +3500,13 @@ export type Coordinates_Serialize = {
 export type CreateCamera = {
 	name: string,
 	aliases: string[],
+	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
+	sensorType?: SensorType | null,
+	passband?: string[] | null,
+	/**  Sensor geometry; `#[serde(default)]` keeps pre-0079 payloads valid. */
+	pixelSizeUm?: number | null,
+	sensorWidthPx?: number | null,
+	sensorHeightPx?: number | null,
 };
 
 export type CreateFilter = {
@@ -2657,6 +3556,17 @@ export type Density = "compact" | "comfortable" | "spacious";
 
 /**  Per-plan destination for destructive items (R-Trash-1). */
 export type DestructiveDestination = "archive" | "os_trash";
+
+/**
+ *  Per-page detail-dock state.
+ * 
+ *  `placement` is three-state: `Some(Side)` / `Some(Bottom)` pin the dock,
+ *  `None` means "auto" — follow the window-width rule (#1066).
+ */
+export type DetailDockPref = {
+	placement: DockPlacement | null,
+	width: number | null,
+};
 
 /**  Per-root detection trigger configuration (spec 048 FR-014/FR-015/FR-017). */
 export type DetectionConfig = {
@@ -2836,6 +3746,9 @@ export type DirectoryPickResponse = {
 	cancelled: boolean,
 };
 
+/**  Detail-panel dock placement for a list page. */
+export type DockPlacement = "side" | "bottom";
+
 /**  Entity kind for audit-log correlation on reveal operations. */
 export type EntityKind = "inbox_item" | "inventory_row" | "project_manifest" | "master_calibration" | "registered_source" | "other";
 
@@ -2867,7 +3780,14 @@ export type Equipment = {
  *  );
  *  ```
  */
-export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
+export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | 
+/**
+ *  `roots.register`/`roots.register.batch`: a candidate root path is a
+ *  parent of, or nested within, an already-registered root (issue #501).
+ *  Cross-cutting across categories — an inbox root inside a light-frames
+ *  root is still an overlap.
+ */
+"path.overlaps_existing" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
 "plan.approval_required" | "plan.approval.stale" | 
 /**
@@ -2875,13 +3795,66 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  path set overlaps an active apply run's path set (spec 025 FR-017,
  *  R-Concur-1).
  */
-"plan.conflict.overlap" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"plan.conflict.overlap" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | 
+/**
+ *  `plan.resume` re-validated the pause condition (R-Pause-1, R-Env-1)
+ *  and found the paused item's source is still stale; resume is
+ *  refused and the plan stays `paused` (spec 025 T048/T049/T050).
+ */
+"item.still.stale" | 
+/**
+ *  `plan.resume` re-validated and the paused item's volume is still
+ *  unreachable.
+ */
+"volume.still.unavailable" | 
+/**  `plan.resume` re-validated and the destination volume is still full. */
+"disk.still.full" | "archive.empty" | 
+/**
+ *  OS trash unavailable or failed for every item in an
+ *  `archive.send_to_trash` run (spec 017 US6, spec 025 `FailureCode::OsTrashUnavailable`).
+ */
+"os_trash.unavailable" | 
+/**
+ *  OS trash denied permission for every item in an
+ *  `archive.send_to_trash` run.
+ */
+"os_trash.permission.denied" | 
+/**
+ *  Non-permission delete failure (e.g. the file vanished mid-run, its
+ *  volume went unavailable, or the destination disk filled) for every
+ *  item in an `archive.permanently_delete` run. Permission failures use
+ *  the more specific `path.permission_denied`.
+ */
+"archive.delete_failed" | 
+/**
+ *  #886: `calibration_archive_generator::generate` refuses to archive a
+ *  master currently assigned to one or more sessions unless the caller
+ *  re-calls with `confirm_in_use = true` (decisions.md: warn + require
+ *  confirm before archiving an in-use master).
+ */
+"calibration.master_in_use" | 
+/**
+ *  #886: the master has no `root_id`/`relative_path` resolved to a real
+ *  `file_record` (legacy master, or the applied-frame write at
+ *  master-confirm time failed) — nothing to archive.
+ */
+"calibration.master_untracked" | 
+/**
+ *  #886: `calibration.masters.get`/`.archive` target id has no matching
+ *  `calibration_session` row.
+ */
+"master.not_found" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "attribution.not_light_frame" | "attribution.geometry_unavailable" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
  *  root; deletion is blocked rather than cascade-nullified.
  */
-"root.has_dependents" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+"root.has_dependents" | 
+/**
+ *  `roots.remap.apply` (issue #707): the two-step Verify → Apply flow
+ *  requires a successful Verify before Apply may mutate the root's path.
+ */
+"remap.not_verified" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
 "filesystem.destination_exists" | 
 /**
@@ -2893,10 +3866,27 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 /**  `plan.required` appears in `ContractError` in `transition_use_case.rs`. */
 "plan.required" | 
 /**
- *  Appears in `TargetOpError.code: String` (`target_management.rs`).
- *  Included per task instruction ("include when unsure — superset is safe").
+ *  `target.alias.add` (#751, FR-008): the normalized alias already belongs
+ *  to a *different* canonical target. A same-target duplicate stays
+ *  idempotent (no error) — only a cross-target collision returns this.
  */
 "alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" | 
+/**
+ *  Online resolution disabled or network unavailable — non-blocking
+ *  degraded state (FR-018), not a failure; ingest proceeds without a
+ *  suggestion.
+ */
+"resolve.offline" | "frameset.not_found" | 
+/**
+ *  Equivalent to a pointing `source = "none"` response; kept as a named
+ *  code for callers that prefer an error over an empty-suggestions 200.
+ */
+"pointing.unavailable" | 
+/**
+ *  A `target.cone_search.confirm` candidate no longer resolves (e.g. the
+ *  object vanished from SIMBAD between suggest and confirm).
+ */
+"candidate.invalid" | 
 /**
  *  Appears in `ToolLaunchError.code: String` (`tool_launch.rs`).
  *  Included per task instruction.
@@ -2915,6 +3905,18 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 "hash.mismatch" | 
 /**  Referenced `file_record` id does not exist. */
 "frame.not_found" | 
+/**
+ *  `onboarding.item.set_state` referenced an `item_id` not in the
+ *  registry (contracts/onboarding-commands.md `unknown_item`).
+ */
+"onboarding.item.unknown" | 
+/**
+ *  A request violated an onboarding state-shape rule: `item.set_state`
+ *  with an auto state (`unchecked`/`auto_checked`), or `section.set` with
+ *  `hidden: false` — unhiding is exclusively `onboarding.restore`
+ *  (contracts/onboarding-commands.md `invalid_state`).
+ */
+"onboarding.invalid_state" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
@@ -3055,10 +4057,222 @@ export type Frameset = {
 };
 
 /**
+ *  Clustering provenance (FR-015). `Suggested` is the app's own tolerance-based
+ *  grouping; `UserAdjusted` marks a framing a user has merged, split, or
+ *  reassigned into — re-derivation (F-Framing-2) never modifies it.
+ */
+export type FramingClustering = "suggested" | "user_adjusted";
+
+/**
+ *  A framing (spec 008 Q27 data-model.md `Framing`) — the co-registerable
+ *  integration unit within a project.
+ */
+export type FramingDto = FramingDto_Serialize | FramingDto_Deserialize;
+
+/**
+ *  A framing (spec 008 Q27 data-model.md `Framing`) — the co-registerable
+ *  integration unit within a project.
+ */
+export type FramingDto_Deserialize = {
+	id: string,
+	projectId: string,
+	/**
+	 *  `null` for a framing whose target has not yet resolved, or before the
+	 *  Q20/Q10 projections attach one. Equal to the project's declared target
+	 *  for mosaic panels (FR-017) and for the single active framing of a
+	 *  non-mosaic project (FR-016).
+	 */
+	targetId: string | null,
+	opticTrainKey: string,
+	pointing: FramingPointingDto,
+	/**  Representative rotation, degrees. */
+	rotation: number | null,
+	tolerance: FramingToleranceDto,
+	sessionIds: string[],
+	clustering: FramingClustering,
+};
+
+/**
+ *  A framing (spec 008 Q27 data-model.md `Framing`) — the co-registerable
+ *  integration unit within a project.
+ */
+export type FramingDto_Serialize = {
+	id: string,
+	projectId: string,
+	/**
+	 *  `null` for a framing whose target has not yet resolved, or before the
+	 *  Q20/Q10 projections attach one. Equal to the project's declared target
+	 *  for mosaic panels (FR-017) and for the single active framing of a
+	 *  non-mosaic project (FR-016).
+	 */
+	targetId?: string | null,
+	opticTrainKey: string,
+	pointing: FramingPointingDto,
+	/**  Representative rotation, degrees. */
+	rotation: number | null,
+	tolerance: FramingToleranceDto,
+	sessionIds: string[],
+	clustering: FramingClustering,
+};
+
+/**  Request body for `framing.list`. */
+export type FramingListRequest = {
+	projectId: string,
+};
+
+/**  Response body for `framing.list`. */
+export type FramingListResponse = FramingListResponse_Serialize | FramingListResponse_Deserialize;
+
+/**  Response body for `framing.list`. */
+export type FramingListResponse_Deserialize = {
+	framings: FramingDto_Deserialize[],
+};
+
+/**  Response body for `framing.list`. */
+export type FramingListResponse_Serialize = {
+	framings: FramingDto_Serialize[],
+};
+
+/**
+ *  Request body for `framing.merge`: fold `mergeFramingIds` into
+ *  `primaryFramingId`. The merged-away framings are deleted; their sessions
+ *  become members of `primaryFramingId`, which flips to `user_adjusted`.
+ */
+export type FramingMergeRequest = {
+	requestId: string,
+	projectId: string,
+	primaryFramingId: string,
+	/**
+	 *  At least one id, all distinct from `primaryFramingId` and belonging to
+	 *  the same project.
+	 */
+	mergeFramingIds: string[],
+};
+
+/**  Successful result from `framing.merge`. */
+export type FramingMergeResult = FramingMergeResult_Serialize | FramingMergeResult_Deserialize;
+
+/**  Successful result from `framing.merge`. */
+export type FramingMergeResult_Deserialize = {
+	projectId: string,
+	/**  The surviving framing with its post-merge membership. */
+	framing: FramingDto_Deserialize,
+	removedFramingIds: string[],
+	auditId: string,
+};
+
+/**  Successful result from `framing.merge`. */
+export type FramingMergeResult_Serialize = {
+	projectId: string,
+	/**  The surviving framing with its post-merge membership. */
+	framing: FramingDto_Serialize,
+	removedFramingIds: string[],
+	auditId: string,
+};
+
+/**  Representative pointing, degrees ICRS (data-model.md `Framing.pointing`). */
+export type FramingPointingDto = {
+	ra: number | null,
+	dec: number | null,
+};
+
+/**
+ *  Request body for `framing.reassign`: move `sessionIds` into
+ *  `targetFramingId`, whether they currently belong to another framing of the
+ *  same project or to none. `targetFramingId` flips to `user_adjusted`, as
+ *  does any framing a session was moved out of.
+ */
+export type FramingReassignRequest = {
+	requestId: string,
+	projectId: string,
+	sessionIds: string[],
+	targetFramingId: string,
+};
+
+/**  Successful result from `framing.reassign`. */
+export type FramingReassignResult = FramingReassignResult_Serialize | FramingReassignResult_Deserialize;
+
+/**  Successful result from `framing.reassign`. */
+export type FramingReassignResult_Deserialize = {
+	projectId: string,
+	targetFraming: FramingDto_Deserialize,
+	/**
+	 *  `targetFramingId` plus every framing a session was moved out of —
+	 *  callers should invalidate/refetch all of these.
+	 */
+	affectedFramingIds: string[],
+	auditId: string,
+};
+
+/**  Successful result from `framing.reassign`. */
+export type FramingReassignResult_Serialize = {
+	projectId: string,
+	targetFraming: FramingDto_Serialize,
+	/**
+	 *  `targetFramingId` plus every framing a session was moved out of —
+	 *  callers should invalidate/refetch all of these.
+	 */
+	affectedFramingIds: string[],
+	auditId: string,
+};
+
+/**
+ *  Request body for `framing.split`: move `sessionIds` (a non-empty proper
+ *  subset of `sourceFramingId`'s members) into a brand-new framing. The new
+ *  framing inherits `sourceFramingId`'s target/optic-train/pointing/rotation/
+ *  tolerance snapshot unchanged (membership-only mutation, FR-015); both the
+ *  source and the new framing flip to `user_adjusted`.
+ */
+export type FramingSplitRequest = {
+	requestId: string,
+	projectId: string,
+	sourceFramingId: string,
+	/**
+	 *  Must be non-empty and leave at least one session behind in
+	 *  `sourceFramingId`.
+	 */
+	sessionIds: string[],
+};
+
+/**  Successful result from `framing.split`. */
+export type FramingSplitResult = FramingSplitResult_Serialize | FramingSplitResult_Deserialize;
+
+/**  Successful result from `framing.split`. */
+export type FramingSplitResult_Deserialize = {
+	projectId: string,
+	sourceFraming: FramingDto_Deserialize,
+	newFraming: FramingDto_Deserialize,
+	auditId: string,
+};
+
+/**  Successful result from `framing.split`. */
+export type FramingSplitResult_Serialize = {
+	projectId: string,
+	sourceFraming: FramingDto_Serialize,
+	newFraming: FramingDto_Serialize,
+	auditId: string,
+};
+
+/**
+ *  Snapshot of the tunable tolerance the clustering pass used (FR-014;
+ *  data-model.md `Framing.tolerance`). Never an exact-match key.
+ */
+export type FramingToleranceDto = {
+	pointing: number | null,
+	rotation: number | null,
+};
+
+/**
  *  Result of `archive.plan.generate` — a whole-project archive plan created in
  *  `ready_for_review` (constitution II: reviewable, never auto-applied).
  */
-export type GenerateArchivePlanResult = {
+export type GenerateArchivePlanResult = GenerateArchivePlanResult_Serialize | GenerateArchivePlanResult_Deserialize;
+
+/**
+ *  Result of `archive.plan.generate` — a whole-project archive plan created in
+ *  `ready_for_review` (constitution II: reviewable, never auto-applied).
+ */
+export type GenerateArchivePlanResult_Deserialize = {
 	/**  Id of the newly created archive plan (in `ready_for_review` state). */
 	planId: string,
 	/**  Total number of archive items placed on the plan. */
@@ -3068,6 +4282,36 @@ export type GenerateArchivePlanResult = {
 	 *  gate plan approval until acknowledged (constitution II).
 	 */
 	protectedItemCount: number,
+	/**
+	 *  Diagnostic sentence explaining an empty plan (#603): set only when
+	 *  `item_count == 0`, so the review UI can render a reason instead of a
+	 *  bare disabled "Approve & apply" button. `None` whenever the plan has
+	 *  items — never a filler string standing in for "everything's fine".
+	 */
+	emptyReason: string | null,
+};
+
+/**
+ *  Result of `archive.plan.generate` — a whole-project archive plan created in
+ *  `ready_for_review` (constitution II: reviewable, never auto-applied).
+ */
+export type GenerateArchivePlanResult_Serialize = {
+	/**  Id of the newly created archive plan (in `ready_for_review` state). */
+	planId: string,
+	/**  Total number of archive items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
+	/**
+	 *  Diagnostic sentence explaining an empty plan (#603): set only when
+	 *  `item_count == 0`, so the review UI can render a reason instead of a
+	 *  bare disabled "Approve & apply" button. `None` whenever the plan has
+	 *  items — never a filler string standing in for "everything's fine".
+	 */
+	emptyReason?: string | null,
 };
 
 /**
@@ -3095,6 +4339,27 @@ export type GenerateCleanupPlanResult = {
 	/**  Id of the newly created plan (in `ready_for_review` state). */
 	planId: string,
 	/**  Total number of cleanup items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
+};
+
+/**
+ *  Result of `archive.plan.generate_restore` (#885) — a reviewable
+ *  un-archive plan created in `ready_for_review`, moving a project's
+ *  previously archived files back to their recorded original locations.
+ *  Never auto-applied (constitution II).
+ */
+export type GenerateRestorePlanResult = {
+	/**  Id of the newly created restore plan (in `ready_for_review` state). */
+	planId: string,
+	/**
+	 *  Total number of restore items placed on the plan (one per archived
+	 *  item the original archive plan actually moved).
+	 */
 	itemCount: number,
 	/**
 	 *  Number of items that resolved to a protected protection level and will
@@ -3133,64 +4398,6 @@ export type GenerationWarningCode =
 "capability_drift" | 
 /**  A destination path exceeds the Windows 260-char limit (FR-018). */
 "long_path";
-
-/**  Response from `guided.dismiss`. */
-export type GuidedDismissResponse = {
-	/**  RFC-3339 UTC timestamp the dismiss was recorded. */
-	dismissedAt: string,
-};
-
-/**  Current coach state returned by `guided.state.get` and after transitions. */
-export type GuidedFlowStateDto = {
-	/**  Id of the active step, or `null` when dismissed/idle/completed. */
-	currentStep: string | null,
-	/**  Ids of completed steps in order of completion. */
-	completedSteps: string[],
-	/**  True when the coach has been dismissed. */
-	dismissed: boolean,
-	/**  RFC-3339 UTC timestamp when dismissed, or `null`. */
-	dismissedAt: string | null,
-	/**  RFC-3339 UTC timestamp of the last transition. */
-	updatedAt: string,
-};
-
-/**
- *  Response from `guided.restart`.
- * 
- *  - If flow was `Dismissed`: resumes at the lowest uncompleted step; previously
- *    completed steps retained.
- *  - If flow was `Completed`: resets all progress to Idle (replay from step 1).
- */
-export type GuidedRestartResponse = {
-	/**  Updated state after restart. */
-	state: GuidedFlowStateDto,
-};
-
-/**
- *  Response from `guided.state.get`.
- * 
- *  On `state_corrupted` the row has already been reset to Idle server-side;
- *  the caller should display a non-blocking notice and retry.
- */
-export type GuidedStateGetResponse = {
-	state: GuidedFlowStateDto,
-};
-
-/**  Request for `guided.step.complete`. */
-export type GuidedStepCompleteRequest = {
-	/**  Stable id of the step to complete (e.g. `inbox.confirm_first`). */
-	stepId: string,
-};
-
-/**  Response from `guided.step.complete`. */
-export type GuidedStepCompleteResponse = {
-	/**  True when this call transitioned the step into `completedSteps`. */
-	completed: boolean,
-	/**  Id of the next uncompleted step, or `null` when the flow is complete. */
-	nextStep: string | null,
-	/**  Updated state after the transition. */
-	state: GuidedFlowStateDto,
-};
 
 /**  Response from `inbox.plan.apply_all` (spec 041, FR-003a). */
 export type InboxApplyAllResponse = {
@@ -3266,6 +4473,39 @@ export type InboxClassifyResponse_Serialize = {
 };
 
 /**
+ *  Request for `inbox.classify.sourceGroup` — classify a scanned folder that
+ *  has no `inbox_items` row yet.
+ * 
+ *  Spec 058 removes the scan-time folder placeholder (FR-015/T020), and with it
+ *  the only route into `materialize_sub_items`: both existing entry points are
+ *  keyed on an item id. This request is keyed on the source group instead, so a
+ *  bare group can become item rows without one ever having existed.
+ */
+export type InboxClassifySourceGroupRequest = {
+	sourceGroupId: string,
+	/**
+	 *  Absolute path to the registered root on disk, so the use case can locate
+	 *  the group's files. Transport detail, as on `InboxClassifyRequest`.
+	 */
+	rootAbsolutePath: string,
+};
+
+/**
+ *  Response from `inbox.classify.sourceGroup`.
+ * 
+ *  Deliberately returns a **count, not a plan, and no confirmable id**. The
+ *  source-group row is the thing you classify, never the thing you confirm
+ *  (FR-016) — confirmation continues to happen only against the item rows this
+ *  materializes, which the next `inbox.list` returns in `items` while the group
+ *  drops out of `sourceGroups` (FR-017, a consequence of that query's zero-item
+ *  predicate rather than a separate step).
+ */
+export type InboxClassifySourceGroupResponse = {
+	sourceGroupId: string,
+	materializedSubItemCount: number,
+};
+
+/**
  *  Summary of plan actions split by type (spec 041 US4/US5/FR-020).
  * 
  *  Lets the UI show "N move / M catalogue" without iterating plan items.
@@ -3323,6 +4563,14 @@ export type InboxConfirmRequest_Deserialize = {
 	 *  item's category is rejected with `inbox.invalid_destination_root`.
 	 */
 	rootId?: string | null,
+	/**
+	 *  Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+	 *  The user's pick from a prior `attributionCandidates` list. Only
+	 *  meaningful for light-frame items (`attribution.not_light_frame` on any
+	 *  other frame type); omitting it leaves the confirmed session's framing
+	 *  membership unset.
+	 */
+	chosenAttribution?: ChosenAttributionDto_Deserialize | null,
 };
 
 /**  Request for `inbox.confirm`. */
@@ -3346,6 +4594,14 @@ export type InboxConfirmRequest_Serialize = {
 	 *  item's category is rejected with `inbox.invalid_destination_root`.
 	 */
 	rootId?: string | null,
+	/**
+	 *  Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+	 *  The user's pick from a prior `attributionCandidates` list. Only
+	 *  meaningful for light-frame items (`attribution.not_light_frame` on any
+	 *  other frame type); omitting it leaves the confirmed session's framing
+	 *  membership unset.
+	 */
+	chosenAttribution?: ChosenAttributionDto_Serialize | null,
 };
 
 /**  Response from `inbox.confirm`. */
@@ -3381,6 +4637,18 @@ export type InboxConfirmResponse_Deserialize = {
 	 *  Empty for master-registration responses.
 	 */
 	destinations?: InboxConfirmDestination[],
+	/**
+	 *  Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+	 *  Ranked suggestions for where this item's light session belongs — a
+	 *  suggestion surface only, never auto-applied. Empty for non-light items
+	 *  or when no candidate matched.
+	 */
+	attributionCandidates?: IngestionAttributionCandidateDto_Deserialize[],
+	/**
+	 *  Present when the request carried a `chosenAttribution` that was
+	 *  successfully applied (F-Framing-10).
+	 */
+	attributionApplied: AttributionAppliedDto_Deserialize | null,
 };
 
 /**  Response from `inbox.confirm`. */
@@ -3413,6 +4681,18 @@ export type InboxConfirmResponse_Serialize = {
 	 *  Empty for master-registration responses.
 	 */
 	destinations?: InboxConfirmDestination[],
+	/**
+	 *  Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+	 *  Ranked suggestions for where this item's light session belongs — a
+	 *  suggestion surface only, never auto-applied. Empty for non-light items
+	 *  or when no candidate matched.
+	 */
+	attributionCandidates?: IngestionAttributionCandidateDto_Serialize[],
+	/**
+	 *  Present when the request carried a `chosenAttribution` that was
+	 *  successfully applied (F-Framing-10).
+	 */
+	attributionApplied?: AttributionAppliedDto_Serialize | null,
 };
 
 /**  A file entry discovered during an inbox scan. */
@@ -3760,6 +5040,25 @@ export type InboxListItem_Deserialize = {
 	 *  until classified.
 	 */
 	frameType: string | null,
+	/**
+	 *  Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+	 *  its own field rather than a `group_key` value. `true` means the item
+	 *  cannot be confirmed until the missing attributes are supplied.
+	 */
+	needsReview: boolean,
+	/**
+	 *  Cached classification result, DB vocabulary (`"classified"` /
+	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
+	 *  item. `None` when the item has never been classified.
+	 * 
+	 *  Issue #711 Instance A (unsplit-folder variant): `state` is
+	 *  unconditionally `"classified"` once a folder has been scanned even
+	 *  when it has no dominant frame type (empty/mixed/needs-review), so the
+	 *  list's classification badge must not fall back to `state` alone —
+	 *  this field lets it agree with `inbox.classify`/the detail panel by
+	 *  construction instead.
+	 */
+	classificationResult: string | null,
 };
 
 /**
@@ -3849,6 +5148,25 @@ export type InboxListItem_Serialize = {
 	 *  until classified.
 	 */
 	frameType?: string | null,
+	/**
+	 *  Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+	 *  its own field rather than a `group_key` value. `true` means the item
+	 *  cannot be confirmed until the missing attributes are supplied.
+	 */
+	needsReview: boolean,
+	/**
+	 *  Cached classification result, DB vocabulary (`"classified"` /
+	 *  `"unclassified"`) — the SAME value `inbox.classify` reads for this
+	 *  item. `None` when the item has never been classified.
+	 * 
+	 *  Issue #711 Instance A (unsplit-folder variant): `state` is
+	 *  unconditionally `"classified"` once a folder has been scanned even
+	 *  when it has no dominant frame type (empty/mixed/needs-review), so the
+	 *  list's classification badge must not fall back to `state` alone —
+	 *  this field lets it agree with `inbox.classify`/the detail panel by
+	 *  construction instead.
+	 */
+	classificationResult?: string | null,
 };
 
 /**  Response from `inbox.list`. */
@@ -3857,6 +5175,12 @@ export type InboxListResponse = InboxListResponse_Serialize | InboxListResponse_
 /**  Response from `inbox.list`. */
 export type InboxListResponse_Deserialize = {
 	items: InboxListItem_Deserialize[],
+	/**
+	 *  Folders that have been scanned but have produced no items yet. Contains
+	 *  only groups with zero item rows, so FR-017's "replaced by its item
+	 *  rows" is a consequence of the query rather than a separate step.
+	 */
+	sourceGroups: InboxSourceGroupListItem[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -3866,6 +5190,12 @@ export type InboxListResponse_Deserialize = {
 /**  Response from `inbox.list`. */
 export type InboxListResponse_Serialize = {
 	items: InboxListItem_Serialize[],
+	/**
+	 *  Folders that have been scanned but have produced no items yet. Contains
+	 *  only groups with zero item rows, so FR-017's "replaced by its item
+	 *  rows" is a consequence of the query rather than a separate step.
+	 */
+	sourceGroups: InboxSourceGroupListItem[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -4141,6 +5471,16 @@ export type InboxReclassifyV2Request_Deserialize = {
 	overrides?: InboxReclassifyFileOverride[],
 	/**  Bulk operations applied after per-file overrides. Processed in order. */
 	bulk?: InboxReclassifyBulk_Deserialize[],
+	/**
+	 *  Absolute path to the inbox root on disk. Not in the JSON Schema
+	 *  (transport detail), mirroring `InboxClassifyRequest`.
+	 * 
+	 *  Required, not optional: without it the re-split cannot hash the group's
+	 *  files, so every re-materialized sub-item inherits the signature of the
+	 *  empty set — a fixed constant that compares equal across unrelated items
+	 *  and silently disables the confirm staleness guard (spec 058 Q-5).
+	 */
+	rootAbsolutePath: string,
 };
 
 /**
@@ -4163,6 +5503,16 @@ export type InboxReclassifyV2Request_Serialize = {
 	overrides: InboxReclassifyFileOverride[],
 	/**  Bulk operations applied after per-file overrides. Processed in order. */
 	bulk?: InboxReclassifyBulk_Serialize[],
+	/**
+	 *  Absolute path to the inbox root on disk. Not in the JSON Schema
+	 *  (transport detail), mirroring `InboxClassifyRequest`.
+	 * 
+	 *  Required, not optional: without it the re-split cannot hash the group's
+	 *  files, so every re-materialized sub-item inherits the signature of the
+	 *  empty set — a fixed constant that compares equal across unrelated items
+	 *  and silently disables the confirm staleness guard (spec 058 Q-5).
+	 */
+	rootAbsolutePath: string,
 };
 
 /**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
@@ -4200,11 +5550,17 @@ export type InboxReclassifyV2Response_Serialize = {
 	needsReviewCount: number,
 };
 
-/**  Request to scan a root directory and discover inbox items. */
+/**
+ *  Request to scan a root directory and discover inbox items.
+ * 
+ *  Traversal behaviour is deliberately not a request field: `inbox.scan.folder`
+ *  resolves `followSymlinks` from persisted ingestion settings so every caller
+ *  gets the behaviour the user configured (issue #878). Every previous caller
+ *  hardcoded `false`, which silently overrode that setting.
+ */
 export type InboxScanFolderRequest = {
 	rootId: string,
 	rootAbsolutePath: string,
-	followSymlinks?: boolean,
 };
 
 /**  Response from `inbox.scan.folder`. */
@@ -4228,6 +5584,34 @@ export type InboxScanResult = {
 	entries: InboxFileEntry[],
 	totalCount: number,
 	totalSizeBytes: number,
+};
+
+/**
+ *  A scanned-but-unclassified folder in `inbox.list` (spec 058 FR-016).
+ * 
+ *  Carries **no** `inboxItemId`. Non-confirmability is structural: there is
+ *  nothing to pass to `inbox.confirm`, so no new guard and no new error code
+ *  exist for it. A discriminated union with [`InboxListItem`] was rejected
+ *  precisely because it would restore a row that looks like an item and
+ *  carries an id the UI is tempted to confirm (FR-004).
+ */
+export type InboxSourceGroupListItem = {
+	sourceGroupId: string,
+	rootId: string,
+	/**  Absolute path of the registered root (for display). */
+	rootAbsolutePath: string,
+	relativePath: string,
+	/**  Sub-frames the scan found, excluding detected calibration masters. */
+	fileCount: number,
+	/**  Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`. */
+	format: string,
+	/**
+	 *  The source group's `"move"` | `"catalogue"` lane — NOT the
+	 *  `"fits"`/`"video"` item lane. The two columns share a name only.
+	 */
+	lane: string,
+	contentSignature: string,
+	discoveredAt: string,
 };
 
 /**  Per-frame-type queue stats entry. */
@@ -4314,38 +5698,37 @@ export type InboxTargetCandidate = {
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsRequest_Serialize | InboxTargetRecommendationsRequest_Deserialize;
 
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest_Deserialize = {
 	/**  The single-type inbox item (light sub-group) to resolve a target for. */
 	inboxItemId?: string | null,
-	/**  Alternatively, the originating source group (R-12 provenance). */
-	sourceGroupId?: string | null,
 };
 
 /**
  *  Request for `inbox.target_recommendations`.
  * 
- *  Identify a light sub-group by **either** its `inboxItemId` **or** its
- *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
- *  one should be set; if both are present, `inboxItemId` takes precedence.
+ *  Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+ *  homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+ *  in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+ *  a source group is no longer a resolvable target.
  */
 export type InboxTargetRecommendationsRequest_Serialize = {
 	/**  The single-type inbox item (light sub-group) to resolve a target for. */
 	inboxItemId?: string | null,
-	/**  Alternatively, the originating source group (R-12 provenance). */
-	sourceGroupId?: string | null,
 };
 
 /**
@@ -4388,6 +5771,71 @@ export type InboxTargetRecommendationsResponse_Serialize = {
 	pointing?: InboxPointing | null,
 	objectHint?: string | null,
 };
+
+/**  A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`). */
+export type IngestionAttributionCandidateDto = IngestionAttributionCandidateDto_Serialize | IngestionAttributionCandidateDto_Deserialize;
+
+/**  A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`). */
+export type IngestionAttributionCandidateDto_Deserialize = {
+	kind: IngestionAttributionKind,
+	/**
+	 *  Present for every kind except a match-less pass (the caller always
+	 *  receives at least one candidate — a trailing zero-score `new_project`
+	 *  candidate with no `projectId` when nothing else matched).
+	 */
+	projectId: string | null,
+	/**  Present for `add_to_framing`. */
+	framingId: string | null,
+	/**  The matched target, when one resolved. */
+	targetId: string | null,
+	/**
+	 *  Ranking key: framing-match strength (target+optic-train+pointing+rotation).
+	 *  Higher is a closer match; candidates are returned in descending order.
+	 */
+	matchScore: number | null,
+	/**
+	 *  `true` when `projectId` is a `completed` project — selecting this
+	 *  candidate offers add + reopen (Q25 revoke/warn, F-Framing-6).
+	 */
+	reopen: boolean | null,
+	/**  `true` for `flag_optic_difference`. */
+	opticMismatch: boolean | null,
+};
+
+/**  A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`). */
+export type IngestionAttributionCandidateDto_Serialize = {
+	kind: IngestionAttributionKind,
+	/**
+	 *  Present for every kind except a match-less pass (the caller always
+	 *  receives at least one candidate — a trailing zero-score `new_project`
+	 *  candidate with no `projectId` when nothing else matched).
+	 */
+	projectId?: string | null,
+	/**  Present for `add_to_framing`. */
+	framingId?: string | null,
+	/**  The matched target, when one resolved. */
+	targetId?: string | null,
+	/**
+	 *  Ranking key: framing-match strength (target+optic-train+pointing+rotation).
+	 *  Higher is a closer match; candidates are returned in descending order.
+	 */
+	matchScore: number | null,
+	/**
+	 *  `true` when `projectId` is a `completed` project — selecting this
+	 *  candidate offers add + reopen (Q25 revoke/warn, F-Framing-6).
+	 */
+	reopen?: boolean | null,
+	/**  `true` for `flag_optic_difference`. */
+	opticMismatch?: boolean | null,
+};
+
+/**
+ *  One ranked suggestion from the Inbox-confirm attribution pass
+ *  (data-model.md `IngestionAttributionCandidate`). A **suggestion surface**
+ *  only — it never writes a merge (FR-019/FR-020); the user picks via
+ *  [`ChosenAttributionDto`] on the confirm request (FR-022).
+ */
+export type IngestionAttributionKind = "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project";
 
 export type IngestionSettings = {
 	watcherEnabled: boolean,
@@ -4666,6 +6114,26 @@ export type InventorySession_Deserialize = {
 	capturedOn: string | null,
 	provenance: InventoryProvenanceSummary_Deserialize | null,
 	linked: InventoryLinkedRefs_Deserialize | null,
+	/**
+	 *  The session's frame folder, relative to its source root
+	 *  (`source_id`'s `current_path`). The reveal action joins the root path
+	 *  with this so it opens the session's actual frame folder instead of the
+	 *  library root (#567). `None` when no frame `file_record` resolves a
+	 *  path (legacy/unscanned sessions) — the UI then falls back to the root.
+	 */
+	relativePath: string | null,
+	/**  User-editable free-text notes (#773). `None` when never set. */
+	notes: string | null,
+	/**
+	 *  Calibration masters assigned to this session (`calibration_assignment`
+	 *  rows), reusing the same DTO the (frontend-unused) `sessions_get`
+	 *  contract already carries. Empty for calibration sessions (dark/flat/
+	 *  bias) — assignment links a light session to its calibration masters,
+	 *  never the reverse — and for a light session with no assignment yet;
+	 *  the UI renders both as an explicit "no calibration match" state
+	 *  rather than omitting the section (#772).
+	 */
+	calibrationMatches?: SessionCalibrationMatch[],
 };
 
 /**
@@ -4691,6 +6159,26 @@ export type InventorySession_Serialize = {
 	capturedOn?: string | null,
 	provenance?: InventoryProvenanceSummary_Serialize | null,
 	linked?: InventoryLinkedRefs_Serialize | null,
+	/**
+	 *  The session's frame folder, relative to its source root
+	 *  (`source_id`'s `current_path`). The reveal action joins the root path
+	 *  with this so it opens the session's actual frame folder instead of the
+	 *  library root (#567). `None` when no frame `file_record` resolves a
+	 *  path (legacy/unscanned sessions) — the UI then falls back to the root.
+	 */
+	relativePath?: string | null,
+	/**  User-editable free-text notes (#773). `None` when never set. */
+	notes?: string | null,
+	/**
+	 *  Calibration masters assigned to this session (`calibration_assignment`
+	 *  rows), reusing the same DTO the (frontend-unused) `sessions_get`
+	 *  contract already carries. Empty for calibration sessions (dark/flat/
+	 *  bias) — assignment links a light session to its calibration masters,
+	 *  never the reverse — and for a light session with no assignment yet;
+	 *  the UI renders both as an explicit "no calibration match" state
+	 *  rather than omitting the section (#772).
+	 */
+	calibrationMatches?: SessionCalibrationMatch[],
 };
 
 /**
@@ -5094,14 +6582,18 @@ export type MasterDetail_Deserialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Deserialize,
-	sourceSessionId: string,
+	sourceSessionId: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	rootId: string | null,
+	relativePath: string | null,
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
+	/**  spec 048 US5: `None` when no matches using this master are flagged. */
+	missingFlag: CalibrationMatchMissingFlag | null,
 };
 
 /**  Extended detail view of a calibration master. */
@@ -5109,14 +6601,18 @@ export type MasterDetail_Serialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Serialize,
-	sourceSessionId: string,
+	sourceSessionId?: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
+	rootId?: string | null,
+	relativePath?: string | null,
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
+	/**  spec 048 US5: `None` when no matches using this master are flagged. */
+	missingFlag?: CalibrationMatchMissingFlag | null,
 };
 
 /**  Usage statistics for a calibration master. */
@@ -5275,11 +6771,225 @@ export type MismatchedDimDto_Serialize = {
 	delta?: number | null,
 };
 
+/**  Moon-separation + opposition result for one target. */
+export type MoonOppositionResult = {
+	id: string,
+	/**
+	 *  Angular separation from the Moon in degrees (0..=180), or `None` for
+	 *  out-of-domain RA/Dec (never a fabricated value).
+	 */
+	moonSeparationDeg: number | null,
+	/**  `None` for out-of-domain RA/Dec. */
+	opposition: OppositionResult | null,
+};
+
+/**
+ *  One target's catalogued J2000 coordinates for a moon-separation/opposition
+ *  batch request.
+ */
+export type MoonOppositionTargetInput = {
+	/**  Caller-defined id, echoed back on the matching result (never re-derived). */
+	id: string,
+	raDeg: number | null,
+	decDeg: number | null,
+};
+
 /**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */
 export type NonBlockingSummary = {
 	normalCount: number,
 	unprotectedCount: number,
 };
+
+/**  Section-level flags (`onboarding_flags` singleton). */
+export type OnboardingFlagsDto = {
+	orientationDone: boolean,
+	/**
+	 *  Covers both explicit removal (FR-013) and completion auto-hide
+	 *  (FR-031).
+	 */
+	sectionHidden: boolean,
+	sidebarCollapsed: boolean,
+};
+
+/**  One onboarding item row for UI hydration. */
+export type OnboardingItemDto = {
+	itemId: string,
+	page: OnboardingPage,
+	state: OnboardingItemState,
+	/**  RFC-3339 UTC timestamp of the last state change. */
+	at: string,
+	source: OnboardingStateSource,
+	/**
+	 *  `None` when the item has no prerequisite in the registry. Present
+	 *  (with a live-computed `met`) whenever the item has one, regardless of
+	 *  current satisfaction — the UI decides what to render for `met: true`.
+	 */
+	prerequisite: OnboardingPrerequisiteDto | null,
+	/**
+	 *  True when this item has a `completion_topic` (auto-tick eligible) —
+	 *  lets the UI distinguish "will tick itself" from "check me manually".
+	 */
+	hasAutoTick: boolean,
+};
+
+/**  Request for `onboarding.item.set_state`. */
+export type OnboardingItemSetStateRequest = {
+	itemId: string,
+	state: OnboardingManualState,
+};
+
+/**  Response from `onboarding.item.set_state` — the updated item row. */
+export type OnboardingItemSetStateResponse = {
+	item: OnboardingItemDto,
+};
+
+/**
+ *  Per-item lifecycle state (data-model.md "State transitions").
+ * 
+ *  `AutoChecked`/`ManuallyChecked`/`Dismissed` are terminal: neither a live
+ *  event nor a repeat manual action ever downgrades a settled item.
+ */
+export type OnboardingItemState = "unchecked" | "auto_checked" | "manually_checked" | "dismissed";
+
+/**
+ *  Manual state a caller may request via `onboarding.item.set_state`
+ *  (FR-017). `auto_checked` is rejected — `invalid_state` — because only the
+ *  bus subscriber may assert that real work happened.
+ */
+export type OnboardingManualState = "manually_checked" | "dismissed" | 
+/**
+ *  Explicit un-check — the only transition that may clear a settled row.
+ * 
+ *  Settled states are otherwise terminal so re-derivation, live ticks and
+ *  repeat calls can never *silently* downgrade a user's decision. An
+ *  un-check is the user asking for exactly that, once, by hand, so it is
+ *  allowed from ANY state, automatic rows included.
+ * 
+ *  It does not let the checklist permanently contradict the library: the
+ *  item re-ticks when the underlying action happens again, and an explicit
+ *  restore re-derives it from real database state.
+ */
+"unchecked";
+
+/**  Request for `onboarding.orientation.complete`. */
+export type OnboardingOrientationCompleteRequest = {
+	outcome: OnboardingOrientationOutcome,
+};
+
+/**
+ *  Response from `onboarding.orientation.complete`. Idempotent — repeat
+ *  calls return the original timestamp.
+ */
+export type OnboardingOrientationCompleteResponse = {
+	orientationDoneAt: string,
+};
+
+/**  How the walk ended (both set done-forever, FR-004). */
+export type OnboardingOrientationOutcome = "finished" | "skipped";
+
+/**  The five FR-006 workflow pages that carry a Getting Started checklist. */
+export type OnboardingPage = "inbox" | "sessions" | "calibration" | "targets" | "projects";
+
+/**  Per-page item counts. */
+export type OnboardingPageProgressDto = {
+	page: OnboardingPage,
+	done: number,
+	total: number,
+};
+
+/**
+ *  Prerequisite presentation for an item whose upstream milestone is missing
+ *  (FR-010).
+ */
+export type OnboardingPrerequisiteDto = {
+	/**
+	 *  Registry id of the upstream item that must be done first.
+	 * 
+	 *  The UI needs the id itself, not just the rendered reason: a blocked
+	 *  item's find affordance spotlights the UPSTREAM item's control, which
+	 *  means resolving the upstream item's anchor and label. Recovering it by
+	 *  stripping a prefix off `reason_key` would couple the UI to a message-key
+	 *  format.
+	 */
+	upstreamItemId: string,
+	/**  Whether the upstream milestone is currently satisfied. */
+	met: boolean,
+	/**  Paraglide message key for the human-readable reason. */
+	reasonKey: string,
+	/**  Page to jump to in order to satisfy the prerequisite. */
+	jumpPage: OnboardingPage,
+};
+
+/**
+ *  Overall + per-page progress, derived from `onboarding_state` (never
+ *  stored).
+ */
+export type OnboardingProgressDto = {
+	done: number,
+	total: number,
+	perPage: OnboardingPageProgressDto[],
+};
+
+/**  Response from `onboarding.restore` — same shape as `onboarding.state.get`. */
+export type OnboardingRestoreResponse = {
+	state: OnboardingStateDto,
+};
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest = OnboardingSectionSetRequest_Serialize | OnboardingSectionSetRequest_Deserialize;
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest_Deserialize = {
+	hidden: boolean | null,
+	sidebarCollapsed: boolean | null,
+};
+
+/**
+ *  Request for `onboarding.section.set`. At least one field MUST be set.
+ *  `hidden` accepts only `true` (user remove) — unhiding happens exclusively
+ *  via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
+ *  The completion auto-hide (FR-031) is written by the backend settle path,
+ *  never through this command.
+ */
+export type OnboardingSectionSetRequest_Serialize = {
+	hidden?: boolean | null,
+	sidebarCollapsed?: boolean | null,
+};
+
+/**  Response from `onboarding.section.set` — the updated flags. */
+export type OnboardingSectionSetResponse = {
+	flags: OnboardingFlagsDto,
+};
+
+/**
+ *  Full onboarding projection — the response shape shared by
+ *  `onboarding.state.get` and `onboarding.restore`.
+ */
+export type OnboardingStateDto = {
+	items: OnboardingItemDto[],
+	flags: OnboardingFlagsDto,
+	progress: OnboardingProgressDto,
+};
+
+/**  Response from `onboarding.state.get`. */
+export type OnboardingStateGetResponse = {
+	state: OnboardingStateDto,
+};
+
+/**  What set the item's current state. */
+export type OnboardingStateSource = "seed" | "event" | "user";
 
 export type OperationEvent = {
 	contractVersion: string,
@@ -5293,12 +7003,32 @@ export type OperationEventType = "progress" | "discovered_item_batch" | "extract
 
 export type OperationId = string;
 
+/**  Opposition search result for one target. */
+export type OppositionResult = {
+	/**
+	 *  RFC3339 date (whole-day resolution) of the next opposition-like
+	 *  midnight culmination.
+	 */
+	date: string,
+	daysUntil: number,
+};
+
 export type OpticalTrain = {
 	id: string,
 	name: string,
 	telescopeId: string | null,
 	cameraId: string | null,
 	focalLengthMm: number,
+	/**
+	 *  Diagonal field of view in degrees, derived from this train's focal
+	 *  length plus the linked camera's sensor geometry.
+	 * 
+	 *  `None` whenever any operand is absent or non-positive — no camera
+	 *  linked, or a camera with no recorded geometry. Absent MUST stay absent:
+	 *  a fabricated `0.0` would read as a real (degenerate) field of view.
+	 *  Derived on read, never stored.
+	 */
+	fovDiagonalDeg?: number | null,
 };
 
 /**
@@ -5522,6 +7252,21 @@ export type PlanCancelResponse = {
 	itemsCancelled: number,
 };
 
+/**
+ *  Response for `plans.confirm.destructive`.
+ * 
+ *  Local to this command (rather than a `contracts_core::plan_apply` DTO):
+ *  the shape is a plain confirmation receipt with no other consumer.
+ */
+export type PlanDestructiveConfirmResponse = {
+	planId: string,
+	/**
+	 *  Number of items whose `destructive_confirmed` flag flipped (0 when
+	 *  every destructive item in the plan was already confirmed).
+	 */
+	itemsConfirmed: number,
+};
+
 /**  Full plan detail returned by `plans.get`. */
 export type PlanDetail = PlanDetail_Serialize | PlanDetail_Deserialize;
 
@@ -5577,6 +7322,64 @@ export type PlanDetail_Serialize = {
 export type PlanDiscardResponse = {
 	planId: string,
 	discardedAt: string,
+};
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate = PlanFreeSpaceEstimate_Serialize | PlanFreeSpaceEstimate_Deserialize;
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate_Deserialize = {
+	/**
+	 *  Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+	 *  all-trash/all-delete plan, which needs no destination space).
+	 */
+	requiredBytes: number,
+	/**
+	 *  Free bytes on the destination volume, probed via
+	 *  `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+	 *  items to probe a destination from, or the probe itself fails (e.g. the
+	 *  volume is momentarily unreachable) — the UI shows no comparison rather
+	 *  than a false warning in that case.
+	 */
+	availableBytes: number | null,
+};
+
+/**
+ *  Response for `plans.free_space_estimate` (issue #876): an ADVISORY
+ *  destination free-space estimate surfaced at plan review time, before
+ *  approval. Never blocks approval — `crates/fs/executor/src/ops/volume_check.rs`
+ *  still re-validates for real and pauses the apply run (R-Pause-1) if the
+ *  destination genuinely runs out; this is only a heads-up so the user isn't
+ *  first told about a space problem after already approving the plan.
+ */
+export type PlanFreeSpaceEstimate_Serialize = {
+	/**
+	 *  Same value as `PlanDetail::total_bytes_required` (0 for e.g. an
+	 *  all-trash/all-delete plan, which needs no destination space).
+	 */
+	requiredBytes: number,
+	/**
+	 *  Free bytes on the destination volume, probed via
+	 *  `fs_executor::ops::available_space_bytes`. `None` when the plan has no
+	 *  items to probe a destination from, or the probe itself fails (e.g. the
+	 *  volume is momentarily unreachable) — the UI shows no comparison rather
+	 *  than a false warning in that case.
+	 */
+	availableBytes?: number | null,
 };
 
 /**  Action to perform on a single filesystem item. */
@@ -5787,6 +7590,15 @@ export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source
 "source_view_regeneration" | 
 /**  Spec 049 — first-materializes a project source view. */
 "source_view_generation";
+
+/**
+ *  Coordinate-source quality for a derived [`Pointing`] (FR-012).
+ * 
+ *  `Wcs` (plate-solved `CRVAL1/2`) is high confidence; `Mount` (`OBJCTRA`/
+ *  `OBJCTDEC` or decimal `RA`/`DEC`) is medium; `None` means no reliable
+ *  pointing (never derived from the filename) — `suggestions` is then empty.
+ */
+export type PointingSource = "wcs" | "mount" | "none";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 
@@ -6006,6 +7818,8 @@ export type ProjectCreateRequest_Deserialize = {
 	 *  decision). Existing callers omit it.
 	 */
 	canonicalTargetId?: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017), default false. Existing callers omit it. */
+	isMosaic?: boolean,
 };
 
 /**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
@@ -6029,6 +7843,8 @@ export type ProjectCreateRequest_Serialize = {
 	 *  decision). Existing callers omit it.
 	 */
 	canonicalTargetId?: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017), default false. Existing callers omit it. */
+	isMosaic?: boolean,
 };
 
 /**  Successful result from `projects.create`. */
@@ -6037,6 +7853,7 @@ export type ProjectCreateResult = ProjectCreateResult_Serialize | ProjectCreateR
 /**  Successful result from `projects.create`. */
 export type ProjectCreateResult_Deserialize = {
 	projectId: string,
+	isMosaic?: boolean,
 	/**
 	 *  Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
 	 *  may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
@@ -6067,6 +7884,7 @@ export type ProjectCreateResult_Deserialize = {
 /**  Successful result from `projects.create`. */
 export type ProjectCreateResult_Serialize = {
 	projectId: string,
+	isMosaic?: boolean,
 	/**
 	 *  Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
 	 *  may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
@@ -6121,6 +7939,12 @@ export type ProjectDetailDto_Deserialize = {
 	blockedReasonKind: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, every framing
+	 *  derived for this project inherits the declared target and per-frame
+	 *  OBJECT/coordinate resolution is suppressed. There is no panel entity.
+	 */
+	isMosaic?: boolean,
 };
 
 /**  A project detail (sources + channels included). */
@@ -6147,6 +7971,12 @@ export type ProjectDetailDto_Serialize = {
 	blockedReasonKind?: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote?: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, every framing
+	 *  derived for this project inherits the declared target and per-frame
+	 *  OBJECT/coordinate resolution is suppressed. There is no panel entity.
+	 */
+	isMosaic?: boolean,
 };
 
 /**  Request for `project.note.get`. */
@@ -6305,6 +8135,12 @@ export type ProjectSummaryDto_Deserialize = {
 	blockedReasonKind: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, the project
+	 *  may hold multiple framings (panels) that all inherit the project's
+	 *  declared target.
+	 */
+	isMosaic?: boolean,
 };
 
 /**  A project summary for list views (spec 008 read surface). */
@@ -6323,6 +8159,12 @@ export type ProjectSummaryDto_Serialize = {
 	blockedReasonKind?: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote?: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, the project
+	 *  may hold multiple framings (panels) that all inherit the project's
+	 *  declared target.
+	 */
+	isMosaic?: boolean,
 };
 
 /**
@@ -6365,6 +8207,8 @@ export type ProjectUpdateRequest_Deserialize = {
 	name: string | null,
 	tool: ProjectTool | null,
 	notes: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017). Omitted means "leave unchanged". */
+	isMosaic?: boolean | null,
 };
 
 /**  Request body for `projects.update`. */
@@ -6374,6 +8218,8 @@ export type ProjectUpdateRequest_Serialize = {
 	name?: string | null,
 	tool?: ProjectTool | null,
 	notes?: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017). Omitted means "leave unchanged". */
+	isMosaic?: boolean | null,
 };
 
 /**  Successful result from `projects.update`. */
@@ -6589,8 +8435,14 @@ export type ProtectedPlanItem_Serialize = {
 	reason: string,
 };
 
-/**  Protection level enum (spec 016 data-model.md). */
-export type ProtectionLevel = "protected" | "normal" | "unprotected";
+/**
+ *  Protection level enum (spec 016 data-model.md; simplified to 2 levels per
+ *  issue #506 — the third "inherit-global via an explicit `normal` row" tier
+ *  added confusion without adding capability, since absence of an override
+ *  row already means inherit-global. Existing `normal` rows are remapped to
+ *  `unprotected` by migration 0070, non-destructively).
+ */
+export type ProtectionLevel = "protected" | "unprotected";
 
 /**  A provenance label/value pair for how an item was inferred. */
 export type ProvenanceEntry = {
@@ -6697,6 +8549,148 @@ export type ProvenanceReadResponse_Serialize = {
 };
 
 export type ProvenanceResponseStatus = "success" | "error";
+
+/**  One raw sub-frame cleanup candidate (a present, non-protected `file_record`). */
+export type RawFrameCleanupCandidate = RawFrameCleanupCandidate_Serialize | RawFrameCleanupCandidate_Deserialize;
+
+/**  One raw sub-frame cleanup candidate (a present, non-protected `file_record`). */
+export type RawFrameCleanupCandidate_Deserialize = {
+	frameId: string,
+	sessionId: string | null,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	/**
+	 *  Resolved protection level (e.g. `"protected"`/`"unprotected"`),
+	 *  surfaced BEFORE generating a plan (constitution II).
+	 */
+	protection: string,
+	/**
+	 *  Confidence the classification is correct, `0.0..=1.0`. Raw frame
+	 *  classification is deterministic (derived from the owning session's
+	 *  kind, not inferred), so this is always `1.0` today; the field exists
+	 *  so a future ambiguous-classification path has somewhere to report
+	 *  uncertainty (FR-023).
+	 */
+	confidence: number | null,
+};
+
+/**  One raw sub-frame cleanup candidate (a present, non-protected `file_record`). */
+export type RawFrameCleanupCandidate_Serialize = {
+	frameId: string,
+	sessionId?: string | null,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	/**
+	 *  Resolved protection level (e.g. `"protected"`/`"unprotected"`),
+	 *  surfaced BEFORE generating a plan (constitution II).
+	 */
+	protection: string,
+	/**
+	 *  Confidence the classification is correct, `0.0..=1.0`. Raw frame
+	 *  classification is deterministic (derived from the owning session's
+	 *  kind, not inferred), so this is always `1.0` today; the field exists
+	 *  so a future ambiguous-classification path has somewhere to report
+	 *  uncertainty (FR-023).
+	 */
+	confidence: number | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.plan.generate`. */
+export type RawFrameCleanupGenerateRequest = RawFrameCleanupGenerateRequest_Serialize | RawFrameCleanupGenerateRequest_Deserialize;
+
+/**  Request envelope for the raw sub-frame `cleanup.plan.generate`. */
+export type RawFrameCleanupGenerateRequest_Deserialize = {
+	selectedFrameIds: string[],
+	title?: string | null,
+	/**
+	 *  `"archive"` (default) or `"trash"` — canonical vocabulary per
+	 *  migration 0040 / spec 033 vocab split.
+	 */
+	destructiveDestination?: string | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.plan.generate`. */
+export type RawFrameCleanupGenerateRequest_Serialize = {
+	selectedFrameIds: string[],
+	title?: string | null,
+	/**
+	 *  `"archive"` (default) or `"trash"` — canonical vocabulary per
+	 *  migration 0040 / spec 033 vocab split.
+	 */
+	destructiveDestination?: string | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.candidates.scan`. */
+export type RawFrameCleanupScanRequest = RawFrameCleanupScanRequest_Serialize | RawFrameCleanupScanRequest_Deserialize;
+
+/**  Request envelope for the raw sub-frame `cleanup.candidates.scan`. */
+export type RawFrameCleanupScanRequest_Deserialize = {
+	scope: RawFrameCleanupScope_Deserialize,
+	/**  Restrict to specific raw frame kinds; all kinds when absent. */
+	kinds?: RawFrameType[] | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.candidates.scan`. */
+export type RawFrameCleanupScanRequest_Serialize = {
+	scope: RawFrameCleanupScope_Serialize,
+	/**  Restrict to specific raw frame kinds; all kinds when absent. */
+	kinds?: RawFrameType[] | null,
+};
+
+/**
+ *  Response payload for the raw sub-frame `cleanup.candidates.scan`.
+ *  Grouping by session is a client-side concern over `session_id` on each
+ *  candidate — no separate grouped shape is needed.
+ */
+export type RawFrameCleanupScanResponse = RawFrameCleanupScanResponse_Serialize | RawFrameCleanupScanResponse_Deserialize;
+
+/**
+ *  Response payload for the raw sub-frame `cleanup.candidates.scan`.
+ *  Grouping by session is a client-side concern over `session_id` on each
+ *  candidate — no separate grouped shape is needed.
+ */
+export type RawFrameCleanupScanResponse_Deserialize = {
+	candidates: RawFrameCleanupCandidate_Deserialize[],
+	totalReclaimableBytes: number,
+};
+
+/**
+ *  Response payload for the raw sub-frame `cleanup.candidates.scan`.
+ *  Grouping by session is a client-side concern over `session_id` on each
+ *  candidate — no separate grouped shape is needed.
+ */
+export type RawFrameCleanupScanResponse_Serialize = {
+	candidates: RawFrameCleanupCandidate_Serialize[],
+	totalReclaimableBytes: number,
+};
+
+/**
+ *  Scope for `cleanup.candidates.scan` (raw sub-frame variant) — exactly one
+ *  of `session_id`/`root_id` is expected to be set.
+ */
+export type RawFrameCleanupScope = RawFrameCleanupScope_Serialize | RawFrameCleanupScope_Deserialize;
+
+/**
+ *  Scope for `cleanup.candidates.scan` (raw sub-frame variant) — exactly one
+ *  of `session_id`/`root_id` is expected to be set.
+ */
+export type RawFrameCleanupScope_Deserialize = {
+	sessionId: string | null,
+	rootId: string | null,
+};
+
+/**
+ *  Scope for `cleanup.candidates.scan` (raw sub-frame variant) — exactly one
+ *  of `session_id`/`root_id` is expected to be set.
+ */
+export type RawFrameCleanupScope_Serialize = {
+	sessionId?: string | null,
+	rootId?: string | null,
+};
 
 /**  Raw frame kind for a per-frame inventory entry. */
 export type RawFrameType = "light" | "dark" | "flat" | "bias";
@@ -7079,12 +9073,26 @@ export type SearchResult_Serialize = {
 /**  How a candidate was selected (observing-night provenance). */
 export type SelectionReason = "same_session" | "same_night" | "compatible_fallback";
 
+/**
+ *  Camera sensor type (spec 044 iteration 2026-07-15, FR-035): `mono`
+ *  per-filter imaging vs `osc` (one-shot color) single-pass imaging.
+ *  Absence (`None` on [`Camera::sensor_type`]) means unknown, which MUST
+ *  behave as mono downstream (FR-038).
+ */
+export type SensorType = "mono" | "osc";
+
 /**  A calibration match entry for a session detail view. */
 export type SessionCalibrationMatch = {
 	masterId: string,
 	kind: CalibrationKind,
 	score: number | null,
 	softMismatches: string[],
+	/**
+	 *  Whether this assignment was made via the hard-rule override path
+	 *  (spec 007 SC-003) — persisted so the UI can distinguish an override
+	 *  from a normal match on reopen instead of losing the distinction.
+	 */
+	wasOverride: boolean,
 };
 
 /**  Extended detail view of an acquisition session. */
@@ -7144,6 +9152,31 @@ export type SessionKey = {
 	gain: string,
 	/**  ISO date of the observing night (local sunset date). */
 	night: string,
+};
+
+/**
+ *  Request for `inventory.session.notes.update`. Mirrors the
+ *  `target.note.update` shape (spec 023 US4) — empty/whitespace-only `notes`
+ *  clears the field (stores NULL).
+ */
+export type SessionNotesUpdateRequest = {
+	sessionId: string,
+	notes: string,
+};
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult = SessionNotesUpdateResult_Serialize | SessionNotesUpdateResult_Deserialize;
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult_Deserialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes: string | null,
+};
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult_Serialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes?: string | null,
 };
 
 /**  Wrapper for `sessions.split` return value. */
@@ -7330,6 +9363,25 @@ export type SourceRole = "light" | "dark" | "flat" | "bias";
  */
 export type SourceSelection = "selected" | "candidate";
 
+/**  Response: `None` when no override is persisted (the envelope default applies). */
+export type SourceViewDestinationGetResponse = {
+	destination?: string | null,
+};
+
+/**
+ *  Request: persist (or clear, with `destination: null`) the per-project
+ *  destination override.
+ */
+export type SourceViewDestinationSetRequest = {
+	projectId: string,
+	destination?: string | null,
+};
+
+/**  Bare success response for `sourceview.destination.set`. */
+export type SourceViewDestinationSetResponse = {
+	ok: boolean,
+};
+
 /**
  *  Request: create a `prepared_view_generation` plan first-materializing a
  *  project's selected lights + matched calibration as link actions.
@@ -7365,6 +9417,24 @@ export type SourceViewGenerateResponse = {
 	planId: string,
 	/**  Non-blocking review warnings surfaced with the plan. */
 	warnings?: GenerationWarning[],
+	/**
+	 *  `true` when at least one item resolved to a copy-fallback
+	 *  materialization (no link kind was achievable and `copyOptIn` allowed a
+	 *  copy — FR-003/FR-004b). Lets callers surface link vs. copy-fallback
+	 *  distinctly instead of a generic success message.
+	 */
+	usedCopyFallback?: boolean,
+};
+
+/**  Success response for `sourceview.verify`. */
+export type SourceViewVerifyResponse = {
+	/**
+	 *  `true` when every item resolved to a present canonical source (safe to
+	 *  process — SC-006). `false` iff `broken_items` is non-empty.
+	 */
+	clean: boolean,
+	/**  Empty when `clean`. One entry per broken/missing/stale item. */
+	brokenItems?: BrokenItem[],
 };
 
 export type StatusSummary = {
@@ -7388,6 +9458,29 @@ export type SuggestStatus = "match" | "ambiguous" | "no_match" |
 
 /**  An astronomical target as seen in list views (spec 029 stub). */
 export type Target = Target_Serialize | Target_Deserialize;
+
+/**
+ *  Request for `target.adopt` — promote a redb-cache-only target (a `target_id`
+ *  a prior `target.search`/`target.resolve` response returned) into the
+ *  durable `canonical_target` table. The explicit in-use commit for UI flows
+ *  with no other natural commit point (e.g. the Targets-page "Add Target"
+ *  dialog; favouriting/project-create/session-link promote inline as part of
+ *  their own commands).
+ */
+export type TargetAdoptRequest = {
+	requestId: string,
+	targetId: string,
+};
+
+/**  Response for `target.adopt`. */
+export type TargetAdoptResponse = {
+	targetId: string,
+	/**
+	 *  `false` when `target_id` is unknown to both the redb cache and
+	 *  `canonical_target` — never fabricated.
+	 */
+	adopted: boolean,
+};
 
 /**  Request for `target.alias.add` (gen-3). */
 export type TargetAliasAddRequest = {
@@ -7419,6 +9512,55 @@ export type TargetAliasRemoveRequest = {
 /**  Response for `target.alias.remove` (gen-3). */
 export type TargetAliasRemoveResult = {
 	removed: boolean,
+};
+
+/**
+ *  One target's sexagesimal-formatted RA/Dec.
+ * 
+ *  Absent from the response when its input RA/Dec was non-finite — never a
+ *  fabricated string (callers key on `id` to look up a result and fall back
+ *  to an explicit "unknown" display for ids with no match).
+ */
+export type TargetAstroFormat = {
+	id: string,
+	/**  `HH:MM:SS` (0 fractional-second digits, carry-safe rounding). */
+	raSexagesimal: string,
+	/**  `±DD:MM:SS` (0 fractional-second digits, carry-safe rounding). */
+	decSexagesimal: string,
+};
+
+/**
+ *  Request for `target.astro_format.batch`: sexagesimal RA/Dec formatting for
+ *  N targets in a single call, never per-row round trips.
+ */
+export type TargetAstroFormatBatchRequest = {
+	targets: TargetAstroFormatItem[],
+};
+
+/**  Response for `target.astro_format.batch`. */
+export type TargetAstroFormatBatchResponse = {
+	formatted: TargetAstroFormat[],
+};
+
+/**  One target's RA/Dec to format, for `target.astro_format.batch`. */
+export type TargetAstroFormatItem = {
+	/**
+	 *  Caller-supplied id echoed back on the matching [`TargetAstroFormat`]
+	 *  (opaque to this command — a `canonical_target.id` in practice).
+	 */
+	id: string,
+	raDeg: number | null,
+	decDeg: number | null,
+};
+
+/**
+ *  Response for `target.cache.clear` (FR-002): the redb resolve cache is
+ *  wiped and re-warmed from the bundled seed + existing durable
+ *  `canonical_target` rows. Never touches `canonical_target` itself.
+ */
+export type TargetCacheClearResponse = {
+	/**  Number of entries the cache was re-warmed with after clearing. */
+	rewarmedCount: number,
 };
 
 /**  Closed catalogue identifier slug (spec 035 `CatalogId`). */
@@ -7534,6 +9676,29 @@ export type TargetDisplayAliasSetRequest = {
 	displayAlias: string,
 };
 
+/**  Response for `targets.favourites.add` (spec 051 US2). */
+export type TargetFavouriteAddResult = {
+	targetId: string,
+	/**  ISO-8601 UTC timestamp the target was first favourited. */
+	favouritedAt: string,
+};
+
+/**  Response for `targets.favourites.remove` (spec 051 US2). */
+export type TargetFavouriteRemoveResult = {
+	targetId: string,
+};
+
+/**  Request for `targets.favourites.add` / `targets.favourites.remove` (spec 051 US2). */
+export type TargetFavouriteRequest = {
+	targetId: string,
+};
+
+/**  Response for `targets.favourites.list` (spec 051 US2). */
+export type TargetFavouritesListResult = {
+	/**  Ids of every currently-favourited canonical target. */
+	targetIds: string[],
+};
+
 /**  Request for `target.get` (gen-3). */
 export type TargetGetRequest = {
 	targetId: string,
@@ -7588,6 +9753,12 @@ export type TargetListItem_Deserialize = {
 	 *  that ignore unknown keys are unaffected.
 	 */
 	aliases?: string[],
+	/**
+	 *  Count of `acquisition_session` rows linked to this target (#877, planner
+	 *  Sessions column). `0` when no session has resolved to this target yet —
+	 *  additive field, older clients ignoring unknown keys are unaffected.
+	 */
+	sessionCount?: number,
 };
 
 /**
@@ -7623,6 +9794,30 @@ export type TargetListItem_Serialize = {
 	 *  that ignore unknown keys are unaffected.
 	 */
 	aliases: string[],
+	/**
+	 *  Count of `acquisition_session` rows linked to this target (#877, planner
+	 *  Sessions column). `0` when no session has resolved to this target yet —
+	 *  additive field, older clients ignoring unknown keys are unaffected.
+	 */
+	sessionCount: number,
+};
+
+/**  `target.moon_opposition.batch` request. */
+export type TargetMoonOppositionBatchRequest = {
+	targets: MoonOppositionTargetInput[],
+	/**
+	 *  RFC3339 instant shared by every target in the batch: the Moon's
+	 *  geocentric position, and the opposition search's start day, are the
+	 *  same for every row on one observing night (same memoization rationale
+	 *  as the TS `sunRaTable` this replaces) — pass the SAME instant for a
+	 *  whole table render, not a per-row `now()`.
+	 */
+	at: string,
+};
+
+/**  `target.moon_opposition.batch` response. */
+export type TargetMoonOppositionBatchResponse = {
+	results: MoonOppositionResult[],
 };
 
 /**  Request for `target.note.get` (spec 023 US4). */
@@ -7673,25 +9868,6 @@ export type TargetNoteUpdateResult_Serialize = {
  *  Mapped uniformly from SIMBAD `otype`; unknown values map to `Other`.
  */
 export type TargetObjectType = "galaxy" | "planetary_nebula" | "emission_nebula" | "reflection_nebula" | "dark_nebula" | "open_cluster" | "globular_cluster" | "supernova_remnant" | "galaxy_cluster" | "double_star" | "asterism" | "other";
-
-/**  Generic error envelope for target operations (gen-3). */
-export type TargetOpError = TargetOpError_Serialize | TargetOpError_Deserialize;
-
-/**  Generic error envelope for target operations (gen-3). */
-export type TargetOpError_Deserialize = {
-	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
-	code: string,
-	message: string,
-	details: unknown | null,
-};
-
-/**  Generic error envelope for target operations (gen-3). */
-export type TargetOpError_Serialize = {
-	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
-	code: string,
-	message: string,
-	details?: unknown | null,
-};
 
 /**
  *  A linked project returned by `target.projects.list` (spec 023 US3).
@@ -7865,6 +10041,18 @@ export type TargetSearchResponse_Deserialize = {
 	contractVersion: string,
 	requestId: string,
 	suggestions: TargetSuggestion_Deserialize[],
+	/**
+	 *  Whether the shared resolve cache is still running its background
+	 *  seed/durable-row re-warm (startup, or after `target.cache.clear`) —
+	 *  issue #818: a query that lands mid-warm can get a legitimate-looking
+	 *  empty result for an object the seed does contain, simply because it
+	 *  hasn't committed yet. `true` tells the caller a retry may still find
+	 *  it; `false` means whatever `suggestions` holds is the settled answer.
+	 *  Always `false` from this pure use case directly (its own unit tests
+	 *  exercise no `AppState`) — the `target.search` Tauri command sets the
+	 *  real value from the live warm flag after calling `search`.
+	 */
+	cacheWarming?: boolean,
 };
 
 /**
@@ -7877,6 +10065,18 @@ export type TargetSearchResponse_Serialize = {
 	contractVersion: string,
 	requestId: string,
 	suggestions: TargetSuggestion_Serialize[],
+	/**
+	 *  Whether the shared resolve cache is still running its background
+	 *  seed/durable-row re-warm (startup, or after `target.cache.clear`) —
+	 *  issue #818: a query that lands mid-warm can get a legitimate-looking
+	 *  empty result for an object the seed does contain, simply because it
+	 *  hasn't committed yet. `true` tells the caller a retry may still find
+	 *  it; `false` means whatever `suggestions` holds is the settled answer.
+	 *  Always `false` from this pure use case directly (its own unit tests
+	 *  exercise no `AppState`) — the `target.search` Tauri command sets the
+	 *  real value from the live warm flag after calling `search`.
+	 */
+	cacheWarming: boolean,
 };
 
 /**
@@ -7884,23 +10084,28 @@ export type TargetSearchResponse_Serialize = {
  * 
  *  Only columns reliably present in `acquisition_session` are surfaced:
  *  - `id` — row UUID.
- *  - `session_key` — raw JSON string (matches the `session_key` column, which
- *    stores the composite key as a JSON object — caller can parse it if needed).
+ *  - `session_key` — the composite grouping key (pipe-delimited
+ *    `target|filter|binning|gain|night`, per `sessions::session_key`) —
+ *    caller can parse it further if needed.
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
  *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
+ *  - `filter` — the filter segment of `session_key` (FR-003/US2-AC1, #739);
+ *    `""` when the session has no filter (e.g. an unfiltered OSC capture).
  * 
  *  Spec 041 FR-051 (T076): no `state` field — sessions are derived,
  *  already-confirmed inventory with no review lifecycle.
  */
 export type TargetSessionItem = {
 	id: string,
-	/**  Raw JSON object stored in `acquisition_session.session_key`. */
+	/**  The composite `session_key` grouping key (see struct docs for shape). */
 	sessionKey: string,
 	/**  RFC 3339 UTC creation timestamp. */
 	createdAt: string,
 	/**  Number of frames in `frame_ids` JSON array. */
 	frameCount: number,
+	/**  Filter segment of `session_key`; `""` when the session has no filter. */
+	filter: string,
 };
 
 /**  Request for `target.sessions.list` (spec 023 US2). */
@@ -8041,6 +10246,13 @@ export type ToolPathValidation = {
 	path: string,
 	valid: boolean,
 	reason: string | null,
+	/**
+	 *  `Some(true)` when the path exists and is a directory, `Some(false)`
+	 *  when it exists and is a file (or other non-directory entry). `None`
+	 *  when the path does not exist, so callers cannot distinguish file vs.
+	 *  directory (issue #1056).
+	 */
+	isDir: boolean | null,
 };
 
 /**  Response DTO for `tool.profile.list`. */
@@ -8071,13 +10283,6 @@ export type ToolProfileSummary = {
 	 *  `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS`.
 	 */
 	watchExtensions: string[],
-};
-
-/**  Tour completion state tracking. */
-export type TourCompleted = {
-	step1: boolean,
-	step2: boolean,
-	step3: boolean,
 };
 
 export type TransitionActor = "user" | "system";
@@ -8159,6 +10364,12 @@ export type TransitionResponse_Serialize = {
 
 export type TransitionStatus = "success" | "noop" | "error";
 
+/**  Error envelope for unassign. */
+export type UnassignErrorDto = {
+	code: string,
+	message: string,
+};
+
 export type UpdateCalibrationTolerances = {
 	temperatureToleranceC: number | null,
 	exposureToleranceS: number | null,
@@ -8173,6 +10384,13 @@ export type UpdateCamera = {
 	id: string,
 	name: string,
 	aliases: string[],
+	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
+	sensorType?: SensorType | null,
+	passband?: string[] | null,
+	/**  Sensor geometry; `#[serde(default)]` keeps pre-0079 payloads valid. */
+	pixelSizeUm?: number | null,
+	sensorWidthPx?: number | null,
+	sensorHeightPx?: number | null,
 };
 
 export type UpdateCleanupPolicy = {

@@ -16,9 +16,13 @@ REPO_ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null)
 BRANCH=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null)
 PROJECT=$(basename "$REPO_ROOT")
 
-# Base context for ALL subagents
+# Base context for ALL subagents: project identity + code-discovery routing.
+# Working-style discipline (code economy, comments, report format) lives in the
+# steering-pragmatic package's SubagentStart hook, not here -- this package owns
+# only the codebase-graph/MCP concern.
+NL=$'\n'
 CTX="Project: $PROJECT. Branch: $BRANCH. "
-CTX+="For code discovery prefer codebase-memory-mcp (search_graph, get_code_snippet) and context7 (resolve-library-id, query-docs) when available; otherwise Grep/Read/Glob for direct file access. "
+CTX+="For code discovery prefer codebase-memory-mcp (search_graph, get_code_snippet) and context7 (resolve-library-id, query-docs) when available; otherwise Grep/Read/Glob for direct file access.${NL}"
 
 # Adversarial challenger: reinforce isolation
 if [ "$AGENT_TYPE" = "adversarial-challenger" ]; then

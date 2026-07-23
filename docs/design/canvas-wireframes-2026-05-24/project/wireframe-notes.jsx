@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // wireframe-notes.jsx — All DesignNotes annotation arrays, one per wireframe.
 // These are read by WfWrap and rendered as a numbered band at the bottom of each artboard.
 // Each entry: { n, title, body }. Use short, implementor-facing language.

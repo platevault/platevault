@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sessions / Inventory store — spec 006, TanStack Query.
  *
@@ -10,25 +13,74 @@
  * removed along with the review-state machine.
  */
 
-import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/data/queryKeys";
-import { commands } from "@/bindings/index";
-import { unwrap } from "@/api/ipc";
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
 import type {
   InventoryListResponse,
   InventoryListRequest,
   InventoryFrameType,
-} from "@/bindings/index";
+  SessionNotesUpdateResult,
+} from '@/bindings/index';
 
 export type { InventoryListResponse };
-export type { InventorySource, InventorySession } from "@/bindings/index";
+export type { InventorySource, InventorySession } from '@/bindings/index';
 
 // Local IPC helper — migrated off the hand-written @/api/commands wrapper
 // (spec 037) onto the generated bindings. unwrap() turns the generated Result
 // into the throw-on-error contract the hooks below rely on.
-async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
-  return unwrap(await commands.inventoryList(req as Parameters<typeof commands.inventoryList>[0]));
+async function inventoryList(
+  req: InventoryListRequest,
+): Promise<InventoryListResponse> {
+  return unwrap(
+    await commands.inventoryList(ipcArgs<typeof commands.inventoryList>(req)),
+  );
+}
+
+/**
+ * Persist post-hoc notes for an inventory session (#773). Empty/whitespace
+ * `notes` clears the field server-side. Throws the mapped `ContractError` on
+ * `note.content_too_large` / `session.not_found` / database error.
+ */
+export async function saveSessionNote(
+  sessionId: string,
+  notes: string,
+): Promise<SessionNotesUpdateResult> {
+  return unwrap(
+    await commands.inventorySessionNotesUpdate(
+      ipcArgs<typeof commands.inventorySessionNotesUpdate>({
+        sessionId,
+        notes,
+      }),
+    ),
+  );
+}
+
+/**
+ * Id of the first session in the (unfiltered) inventory ledger, or `null` when
+ * the library has none yet.
+ *
+ * The onboarding find spotlight needs one: the note field it points at lives on
+ * a session's detail pane, not on the sessions list, so it has to deep-link to
+ * a real session. `fetchQuery` reuses a warm cache and only hits IPC when the
+ * sessions page has never loaded.
+ */
+export async function fetchFirstSessionId(
+  queryClient: QueryClient,
+): Promise<string | null> {
+  const response = await queryClient.fetchQuery({
+    queryKey: queryKeys.inventory.all(),
+    queryFn: () => inventoryList(makeRequest()),
+  });
+  for (const source of response.sources) {
+    const first = source.sessions[0];
+    if (first) return first.id;
+  }
+  return null;
 }
 
 // Filters shape
@@ -48,14 +100,16 @@ export interface QueryState<T> {
 
 function makeRequest(filters?: InventoryFilters): InventoryListRequest {
   return {
-    contractVersion: "2.0.0",
+    contractVersion: '2.0.0',
     requestId: crypto.randomUUID(),
     filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
   };
 }
 
 /** Subscribe to the grouped inventory ledger. */
-export function useInventorySources(filters?: InventoryFilters): QueryState<InventoryListResponse> {
+export function useInventorySources(
+  filters?: InventoryFilters,
+): QueryState<InventoryListResponse> {
   const { data, isFetching, error } = useQuery({
     queryKey: queryKeys.inventory.all(filters),
     queryFn: () => inventoryList(makeRequest(filters)),
@@ -71,7 +125,7 @@ export function useInventorySources(filters?: InventoryFilters): QueryState<Inve
 export function useInvalidateInventory() {
   const queryClient = useQueryClient();
   return useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all() });
   }, [queryClient]);
 }
 

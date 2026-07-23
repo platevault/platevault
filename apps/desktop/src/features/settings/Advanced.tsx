@@ -1,20 +1,40 @@
-// spec 018 — owned pane: logLevel, rememberFollowLogs, devMode.
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// spec 018 — owned scope: logLevel (rendered below), rememberFollowLogs
+// (surfaced via the log panel's follow-tail toggle, app/LogPanelContext.tsx —
+// not duplicated here) and devMode (deliberately hidden per spec 021 T032,
+// reachable only at /dev/settings; NOT a UI gap, see app/router.tsx). #624
+// audited this pane's key list; both are covered elsewhere by design.
 // On mount, loads persisted values from backend via settings.get('advanced').
 // Changes are auto-saved via the save() prop (useAutoSave -> settings.update).
-// spec 010 — Guided flow restart control added (T042).
 // spec 003 US3 — first-run setup wizard restart control added (regression fix:
 // firstrun.restart was fully wired on the backend but had no UI caller).
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Btn } from '@/ui';
 import { getSettings, restartFirstRun } from './settingsIpc';
-import { getGuidedState, restartGuidedFlow, type GuidedFlowStateDto } from '@/features/guided/store';
-import { STEP_ORDER } from '@/features/guided/store';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
-import { setPreference } from '@/data/preferences';
-import { resetWizardStateWithSources, type SourceEntry } from '@/features/setup/sources-store';
-import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import { setPreference, resetPreferences } from '@/data/preferences';
+import {
+  resetWizardStateWithSources,
+  type SourceEntry,
+} from '@/features/setup/sources-store';
+import { requestOrientationReplay } from '@/features/onboarding/OrientationWalk';
+import { restoreOnboarding } from '@/features/onboarding/store';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
+import {
+  getUpdateSnapshot,
+  subscribeUpdate,
+  checkForUpdate,
+  restartPendingUpdate,
+  getRunningVersion,
+} from '@/data/updateSubscription';
 
 const ADVANCED_KEYS = ['logLevel', 'rememberFollowLogs', 'devMode'];
 
@@ -27,11 +47,14 @@ type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 export function Advanced({ save }: AdvancedProps) {
   const navigate = useNavigate();
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
-  const [guidedState, setGuidedState] = useState<GuidedFlowStateDto | null>(null);
-  const [guidedRestarting, setGuidedRestarting] = useState(false);
   const [firstRunConfirming, setFirstRunConfirming] = useState(false);
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
+  const updateState = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [runningVersion, setRunningVersion] = useState<string | null>(null);
+  const [resetConfirming, setResetConfirming] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (vals?.logLevel && typeof vals.logLevel === 'string') {
@@ -53,54 +76,38 @@ export function Advanced({ save }: AdvancedProps) {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load guided flow state on mount (spec 010, T042).
+  // Running app semver, independent of update state (#845).
   useEffect(() => {
     let cancelled = false;
-    getGuidedState()
-      .then((state) => {
-        if (!cancelled) setGuidedState(state);
-      })
-      .catch(() => {/* Backend unavailable — hide control */});
-    return () => { cancelled = true; };
+    void getRunningVersion().then((version) => {
+      if (!cancelled) setRunningVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleGuidedRestart = async () => {
-    setGuidedRestarting(true);
-    try {
-      const newState = await restartGuidedFlow();
-      setGuidedState(newState);
-    } catch {
-      // Best-effort.
-    } finally {
-      setGuidedRestarting(false);
-    }
-  };
-
-  // A "Completed" flow is one where all steps are in completedSteps.
-  const guidedCompleted = guidedState
-    ? STEP_ORDER.every((id) => guidedState.completedSteps.includes(id))
-    : false;
-
-  // Restart the first-run *source setup* wizard (spec 003 US3) — distinct from
-  // the guided first-project tour above. Requires an explicit confirm step
-  // because it reopens the whole source-registration flow.
+  // Restart the first-run *source setup* wizard (spec 003 US3). Requires an
+  // explicit confirm step because it reopens the whole source-registration flow.
   const handleFirstRunRestart = async () => {
     setFirstRunRestarting(true);
     setFirstRunError(null);
     try {
       const response = await restartFirstRun();
       // Prefill the wizard's working buffer with the currently registered
-      // sources (A7) — RegisterSourceResponse has no scanDepth, so default to
-      // 'recursive' per FR-017.
-      const prefilled: SourceEntry[] = response.prefilledSources.map((source) => ({
-        path: source.path,
-        kind: source.kind,
-        scanDepth: 'recursive',
-        organizationState: source.organizationState,
-      }));
+      // sources (A7). `scanDepth` was retired from `SourceEntry` (#913) — this
+      // literal used to carry a dead `scanDepth: 'recursive'` field the type
+      // no longer declares.
+      const prefilled: SourceEntry[] = response.prefilledSources.map(
+        (source) => ({
+          path: source.path,
+          kind: source.kind,
+          organizationState: source.organizationState,
+        }),
+      );
       resetWizardStateWithSources(prefilled);
       setPreference('setupCompleted', false);
       setFirstRunConfirming(false);
@@ -112,24 +119,68 @@ export function Advanced({ save }: AdvancedProps) {
     }
   };
 
-  const handleExport = () => console.log('Export DB triggered');
-  const handleReset = () => console.log('Reset preferences triggered');
+  // #601: no `db.export` backend command exists yet — the button used to be
+  // a console.log no-op styled as a real action. Disabled with an
+  // explanatory title (same "not backed yet" convention as MasterDetail's
+  // #642 disabled actions) rather than shipping a dead "live" button.
+  //
+  // Reset preferences, by contrast, genuinely has a real backend already
+  // (`resetPreferences()` — theme/density/font-size, local-only, no IPC
+  // needed) — it was just never wired to the button. Gated behind a confirm
+  // step for consistency with this pane's other resets (guided-tour/
+  // first-run restarts above).
+  const handleReset = () => {
+    resetPreferences();
+    setResetConfirming(false);
+    setResetDone(true);
+    setTimeout(() => setResetDone(false), 3000);
+  };
+
+  // Staged update flow (#888, absorbs #869/#873): checking/downloading are
+  // automatic; only the restart/install step is an explicit user action
+  // (US10 AS1, FR-030). Both actions manage their own phase transitions in
+  // updateSubscription.ts — this pane just reflects `updateState`.
+  const handleCheckForUpdate = async () => {
+    setUpdateBusy(true);
+    try {
+      await checkForUpdate();
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const handleRestartUpdate = async () => {
+    setUpdateBusy(true);
+    try {
+      await restartPendingUpdate();
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
 
   return (
     <>
-      {/* Database info */}
+      {/* Database info (#602: this panel used to hardcode a fabricated size,
+          schema version, and record count — plus a pre-rename `~/.alm/` path
+          — directly above the real status bar showing genuinely different
+          live numbers. No backend command exists yet to report real db stats
+          or a real path, so those rows are removed rather than shown wrong;
+          "Engine" is the one row that was always a true, static fact. */}
       <SettingsSection
         title={m.settings_advanced_db_title()}
-        action={<Btn size="sm" onClick={handleExport}>{m.settings_advanced_db_export()}</Btn>}
+        action={
+          <Btn
+            size="sm"
+            disabled
+            title={m.settings_advanced_db_export_unavailable_title()}
+          >
+            {m.settings_advanced_db_export()}
+          </Btn>
+        }
       >
-        <SettingsRow label={m.settings_advanced_db_location()}>
-          {/* eslint-disable-next-line alm/no-user-string -- filesystem path identifier, not translatable */}
-          <code className="alm-mono alm-adv-settings__db-path">~/.alm/astro-library.db</code>
+        <SettingsRow label={m.settings_advanced_db_engine()}>
+          {m.settings_advanced_db_engine_value()}
         </SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_engine()}>{m.settings_advanced_db_engine_value()}</SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_size()}>{m.settings_advanced_db_size_value()}</SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_schema()}>{m.settings_advanced_db_schema_value()}</SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_records()}>{m.settings_advanced_db_records_value()}</SettingsRow>
       </SettingsSection>
 
       {/* Log level — persisted via spec 018 settings backend */}
@@ -148,7 +199,7 @@ export function Advanced({ save }: AdvancedProps) {
           info={m.settings_advanced_loglevel_info()}
         >
           <select
-            className="alm-select alm-adv-settings__log-select"
+            className="pv-select pv-adv-settings__log-select"
             value={logLevel}
             onChange={(e) => {
               const v = e.target.value as LogLevel;
@@ -164,50 +215,21 @@ export function Advanced({ save }: AdvancedProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Guided first-project-flow restart (spec 010, T042) */}
-      {guidedState !== null && (
-        <SettingsSection title={m.settings_advanced_tour_title()}>
-          <SettingsRow
-            label={m.settings_advanced_tour_label()}
-            info={m.settings_advanced_firstrun_info()}
-          >
-            <div className="alm-adv-settings__control-col">
-              <p className="alm-adv-settings__control-desc">
-                {guidedCompleted
-                  ? m.settings_advanced_guided_completed()
-                  : guidedState.dismissed
-                    ? m.settings_advanced_guided_dismissed()
-                    : m.settings_advanced_guided_active()}
-              </p>
-              <Btn
-                size="sm"
-                onClick={() => void handleGuidedRestart()}
-                disabled={guidedRestarting}
-                data-testid="guided-restart-btn"
-              >
-                {guidedRestarting ? m.common_restarting() : m.settings_advanced_restart_guided()}
-              </Btn>
-            </div>
-          </SettingsRow>
-        </SettingsSection>
-      )}
-
-      {/* First-run source setup wizard restart (spec 003 US3). Distinct from
-          the guided first-project tour above: this reopens the Raw/
-          Calibration/Project/Inbox source-registration wizard, not the
-          walkthrough. Requires an explicit confirm step (A7, R-E5). */}
+      {/* First-run source setup wizard restart (spec 003 US3). Reopens the
+          Raw/Calibration/Project/Inbox source-registration wizard. Requires
+          an explicit confirm step (A7, R-E5). */}
       <SettingsSection title={m.settings_advanced_firstrun_restart_title()}>
         <SettingsRow
           label={m.settings_advanced_firstrun_restart_label()}
           info={m.settings_advanced_firstrun_restart_desc()}
         >
-          <div className="alm-adv-settings__control-col">
+          <div className="pv-adv-settings__control-col">
             {firstRunConfirming ? (
-              <div className="alm-adv-settings__danger-box">
-                <p className="alm-adv-settings__danger-desc">
+              <div className="pv-adv-settings__danger-box">
+                <p className="pv-adv-settings__danger-desc">
                   {m.settings_advanced_firstrun_restart_confirm_desc()}
                 </p>
-                <div className="alm-adv-settings__control-row">
+                <div className="pv-adv-settings__control-row">
                   <Btn
                     size="sm"
                     variant="danger"
@@ -225,7 +247,7 @@ export function Advanced({ save }: AdvancedProps) {
                     onClick={() => setFirstRunConfirming(false)}
                     disabled={firstRunRestarting}
                   >
-                    {m.settings_advanced_firstrun_restart_cancel()}
+                    {m.common_cancel()}
                   </Btn>
                 </div>
               </div>
@@ -239,26 +261,169 @@ export function Advanced({ save }: AdvancedProps) {
               </Btn>
             )}
             {firstRunError && (
-              <div className="alm-settings__error" role="alert">
-                {m.settings_advanced_firstrun_restart_error({ message: firstRunError })}
+              <div className="pv-settings__error" role="alert">
+                {m.settings_advanced_firstrun_restart_error({
+                  message: firstRunError,
+                })}
               </div>
             )}
           </div>
         </SettingsRow>
       </SettingsSection>
 
-      {/* Danger zone */}
+      {/* Signed auto-update — staged flow (spec 051 US10, #888/#869/#873) */}
+      <SettingsSection title={m.settings_advanced_updates_title()}>
+        <SettingsRow label={m.settings_advanced_updates_title()}>
+          <div className="pv-adv-settings__control-col">
+            {runningVersion && (
+              <p
+                className="pv-adv-settings__control-desc"
+                data-testid="update-running-version"
+              >
+                {m.settings_advanced_updates_running_version({
+                  version: runningVersion,
+                })}
+              </p>
+            )}
+            <p
+              className="pv-adv-settings__control-desc"
+              data-testid="update-status"
+            >
+              {updateState.phase === 'checking' &&
+                m.settings_advanced_updates_checking()}
+              {(updateState.phase === 'idle' ||
+                updateState.phase === 'up-to-date') &&
+                m.settings_advanced_updates_uptodate()}
+              {updateState.phase === 'check-failed' &&
+                m.settings_advanced_updates_checkfailed({
+                  message: updateState.error ?? '',
+                })}
+              {updateState.phase === 'downloading' &&
+                m.settings_advanced_updates_downloading({
+                  version: updateState.version ?? '',
+                })}
+              {updateState.phase === 'download-failed' &&
+                m.settings_advanced_updates_downloadfailed({
+                  message: updateState.error ?? '',
+                })}
+              {updateState.phase === 'ready' &&
+                m.settings_advanced_updates_ready({
+                  version: updateState.version ?? '',
+                })}
+              {updateState.phase === 'restart-failed' &&
+                m.settings_advanced_updates_restartfailed()}
+            </p>
+            {(updateState.phase === 'ready' ||
+              updateState.phase === 'restart-failed') && (
+              <Btn
+                size="sm"
+                onClick={() => void handleRestartUpdate()}
+                disabled={updateBusy}
+                data-testid="update-restart-btn"
+              >
+                {updateBusy
+                  ? m.common_restarting()
+                  : m.settings_advanced_updates_restart()}
+              </Btn>
+            )}
+            {(updateState.phase === 'check-failed' ||
+              updateState.phase === 'download-failed') && (
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleCheckForUpdate()}
+                disabled={updateBusy}
+                data-testid="update-retry-btn"
+              >
+                {m.settings_advanced_updates_check_retry()}
+              </Btn>
+            )}
+          </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* Getting started (spec 056). Replay control (T015) + the single restore/
+          reset control (T030, FR-014): unhides the section after explicit
+          removal AND after completion auto-hide, re-derives automatic pre-ticks,
+          preserves manual/dismissed state; idempotent on repeat. */}
+      <SettingsSection title={m.onboarding_section_title()}>
+        <SettingsRow label={m.onboarding_settings_replay_label()}>
+          <Btn
+            size="sm"
+            onClick={() => requestOrientationReplay()}
+            data-testid="onboarding-replay-btn"
+          >
+            {m.onboarding_settings_replay_label()}
+          </Btn>
+        </SettingsRow>
+        <SettingsRow
+          label={m.onboarding_settings_restore_label()}
+          info={m.onboarding_settings_restore_description()}
+        >
+          <Btn
+            size="sm"
+            onClick={() => void restoreOnboarding()}
+            data-testid="onboarding-restore-btn"
+          >
+            {m.onboarding_settings_restore_label()}
+          </Btn>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* Danger zone (#601): was a console.log no-op styled as a real
+          destructive action. `resetPreferences()` is real and local-only, so
+          it's wired for real, gated behind a confirm step like this pane's
+          other resets. */}
       <SettingsSection title={m.settings_advanced_danger_title()}>
-        <div className="alm-adv-settings__danger-box">
-          <div className="alm-adv-settings__danger-heading">
+        <div className="pv-adv-settings__danger-box">
+          <div className="pv-adv-settings__danger-heading">
             <strong>{m.settings_advanced_danger_reset()}</strong>
           </div>
-          <p className="alm-adv-settings__danger-desc">
+          <p className="pv-adv-settings__danger-desc">
             {m.settings_advanced_danger_desc()}
           </p>
-          <Btn size="sm" variant="danger" onClick={handleReset}>
-            {m.settings_advanced_danger_reset()}
-          </Btn>
+          {resetConfirming ? (
+            <>
+              <p className="pv-adv-settings__danger-desc">
+                {m.settings_advanced_danger_confirm_desc()}
+              </p>
+              <div className="pv-adv-settings__control-row">
+                <Btn
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleReset}
+                  data-testid="reset-preferences-confirm-btn"
+                >
+                  {m.settings_advanced_danger_confirm_yes()}
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setResetConfirming(false)}
+                >
+                  {m.common_cancel()}
+                </Btn>
+              </div>
+            </>
+          ) : (
+            <Btn
+              size="sm"
+              variant="destructive"
+              onClick={() => setResetConfirming(true)}
+              data-testid="reset-preferences-btn"
+            >
+              {m.settings_advanced_danger_reset()}
+            </Btn>
+          )}
+          {resetDone && (
+            <p
+              className="pv-adv-settings__control-desc"
+              role="status"
+              data-testid="reset-preferences-done"
+            >
+              {m.settings_advanced_danger_reset_done()}
+            </p>
+          )}
         </div>
       </SettingsSection>
     </>

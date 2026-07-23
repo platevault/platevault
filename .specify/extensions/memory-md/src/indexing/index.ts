@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import path from "path";
 import { promises as fs } from "fs";
 import fg from "fast-glob";
@@ -130,4 +133,3 @@ export function buildSearchQuery(query: string): string {
     .match(/\b[\p{L}\p{N}_-]+\b/gu) ?? [];
   return terms.length > 0 ? terms.join(" ") : query.trim();
 }
-

@@ -1,15 +1,23 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Hybrid event bus: live broadcast via tokio + durable SQLite events table.
 //!
 //! T010b: durable side wired in this module. Publishes to both the SQLite
 //! `events` table (durable, survives restart) and a tokio broadcast channel
 //! (in-process, non-durable). Replay reads from the `events` table with a
 //! monotonic `event_id` cursor.
+//!
+//! Durable reads/writes delegate to `persistence_db::repositories::events`
+//! (db-boundary-zero) rather than issuing raw SQL here.
 
+use audit_types::{AuditLogEntry, EventPublisher, Source};
+use domain_core::ids::AuditId;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 
-use crate::event_bus::{EventEnvelope, Source};
+use crate::event_bus::EventEnvelope;
 
 /// Capacity of the broadcast channel.  Lagging receivers are dropped with
 /// `RecvError::Lagged`; they must re-subscribe and query the durable table.
@@ -21,7 +29,7 @@ pub enum BusError {
     #[error("serialisation error: {0}")]
     Serialise(#[from] serde_json::Error),
     #[error("database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] persistence_db::DbError),
 }
 
 /// Hybrid live + durable event bus.
@@ -81,17 +89,76 @@ impl EventBus {
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
         let payload_str = serde_json::to_string(&value)?;
 
-        sqlx::query("INSERT INTO events (topic, source, emitted_at, payload) VALUES (?, ?, ?, ?)")
-            .bind(topic)
-            .bind(source_str)
-            .bind(&emitted_at)
-            .bind(&payload_str)
-            .execute(&self.pool)
-            .await?;
+        persistence_db::repositories::events::insert_event(
+            &self.pool,
+            topic,
+            source_str,
+            &emitted_at,
+            &payload_str,
+        )
+        .await?;
 
         // 2. Broadcast to live subscribers.
         // `send` errors only when there are NO receivers at all (which is fine).
         Ok(self.sender.send(envelope).unwrap_or(0))
+    }
+
+    /// T121 (spec 030 FR-131, Q15/#647): single write-through path for
+    /// audit-worthy mutations. Writes the durable `audit_log_entry` row
+    /// first, then emits `event_payload` on `topic` for the live UI, and
+    /// returns the durable `entry.audit_id` — never a bus-only id (the
+    /// FR-131 violation this closes: settings/protection/equipment/source
+    /// mutations previously returned an id pointing at a bus event no audit
+    /// read could resolve).
+    ///
+    /// Build `entry` with `AuditLogEntry::new(..)` and, as needed,
+    /// `.with_reason_code(..)` (refused/failed outcomes) and
+    /// `.with_payload(json!({"before": .., "after": ..}))` for
+    /// non-lifecycle before→after pairs (data-model.md "Audit Entry —
+    /// Generalized Mutation Record"). Typical call site:
+    ///
+    /// ```ignore
+    /// let entry = AuditLogEntry::new(
+    ///     EntityType::Settings, entity_id, "settings.update", "user",
+    ///     Outcome::Applied, Severity::Workflow, request_id,
+    /// )
+    /// .with_payload(json!({"key": key, "before": prior_value, "after": new_value}));
+    /// let audit_id = bus.write_audit(entry, TOPIC_SETTINGS_CHANGED, Source::User, event_payload).await?;
+    /// ```
+    ///
+    /// # Failure semantics (constitution §II)
+    /// The durable `audit_log_entry` insert is load-bearing: an insert
+    /// failure returns `Err` and the caller's command MUST fail. The bus
+    /// emit (including its own durable `events`-table row) is best-effort:
+    /// a publish failure is logged and swallowed — the command still
+    /// succeeds, because `audit_log_entry` is the authoritative audit
+    /// record and `events` is non-authoritative transient diagnostics
+    /// (spec §8.3 "Store roles").
+    ///
+    /// # Errors
+    /// Returns `BusError::Database` only if the durable `audit_log_entry`
+    /// insert fails.
+    pub async fn write_audit<P: Serialize>(
+        &self,
+        entry: AuditLogEntry,
+        topic: &str,
+        source: Source,
+        event_payload: P,
+    ) -> Result<AuditId, BusError> {
+        persistence_db::repositories::audit::insert_audit_entry(&self.pool, &entry)
+            .await
+            .map_err(BusError::Database)?;
+
+        if let Err(err) = self.publish(topic, source, event_payload).await {
+            tracing::warn!(
+                audit_id = %entry.audit_id.as_uuid(),
+                topic,
+                error = %err,
+                "audit bus emit failed after durable write; audit_log_entry row is authoritative"
+            );
+        }
+
+        Ok(entry.audit_id)
     }
 
     /// Subscribe to all live events on the bus.
@@ -118,38 +185,34 @@ impl EventBus {
         topic_filter: Option<&str>,
         since: Option<i64>,
     ) -> Result<Vec<EventEnvelope<serde_json::Value>>, BusError> {
-        // Use runtime-checked queries (sqlx::query) rather than sqlx::query! macros
-        // because the DATABASE_URL env var is not set at compile time for this crate.
         let since_id = since.unwrap_or(0);
 
-        let rows: Vec<(i64, String, String, String)> = if let Some(topic) = topic_filter {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-                 FROM events WHERE event_id > ? AND topic = ? ORDER BY event_id ASC",
-            )
-            .bind(since_id)
-            .bind(topic)
-            .fetch_all(&self.pool)
-            .await?
+        let rows = if let Some(topic) = topic_filter {
+            persistence_db::repositories::events::list_since_by_topic(&self.pool, since_id, topic)
+                .await?
         } else {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-                 FROM events WHERE event_id > ? ORDER BY event_id ASC",
-            )
-            .bind(since_id)
-            .fetch_all(&self.pool)
-            .await?
+            persistence_db::repositories::events::list_since(&self.pool, since_id).await?
         };
 
         let mut envelopes = Vec::with_capacity(rows.len());
-        for (_event_id, topic, _emitted_at, payload_str) in rows {
-            let payload: serde_json::Value = serde_json::from_str(&payload_str)?;
+        for row in rows {
+            let payload: serde_json::Value = serde_json::from_str(&row.payload)?;
             // Restore semantics: always emit with Source::Restore (R-Source-1).
-            let envelope = EventEnvelope::new(&topic, Source::Restore, payload);
+            let envelope = EventEnvelope::new(&row.topic, Source::Restore, payload);
             envelopes.push(envelope);
         }
 
         Ok(envelopes)
+    }
+}
+
+/// Lets `persistence_db` repositories (e.g. `lifecycle::SqliteLifecycleRepository`)
+/// publish through this bus without depending on the `audit` crate (which
+/// depends on `persistence_db`, so the reverse edge would cycle).
+#[async_trait::async_trait]
+impl EventPublisher for EventBus {
+    async fn publish(&self, topic: &str, source: Source, payload: serde_json::Value) {
+        let _ = EventBus::publish(self, topic, source, payload).await;
     }
 }
 
@@ -246,6 +309,119 @@ mod tests {
         for envelope in &replayed {
             assert_eq!(envelope.source, Source::Restore, "replay must use Restore source");
         }
+    }
+
+    /// Real migrated DB (not the hand-rolled `events`-only fixture above) —
+    /// `write_audit` needs the actual `audit_log_entry` table (migration
+    /// 0063 adds `reason_code`).
+    async fn make_migrated_bus() -> (persistence_db::Database, EventBus) {
+        let db = persistence_db::Database::in_memory().await.expect("in-memory db");
+        db.migrate().await.expect("migrate");
+        let bus = EventBus::with_pool(db.pool().clone());
+        (db, bus)
+    }
+
+    #[tokio::test]
+    async fn write_audit_writes_durable_row_and_returns_its_audit_id() {
+        use audit_types::{Outcome, Severity};
+        use domain_core::ids::EntityId;
+        use domain_core::lifecycle::data_asset::EntityType;
+
+        let (db, bus) = make_migrated_bus().await;
+        let entity_id = EntityId::new();
+        let entry = AuditLogEntry::new(
+            EntityType::Settings,
+            entity_id,
+            "settings.update",
+            "user",
+            Outcome::Refused,
+            Severity::Workflow,
+            EntityId::new(),
+        )
+        .with_reason_code("invalid_value")
+        .with_payload(serde_json::json!({"key": "pattern", "before": "a", "after": "b"}));
+        let expected_audit_id = entry.audit_id;
+
+        let audit_id = bus
+            .write_audit(entry, "settings.changed", Source::User, serde_json::json!({"ok": true}))
+            .await
+            .expect("write_audit");
+
+        assert_eq!(audit_id, expected_audit_id);
+
+        let row: (String, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT outcome, reason_code, payload FROM audit_log_entry WHERE audit_id = ?",
+        )
+        .bind(audit_id.as_uuid().to_string())
+        .fetch_one(db.pool())
+        .await
+        .expect("durable row must exist");
+        assert_eq!(row.0, "refused");
+        assert_eq!(row.1.as_deref(), Some("invalid_value"));
+        assert!(row.2.expect("payload present").contains("\"before\":\"a\""));
+    }
+
+    #[tokio::test]
+    async fn write_audit_propagates_error_when_durable_insert_fails() {
+        use audit_types::{Outcome, Severity};
+        use domain_core::ids::EntityId;
+        use domain_core::lifecycle::data_asset::EntityType;
+
+        let (db, bus) = make_migrated_bus().await;
+        // Simulate a durable-write failure: drop the load-bearing table.
+        sqlx::query("DROP TABLE audit_log_entry").execute(db.pool()).await.expect("drop table");
+
+        let entry = AuditLogEntry::new(
+            EntityType::Protection,
+            EntityId::new(),
+            "protection.source.set",
+            "user",
+            Outcome::Applied,
+            Severity::Workflow,
+            EntityId::new(),
+        );
+
+        let result = bus
+            .write_audit(entry, "protection.source.set", Source::User, serde_json::json!({}))
+            .await;
+        assert!(result.is_err(), "insert failure must propagate — the durable row is load-bearing");
+    }
+
+    #[tokio::test]
+    async fn write_audit_succeeds_when_bus_emit_fails_but_durable_row_is_written() {
+        use audit_types::{Outcome, Severity};
+        use domain_core::ids::EntityId;
+        use domain_core::lifecycle::data_asset::EntityType;
+
+        let (db, bus) = make_migrated_bus().await;
+        // Simulate a bus-emit failure (the events table's own durable write
+        // fails) while audit_log_entry stays intact.
+        sqlx::query("DROP TABLE events").execute(db.pool()).await.expect("drop events table");
+
+        let entry = AuditLogEntry::new(
+            EntityType::Equipment,
+            EntityId::new(),
+            "equipment.optical_train.create",
+            "user",
+            Outcome::Applied,
+            Severity::Workflow,
+            EntityId::new(),
+        );
+        let expected_audit_id = entry.audit_id;
+
+        let audit_id = bus
+            .write_audit(entry, "equipment.changed", Source::User, serde_json::json!({}))
+            .await
+            .expect("bus-emit failure must not fail the command");
+        assert_eq!(audit_id, expected_audit_id);
+
+        let count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM audit_log_entry WHERE audit_id = ?")
+                .bind(audit_id.as_uuid().to_string())
+                .fetch_one(db.pool())
+                .await
+                .expect("count");
+        assert_eq!(count.0, 1, "durable row must exist despite the bus-emit failure");
     }
 
     #[tokio::test]

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * iana-timezones.ts — offline IANA timezone id list for the site picker (spec 044 R7, T003).
  *

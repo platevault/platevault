@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.confirm` use case — the single confirm path (spec 005, T027/T028).
 //!
 //! Spec 041 FR-050/T071: the legacy "split" action and its mixed per-type
@@ -22,15 +25,32 @@
 //! move into a chosen library root (`select_destination_root`, US8); non-inbox
 //! sources stay under their own root. A structural failure returns
 //! `pattern.unset`.
+//!
+//! Equipment resolution (#1342): the `camera` token resolves its raw
+//! `INSTRUME` string against the registered camera aliases, so one physical
+//! camera spelled several ways by different capture programs resolves to one
+//! destination directory. Resolution is read-only. Ingest deliberately does
+//! **not** call `find_or_create_camera_by_alias`: that function registers one
+//! camera per distinct spelling (`name = alias`, `aliases = [alias]`), so
+//! running it over a batch would mint sibling cameras for the very spellings
+//! the alias array exists to collapse. Growing the registry belongs to an
+//! explicit user action over the unclaimed strings, not to a batch write
+//! inferred during confirm.
 #![allow(clippy::doc_markdown)]
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use app_core_targets::metadata_cache::cached_extract;
+use audit::bus::EventBus;
+use audit::event_bus::{InventoryConfirmed, Source, TOPIC_INVENTORY_CONFIRMED};
 use contracts_core::first_run::{OrganizationState, SourceKind};
+use contracts_core::framing::{
+    AttributionAppliedDto, ChosenAttributionDto, IngestionAttributionCandidateDto,
+};
+use contracts_core::plans::ProvenanceEntry;
 use contracts_core::settings::PatternPart as ContractPatternPart;
-use metadata_core::{v1_normalization_table, MetadataExtractor};
-use metadata_fits::FitsExtractor;
-use metadata_xisf::XisfExtractor;
+use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
 use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::inbox::{self as inbox_repo};
@@ -43,6 +63,8 @@ use uuid::Uuid;
 use app_core_errors::db_internal_ctx;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
+
+use crate::attribution;
 
 // ── Request / Response ────────────────────────────────────────────────────────
 
@@ -60,6 +82,12 @@ pub struct ConfirmRequest {
     /// consulted for inbox sources whose frame-type category has >1 candidate
     /// root; ignored otherwise.
     pub root_id: Option<String>,
+    /// Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+    /// The user's pick from a prior `attribution_candidates` list. Only
+    /// meaningful for light-frame items (`attribution.not_light_frame`
+    /// otherwise); omitting it leaves the confirmed session's framing
+    /// membership unset.
+    pub chosen_attribution: Option<ChosenAttributionDto>,
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +108,14 @@ pub struct ConfirmResponse {
     pub catalogue_count: usize,
     /// Per-action absolute destination previews (spec 041 US8/FR-031).
     pub destinations: Vec<ResolvedDestination>,
+    /// Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+    /// Ranked suggestions for where this item's light session belongs — a
+    /// suggestion surface only, never auto-applied. Empty for non-light items
+    /// or when no candidate matched.
+    pub attribution_candidates: Vec<IngestionAttributionCandidateDto>,
+    /// Present when the request carried a `chosen_attribution` that was
+    /// successfully applied (F-Framing-10/6).
+    pub attribution_applied: Option<AttributionAppliedDto>,
 }
 
 /// One resolved per-file destination (spec 041 US8/FR-031). The absolute path
@@ -105,9 +141,14 @@ pub struct ResolvedDestination {
 /// - `classification.ambiguous` — action/classification mismatch or no classified files.
 /// - `classification.stale` — signature drift detected.
 /// - `pattern.unset` — naming pattern is unset or fails to resolve required tokens.
+/// - `attribution.not_light_frame` — `chosen_attribution` was supplied for a
+///   non-light item (spec 008 Q27 F-Framing-10).
+/// - `attribution.geometry_unavailable` — `chosen_attribution` requires
+///   creating a new framing, but this item has no staged pointing/rotation.
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: ConfirmRequest,
 ) -> Result<ConfirmResponse, ContractError> {
     // 1. Load item
@@ -140,10 +181,10 @@ pub async fn confirm(
         ));
     }
 
-    // 3. T070 / FR-049 / SC-015: reject any item that is still in the
-    // needs-review sentinel bucket (missing mandatory attributes).  Splitting /
+    // 3. T070 / FR-049 / SC-015: reject any item still flagged `needs_review`
+    // (missing mandatory attributes; spec 058 FR-028).  Splitting /
     // recalculation happens at classify/reclassify (before confirm), never here.
-    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+    if item.needs_review != 0 {
         return Err(ContractError::new(
             ErrorCode::InboxMissingPathAttributes,
             "This item is in the needs-review bucket: one or more files are missing mandatory \
@@ -179,7 +220,7 @@ pub async fn confirm(
     // 7. Validate the request. Spec 041 FR-050/T071/T072: the "split" action
     // and the mixed per-type confirm branch are removed — the request no
     // longer carries an `action` field at all; `classified` (migration
-    // 0048's CHECK-constrained single-type DB value) is the only confirmable
+    // 0049's CHECK-constrained single-type DB value) is the only confirmable
     // classification result. A folder that classified as `unclassified`
     // (zero or multiple distinct frame types) is not confirmable directly; it
     // must be re-split into single-type sub-items (T066 materialization)
@@ -210,6 +251,56 @@ pub async fn confirm(
             false,
         ));
     }
+
+    // 9b. Attribution pass (spec 008 Q27, F-Framing-5, FR-019) — the first
+    // pre-ingest pass at the confirm gate (composition point for the Q22
+    // duplicate sweep once it lands, see `crate::attribution` module docs).
+    let is_light_item = evidence_is_light(&evidence_rows);
+
+    if req.chosen_attribution.is_some() && !is_light_item {
+        return Err(ContractError::new(
+            ErrorCode::AttributionNotLightFrame,
+            "chosen_attribution only applies to light-frame items.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    // `item_geometry` is also consumed by the apply-path below once the plan
+    // (and its id) exists — computed once here rather than twice. The
+    // attribution pass is a suggestion surface (FR-019/FR-020): a query
+    // failure here must degrade to "no candidates" rather than abort
+    // confirm() — missing/absent geometry is the ordinary, expected case
+    // (Q16 NULL-geometry exclusion), never a reason to block plan creation,
+    // and an unexpected transient failure computing suggestions is not a
+    // reason to lose the user's confirm either. Only an explicit
+    // `chosenAttribution` pick that itself requires geometry (the apply-path
+    // below) is allowed to fail the request.
+    let item_geometry = if is_light_item {
+        match attribution::compute_item_geometry(pool, &req.inbox_item_id).await {
+            Ok(geometry) => Some(geometry),
+            Err(e) => {
+                tracing::warn!(
+                    inbox_item_id = %req.inbox_item_id,
+                    "confirm: attribution geometry computation failed, degrading to no \
+                     candidates: {e:?}"
+                );
+                Some(attribution::ItemGeometry::default())
+            }
+        }
+    } else {
+        None
+    };
+    let attribution_candidates = match &item_geometry {
+        Some(geometry) => attribution::compute_candidates(pool, geometry).await.unwrap_or_else(|e| {
+            tracing::warn!(
+                inbox_item_id = %req.inbox_item_id,
+                "confirm: attribution candidate ranking failed, degrading to no candidates: {e:?}"
+            );
+            Vec::new()
+        }),
+        None => Vec::new(),
+    };
 
     // Spec 041 FR-050/T071: per-type action grouping is retired along with the
     // "split" action — a confirmable item is single-type (classification.result
@@ -265,8 +356,10 @@ pub async fn confirm(
     // US9 gate (T056) is derived from it rather than a separate matrix. A hard
     // `Err(ResolveError)` signals a structural failure (traversal, length cap).
     let norm_table = v1_normalization_table();
-    let fits_extractor = FitsExtractor;
-    let xisf_extractor = XisfExtractor;
+    // Loaded once per confirm, not per file: the whole registry is small and
+    // the resolve below runs for every plan file. Equipment being unreadable
+    // degrades to raw header strings rather than failing the confirm.
+    let cameras = app_core_calibration::equipment::list_cameras(pool).await.unwrap_or_default();
 
     let mut resolved_items: Vec<ResolvedRow> = Vec::with_capacity(plan_files.len());
     // Per-file missing path attributes for the US9 gate (FR-032/FR-033).
@@ -274,6 +367,11 @@ pub async fn confirm(
     // Cache the chosen destination root per category (keyed by the category's
     // stable string name) so a multi-category item resolves each category once.
     let mut chosen_root_cache: std::collections::HashMap<&'static str, DestinationRoot> =
+        std::collections::HashMap::new();
+    // Tier 2.5: cache the resolved per-type destination pattern by (frame_type,
+    // is_master) so a confirmable item (single-type per FR-050) fetches its
+    // pattern once instead of once per file in the loop below.
+    let mut pattern_cache: std::collections::HashMap<(String, bool), Option<String>> =
         std::collections::HashMap::new();
 
     for ev in &plan_files {
@@ -284,6 +382,11 @@ pub async fn confirm(
         let basename = ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
         let item_name = format!("[{}] {basename}", ft.to_uppercase());
 
+        // Built once per file for both branches so a catalogued item carries the
+        // same frozen context as a moved one; the unorganized branch below also
+        // resolves its destination pattern against this bundle.
+        let bundle = build_metadata_bundle(&abs_path, ft, &norm_table, &cameras);
+
         match org_state {
             OrganizationState::Organized => {
                 // Catalogue-in-place: dest == source; stays under its own root.
@@ -293,15 +396,20 @@ pub async fn confirm(
                     item_name,
                     action: "catalogue",
                     to_root_id: item.root_id.clone(),
+                    provenance: freeze_confirm_provenance(&bundle, is_master, None),
                 });
             }
             OrganizationState::Unorganized => {
                 // Select the per-type pattern. `None` → frame type is not a known
                 // class (missing/garbage IMAGETYP) → needs-review (same flow as
                 // missing IMAGETYP: surfaced as a missing path attribute below).
-                let pattern = settings_repo::effective_pattern_for(pool, ft, is_master)
-                    .await
-                    .map_err(|e| {
+                let cache_key = (ft.to_owned(), is_master);
+                let pattern = if let Some(cached) = pattern_cache.get(&cache_key) {
+                    cached.clone()
+                } else {
+                    let fetched = settings_repo::effective_pattern_for(pool, ft, is_master)
+                        .await
+                        .map_err(|e| {
                         ContractError::new(
                             ErrorCode::InternalDatabase,
                             e.to_string(),
@@ -309,20 +417,15 @@ pub async fn confirm(
                             true,
                         )
                     })?;
+                    pattern_cache.insert(cache_key, fetched.clone());
+                    fetched
+                };
                 let Some(pattern) = pattern else {
                     // Unclassified frame: image type is the missing attribute.
                     missing_by_file
                         .push((ev.relative_file_path.clone(), vec!["image type".to_owned()]));
                     continue;
                 };
-
-                let bundle = build_metadata_bundle(
-                    &abs_path,
-                    ft,
-                    &norm_table,
-                    &fits_extractor,
-                    &xisf_extractor,
-                );
 
                 let result = match resolve_pattern_str(&pattern, &bundle) {
                     Ok(r) => r,
@@ -378,6 +481,7 @@ pub async fn confirm(
                     item_name,
                     action: "move",
                     to_root_id: dest_root.root_id,
+                    provenance: freeze_confirm_provenance(&bundle, is_master, Some(&pattern)),
                 });
             }
         }
@@ -483,7 +587,7 @@ pub async fn confirm(
             reason: "inbox_confirm",
             protection: "normal",
             linked_entity: None,
-            provenance_json: None,
+            provenance_json: row.provenance.as_deref(),
             archive_path: None,
             source_id: None,
             category: None,
@@ -509,9 +613,7 @@ pub async fn confirm(
     }
 
     // 12. Transition plan to ready_for_review
-    sqlx::query("UPDATE plans SET state = 'ready_for_review' WHERE id = ?")
-        .bind(&plan_id)
-        .execute(pool)
+    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
         .await
         .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?;
 
@@ -520,7 +622,56 @@ pub async fn confirm(
         .await
         .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
 
-    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
+    // Load-bearing (#1101): the plan and its link were just committed above, so
+    // an item left off `plan_open` contradicts them — same class as the two
+    // propagating writes it follows.
+    inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open")
+        .await
+        .map_err(|e| db_internal_ctx(e, "mark inbox item plan_open"))?;
+
+    // 14. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
+    // plan now exists, so the pick can be persisted (`plans.chosen_framing_id`)
+    // for `ingest_sessions` to bind once the real session is created. Creates
+    // the framing/project the kind requires and honors the F-Framing-6
+    // completed-project reopen.
+    let attribution_applied = match (&item_geometry, &req.chosen_attribution) {
+        (Some(geometry), Some(chosen)) => {
+            attribution::apply_chosen_attribution(pool, bus, &plan_id, geometry, chosen).await?
+        }
+        _ => None,
+    };
+
+    // 15. Publish `inventory.confirmed` so the onboarding tick subscriber can
+    // auto-check the `inbox.confirm_first` item (spec 056; this use case takes an
+    // EventBus for this domain-completion signal).
+    //
+    // Best-effort: the plan, plan_items, plan-link, and inbox_item.state=plan_open
+    // are already durably committed above, so confirm() has succeeded by this
+    // point — a transient bus publish failure must not surface as a Fatal error
+    // for a confirm that already landed (mirrors plan_apply.rs's item-progress
+    // publish and the write_audit failure-semantics doc in audit/src/bus.rs).
+    let confirmed_at = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    if let Err(e) = bus
+        .publish(
+            TOPIC_INVENTORY_CONFIRMED,
+            Source::User,
+            InventoryConfirmed {
+                inbox_item_id: req.inbox_item_id.clone(),
+                plan_id: plan_id.clone(),
+                at: confirmed_at,
+            },
+        )
+        .await
+    {
+        tracing::warn!(
+            inbox_item_id = %req.inbox_item_id,
+            plan_id = %plan_id,
+            error = %e,
+            "audit bus publish failed for inventory.confirmed"
+        );
+    }
 
     Ok(ConfirmResponse {
         plan_id,
@@ -533,6 +684,8 @@ pub async fn confirm(
         move_count,
         catalogue_count,
         destinations,
+        attribution_candidates,
+        attribution_applied,
     })
 }
 
@@ -547,6 +700,8 @@ struct ResolvedRow {
     item_name: String,
     action: &'static str,
     to_root_id: String,
+    /// Frozen inferred context at approval time (`freeze_confirm_provenance`).
+    provenance: Option<String>,
 }
 
 /// A chosen destination library root (id + absolute path) for inbox moves.
@@ -645,11 +800,31 @@ async fn select_destination_root(
     }
 }
 
-/// Return the effective frame type for a file: `manual_override` if set, else `frame_type`.
-fn effective_frame_type(
+/// Return the effective frame type for a file: `manual_override` if set, else
+/// the durable group-keyed `frameType` override, else the extracted
+/// `frame_type` (same priority chain as classify's split and the metadata
+/// DTO — the durable middle layer survives evidence rebuilds, #854).
+pub(crate) fn effective_frame_type(
     ev: &persistence_db::repositories::inbox::InboxEvidenceRow,
 ) -> Option<&str> {
-    ev.manual_override.as_deref().or(ev.frame_type.as_deref())
+    ev.manual_override.as_deref().or(ev.override_frame_type.as_deref()).or(ev.frame_type.as_deref())
+}
+
+/// Whether an item's classified evidence makes it a light-frame item — the
+/// gate for the whole attribution surface (FR-019).
+///
+/// A confirmable item is single-type (FR-050), so the first classified file's
+/// effective frame type determines the whole item's class. Shared by
+/// [`confirm`] and [`crate::attribution::suggest_candidates`] so the
+/// suggest-time and apply-time gates can never disagree.
+pub(crate) fn evidence_is_light(
+    evidence_rows: &[persistence_db::repositories::inbox::InboxEvidenceRow],
+) -> bool {
+    evidence_rows
+        .iter()
+        .find_map(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
+        .and_then(|(ft, is_master)| classify_frame(ft, is_master))
+        == Some(FrameTypeClass::Light)
 }
 
 /// Load the active `pattern` from the settings table, or fall back to the
@@ -692,6 +867,41 @@ pub(crate) async fn load_active_pattern(
         .collect())
 }
 
+/// Freeze the inferred context that produced this plan item's destination, as
+/// the free-form `[{label,value}]` JSON the `plan_items.provenance` column
+/// already carries (spec 002 FR-005, applied at the spec 041 Inbox confirm
+/// gate).
+///
+/// The snapshot is self-contained by construction: a later rescan re-extracts
+/// headers and overwrites the live metadata, so anything that referenced a
+/// metadata row instead of copying it would silently answer with today's values
+/// rather than the ones the approver saw.
+///
+/// `destination_pattern` is stored next to the metadata because the destination
+/// is a function of both. Without it, a path that no longer matches cannot be
+/// attributed to metadata drift as opposed to a changed pattern setting. It is
+/// `None` for catalogue-in-place items, which resolve no pattern.
+///
+/// `BTreeMap` fixes entry order so two snapshots of the same context compare
+/// equal byte-for-byte.
+fn freeze_confirm_provenance(
+    bundle: &MetadataBundle,
+    is_master: bool,
+    destination_pattern: Option<&str>,
+) -> Option<String> {
+    let mut frozen: BTreeMap<&str, String> =
+        bundle.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+    frozen.insert("is_master", is_master.to_string());
+    if let Some(pattern) = destination_pattern {
+        frozen.insert("destination_pattern", pattern.to_owned());
+    }
+    let entries: Vec<ProvenanceEntry> = frozen
+        .into_iter()
+        .map(|(label, value)| ProvenanceEntry { label: label.to_owned(), value })
+        .collect();
+    serde_json::to_string(&entries).ok()
+}
+
 /// Build a `MetadataBundle` for pattern resolution from extracted FITS/XISF
 /// headers + the known `frame_type` from classification evidence.
 ///
@@ -702,25 +912,13 @@ pub(crate) fn build_metadata_bundle(
     abs_path: &std::path::Path,
     frame_type: &str,
     norm_table: &metadata_core::ImageTypNormalizationTable,
-    fits_ext: &FitsExtractor,
-    xisf_ext: &XisfExtractor,
+    cameras: &[contracts_core::equipment::Camera],
 ) -> MetadataBundle {
     let mut bundle = MetadataBundle::new();
 
-    // Extract raw metadata from FITS or XISF file
-    let ext = abs_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
-
-    let raw_meta = if xisf_ext.supports_extension(&ext) {
-        xisf_ext.extract(abs_path).ok().flatten()
-    } else if fits_ext.supports_extension(&ext) {
-        fits_ext.extract(abs_path).ok().flatten()
-    } else {
-        None
-    };
+    // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size;
+    // dispatches by extension internally).
+    let raw_meta = cached_extract(abs_path).ok();
 
     // frame_type (authoritative from classification)
     bundle.insert("frame_type".to_owned(), frame_type.to_owned());
@@ -747,11 +945,19 @@ pub(crate) fn build_metadata_bundle(
                 bundle.insert("date".to_owned(), date_part.to_owned());
             }
         }
-        // camera
+        // camera — a registered camera claims the raw INSTRUME string under
+        // case/whitespace-insensitive alias matching, so every spelling one
+        // capture program or another wrote for the same physical camera
+        // resolves to a single destination directory. An unregistered string
+        // stays raw; nothing is created here (see the module note on why
+        // ingest resolves but never registers equipment).
         if let Some(instrume) = &meta.instrume {
             let cleaned = instrume.trim();
             if !cleaned.is_empty() {
-                bundle.insert("camera".to_owned(), cleaned.to_owned());
+                let resolved =
+                    app_core_calibration::equipment::resolve_camera_display_name(cameras, cleaned)
+                        .unwrap_or_else(|| cleaned.to_owned());
+                bundle.insert("camera".to_owned(), resolved);
             }
         }
         // exposure
@@ -787,11 +993,18 @@ pub(crate) fn build_metadata_bundle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use audit::bus::EventBus;
+    use persistence_db::repositories::equipment as equipment_repo;
     use persistence_db::repositories::inbox::{
-        InsertEvidence, InsertInboxItem, UpsertClassification,
+        InsertEvidence, InsertInboxItem, UpsertClassification, UpsertInboxSubItem,
+        UpsertSourceGroup,
     };
     use persistence_db::Database;
     use std::io::Write;
+
+    fn make_bus(db: &Database) -> EventBus {
+        EventBus::with_pool(db.pool().clone())
+    }
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
@@ -799,14 +1012,18 @@ mod tests {
         db
     }
 
-    /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
-    fn write_fits(
+    /// Write a minimal single-block FITS file from the optional cards the
+    /// destination-pattern tests care about. The `write_fits*` helpers below
+    /// are thin presets over this.
+    fn write_fits_cards(
         dir: &std::path::Path,
         name: &str,
         imagetyp: &str,
         object: Option<&str>,
         filter: Option<&str>,
         date_obs: Option<&str>,
+        exptime: Option<f64>,
+        instrume: Option<&str>,
     ) {
         let path = dir.join(name);
         let mut block = vec![b' '; 2880];
@@ -828,9 +1045,27 @@ mod tests {
         if let Some(d) = date_obs {
             write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
         }
+        if let Some(e) = exptime {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {e}")));
+        }
+        if let Some(i) = instrume {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("INSTRUME= '{i}'")));
+        }
         block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
         let mut f = std::fs::File::create(path).unwrap();
         f.write_all(&block).unwrap();
+    }
+
+    /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
+    fn write_fits(
+        dir: &std::path::Path,
+        name: &str,
+        imagetyp: &str,
+        object: Option<&str>,
+        filter: Option<&str>,
+        date_obs: Option<&str>,
+    ) {
+        write_fits_cards(dir, name, imagetyp, object, filter, date_obs, None, None);
     }
 
     /// Like [`write_fits`] but also writes an `EXPTIME` card. Used by calibration
@@ -846,29 +1081,7 @@ mod tests {
         date_obs: Option<&str>,
         exptime: f64,
     ) {
-        let path = dir.join(name);
-        let mut block = vec![b' '; 2880];
-        let mut idx = 0usize;
-        let write_card = |block: &mut Vec<u8>, idx: &mut usize, card: &str| {
-            let bytes = card.as_bytes();
-            let len = bytes.len().min(80);
-            block[*idx * 80..*idx * 80 + len].copy_from_slice(&bytes[..len]);
-            *idx += 1;
-        };
-        write_card(&mut block, &mut idx, &format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
-        if let Some(obj) = object {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("OBJECT  = '{obj}'")));
-        }
-        if let Some(f) = filter {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("FILTER  = '{f}'")));
-        }
-        if let Some(d) = date_obs {
-            write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
-        }
-        write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {exptime}")));
-        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
-        let mut f = std::fs::File::create(path).unwrap();
-        f.write_all(&block).unwrap();
+        write_fits_cards(dir, name, imagetyp, object, filter, date_obs, Some(exptime), None);
     }
 
     async fn setup_classified_item(
@@ -1013,6 +1226,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-c1",
@@ -1025,12 +1240,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-c1".to_owned(),
                 content_signature: "sig-abc".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1038,6 +1255,212 @@ mod tests {
 
         assert_eq!(resp.plan_state, "ready_for_review");
         assert_eq!(resp.items_total, 3);
+    }
+
+    /// Build one classified sibling sub-item under `sg_id`.
+    ///
+    /// Deliberately not [`setup_classified_item`]: that writes a legacy row via
+    /// `insert_inbox_item` with no `source_group_id` and an empty `group_key`,
+    /// so two of them are not siblings in the sense SC-006 is about. Sibling
+    /// identity is `(root_id, relative_path, group_key)` — same folder, same
+    /// group, different classification identity.
+    async fn setup_sibling_sub_item(
+        db: &Database,
+        item_id: &str,
+        sg_id: &str,
+        group_key: &str,
+        frame_type: &str,
+        sig: &str,
+        file_names: &[&str],
+    ) {
+        inbox_repo::upsert_inbox_sub_item(
+            db.pool(),
+            &UpsertInboxSubItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                source_group_id: sg_id,
+                group_key,
+                group_label: group_key,
+                frame_type: Some(frame_type),
+                content_signature: sig,
+                file_count: i64::try_from(file_names.len()).unwrap_or(i64::MAX),
+                lane: "fits",
+                needs_review: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: item_id,
+                result: "classified",
+                frame_type: Some(frame_type),
+                content_signature: sig,
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        for (i, fname) in file_names.iter().enumerate() {
+            inbox_repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &format!("ev-{item_id}-{i}"),
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    frame_type: Some(frame_type),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some(frame_type),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    /// Spec 058 T026 / FR-010 / SC-006: `inbox.confirm` operates on exactly one
+    /// `inbox_item_id` and alters no sibling.
+    ///
+    /// Contracts say this needs no code change — the point of the test is that
+    /// dropping the parent row (FR-001) makes the N siblings of a split folder
+    /// the *only* rows, so sibling isolation stops being incidental and becomes
+    /// the whole correctness story. Asserted in both directions: the confirmed
+    /// item must move to `plan_open` and gain a plan link, the sibling must be
+    /// byte-identical to its pre-confirm snapshot and have no link.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn confirm_alters_exactly_one_item_and_leaves_its_sibling_untouched_sc006() {
+        let tmp = tempfile::tempdir().unwrap();
+        for (i, name) in ["light_001.fits", "light_002.fits"].iter().enumerate() {
+            write_fits(
+                tmp.path(),
+                name,
+                "Light Frame",
+                Some("M42"),
+                Some("Ha"),
+                Some(&format!("2025-10-10T22:0{i}:00")),
+            );
+        }
+        for (i, name) in ["flat_001.fits", "flat_002.fits"].iter().enumerate() {
+            write_fits_exp(
+                tmp.path(),
+                name,
+                "Flat Field",
+                None,
+                Some("Ha"),
+                Some(&format!("2025-10-10T18:0{i}:00")),
+                3.0,
+            );
+        }
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+
+        inbox_repo::upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: "sg-sc006",
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig-folder"),
+                format: Some("fits"),
+                lane: Some("move"),
+                file_count: 4,
+            },
+        )
+        .await
+        .unwrap();
+
+        setup_sibling_sub_item(
+            &db,
+            "item-lights",
+            "sg-sc006",
+            "type=light",
+            "light",
+            "sig-lights",
+            &["light_001.fits", "light_002.fits"],
+        )
+        .await;
+        setup_sibling_sub_item(
+            &db,
+            "item-flats",
+            "sg-sc006",
+            "type=flat",
+            "flat",
+            "sig-flats",
+            &["flat_001.fits", "flat_002.fits"],
+        )
+        .await;
+
+        let sibling_before = inbox_repo::get_inbox_item(db.pool(), "item-flats").await.unwrap();
+
+        confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: "item-lights".to_owned(),
+                content_signature: "sig-lights".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Positive direction — without this the assertions below pass on a
+        // confirm that did nothing at all.
+        let confirmed = inbox_repo::get_inbox_item(db.pool(), "item-lights").await.unwrap();
+        assert_eq!(
+            confirmed.state, "plan_open",
+            "the confirmed item must have moved to `plan_open` — otherwise this test proves nothing"
+        );
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), "item-lights").await.unwrap().is_some(),
+            "the confirmed item must own the new plan link"
+        );
+
+        let sibling_after = inbox_repo::get_inbox_item(db.pool(), "item-flats").await.unwrap();
+        assert_eq!(
+            (
+                sibling_after.state.as_str(),
+                sibling_after.frame_type.as_deref(),
+                sibling_after.needs_review,
+                sibling_after.content_signature.as_deref(),
+                sibling_after.group_key.as_str(),
+                sibling_after.file_count,
+            ),
+            (
+                sibling_before.state.as_str(),
+                sibling_before.frame_type.as_deref(),
+                sibling_before.needs_review,
+                sibling_before.content_signature.as_deref(),
+                sibling_before.group_key.as_str(),
+                sibling_before.file_count,
+            ),
+            "SC-006: confirming one item must not alter its sibling"
+        );
+        assert!(
+            inbox_repo::get_plan_link(db.pool(), "item-flats").await.unwrap().is_none(),
+            "SC-006: the sibling must not be bound to the confirmed item's plan"
+        );
+
+        let sibling_classification =
+            inbox_repo::get_classification(db.pool(), "item-flats").await.unwrap().unwrap();
+        assert_eq!(
+            (sibling_classification.result.as_str(), sibling_classification.frame_type.as_deref()),
+            ("classified", Some("flat")),
+            "SC-006: the sibling's own classification must survive the confirm untouched"
+        );
     }
 
     /// US7 / T042-T043: the chosen destructive destination must be persisted on
@@ -1074,6 +1497,7 @@ mod tests {
             // Fresh DB per case: setup_classified_item hardcodes the
             // (root_id, relative_path) key, so it supports one item per DB.
             let db = test_db().await;
+            let bus = make_bus(&db);
             setup_classified_item(
                 &db,
                 "item-dd",
@@ -1086,12 +1510,14 @@ mod tests {
 
             let resp = confirm(
                 db.pool(),
+                &bus,
                 ConfirmRequest {
                     inbox_item_id: "item-dd".to_owned(),
                     content_signature: "sig-dd".to_owned(),
                     destructive_destination: dest.map(str::to_owned),
                     root_absolute_path: tmp.path().to_owned(),
                     root_id: None,
+                    chosen_attribution: None,
                 },
             )
             .await
@@ -1157,6 +1583,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         let item_id = "item-mixed-split";
         let sig = "sig-mixed";
 
@@ -1215,12 +1643,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1317,6 +1747,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_typed_item(
             &db,
             "item-single",
@@ -1331,12 +1763,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-single".to_owned(),
                 content_signature: "sig-single".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1355,6 +1789,8 @@ mod tests {
         write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-stale",
@@ -1367,12 +1803,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-stale".to_owned(),
                 content_signature: "sig-OLD".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1394,6 +1832,8 @@ mod tests {
         write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-ambig",
@@ -1406,12 +1846,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-ambig".to_owned(),
                 content_signature: "sig-x".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1441,6 +1883,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-dup",
@@ -1454,12 +1898,14 @@ mod tests {
         // First confirm
         confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1468,12 +1914,14 @@ mod tests {
         // Second confirm should fail
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1513,6 +1961,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_org_state(&db, "root-1", "light_frames", "organized").await;
         setup_classified_item(
             &db,
@@ -1526,12 +1976,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-org".to_owned(),
                 content_signature: "sig-org".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1568,6 +2020,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         // Non-inbox unorganized source → in-place move under its own root (no
         // destination-root selection). Inbox-source routing is covered by the
         // dedicated US8 tests below.
@@ -1584,12 +2038,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-unorg".to_owned(),
                 content_signature: "sig-unorg".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1628,6 +2084,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         // No registered_sources row inserted for root-1.
         setup_classified_item(
             &db,
@@ -1641,12 +2099,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-absent".to_owned(),
                 content_signature: "sig-absent".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1696,6 +2156,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib/lights", "unorganized").await;
         setup_classified_item(
             &db,
@@ -1709,12 +2171,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-np".to_owned(),
                 content_signature: "sig-np".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1746,6 +2210,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         register_source_full(&db, "root-lights", "light_frames", "/lib/lights", "unorganized")
             .await;
@@ -1762,12 +2228,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-1cand".to_owned(),
                 content_signature: "sig-1c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1801,6 +2269,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         register_source_full(&db, "root-lib-a", "light_frames", "/a", "unorganized").await;
         register_source_full(&db, "root-lib-b", "light_frames", "/b", "unorganized").await;
@@ -1820,20 +2290,21 @@ mod tests {
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id,
+            chosen_attribution: None,
         };
 
         // Absent selection → blocking error listing both candidates.
-        let err = confirm(db.pool(), mk(None)).await.unwrap_err();
+        let err = confirm(db.pool(), &bus, mk(None)).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxDestinationRootRequired);
         let candidates = err.details.0.get("candidates").and_then(|c| c.as_array()).unwrap();
         assert_eq!(candidates.len(), 2, "both library roots offered as candidates");
 
         // Invalid selection (an id that is not a candidate) → rejected.
-        let err = confirm(db.pool(), mk(Some("root-inbox".to_owned()))).await.unwrap_err();
+        let err = confirm(db.pool(), &bus, mk(Some("root-inbox".to_owned()))).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxInvalidDestinationRoot);
 
         // Valid selection → plan lands under the chosen root.
-        let resp = confirm(db.pool(), mk(Some("root-lib-b".to_owned()))).await.unwrap();
+        let resp = confirm(db.pool(), &bus, mk(Some("root-lib-b".to_owned()))).await.unwrap();
         assert_eq!(resp.destinations.len(), 1);
         assert_eq!(resp.destinations[0].to_root_id, "root-lib-b");
     }
@@ -1853,6 +2324,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         // Only a calibration root exists; a light has no light_frames destination.
         register_source_full(&db, "root-cal", "calibration", "/cal", "unorganized").await;
@@ -1868,12 +2341,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-0cand".to_owned(),
                 content_signature: "sig-0c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1895,6 +2370,8 @@ mod tests {
         write_fits_exp(tmp.path(), "dark.fits", "Dark Frame", None, None, None, 300.0);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "calibration", "/cal", "unorganized").await;
         setup_classified_item(
             &db,
@@ -1908,12 +2385,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-cal-dark".to_owned(),
                 content_signature: "sig-cal-dark".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1936,6 +2415,8 @@ mod tests {
         write_fits_exp(tmp.path(), "master_flat.fits", "Flat Frame", None, Some("Ha"), None, 5.0);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-2", "calibration", "/cal", "unorganized").await;
         inbox_repo::insert_inbox_item(
             db.pool(),
@@ -1982,12 +2463,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-cal-master".to_owned(),
                 content_signature: "sig-cal-master".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2010,6 +2493,8 @@ mod tests {
         write_fits(tmp.path(), "light_001.fits", "Light Frame", Some("M42"), Some("Ha"), None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
         setup_classified_item(
             &db,
@@ -2023,12 +2508,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-gate".to_owned(),
                 content_signature: "sig-gate".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2046,7 +2533,7 @@ mod tests {
     // ── T070 tests — needs-review sentinel gate at confirm ───────────────────
 
     /// T070/FR-049/SC-015: confirm of an item whose group_key is the sentinel
-    /// __needs_review__ must be rejected with InboxMissingPathAttributes.
+    /// flagged `needs_review` must be rejected with InboxMissingPathAttributes.
     #[tokio::test]
     async fn t070_confirm_of_needs_review_item_is_rejected() {
         let tmp = tempfile::tempdir().unwrap();
@@ -2055,11 +2542,13 @@ mod tests {
         write_fits(tmp.path(), "light_001.fits", "Light Frame", Some("M42"), Some("Ha"), None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
 
-        // Insert the inbox item with group_key = SENTINEL_NEEDS_REVIEW directly.
-        // The sentinel gate checks item.group_key, so we bypass setup_classified_item
-        // and set group_key explicitly via raw SQL.
+        // Insert the inbox item flagged needs_review directly. The gate reads
+        // `item.needs_review` (spec 058 FR-028), so we bypass
+        // setup_classified_item and set the column explicitly via raw SQL.
         let item_id = "item-t070-sentinel";
         let sig = "sig-t070-sentinel";
         inbox_repo::insert_inbox_item(
@@ -2075,9 +2564,7 @@ mod tests {
         )
         .await
         .unwrap();
-        // Set group_key to SENTINEL_NEEDS_REVIEW.
-        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
-            .bind(crate::classify::SENTINEL_NEEDS_REVIEW)
+        sqlx::query("UPDATE inbox_items SET needs_review = 1 WHERE id = ?")
             .bind(item_id)
             .execute(db.pool())
             .await
@@ -2098,12 +2585,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2138,6 +2627,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
         setup_classified_item(
             &db,
@@ -2149,32 +2640,578 @@ mod tests {
         )
         .await;
 
-        // A fully-resolved item (group_key defaults to '' in the helper, which is
-        // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
-        let result = confirm(
+        // A fully-resolved item (needs_review defaults to 0 in the helper) must
+        // pass the needs-review gate.
+        // Same registered-source / classified-item shape as
+        // `non_inbox_source_moves_in_place`, which deterministically succeeds —
+        // a fully-resolved item must confirm cleanly, not merely "not fail on
+        // the sentinel gate".
+        let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-t070-ok".to_owned(),
                 content_signature: "sig-t070-ok".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
+        )
+        .await
+        .expect("fully-resolved item must confirm successfully and produce a plan");
+
+        assert!(!resp.plan_id.is_empty(), "confirm must produce a plan id");
+        assert_eq!(resp.items_total, 1, "one classified file must produce one plan item");
+        assert_eq!(resp.move_count, 1, "unorganized source must produce a move item");
+        assert_eq!(resp.catalogue_count, 0, "unorganized source must not catalogue in place");
+    }
+
+    // ── inventory.confirmed publish (review fix: swallow-on-failure) ─────────
+
+    #[tokio::test]
+    async fn confirm_publishes_inventory_confirmed_on_success() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        let mut rx = bus.subscribe();
+
+        setup_classified_item(
+            &db,
+            "item-evt1",
+            "classified",
+            Some("light"),
+            "sig-evt1",
+            &["light_001.fits"],
         )
         .await;
 
-        // The item passes the sentinel gate (group_key != SENTINEL_NEEDS_REVIEW).
-        // It may still fail on other gates (destination root, pattern) — what we
-        // assert is that it does NOT fail with InboxMissingPathAttributes from the
-        // sentinel check: any error must NOT be the sentinel gate.
-        if let Err(ref e) = result {
-            assert_ne!(
-                e.code,
-                ErrorCode::InboxMissingPathAttributes,
-                "fully-resolved item must not be blocked by the needs-review sentinel gate: {}",
-                e.message
-            );
-        }
-        // If it succeeds, the plan was created — also valid.
+        let resp = confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: "item-evt1".to_owned(),
+                content_signature: "sig-evt1".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let envelope =
+            rx.try_recv().expect("inventory.confirmed must be published on a successful confirm");
+        assert_eq!(envelope.topic, TOPIC_INVENTORY_CONFIRMED);
+        assert_eq!(envelope.payload["inboxItemId"], "item-evt1");
+        assert_eq!(envelope.payload["planId"], resp.plan_id);
+    }
+
+    #[tokio::test]
+    async fn confirm_succeeds_even_when_publish_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-evt2",
+            "classified",
+            Some("light"),
+            "sig-evt2",
+            &["light_001.fits"],
+        )
+        .await;
+
+        // A bus backed by a pool with no `events` table: `bus.publish` fails
+        // durably (BusError::Database). confirm()'s own writes still go
+        // through the properly-migrated `db.pool()`, isolating the publish
+        // failure from confirm's transactional work.
+        let bad_pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let bad_bus = EventBus::with_pool(bad_pool);
+
+        let resp = confirm(
+            db.pool(),
+            &bad_bus,
+            ConfirmRequest {
+                inbox_item_id: "item-evt2".to_owned(),
+                content_signature: "sig-evt2".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .expect("confirm must succeed even when the audit bus publish fails");
+
+        assert!(!resp.plan_id.is_empty(), "plan must still be created");
+
+        // The transactional work landed despite the publish failure.
+        let link = inbox_repo::get_plan_link(db.pool(), "item-evt2").await.unwrap();
+        assert!(link.is_some(), "plan link must be created despite publish failure");
+    }
+
+    // ── Attribution wiring (spec 008 Q27, F-Framing-5/10) ────────────────────
+
+    #[tokio::test]
+    async fn confirm_returns_new_project_fallback_candidate_for_a_light_item_with_no_geometry() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-attr1",
+            "classified",
+            Some("light"),
+            "sig-attr1",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-attr1".to_owned(),
+                content_signature: "sig-attr1".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // `write_fits` in this test module does not carry TELESCOP/INSTRUME/
+        // FOCALLEN/RA/DEC — the item has no staged geometry, so the pass
+        // yields only the trailing new_project fallback (never an error: an
+        // ungeometried light item still confirms normally).
+        assert_eq!(resp.attribution_candidates.len(), 1);
+        assert_eq!(
+            resp.attribution_candidates[0].kind,
+            contracts_core::framing::IngestionAttributionKind::NewProject
+        );
+        assert!(resp.attribution_applied.is_none());
+    }
+
+    #[tokio::test]
+    async fn confirm_rejects_chosen_attribution_for_a_non_light_item() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(tmp.path(), "dark_001.fits", "Dark Frame", None, None, None);
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-attr-dark",
+            "classified",
+            Some("dark"),
+            "sig-attr-dark",
+            &["dark_001.fits"],
+        )
+        .await;
+
+        let err = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-attr-dark".to_owned(),
+                content_signature: "sig-attr-dark".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: Some(contracts_core::framing::ChosenAttributionDto {
+                    kind: contracts_core::framing::ChosenAttributionKind::Unassigned,
+                    project_id: None,
+                    framing_id: None,
+                }),
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.code, ErrorCode::AttributionNotLightFrame);
+    }
+
+    /// F-Framing-10 (FR-022): a `chosen_attribution` picking an existing
+    /// framing is applied and persisted on the plan `confirm` itself created —
+    /// the apply-path's whole point (the response's `attribution_applied` and
+    /// the durable `plans.chosen_framing_id` must agree).
+    #[tokio::test]
+    async fn confirm_applies_add_to_framing_and_persists_the_pick_on_its_own_plan() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-attr2",
+            "classified",
+            Some("light"),
+            "sig-attr2",
+            &["light_001.fits"],
+        )
+        .await;
+
+        persistence_db::repositories::projects::insert_project(
+            db.pool(),
+            &persistence_db::repositories::projects::InsertProject {
+                id: "proj-attr2",
+                name: "M42 project",
+                tool: "PixInsight",
+                lifecycle: "ready",
+                path: "projects/proj-attr2",
+                notes: None,
+                canonical_target_id: None,
+                is_mosaic: false,
+            },
+        )
+        .await
+        .unwrap();
+        persistence_db::repositories::framing::insert_framing(
+            db.pool(),
+            &persistence_db::repositories::framing::InsertFraming {
+                id: "framing-attr2",
+                project_id: "proj-attr2",
+                target_id: None,
+                optic_train_key: "scope|cam|400",
+                pointing_ra_deg: 10.0,
+                pointing_dec_deg: 20.0,
+                rotation_deg: 0.0,
+                tolerance_pointing: 0.1,
+                tolerance_rotation_deg: 3.0,
+                clustering: "suggested",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = confirm(
+            db.pool(),
+            &make_bus(&db),
+            ConfirmRequest {
+                inbox_item_id: "item-attr2".to_owned(),
+                content_signature: "sig-attr2".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: Some(contracts_core::framing::ChosenAttributionDto {
+                    kind: contracts_core::framing::ChosenAttributionKind::AddToFraming,
+                    project_id: None,
+                    framing_id: Some("framing-attr2".to_owned()),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        let applied = resp.attribution_applied.expect("chosen_attribution must apply");
+        assert_eq!(applied.project_id, "proj-attr2");
+        assert_eq!(applied.framing_id.as_deref(), Some("framing-attr2"));
+        assert!(!applied.reopened);
+
+        assert_eq!(
+            plans_repo::get_chosen_framing_id(db.pool(), &resp.plan_id).await.unwrap().as_deref(),
+            Some("framing-attr2"),
+            "the apply-path must persist the pick on the plan confirm() itself created"
+        );
+    }
+
+    // ── #1342: equipment resolution on the ingest path ────────────────────
+
+    /// Confirm a one-light item whose header names `instrume`, under a
+    /// `{camera}/light/` destination pattern, and return the destination
+    /// directory the plan recorded.
+    async fn confirm_camera_dest_dir(db: &Database, instrume: &str, item: &str) -> String {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_cards(
+            tmp.path(),
+            "frame_000.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+            None,
+            Some(instrume),
+        );
+        settings_repo::set_pattern_for(
+            db.pool(),
+            patterns::FrameTypeClass::Light,
+            "{camera}/light/",
+        )
+        .await
+        .unwrap();
+
+        let bus = make_bus(db);
+        let sig = format!("sig-{item}");
+        setup_classified_item(db, item, "classified", Some("light"), &sig, &["frame_000.fits"])
+            .await;
+
+        let resp = confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: item.to_owned(),
+                content_signature: sig,
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let items = persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+            .await
+            .unwrap();
+        dest_dir(items.first().expect("confirm must record a plan item"))
+    }
+
+    /// #1342: a header string claimed by a registered camera's alias resolves
+    /// to that camera's name, so the destination directory carries the name
+    /// the user chose rather than whatever the capture program wrote. Case and
+    /// padding differ here to pin the normalized match.
+    #[tokio::test]
+    async fn confirm_resolves_a_registered_camera_alias_to_its_name() {
+        let db = test_db().await;
+        equipment_repo::create_camera(
+            db.pool(),
+            &contracts_core::equipment::CreateCamera {
+                name: "Main Imaging Rig".to_owned(),
+                aliases: vec!["ASI2600MM".to_owned()],
+                sensor_type: None,
+                passband: None,
+                pixel_size_um: None,
+                sensor_width_px: None,
+                sensor_height_px: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dir = confirm_camera_dest_dir(&db, " asi2600mm ", "item-cam-hit").await;
+        assert_eq!(
+            dir, "Main Imaging Rig/light",
+            "a registered alias must resolve to the camera's name in the destination path"
+        );
+    }
+
+    /// #1342: an unregistered header string keeps its raw spelling AND does
+    /// not register a camera. Ingest resolves equipment; it never creates it
+    /// (`find_or_create_camera_by_alias` stays uncalled here) — auto-creating
+    /// one camera per distinct spelling would defeat the alias model the
+    /// registry exists to provide.
+    #[tokio::test]
+    async fn confirm_leaves_an_unregistered_camera_raw_and_registers_nothing() {
+        let db = test_db().await;
+        equipment_repo::create_camera(
+            db.pool(),
+            &contracts_core::equipment::CreateCamera {
+                name: "Main Imaging Rig".to_owned(),
+                aliases: vec!["ASI2600MM".to_owned()],
+                sensor_type: None,
+                passband: None,
+                pixel_size_um: None,
+                sensor_width_px: None,
+                sensor_height_px: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dir = confirm_camera_dest_dir(&db, "ASI6200MM Pro", "item-cam-miss").await;
+        assert_eq!(
+            dir, "ASI6200MM Pro/light",
+            "an unclaimed header string must stay raw rather than resolve to another camera"
+        );
+
+        let cameras = equipment_repo::list_cameras(db.pool()).await.unwrap();
+        assert_eq!(
+            cameras.len(),
+            1,
+            "confirm must not register a camera for an unclaimed header string"
+        );
+        assert!(
+            !cameras.iter().any(|c| c.auto_detected),
+            "confirm must not write auto-detected equipment rows"
+        );
+    }
+
+    /// Read the single plan item's frozen provenance for `plan_id`.
+    async fn read_item_provenance(db: &Database, plan_id: &str) -> Vec<ProvenanceEntry> {
+        let raw = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT provenance FROM plan_items WHERE plan_id = ?",
+        )
+        .bind(plan_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        let json = raw.0.expect("confirm must write plan_items.provenance");
+        serde_json::from_str(&json).unwrap()
+    }
+
+    fn prov(entries: &[ProvenanceEntry], label: &str) -> Option<String> {
+        entries.iter().find(|e| e.label == label).map(|e| e.value.clone())
+    }
+
+    async fn confirm_defaults(
+        db: &Database,
+        bus: &EventBus,
+        item_id: &str,
+        sig: &str,
+        root_absolute_path: &std::path::Path,
+    ) -> ConfirmResponse {
+        confirm(
+            db.pool(),
+            bus,
+            ConfirmRequest {
+                inbox_item_id: item_id.to_owned(),
+                content_signature: sig.to_owned(),
+                destructive_destination: None,
+                root_absolute_path: root_absolute_path.to_owned(),
+                root_id: None,
+                chosen_attribution: None,
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Spec 002 FR-005 at the spec 041 Inbox confirm gate: the inferred context
+    /// behind an approved destination is frozen on the plan item, so a later
+    /// rescan that reads different headers cannot rewrite the record of what
+    /// was known at approval time — while still producing a new snapshot of
+    /// its own.
+    #[tokio::test]
+    async fn confirm_provenance_survives_later_metadata_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("light_001.fits");
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        register_source_org_state(&db, "root-1", "light_frames", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-prov",
+            "classified",
+            Some("light"),
+            "sig-prov",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let first = confirm_defaults(&db, &bus, "item-prov", "sig-prov", tmp.path()).await;
+
+        let approved = read_item_provenance(&db, &first.plan_id).await;
+        assert_eq!(prov(&approved, "target").as_deref(), Some("M42"));
+        assert_eq!(prov(&approved, "filter").as_deref(), Some("Ha"));
+        assert_eq!(prov(&approved, "date").as_deref(), Some("2025-10-10"));
+        assert_eq!(prov(&approved, "frame_type").as_deref(), Some("light"));
+        assert_eq!(prov(&approved, "is_master").as_deref(), Some("false"));
+        assert!(
+            prov(&approved, "destination_pattern").is_some_and(|p| !p.is_empty()),
+            "a moved item records the pattern its destination was resolved from"
+        );
+
+        // Rescan simulation: the same file now reports different headers.
+        // The metadata cache is keyed by (path, mtime, size), so this rewrite
+        // also changes the byte length — a same-second rewrite of identical
+        // length would be a cache hit and would make the "the live value really
+        // did change" leg below vacuous rather than failing loudly.
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("NGC7000"),
+            Some("Oiii"),
+            Some("2025-12-31T21:00:00"),
+        );
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&file_path)
+            .unwrap()
+            .write_all(&[b' '; 2880])
+            .unwrap();
+        assert_eq!(
+            cached_extract(&file_path).unwrap().object.as_deref(),
+            Some("NGC7000"),
+            "precondition: the live metadata must actually have changed"
+        );
+
+        let after_rescan = read_item_provenance(&db, &first.plan_id).await;
+        assert_eq!(
+            prov(&after_rescan, "target").as_deref(),
+            Some("M42"),
+            "the approved snapshot must still report what was known at approval time"
+        );
+        assert_eq!(prov(&after_rescan, "filter").as_deref(), Some("Ha"));
+        assert_eq!(prov(&after_rescan, "date").as_deref(), Some("2025-10-10"));
+
+        // FR-005 also requires later rescans to produce their own snapshots.
+        // A second root: `inbox_items` is unique on (root_id, relative_path,
+        // group_key), so the rescanned item cannot reuse root-1.
+        // `registered_sources` is unique on (kind, path), so root-2 needs its
+        // own path rather than `register_source_org_state`'s fixed one.
+        sqlx::query(
+            "INSERT INTO registered_sources
+                (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES ('root-2', 'light_frames', '/tmp/src-2', NULL, 'recursive',
+                     '2026-01-01T00:00:00Z', 'first_run', 'unorganized')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        setup_classified_item_rooted(
+            &db,
+            "item-prov-2",
+            "root-2",
+            Some("light"),
+            "sig-prov-2",
+            &["light_001.fits"],
+        )
+        .await;
+        let second = confirm_defaults(&db, &bus, "item-prov-2", "sig-prov-2", tmp.path()).await;
+        let rescanned = read_item_provenance(&db, &second.plan_id).await;
+        assert_eq!(prov(&rescanned, "target").as_deref(), Some("NGC7000"));
+        assert_eq!(prov(&rescanned, "filter").as_deref(), Some("Oiii"));
     }
 }

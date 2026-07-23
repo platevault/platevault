@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """SpecKit DAG dispatcher (stdlib-only).
 
 Ported from dispatcher.sh. Wired through .apm/hooks/speckit-{claude,codex}-hooks.json:

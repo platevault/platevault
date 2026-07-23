@@ -83,6 +83,12 @@ As a user, I want settings grouped by workflow domain so that source behavior, c
   per-table or internal control is preserved; it is a single global Appearance
   choice.)*
 - **FR-007**: Light/dark mode MUST be available as an icon control in the app shell and as a persisted appearance setting if exposed.
+  *(Reconciliation note, 2026-07-19, issue #764: spec 043's redesign shipped
+  4 named themes + system (`General.tsx`'s swatch-card picker: system,
+  warm-clay, warm-slate, observatory-dark, espresso-dark), not a binary
+  light/dark icon toggle. The persisted-setting half of this FR still holds
+  (`theme` in the "general" settings scope); the "icon control" shape does
+  not.)*
 - **FR-008**: Project folder and archive location patterns MUST use the token pattern builder, not freeform text.
 - **FR-009**: Calibration matching settings MUST be per calibration frame type.
   *(Reconciled 2026-06-23 to as-built: per-frame-type lives in the backend model

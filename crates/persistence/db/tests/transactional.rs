@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! T031 — integration tests covering `SqliteLifecycleRepository::record_transition`
 //! transactional behaviour. The contract (data-model.md AuditLogEntry Invariants):
 //!

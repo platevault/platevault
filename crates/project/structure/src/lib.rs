@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! App-owned project envelope and folder-structure rules (spec 008 F-1).
 //!
 //! Defines the expected on-disk folder layout for each `ProcessingTool` and
@@ -242,7 +245,9 @@ mod tests {
 
     #[test]
     fn exposes_crate_name() {
-        assert_eq!(CRATE_NAME, "project_structure");
+        // Source of truth is Cargo.toml's package name, not a second hand-typed
+        // literal in this file — catches CRATE_NAME drifting from the manifest.
+        assert_eq!(CRATE_NAME, env!("CARGO_PKG_NAME"));
     }
 
     #[test]

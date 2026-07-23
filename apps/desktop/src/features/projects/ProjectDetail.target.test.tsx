@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * ProjectDetail canonical-target rail tests — spec 035 US1 #2.
@@ -16,14 +19,52 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockAddToast } = vi.hoisted(() => ({ mockAddToast: vi.fn() }));
 
+// The canonical-target block links to /targets (#738), which needs a router
+// context this test doesn't provide — stub as a plain anchor, consistent with
+// TargetsTable.test.tsx's `@tanstack/react-router` mock.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    to,
+    search,
+    ...rest
+  }: {
+    children?: import('react').ReactNode;
+    to: string;
+    search?: Record<string, string>;
+  }) => {
+    const query = search ? `?${new URLSearchParams(search).toString()}` : '';
+    return (
+      <a href={`${to}${query}`} {...rest}>
+        {children}
+      </a>
+    );
+  },
+  // ProjectLifecycleStepper's History section (#833) falls back to this route
+  // search param when its (optional) projectId prop isn't wired; unrelated to
+  // this file's assertions, so a static empty selection is enough.
+  useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+  // #735: the tool-launch toast's "Configure path" action now navigates
+  // through the router instead of assigning window.location.hash.
+  useNavigate: () => vi.fn(),
+}));
+
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {
     ...original,
     useProjectDetail: vi.fn(),
+    useSessionNames: vi.fn(() => new Map()),
     useTransitionLifecycle: vi.fn(),
     useReinferChannels: vi.fn(),
     useDismissChannelDrift: vi.fn(),
+    // Avoids requiring a QueryClientProvider for this file's real-useQuery
+    // History query (#833) — same reasoning as useProjectDetail above.
+    useProjectHistory: vi.fn(() => ({
+      data: [],
+      loading: false,
+      error: undefined,
+    })),
   };
 });
 
@@ -109,6 +150,22 @@ describe('ProjectDetail — canonical target rail (spec 035)', () => {
   it('3. omits the target card when no canonical target is associated', () => {
     setupStore({ canonicalTarget: null });
     render(<ProjectDetailContent projectId="proj-m31" />);
-    expect(screen.queryByTestId('project-canonical-target')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('project-canonical-target'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('4. links through to the Targets page (#738 — was a non-interactive span)', () => {
+    setupStore({
+      canonicalTarget: {
+        id: 'ct-3',
+        primaryDesignation: 'M 42',
+        commonName: 'Orion Nebula',
+      },
+    });
+    render(<ProjectDetailContent projectId="proj-m31" />);
+    const card = screen.getByTestId('project-canonical-target');
+    expect(card.tagName).toBe('A');
+    expect(card.getAttribute('href')).toBe('/targets?selected=ct-3');
   });
 });

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Menu as BaseMenu } from "@base-ui-components/react/menu";
 import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import clsx from "clsx";

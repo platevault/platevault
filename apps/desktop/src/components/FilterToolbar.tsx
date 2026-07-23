@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * FilterToolbar — generic, prop-driven filter row (spec 043, task #63).
  *
@@ -9,7 +12,7 @@
  * This is what goes in `PageTopBar`'s `filters` slot. It owns NO state: all
  * values + change handlers are supplied by the host page (URL state, store,
  * local state — the toolbar does not care). Token-only styling via the shared
- * `.alm-filterbar*` classes; no inline styles.
+ * `.pv-filterbar*` classes; no inline styles.
  */
 
 import type { ReactNode } from 'react';
@@ -120,7 +123,7 @@ export interface FilterToolbarProps {
 function GroupingSelects({ grouping }: { grouping: GroupingControl }) {
   const { dimensions, dims, setSlot, maxLevels = 3 } = grouping;
   return (
-    <div className="alm-filterbar__group">
+    <div className="pv-filterbar__group">
       {Array.from({ length: maxLevels }).map((_, slot) => {
         const value = dims[slot] ?? '';
         const disabled = slot > 0 && !dims[slot - 1];
@@ -128,18 +131,28 @@ function GroupingSelects({ grouping }: { grouping: GroupingControl }) {
         return (
           <select
             key={slot}
-            className="alm-filterbar__select"
+            className="pv-filterbar__select"
             value={value}
             disabled={disabled}
             onChange={(e) => setSlot(slot, e.target.value)}
-            aria-label={slot === 0 ? m.inbox_group_by_aria() : m.inbox_group_by_level_aria({ level: slot + 1 })}
+            aria-label={
+              slot === 0
+                ? m.inbox_group_by_aria()
+                : m.inbox_group_by_level_aria({ level: slot + 1 })
+            }
           >
-            <option value="">{slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}</option>
+            <option value="">
+              {slot === 0
+                ? m.inbox_controls_group_none()
+                : m.inbox_controls_then_none()}
+            </option>
             {dimensions
               .filter((d) => d.value === value || !usedEarlier.has(d.value))
               .map((d) => (
                 <option key={d.value} value={d.value}>
-                  {slot === 0 ? m.inbox_groupby_chip_primary({ label: d.label }) : m.inbox_groupby_chip_secondary({ label: d.label })}
+                  {slot === 0
+                    ? m.inbox_groupby_chip_primary({ label: d.label })
+                    : m.inbox_groupby_chip_secondary({ label: d.label })}
                 </option>
               ))}
           </select>
@@ -165,10 +178,10 @@ function LabeledSelect({
   leadingOption?: string;
 }) {
   return (
-    <label className="alm-filterbar__field" htmlFor={id}>
-      <span className="alm-filterbar__field-label">{label}</span>
+    <label className="pv-filterbar__field" htmlFor={id}>
+      <span className="pv-filterbar__field-label">{label}</span>
       <select
-        className="alm-filterbar__select"
+        className="pv-filterbar__select"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={label}
@@ -189,7 +202,7 @@ function LabeledSelect({
  * Multi-select filter control: a `<details>` popover whose summary shows the
  * selection count and whose body is a list of option checkboxes. Native
  * `<details>` keeps it dependency-free, keyboard-accessible, and click-to-toggle
- * without any open-state wiring in the host. Token-only `.alm-filterbar__multi*`
+ * without any open-state wiring in the host. Token-only `.pv-filterbar__multi*`
  * styling; no inline styles.
  */
 function MultiSelect({
@@ -223,19 +236,30 @@ function MultiSelect({
   return (
     // A `<details>` is not a labelable control, so this field is a labelled
     // group (heading + aria-label) rather than a `<label>` wrapper.
-    <div className="alm-filterbar__field">
-      <span className="alm-filterbar__field-label">{label}</span>
-      <details className="alm-filterbar__multi" id={id}>
-        <summary className="alm-filterbar__multi-summary" aria-label={`${label}: ${summary}`}>
+    <div className="pv-filterbar__field">
+      <span className="pv-filterbar__field-label">{label}</span>
+      <details className="pv-filterbar__multi" id={id}>
+        <summary
+          className="pv-filterbar__multi-summary"
+          aria-label={`${label}: ${summary}`}
+        >
           {summary}
         </summary>
-        <div className="alm-filterbar__multi-menu" role="group" aria-label={label}>
+        <div
+          className="pv-filterbar__multi-menu"
+          role="group"
+          aria-label={label}
+        >
           {options.map((o) => (
-            <label key={o.value} className="alm-filterbar__multi-option" htmlFor={`${id}-${o.value}`}>
+            <label
+              key={o.value}
+              className="pv-filterbar__multi-option"
+              htmlFor={`${id}-${o.value}`}
+            >
               <input
                 type="checkbox"
                 id={`${id}-${o.value}`}
-                className="alm-filterbar__multi-check"
+                className="pv-filterbar__multi-check"
                 checked={selected.has(o.value)}
                 onChange={() => toggle(o.value)}
                 aria-label={o.label}
@@ -259,11 +283,11 @@ export function FilterToolbar({
   actions,
 }: FilterToolbarProps) {
   return (
-    <div className="alm-filterbar">
+    <div className="pv-filterbar">
       {search && (
         <input
           type="search"
-          className="alm-filterbar__search"
+          className="pv-filterbar__search"
           placeholder={search.placeholder ?? m.common_search_placeholder()}
           value={search.value}
           onChange={(e) => search.onChange(e.target.value)}
@@ -307,7 +331,7 @@ export function FilterToolbar({
       )}
 
       {sort && (
-        <div className="alm-filterbar__sort">
+        <div className="pv-filterbar__sort">
           <LabeledSelect
             id="filterbar-sort"
             label={sort.label ?? m.filter_sort_label()}
@@ -318,17 +342,28 @@ export function FilterToolbar({
           <Btn
             size="sm"
             variant="ghost"
-            className="alm-filterbar__sort-dir"
+            className="pv-filterbar__sort-dir"
             onClick={sort.onDirToggle}
-            aria-label={m.filter_sort_dir_aria({ dir: sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending() })}
-            title={sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending()}
+            aria-label={m.filter_sort_dir_aria({
+              dir:
+                sort.dir === 'asc'
+                  ? m.filter_sort_dir_ascending()
+                  : m.filter_sort_dir_descending(),
+            })}
+            title={
+              sort.dir === 'asc'
+                ? m.filter_sort_dir_ascending()
+                : m.filter_sort_dir_descending()
+            }
           >
             <span aria-hidden="true">{sort.dir === 'asc' ? '▲' : '▼'}</span>
           </Btn>
         </div>
       )}
 
-      {actions != null && <div className="alm-filterbar__actions">{actions}</div>}
+      {actions != null && (
+        <div className="pv-filterbar__actions">{actions}</div>
+      )}
     </div>
   );
 }

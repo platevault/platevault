@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Example: Data Table with Sorting and Filtering
 // Demonstrates: Table composition, TanStack Table integration, responsive design
 

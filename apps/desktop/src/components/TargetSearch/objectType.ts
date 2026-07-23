@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Human-readable labels for the spec-035 `TargetObjectType` and
  * `TargetCatalogId` enums, plus the ordered value lists used by the optional

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest';
 import {
   BANDS,
@@ -90,7 +93,9 @@ describe('deriveRecommendation', () => {
   });
 
   it('broadband-ok when any broadband band is viable', () => {
-    expect(deriveRecommendation(bandViability(180, 14.77))).toBe('broadband-ok');
+    expect(deriveRecommendation(bandViability(180, 14.77))).toBe(
+      'broadband-ok',
+    );
   });
 
   it('narrowband-only when only narrowband bands are viable', () => {

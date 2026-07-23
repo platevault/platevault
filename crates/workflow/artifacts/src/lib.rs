@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Workflow artifact observation crate (spec 012).
 //!
 //! Provides pure-domain types and logic for:
@@ -34,5 +37,5 @@ pub use reconciler::{reconcile, NewDetection, ReconcileOutcome, ReconcileReport}
 pub use rules::{ArtifactKind, ArtifactRule, MatchKind};
 pub use watcher::{
     check_stability, extension_allowed, FileSnapshot, StabilityStatus, WatchEvent, WatchEventKind,
-    DEFAULT_WATCH_EXTENSIONS,
+    DEFAULT_STABILITY_DEBOUNCE, DEFAULT_WATCH_EXTENSIONS,
 };

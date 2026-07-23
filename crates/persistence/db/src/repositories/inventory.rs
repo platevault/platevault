@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Inventory projection repository (spec 006).
 //!
 //! Produces `InventorySource[]` by joining `library_root`,
@@ -42,6 +45,8 @@ pub struct SessionProjectionRow {
     /// Target primary designation when linked.
     pub target_name: Option<String>,
     pub created_at: String,
+    /// User-editable free-text notes (#773). `NULL` when never set.
+    pub notes: Option<String>,
 }
 
 /// A project reference row for the `linked.projects` lookup.
@@ -130,7 +135,8 @@ pub async fn list_sessions_for_root(
             acs.frame_ids                   AS frame_ids,
             acs.target_id                   AS target_id,
             NULL                            AS target_name,
-            acs.created_at                  AS created_at
+            acs.created_at                  AS created_at,
+            acs.notes                       AS notes
         FROM acquisition_session acs
         WHERE acs.root_id = ?
         ORDER BY acs.created_at DESC
@@ -152,7 +158,8 @@ pub async fn list_sessions_for_root(
             cs.frame_ids                    AS frame_ids,
             NULL                            AS target_id,
             NULL                            AS target_name,
-            cs.created_at                   AS created_at
+            cs.created_at                   AS created_at,
+            cs.notes                        AS notes
         FROM calibration_session cs
         WHERE cs.root_id = ?
         ORDER BY cs.created_at DESC
@@ -290,6 +297,82 @@ pub async fn get_session_context_by_ids(
     Ok(rows)
 }
 
+/// One `(session, camera)` pairing with the number of the session's active
+/// frames that carry that camera string, as written by the capture program
+/// into the file header (`INSTRUME`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SessionCameraRow {
+    pub session_id: String,
+    /// Raw header string, never blank — callers resolve it to a registered
+    /// camera's name and fall back to this value.
+    pub camera: String,
+    pub frame_count: i64,
+}
+
+/// Batch-load the camera recorded against each session's frames (#1343), for
+/// the whole `session_ids` set in one query — callers MUST NOT call this
+/// per-session (N+1).
+///
+/// Reads `inbox_file_metadata.instrume` rather than
+/// `acquisition_fingerprint.optic_train`: the fingerprint tables have no
+/// production writer for that column, so a fingerprint-sourced camera would
+/// be `NULL` for every real session.
+///
+/// Both session kinds are covered — a calibration session names a camera just
+/// as a light session does. Rows are ordered so the caller can take the first
+/// row per session as the winner: a session is normally homogeneous by
+/// camera, and where it is not, the most-frequent string wins with a
+/// name-ascending tiebreak so the choice is stable across runs.
+///
+/// Sessions whose frames resolve no metadata row are simply absent.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_session_cameras(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> DbResult<Vec<SessionCameraRow>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = vec!["?"; session_ids.len()].join(",");
+    // The inner GROUP BY collapses to one row per frame before counting, so a
+    // root carrying several inbox groups cannot fan a single frame out into
+    // duplicate votes — same guard as `q_core::active_frame_exposure_seconds`.
+    let sql = format!(
+        "SELECT per.session_id AS session_id, per.camera AS camera, COUNT(*) AS frame_count
+         FROM (
+             SELECT s.id AS session_id, fr.id AS frame_id, MAX(ifm.instrume) AS camera
+             FROM (
+                 SELECT id, frame_ids FROM acquisition_session WHERE id IN ({placeholders})
+                 UNION ALL
+                 SELECT id, frame_ids FROM calibration_session WHERE id IN ({placeholders})
+             ) s
+             JOIN json_each(s.frame_ids) je
+             JOIN file_record fr ON fr.id = je.value AND fr.state != 'missing'
+             LEFT JOIN inbox_items ii ON ii.root_id = fr.root_id
+             LEFT JOIN inbox_file_metadata ifm
+                 ON ifm.inbox_item_id = ii.id AND ifm.relative_file_path = fr.relative_path
+             GROUP BY s.id, fr.id
+         ) per
+         WHERE TRIM(COALESCE(per.camera, '')) != ''
+         GROUP BY per.session_id, per.camera
+         ORDER BY per.session_id ASC, frame_count DESC, per.camera ASC"
+    );
+
+    // SQL is built only from a fixed `?` placeholder count (no user strings in
+    // the text); every id flows through `bind`. Same pattern as
+    // `get_session_context_by_ids`. The id list is bound twice — once per
+    // branch of the UNION.
+    let mut q = sqlx::query_as::<_, SessionCameraRow>(sqlx::AssertSqlSafe(sql));
+    for id in session_ids.iter().chain(session_ids) {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows)
+}
+
 /// Set `root_id` on an `acquisition_session` row (T036, FR-012).
 ///
 /// Called when the inbox confirm pipeline resolves the root for a session.
@@ -336,6 +419,89 @@ pub async fn update_calibration_session_root_id(
     Ok(())
 }
 
+/// Write `notes` to whichever session table owns `session_id` — an
+/// inventory session id is always exactly one of `acquisition_session` or
+/// `calibration_session` (spec 006 union), so this tries the acquisition
+/// table first and falls back to calibration only when it matched nothing.
+/// Stores `NULL` when `notes` is `None` (clear). Mirrors
+/// `targets::set_target_notes`'s single-column-write shape.
+///
+/// Returns `true` when a row was updated in either table, `false` when
+/// `session_id` matches neither (caller maps that to `session.not_found`).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn set_session_notes(
+    pool: &SqlitePool,
+    session_id: &str,
+    notes: Option<&str>,
+) -> DbResult<bool> {
+    let acq = sqlx::query("UPDATE acquisition_session SET notes = ? WHERE id = ?")
+        .bind(notes)
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    if acq.rows_affected() > 0 {
+        return Ok(true);
+    }
+    let cal = sqlx::query("UPDATE calibration_session SET notes = ? WHERE id = ?")
+        .bind(notes)
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    Ok(cal.rows_affected() > 0)
+}
+
+/// A `calibration_assignment` row enriched with its owning session id, for
+/// batch-loading calibration linkage across every session in a root (#772).
+/// Mirrors `list_project_links_for_sessions`'s batch-then-filter shape —
+/// one query for the whole `session_ids` set, never N+1 per session.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SessionCalibrationLinkRow {
+    pub session_id: String,
+    pub master_id: String,
+    pub calibration_type: String,
+    pub confidence: f64,
+    pub mismatched_dimensions: String,
+    /// #718 (spec 007 SC-003): persisted so a reopened session detail can
+    /// still distinguish an override assignment from a normal match.
+    pub was_override: bool,
+}
+
+/// Load calibration assignments for a set of session IDs in one query.
+///
+/// Only acquisition (light) sessions ever have rows here — `calibration_
+/// assignment` links a light session to the dark/flat/bias masters that
+/// calibrate it, never the reverse — so calibration session ids in the
+/// input simply produce no rows.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_calibration_matches_for_sessions(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> DbResult<Vec<SessionCalibrationLinkRow>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = vec!["?"; session_ids.len()].join(",");
+    let sql = format!(
+        "SELECT session_id, master_id, calibration_type, confidence, mismatched_dimensions, was_override
+         FROM calibration_assignment
+         WHERE session_id IN ({placeholders})"
+    );
+
+    // Same fixed-placeholder-count pattern as `get_session_context_by_ids`
+    // above — no user string embedded in the SQL text, every id is bound.
+    let mut q = sqlx::query_as::<_, SessionCalibrationLinkRow>(sqlx::AssertSqlSafe(sql));
+    for id in session_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows)
+}
+
 /// Look up the absolute `current_path` of a `library_root` row (T023a).
 ///
 /// Returns `Some(path_string)` when found, `None` when not found.
@@ -363,6 +529,33 @@ pub async fn get_library_root_state(pool: &SqlitePool, root_id: &str) -> DbResul
         .fetch_optional(pool)
         .await?;
     Ok(row.map(|(s,)| s))
+}
+
+/// Minimal `file_record` fields needed to resolve a canonical source's
+/// current path + presence for verification (spec 049 US4).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FileRecordLookupRow {
+    pub root_id: String,
+    pub relative_path: String,
+    pub state: String,
+}
+
+/// Look up a `file_record` row by id (spec 049 `sourceview.verify`'s
+/// read-only source-resolution step). Returns `None` when no row exists.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_file_record_lookup(
+    pool: &SqlitePool,
+    file_record_id: &str,
+) -> DbResult<Option<FileRecordLookupRow>> {
+    let row = sqlx::query_as::<_, FileRecordLookupRow>(
+        "SELECT root_id, relative_path, state FROM file_record WHERE id = ?",
+    )
+    .bind(file_record_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -401,6 +594,48 @@ mod tests {
         let db = setup().await;
         let links = list_project_links_for_sessions(db.pool(), &[]).await.unwrap();
         assert!(links.is_empty());
+    }
+
+    #[tokio::test]
+    async fn project_links_for_sessions_returns_matching_rows_filtered_by_id_set() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, path, created_at, updated_at) VALUES \
+                ('proj-a', 'Andromeda Widefield', 'PixInsight', 'proj-a', \
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'), \
+                ('proj-b', 'Bubble Nebula', 'PixInsight', 'proj-b', \
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO project_sources (id, project_id, inventory_session_id, linked_at) VALUES \
+                ('ps-1', 'proj-a', 'acq-link-1', '2026-01-02T00:00:00Z'), \
+                ('ps-2', 'proj-b', 'acq-link-2', '2026-01-02T00:00:00Z'), \
+                ('ps-3', 'proj-a', 'acq-link-3', '2026-01-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // acq-link-3 is deliberately excluded from the query set, and
+        // missing-id has no project_sources row at all — both must be
+        // absent from the result, proving the join is filtered by the
+        // caller-supplied id set rather than returning every linked row.
+        let ids = vec!["acq-link-1".to_owned(), "acq-link-2".to_owned(), "missing-id".to_owned()];
+        let links = list_project_links_for_sessions(db.pool(), &ids).await.unwrap();
+
+        assert_eq!(links.len(), 2, "acq-link-3 and missing-id must not appear");
+        // Query orders by p.name ASC: "Andromeda Widefield" < "Bubble Nebula".
+        assert_eq!(links[0].project_id, "proj-a");
+        assert_eq!(links[0].project_name, "Andromeda Widefield");
+        assert_eq!(links[0].session_id, "acq-link-1");
+        assert_eq!(links[1].project_id, "proj-b");
+        assert_eq!(links[1].project_name, "Bubble Nebula");
+        assert_eq!(links[1].session_id, "acq-link-2");
     }
 
     #[tokio::test]
@@ -503,5 +738,122 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].target_name.as_deref(), Some("NGC 7000"));
         assert_eq!(rows[0].frame_count, 0);
+    }
+
+    // ── set_session_notes (#773) ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn set_session_notes_updates_acquisition_session() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
+             VALUES ('acq-notes', 'k', '[]', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let updated =
+            set_session_notes(db.pool(), "acq-notes", Some("Great seeing.")).await.unwrap();
+        assert!(updated);
+
+        let (notes,): (Option<String>,) =
+            sqlx::query_as("SELECT notes FROM acquisition_session WHERE id = 'acq-notes'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(notes.as_deref(), Some("Great seeing."));
+    }
+
+    #[tokio::test]
+    async fn set_session_notes_updates_calibration_session() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, frame_ids, kind, created_at) \
+             VALUES ('cal-notes', 'k', '[]', 'dark', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let updated =
+            set_session_notes(db.pool(), "cal-notes", Some("Fresh bias batch.")).await.unwrap();
+        assert!(updated);
+
+        let (notes,): (Option<String>,) =
+            sqlx::query_as("SELECT notes FROM calibration_session WHERE id = 'cal-notes'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(notes.as_deref(), Some("Fresh bias batch."));
+    }
+
+    #[tokio::test]
+    async fn set_session_notes_clears_with_none() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, notes) \
+             VALUES ('acq-clear', 'k', '[]', '2026-01-01T00:00:00Z', 'old note')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        set_session_notes(db.pool(), "acq-clear", None).await.unwrap();
+
+        let (notes,): (Option<String>,) =
+            sqlx::query_as("SELECT notes FROM acquisition_session WHERE id = 'acq-clear'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert!(notes.is_none());
+    }
+
+    #[tokio::test]
+    async fn set_session_notes_unknown_id_updates_nothing() {
+        let db = setup().await;
+        let updated = set_session_notes(db.pool(), "no-such-session", Some("x")).await.unwrap();
+        assert!(!updated);
+    }
+
+    // ── list_calibration_matches_for_sessions (#772) ──────────────────────────
+
+    #[tokio::test]
+    async fn calibration_matches_empty_for_empty_ids() {
+        let db = setup().await;
+        let rows = list_calibration_matches_for_sessions(db.pool(), &[]).await.unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[tokio::test]
+    async fn calibration_matches_batches_multiple_sessions() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
+             VALUES ('acq-cal-1', 'k1', '[]', '2026-01-01T00:00:00Z'), \
+                    ('acq-cal-2', 'k2', '[]', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calibration_assignment \
+                (id, session_id, calibration_type, master_id, confidence, mismatched_dimensions, assigned_at) \
+             VALUES ('ca-1', 'acq-cal-1', 'dark', 'master-dark-1', 0.95, '[]', '2026-01-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let ids = vec!["acq-cal-1".to_owned(), "acq-cal-2".to_owned(), "missing".to_owned()];
+        let rows = list_calibration_matches_for_sessions(db.pool(), &ids).await.unwrap();
+
+        assert_eq!(rows.len(), 1, "only acq-cal-1 has an assignment");
+        assert_eq!(rows[0].session_id, "acq-cal-1");
+        assert_eq!(rows[0].master_id, "master-dark-1");
+        assert_eq!(rows[0].calibration_type, "dark");
+        assert!((rows[0].confidence - 0.95).abs() < f64::EPSILON);
     }
 }

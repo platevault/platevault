@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * StepSourceFolders org-state tests — spec 041 T034/T035.
@@ -15,7 +18,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // StepSourceFolders uses useDirectoryPicker — stub it so no Tauri bridge is needed.
 vi.mock('@/shared/native', () => ({
-  useDirectoryPicker: () => ({ pick: vi.fn(), loading: false, error: null, clearError: vi.fn() }),
+  useDirectoryPicker: () => ({
+    pick: vi.fn(),
+    loading: false,
+    error: null,
+    clearError: vi.fn(),
+  }),
   pickDirectory: vi.fn(),
 }));
 
@@ -29,8 +37,15 @@ import { addSource, flushToDB } from '../sources-store';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
-function makeEntry(kind: SourceEntry['kind'], organizationState: SourceEntry['organizationState'] = 'organized'): SourceEntry {
-  return { path: `/astro/${kind}`, kind, scanDepth: 'recursive', organizationState };
+function makeEntry(
+  kind: SourceEntry['kind'],
+  organizationState: SourceEntry['organizationState'] = 'organized',
+): SourceEntry {
+  return {
+    path: `/astro/${kind}`,
+    kind,
+    organizationState,
+  };
 }
 
 // ── Tests: org-state selector visibility ─────────────────────────────────
@@ -46,13 +61,14 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
     );
 
-    const selects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const selects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -64,13 +80,14 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
     );
 
-    const selects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const selects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -82,13 +99,14 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
     );
 
-    const selects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const selects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -100,17 +118,18 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
     );
 
     // The org-state selector must be absent for inbox rows.
-    expect(screen.queryByRole('combobox', { name: /organization state/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: /organization state/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it('shows both org-state and scan-depth selectors for non-inbox, only scan-depth for inbox', () => {
+  it('shows an org-state selector only for the non-inbox row', () => {
     const entries: SourceEntry[] = [
       makeEntry('light_frames', 'organized'),
       makeEntry('inbox', 'unorganized'),
@@ -121,19 +140,36 @@ describe('StepSourceFolders — organization state selector', () => {
         onAdd={noop}
         onRemove={noop}
         onKindChange={noop}
-        onScanDepthChange={noop}
         onOrganizationStateChange={noop}
         errors={{}}
       />,
     );
 
     // One org-state selector for light_frames row, none for inbox row.
-    const orgSelects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const orgSelects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(orgSelects).toHaveLength(1);
+  });
 
-    // Both rows have a scan-depth selector.
-    const depthSelects = screen.getAllByRole('combobox', { name: /scan depth/i });
-    expect(depthSelects).toHaveLength(2);
+  // Scan-depth is a no-op dropped from the UI (#509) — 'single' was never
+  // implemented, and the scanDepth field/plumbing has been fully retired (#913).
+  it('does not render a scan-depth selector', () => {
+    const entries: SourceEntry[] = [makeEntry('light_frames', 'organized')];
+    render(
+      <StepSourceFolders
+        entries={entries}
+        onAdd={noop}
+        onRemove={noop}
+        onKindChange={noop}
+        onOrganizationStateChange={noop}
+        errors={{}}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('combobox', { name: /scan depth/i }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -150,13 +186,14 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
         onAdd={vi.fn()}
         onRemove={vi.fn()}
         onKindChange={vi.fn()}
-        onScanDepthChange={vi.fn()}
         onOrganizationStateChange={onOrganizationStateChange}
         errors={{}}
       />,
     );
 
-    const select = screen.getByRole('combobox', { name: /organization state/i });
+    const select = screen.getByRole('combobox', {
+      name: /organization state/i,
+    });
     fireEvent.change(select, { target: { value: 'unorganized' } });
 
     expect(onOrganizationStateChange).toHaveBeenCalledWith(0, 'unorganized');
@@ -172,13 +209,14 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
         onAdd={vi.fn()}
         onRemove={vi.fn()}
         onKindChange={vi.fn()}
-        onScanDepthChange={vi.fn()}
         onOrganizationStateChange={onOrganizationStateChange}
         errors={{}}
       />,
     );
 
-    const select = screen.getByRole('combobox', { name: /organization state/i });
+    const select = screen.getByRole('combobox', {
+      name: /organization state/i,
+    });
     fireEvent.change(select, { target: { value: 'organized' } });
 
     expect(onOrganizationStateChange).toHaveBeenCalledWith(0, 'organized');
@@ -203,11 +241,19 @@ vi.stubEnv('VITE_USE_MOCKS', 'false');
 describe('flushToDB — organizationState in register payload', () => {
   beforeEach(() => {
     mockRootsRegisterBatch.mockReset();
-    mockRootsRegisterBatch.mockResolvedValue({ status: 'ok', data: { status: 'success', items: [] } });
+    mockRootsRegisterBatch.mockResolvedValue({
+      status: 'ok',
+      data: { status: 'success', items: [] },
+    });
   });
 
   it('sends the user-chosen organizationState for non-inbox sources', async () => {
-    const sources = addSource([], 'light_frames', '/astro/lights', 'recursive', 'unorganized');
+    const sources = addSource(
+      [],
+      'light_frames',
+      '/astro/lights',
+      'unorganized',
+    );
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
@@ -226,7 +272,7 @@ describe('flushToDB — organizationState in register payload', () => {
   it('always sends "unorganized" for inbox sources regardless of stored value', async () => {
     // Force-add an inbox source — addSource already coerces to unorganized,
     // but we test that flushToDB also enforces it.
-    const sources = addSource([], 'inbox', '/astro/inbox', 'recursive');
+    const sources = addSource([], 'inbox', '/astro/inbox');
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
@@ -244,7 +290,7 @@ describe('flushToDB — organizationState in register payload', () => {
 
   it('defaults to "organized" for non-inbox sources when no state is specified', async () => {
     // addSource with no explicit organizationState → defaults to 'organized'
-    const sources = addSource([], 'project', '/astro/projects', 'recursive');
+    const sources = addSource([], 'project', '/astro/projects');
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(

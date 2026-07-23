@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Inbox contract DTOs for the Tauri IPC surface (spec 005 / spec 041).
 //!
 //! Matches `specs/005-inbox-mixed-folder-split/contracts/`:
@@ -69,6 +72,39 @@ pub struct InboxClassifyRequest {
     pub root_absolute_path: String,
 }
 
+// ── inbox.classify.sourceGroup (spec 058 FR-015/T012) ────────────────────────
+
+/// Request for `inbox.classify.sourceGroup` — classify a scanned folder that
+/// has no `inbox_items` row yet.
+///
+/// Spec 058 removes the scan-time folder placeholder (FR-015/T020), and with it
+/// the only route into `materialize_sub_items`: both existing entry points are
+/// keyed on an item id. This request is keyed on the source group instead, so a
+/// bare group can become item rows without one ever having existed.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxClassifySourceGroupRequest {
+    pub source_group_id: String,
+    /// Absolute path to the registered root on disk, so the use case can locate
+    /// the group's files. Transport detail, as on `InboxClassifyRequest`.
+    pub root_absolute_path: String,
+}
+
+/// Response from `inbox.classify.sourceGroup`.
+///
+/// Deliberately returns a **count, not a plan, and no confirmable id**. The
+/// source-group row is the thing you classify, never the thing you confirm
+/// (FR-016) — confirmation continues to happen only against the item rows this
+/// materializes, which the next `inbox.list` returns in `items` while the group
+/// drops out of `sourceGroups` (FR-017, a consequence of that query's zero-item
+/// predicate rather than a separate step).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxClassifySourceGroupResponse {
+    pub source_group_id: String,
+    pub materialized_sub_item_count: u32,
+}
+
 /// One frame-type breakdown entry in a classify response.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +158,13 @@ pub struct InboxConfirmRequest {
     /// item's category is rejected with `inbox.invalid_destination_root`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_id: Option<String>,
+    /// Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+    /// The user's pick from a prior `attributionCandidates` list. Only
+    /// meaningful for light-frame items (`attribution.not_light_frame` on any
+    /// other frame type); omitting it leaves the confirmed session's framing
+    /// membership unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chosen_attribution: Option<crate::framing::ChosenAttributionDto>,
 }
 
 /// A candidate destination library root for an inbox item's frame-type
@@ -195,6 +238,16 @@ pub struct InboxConfirmResponse {
     /// Empty for master-registration responses.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub destinations: Vec<InboxConfirmDestination>,
+    /// Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+    /// Ranked suggestions for where this item's light session belongs — a
+    /// suggestion surface only, never auto-applied. Empty for non-light items
+    /// or when no candidate matched.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attribution_candidates: Vec<crate::framing::IngestionAttributionCandidateDto>,
+    /// Present when the request carried a `chosenAttribution` that was
+    /// successfully applied (F-Framing-10).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_applied: Option<crate::framing::AttributionAppliedDto>,
 }
 
 // ── inbox.reclassify ──────────────────────────────────────────────────────────
@@ -249,13 +302,16 @@ pub struct InboxReclassifyResponse {
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────
 
 /// Request to scan a root directory and discover inbox items.
+///
+/// Traversal behaviour is deliberately not a request field: `inbox.scan.folder`
+/// resolves `followSymlinks` from persisted ingestion settings so every caller
+/// gets the behaviour the user configured (issue #878). Every previous caller
+/// hardcoded `false`, which silently overrode that setting.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxScanFolderRequest {
     pub root_id: String,
     pub root_absolute_path: String,
-    #[serde(default)]
-    pub follow_symlinks: bool,
 }
 
 /// A discovered inbox item returned from the scan.
@@ -396,6 +452,48 @@ pub struct InboxListItem {
     /// until classified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame_type: Option<String>,
+    /// Spec 058 FR-028: the persisted verdict of the mandatory-attribute gate,
+    /// its own field rather than a `group_key` value. `true` means the item
+    /// cannot be confirmed until the missing attributes are supplied.
+    pub needs_review: bool,
+    /// Cached classification result, DB vocabulary (`"classified"` /
+    /// `"unclassified"`) — the SAME value `inbox.classify` reads for this
+    /// item. `None` when the item has never been classified.
+    ///
+    /// Issue #711 Instance A (unsplit-folder variant): `state` is
+    /// unconditionally `"classified"` once a folder has been scanned even
+    /// when it has no dominant frame type (empty/mixed/needs-review), so the
+    /// list's classification badge must not fall back to `state` alone —
+    /// this field lets it agree with `inbox.classify`/the detail panel by
+    /// construction instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification_result: Option<String>,
+}
+
+/// A scanned-but-unclassified folder in `inbox.list` (spec 058 FR-016).
+///
+/// Carries **no** `inboxItemId`. Non-confirmability is structural: there is
+/// nothing to pass to `inbox.confirm`, so no new guard and no new error code
+/// exist for it. A discriminated union with [`InboxListItem`] was rejected
+/// precisely because it would restore a row that looks like an item and
+/// carries an id the UI is tempted to confirm (FR-004).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxSourceGroupListItem {
+    pub source_group_id: String,
+    pub root_id: String,
+    /// Absolute path of the registered root (for display).
+    pub root_absolute_path: String,
+    pub relative_path: String,
+    /// Sub-frames the scan found, excluding detected calibration masters.
+    pub file_count: u32,
+    /// Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+    pub format: String,
+    /// The source group's `"move"` | `"catalogue"` lane — NOT the
+    /// `"fits"`/`"video"` item lane. The two columns share a name only.
+    pub lane: String,
+    pub content_signature: String,
+    pub discovered_at: String,
 }
 
 /// Response from `inbox.list`.
@@ -403,6 +501,10 @@ pub struct InboxListItem {
 #[serde(rename_all = "camelCase")]
 pub struct InboxListResponse {
     pub items: Vec<InboxListItem>,
+    /// Folders that have been scanned but have produced no items yet. Contains
+    /// only groups with zero item rows, so FR-017's "replaced by its item
+    /// rows" is a consequence of the query rather than a separate step.
+    pub source_groups: Vec<InboxSourceGroupListItem>,
     /// Whether the list was capped at `limit` (true = there may be more).
     pub capped: bool,
     /// Maximum items per response (matches the server-side cap).
@@ -417,7 +519,7 @@ pub struct InboxListResponse {
 /// `frame_type_effective` reflects override-if-present-else-extracted.
 /// `override_stale` is true when the file was changed (size/mtime) since the
 /// override was recorded (R-4); the override is surfaced but flagged.
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxFileMetadata {
     pub relative_file_path: String,
@@ -558,18 +660,16 @@ pub struct InboxStatsResponse {
 
 /// Request for `inbox.target_recommendations`.
 ///
-/// Identify a light sub-group by **either** its `inboxItemId` **or** its
-/// `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
-/// one should be set; if both are present, `inboxItemId` takes precedence.
+/// Identify a light sub-group by its `inboxItemId` (R-17: a sub-group is one
+/// homogeneous light group). The legacy `sourceGroupId` alternative was dropped
+/// in spec 058 (D-002): a recommendation belongs to exactly one inbox item, so
+/// a source group is no longer a resolvable target.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxTargetRecommendationsRequest {
     /// The single-type inbox item (light sub-group) to resolve a target for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inbox_item_id: Option<String>,
-    /// Alternatively, the originating source group (R-12 provenance).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_group_id: Option<String>,
 }
 
 /// The sky pointing a recommendation set was computed from (decimal degrees).
@@ -839,6 +939,14 @@ pub struct InboxReclassifyV2Request {
     /// Bulk operations applied after per-file overrides. Processed in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bulk: Vec<InboxReclassifyBulk>,
+    /// Absolute path to the inbox root on disk. Not in the JSON Schema
+    /// (transport detail), mirroring `InboxClassifyRequest`.
+    ///
+    /// Required, not optional: without it the re-split cannot hash the group's
+    /// files, so every re-materialized sub-item inherits the signature of the
+    /// empty set — a fixed constant that compares equal across unrelated items
+    /// and silently disables the confirm staleness guard (spec 058 Q-5).
+    pub root_absolute_path: String,
 }
 
 /// Summary of one re-materialized sub-item returned after reclassify (T068).

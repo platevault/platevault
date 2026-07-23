@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * T043 — Playwright smoke: Projects page lifecycle transition write-side seam.
  *
@@ -7,7 +10,7 @@
  * ProjectDetail architecture (spec 008 / design-v4).
  *
  * What this test proves:
- *  1. The Projects page at /#/projects renders project rows as .alm-list-item
+ *  1. The Projects page at /#/projects renders project rows as .pv-list-item
  *     divs without crashing.
  *  2. The first project ("NGC 7000 Narrowband", lifecycle: "processing") is
  *     rendered with its lifecycle pill visible.
@@ -32,39 +35,44 @@
  * First-run seeding:
  *   Reads `alm-preferences.setupCompleted` from localStorage.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
+import { disableOnboarding } from './support/harness';
 
-function seedSetupComplete(page: import("@playwright/test").Page): void {
+test.beforeEach(async ({ page }) => {
+  await disableOnboarding(page);
+});
+
+function seedSetupComplete(page: import('@playwright/test').Page): void {
   page.addInitScript(() => {
     window.localStorage.setItem(
-      "alm-preferences",
+      'alm-preferences',
       JSON.stringify({ setupCompleted: true }),
     );
   });
 }
 
-test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)", () => {
-  test("Projects page renders rows; transition button triggers mock success toast", async ({
+test.describe('lifecycle transitions · write-side seam (spec 008 / design-v4)', () => {
+  test('Projects page renders rows; transition button triggers mock success toast', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
+    await page.goto('/#/projects');
 
     // ── 1. Page renders without error boundary ────────────────────────────────
-    const errorBoundary = page.getByTestId("app-error-boundary-fallback");
+    const errorBoundary = page.getByTestId('app-error-boundary-fallback');
     await expect(errorBoundary).not.toBeVisible();
 
     // ── 2. Project row is visible with "Processing" lifecycle pill ────────────
     // ProjectsTable (spec 043 redesign) renders each project as a
-    // `tr.alm-projects-table__row` containing the project name and a state tag.
+    // `tr.pv-projects-table__row` containing the project name and a state tag.
     const projectRow = page
-      .locator(".alm-projects-table__row")
-      .filter({ hasText: "NGC 7000 Narrowband" })
+      .locator('.pv-projects-table__row')
+      .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
 
     // The "Processing" state tag should be visible in the row.
-    await expect(projectRow.getByText("Processing")).toBeVisible();
+    await expect(projectRow.getByText('Processing')).toBeVisible();
 
     // ── 3. Select the row → detail pane opens ─────────────────────────────────
     // Unlike the old list (which auto-selected index 0), the redesigned
@@ -74,10 +82,10 @@ test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)",
     await projectRow.click();
 
     // For "processing" state: "Mark as Completed" → nextState "completed".
-    const footerActions = page.getByTestId("lifecycle-actions");
+    const footerActions = page.getByTestId('lifecycle-actions');
     await expect(footerActions).toBeVisible({ timeout: 5_000 });
 
-    const markCompletedBtn = page.getByTestId("transition-btn-completed");
+    const markCompletedBtn = page.getByTestId('transition-btn-completed');
     await expect(markCompletedBtn).toBeVisible();
     await expect(markCompletedBtn).toBeEnabled();
 
@@ -93,23 +101,29 @@ test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)",
     await expect(successToast).toBeVisible({ timeout: 5_000 });
   });
 
-  test("Projects page renders multiple projects in the list", async ({
+  test('Projects page renders multiple projects in the list', async ({
     page,
   }) => {
     seedSetupComplete(page);
-    await page.goto("/#/projects");
+    await page.goto('/#/projects');
 
-    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+    await expect(
+      page.getByTestId('app-error-boundary-fallback'),
+    ).not.toBeVisible();
 
     // All three mock projects should appear.
     await expect(
-      page.locator(".alm-projects-table__row").filter({ hasText: "NGC 7000 Narrowband" }),
+      page
+        .locator('.pv-projects-table__row')
+        .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
-      page.locator(".alm-projects-table__row").filter({ hasText: "M31 LRGB" }),
+      page.locator('.pv-projects-table__row').filter({ hasText: 'M31 LRGB' }),
     ).toBeVisible();
     await expect(
-      page.locator(".alm-projects-table__row").filter({ hasText: "IC 1396 SHO" }),
+      page
+        .locator('.pv-projects-table__row')
+        .filter({ hasText: 'IC 1396 SHO' }),
     ).toBeVisible();
   });
 
@@ -119,10 +133,7 @@ test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)",
   // stays "Processing" even after success. Full coverage needs the real backend.
   //
   // See: docs/development/test-strategy-033.md § J-4.4 (real-backend layer)
-  test.skip(
-    "lifecycle pill updates after successful transition — real-backend e2e required",
-    async () => {
-      // Intentionally skipped.
-    },
-  );
+  test.skip('lifecycle pill updates after successful transition — real-backend e2e required', async () => {
+    // Intentionally skipped.
+  });
 });

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useMemo, useState } from "react";
 import { useSearch, useNavigate, Link } from "@tanstack/react-router";
 import { MoreVertical, AlertTriangle, Inbox } from "lucide-react";

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * ProjectDetail lifecycle wiring tests — spec 009 US3-3 / US4.
@@ -19,15 +22,42 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@tanstack/react-router')>();
+  return {
+    ...actual,
+    // ProjectLifecycleStepper's History section (#833) falls back to this
+    // route search param when its (optional) projectId prop isn't wired;
+    // unrelated to this file's assertions, so a static empty selection is
+    // enough.
+    useSearch: () => ({ selected: undefined, lifecycle: undefined }),
+    // #735: the tool-launch toast's "Configure path" action now navigates
+    // through the router instead of assigning window.location.hash, and the
+    // tool-not-configured hint is a real `Link` — neither works against the
+    // spread-in real implementations without a router context.
+    useNavigate: () => vi.fn(),
+    Link: (await import('@/test/router-link-stub')).LinkStub,
+  };
+});
+
 // Mock the project detail store
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {
     ...original,
     useProjectDetail: vi.fn(),
+    useSessionNames: vi.fn(() => new Map()),
     callTransitionLifecycle: vi.fn(),
     callReinferChannels: vi.fn(),
     callDismissChannelDrift: vi.fn(),
+    // Avoids requiring a QueryClientProvider for this file's real-useQuery
+    // History query (#833) — same reasoning as useProjectDetail above.
+    useProjectHistory: vi.fn(() => ({
+      data: [],
+      loading: false,
+      error: undefined,
+    })),
   };
 });
 
@@ -136,7 +166,10 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
       status: 'error',
       contractVersion: '2.0.0',
       requestId: 'req-3',
-      error: { code: 'transition.refused', message: 'Transition refused: edge not allowed' },
+      error: {
+        code: 'transition.refused',
+        message: 'Transition refused: edge not allowed',
+      },
     });
 
     render(<ProjectDetailContent projectId="proj-001" />);
@@ -186,7 +219,9 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     expect(screen.queryByTestId(/^transition-btn-/)).not.toBeInTheDocument();
     // The Reveal action carries the shared platform-native revealLabel()
     // (jsdom reports no platform → the Linux-generic label).
-    expect(screen.getByTestId('action-reveal')).toHaveTextContent('Show in file manager');
+    expect(screen.getByTestId('action-reveal')).toHaveTextContent(
+      'Show in file manager',
+    );
   });
 
   it('renders unarchive actions for archived state', () => {

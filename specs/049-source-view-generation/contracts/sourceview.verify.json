@@ -45,7 +45,7 @@
                   "viewRelativePath": { "type": "string" },
                   "state": {
                     "type": "string",
-                    "enum": ["missing", "moved", "unresolved_link", "changed_kind"],
+                    "enum": ["missing", "moved", "unresolved_link", "changed_kind", "hash_diverged"],
                     "description": "Why the item failed verification. Repair is via spec 026 regeneration, never auto-repair here."
                   }
                 }

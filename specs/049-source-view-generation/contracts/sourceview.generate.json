@@ -56,6 +56,11 @@
               "type": "array",
               "description": "Non-blocking review warnings surfaced with the plan.",
               "items": { "$ref": "#/$defs/Warning" }
+            },
+            "usedCopyFallback": {
+              "type": "boolean",
+              "default": false,
+              "description": "True when at least one item resolved to a copy-fallback materialization (no link kind was achievable and copyOptIn allowed a copy — FR-003/FR-004b)."
             }
           }
         },

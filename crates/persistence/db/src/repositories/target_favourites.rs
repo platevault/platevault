@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository query functions for the spec-051 target favourites surface.
 //!
 //! Replaces the `localStorage`-only favourites stub in
@@ -12,6 +15,26 @@ use sqlx::SqlitePool;
 
 use crate::DbResult;
 
+/// Whether a `canonical_target` row exists for `target_id`. Used by the
+/// `targets.favourites.add` use case to distinguish `target.not_found` from a
+/// genuine database error before inserting.
+pub use super::q_targets_mgmt::target_exists;
+
+/// Read back the stored `favourited_at` for `target_id`, or `None` if the
+/// target is not currently favourited.
+///
+/// # Errors
+///
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn get_favourited_at(pool: &SqlitePool, target_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT favourited_at FROM target_favourite WHERE target_id = ?")
+            .bind(target_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(at,)| at))
+}
+
 /// List the ids of every currently-favourited canonical target, ordered by
 /// `favourited_at DESC` (most recently favourited first).
 ///
@@ -25,6 +48,20 @@ pub async fn list_favourites(pool: &SqlitePool) -> DbResult<Vec<String>> {
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
+/// Count every currently-favourited canonical target. Used by
+/// `status.summary` (issue #574): the sidebar's "my targets" badge must equal
+/// what the Targets page's "My Targets" filter shows, which is wired to this
+/// same table, so count and visible list can never diverge.
+///
+/// # Errors
+///
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_favourites(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM target_favourite").fetch_one(pool).await?;
+    Ok(count)
 }
 
 /// Favourite `target_id`. Upsert-safe: favouriting an already-favourited
@@ -152,6 +189,57 @@ mod tests {
         let db = setup().await;
         let ids = list_favourites(db.pool()).await.unwrap();
         assert!(ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn count_favourites_is_zero_when_nothing_favourited() {
+        let db = setup().await;
+        assert_eq!(count_favourites(db.pool()).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn count_favourites_reflects_add_and_remove() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-009").await;
+        insert_target(db.pool(), "t-010").await;
+
+        add_favourite(db.pool(), "t-009", "2026-07-05T00:00:00Z").await.unwrap();
+        add_favourite(db.pool(), "t-010", "2026-07-05T00:00:00Z").await.unwrap();
+        assert_eq!(count_favourites(db.pool()).await.unwrap(), 2);
+
+        remove_favourite(db.pool(), "t-009").await.unwrap();
+        assert_eq!(count_favourites(db.pool()).await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn target_exists_true_for_known_target() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-006").await;
+        assert!(target_exists(db.pool(), "t-006").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn target_exists_false_for_unknown_target() {
+        let db = setup().await;
+        assert!(!target_exists(db.pool(), "missing").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn get_favourited_at_returns_none_when_not_favourited() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-007").await;
+        assert!(get_favourited_at(db.pool(), "t-007").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn get_favourited_at_returns_stored_timestamp() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-008").await;
+        add_favourite(db.pool(), "t-008", "2026-07-05T00:00:00Z").await.unwrap();
+        assert_eq!(
+            get_favourited_at(db.pool(), "t-008").await.unwrap().as_deref(),
+            Some("2026-07-05T00:00:00Z")
+        );
     }
 
     #[tokio::test]

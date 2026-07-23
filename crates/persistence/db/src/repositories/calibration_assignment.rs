@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for `calibration_assignment` table (spec 007, T006/T026).
 //!
 //! Operates on the `calibration_assignment` table from migration 0022.
@@ -8,6 +11,7 @@
 //! other repositories in this crate that do not require a sqlx offline cache.
 
 use domain_core::ids::Timestamp;
+use sqlx::types::Json;
 use sqlx::SqlitePool;
 
 use crate::{DbError, DbResult};
@@ -74,11 +78,9 @@ fn row_to_struct(
 /// Replaces any existing row for the same `(session_id, calibration_type)` pair.
 ///
 /// # Errors
-/// Returns [`DbError::Database`] on query failure.
-/// Returns [`DbError::Serialise`] if `mismatched_dimensions` cannot be serialised.
+/// Returns [`DbError::Database`] on query failure (including JSON encoding
+/// of `mismatched_dimensions`, encoded via `sqlx::types::Json`).
 pub async fn upsert(pool: &SqlitePool, params: UpsertParams<'_>) -> DbResult<()> {
-    let mismatch_json =
-        serde_json::to_string(params.mismatched_dimensions).map_err(DbError::Serialise)?;
     let at = params.assigned_at.map_or_else(Timestamp::now_iso, str::to_owned);
     let override_int = i64::from(params.was_override);
 
@@ -102,13 +104,32 @@ pub async fn upsert(pool: &SqlitePool, params: UpsertParams<'_>) -> DbResult<()>
     .bind(params.master_id)
     .bind(params.confidence)
     .bind(override_int)
-    .bind(&mismatch_json)
+    .bind(Json(params.mismatched_dimensions))
     .bind(&at)
     .execute(pool)
     .await
     .map_err(DbError::Database)?;
 
     Ok(())
+}
+
+/// Delete the assignment for a `(session_id, calibration_type)` pair (#875:
+/// un-assign — returns the session to "no master assigned" for that type).
+///
+/// Returns `true` when a row was deleted, `false` when none existed.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn delete(pool: &SqlitePool, session_id: &str, calibration_type: &str) -> DbResult<bool> {
+    let result = sqlx::query(
+        "DELETE FROM calibration_assignment WHERE session_id = ? AND calibration_type = ?",
+    )
+    .bind(session_id)
+    .bind(calibration_type)
+    .execute(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(result.rows_affected() > 0)
 }
 
 /// Get the current assignment for a `(session_id, calibration_type)` pair.
@@ -166,6 +187,113 @@ pub async fn list_for_session(
 #[must_use]
 pub fn parse_mismatched_dimensions(json: &str) -> Vec<String> {
     serde_json::from_str::<Vec<String>>(json).unwrap_or_default()
+}
+
+// ── Missing-frame awareness (spec 048 US5, FR-024/025) ─────────────────────────
+//
+// A "master" here is always a `calibration_session` row (`master_id` ==
+// `calibration_session.id`, per the `calibration_master_view` join in
+// migration 0033) — there is no separate generated-master-file table in the
+// active matching path. `calibration_master` (migration 0002) is a distinct,
+// currently-unpopulated table for a generated master FILE derived from that
+// session; the two presence checks below cover both possibilities (PATH A:
+// the generated file: PATH B: the session's own raw sub-frames) without
+// assuming either is populated.
+
+/// PATH A: state of the generated master artifact for `master_id`'s session,
+/// via `calibration_master.source_session_id` → `.artifact_id` →
+/// spec-012 `processing_artifacts.state`. `None` when no such artifact is
+/// tracked (the common case today — nothing populates `calibration_master`
+/// yet); `Some(state)` is one of `present` / `missing` / `user_resolved_missing`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn master_artifact_state(pool: &SqlitePool, master_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT pa.state
+         FROM calibration_master cm
+         JOIN processing_artifacts pa ON pa.id = cm.artifact_id
+         WHERE cm.source_session_id = ?
+         LIMIT 1",
+    )
+    .bind(master_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(row.map(|(state,)| state))
+}
+
+/// PATH B: does `master_id`'s own `calibration_session` currently have any
+/// member frame (`frame_ids`) whose `file_record.state = 'missing'`?
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn master_has_missing_source_frame(pool: &SqlitePool, master_id: &str) -> DbResult<bool> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*)
+         FROM calibration_session cs
+         JOIN json_each(cs.frame_ids) je
+         JOIN file_record fr ON fr.id = je.value
+         WHERE cs.id = ? AND fr.state = 'missing'",
+    )
+    .bind(master_id)
+    .fetch_one(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(count > 0)
+}
+
+/// Assignments whose master (`calibration_session`) currently lists
+/// `frame_id` among its `frame_ids` — i.e. matches PATH B would affect when
+/// `frame_id` transitions missing/recovered. Used to scope
+/// `calibration_match.source_missing` / `.source_recovered` audit emission
+/// to exactly the assignments a raw-frame reconcile outcome affects.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_by_source_frame(
+    pool: &SqlitePool,
+    frame_id: &str,
+) -> DbResult<Vec<CalibrationAssignmentRow>> {
+    let like = format!("%\"{frame_id}\"%");
+    let rows: Vec<(String, String, String, String, f64, i64, String, String)> = sqlx::query_as(
+        "SELECT ca.id, ca.session_id, ca.calibration_type, ca.master_id, ca.confidence,
+                ca.was_override, ca.mismatched_dimensions, ca.assigned_at
+         FROM calibration_assignment ca
+         JOIN calibration_session cs ON cs.id = ca.master_id
+         WHERE cs.frame_ids LIKE ?",
+    )
+    .bind(like)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(rows.into_iter().map(row_to_struct).collect())
+}
+
+/// Assignments whose master has a generated-master artifact `artifact_id` —
+/// i.e. matches PATH A would affect when that artifact transitions
+/// missing/recovered. Used to scope `calibration_match.source_missing` /
+/// `.source_recovered` audit emission to exactly the assignments an
+/// artifact reconcile outcome affects.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_by_source_artifact(
+    pool: &SqlitePool,
+    artifact_id: &str,
+) -> DbResult<Vec<CalibrationAssignmentRow>> {
+    let rows: Vec<(String, String, String, String, f64, i64, String, String)> = sqlx::query_as(
+        "SELECT ca.id, ca.session_id, ca.calibration_type, ca.master_id, ca.confidence,
+                ca.was_override, ca.mismatched_dimensions, ca.assigned_at
+         FROM calibration_assignment ca
+         JOIN calibration_master cm ON cm.source_session_id = ca.master_id
+         WHERE cm.artifact_id = ?",
+    )
+    .bind(artifact_id)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(rows.into_iter().map(row_to_struct).collect())
 }
 
 #[cfg(test)]
@@ -232,6 +360,8 @@ mod tests {
         assert_eq!(row.id, "assign-002");
         assert_eq!(row.master_id, "master-002");
         assert!(row.was_override);
+        // Round-trips through the `sqlx::types::Json` write-side codec.
+        assert_eq!(parse_mismatched_dimensions(&row.mismatched_dimensions), override_dims);
     }
 
     #[tokio::test]
@@ -269,6 +399,14 @@ mod tests {
     #[tokio::test]
     async fn parse_mismatched_dimensions_empty() {
         let dims = parse_mismatched_dimensions("[]");
+        assert!(dims.is_empty());
+    }
+
+    /// Graceful-degradation site (spec `n4_jsoncodec`): a corrupt
+    /// `mismatched_dimensions` cell must degrade to empty, not panic/propagate.
+    #[tokio::test]
+    async fn parse_mismatched_dimensions_corrupt_degrades_to_empty() {
+        let dims = parse_mismatched_dimensions("not valid json");
         assert!(dims.is_empty());
     }
 }

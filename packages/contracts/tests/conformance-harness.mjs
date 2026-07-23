@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
+import { registerUtf8ByteKeywords } from "./utf8-byte-keywords.test.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../../..");
 
@@ -36,7 +38,7 @@ function loadSchema(relPath) {
 // ── AJV instance ─────────────────────────────────────────────────────────────
 
 // strict:false so unknown formats (date-time, uuid) produce warnings, not errors.
-const ajv = new Ajv2020({ strict: false, allErrors: true });
+const ajv = registerUtf8ByteKeywords(new Ajv2020({ strict: false, allErrors: true }));
 
 // ── Test runner ───────────────────────────────────────────────────────────────
 
@@ -300,6 +302,733 @@ validate(
   projectLifecycleSchema,
   { lifecycle: "in_progress" },
   false
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spec 007 T015/T020/T024 — calibration.match.suggest response shape
+// (dark/flat/bias) conformance, plus T041/T042 error-path coverage.
+// Schema: specs/007-calibration-matching-rules/contracts/calibration.match.suggest.json
+// ─────────────────────────────────────────────────────────────────────────────
+
+const suggestSchema = loadSchema(
+  "specs/007-calibration-matching-rules/contracts/calibration.match.suggest.json"
+);
+ajv.addSchema(suggestSchema);
+
+const suggestResponseSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:test:calibration-match-suggest-response",
+  $ref: `${suggestSchema.$id}#/$defs/Response`,
+};
+
+const sessionId = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+const requestId = "5b6a2a3e-6b1e-4a3e-9e2a-0b1c2d3e4f5a";
+
+function suggestMatch(overrides = {}) {
+  return {
+    sessionId,
+    masterId: "8c2b1a4e-1234-4a3e-9e2a-0b1c2d3e4f5a",
+    calibrationType: "dark",
+    confidence: 0.92,
+    dimensionsMatched: [{ dimension: "exposure", observed: 300, reference: 300, delta: 0 }],
+    dimensionsMismatched: [],
+    selectionReason: "same_session",
+    ...overrides,
+  };
+}
+
+// T015: dark match response.
+validate(
+  "T015 calibration.match.suggest dark match response is valid",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "match",
+    matches: [suggestMatch({ calibrationType: "dark" })],
+  },
+  true
+);
+
+validate(
+  "T015 DRIFT: dark match missing 'confidence' must be rejected",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "match",
+    matches: [
+      (() => {
+        const { confidence, ...rest } = suggestMatch({ calibrationType: "dark" });
+        return rest;
+      })(),
+    ],
+  },
+  false
+);
+
+// T020: flat match response, asserting selectionReason is present and constrained.
+validate(
+  "T020 calibration.match.suggest flat match response includes selectionReason",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "match",
+    matches: [suggestMatch({ calibrationType: "flat", selectionReason: "compatible_fallback" })],
+  },
+  true
+);
+
+validate(
+  "T020 DRIFT: flat match with invalid selectionReason value must be rejected",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "match",
+    matches: [suggestMatch({ calibrationType: "flat", selectionReason: "bogus_reason" })],
+  },
+  false
+);
+
+// T024: bias ambiguous response with two candidates and a populated mismatch list.
+validate(
+  "T024 calibration.match.suggest bias ambiguous response is valid",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "ambiguous",
+    matches: [
+      suggestMatch({ calibrationType: "bias", confidence: 0.6 }),
+      suggestMatch({
+        calibrationType: "bias",
+        confidence: 0.58,
+        selectionReason: "same_night",
+        dimensionsMismatched: [{ dimension: "gain", reason: "out_of_tolerance", delta: 0.5 }],
+      }),
+    ],
+  },
+  true
+);
+
+validate(
+  "T024 DRIFT: bias mismatch entry missing required 'reason' must be rejected",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "ambiguous",
+    matches: [
+      suggestMatch({
+        calibrationType: "bias",
+        dimensionsMismatched: [{ dimension: "gain", delta: 0.5 }],
+      }),
+    ],
+  },
+  false
+);
+
+// T042: observer_location_missing is a *result* status (not an error) on suggest.
+validate(
+  "T042 calibration.match.suggest observer_location_missing result status is valid",
+  suggestResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    suggestStatus: "observer_location_missing",
+  },
+  true
+);
+
+// T041: session.mixed_state surfaces as a hard error on suggest.
+validate(
+  "T041 calibration.match.suggest session.mixed_state error response is valid",
+  suggestResponseSchema,
+  {
+    status: "error",
+    contractVersion: "2.0.0",
+    requestId,
+    error: { code: "session.mixed_state", message: "Session type is mixed; split required before matching." },
+  },
+  true
+);
+
+validate(
+  "T041 DRIFT: unknown error code on suggest must be rejected",
+  suggestResponseSchema,
+  {
+    status: "error",
+    contractVersion: "2.0.0",
+    requestId,
+    error: { code: "not.a.real.code", message: "bogus" },
+  },
+  false
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spec 007 T029 — calibration.match.assign response shape: success,
+// incompatible.dimensions, master.not_found.
+// Schema: specs/007-calibration-matching-rules/contracts/calibration.match.assign.json
+// ─────────────────────────────────────────────────────────────────────────────
+
+const assignSchema = loadSchema(
+  "specs/007-calibration-matching-rules/contracts/calibration.match.assign.json"
+);
+ajv.addSchema(assignSchema);
+
+const assignResponseSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:test:calibration-match-assign-response",
+  $ref: `${assignSchema.$id}#/$defs/Response`,
+};
+
+validate(
+  "T029 calibration.match.assign success response is valid",
+  assignResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    assigned: {
+      assignmentId: "1a2b3c4d-5e6f-4a3e-9e2a-0b1c2d3e4f5a",
+      sessionId,
+      masterId: "8c2b1a4e-1234-4a3e-9e2a-0b1c2d3e4f5a",
+      calibrationType: "dark",
+      wasOverride: false,
+    },
+    confidence: 0.9,
+  },
+  true
+);
+
+validate(
+  "T029 calibration.match.assign incompatible.dimensions error is valid",
+  assignResponseSchema,
+  {
+    status: "error",
+    contractVersion: "2.0.0",
+    requestId,
+    error: {
+      code: "incompatible.dimensions",
+      message: "Master gain does not match the session within tolerance.",
+      details: { dimensions: ["gain"] },
+    },
+  },
+  true
+);
+
+validate(
+  "T029 calibration.match.assign master.not_found error is valid",
+  assignResponseSchema,
+  {
+    status: "error",
+    contractVersion: "2.0.0",
+    requestId,
+    error: { code: "master.not_found", message: "No calibration master exists with that id." },
+  },
+  true
+);
+
+validate(
+  "T029 DRIFT: assign success without 'assigned' must be rejected",
+  assignResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    confidence: 0.9,
+  },
+  false
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spec 007 T037 — calibration.match.suggest.batch: all-success, partial
+// (one observer_location_missing item + one hard error), all-error.
+// Schema: specs/007-calibration-matching-rules/contracts/calibration.match.suggest.batch.json
+// ─────────────────────────────────────────────────────────────────────────────
+
+const batchSchema = loadSchema(
+  "specs/007-calibration-matching-rules/contracts/calibration.match.suggest.batch.json"
+);
+ajv.addSchema(batchSchema);
+
+const batchResponseSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:test:calibration-match-suggest-batch-response",
+  $ref: `${batchSchema.$id}#/$defs/Response`,
+};
+
+validate(
+  "T037 calibration.match.suggest.batch all-success response is valid",
+  batchResponseSchema,
+  {
+    status: "success",
+    contractVersion: "1.0",
+    requestId,
+    results: [
+      {
+        sessionId,
+        calibrationType: "dark",
+        status: "match",
+        candidates: [
+          (() => {
+            // Batch CalibrationMatch has no sessionId field (it's implied by
+            // the enclosing SessionResult), unlike suggest's CalibrationMatch.
+            const { sessionId: _omit, ...candidate } = suggestMatch();
+            return candidate;
+          })(),
+        ],
+      },
+    ],
+  },
+  true
+);
+
+validate(
+  "T037 calibration.match.suggest.batch partial response is valid",
+  batchResponseSchema,
+  {
+    status: "partial",
+    contractVersion: "1.0",
+    requestId,
+    results: [{ sessionId, calibrationType: "flat", status: "observer_location_missing" }],
+    errors: [
+      {
+        code: "session.not_found",
+        message: "Session no longer exists.",
+        sessionId: "9d8e7f6a-5b4c-4a3e-9e2a-0b1c2d3e4f5a",
+      },
+    ],
+  },
+  true
+);
+
+validate(
+  "T037 calibration.match.suggest.batch all-error response is valid",
+  batchResponseSchema,
+  {
+    status: "error",
+    contractVersion: "1.0",
+    requestId,
+    errors: [{ code: "contract.version_unsupported", message: "Unsupported contract version." }],
+  },
+  true
+);
+
+validate(
+  "T037 DRIFT: batch partial status without 'errors' must be rejected",
+  batchResponseSchema,
+  {
+    status: "partial",
+    contractVersion: "1.0",
+    requestId,
+    results: [{ sessionId, calibrationType: "flat", status: "observer_location_missing" }],
+  },
+  false
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spec 012 T017 — artifact.classify error-path conformance (complements the
+// T063-D success/drift fixtures above): artifact.not_found and a request
+// carrying kind=null (clear override, A6).
+// Schema: specs/012-processing-artifact-observation/contracts/artifact.classify.json
+// ─────────────────────────────────────────────────────────────────────────────
+
+const artifactRequestSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:test:artifact-classify-request",
+  $ref: `${artifactClassifyFullSchema.$id}#/$defs/Request`,
+};
+
+validate(
+  "T017 artifact.classify clear-override request (kind: null) is valid",
+  artifactRequestSchema,
+  {
+    contractVersion: "2.0.0",
+    requestId,
+    artifactId: "art-001",
+    kind: null,
+  },
+  true
+);
+
+validate(
+  "T017 artifact.classify artifact.not_found error response is valid",
+  artifactResponseSchema,
+  {
+    status: "error",
+    contractVersion: "2.0.0",
+    requestId,
+    error: { code: "artifact.not_found", message: "No artifact exists with that id." },
+  },
+  true
+);
+
+validate(
+  "T017 DRIFT: artifact.classify request with invalid kind enum value must be rejected",
+  artifactRequestSchema,
+  {
+    contractVersion: "2.0.0",
+    requestId,
+    artifactId: "art-001",
+    kind: "raw",
+  },
+  false
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spec 025 T009/T029/T035/T036/T048 — plan.apply/cancel/item.skip/item.retry/
+// resume response shapes. These contracts nest `$defs` off the schema root
+// (not off a $id-addressable Request/Response pair), so build a wrapper that
+// carries the response variant's shape plus the root `$defs` for `$ref`
+// resolution instead of using `ajv.addSchema`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function responseSchema(fullSchema, testId) {
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: `urn:test:${testId}`,
+    oneOf: fullSchema.properties.response.oneOf,
+    $defs: fullSchema.$defs,
+  };
+}
+
+// Request-side counterpart of responseSchema(), for schemas (like the
+// native.* contracts below) whose request shape also needs standalone
+// validation rather than just the response.
+function requestSchema(fullSchema, testId) {
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: `urn:test:${testId}`,
+    ...fullSchema.properties.request,
+    $defs: fullSchema.$defs,
+  };
+}
+
+// T009: plan.apply response shape (success + failure).
+const planApplySchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.apply.json");
+const planApplyResponseSchema = responseSchema(planApplySchema, "plan-apply-response");
+
+validate(
+  "T009 plan.apply success response is valid",
+  planApplyResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    runId: "run-001",
+    newState: "applying",
+  },
+  true
+);
+
+validate(
+  "T009 plan.apply failure response (plan.invalid_state) is valid",
+  planApplyResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "plan.invalid_state", message: "plan is not approved", currentState: "applying" }],
+  },
+  true
+);
+
+validate(
+  "T009 DRIFT: plan.apply success without 'runId' must be rejected",
+  planApplyResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    newState: "applying",
+  },
+  false
+);
+
+// T029 (spec 025): plan.cancel response shape.
+const planCancelSchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.cancel.json");
+const planCancelResponseSchema = responseSchema(planCancelSchema, "plan-cancel-response");
+
+validate(
+  "025-T029 plan.cancel success response is valid",
+  planCancelResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    cancelledAt: "2026-07-09T00:00:00Z",
+    itemsApplied: 3,
+    itemsCancelled: 2,
+  },
+  true
+);
+
+validate(
+  "025-T029 plan.cancel plan.not_in_apply failure response is valid",
+  planCancelResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "plan.not_in_apply", message: "plan is not applying or paused", currentState: "applied" }],
+  },
+  true
+);
+
+// T035: plan.item.skip response shape.
+const planItemSkipSchema = loadSchema(
+  "specs/025-filesystem-plan-application/contracts/plan.item.skip.json"
+);
+const planItemSkipResponseSchema = responseSchema(planItemSkipSchema, "plan-item-skip-response");
+
+validate(
+  "T035 plan.item.skip success response is valid",
+  planItemSkipResponseSchema,
+  { status: "success", contractVersion: "2.0.0", requestId, itemId: "item-001", newState: "skipped" },
+  true
+);
+
+validate(
+  "T035 plan.item.skip item.not_pending failure response is valid",
+  planItemSkipResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "item.not_pending", message: "item is not pending", currentItemState: "succeeded" }],
+  },
+  true
+);
+
+// T036: plan.item.retry response shape.
+const planItemRetrySchema = loadSchema(
+  "specs/025-filesystem-plan-application/contracts/plan.item.retry.json"
+);
+const planItemRetryResponseSchema = responseSchema(planItemRetrySchema, "plan-item-retry-response");
+
+validate(
+  "T036 plan.item.retry success response is valid",
+  planItemRetryResponseSchema,
+  { status: "success", contractVersion: "2.0.0", requestId, itemId: "item-001", newState: "applying" },
+  true
+);
+
+validate(
+  "T036 plan.item.retry item.not_failed failure response is valid",
+  planItemRetryResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "item.not_failed", message: "item is not failed", currentItemState: "pending" }],
+  },
+  true
+);
+
+// T048: plan.resume response shape — success, `run.not_paused`, and the
+// R-Pause-1 re-validation failure codes. `resume_plan` (see
+// crates/app/core/src/plan_apply.rs) now re-checks the pause condition
+// against the item that triggered it and produces `item.still.stale` /
+// `volume.still.unavailable` / `disk.still.full` for real when it is not
+// resolved (issue #575); real-backend coverage lives in
+// crates/app/core/tests/plan_resume_integration.rs. This harness only
+// checks the response shape is schema-valid, independent of the Rust
+// backend.
+const planResumeSchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.resume.json");
+const planResumeResponseSchema = responseSchema(planResumeSchema, "plan-resume-response");
+
+validate(
+  "T048 plan.resume success response is valid",
+  planResumeResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    runId: "run-001",
+    resumedAt: "2026-07-09T00:00:00Z",
+  },
+  true
+);
+
+validate(
+  "T048 plan.resume run.not_paused failure response is valid",
+  planResumeResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "run.not_paused", message: "plan is not paused" }],
+  },
+  true
+);
+
+validate(
+  "T048 plan.resume item.still.stale failure response is valid",
+  planResumeResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "item.still.stale", message: "source file changed again while paused" }],
+  },
+  true
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #717 SC-005 (spec 004): the 3 native.* contracts had zero Draft-2020-12
+// schema coverage in this harness — only syntax-level json-schema-to-typescript
+// generation exercised them. Covers request + both response variants for each.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const nativeReveal = loadSchema("specs/004-native-filesystem-controls/contracts/native.reveal.json");
+const nativeRevealRequestSchema = requestSchema(nativeReveal, "native-reveal-request");
+const nativeRevealResponseSchema = responseSchema(nativeReveal, "native-reveal-response");
+
+validate(
+  "native.reveal request valid",
+  nativeRevealRequestSchema,
+  {
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    path: "/mnt/library/M31/notes/manifest.md",
+    entityKind: "project_manifest",
+    entityId: "proj-1",
+  },
+  true
+);
+
+validate(
+  "native.reveal DRIFT: missing 'path' must be rejected",
+  nativeRevealRequestSchema,
+  { contractVersion: "2.0.0", requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+  false
+);
+
+validate(
+  "native.reveal success response valid",
+  nativeRevealResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    revealed: true,
+    selection: "target",
+  },
+  true
+);
+
+validate(
+  "native.reveal failure response valid (path.not_exists)",
+  nativeRevealResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    errors: [{ code: "path.not_exists", message: "Path does not exist" }],
+  },
+  true
+);
+
+const nativeDirPick = loadSchema(
+  "specs/004-native-filesystem-controls/contracts/native.directory.pick.json"
+);
+const nativeDirPickRequestSchema = requestSchema(nativeDirPick, "native-directory-pick-request");
+const nativeDirPickResponseSchema = responseSchema(nativeDirPick, "native-directory-pick-response");
+
+validate(
+  "native.directory.pick request valid (defaultPath omitted)",
+  nativeDirPickRequestSchema,
+  { contractVersion: "2.0.0", requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6" },
+  true
+);
+
+validate(
+  "native.directory.pick success response valid (cancelled)",
+  nativeDirPickResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    path: null,
+    cancelled: true,
+  },
+  true
+);
+
+validate(
+  "native.directory.pick failure response valid (picker.unavailable)",
+  nativeDirPickResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    errors: [{ code: "picker.unavailable", message: "No display server available" }],
+  },
+  true
+);
+
+const nativeFilePick = loadSchema(
+  "specs/004-native-filesystem-controls/contracts/native.file.pick.json"
+);
+const nativeFilePickRequestSchema = requestSchema(nativeFilePick, "native-file-pick-request");
+const nativeFilePickResponseSchema = responseSchema(nativeFilePick, "native-file-pick-response");
+
+validate(
+  "native.file.pick request valid",
+  nativeFilePickRequestSchema,
+  {
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    filters: [{ name: "FITS", extensions: ["fits", "fit"] }],
+  },
+  true
+);
+
+validate(
+  "native.file.pick DRIFT: empty filters array must be rejected",
+  nativeFilePickRequestSchema,
+  { contractVersion: "2.0.0", requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6", filters: [] },
+  false
+);
+
+validate(
+  "native.file.pick success response valid",
+  nativeFilePickResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    path: "/mnt/library/masters/flat_L.fits",
+    selectedFilter: "FITS",
+    cancelled: false,
+  },
+  true
+);
+
+validate(
+  "native.file.pick failure response valid (filters.invalid)",
+  nativeFilePickResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    errors: [{ code: "filters.invalid", message: "'*' only valid in an 'All files' filter" }],
+  },
+  true
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

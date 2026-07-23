@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * TargetsPage — spec 043 shared list-page adoption (task #73), spec 044 mock
  * columns + filter-by-filter + altitude threshold setting.
@@ -21,7 +24,7 @@
  * `?selected=<uuid>` and the detail pane loads the full gen-3 detail from
  * SQLite.
  *
- * #103a: The page root carries `.alm-targets-page` so the layout fix scoped
+ * #103a: The page root carries `.pv-targets-page` so the layout fix scoped
  * to it ensures the virtualizer scroll container always gets a definite measured
  * height in Tauri/Windows WebView.
  *
@@ -43,16 +46,16 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { commands } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
 import type { TargetListItem } from '@/bindings/index';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { m } from '@/lib/i18n';
 import { Btn, EmptyState } from '@/ui';
 import { useGrouping } from '@/lib/use-grouping';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
+import { useTargets } from './store';
 import {
   filterByCatalogues,
   PLANNER_CATALOGS,
@@ -62,18 +65,17 @@ import {
   DEFAULT_ENABLED_CATALOGUES,
   loadDefaultCatalogues,
 } from './catalogue-settings';
-import {
-  TargetsTable,
-  DEFAULT_TARGET_SORT,
-} from './TargetsTable';
+import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
 import type { TargetSort, TargetSortCol } from './TargetsTable';
 import { useAltitudeThreshold } from './altitude-settings';
 import { useFavourites } from './useFavourites';
 import { useObservingNight } from './astro/observing-night';
 import { computeObservingNight, type ObservingNight } from './astro/moon-state';
 import { useObserverSiteExists } from './site-gate';
-import { MoonSummary } from './MoonSummary';
+import { PlannerDatePicker } from './PlannerDatePicker';
+import { PlannerComputedFor } from './PlannerComputedFor';
 import { useGuidanceParams, loadGuidanceParams } from './guidance-settings';
+import { usePlannerSensorConfig } from './planner-sensor';
 import { deriveRowMoonPlanning } from './astro/row-planning';
 import { recommendationLabel } from './FilterBadges';
 import type { Recommendation } from './astro/moon-avoidance';
@@ -184,10 +186,18 @@ const RECOMMENDATION_FILTER_OPTIONS = (): FilterOption[] => [
   { value: 'unknown', label: recommendationLabel('unknown') },
 ];
 
+/**
+ * Progressive-reveal chunk size for the Planner catalogue load (#573). See
+ * the `revealCount` effects below for why: TargetsTable's per-row astronomy
+ * pass over the WHOLE catalogue synchronously on first render froze the app,
+ * so `TargetsPage` grows what it feeds TargetsTable in chunks of this size
+ * instead of handing over the full (possibly ~13k-row) set at once.
+ */
+const REVEAL_CHUNK = 300;
+
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
-  const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [addOpen, setAddOpen] = useState(false);
   /** '' = show full Planner catalog; 'my' = My Targets stub (#91). */
   const [myTargetsFilter, setMyTargetsFilter] = useState('');
@@ -212,7 +222,9 @@ export function TargetsPage() {
    * categories. Empty = no filter. When non-empty, only targets whose REAL
    * derived recommendation matches one of the selected categories are shown.
    */
-  const [filterRecommendations, setFilterRecommendations] = useState<Recommendation[]>([]);
+  const [filterRecommendations, setFilterRecommendations] = useState<
+    Recommendation[]
+  >([]);
   /**
    * User-configured usable-altitude threshold from Settings → Target Planner.
    * Subscribes to localStorage so updates in the Settings pane immediately
@@ -246,6 +258,9 @@ export function TargetsPage() {
    * recompute immediately on a settings change (SC-008).
    */
   const guidanceParams = useGuidanceParams();
+  // FR-036/T046: OSC single-pass model when equipment is unambiguously OSC;
+  // null (mono/unknown) keeps the per-filter model unchanged (FR-038).
+  const sensorConfig = usePlannerSensorConfig();
 
   /**
    * task #18: client-side favourite set.
@@ -277,25 +292,70 @@ export function TargetsPage() {
     void loadGuidanceParams();
   }, []);
 
-  const load = useCallback(() => {
-    setListState({ status: 'loading' });
-    commands
-      .targetList()
-      .then(unwrap)
-      .then((items) => setListState({ status: 'loaded', items }))
-      .catch(() => setListState({ status: 'error', message: m.targets_page_error_load() }));
-  }, []);
+  const targetsQuery = useTargets();
+  const load = targetsQuery.refetch;
+  // `listState` mirrors the pre-migration state machine so the rest of this
+  // component (progressive reveal, error/loading branches) stays unchanged.
+  // `loading` covers BOTH the initial fetch and any explicit `load()` refetch
+  // (`isFetching`, not just "no data yet") — matching the old `load()`, which
+  // always flipped back to 'loading' synchronously on every reload.
+  const listState: ListState = targetsQuery.error
+    ? { status: 'error', message: m.targets_page_error_load() }
+    : targetsQuery.loading || !targetsQuery.data
+      ? { status: 'loading' }
+      : { status: 'loaded', items: targetsQuery.data };
+
+  /**
+   * Progressive reveal of the Planner catalogue (#573): `commands.targetList()`
+   * IPC-loads every target at once (thousands of rows), and TargetsTable's
+   * per-row astronomy pass over the WHOLE set synchronously on first render is
+   * what froze the app on open. Capping what reaches TargetsTable to a small
+   * first chunk, then growing it in the background via `setTimeout` (a real
+   * macrotask boundary, so the browser gets to paint/handle input between
+   * chunks) keeps the page interactive immediately. TargetsTable's per-target-
+   * id row cache (see its module doc) means each growth step only pays for the
+   * newly-revealed delta, not the whole set again — so total work stays
+   * roughly linear in catalogue size instead of blocking once, all at once.
+   * Resets to the first chunk on every fresh `load()` (mount + "Add target").
+   */
+  const [revealCount, setRevealCount] = useState(REVEAL_CHUNK);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (listState.status === 'loading') setRevealCount(REVEAL_CHUNK);
+  }, [listState.status]);
+
+  useEffect(() => {
+    if (listState.status !== 'loaded') return;
+    const total = listState.items.length;
+    if (revealCount >= total) return;
+    const handle = setTimeout(() => {
+      setRevealCount((n) => Math.min(n + REVEAL_CHUNK, total));
+    }, 0);
+    return () => clearTimeout(handle);
+  }, [listState, revealCount]);
 
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   const clearSelection = useCallback(
-    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
+  );
+
+  // #735: Targets was the one ledger page never wired for stale-id cleanup
+  // (tasks.md T030 claimed all six), so a `?selected=<uuid>` for a deleted
+  // target persisted forever. Matched against the FULL query data rather than
+  // the progressively-revealed slice — an unrevealed target is present, not
+  // stale. `status === 'loading'` gates the cold-reload race (#735 item 1).
+  useStaleSelectionCleanup(
+    selected,
+    listState.status !== 'loaded' ||
+      listState.items.some((t) => t.id === selected),
+    clearSelection,
   );
 
   const handleAdded = useCallback(
@@ -308,7 +368,9 @@ export function TargetsPage() {
 
   const handleSort = useCallback((col: TargetSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 
@@ -324,20 +386,47 @@ export function TargetsPage() {
   );
 
   /**
+   * #573: the "All targets" view is what the progressive reveal caps — a
+   * prefix slice of the full filtered catalogue, growing via `revealCount`.
+   * Order is the raw fetch order (not the user's chosen sort — TargetsTable
+   * sorts whatever it's given), so this only affects which rows exist during
+   * the brief initial-load window, not final correctness once fully loaded.
+   */
+  const revealedPlannerTargets = useMemo(
+    () => plannerTargets.slice(0, revealCount),
+    [plannerTargets, revealCount],
+  );
+
+  /**
    * task #18: when "My Targets" is active, filter the Planner catalog to only
    * the targets the user has starred (stored client-side via useFavourites).
    * STUB: favouriteIds comes from localStorage only until task #54 lands and
    * provides real backend "has linked sessions/projects" data.
+   *
+   * Uses the FULL `plannerTargets` (not the progressive-reveal slice, #573):
+   * favourites are a small set regardless of catalogue size, so there's no
+   * perf reason to cap it, and capping it would make a starred target
+   * transiently vanish from "My Targets" until reveal catches up to it.
    */
   const tabTargets = useMemo(() => {
-    if (myTargetsFilter !== MY_TARGETS_VALUE) return plannerTargets;
+    if (myTargetsFilter !== MY_TARGETS_VALUE) return revealedPlannerTargets;
     if (favouriteIds.size === 0) return MY_TARGETS_EMPTY;
     return plannerTargets.filter((t) => favouriteIds.has(t.id));
-  }, [myTargetsFilter, plannerTargets, favouriteIds]);
+  }, [myTargetsFilter, revealedPlannerTargets, plannerTargets, favouriteIds]);
 
   const visibleTargets = useMemo(() => {
     const q = search.trim();
-    let result = q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
+    // #919: search must find any matching target immediately, even one not
+    // yet revealed by the progressive-reveal loader (#573) — same carve-out
+    // "My Targets" already gets. On "My Targets", tabTargets is already the
+    // full (unclipped) favourite set, so search stays scoped to favourites;
+    // elsewhere search bypasses the reveal cap and matches the full catalogue.
+    const searchBase = q
+      ? myTargetsFilter === MY_TARGETS_VALUE
+        ? tabTargets
+        : plannerTargets
+      : tabTargets;
+    let result = q ? searchBase.filter((t) => matchesSearch(t, q)) : tabTargets;
 
     // Filter-by-recommendation (spec 047 US3, FR-011): keep only targets whose
     // REAL derived recommendation is one of the selected categories.
@@ -347,13 +436,25 @@ export function TargetsPage() {
     if (filterRecommendations.length > 0) {
       const selected = new Set(filterRecommendations);
       result = result.filter((t) => {
-        const { recommendation } = deriveRowMoonPlanning(t, night, guidanceParams);
+        const { recommendation } = deriveRowMoonPlanning(
+          t,
+          night,
+          guidanceParams,
+        );
         return selected.has(recommendation);
       });
     }
 
     return result;
-  }, [tabTargets, search, filterRecommendations, night, guidanceParams]);
+  }, [
+    tabTargets,
+    plannerTargets,
+    myTargetsFilter,
+    search,
+    filterRecommendations,
+    night,
+    guidanceParams,
+  ]);
 
   // Per the top-bar convention (task #80/#91): no title/summary in the bar —
   // the left nav names the page and per-page counts move to the status bar.
@@ -419,38 +520,48 @@ export function TargetsPage() {
         // Per-item actions ("+ New project here") live in TargetDetailV2's
         // detail body, not the top bar.
         //
-        // Planner astronomy (spec 047): tonight's Moon summary sits left of the
-        // action, gated behind a default observing site (D7). Until a site
-        // exists the slot shows the set-up-your-site prompt.
+        // #618: the Moon-phase widget (and its no-site fallback prompt) moved
+        // out of this pinned bar and into TargetDetailV2's header — folding
+        // it into the detail rail per the design-review recommendation so the
+        // Targets page's top-bar stack is a single ~44px band like the other
+        // list pages, instead of wrapping to a third stacked row before any
+        // table data is visible.
         <>
-          {night ? (
-            <MoonSummary night={night} />
-          ) : (
-            <div
-              className="alm-planner-site-prompt"
-              data-testid="planner-site-prompt"
-            >
-              <span className="alm-planner-site-prompt__title">
-                {m.targets_planner_site_prompt_title()}
-              </span>
-              <span className="alm-planner-site-prompt__desc">
-                {m.targets_planner_site_prompt_desc()}
-              </span>
-            </div>
-          )}
-          <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
+          {/* FR-033/T043: always-visible computation-context label — the one
+              place disclosing site/twilight/threshold behind every number. */}
+          <PlannerComputedFor usableAltDeg={usableAltDeg} />
+          {/* US2/T024: plan an arbitrary future night — every table/detail
+              computation reads this chosen date (SC-004). */}
+          <PlannerDatePicker />
+          {/* #618: primary CTA — the page's one primary action. Also the
+              onboarding spotlight anchor for `targets.resolve_first`: this
+              button opens the SIMBAD resolve flow, so it is the control to
+              point at (not the dialog's own confirm, which does not exist
+              until the dialog is open). */}
+          <Btn
+            size="sm"
+            variant="primary"
+            data-guide-anchor="targets.resolve-cta"
+            onClick={() => setAddOpen(true)}
+          >
+            {m.targets_add_target()}
+          </Btn>
         </>
       }
     />
   );
 
   return (
-    // .alm-targets-page scopes the layout fix from targets-fixes.css (#103a):
+    // .pv-targets-page scopes the layout fix from targets-fixes.css (#103a):
     // the virtualizer scroll container gets a definite measured height in the
-    // Tauri/Windows WebView by overriding .alm-listpage__main to overflow:hidden
-    // and positioning .alm-targets-table__wrap absolutely within it.
-    <div className="alm-targets-page">
-      <AddTargetDialog open={addOpen} onClose={() => setAddOpen(false)} onAdded={handleAdded} />
+    // Tauri/Windows WebView by overriding .pv-listpage__main to overflow:hidden
+    // and positioning .pv-targets-table__wrap absolutely within it.
+    <div className="pv-targets-page">
+      <AddTargetDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={handleAdded}
+      />
       <ListPageLayout
         topBar={topBar}
         detail={
@@ -460,14 +571,24 @@ export function TargetsPage() {
               item={plannerTargets.find((t) => t.id === selected) ?? null}
               usableAltDeg={usableAltDeg}
               night={night}
+              sensorConfig={sensorConfig}
+              // #658: an alias add/remove or display-alias set/clear in the
+              // detail pane must refresh the list payload search/rows read
+              // from, or a fresh alias stays unsearchable and a new display
+              // label never reaches the list row.
+              onMutated={load}
             />
           ) : undefined
         }
         onCloseDetail={selected ? clearSelection : undefined}
-        detailLabel="Target details"
+        detailLabel={m.targets_detail_label()}
+        dockId="targets"
       >
         {listState.status === 'error' ? (
-          <EmptyState title={m.settings_advanced_log_error()} desc={listState.message} />
+          <EmptyState
+            title={m.settings_advanced_log_error()}
+            desc={listState.message}
+          />
         ) : (
           <TargetsTable
             targets={visibleTargets}
@@ -485,6 +606,8 @@ export function TargetsPage() {
             // Settings → Target Planner recompute pills/recommendation here
             // without a restart.
             guidanceParams={guidanceParams}
+            // FR-036: OSC single-pass headline when equipment is OSC.
+            sensorConfig={sensorConfig}
             // task #18: pass the local favourite set down so the star column renders correctly.
             // STUB: localStorage only until task #54 backend linkage lands.
             favouriteIds={favouriteIds}
@@ -492,10 +615,10 @@ export function TargetsPage() {
             emptyMessage={
               isMyTargets
                 ? favouriteIds.size === 0
-                  // No stars yet — nudge the user to star something.
-                  ? m.targets_page_my_targets_no_favs()
-                  // Stars exist but filters excluded them all.
-                  : m.targets_page_my_targets_no_match()
+                  ? // No stars yet — nudge the user to star something.
+                    m.targets_page_my_targets_no_favs()
+                  : // Stars exist but filters excluded them all.
+                    m.targets_page_my_targets_no_match()
                 : m.targets_page_no_match()
             }
           />

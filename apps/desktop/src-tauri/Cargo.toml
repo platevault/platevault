@@ -1,6 +1,6 @@
 [package]
 name = "desktop_shell"
-version = "0.1.0"
+version = "0.6.0"
 edition.workspace = true
 license.workspace = true
 
@@ -21,6 +21,15 @@ audit = { path = "../../../crates/audit" }
 # spec 042 (T250): the SIMBAD resolver/seed surface this shell consumes moved
 # from `targeting` into the `targeting_resolver` crate.
 targeting_resolver = { path = "../../../crates/targeting/resolver" }
+# spec 052 P1: AppState owns the shared redb resolve-cache handle directly
+# (Cache trait for .cache()/search, identity::namespace for warming).
+simbad-resolver = "0.4.0"
+# target.astro_format.batch: sexagesimal RA/Dec formatting (adopt target-match).
+targeting = { path = "../../../crates/targeting" }
+# target.moon_opposition.batch (#634): geocentric Sun/Moon position
+# (sun_position/moon_position — not re-exported by `targeting`, which only
+# re-exports the coordinate primitives).
+skymath = "0.6.0"
 contracts_core = { path = "../../../crates/contracts/core" }
 domain_core = { path = "../../../crates/domain/core" }
 fs_inventory = { path = "../../../crates/fs/inventory" }
@@ -41,6 +50,8 @@ tauri-plugin-window-state = { workspace = true }
 tauri-plugin-log = { workspace = true }
 tauri-plugin-notification = { workspace = true }
 tauri-plugin-updater = { workspace = true }
+# Relaunch-to-apply step for the updater plugin (spec 051 US10, T056).
+tauri-plugin-process = { workspace = true }
 tauri-plugin-prevent-default = { workspace = true }
 tauri-specta = { workspace = true }
 # E2E automation surface — ONLY compiled when the `e2e` feature is enabled.
@@ -51,6 +62,8 @@ thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Rotating diagnostics log file (spec 051 US7, T041/T042) — alongside stderr.
+tracing-appender = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
 
@@ -58,6 +71,7 @@ uuid = { workspace = true }
 # The `test` feature gates the `tauri::test` module (mock runtime, IPC
 # helpers). Only dev-dependencies pull it in so release builds stay clean.
 tauri = { workspace = true, features = ["test"] }
+tempfile = { workspace = true }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries MUST NOT enable this.

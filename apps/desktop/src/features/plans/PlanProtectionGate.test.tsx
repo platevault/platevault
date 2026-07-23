@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vitest unit tests for PlanProtectionGate (spec 016 US3, T024).
  *
@@ -33,7 +36,9 @@ const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeCheckResponse(overrides: Partial<PlanProtectionCheckResponse> = {}) {
+function makeCheckResponse(
+  overrides: Partial<PlanProtectionCheckResponse> = {},
+) {
   return ok<PlanProtectionCheckResponse>({
     planId: 'plan-1',
     hasProtectedItems: false,
@@ -60,10 +65,15 @@ describe('PlanProtectionGate', () => {
 
   it('shows no-protected-items message when plan is clean', async () => {
     mockCheck.mockResolvedValue(
-      makeCheckResponse({ hasProtectedItems: false, nonBlockingSummary: { normalCount: 3, unprotectedCount: 0 } }),
+      makeCheckResponse({
+        hasProtectedItems: false,
+        nonBlockingSummary: { normalCount: 3, unprotectedCount: 0 },
+      }),
     );
     const onChange = vi.fn();
-    render(<PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />);
+    render(
+      <PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText(/No protected items/i)).toBeTruthy();
@@ -125,7 +135,9 @@ describe('PlanProtectionGate', () => {
         nonBlockingSummary: { normalCount: 0, unprotectedCount: 0 },
       }),
     );
-    render(<PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />);
+    render(
+      <PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />,
+    );
 
     await waitFor(() => screen.getByRole('button', { name: /Acknowledge/i }));
     fireEvent.click(screen.getByRole('button', { name: /Acknowledge/i }));
@@ -135,7 +147,13 @@ describe('PlanProtectionGate', () => {
       expect(screen.getByText('All acknowledged')).toBeTruthy();
     });
     // protectionPlanAcknowledged was called with correct args.
-    expect(mockAck).toHaveBeenCalledWith('plan-1', 'item-xyz', null, 'protected', 'Protected.');
+    expect(mockAck).toHaveBeenCalledWith(
+      'plan-1',
+      'item-xyz',
+      null,
+      'protected',
+      'Protected.',
+    );
     // onAcknowledgedChange called with true (all 1 items done).
     expect(onChange).toHaveBeenCalledWith(true);
   });
@@ -147,6 +165,51 @@ describe('PlanProtectionGate', () => {
     await waitFor(() => {
       expect(screen.getByText(/Protection check failed to load/i)).toBeTruthy();
     });
+  });
+
+  // #807: acknowledging a protected item never unlocks a successful apply —
+  // the backend permanently refuses any mutating action on a protected item
+  // (`fs/executor/run.rs`). The UI must never imply otherwise.
+  it('never implies acknowledging unlocks a successful apply', async () => {
+    mockCheck.mockResolvedValue(
+      makeCheckResponse({
+        hasProtectedItems: true,
+        protectedItems: [
+          {
+            itemId: 'item-xyz',
+            sourceId: null,
+            level: 'protected',
+            matchedCategories: [],
+            originalAction: 'delete',
+            rewrittenAction: 'archive',
+            requiresAcknowledgement: true,
+            reason: 'Protected.',
+          },
+        ],
+        nonBlockingSummary: { normalCount: 0, unprotectedCount: 0 },
+      }),
+    );
+    render(<PlanProtectionGate planId="plan-1" />);
+
+    // Always-shown per-item honesty note, regardless of acknowledgement.
+    await waitFor(() => {
+      expect(
+        screen.getByText(/excluded from archive\/move\/delete/i),
+      ).toBeTruthy();
+    });
+    // The rewritten action is shown as context, never as "will run".
+    expect(screen.queryByText(/rewritten by protection policy/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Acknowledge/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('All acknowledged')).toBeTruthy();
+    });
+    // The old "you may proceed" success-implying copy must be gone.
+    expect(
+      screen.queryByText(/you may proceed with plan execution/i),
+    ).toBeNull();
+    expect(screen.getByText(/does not override protection/i)).toBeTruthy();
   });
 
   it('shows non-blocking summary counts', async () => {

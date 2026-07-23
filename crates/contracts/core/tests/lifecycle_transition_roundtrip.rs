@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Regression tests for issue #423: `TransitionRequest` must accept the
 //! canonical flat discriminated envelope from the source-of-truth contract
 //! (`packages/contracts/src/generated/lifecycle.transition.d.ts`) and must

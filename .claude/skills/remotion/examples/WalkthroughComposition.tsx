@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import {Composition} from 'remotion';
 import {Sequence} from 'remotion';
 import {fade} from '@remotion/transitions/fade';

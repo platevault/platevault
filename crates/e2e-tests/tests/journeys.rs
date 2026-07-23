@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI E2E journeys.
 //!
 //! Every journey launches the real `desktop_shell` binary (built with
@@ -34,7 +37,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -159,13 +162,14 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     // 1. Register a disposable light-frames root with one real FITS file.
     let root_dir = tempfile::tempdir()?;
     let file_name = "light_001.fits";
-    let original_path = write_minimal_fits(
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         file_name,
         "Light Frame",
         Some("M 42"),
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
 
@@ -197,29 +201,15 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
 
     // 2. Scan + classify + confirm — this is the real reviewable plan (FR-009
     // requires the plan to exist and be reviewable before it applies).
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let items = scan["items"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
-    anyhow::ensure!(
-        !items.is_empty(),
-        "expected inbox.scan.folder to discover the fixture file: {scan}"
-    );
-    let inbox_item_id = items[0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("scanned item has no inboxItemId: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -319,13 +309,14 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     let root_dir = tempfile::tempdir()?;
-    let original_path = write_minimal_fits(
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-11T21:30:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
 
@@ -350,22 +341,15 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
         )
         .await?;
 
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -402,11 +386,18 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
     let _: serde_json::Value =
         app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
 
-    // Session grouping is event-driven (the plan-listener reacts to the
-    // plan-applied event asynchronously) — poll `sessions.list` for the real,
-    // grouped-and-resolved session instead of a blind sleep.
+    // Poll `sessions.list` for the real, grouped-and-resolved session instead
+    // of a blind sleep.
+    //
+    // NOTE: the previous comment here claimed this is event-driven — "the
+    // plan-listener reacts to the plan-applied event asynchronously". That is
+    // true of session GROUPING, but NOT of the `targetIds` this predicate
+    // waits on. `backfill_session_targets` has exactly one caller in the app,
+    // the 30 s-interval ingest-resolution drain, so this wait is bounded by
+    // that drain's cadence and needs [`DRAIN_BACKED_TIMEOUT`], not the plain
+    // 30 s one. Waiting 30 s on a 30 s-period task is what flaked (#1205).
     let sessions: serde_json::Value = app
-        .invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
+        .invoke_until("sessions_list", json!({}), DRAIN_BACKED_TIMEOUT, |v: &serde_json::Value| {
             v.as_array().is_some_and(|arr| {
                 arr.iter().any(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
             })
@@ -580,11 +571,13 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
 /// `plans.approve`, `plans.apply.direct`, `plans.apply.status`.
 ///
 /// FORMERLY a documented gap: applying the generated plan needed
-/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
-/// argument this WebDriver harness cannot construct. `plans.apply.direct`
-/// (spec 037) is the channel-free equivalent — same executor, same durable
-/// audit trail, no `Channel` required — so this journey now drives the real
-/// filesystem mutation instead of stopping at `approved`.
+/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress argument
+/// this harness declines to construct — see the module docs: it is buildable
+/// from a WebDriver script, but only by reaching into Tauri internals.
+/// `plans.apply.direct` (spec 037) is the channel-free equivalent — same
+/// executor, same durable audit trail, no `Channel` required — so this
+/// journey now drives the real filesystem mutation instead of stopping at
+/// `approved`.
 ///
 /// `source.protection.set` marks this project `normal` before generating the
 /// plan: the app's safe-by-default protection level is `"protected"`
@@ -635,13 +628,15 @@ async fn cleanup_plan_review() -> anyhow::Result<()> {
     // step below refuses every item with `protected.source` — not a bug,
     // the documented constitution-II gate — so a real cleanup flow always
     // sets this (or the global default) before a first-time cleanup.
+    // 2-level model (issue #506): "normal" is retired — "unprotected" is the
+    // non-gating override this test needs.
     let _: serde_json::Value = app
         .invoke(
             "source_protection_set",
             json!({
                 "request": {
                     "sourceId": project_id,
-                    "level": "normal",
+                    "level": "unprotected",
                     "blockPermanentDelete": null,
                     "categories": null,
                 }

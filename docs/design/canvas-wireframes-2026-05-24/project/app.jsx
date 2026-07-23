@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // app.jsx — Compose the design canvas with all wireframes + Tweaks panel.
 // IMPORTANT: DCArtboard must be a *direct* JSX child of DCSection — wrappers break the child filter.
 

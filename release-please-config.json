@@ -3,6 +3,7 @@
   "separate-pull-requests": false,
   "include-component-in-tag": false,
   "bump-minor-pre-major": true,
+  "last-release-sha": "9c61724fd29d999e4d8fa616f063f4898bc02c30",
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },

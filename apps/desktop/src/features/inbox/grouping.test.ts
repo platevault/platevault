@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Unit tests for the multi-level grouping engine (spec 041, US2 / FR-009).
  *
@@ -13,6 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { groupByDimensions, flattenLeafItems, NONE_KEY } from './grouping';
+import { assertDefined } from '@/test/assertDefined';
 
 // ── Fixture type ──────────────────────────────────────────────────────────────
 
@@ -29,8 +33,11 @@ const accessors = {
 
 // ── Test data ─────────────────────────────────────────────────────────────────
 
-const makeItem = (id: string, target: string | null, frameType: string | null): Item =>
-  ({ id, target, frameType });
+const makeItem = (
+  id: string,
+  target: string | null,
+  frameType: string | null,
+): Item => ({ id, target, frameType });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -68,17 +75,21 @@ describe('groupByDimensions', () => {
 
     expect(result).toHaveLength(2);
 
-    const m31 = result.find((n) => n.label === 'M31');
-    const ngc  = result.find((n) => n.label === 'NGC 1234');
+    const m31 = assertDefined(
+      result.find((n) => n.label === 'M31'),
+      'M31 group',
+    );
+    const ngc = assertDefined(
+      result.find((n) => n.label === 'NGC 1234'),
+      'NGC 1234 group',
+    );
 
-    expect(m31).toBeDefined();
-    expect(m31!.count).toBe(2);
-    expect(m31!.items).toHaveLength(2);
-    expect(m31!.children).toHaveLength(0);
+    expect(m31.count).toBe(2);
+    expect(m31.items).toHaveLength(2);
+    expect(m31.children).toHaveLength(0);
 
-    expect(ngc).toBeDefined();
-    expect(ngc!.count).toBe(1);
-    expect(ngc!.items).toHaveLength(1);
+    expect(ngc.count).toBe(1);
+    expect(ngc.items).toHaveLength(1);
   });
 
   it('(3) two-level nesting produces correct child structure', () => {
@@ -93,21 +104,33 @@ describe('groupByDimensions', () => {
     // Top level: M31 and NGC 1234.
     expect(result).toHaveLength(2);
 
-    const m31 = result.find((n) => n.label === 'M31')!;
+    const m31 = assertDefined(
+      result.find((n) => n.label === 'M31'),
+      'M31 group',
+    );
     expect(m31.count).toBe(3);
-    expect(m31.items).toHaveLength(0);    // inner node — no items
+    expect(m31.items).toHaveLength(0); // inner node — no items
     expect(m31.children).toHaveLength(2); // light + dark
 
-    const m31Light = m31.children.find((c) => c.label === 'light')!;
+    const m31Light = assertDefined(
+      m31.children.find((c) => c.label === 'light'),
+      'M31/light child',
+    );
     expect(m31Light.count).toBe(2);
     expect(m31Light.items).toHaveLength(2);
     expect(m31Light.children).toHaveLength(0);
 
-    const m31Dark = m31.children.find((c) => c.label === 'dark')!;
+    const m31Dark = assertDefined(
+      m31.children.find((c) => c.label === 'dark'),
+      'M31/dark child',
+    );
     expect(m31Dark.count).toBe(1);
     expect(m31Dark.items[0].id).toBe('c');
 
-    const ngc = result.find((n) => n.label === 'NGC 1234')!;
+    const ngc = assertDefined(
+      result.find((n) => n.label === 'NGC 1234'),
+      'NGC 1234 group',
+    );
     expect(ngc.children).toHaveLength(1);
     expect(ngc.children[0].label).toBe('flat');
     expect(ngc.children[0].items).toHaveLength(1);
@@ -116,7 +139,7 @@ describe('groupByDimensions', () => {
   it('(4) items missing a dimension land in NONE_KEY group sorted last', () => {
     const items = [
       makeItem('a', 'M31', 'light'),
-      makeItem('b', null, 'dark'),   // missing target
+      makeItem('b', null, 'dark'), // missing target
       makeItem('c', 'NGC 1234', 'light'),
     ];
     const result = groupByDimensions(items, ['target'], accessors);
@@ -146,10 +169,10 @@ describe('groupByDimensions', () => {
   it('(5) groups are sorted by label in numeric-aware ascending order', () => {
     const items = [
       makeItem('a', 'NGC 2359', 'light'),
-      makeItem('b', 'NGC 10',   'light'),
-      makeItem('c', 'M110',     'light'),
-      makeItem('d', 'M31',      'light'),
-      makeItem('e', 'M3',       'light'),
+      makeItem('b', 'NGC 10', 'light'),
+      makeItem('c', 'M110', 'light'),
+      makeItem('d', 'M31', 'light'),
+      makeItem('e', 'M3', 'light'),
     ];
     const result = groupByDimensions(items, ['target'], accessors);
 
@@ -161,7 +184,7 @@ describe('groupByDimensions', () => {
 
   it('(5) NONE_KEY group is always last even when alphabetically first', () => {
     const items = [
-      makeItem('a', null, 'light'),   // would sort as '(none)' = before 'Z...'
+      makeItem('a', null, 'light'), // would sort as '(none)' = before 'Z...'
       makeItem('b', 'Ztarget', 'dark'),
     ];
     const result = groupByDimensions(items, ['target'], accessors);
@@ -194,7 +217,10 @@ describe('groupByDimensions', () => {
 
     // Only 'target' active → 2 top-level groups, leaf items present.
     expect(result).toHaveLength(2);
-    const m31 = result.find((n) => n.label === 'M31')!;
+    const m31 = assertDefined(
+      result.find((n) => n.label === 'M31'),
+      'M31 group',
+    );
     expect(m31.items).toHaveLength(2);
   });
 });
@@ -219,25 +245,44 @@ describe('groupByDimensions — count aggregation across nested levels', () => {
       { id: 'd', target: 'M31', frameType: 'dark', filter: null },
       { id: 'e', target: 'NGC 1', frameType: 'flat', filter: 'L' },
     ];
-    const result = groupByDimensions(items, ['target', 'frameType', 'filter'], triAccessors);
+    const result = groupByDimensions(
+      items,
+      ['target', 'frameType', 'filter'],
+      triAccessors,
+    );
 
-    const m31 = result.find((n) => n.label === 'M31')!;
+    const m31 = assertDefined(
+      result.find((n) => n.label === 'M31'),
+      'M31 group',
+    );
     expect(m31.count).toBe(4); // a,b,c,d
     expect(m31.items).toHaveLength(0); // inner node carries no items
 
-    const m31Light = m31.children.find((c) => c.label === 'light')!;
+    const m31Light = assertDefined(
+      m31.children.find((c) => c.label === 'light'),
+      'M31/light child',
+    );
     expect(m31Light.count).toBe(3); // a,b,c
 
     // Deepest level (filter): Ha=2 (a,c), OIII=1 (b). Sum == parent count.
-    const ha = m31Light.children.find((c) => c.label === 'Ha')!;
-    const oiii = m31Light.children.find((c) => c.label === 'OIII')!;
+    const ha = assertDefined(
+      m31Light.children.find((c) => c.label === 'Ha'),
+      'M31/light/Ha child',
+    );
+    const oiii = assertDefined(
+      m31Light.children.find((c) => c.label === 'OIII'),
+      'M31/light/OIII child',
+    );
     expect(ha.count).toBe(2);
     expect(ha.items).toHaveLength(2);
     expect(oiii.count).toBe(1);
     expect(ha.count + oiii.count).toBe(m31Light.count);
 
     // The dark sub-frame has a missing filter → NONE bucket at the deepest level.
-    const m31Dark = m31.children.find((c) => c.label === 'dark')!;
+    const m31Dark = assertDefined(
+      m31.children.find((c) => c.label === 'dark'),
+      'M31/dark child',
+    );
     expect(m31Dark.count).toBe(1);
     expect(m31Dark.children[m31Dark.children.length - 1].key).toBe(NONE_KEY);
 
@@ -249,8 +294,8 @@ describe('groupByDimensions — count aggregation across nested levels', () => {
   it('NONE bucket aggregates at an intermediate level too', () => {
     const items = [
       makeItem('a', 'M31', 'light'),
-      makeItem('b', null, 'light'),   // missing target → NONE at level 1
-      makeItem('c', null, 'dark'),    // missing target → NONE at level 1
+      makeItem('b', null, 'light'), // missing target → NONE at level 1
+      makeItem('c', null, 'dark'), // missing target → NONE at level 1
     ];
     const result = groupByDimensions(items, ['target', 'frameType'], accessors);
 
@@ -259,8 +304,14 @@ describe('groupByDimensions — count aggregation across nested levels', () => {
     expect(none.count).toBe(2); // b, c both nest under the NONE target
     // ...and split by frameType beneath it.
     expect(none.children).toHaveLength(2);
-    const noneLight = none.children.find((c) => c.label === 'light')!;
-    const noneDark = none.children.find((c) => c.label === 'dark')!;
+    const noneLight = assertDefined(
+      none.children.find((c) => c.label === 'light'),
+      'NONE/light child',
+    );
+    const noneDark = assertDefined(
+      none.children.find((c) => c.label === 'dark'),
+      'NONE/dark child',
+    );
     expect(noneLight.items[0].id).toBe('b');
     expect(noneDark.items[0].id).toBe('c');
   });

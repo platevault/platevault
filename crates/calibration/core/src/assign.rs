@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Assignment logic (spec 007 US4, T025).
 #![allow(clippy::must_use_candidate)]
 //!
@@ -71,10 +74,10 @@ pub fn evaluate_assign(
         return Err(AssignError::SessionMixedState);
     }
 
-    // Guard A6.
-    if !session.has_observer_location || !session.has_exposure_start_utc {
-        return Err(AssignError::ObserverLocationMissing);
-    }
+    // Guard A6 (issue #867): no longer hard-blocks — see suggest() doc comment
+    // in lib.rs. Kept as a no-op guard site (rather than deleted) so the
+    // `AssignError::ObserverLocationMissing` variant and its contract error
+    // code stay available if a future caller needs to surface a warning.
 
     // Check hard-rule violations.
     let hard_violations = collect_hard_violations(session, master);
@@ -106,28 +109,35 @@ pub fn evaluate_assign(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Collect dimensions with hard-rule violations for the given master type.
+///
+/// Uses [`crate::rules::hard_rule_numeric`] / [`crate::rules::hard_rule_string`]
+/// — the same exact-match-or-exclude policy the `rules::{bias,dark,flat}`
+/// evaluators apply — so an assign override's violation list always agrees
+/// with what `suggest` would have excluded.
 fn collect_hard_violations(session: &SessionInfo, master: &MasterInfo) -> Vec<Dimension> {
+    use crate::rules::{hard_rule_numeric, hard_rule_string};
+
     let mut violations = Vec::new();
     match master.kind {
         CalibrationKind::Dark | CalibrationKind::Bias => {
-            if !exact_f64(session.gain, master.gain) {
+            if !hard_rule_numeric(session.gain, master.gain) {
                 violations.push(Dimension::Gain);
             }
-            if !exact_f64(session.offset, master.offset) {
+            if !hard_rule_numeric(session.offset, master.offset) {
                 violations.push(Dimension::Offset);
             }
         }
         CalibrationKind::Flat => {
-            if !exact_string(session.filter.as_deref(), master.filter.as_deref()) {
+            if !hard_rule_string(session.filter.as_deref(), master.filter.as_deref()) {
                 violations.push(Dimension::Filter);
             }
-            if !exact_string(session.binning.as_deref(), master.binning.as_deref()) {
+            if !hard_rule_string(session.binning.as_deref(), master.binning.as_deref()) {
                 violations.push(Dimension::Binning);
             }
-            if !exact_string(session.optic_train.as_deref(), master.optic_train.as_deref()) {
+            if !hard_rule_string(session.optic_train.as_deref(), master.optic_train.as_deref()) {
                 violations.push(Dimension::OpticTrain);
             }
-            if !exact_f64(session.gain, master.gain) {
+            if !hard_rule_numeric(session.gain, master.gain) {
                 violations.push(Dimension::Gain);
             }
         }
@@ -137,20 +147,6 @@ fn collect_hard_violations(session: &SessionInfo, master: &MasterInfo) -> Vec<Di
         }
     }
     violations
-}
-
-fn exact_f64(lhs: Option<f64>, rhs: Option<f64>) -> bool {
-    match (lhs, rhs) {
-        (Some(lv), Some(rv)) => (lv - rv).abs() < 1e-9,
-        _ => false,
-    }
-}
-
-fn exact_string(lhs: Option<&str>, rhs: Option<&str>) -> bool {
-    match (lhs, rhs) {
-        (Some(lv), Some(rv)) => lv == rv,
-        _ => false,
-    }
 }
 
 fn override_penalty_for(kind: CalibrationKind, config: &MatchingRuleConfig) -> f64 {
@@ -298,12 +294,14 @@ mod tests {
     }
 
     #[test]
-    fn missing_observer_location_returns_error() {
+    fn missing_observer_location_no_longer_blocks_assign() {
+        // #867: a session without an acquisition fingerprint yet must still
+        // be assignable (degraded-but-usable path).
         let mut s = session("light", 100.0, 50.0);
         s.has_observer_location = false;
         let r =
             evaluate_assign(&s, &dark_master(100.0, 50.0), false, &MatchingRuleConfig::default());
-        assert_eq!(r.unwrap_err().error_code(), "match.observer_location_missing");
+        assert!(r.is_ok(), "missing observer_location must not block assign");
     }
 
     #[test]
