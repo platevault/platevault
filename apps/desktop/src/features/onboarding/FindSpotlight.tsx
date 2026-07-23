@@ -41,20 +41,24 @@ import {
 } from './ChecklistSection';
 
 /**
- * The items whose real control carries a resolvable page-level anchor. The
- * remaining items have no on-page control to spotlight yet (their control
- * only exists once data the user hasn't created yet is present), so the find
- * affordance shows the unavailable-target explanation (spec edge case).
- * Values match the `data-guide-anchor` attributes wired on the real pages.
+ * Every registry item's real control has a deterministic page-level anchor.
+ * Some data-dependent controls are absent until the user creates a record; in
+ * that case the resolver shows the unavailable-target explanation rather than
+ * spotlighting nothing (spec edge case). Values match the
+ * `data-guide-anchor` attributes wired on the real pages.
  */
 const ITEM_ANCHORS: Record<string, string> = {
   'inbox.confirm_first': 'inbox.confirm-row',
+  'inbox.apply_first_plan': 'inbox.apply-plan-cta',
+  'sessions.review_first': 'sessions.review-row',
   'projects.create_first': 'projects.create-cta',
   'projects.launch_tool': 'project.open-in-tool',
+  'projects.review_artifacts': 'projects.artifacts-row',
   'targets.resolve_first': 'targets.resolve-cta',
   'targets.add_favourite': 'targets.favourite-toggle',
   'sessions.add_note': 'sessions.note-field',
   'calibration.match_master': 'calibration.match-assign',
+  'calibration.review_masters': 'calibration.review-row',
 };
 
 /**

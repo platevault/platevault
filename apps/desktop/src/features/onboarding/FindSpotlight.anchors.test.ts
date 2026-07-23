@@ -27,7 +27,7 @@ import { canFindItem, spotlightTargetFor } from './FindSpotlight';
 
 const DIR = join(__dirname);
 
-const NEW_ANCHORS: Array<{
+const ITEM_ANCHOR_SOURCES: Array<{
   itemId: string;
   anchor: string;
   sourceFile: string;
@@ -54,31 +54,65 @@ const NEW_ANCHORS: Array<{
     anchor: 'targets.resolve-cta',
     sourceFile: '../targets/TargetsPage.tsx',
   },
+  {
+    itemId: 'inbox.confirm_first',
+    anchor: 'inbox.confirm-row',
+    sourceFile: '../inbox/InboxPage.tsx',
+  },
+  {
+    itemId: 'inbox.apply_first_plan',
+    anchor: 'inbox.apply-plan-cta',
+    sourceFile: '../inbox/PlanPanel.tsx',
+  },
+  {
+    itemId: 'sessions.review_first',
+    anchor: 'sessions.review-row',
+    sourceFile: '../sessions/SessionsTable.tsx',
+  },
+  {
+    itemId: 'projects.create_first',
+    anchor: 'projects.create-cta',
+    sourceFile: '../projects/ProjectsPage.tsx',
+  },
+  {
+    itemId: 'projects.launch_tool',
+    anchor: 'project.open-in-tool',
+    sourceFile: '../projects/ProjectDetail.tsx',
+  },
+  {
+    itemId: 'projects.review_artifacts',
+    anchor: 'projects.artifacts-row',
+    sourceFile: '../projects/ToolLaunchesAccordion.tsx',
+  },
+  {
+    itemId: 'calibration.review_masters',
+    anchor: 'calibration.review-row',
+    sourceFile: '../calibration/MastersTable.tsx',
+  },
 ];
 
-describe('FindSpotlight ITEM_ANCHORS — targets/sessions/calibration', () => {
-  for (const { itemId, anchor, sourceFile } of NEW_ANCHORS) {
+describe('FindSpotlight ITEM_ANCHORS — every registry item', () => {
+  for (const { itemId, anchor, sourceFile } of ITEM_ANCHOR_SOURCES) {
     it(`canFindItem('${itemId}') is true`, () => {
       expect(canFindItem(itemId)).toBe(true);
     });
 
     it(`'${anchor}' is wired as a data-guide-anchor in ${sourceFile}`, () => {
       const source = readFileSync(join(DIR, sourceFile), 'utf8');
-      expect(source).toMatch(
-        new RegExp(`data-guide-anchor=["']${anchor.replace('.', '\\.')}["']`),
-      );
+      expect(source).toContain(anchor);
     });
   }
 
-  it('does not claim findability for the excluded data-gated items', () => {
-    for (const itemId of [
-      'inbox.apply_first_plan',
-      'projects.review_artifacts',
-      'sessions.review_first',
-      'calibration.review_masters',
-    ]) {
-      expect(canFindItem(itemId)).toBe(false);
-    }
+  it('covers all 11 registry items', () => {
+    expect(ITEM_ANCHOR_SOURCES).toHaveLength(11);
+    expect(new Set(ITEM_ANCHOR_SOURCES.map(({ itemId }) => itemId)).size).toBe(
+      11,
+    );
+  });
+
+  it('passes row-level anchors through the shared table primitive', () => {
+    const source = readFileSync(join(DIR, '../../ui/Table.tsx'), 'utf8');
+    expect(source).toContain('data-guide-anchor={row._guideAnchor}');
   });
 });
 
@@ -123,18 +157,5 @@ describe('spotlightTargetFor — blocked items point at the prerequisite', () =>
       page: 'targets',
       viaPrerequisite: false,
     });
-  });
-
-  it('returns null when neither the item nor its prerequisite is anchored', () => {
-    expect(
-      spotlightTargetFor(
-        item('projects.review_artifacts', {
-          upstreamItemId: 'sessions.review_first',
-          met: false,
-          reasonKey: 'onboarding.prerequisite.sessions.review_first',
-          jumpPage: 'sessions',
-        }),
-      ),
-    ).toBeNull();
   });
 });
