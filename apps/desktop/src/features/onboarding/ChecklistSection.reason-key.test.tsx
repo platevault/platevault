@@ -48,10 +48,11 @@ const REASON_KEYS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 describe('prerequisiteReason (FR-010 dotted reason-key resolution)', () => {
-  it.each(
-    REASON_KEYS,
-  )('resolves dotted backend reason key %s without throwing', (reasonKey, expected) => {
-    expect(() => prerequisiteReason(reasonKey)).not.toThrow();
-    expect(prerequisiteReason(reasonKey)).toBe(expected);
-  });
+  it.each(REASON_KEYS)(
+    'resolves dotted backend reason key %s without throwing',
+    (reasonKey, expected) => {
+      expect(() => prerequisiteReason(reasonKey)).not.toThrow();
+      expect(prerequisiteReason(reasonKey)).toBe(expected);
+    },
+  );
 });
