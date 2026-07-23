@@ -219,10 +219,10 @@ async fn chosen_framing_pick_materializes_as_session_membership_once_the_plan_ap
         || async {
             let rows: Vec<(String,)> =
                 sqlx::query_as("SELECT id FROM acquisition_session").fetch_all(pool).await.unwrap();
-            if !rows.is_empty() {
-                Some(())
-            } else {
+            if rows.is_empty() {
                 None
+            } else {
+                Some(())
             }
         },
         "acquisition_session row never appeared after plan-sc008 apply-completed event",
@@ -247,6 +247,43 @@ async fn chosen_framing_pick_materializes_as_session_membership_once_the_plan_ap
     // erroring, not that this particular fixture has geometry to report).
     let geo = framing_repo::get_session_geometry(pool, session_id).await.unwrap();
     assert!(geo.is_some(), "get_session_geometry must find the row (even with NULL fields)");
+}
+
+/// Run classify then confirm (no chosenAttribution) against `root_id` at `root_path`.
+/// Extracted to keep the calling test within clippy's function-length limit.
+async fn classify_and_confirm(
+    pool: &sqlx::SqlitePool,
+    bus: &EventBus,
+    item_id: &str,
+    root_path: &std::path::Path,
+) -> app_core::inbox::confirm::ConfirmResponse {
+    let classify_resp = app_core::inbox::classify::classify(
+        pool,
+        app_core::inbox::classify::ClassifyRequest {
+            inbox_item_id: item_id.to_owned(),
+            root_absolute_path: root_path.to_path_buf(),
+            force_rescan: false,
+        },
+    )
+    .await
+    .expect("classify() must succeed");
+    assert_eq!(classify_resp.classification_type, "single_type");
+    app_core::inbox::confirm::confirm(
+        pool,
+        bus,
+        app_core::inbox::confirm::ConfirmRequest {
+            inbox_item_id: item_id.to_owned(),
+            content_signature: classify_resp.content_signature,
+            destructive_destination: None,
+            root_absolute_path: root_path.to_path_buf(),
+            // root_id not forwarded: matches the journey's real invoke payload
+            // (no root_id key) — tests catalogue-in-place path.
+            root_id: None,
+            chosen_attribution: None,
+        },
+    )
+    .await
+    .expect("confirm() must succeed for a geometry-less light item with no chosenAttribution")
 }
 
 /// Repro attempt for the #898 CI red (`reconcile_drops_externally_deleted_
@@ -295,37 +332,7 @@ async fn geometry_less_two_frame_catalogue_in_place_confirm_forms_one_session() 
     .await
     .unwrap();
 
-    let classify_resp = app_core::inbox::classify::classify(
-        pool,
-        app_core::inbox::classify::ClassifyRequest {
-            inbox_item_id: inbox_item_id.to_owned(),
-            root_absolute_path: tmp.path().to_path_buf(),
-            force_rescan: false,
-        },
-    )
-    .await
-    .expect("real classify() must succeed on a folder of geometry-less light frames");
-    assert_eq!(classify_resp.classification_type, "single_type");
-
-    let confirm_resp = app_core::inbox::confirm::confirm(
-        pool,
-        &bus,
-        app_core::inbox::confirm::ConfirmRequest {
-            inbox_item_id: inbox_item_id.to_owned(),
-            content_signature: classify_resp.content_signature,
-            destructive_destination: None,
-            root_absolute_path: tmp.path().to_path_buf(),
-            root_id: None,
-            // Matches the journey's real invoke payload exactly — no
-            // chosenAttribution key at all.
-            chosen_attribution: None,
-        },
-    )
-    .await
-    .expect(
-        "real confirm() must succeed for a geometry-less light item with no chosenAttribution \
-         (NULL-geometry sessions are excluded from attribution matching, never rejected)",
-    );
+    let confirm_resp = classify_and_confirm(pool, &bus, inbox_item_id, tmp.path()).await;
     assert_eq!(confirm_resp.items_total, 2);
     assert!(
         confirm_resp.attribution_candidates.len() == 1
