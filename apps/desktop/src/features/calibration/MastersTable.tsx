@@ -472,11 +472,16 @@ export function MastersTable({
     created: '' as string,
   };
 
-  function masterItemRow(master: CalibrationMaster, indentPx = 0): TableRow {
+  function masterItemRow(
+    master: CalibrationMaster,
+    indentPx = 0,
+    guideAnchor = false,
+  ): TableRow {
     const isAging = master.ageDays > agingThresholdDays;
     const kindStr = master.kind.toLowerCase();
     return {
       _testid: `master-row-${master.id}`,
+      _guideAnchor: guideAnchor ? 'calibration.review-row' : undefined,
       _rowClassName:
         'pv-calib-table__row' +
         (selected === master.id ? ' pv-calib-table__row--selected' : ''),
@@ -515,7 +520,8 @@ export function MastersTable({
   const rows: TableRow[] = [];
 
   if (useMultiGroup) {
-    for (const vrow of visualRows) {
+    const firstItemIndex = visualRows.findIndex((row) => row.kind === 'item');
+    for (const [rowIndex, vrow] of visualRows.entries()) {
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
@@ -539,13 +545,19 @@ export function MastersTable({
           ...EMPTY_MASTER_CELLS,
         });
       } else {
-        rows.push(masterItemRow(vrow.item, tableIndent(vrow.depth)));
+        rows.push(
+          masterItemRow(
+            vrow.item,
+            tableIndent(vrow.depth),
+            rowIndex === firstItemIndex,
+          ),
+        );
       }
     }
   } else {
     // Flat sorted list (default, dims empty).
-    for (const master of sorted) {
-      rows.push(masterItemRow(master));
+    for (const [index, master] of sorted.entries()) {
+      rows.push(masterItemRow(master, 0, index === 0));
     }
   }
 

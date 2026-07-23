@@ -209,6 +209,7 @@
   "common_save": "Salvar",
   "common_saving": "Salvando…",
   "common_save_failed": "Não foi possível salvar.",
+  "common_selected": "Selecionado",
   "common_sessions": "Sessões",
   "common_sort_by_aria": "Ordenar por {col}",
   "common_sources": "Origens",
@@ -991,20 +992,137 @@
   "setup_kind_calibration": "Quadros de calibração",
   "setup_kind_calibration_help": "Quadros de dark, flat e bias usados para calibrar seus lights. O tipo de quadro é detectado a partir dos metadados de cada arquivo, não da pasta em que está — esta categoria apenas indica ao PlateVault onde procurar.",
   "setup_kind_inbox_help": "Uma pasta de descarte opcional para arquivos recém-capturados ou baixados que você ainda não organizou. Arquivos não revisados em toda pasta registrada já aparecem na Caixa de entrada, então isso é uma conveniência, não uma exigência.",
-  "setup_kind_light_frames": "Quadros de light",
+  "setup_kind_light_frames": "Quadros de luz",
   "setup_kind_light_frames_help": "Quadros de light brutos das suas sessões de imageamento (FITS/XISF). O PlateVault lê os cabeçalhos dos arquivos para montar seu histórico de aquisição — esses arquivos nunca são movidos ou copiados sem sua aprovação.",
   "setup_kind_project_help": "Pastas onde ficam seus projetos do PixInsight/WBPP e as saídas de processamento. Você criará projetos individuais a partir dessas pastas depois, em um fluxo guiado — adicionar a pasta agora apenas registra onde o PlateVault deve procurar.",
-  "setup_language_desc": "Escolha o idioma que você lê. Você pode alterá-lo depois em Configurações.",
+  "setup_language_desc": "Escolha seu idioma preferido",
   "setup_language_heading": "Escolha seu idioma",
   "setup_language_label": "Idioma",
   "setup_language_review_notice": "Esta tradução foi gerada automaticamente e aguarda a revisão de uma pessoa fluente.",
-  "setup_scan_classify_failed": "Não foi possível ler os tipos",
+"setup_theme_heading": "Escolha a aparência do PlateVault",
+  "setup_theme_desc": "Escolha um tema. As alterações são aplicadas imediatamente; Sistema acompanha o tema do seu sistema operacional.",
+  "setup_theme_preview_heading": "Registro de observação",
+  "setup_theme_preview_desc": "Uma amostra compacta das superfícies, controles e linguagem de status que você usará no PlateVault.",
+  "setup_theme_preview_source_meta": "42 FITS · M31",
+  "setup_theme_preview_input": "Nome da biblioteca",
+  "setup_theme_preview_feedback": "Origem pronta para revisão",  "setup_scan_classify_failed": "Não foi possível ler os tipos",
+  "setup_scan_classify_failed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} arquivo com tipo ilegível",
+        "pp=other": "{count} arquivos com tipos ilegíveis"
+      }
+    }
+  ],
   "setup_scan_col_files": "Arquivos",
   "setup_scan_col_folder": "Pasta / Arquivo",
   "setup_scan_col_format": "Formato",
   "setup_scan_col_types": "Tipos detectados",
-  "setup_scan_master": "Master",
-  "setup_scan_master_kind": "Master {kind}",
+  "setup_scan_frame_count_bias": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de viés",
+        "pp=other": "{count} quadros de viés"
+      }
+    }
+  ],
+  "setup_scan_frame_count_dark": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro escuro",
+        "pp=other": "{count} quadros escuros"
+      }
+    }
+  ],
+  "setup_scan_frame_count_flat": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro plano",
+        "pp=other": "{count} quadros planos"
+      }
+    }
+  ],
+  "setup_scan_frame_count_light": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de luz",
+        "pp=other": "{count} quadros de luz"
+      }
+    }
+  ],
+  "setup_scan_frame_count_unknown": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} quadro de tipo desconhecido ({value})",
+        "pp=other": "{count} quadros de tipo desconhecido ({value})"
+      }
+    }
+  ],
+  "setup_scan_frame_type_bias": "Viés",
+  "setup_scan_frame_type_dark": "Escuro",
+  "setup_scan_frame_type_flat": "Plano",
+  "setup_scan_frame_type_light": "Luz",
+  "setup_scan_frame_type_unknown": "Tipo desconhecido ({value})",
+  "setup_scan_master": "Mestre",
+  "setup_scan_master_kind": "Mestre {kind}",
+  "setup_scan_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} mestre",
+        "pp=other": "{count} mestres"
+      }
+    }
+  ],
   "setup_scan_no_sources": "Nenhuma origem registrada ainda. Volte e adicione pelo menos uma pasta.",
   "setup_scan_nothing_detected": "Nada detectado nesta pasta.",
   "setup_scan_resolution_failed": "Não foi possível verificar se esta origem já foi escaneada. Volte para Confirmar e tente novamente.",
@@ -1013,6 +1131,9 @@
   "setup_scan_phase_done": "Concluído",
   "setup_scan_phase_pending": "Pendente",
   "setup_scan_scanning": "Escaneando…",
+  "setup_scan_source_unknown": "Origem desconhecida ({value})",
+  "setup_scan_source_error": "{path}: {error}",
+  "setup_scan_source_status": "{path}: {status}",
   "setup_scan_summary_empty": "Nenhuma pasta detectada. Você pode adicionar mais origens em Configurações.",
   "setup_scan_summary_found": [
     {
@@ -1068,6 +1189,7 @@
   "setup_step_tools_heading": "Ferramentas de processamento",
   "setup_step_tools_label": "Ferramentas de processamento",
   "setup_tools_detected": "Detectado",
+  "setup_tools_detecting": "Detectando {name}…",
   "setup_tools_executable_label": "Executável",
   "setup_tools_intro": "Configure suas ferramentas de processamento para que a aplicação possa preparar as entradas do projeto e sugerir perfis de fluxo de trabalho. Ferramentas instaladas são detectadas automaticamente; você pode substituir ou definir um caminho manualmente.",
   "setup_tools_invalid": "Inválido",

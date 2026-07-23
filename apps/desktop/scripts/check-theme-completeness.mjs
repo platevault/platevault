@@ -2,10 +2,11 @@
 // check-theme-completeness.mjs — CI guard that every [data-theme] block in
 // tokens.css declares the full raw-palette token set.
 //
-// Warm Slate is the reference palette (it also backs the bare :root default,
-// so the two share one declaration block). Every other theme MUST override the
-// same raw tokens; a missing token silently falls back to Warm Slate's value
-// and produces an off-theme color. This check fails the build on any omission.
+// Warm Slate is the reference palette (it also backs :root without a
+// data-theme, so the two share one declaration block). Every other theme MUST
+// override the same raw tokens; a missing token silently falls back to Warm
+// Slate's value and produces an off-theme color. This check fails the build on
+// any omission or a fallback selector that also matches a named theme.
 //
 // Dependency-free (Node built-ins only). Run: node scripts/check-theme-completeness.mjs
 
@@ -21,14 +22,25 @@ const css = readFileSync(SRC, 'utf8');
 
 // Collect every declaration block whose selector targets a [data-theme="..."].
 // The raw-token blocks contain no nested braces, so a flat selector{body} match
-// is sufficient. One block may name several themes (e.g. ":root,
-// [data-theme=\"warm-slate\"]"), so a token set is merged per theme name.
+// is sufficient. One block may name several themes (e.g.
+// ":root:not([data-theme]), [data-theme=\"warm-slate\"]"), so a token set is
+// merged per theme name.
 const blockRe = /([^{}]*)\{([^{}]*)\}/g;
 const themeTokens = new Map(); // theme id -> Set<token name>
+const referenceSelectors = [];
 
 for (const [, selector, body] of css.matchAll(blockRe)) {
   const themeNames = [...selector.matchAll(/\[data-theme="([a-z0-9-]+)"\]/g)].map((m) => m[1]);
   if (themeNames.length === 0) continue;
+  if (themeNames.includes(REFERENCE)) {
+    referenceSelectors.push(
+      ...selector
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean),
+    );
+  }
   const tokens = [...body.matchAll(/(--pv-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
   for (const theme of themeNames) {
     const set = themeTokens.get(theme) ?? new Set();
@@ -44,6 +56,19 @@ if (!reference || reference.size === 0) {
 }
 
 let ok = true;
+const explicitReference = `[data-theme="${REFERENCE}"]`;
+if (
+  !referenceSelectors.includes(':root:not([data-theme])') ||
+  !referenceSelectors.includes(explicitReference) ||
+  referenceSelectors.includes(':root')
+) {
+  ok = false;
+  console.error(
+    `FAIL: "${REFERENCE}" must pair ${explicitReference} with the mutually exclusive ` +
+      `:root:not([data-theme]) fallback; found: ${referenceSelectors.join(', ') || '(none)'}`,
+  );
+}
+
 for (const [theme, tokens] of themeTokens) {
   if (theme === REFERENCE) continue;
   const missing = [...reference].filter((t) => !tokens.has(t)).sort();

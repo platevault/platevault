@@ -24,7 +24,7 @@ export function StepLanguage() {
 
   return (
     <div className="pv-step-language">
-      <div className="pv-theme-swatches">
+      <div className="pv-locale-choices">
         {SHIPPED_LOCALES.map((id) => {
           const meta = LOCALE_META[id];
           const isActive = locale === id;
@@ -36,8 +36,8 @@ export function StepLanguage() {
               type="button"
               lang={meta.id}
               className={clsx(
-                'pv-theme-swatch',
-                isActive && 'pv-theme-swatch--active',
+                'pv-locale-choice',
+                isActive && 'pv-locale-choice--active',
               )}
               onClick={() => changeLocale(id)}
               aria-pressed={isActive}
@@ -47,7 +47,7 @@ export function StepLanguage() {
               // Brazil" would be noise on top of the visible label below.
               aria-label={meta.nativeName}
             >
-              <span className="pv-theme-swatch__name">
+              <span className="pv-locale-choice__name">
                 <span aria-hidden="true">{meta.flag}</span> {meta.nativeName}
               </span>
               {showReviewNotice && (

@@ -9,6 +9,12 @@ use crate::{DbError, DbResult};
 
 use super::{InsertProjectSource, ProjectSourceRow};
 
+const SOURCE_MISSING_HEALTH_OPERATION: &str = "project-source-missing-health";
+
+fn source_missing_health_operation_id(root_id: &str) -> String {
+    format!("{SOURCE_MISSING_HEALTH_OPERATION}:{root_id}")
+}
+
 /// List the ids of every project linked (via `project_sources`) to a given
 /// `inventory_session_id` (an `acquisition_session.id`).
 ///
@@ -35,9 +41,8 @@ pub async fn list_project_ids_for_session(
 /// session currently lists a frame whose `file_record.state = 'missing'`, and
 /// the project is still in a lifecycle a system block may move it out of.
 ///
-/// `archived` is excluded as well as `blocked`: `emit_block_transition` only
-/// guards `blocked`, so without this filter an archived project would be
-/// dragged back to `blocked` by a reconcile pass.
+/// The explicit lifecycle list mirrors the canonical `ProjectState -> Blocked`
+/// edges. In particular, `completed` remains terminal for automatic blocking.
 ///
 /// # Errors
 ///
@@ -51,12 +56,48 @@ pub async fn find_blockable_missing_sources(pool: &SqlitePool) -> DbResult<Vec<(
          JOIN json_each(s.frame_ids) je
          JOIN file_record fr ON fr.id = je.value
          WHERE fr.state = 'missing'
-           AND p.lifecycle IN ('ready', 'setup_incomplete')
+           AND p.lifecycle IN ('setup_incomplete', 'ready', 'prepared', 'processing')
          ORDER BY ps.project_id, ps.inventory_session_id",
     )
     .fetch_all(pool)
     .await?;
     Ok(rows)
+}
+
+/// Mark a root's source-missing health check as pending before reconciliation.
+///
+/// Returns `true` when a marker already existed from an interrupted or failed
+/// prior run. The marker uses the existing resumable `operation_states` table.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn begin_source_missing_health_check(pool: &SqlitePool, root_id: &str) -> DbResult<bool> {
+    let result = sqlx::query(
+        "INSERT INTO operation_states (id, operation_type, status, updated_at)
+         VALUES (?, ?, 'pending', datetime('now'))
+         ON CONFLICT(id) DO NOTHING",
+    )
+    .bind(source_missing_health_operation_id(root_id))
+    .bind(SOURCE_MISSING_HEALTH_OPERATION)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() == 0)
+}
+
+/// Clear a root's pending source-missing health check after success or a
+/// reconcile that produced no newly missing frames.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn clear_source_missing_health_check(pool: &SqlitePool, root_id: &str) -> DbResult<()> {
+    sqlx::query("DELETE FROM operation_states WHERE id = ? AND operation_type = ?")
+        .bind(source_missing_health_operation_id(root_id))
+        .bind(SOURCE_MISSING_HEALTH_OPERATION)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// Whether any of this project's linked sessions has had a raw-frame archived

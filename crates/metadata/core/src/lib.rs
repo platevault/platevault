@@ -11,11 +11,22 @@
 //!   [`FrameType`] via case-insensitive lookup.
 //! - [`MetadataExtractor`] — trait implemented by FITS/XISF adapters.
 //! - [`RawFileMetadata`] — minimal header values returned by extractors.
+//! - [`CaptureProfileRegistry`] — versioned normalization of raw FITS/XISF fields.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+
+mod evidence;
+mod profile;
+
+pub use evidence::{
+    CalculatedFocalLength, CanonicalField, CaptureProfileVersion, EvidenceConfidence,
+    EvidenceError, EvidenceState, FieldEvidence, MetadataEvidence, MetadataValue, RawMetadata,
+    MAX_EVIDENCE_PAYLOAD_BYTES, MAX_EVIDENCE_VALUE_BYTES,
+};
+pub use profile::{CaptureProfileError, CaptureProfileRegistry, MAX_CAPTURE_PROFILE_TOML_BYTES};
 
 // ── FrameType ─────────────────────────────────────────────────────────────────
 

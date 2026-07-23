@@ -25,9 +25,63 @@ export interface MasterLabelFields {
   masterExposureS?: number | null;
 }
 
-/** Capitalize the first letter (e.g. "dark" → "Dark"). */
-function titleCase(s: string): string {
-  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
+type KnownFrameType = 'light' | 'dark' | 'flat' | 'bias';
+type LabelOptions = { locale?: 'en-GB' | 'pt-BR' };
+
+const FRAME_TYPE_LABELS: Record<
+  KnownFrameType,
+  (options?: LabelOptions) => string
+> = {
+  light: (options) => m.setup_scan_frame_type_light({}, options),
+  dark: (options) => m.setup_scan_frame_type_dark({}, options),
+  flat: (options) => m.setup_scan_frame_type_flat({}, options),
+  bias: (options) => m.setup_scan_frame_type_bias({}, options),
+};
+
+const FRAME_TYPE_COUNT_LABELS: Record<
+  KnownFrameType,
+  (count: number, options?: LabelOptions) => string
+> = {
+  light: (count, options) => m.setup_scan_frame_count_light({ count }, options),
+  dark: (count, options) => m.setup_scan_frame_count_dark({ count }, options),
+  flat: (count, options) => m.setup_scan_frame_count_flat({ count }, options),
+  bias: (count, options) => m.setup_scan_frame_count_bias({ count }, options),
+};
+
+function knownFrameType(value: string): KnownFrameType | null {
+  const normalized = value.trim().toLowerCase();
+  return Object.hasOwn(FRAME_TYPE_LABELS, normalized)
+    ? (normalized as KnownFrameType)
+    : null;
+}
+
+export function frameTypeLabel(value: string, options?: LabelOptions): string {
+  const known = knownFrameType(value);
+  return known
+    ? FRAME_TYPE_LABELS[known](options)
+    : m.setup_scan_frame_type_unknown(
+        {
+          value: value.trim() || m.common_unknown({}, options),
+        },
+        options,
+      );
+}
+
+export function frameTypeCountLabel(
+  value: string,
+  count: number,
+  options?: LabelOptions,
+): string {
+  const known = knownFrameType(value);
+  return known
+    ? FRAME_TYPE_COUNT_LABELS[known](count, options)
+    : m.setup_scan_frame_count_unknown(
+        {
+          count,
+          value: value.trim() || m.common_unknown({}, options),
+        },
+        options,
+      );
 }
 
 /**
@@ -39,11 +93,19 @@ function titleCase(s: string): string {
  * their unit like every other exposure in the app (#811); FR-006's "300s"
  * examples predate that convention.
  */
-export function masterLabel(item: MasterLabelFields): string {
+export function masterLabel(
+  item: MasterLabelFields,
+  options?: LabelOptions,
+): string {
   const parts: string[] = [
     item.masterFrameType
-      ? m.setup_scan_master_kind({ kind: titleCase(item.masterFrameType) })
-      : m.setup_scan_master(),
+      ? m.setup_scan_master_kind(
+          {
+            kind: frameTypeLabel(item.masterFrameType, options),
+          },
+          options,
+        )
+      : m.setup_scan_master({}, options),
   ];
   if (item.masterFilter) parts.push(item.masterFilter);
   if (item.masterExposureS != null) {

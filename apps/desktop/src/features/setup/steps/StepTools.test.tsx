@@ -9,7 +9,13 @@
  * #510 (single status pill, icon-only Redetect button).
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -137,5 +143,90 @@ describe('StepTools', () => {
     });
     expect(btn).toBeInTheDocument();
     expect(btn).not.toHaveTextContent('Redetect');
+  });
+
+  it('announces redetection transitions in the tool-scoped polite region without moving focus', async () => {
+    renderStep(DEFAULT_TOOLS_STATE);
+    await waitFor(() => expect(mockToolsDiscover).toHaveBeenCalled());
+
+    let resolveRedetect!: (value: unknown) => void;
+    mockToolsDiscover.mockReset();
+    mockToolsDiscover.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRedetect = resolve;
+      }),
+    );
+
+    const card = screen.getByTestId('tool-card-pixinsight');
+    const status = within(card).getByRole('status');
+    const button = within(card).getByRole('button', {
+      name: 'Redetect PixInsight binary',
+    });
+    button.focus();
+    fireEvent.click(button);
+
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    expect(status).toHaveTextContent('PixInsightDetecting PixInsight…');
+    expect(button).toHaveFocus();
+
+    resolveRedetect({ status: 'ok', data: { entries: [] } });
+    await waitFor(() =>
+      expect(status).toHaveTextContent('PixInsightNo installation found'),
+    );
+    expect(button).toHaveFocus();
+  });
+
+  it('clears failed redetection feedback after a valid executable is selected manually', async () => {
+    const tools: ToolsState = {
+      ...DEFAULT_TOOLS_STATE,
+      pixinsight: {
+        enabled: true,
+        path: 'C:\\Program Files\\PixInsight\\bin\\PixInsight.exe',
+      },
+    };
+    const { onToolsChange, rerender } = renderStep(tools);
+    await waitFor(() => expect(mockToolsDiscover).toHaveBeenCalled());
+
+    mockToolsDiscover.mockReset();
+    mockToolsDiscover.mockResolvedValue({
+      status: 'ok',
+      data: { entries: [] },
+    });
+
+    const card = screen.getByTestId('tool-card-pixinsight');
+    fireEvent.click(
+      within(card).getByRole('button', {
+        name: 'Redetect PixInsight binary',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(within(card).getByRole('status')).toHaveTextContent(
+        'PixInsightNo installation found',
+      ),
+    );
+    expect(within(card).getByText('No installation found')).toBeVisible();
+
+    mockPick.mockResolvedValue({
+      path: 'D:\\Tools\\PixInsight.exe',
+      selectedFilter: null,
+      cancelled: false,
+    });
+    fireEvent.click(
+      within(card).getByRole('button', {
+        name: 'Select PixInsight binary',
+      }),
+    );
+
+    await waitFor(() => expect(onToolsChange).toHaveBeenCalled());
+    const next = onToolsChange.mock.calls.at(-1)?.[0] as ToolsState;
+    rerender(<StepTools tools={next} onToolsChange={onToolsChange} />);
+
+    expect(within(card).queryByText('No installation found')).toBeNull();
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      'PixInsightDetected',
+    );
+    expect(within(card).getByText('D:\\Tools\\PixInsight.exe')).toBeVisible();
   });
 });

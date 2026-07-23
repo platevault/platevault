@@ -1920,7 +1920,12 @@ impl E2eApp {
         // Proof the window/process actually tore down: once it has, WebDriver
         // commands against the now-gone window/session fail — treat any
         // error the same as an explicit "bridge gone" (`Ok(false)`).
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let shutdown_timeout = if cfg!(target_os = "windows") {
+            Duration::from_secs(60)
+        } else {
+            Duration::from_secs(10)
+        };
+        let deadline = Instant::now() + shutdown_timeout;
         loop {
             match self.bridge_ready().await {
                 Ok(false) | Err(_) => break,
@@ -1933,6 +1938,51 @@ impl E2eApp {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         self.shutdown().await
+    }
+
+    #[cfg(target_os = "windows")]
+    pub async fn wait_for_webview_storage_flush() -> Result<()> {
+        let dir = lookup(&instance_env().vars, "WEBVIEW2_USER_DATA_FOLDER")
+            .map(PathBuf::from)
+            .context("WEBVIEW2_USER_DATA_FOLDER was not configured")?;
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            if let Some(leveldb) = find_leveldb_dir(&dir) {
+                // Wait for a DATA file (.ldb) or a write-ahead log (.log with
+                // non-zero size). Structural files (LOCK, CURRENT, MANIFEST-*)
+                // appear before localStorage content is committed, so checking
+                // "any file exists" is insufficient — that's what caused the
+                // TRY-1-only "no persisted detailDock entry" on loaded runners
+                // (bead astro-plan-msdw).
+                if std::fs::read_dir(&leveldb).ok().is_some_and(|entries| {
+                    entries.flatten().any(|entry| {
+                        let path = entry.path();
+                        if !path.is_file() {
+                            return false;
+                        }
+                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        if ext == "ldb" {
+                            return true;
+                        }
+                        // LevelDB .log files are the WAL — a non-empty one
+                        // means data has been written (even if not yet
+                        // compacted into .ldb).
+                        if ext == "log" {
+                            return path.metadata().map_or(false, |m| m.len() > 0);
+                        }
+                        false
+                    })
+                }) {
+                    return Ok(());
+                }
+            }
+            if Instant::now() >= deadline {
+                anyhow::bail!(
+                    "WebView2 profile did not expose persisted LevelDB data files within 15s"
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
@@ -1949,6 +1999,24 @@ impl E2eApp {
         }
         Ok(())
     }
+}
+
+#[cfg(target_os = "windows")]
+fn find_leveldb_dir(root: &Path) -> Option<PathBuf> {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name == "leveldb") {
+                    return Some(path);
+                }
+                pending.push(path);
+            }
+        }
+    }
+    None
 }
 
 impl Drop for E2eApp {

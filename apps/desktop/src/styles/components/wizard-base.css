@@ -40,7 +40,7 @@
 /* === SELECT === */
 .pv-select {
   height: var(--pv-control-h); padding: 0 var(--pv-sp-2);
-  border: 1px solid var(--pv-border); border-radius: var(--pv-radius-sm);
+  border: 1px solid var(--pv-control-border); border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
   background: var(--pv-bg); color: var(--pv-text);
   cursor: pointer;
