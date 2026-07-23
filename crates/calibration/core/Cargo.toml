@@ -10,7 +10,6 @@ path = "src/lib.rs"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-uuid = { workspace = true }
 # Issue #921: circular_distance replaces the hand-rolled `(a - b).abs()` flat
 # rotation delta, which max-penalized correct flats straddling the 0/360 seam.
 skymath = "0.6.0"

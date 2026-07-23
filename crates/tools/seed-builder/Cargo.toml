@@ -13,9 +13,7 @@ path = "src/main.rs"
 # Offline one-time build tool (spec 035 T015): queries SIMBAD TAP + OpenNGC and
 # emits assets/seed/seed.json. Not part of the shipped app; build-time only.
 reqwest = { workspace = true, features = ["blocking"] }
-serde = { workspace = true }
 serde_json.workspace = true
-time = { workspace = true }
 # spec 042 (T250): the resolver/seed/caldwell/simbad surface this tool consumes
 # moved from `targeting` into the `targeting_resolver` crate.
 targeting_resolver = { path = "../../targeting/resolver" }
