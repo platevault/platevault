@@ -15,6 +15,10 @@
     "$value": "#525a66",
     "$type": "color"
   },
+  "control-border": {
+    "$value": "#7b7f86",
+    "$type": "color"
+  },
   "rule": {
     "$value": "#cbd2dd",
     "$type": "color"

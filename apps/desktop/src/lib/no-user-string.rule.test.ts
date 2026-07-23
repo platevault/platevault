@@ -677,15 +677,15 @@ describe('alm/no-user-string', () => {
     );
   });
 
-  it.each([
-    'confirm',
-    'prompt',
-  ])('flags a string passed to window.%s', (api) => {
-    const out = lint(`window.${api}('Delete these files permanently?');`);
-    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
-    expect(hits).toHaveLength(1);
-    expect(hits[0].messageId).toBe('toast');
-  });
+  it.each(['confirm', 'prompt'])(
+    'flags a string passed to window.%s',
+    (api) => {
+      const out = lint(`window.${api}('Delete these files permanently?');`);
+      const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+      expect(hits).toHaveLength(1);
+      expect(hits[0].messageId).toBe('toast');
+    },
+  );
 
   // Unlike every other sink, the dialog APIs do NOT apply the machine-string
   // gate: a confirm()/prompt() argument is shown verbatim to the user, so any

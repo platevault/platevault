@@ -282,12 +282,12 @@ jobs:
           shared-key: "rust-${{ matrix.os }}-v2"
 
       - uses: pnpm/action-setup@v4
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         with:
           node-version: 20
           cache: pnpm
@@ -300,7 +300,7 @@ jobs:
           tool: just,nextest
 
       - name: Install JS deps
-        if: needs.changes.outputs.frontend == 'true'
+        if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
       # Vite's dependency-optimizer output. Restored AFTER `pnpm install`
@@ -327,6 +327,13 @@ jobs:
             vite-${{ runner.os }}-
 
       # --- Fast checks first (FR-012) ---
+      # Keep locale parity as a named CI gate, independent of the broader lint
+      # summary. The check is fast and its failure tells a catalogue author
+      # exactly which missing or orphaned keys must be corrected.
+      - name: Locale catalogue parity
+        if: needs.changes.outputs.frontend == 'true' && matrix.os == 'ubuntu-latest'
+        run: pnpm --filter @astro-plan/desktop run lint:i18n-drift
+
       # Frontend lint gate: Biome (format check + syntactic rules) first, then
       # the slimmed ESLint layer Biome cannot replicate — the spec-046
       # `alm/no-user-string` i18n rule (fails the build on any NEW hardcoded

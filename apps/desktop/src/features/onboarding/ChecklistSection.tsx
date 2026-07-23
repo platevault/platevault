@@ -25,11 +25,8 @@
  *
  * Completion choreography (animation, completed-area move) is layered on by US3
  * T024/T025; this node renders the settled end-state (open items on top,
- * completed greyed at the bottom of their group) plus the manual check
- * affordance the group-collapse behaviour (FR-031) needs. The per-row dismiss
- * control was removed: the round checkbox writes `manually_checked` and nothing
- * else, and `dismissed` is deliberately unreachable from the UI (the backend
- * still supports it, so a row menu can restore it later without a migration).
+ * completed greyed at the bottom of their group) plus the manual check and
+ * dismiss affordances required for non-event items (FR-017).
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -41,6 +38,7 @@ import {
   Lock,
   MoreHorizontal,
   Search,
+  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
@@ -62,7 +60,6 @@ import { useCompletionChoreography } from './choreography';
 import {
   FindSpotlight,
   clearFind,
-  spotlightTargetFor,
   toggleFind,
   useActiveFindItem,
 } from './FindSpotlight';
@@ -98,7 +95,7 @@ export const ONBOARDING_PAGE_PATHS = Object.fromEntries(
 ) as Record<OnboardingPage, string>;
 
 /** Dynamic catalog access for registry-keyed item/prerequisite strings. The
- * keys are all present in `messages/en.json` (seeded T011); the itemId → key
+ * keys are all present in `messages/en-GB.json` (seeded T011); the itemId → key
  * mapping is `onboarding_item_<id-with-underscores>_<label|tooltip>`. */
 const catalog = m as unknown as Record<
   string,
@@ -116,6 +113,19 @@ export const itemTooltip = (id: string): string =>
 // with `prerequisite: null` never reach this path).
 export const prerequisiteReason = (reasonKey: string): string =>
   catalog[reasonKey.replaceAll('.', '_')]();
+
+export function isChecklistGroupSettled(items: OnboardingItemDto[]): boolean {
+  return items.length > 0 && items.every((item) => item.state !== 'unchecked');
+}
+
+export function completedChecklistItems(
+  items: OnboardingItemDto[],
+): OnboardingItemDto[] {
+  return items.filter(
+    (item) =>
+      item.state === 'auto_checked' || item.state === 'manually_checked',
+  );
+}
 
 function pageForPath(pathname: string): OnboardingPage | null {
   return PAGE_ORDER.find((p) => pathname.startsWith(PAGE_META[p].path)) ?? null;
@@ -190,8 +200,8 @@ export function ChecklistSection({
     };
 
   const isGroupComplete = (page: OnboardingPage): boolean => {
-    const g = groupProgress(page);
-    return g.total > 0 && g.done === g.total;
+    const items = itemsByPage.get(page) ?? [];
+    return isChecklistGroupSettled(items);
   };
 
   // FR-007 auto-expand the current page's group; FR-031 takes precedence — a
@@ -347,9 +357,8 @@ export function ChecklistSection({
               (i) =>
                 i.state === 'unchecked' || choreo.completingIds.has(i.itemId),
             );
-            const completed = items.filter(
-              (i) =>
-                i.state !== 'unchecked' && !choreo.completingIds.has(i.itemId),
+            const completed = completedChecklistItems(items).filter(
+              (i) => !choreo.completingIds.has(i.itemId),
             );
             const g = groupProgress(page);
             const complete = isGroupComplete(page);
@@ -415,21 +424,6 @@ export function ChecklistSection({
                                 data-item-id={item.itemId}
                                 data-state={item.state}
                               >
-                                {/*
-                                  A real checkbox, not the inert tick it used to
-                                  be: a completed row is struck through and
-                                  greyed rather than hidden precisely so it can
-                                  be taken back, and a click that lands on a
-                                  crossed-out row and does nothing reads as
-                                  broken. `aria-checked` + the shared label carry
-                                  the toggle semantics, so no extra string.
-
-                                  Un-checking is allowed on AUTOMATIC rows too.
-                                  It is not a lie about the library: the item
-                                  re-ticks when the underlying action happens
-                                  again, and restore re-derives it from real
-                                  database state.
-                                */}
                                 <button
                                   type="button"
                                   role="checkbox"
@@ -487,7 +481,7 @@ interface ChecklistItemRowProps {
 /** One open (unchecked) item row: label, hover/focus tooltip (WCAG 1.4.13),
  * a manual check affordance for non-auto items, and — when the upstream
  * milestone is missing — a prerequisite reason plus a jump link (FR-010). */
-function ChecklistItemRow({
+export function ChecklistItemRow({
   item,
   idPrefix,
   completing,
@@ -499,14 +493,6 @@ function ChecklistItemRow({
   const blocked = item.prerequisite != null && !item.prerequisite.met;
   const label = itemLabel(item.itemId);
   const findActive = useActiveFindItem()?.itemId === item.itemId;
-
-  // Only offer "point me at it" when the spotlight can actually deliver.
-  // A blocked row still qualifies: it points at the PREREQUISITE's control
-  // instead of its own (which does not exist yet by definition), so "show me
-  // where" answers with what to do first rather than refusing. `null` means
-  // neither the item nor its prerequisite has a resolvable anchor — then the
-  // affordance stays hidden and the prerequisite line below carries the story.
-  const findable = spotlightTargetFor(item) !== null;
 
   // Tooltip (FR-008 / WCAG 1.4.13) is the shared `Tooltip` primitive.
   //
@@ -538,6 +524,7 @@ function ChecklistItemRow({
 
   const check = () =>
     void setOnboardingItemState(item.itemId, 'manually_checked');
+  const dismiss = () => void setOnboardingItemState(item.itemId, 'dismissed');
 
   // Settling in place (T024): a checked, emphasised row that has not yet
   // dropped to the completed area. Non-interactive during the animation.
@@ -566,52 +553,47 @@ function ChecklistItemRow({
       data-blocked={blocked ? 'true' : undefined}
       data-auto={item.hasAutoTick ? 'true' : undefined}
     >
-      {/*
-        EVERY item gets a real, clickable checkbox — including auto-tick ones,
-        which used to render an inert bullet. `set_item_state` accepts a manual
-        check on any registry item (it does not special-case automatic ones), so
-        the inert bullet was a UI-only gap: the row looked actionable, described
-        a task, and could not be crossed off. Auto items still tick themselves
-        from real work; this just stops the checklist from refusing a check the
-        backend would happily accept.
-      */}
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={false}
-        aria-labelledby={labelId}
-        aria-describedby={tooltipId}
-        className="pv-onb-checklist__check"
-        onClick={check}
-        disabled={blocked}
-        // #1103: this control owns the tooltip reveal for keyboard users.
-        //
-        // Reveals on ANY focus, deliberately not gated on `:focus-visible`.
-        // Gating on it was tried first and is wrong here: `:focus-visible` does
-        // not match focus moved programmatically after pointer input, which is
-        // exactly how assistive tech and `element.focus()` arrive — so the
-        // people this fix exists for were the ones it silently skipped. The
-        // cost is that a pointer click also pops the tooltip briefly; that is
-        // acceptable, since hovering to reach the checkbox already showed it.
-        onFocus={() => setTipOpen(true)}
-        onBlur={() => setTipOpen(false)}
-        onKeyDown={(e) => {
-          // 1.4.13 "dismissible". base-ui's own `useDismiss` handles Escape for
-          // ITS trigger — but the reveal here is owned by this checkbox, which
-          // is not that trigger, so Escape never reaches it. Verified by
-          // removing this handler: the e2e Escape assertion fails.
+      {item.hasAutoTick ? (
+        <span className="pv-onb-checklist__auto-marker" aria-hidden />
+      ) : (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={false}
+          aria-labelledby={labelId}
+          aria-describedby={tooltipId}
+          className="pv-onb-checklist__check"
+          onClick={check}
+          disabled={blocked}
+          // #1103: this control owns the tooltip reveal for keyboard users.
           //
-          // This is NOT a hand-rolled reveal: base-ui still owns the popup,
-          // positioning, delays and hoverable safe-polygon. Only the dismiss
-          // key is bridged from the control that owns the open state.
-          if (e.key === 'Escape' && tipOpen) {
-            e.stopPropagation();
-            setTipOpen(false);
-          }
-        }}
-      >
-        <span className="pv-onb-checklist__checkbox" aria-hidden />
-      </button>
+          // Reveals on ANY focus, deliberately not gated on `:focus-visible`.
+          // Gating on it was tried first and is wrong here: `:focus-visible` does
+          // not match focus moved programmatically after pointer input, which is
+          // exactly how assistive tech and `element.focus()` arrive — so the
+          // people this fix exists for were the ones it silently skipped. The
+          // cost is that a pointer click also pops the tooltip briefly; that is
+          // acceptable, since hovering to reach the checkbox already showed it.
+          onFocus={() => setTipOpen(true)}
+          onBlur={() => setTipOpen(false)}
+          onKeyDown={(e) => {
+            // 1.4.13 "dismissible". base-ui's own `useDismiss` handles Escape for
+            // ITS trigger — but the reveal here is owned by this checkbox, which
+            // is not that trigger, so Escape never reaches it. Verified by
+            // removing this handler: the e2e Escape assertion fails.
+            //
+            // This is NOT a hand-rolled reveal: base-ui still owns the popup,
+            // positioning, delays and hoverable safe-polygon. Only the dismiss
+            // key is bridged from the control that owns the open state.
+            if (e.key === 'Escape' && tipOpen) {
+              e.stopPropagation();
+              setTipOpen(false);
+            }
+          }}
+        >
+          <span className="pv-onb-checklist__checkbox" aria-hidden />
+        </button>
+      )}
       <span className="pv-onb-checklist__item-main">
         {/*
           Shared Tooltip (base-ui): portalled, positioned, with the app's
@@ -652,27 +634,29 @@ function ChecklistItemRow({
           </span>
         )}
       </span>
-      {/*
-        No per-row dismiss (X). The round checkbox is the single completion
-        affordance; a second destructive-looking control on every row was noise,
-        and "remove this one forever" is a rarer intent than "tick it off".
-        Whole-section removal still exists in the section header's ··· menu
-        (FR-013). The backend `dismissed` state is untouched and still settles
-        rows, so a per-item dismiss can return (e.g. behind a row menu) without
-        a migration.
-      */}
       <span className="pv-onb-checklist__actions">
-        {findable && (
+        {!item.hasAutoTick && (
           <button
             type="button"
-            className="pv-onb-checklist__find"
-            aria-label={m.onboarding_find_label({ item: label })}
-            aria-pressed={findActive}
-            onClick={() => toggleFind(item)}
+            className="pv-onb-checklist__dismiss"
+            aria-label={m.onboarding_item_dismiss_label({ item: label })}
+            onClick={dismiss}
           >
-            <Search size={13} aria-hidden />
+            <X size={13} aria-hidden />
           </button>
         )}
+        <button
+          type="button"
+          className="pv-onb-checklist__find"
+          aria-label={m.onboarding_find_label({ item: label })}
+          aria-pressed={findActive}
+          aria-describedby={item.hasAutoTick ? tooltipId : undefined}
+          onFocus={item.hasAutoTick ? () => setTipOpen(true) : undefined}
+          onBlur={item.hasAutoTick ? () => setTipOpen(false) : undefined}
+          onClick={() => toggleFind(item)}
+        >
+          <Search size={13} aria-hidden />
+        </button>
       </span>
     </li>
   );
