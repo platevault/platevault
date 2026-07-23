@@ -55,22 +55,63 @@ use contracts_core::inventory_frame::{
 ///
 /// # Errors
 ///
-/// Returns `ContractError` per [`reconcile::run_reconcile`], or an internal
-/// database error if the block check fails.
+/// Returns `ContractError` per [`reconcile::run_reconcile`]. A failed
+/// project-health check is retried on the next reconcile for the same root,
+/// because the frame-state writes have already committed by then.
 pub async fn run_reconcile(
     pool: &SqlitePool,
     bus: &audit::bus::EventBus,
     req: &InventoryReconcileRunRequest,
 ) -> Result<InventoryReconcileRunResponse, ContractError> {
-    let response = reconcile::run_reconcile(pool, bus, req).await?;
-
-    app_core_projects::project_health::check_project_source_missing_invariant(
+    let retry_pending = persistence_db::repositories::projects::begin_source_missing_health_check(
         pool,
-        bus,
-        crate::caches::project_block_debounce(),
+        &req.root_id,
     )
     .await
-    .map_err(internal)?;
+    .map_err(db_err)?;
+
+    let response = match reconcile::run_reconcile(pool, bus, req).await {
+        Ok(response) => response,
+        Err(error) => {
+            if !retry_pending {
+                let _ = persistence_db::repositories::projects::clear_source_missing_health_check(
+                    pool,
+                    &req.root_id,
+                )
+                .await;
+            }
+            return Err(error);
+        }
+    };
+
+    let should_check = response.newly_missing > 0 || retry_pending;
+    if should_check {
+        match app_core_projects::project_health::check_project_source_missing_invariant(
+            pool,
+            bus,
+            crate::caches::project_block_debounce(),
+        )
+        .await
+        {
+            Ok(app_core_projects::project_health::SourceMissingCheckOutcome::RetryRequired) => {
+                return Ok(response);
+            }
+            Ok(app_core_projects::project_health::SourceMissingCheckOutcome::Complete) => {}
+            Err(error) => {
+                tracing::warn!(%error, "project source-missing health check failed after reconcile");
+                return Ok(response);
+            }
+        }
+    }
+
+    if let Err(error) = persistence_db::repositories::projects::clear_source_missing_health_check(
+        pool,
+        &req.root_id,
+    )
+    .await
+    {
+        tracing::warn!(%error, "failed to clear project source-missing health retry");
+    }
 
     Ok(response)
 }
