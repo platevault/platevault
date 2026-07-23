@@ -215,7 +215,19 @@ async fn chosen_framing_pick_materializes_as_session_membership_once_the_plan_ap
         targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
     );
     publish_applied(&bus, "plan-sc008").await;
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    support::poll_until(
+        || async {
+            let rows: Vec<(String,)> =
+                sqlx::query_as("SELECT id FROM acquisition_session").fetch_all(pool).await.unwrap();
+            if !rows.is_empty() {
+                Some(())
+            } else {
+                None
+            }
+        },
+        "acquisition_session row never appeared after plan-sc008 apply-completed event",
+    )
+    .await;
 
     let sessions: Vec<(String,)> =
         sqlx::query_as("SELECT id FROM acquisition_session").fetch_all(pool).await.unwrap();
@@ -341,7 +353,24 @@ async fn geometry_less_two_frame_catalogue_in_place_confirm_forms_one_session() 
         targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
     );
     publish_applied(&bus, &confirm_resp.plan_id).await;
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // Poll until the session has both M 33 frames (listener writes them one by one;
+    // polling for non-empty would race before the second frame is appended).
+    support::poll_until(
+        || async {
+            let rows: Vec<(String, String)> =
+                sqlx::query_as("SELECT id, frame_ids FROM acquisition_session")
+                    .fetch_all(pool)
+                    .await
+                    .unwrap();
+            let ready = rows.iter().any(|(_id, frame_ids)| {
+                let frames: Vec<String> = serde_json::from_str(frame_ids).unwrap_or_default();
+                frames.len() >= 2
+            });
+            if ready { Some(()) } else { None }
+        },
+        "acquisition_session with 2 frames never appeared after confirm_resp plan apply-completed event",
+    )
+    .await;
 
     let sessions: Vec<(String, String)> =
         sqlx::query_as("SELECT id, frame_ids FROM acquisition_session")

@@ -145,7 +145,7 @@ async fn resume_refused_while_item_still_stale() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
     assert_eq!(plan_row.state, "paused", "run must have paused on the stale item");
@@ -204,7 +204,7 @@ async fn resume_succeeds_after_stale_item_resolved_and_drains_remaining_pending(
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
     assert_eq!(plan_row.state, "paused");
@@ -228,7 +228,7 @@ async fn resume_succeeds_after_stale_item_resolved_and_drains_remaining_pending(
         .expect("resume must succeed once the stale condition is resolved");
     assert_eq!(resp.plan_id, plan_id);
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     assert!(!src1.exists(), "item 1's source should have been moved by the resumed run");
     assert!(dst1.exists(), "item 1's destination should exist after the resumed run");
@@ -345,7 +345,7 @@ async fn resume_succeeds_after_volume_available_again() {
         .expect("resume must succeed once the volume is reachable again");
     assert_eq!(resp.plan_id, plan_id);
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     assert!(dst1.exists(), "item 1's destination should exist after the resumed run");
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
@@ -447,7 +447,7 @@ async fn resume_succeeds_after_disk_space_available_again() {
         .expect("resume must succeed once there is enough free space again");
     assert_eq!(resp.plan_id, plan_id);
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     assert!(dst1.exists(), "item 1's destination should exist after the resumed run");
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
@@ -534,7 +534,7 @@ async fn cancel_signals_the_executor_restarted_by_resume() {
         .await
         .expect("cancel must find the resumed run's freshly re-registered ActiveRun");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
     assert_eq!(
@@ -635,7 +635,7 @@ async fn resume_then_retry_of_pre_pause_failed_item_reaches_terminal_state() {
     app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should start");
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
     assert_eq!(plan_row.state, "paused", "run must have paused on the stale item");
@@ -661,7 +661,7 @@ async fn resume_then_retry_of_pre_pause_failed_item_reaches_terminal_state() {
         .await
         .expect("retry must be accepted: plan is applying, item is failed, run is active");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    support::wait_plan_terminal(db.pool(), &plan_id).await;
 
     // The retried item actually re-executed for real (not just a DB flip):
     // its source file really moved.
