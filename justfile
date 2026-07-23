@@ -178,3 +178,11 @@ test-integration:
 # Run end-to-end tests against the real Tauri backend.
 test-e2e:
     cd apps/desktop && pnpm test:e2e:real
+
+# Run the inbox perf measurement harness and print baseline JSON lines.
+# Set PERF_N to control fixture size (default 500; use 5000 for a deeper run).
+# Output is machine-readable JSON — one line per scenario — suitable for
+# pasting before/after numbers into PR descriptions.
+# Tests are marked #[ignore] so `cargo test --workspace` skips them.
+perf-bench:
+    cargo run --release -p perf-bench
