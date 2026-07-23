@@ -1,6 +1,14 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project name and tool validation (spec 008 F-2).
 
 /// Maximum length for a project name (per data-model.md invariants).
+///
+/// Parity: duplicated in
+/// `apps/desktop/src/features/projects/schemas.ts` `MAX_NAME_LEN` (no
+/// generated tauri-specta binding exposes this constant today). A vitest in
+/// `schemas.test.ts` pins the TS value so drift is caught on either side.
 pub const MAX_NAME_LEN: usize = 120;
 
 /// Validate a project name.

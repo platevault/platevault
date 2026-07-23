@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * altitude-settings.test.ts — unit tests for the usable-altitude threshold
  * adapter (spec 044 Track B, T012b).
@@ -35,7 +38,11 @@ import { USABLE_ALT_DEG } from './planner-altitude';
 import {
   __setObservingStateForTest,
   DEFAULT_USABLE_ALTITUDE_DEG,
+  loadObservingState,
+  USABLE_ALTITUDE_KEY,
+  OBSERVING_SCOPE,
 } from './observing-sites/site-store';
+import { commands } from '@/bindings/index';
 
 beforeEach(() => {
   __setObservingStateForTest({});
@@ -77,5 +84,32 @@ describe('setAltitudeThreshold', () => {
   it('updates the shared observing state cache the planner reads from', () => {
     setAltitudeThreshold(42);
     expect(getAltitudeThreshold()).toBe(42);
+  });
+});
+
+describe('usable-altitude backend round-trip (#823)', () => {
+  it('sends the clamped value to settings.update under usableAltitudeDeg/observing', async () => {
+    setAltitudeThreshold(45);
+    // saveUsableAltitude awaits the write; flush a microtask so it lands.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(commands.settingsUpdate).toHaveBeenCalledWith(OBSERVING_SCOPE, {
+      [USABLE_ALTITUDE_KEY]: 45,
+    });
+  });
+
+  it('a reload (loadObservingState) after a persisted write returns the saved value, not the default', async () => {
+    setAltitudeThreshold(45);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Simulate what a fresh app session's settings.get would now return.
+    vi.mocked(commands.settingsGet).mockResolvedValueOnce({
+      status: 'ok',
+      data: { scope: OBSERVING_SCOPE, values: { [USABLE_ALTITUDE_KEY]: 45 } },
+    });
+    await loadObservingState();
+
+    expect(getAltitudeThreshold()).toBe(45);
   });
 });

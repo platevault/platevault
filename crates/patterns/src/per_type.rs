@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-frame-type destination pattern selector (spec 041 iteration 2026-06-21,
 //! T049 — FR-025/FR-026/FR-026a).
 //!

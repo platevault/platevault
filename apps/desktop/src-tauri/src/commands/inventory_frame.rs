@@ -1,23 +1,24 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-frame inventory Tauri commands (spec 048 T006).
 //!
-//! `inventory_frame_list` and `inventory_reconcile_run` are wired through
-//! `app_core::frame_inventory`. `inventory_root_config_get`/`_set` are wired
-//! through `app_core_settings::root_config`. `inventory_frame_relink` is a
-//! contract-shape stub — the sha256 relink identity check is US2 T025, not
-//! yet implemented.
+//! `inventory_frame_list`, `inventory_reconcile_run`, and
+//! `inventory_frame_relink` are wired through `app_core::frame_inventory`.
+//! `inventory_root_config_get`/`_set` are wired through
+//! `app_core_settings::root_config`.
 //!
 //! Command fn names below are the literal Tauri invoke targets (no specta
 //! rename) — e.g. `inventory_frame_list` is invoked as `"inventory_frame_list"`.
 
-use app_core::frame_inventory::{list_frames, run_reconcile};
+use app_core::frame_inventory::{list_frames, relink_frame, run_reconcile};
 use app_core::settings::root_config::{get_root_config, set_root_config};
-use contracts_core::error_code::ErrorCode;
 use contracts_core::inventory_frame::{
     InventoryFrameListRequest, InventoryFrameListResponse, InventoryFrameRelinkRequest,
     InventoryFrameRelinkResponse, InventoryReconcileRunRequest, InventoryReconcileRunResponse,
     RootConfigGetRequest, RootConfigSetRequest, RootInventoryConfig,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::ContractError;
 use sqlx::SqlitePool;
 use tauri::State;
 
@@ -55,27 +56,17 @@ pub async fn inventory_reconcile_run(
 /// `inventory.frame.relink` — relink a surfaced missing frame to a candidate
 /// file under the same root, confirmed by sha256 content hash.
 ///
-/// Stub (US2 T025 not yet implemented): always returns `internal.error`
-/// rather than silently claiming a match. Contract shape only.
-///
 /// # Errors
-/// Always returns `ContractError` until T025 lands.
+/// Returns `ContractError` (`frame.not_found`, `root.unavailable`,
+/// `file.not_found`, `hash.mismatch`) per `app_core::frame_inventory::relink_frame`.
 #[tauri::command]
 #[specta::specta]
 pub async fn inventory_frame_relink(
     req: InventoryFrameRelinkRequest,
+    pool: State<'_, SqlitePool>,
+    app_state: State<'_, AppState>,
 ) -> Result<InventoryFrameRelinkResponse, ContractError> {
-    tracing::debug!(
-        "stub: inventory.frame.relink frame_id={} candidate={}",
-        req.frame_id,
-        req.candidate_relative_path
-    );
-    Err(ContractError::new(
-        ErrorCode::InternalError,
-        "inventory.frame.relink is not yet implemented (spec 048 US2 T025)".to_owned(),
-        ErrorSeverity::Blocking,
-        false,
-    ))
+    relink_frame(&pool, &app_state.bus, &req).await
 }
 
 /// `inventory.root_config.get` — read a root's reconcile/detection

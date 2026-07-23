@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * RotationWarning — spec 041 T080 · FR-040 (flat↔light rotation applicability).
  *
@@ -53,14 +56,14 @@ export function RotationWarningNotice({ warning }: RotationWarningNoticeProps) {
   return (
     <Banner
       variant="warn"
-      className="alm-rotation-warning"
+      className="pv-rotation-warning"
       data-testid={`rotation-warning-${warning.kind}`}
     >
       <AlertTriangle
         size={14}
         role="img"
         aria-label={m.calibration_rotation_warning_aria()}
-        className="alm-rotation-warning__icon"
+        className="pv-rotation-warning__icon"
       />{' '}
       {message}
     </Banner>

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Ring buffer eviction tests (spec 019, T022).
  *
@@ -105,7 +108,9 @@ describe('logStore ring buffer', () => {
 
   it('notifies listeners on append', () => {
     let callCount = 0;
-    const unsub = subscribeLog(() => { callCount++; });
+    const unsub = subscribeLog(() => {
+      callCount++;
+    });
 
     appendLog([makeEntry(1)]);
     expect(callCount).toBe(1);

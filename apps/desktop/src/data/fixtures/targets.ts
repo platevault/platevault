@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Static mock fixture data for Target and TargetDetail
 // Matches design V3 mock data.
 
@@ -27,12 +30,68 @@ export interface TargetFixture {
 }
 
 export const TARGETS_DATA: TargetFixture[] = [
-  { id: 1, uuid: '550e8400-e29b-41d4-a716-446655440206', name: '(unresolved)', common: '', kind: 'unknown', sessions: 3, hours: 4.2, projects: 0, warn: true },
-  { id: 2, uuid: '550e8400-e29b-41d4-a716-446655440203', name: 'IC 1396', common: "Elephant's Trunk", kind: 'deep sky', sessions: 4, hours: 9.3, projects: 1 },
-  { id: 3, uuid: '550e8400-e29b-41d4-a716-446655440204', name: 'Jupiter', common: '', kind: 'planetary', sessions: 6, hours: 2.5, projects: 1 },
-  { id: 4, uuid: '550e8400-e29b-41d4-a716-446655440202', name: 'M31', common: 'Andromeda Galaxy', kind: 'deep sky', sessions: 8, hours: 11.8, projects: 1, warn: true },
-  { id: 5, uuid: '550e8400-e29b-41d4-a716-446655440205', name: 'M42', common: 'Orion Nebula', kind: 'deep sky', sessions: 5, hours: 3.4, projects: 0 },
-  { id: 6, uuid: '550e8400-e29b-41d4-a716-446655440201', name: 'NGC 7000', common: 'North America Nebula', kind: 'deep sky', sessions: 12, hours: 14.2, projects: 2 },
+  {
+    id: 1,
+    uuid: '550e8400-e29b-41d4-a716-446655440206',
+    name: '(unresolved)',
+    common: '',
+    kind: 'unknown',
+    sessions: 3,
+    hours: 4.2,
+    projects: 0,
+    warn: true,
+  },
+  {
+    id: 2,
+    uuid: '550e8400-e29b-41d4-a716-446655440203',
+    name: 'IC 1396',
+    common: "Elephant's Trunk",
+    kind: 'deep sky',
+    sessions: 4,
+    hours: 9.3,
+    projects: 1,
+  },
+  {
+    id: 3,
+    uuid: '550e8400-e29b-41d4-a716-446655440204',
+    name: 'Jupiter',
+    common: '',
+    kind: 'planetary',
+    sessions: 6,
+    hours: 2.5,
+    projects: 1,
+  },
+  {
+    id: 4,
+    uuid: '550e8400-e29b-41d4-a716-446655440202',
+    name: 'M31',
+    common: 'Andromeda Galaxy',
+    kind: 'deep sky',
+    sessions: 8,
+    hours: 11.8,
+    projects: 1,
+    warn: true,
+  },
+  {
+    id: 5,
+    uuid: '550e8400-e29b-41d4-a716-446655440205',
+    name: 'M42',
+    common: 'Orion Nebula',
+    kind: 'deep sky',
+    sessions: 5,
+    hours: 3.4,
+    projects: 0,
+  },
+  {
+    id: 6,
+    uuid: '550e8400-e29b-41d4-a716-446655440201',
+    name: 'NGC 7000',
+    common: 'North America Nebula',
+    kind: 'deep sky',
+    sessions: 12,
+    hours: 14.2,
+    projects: 2,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -129,7 +188,13 @@ export const targetDetail: TargetDetailType = {
   sessions: [
     {
       id: 's-001',
-      sessionKey: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-11-30' },
+      sessionKey: {
+        target: 'NGC 7000',
+        filter: 'Ha',
+        binning: '1x1',
+        gain: '100',
+        night: '2024-11-30',
+      },
       confidence: 'confirmed',
       opticalTrainId: 'ot-2600mm',
       frameCount: 54,
@@ -142,7 +207,13 @@ export const targetDetail: TargetDetailType = {
     },
     {
       id: 's-002',
-      sessionKey: { target: 'NGC 7000', filter: 'OIII', binning: '1x1', gain: '100', night: '2024-11-30' },
+      sessionKey: {
+        target: 'NGC 7000',
+        filter: 'OIII',
+        binning: '1x1',
+        gain: '100',
+        night: '2024-11-30',
+      },
       confidence: 'confirmed',
       opticalTrainId: 'ot-2600mm',
       frameCount: 38,
@@ -155,7 +226,13 @@ export const targetDetail: TargetDetailType = {
     },
     {
       id: 's-003',
-      sessionKey: { target: 'NGC 7000', filter: 'SII', binning: '1x1', gain: '100', night: '2024-12-01' },
+      sessionKey: {
+        target: 'NGC 7000',
+        filter: 'SII',
+        binning: '1x1',
+        gain: '100',
+        night: '2024-12-01',
+      },
       confidence: 'high',
       opticalTrainId: 'ot-2600mm',
       frameCount: 22,
@@ -168,7 +245,13 @@ export const targetDetail: TargetDetailType = {
     },
     {
       id: 's-004',
-      sessionKey: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-12-15' },
+      sessionKey: {
+        target: 'NGC 7000',
+        filter: 'Ha',
+        binning: '1x1',
+        gain: '100',
+        night: '2024-12-15',
+      },
       confidence: 'confirmed',
       opticalTrainId: 'ot-2600mm',
       frameCount: 30,

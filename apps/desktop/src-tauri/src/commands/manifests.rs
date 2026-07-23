@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project manifest and notes Tauri commands (spec 024).
 //!
 //! ## Commands
@@ -14,10 +17,11 @@ use contracts_core::manifests::{
     ManifestRevealRequest, ProjectNoteGetRequest, ProjectNoteGetResult, ProjectNoteUpdateRequest,
     ProjectNoteUpdateResult,
 };
+use contracts_core::native::{EntityKind, RevealRequest};
 use tauri::{AppHandle, State};
-use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::lifecycle::AppState;
+use crate::commands::native::reveal_with_audit;
 
 // ── project.manifest.list ─────────────────────────────────────────────────────
 
@@ -113,41 +117,28 @@ pub async fn note_update(
 /// `project.manifest.reveal_in_os` — open the manifest file's folder in the
 /// OS file manager.
 ///
-/// Delegates to `tauri-plugin-opener::reveal_item_in_dir`. On Linux, if the
-/// opener plugin fails, falls back to `xdg-open` on the parent directory
-/// (matching the pattern from `native.reveal`).
+/// #716: routes through the shared spec-004 `native.reveal` core
+/// (`reveal_with_audit`) instead of reimplementing the opener/xdg-open
+/// fallback independently — path validation and `native.reveal.failed`
+/// audit-on-failure now apply here too, which the standalone reimplementation
+/// never had. The external `Result<(), String>` contract is unchanged.
 ///
 /// # Errors
 /// Returns `Err(String)` when the path does not exist or the OS open fails.
 #[tauri::command]
 #[specta::specta]
 pub async fn manifest_reveal_in_os(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     app: AppHandle,
     request: ManifestRevealRequest,
 ) -> Result<(), String> {
     tracing::debug!("project.manifest.reveal_in_os path={}", request.path);
 
-    let path = std::path::Path::new(&request.path);
-    if !path.exists() {
-        return Err(format!("manifest file not found: {}", request.path));
-    }
-
-    match app.opener().reveal_item_in_dir(&request.path) {
-        Ok(()) => Ok(()),
-        Err(opener_err) => {
-            // Linux fallback: xdg-open on the parent directory.
-            #[cfg(target_os = "linux")]
-            if let Some(parent) = path.parent() {
-                let parent_str = parent.to_string_lossy();
-                match std::process::Command::new("xdg-open").arg(parent_str.as_ref()).spawn() {
-                    Ok(_) => return Ok(()),
-                    Err(e) => {
-                        tracing::warn!("manifest.reveal_in_os: xdg-open fallback failed: {e}");
-                    }
-                }
-            }
-            Err(format!("failed to reveal {} in file manager: {opener_err}", request.path))
-        }
-    }
+    let reveal_request = RevealRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        path: request.path,
+        entity_kind: Some(EntityKind::ProjectManifest),
+        entity_id: None,
+    };
+    reveal_with_audit(&app, &state, &reveal_request).await.map(|_| ()).map_err(|e| e.message)
 }

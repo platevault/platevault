@@ -1,11 +1,16 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { usePreference } from '@/data/preferences';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { checkFirstRunComplete } from '@/app/first-run';
 import { m } from '@/lib/i18n';
 import { SetupWizard } from './SetupWizard';
 
 export function SetupPage() {
   const [setupCompleted] = usePreference('setupCompleted');
+  const [density] = usePreference('density');
   const navigate = useNavigate();
   const [checking, setChecking] = useState(!setupCompleted);
 
@@ -15,39 +20,34 @@ export function SetupPage() {
       return;
     }
 
-    const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-    if (useMocks) {
-      setChecking(false);
-      return;
-    }
-
+    // Single source of truth for the first-run gate (also used by the index
+    // route) — handles mock mode, the backend round-trip, and the fallback to
+    // the cached preference internally.
     let cancelled = false;
-    import('@/bindings/index')
-      .then(({ commands }) => commands.firstrunState())
-      .then((result) => {
-        if (cancelled) return;
-        if (result.status === 'ok' && Boolean(result.data.completedAt)) {
-          void navigate({ to: '/inbox' });
-        } else {
-          setChecking(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setChecking(false);
-      });
-    return () => { cancelled = true; };
+    void checkFirstRunComplete().then((complete) => {
+      if (cancelled) return;
+      if (complete) {
+        void navigate({ to: '/inbox' });
+      } else {
+        setChecking(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [setupCompleted, navigate]);
 
   if (setupCompleted || checking) {
     return (
-      <div className="alm-page alm-setup-page__loading">
-        {m.common_loading()}
-      </div>
+      <div className="pv-page pv-setup-page__loading">{m.common_loading()}</div>
     );
   }
 
   return (
-    <div className="alm-page">
+    // density-* mirrors Shell.tsx's `.pv-frame` class: the wizard renders
+    // outside the Shell, so it needs its own carrier for a live density
+    // preview during setup (#505).
+    <div className={`pv-page density-${density}`}>
       <SetupWizard />
     </div>
   );

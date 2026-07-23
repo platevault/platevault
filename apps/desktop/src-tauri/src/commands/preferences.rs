@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 029 preferences stubs exposed to the Tauri webview.
 //!
 //! Stub implementations returning hardcoded fixture data matching the mock
@@ -6,7 +9,7 @@
 use std::collections::HashMap;
 
 use contracts_core::enums::{Density, ViewMode};
-use contracts_core::preferences::{AppPreferences, SessionsGroupBy, SessionsView, TourCompleted};
+use contracts_core::preferences::{AppPreferences, SessionsGroupBy, SessionsView};
 use contracts_core::ContractError;
 use contracts_core::JsonAny;
 
@@ -25,8 +28,8 @@ pub async fn preferences_get() -> Result<AppPreferences, ContractError> {
         default_project_view: ViewMode::Combined,
         sessions_group_by: SessionsGroupBy::None,
         sessions_view: SessionsView::List,
-        tour_completed: TourCompleted { step1: false, step2: false, step3: false },
         setup_completed: false,
+        detail_dock: HashMap::new(),
     })
 }
 

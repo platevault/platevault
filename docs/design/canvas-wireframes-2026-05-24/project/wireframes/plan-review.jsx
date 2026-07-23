@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Filesystem plan review — single page, toggle between table and diff views.
 // Same plan: cleanup plan for "NGC 7000 · HOO" with 148 items.
 

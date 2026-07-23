@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Provenance hydration for spec 002 Phase 4.
 //!
 //! Reads `provenance_history_archive` rows for a given (entity_type, entity_id)
@@ -20,10 +23,14 @@ use domain_core::ids::{EntityId, Timestamp};
 ///
 /// Ordered to match the column projection in `load_provenance`:
 /// `id, asset_id, asset_type, field_path, origin, value, captured_at, source_id, replaced_by`.
+/// `value` decodes via `sqlx::types::Json` at fetch time — a malformed cell
+/// fails the whole query (propagates), matching the pre-migration `?` on
+/// `serde_json::from_str` in `row_to_entry`.
 type RawProvenanceTuple =
-    (String, String, String, String, String, String, String, Option<String>, Option<String>);
+    (String, String, String, String, String, Json<Value>, String, Option<String>, Option<String>);
 use domain_core::lifecycle::provenance::{ProvenanceEntry, ProvenanceTag, ProvenancedValue};
 use serde_json::Value;
+use sqlx::types::Json;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -44,8 +51,8 @@ pub struct ProvenanceRow {
     pub field_path: String,
     /// Matches `ProvenanceTag` snake_case discriminant.
     pub origin: String,
-    /// Serialized `T`.
-    pub value_json: String,
+    /// Already decoded via `sqlx::types::Json` in the SELECT tuple.
+    pub value: Value,
     /// RFC 3339 timestamp.
     pub captured_at: String,
     pub source_id: Option<String>,
@@ -88,12 +95,11 @@ fn parse_entity_id(s: &str) -> Result<EntityId, DbError> {
 
 /// Convert one raw row into a typed `ProvenanceEntry<Value>`.
 fn row_to_entry(row: &ProvenanceRow) -> DbResult<ProvenanceEntry<Value>> {
-    let value: Value = serde_json::from_str(&row.value_json)?;
     let origin = parse_tag(&row.origin)?;
     let captured_at = parse_timestamp(&row.captured_at)?;
     let source_id = row.source_id.as_deref().map(parse_entity_id).transpose()?;
     Ok(ProvenanceEntry {
-        value,
+        value: row.value.clone(),
         origin,
         captured_at,
         source_id,
@@ -114,9 +120,10 @@ fn row_to_entry(row: &ProvenanceRow) -> DbResult<ProvenanceEntry<Value>> {
 ///
 /// # Errors
 ///
-/// Returns [`DbError::Database`] for SQL failures, [`DbError::Serialise`]
-/// when a stored value cannot be parsed as JSON, and [`DbError::NotFound`]
-/// when stored discriminants/UUIDs/timestamps cannot be decoded.
+/// Returns [`DbError::Database`] for SQL failures (including a stored `value`
+/// that cannot be parsed as JSON — decoded via `sqlx::types::Json` at fetch
+/// time) and [`DbError::NotFound`] when stored discriminants/UUIDs/timestamps
+/// cannot be decoded.
 pub async fn load_provenance(
     pool: &sqlx::SqlitePool,
     entity_id: EntityId,
@@ -144,7 +151,7 @@ pub async fn load_provenance(
                 entity_type,
                 field_path,
                 origin,
-                value_json,
+                Json(value),
                 captured_at,
                 source_id,
                 superseded_by,
@@ -155,7 +162,7 @@ pub async fn load_provenance(
                     entity_type,
                     field_path,
                     origin,
-                    value_json,
+                    value,
                     captured_at,
                     source_id,
                     superseded_by,

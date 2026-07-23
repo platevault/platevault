@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Static mock fixture data for the review queue — session-centric.
 // Matches design V3 mock data.
 
@@ -24,13 +27,91 @@ export interface InboxFixture {
 }
 
 export const INBOX_DATA: InboxFixture[] = [
-  { id: 1, target: 'IC 1396', filter: 'Ha', date: '2025-10-10', duration: '1h 30m', size: '810 MB', frameType: 'light', frames: 18, conflict: 'Mixed gains: 100, 120', gain: 100, exposure: 300 },
-  { id: 2, target: 'M42', filter: 'OIII', date: '2025-10-02', duration: '1h 15m', size: '675 MB', frameType: 'light', frames: 15, gain: 100, exposure: 300 },
-  { id: 3, target: 'NGC 7000', filter: 'Ha', date: '2025-09-15', duration: '3h 30m', size: '1.8 GB', frameType: 'light', frames: 42, gain: 100, exposure: 300 },
-  { id: 4, target: 'Dark', filter: '', date: '2025-09-15', duration: '4h 10m', size: '2.2 GB', frameType: 'dark', frames: 50, gain: 100, exposure: 300 },
-  { id: 5, target: 'Flat', filter: 'Ha', date: '2025-09-15', duration: '0s', size: '1.3 GB', frameType: 'flat', frames: 30, gain: 100, exposure: 3 },
-  { id: 6, target: 'Bias', filter: '', date: '2025-09-15', duration: '0s', size: '4.4 GB', frameType: 'bias', frames: 100, gain: 100, exposure: 0 },
-  { id: 7, target: 'M31', filter: 'L', date: '2025-09-14', duration: '1h 24m', size: '1.2 GB', frameType: 'light', frames: 28, gain: 100, exposure: 300 },
+  {
+    id: 1,
+    target: 'IC 1396',
+    filter: 'Ha',
+    date: '2025-10-10',
+    duration: '1h 30m',
+    size: '810 MB',
+    frameType: 'light',
+    frames: 18,
+    conflict: 'Mixed gains: 100, 120',
+    gain: 100,
+    exposure: 300,
+  },
+  {
+    id: 2,
+    target: 'M42',
+    filter: 'OIII',
+    date: '2025-10-02',
+    duration: '1h 15m',
+    size: '675 MB',
+    frameType: 'light',
+    frames: 15,
+    gain: 100,
+    exposure: 300,
+  },
+  {
+    id: 3,
+    target: 'NGC 7000',
+    filter: 'Ha',
+    date: '2025-09-15',
+    duration: '3h 30m',
+    size: '1.8 GB',
+    frameType: 'light',
+    frames: 42,
+    gain: 100,
+    exposure: 300,
+  },
+  {
+    id: 4,
+    target: 'Dark',
+    filter: '',
+    date: '2025-09-15',
+    duration: '4h 10m',
+    size: '2.2 GB',
+    frameType: 'dark',
+    frames: 50,
+    gain: 100,
+    exposure: 300,
+  },
+  {
+    id: 5,
+    target: 'Flat',
+    filter: 'Ha',
+    date: '2025-09-15',
+    duration: '0s',
+    size: '1.3 GB',
+    frameType: 'flat',
+    frames: 30,
+    gain: 100,
+    exposure: 3,
+  },
+  {
+    id: 6,
+    target: 'Bias',
+    filter: '',
+    date: '2025-09-15',
+    duration: '0s',
+    size: '4.4 GB',
+    frameType: 'bias',
+    frames: 100,
+    gain: 100,
+    exposure: 0,
+  },
+  {
+    id: 7,
+    target: 'M31',
+    filter: 'L',
+    date: '2025-09-14',
+    duration: '1h 24m',
+    size: '1.2 GB',
+    frameType: 'light',
+    frames: 28,
+    gain: 100,
+    exposure: 300,
+  },
 ];
 
 // ─── Queue items (rich review shape, retained) ───────────────────────────────
@@ -45,17 +126,49 @@ export const reviewItems: ReviewItem[] = [
       'observer_location needs reviewed provenance before this session can be marked confirmed. Currently inferred from FITS sitelong/sitelat headers.',
     ],
     evidence: {
-      target: { value: 'NGC 7000', origin: 'reviewed', confidence: 'confirmed' },
-      filter: { value: 'SII (Optolong 7nm)', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'NGC 7000',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      filter: {
+        value: 'SII (Optolong 7nm)',
+        origin: 'observed',
+        confidence: 'high',
+      },
       binning: { value: '1×1', origin: 'observed', confidence: 'high' },
       gain: { value: '100', origin: 'observed', confidence: 'high' },
-      night: { value: '2024-12-01 (local solar noon)', origin: 'inferred', confidence: 'medium' },
-      optical_train: { value: 'AT130-EDT + 2600MM', origin: 'reviewed', confidence: 'confirmed' },
-      camera: { value: 'ZWO ASI2600MM Pro', origin: 'observed', confidence: 'high' },
+      night: {
+        value: '2024-12-01 (local solar noon)',
+        origin: 'inferred',
+        confidence: 'medium',
+      },
+      optical_train: {
+        value: 'AT130-EDT + 2600MM',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      camera: {
+        value: 'ZWO ASI2600MM Pro',
+        origin: 'observed',
+        confidence: 'high',
+      },
       telescope: { value: 'AT130-EDT', origin: 'observed', confidence: 'high' },
-      focal_length: { value: '910 mm', origin: 'reviewed', confidence: 'confirmed' },
-      observer_location: { value: 'Truckee, CA (inferred from SITELAT/SITELONG)', origin: 'inferred', confidence: 'medium' },
-      timezone: { value: 'America/Los_Angeles', origin: 'inferred', confidence: 'medium' },
+      focal_length: {
+        value: '910 mm',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      observer_location: {
+        value: 'Truckee, CA (inferred from SITELAT/SITELONG)',
+        origin: 'inferred',
+        confidence: 'medium',
+      },
+      timezone: {
+        value: 'America/Los_Angeles',
+        origin: 'inferred',
+        confidence: 'medium',
+      },
     },
     suggestedTarget: 'NGC 7000',
     suggestedFilter: 'SII',
@@ -65,9 +178,7 @@ export const reviewItems: ReviewItem[] = [
     kind: 'session',
     sessionId: 'sess-12',
     confidence: 'low',
-    blockingReasons: [
-      'OBJECT keyword missing on all 22 frames',
-    ],
+    blockingReasons: ['OBJECT keyword missing on all 22 frames'],
     evidence: {
       target: { value: '(unresolved)', origin: 'inferred', confidence: 'low' },
       filter: { value: 'Unknown', origin: 'inferred', confidence: 'low' },
@@ -82,11 +193,13 @@ export const reviewItems: ReviewItem[] = [
     kind: 'session',
     sessionId: 'sess-14',
     confidence: 'medium',
-    blockingReasons: [
-      'new night — confirm equipment train',
-    ],
+    blockingReasons: ['new night — confirm equipment train'],
     evidence: {
-      target: { value: 'NGC 7000', origin: 'reviewed', confidence: 'confirmed' },
+      target: {
+        value: 'NGC 7000',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
       filter: { value: 'Ha', origin: 'observed', confidence: 'high' },
       night: { value: '2024-12-15', origin: 'observed', confidence: 'high' },
     },
@@ -98,11 +211,13 @@ export const reviewItems: ReviewItem[] = [
     kind: 'session',
     sessionId: 'sess-15',
     confidence: 'medium',
-    blockingReasons: [
-      'new night — confirm equipment train',
-    ],
+    blockingReasons: ['new night — confirm equipment train'],
     evidence: {
-      target: { value: 'NGC 7000', origin: 'reviewed', confidence: 'confirmed' },
+      target: {
+        value: 'NGC 7000',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
       filter: { value: 'OIII', origin: 'observed', confidence: 'high' },
       night: { value: '2024-12-15', origin: 'observed', confidence: 'high' },
     },
@@ -114,11 +229,13 @@ export const reviewItems: ReviewItem[] = [
     kind: 'session',
     sessionId: 'cal-22',
     confidence: 'medium',
-    blockingReasons: [
-      'temperature drift across frames',
-    ],
+    blockingReasons: ['temperature drift across frames'],
     evidence: {
-      target: { value: 'Calibration: Flats Ha', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'Calibration: Flats Ha',
+        origin: 'observed',
+        confidence: 'high',
+      },
       night: { value: '2024-12-14', origin: 'observed', confidence: 'high' },
     },
     suggestedTarget: 'Calibration: Flats Ha',
@@ -129,9 +246,7 @@ export const reviewItems: ReviewItem[] = [
     kind: 'session',
     sessionId: 'sess-31',
     confidence: 'medium',
-    blockingReasons: [
-      'session spans two nights — split?',
-    ],
+    blockingReasons: ['session spans two nights — split?'],
     evidence: {
       target: { value: 'M42', origin: 'reviewed', confidence: 'confirmed' },
       filter: { value: 'Ha', origin: 'observed', confidence: 'high' },
@@ -154,9 +269,19 @@ export interface ReviewSessionDetail {
   sourcePath: string;
 
   sessionKey: Array<{ k: string; v: string; prov: ProvenanceOrigin }>;
-  equipment: Array<{ k: string; v: string; prov: ProvenanceOrigin; conf?: ConfidenceLevel; warn?: boolean }>;
+  equipment: Array<{
+    k: string;
+    v: string;
+    prov: ProvenanceOrigin;
+    conf?: ConfidenceLevel;
+    warn?: boolean;
+  }>;
   framesSummary: Array<{ label: string; value: string; warn?: boolean }>;
-  calibrationMatches: Array<{ label: string; status: 'match' | 'none' | 'warn'; pill: string }>;
+  calibrationMatches: Array<{
+    label: string;
+    status: 'match' | 'none' | 'warn';
+    pill: string;
+  }>;
   calibrationNote?: string;
 }
 
@@ -182,7 +307,13 @@ export const focusedSession: ReviewSessionDetail = {
     { k: 'Camera', v: 'ZWO ASI2600MM Pro', prov: 'observed' },
     { k: 'Telescope', v: 'AT130-EDT', prov: 'observed' },
     { k: 'Focal length', v: '910 mm', prov: 'reviewed' },
-    { k: 'Observer location', v: 'Truckee, CA (inferred from SITELAT/SITELONG)', prov: 'inferred', conf: 'medium', warn: true },
+    {
+      k: 'Observer location',
+      v: 'Truckee, CA (inferred from SITELAT/SITELONG)',
+      prov: 'inferred',
+      conf: 'medium',
+      warn: true,
+    },
     { k: 'Timezone', v: 'America/Los_Angeles', prov: 'inferred' },
   ],
 
@@ -199,7 +330,8 @@ export const focusedSession: ReviewSessionDetail = {
     { label: 'Master Flat SII', status: 'none', pill: 'none in library' },
     { label: 'Master Bias', status: 'match', pill: 'match' },
   ],
-  calibrationNote: 'This session cannot be fully calibrated until SII flats are captured.',
+  calibrationNote:
+    'This session cannot be fully calibrated until SII flats are captured.',
 };
 
 // ─── Queue progress ─────────────────────────────────────────────────────────

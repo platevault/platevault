@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CallList — renders the recent-calls ring buffer table (spec 021 US2).
  *
@@ -11,6 +14,7 @@ interface CallListProps {
   calls: ContractCall[];
   contracts: ContractMeta[];
   onViewSchema: (call: ContractCall) => void;
+  onReplay: (call: ContractCall) => void;
 }
 
 function formatDuration(ms: number | null): string {
@@ -28,29 +32,31 @@ function formatStarted(iso: string): string {
   }
 }
 
-export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
+export function CallList({
+  calls,
+  contracts,
+  onViewSchema,
+  onReplay,
+}: CallListProps) {
   if (calls.length === 0) {
     return (
-      <p className="alm-dev-calls__empty">
+      <p className="pv-dev-calls__empty">
         No calls recorded yet. Make some API calls with devMode on.
       </p>
     );
   }
 
   return (
-    <table
-      className="alm-dev-calls__table"
-      aria-label="Recent contract calls"
-    >
+    <table className="pv-dev-calls__table" aria-label="Recent contract calls">
       <thead>
-        <tr className="alm-dev-calls__thead-row">
-          <th className="alm-dev-calls__th">ID</th>
-          <th className="alm-dev-calls__th">Contract</th>
-          <th className="alm-dev-calls__th">Version</th>
-          <th className="alm-dev-calls__th">Started</th>
-          <th className="alm-dev-calls__th">Duration</th>
-          <th className="alm-dev-calls__th">Outcome</th>
-          <th className="alm-dev-calls__th">Actions</th>
+        <tr className="pv-dev-calls__thead-row">
+          <th className="pv-dev-calls__th">ID</th>
+          <th className="pv-dev-calls__th">Contract</th>
+          <th className="pv-dev-calls__th">Version</th>
+          <th className="pv-dev-calls__th">Started</th>
+          <th className="pv-dev-calls__th">Duration</th>
+          <th className="pv-dev-calls__th">Outcome</th>
+          <th className="pv-dev-calls__th">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -62,48 +68,44 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
           return (
             <tr
               key={call.id}
-              className="alm-dev-calls__row"
+              className="pv-dev-calls__row"
               data-testid={`call-row-${call.id}`}
             >
-              <td className="alm-dev-calls__td--id">
-                {call.id}
-              </td>
-              <td className="alm-dev-calls__td--contract">
+              <td className="pv-dev-calls__td--id">{call.id}</td>
+              <td className="pv-dev-calls__td--contract">
                 {call.contract}
                 {call.payloadTruncated && (
                   <span
                     title="Payload was truncated (exceeded 64 KB)"
-                    className="alm-dev-calls__truncated"
+                    className="pv-dev-calls__truncated"
                   >
                     ⚠T
                   </span>
                 )}
               </td>
-              <td className="alm-dev-calls__td">
-                {call.contractVersion}
-              </td>
-              <td className="alm-dev-calls__td--started">
+              <td className="pv-dev-calls__td">{call.contractVersion}</td>
+              <td className="pv-dev-calls__td--started">
                 {formatStarted(call.startedAt)}
               </td>
-              <td className="alm-dev-calls__td">
+              <td className="pv-dev-calls__td">
                 {formatDuration(call.durationMs)}
               </td>
-              <td className="alm-dev-calls__td">
+              <td className="pv-dev-calls__td">
                 {isError ? (
                   <span
-                    className="alm-dev-calls__outcome--error"
+                    className="pv-dev-calls__outcome--error"
                     title={call.error?.message}
                   >
                     error: {call.error?.code}
                   </span>
                 ) : (
-                  <span className="alm-dev-calls__outcome--ok">ok</span>
+                  <span className="pv-dev-calls__outcome--ok">ok</span>
                 )}
               </td>
-              <td className="alm-dev-calls__td--actions">
+              <td className="pv-dev-calls__td--actions">
                 <button
                   type="button"
-                  className="alm-btn alm-btn--xs"
+                  className="pv-btn pv-btn--xs"
                   onClick={() => onViewSchema(call)}
                   aria-label={`View schema for ${call.contract} v${call.contractVersion}`}
                 >
@@ -111,7 +113,13 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                 </button>
                 <button
                   type="button"
-                  className={'alm-btn alm-btn--xs' + (isReplaySafe ? ' alm-dev-calls__replay-btn--safe' : ' alm-dev-calls__replay-btn--unsafe')}
+                  className={
+                    'pv-btn pv-btn--xs' +
+                    (isReplaySafe
+                      ? ' pv-dev-calls__replay-btn--safe'
+                      : ' pv-dev-calls__replay-btn--unsafe')
+                  }
+                  onClick={() => onReplay(call)}
                   disabled={!isReplaySafe}
                   title={
                     isReplaySafe

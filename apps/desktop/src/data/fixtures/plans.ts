@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Static mock fixture data for FilesystemPlan and PlanDetail (spec 017).
 // Updated to match the new contract types from crates/contracts/core/src/plans.rs.
 // Matches wireframe: canvas-wireframes-2026-05-24/project/wireframes/plan-review.jsx

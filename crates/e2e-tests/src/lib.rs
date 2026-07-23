@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Real-UI end-to-end test crate (spec 037, Layer 2).
 //!
 //! The library target is intentionally empty. All E2E logic lives under

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 030 (ingestion settings) — package P12: real backend persistence.
 //
 // Owned backend keys (IngestionSettings / UpdateIngestionSettings, its own
@@ -16,14 +19,26 @@
 // clobbers them, the same pattern CalibrationMatching.tsx uses for its
 // backend-unsupported fields.
 //
-// CONSUMER STATUS (P12): no scan/watch/ingest pipeline reads these values yet
-// — this pane makes them durable, not yet enforced. Toggling e.g. "Follow NTFS
-// junctions" does not change scan behaviour until a scan-pipeline consumer is
-// wired to read it.
-import { useState, useEffect } from 'react';
+// CONSUMERS (issue #878):
+//   - followSymlinks IS enforced: `inbox.scan.folder` resolves it through
+//     `app_core::inbox_scan::resolve_scan_options`, so it decides whether the
+//     Inbox scan traverses links. Covered by
+//     crates/app/core/tests/ingestion_scan_settings_integration.rs.
+//   - followJunctions, scanOnStartup and hashingMode have no consumer, so they
+//     render disabled rather than as working controls. The scanner classes
+//     junctions with symlinks under one flag
+//     (`fs_pathsafe::is_link_or_junction`), no startup-scan path exists, and
+//     folder signatures always use a partial hash. Giving each an independent
+//     effect is a feature, not wiring; they stay persisted so enabling them
+//     later needs no migration.
+import { useState, useEffect, useRef } from 'react';
 import { Toggle } from '@/ui';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
 import {
   ingestionSettingsGet,
   ingestionSettingsUpdate,
@@ -59,11 +74,19 @@ export function Ingestion(_props: IngestionProps) {
   // clobbering them.
   const [settings, setSettings] = useState<UpdateIngestionSettings>(DEFAULTS);
 
+  // Guards against the initial `ingestionSettingsGet()` fetch resolving
+  // *after* the user has already edited a control (a real race, not just a
+  // CI timing artifact: on a slower/more contended machine the mount fetch
+  // can still be in flight when the user's first click fires). Without this,
+  // the late `setSettings(loaded)` below stomps the user's optimistic edit
+  // back to the stale fetched value.
+  const editedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     ingestionSettingsGet()
       .then((loaded: IngestionSettings) => {
-        if (cancelled) return;
+        if (cancelled || editedRef.current) return;
         setSettings(loaded);
       })
       .catch(() => {
@@ -75,6 +98,7 @@ export function Ingestion(_props: IngestionProps) {
   }, []);
 
   function persist(patch: Partial<UpdateIngestionSettings>) {
+    editedRef.current = true;
     const next: UpdateIngestionSettings = { ...settings, ...patch };
     setSettings(next);
     ingestionSettingsUpdate(next).catch(() => {
@@ -83,6 +107,7 @@ export function Ingestion(_props: IngestionProps) {
   }
 
   const handleRestoreDefaults = async () => {
+    editedRef.current = true;
     const persisted = await ingestionSettingsUpdate(DEFAULTS);
     setSettings(persisted);
   };
@@ -100,6 +125,7 @@ export function Ingestion(_props: IngestionProps) {
           <Toggle
             aria-label={m.settings_ingestion_scan_startup()}
             checked={settings.scanOnStartup}
+            disabled
             onChange={(v) => persist({ scanOnStartup: v })}
           />
         </SettingsRow>
@@ -122,6 +148,7 @@ export function Ingestion(_props: IngestionProps) {
           <Toggle
             aria-label={m.settings_ingestion_follow_junctions()}
             checked={settings.followJunctions}
+            disabled
             onChange={(v) => persist({ followJunctions: v })}
           />
         </SettingsRow>
@@ -133,8 +160,9 @@ export function Ingestion(_props: IngestionProps) {
           info={m.settings_ingestion_hashing_info()}
         >
           <select
-            className="alm-select"
+            className="pv-select"
             aria-label={m.settings_ingestion_hashing_mode()}
+            disabled
             value={settings.hashingMode}
             onChange={(e) => {
               const v = e.target.value as HashingMode;
@@ -142,7 +170,9 @@ export function Ingestion(_props: IngestionProps) {
             }}
           >
             <option value="lazy">{m.settings_ingestion_hashing_lazy()}</option>
-            <option value="eager">{m.settings_ingestion_hashing_eager()}</option>
+            <option value="eager">
+              {m.settings_ingestion_hashing_eager()}
+            </option>
             <option value="off">{m.settings_ingestion_hashing_off()}</option>
           </select>
         </SettingsRow>

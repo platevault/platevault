@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `list_assets_ledger` use case (spec 002, T020 surface).
 //!
 //! Thin wrapper over [`LifecycleRepository::list_assets_ledger`] so callers

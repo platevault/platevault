@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Settings contract DTOs for the Tauri IPC surface (spec 018, T004).
 //!
 //! `SettingsState` is the full v1 bag of settings, one field per key from

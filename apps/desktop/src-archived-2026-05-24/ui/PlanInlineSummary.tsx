@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ReactElement } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import type { Plan } from "../data/mock";

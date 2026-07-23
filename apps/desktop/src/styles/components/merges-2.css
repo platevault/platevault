@@ -6,140 +6,155 @@
  * merges these rules into src/styles/components.css. Rules here either ADD new
  * classes for the redesign or OVERRIDE prior inbox rules that the redesign
  * supersedes (the stale ones in components.css should be replaced on merge —
- * notably the old `.alm-inbox-stats` strip, `.alm-inbox-statsbar`,
- * `.alm-inbox-detail-pane`, `.alm-inbox-detail-plans*`).
+ * notably the old `.pv-inbox-stats` strip, `.pv-inbox-statsbar`,
+ * `.pv-inbox-detail-pane`, `.pv-inbox-detail-plans*`).
  *
  * The Inbox is a SPECIAL page (NOT the shared ListPageLayout bottom-split). Its
  * body is 3 zones:
- *   - `.alm-inbox-upper`  row 1: detection LIST (primary) + file-details SIDE
+ *   - `.pv-inbox-upper`  row 1: detection LIST (primary) + file-details SIDE
  *                          panel (right, fixed readable width).
- *   - `.alm-inbox-plandock` row 2: planned-actions BOTTOM panel, full width,
+ *   - `.pv-inbox-plandock` row 2: planned-actions BOTTOM panel, full width,
  *                          docked, capped height with its OWN scroll — never
  *                          steals the list or side panel.
  *
  * Other groups:
- *   - `.alm-inbox-summary*`     top-bar summary: count + ONE per-type breakdown.
- *   - `.alm-inbox-stats*`       per-type breakdown as inline chips (no strip).
- *   - `.alm-inbox-list*`        self-scrolling list viewport (no ListSidebar
+ *   - `.pv-inbox-summary*`     top-bar summary: count + ONE per-type breakdown.
+ *   - `.pv-inbox-stats*`       per-type breakdown as inline chips (no strip).
+ *   - `.pv-inbox-list*`        self-scrolling list viewport (no ListSidebar
  *                               search box, no duplicate footer count).
- *   - `.alm-inbox-meta-row--warn` state-modifier replacing an inline warn-bg.
+ *   - `.pv-inbox-meta-row--warn` state-modifier replacing an inline warn-bg.
  * ==========================================================================*/
 
 /* ── Top-bar summary: count text + inline per-type chips ──────────────────── */
-.alm-inbox-summary {
+.pv-inbox-summary {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--alm-sp-2) var(--alm-sp-3);
+  gap: var(--pv-sp-2) var(--pv-sp-3);
   min-width: 0;
 }
-.alm-inbox-summary__count {
+.pv-inbox-summary__count {
   white-space: nowrap;
-  color: var(--alm-text-secondary);
+  color: var(--pv-text-secondary);
 }
 
 /* ── Per-frame-type breakdown: ONE compact inline chip row (no strip) ──────
- * Overrides the old `.alm-inbox-stats` full-width bordered strip. */
-.alm-inbox-stats {
+ * Overrides the old `.pv-inbox-stats` full-width bordered strip. */
+.pv-inbox-stats {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   padding: 0;
   border: none;
   background: none;
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
 }
-.alm-inbox-stats__per-type {
+.pv-inbox-stats__per-type {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   white-space: nowrap;
-  padding: 1px var(--alm-sp-2);
-  border: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-pill, var(--alm-radius-sm));
-  background: var(--alm-surface-raised);
+  padding: 1px var(--pv-sp-2);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-pill, var(--pv-radius-sm));
+  background: var(--pv-surface-raised);
 }
-.alm-inbox-stats__type {
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+.pv-inbox-stats__type {
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
   text-transform: capitalize;
 }
-.alm-inbox-stats__label {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-2xs);
+.pv-inbox-stats__label {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
 }
 
-/* ── List viewport: moved to the SHARED `.alm-listtable` block (tables-lists.css)
+/* ── List viewport: moved to the SHARED `.pv-listtable` block (tables-lists.css)
    — one wrapper for every full-width virtualized list table (Inbox · Sessions);
-   the old `.alm-inbox-list*` viewport/footer/empty clones were deleted. ── */
+   the old `.pv-inbox-list*` viewport/footer/empty clones were deleted. ── */
 
 /* ── Inbox list on the shared Table construct (font/row-height/header parity) ── */
-.alm-inbox-table {
+.pv-inbox-table {
   table-layout: fixed;
   width: 100%;
 }
-.alm-inbox-table td.num,
-.alm-inbox-table th.num,
-.alm-inbox-table td.alm-inbox-cell--right,
-.alm-inbox-table th.alm-inbox-cell--right {
+.pv-inbox-table td.num,
+.pv-inbox-table th.num,
+.pv-inbox-table td.pv-inbox-cell--right,
+.pv-inbox-table th.pv-inbox-cell--right {
   text-align: right;
 }
 /* Detection (path) cell: single line, ellipsis (needs table-layout:fixed). */
-.alm-inbox-cell__path {
+.pv-inbox-cell__path {
   display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
-  color: var(--alm-text);
+  color: var(--pv-text);
 }
-.alm-inbox-table__row {
+/* Issue #605: path + the "Plan pending review" chip on one line — the path
+   shrinks/ellipses first, the chip (fixed content) never wraps or clips. */
+.pv-inbox-cell__path-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  min-width: 0;
+}
+.pv-inbox-cell__path-wrap .pv-inbox-cell__path {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.pv-inbox-cell__path-wrap .pv-pill {
+  flex-shrink: 0;
+}
+.pv-inbox-table__row {
   cursor: pointer;
 }
-.alm-inbox-table__row:hover {
-  background: var(--alm-hover-bg, var(--alm-surface));
+.pv-inbox-table__row:hover {
+  background: var(--pv-hover-bg, var(--pv-surface));
 }
-.alm-inbox-table__row--selected,
-.alm-inbox-table__row--selected:hover {
-  background: var(--alm-info-bg);
+.pv-inbox-table__row--selected,
+.pv-inbox-table__row--selected:hover {
+  background: var(--pv-info-bg);
 }
-.alm-inbox-table__row--muted {
+.pv-inbox-table__row--muted {
   opacity: 0.6;
 }
 /* Group sub-header row. */
-.alm-inbox-table__group {
+.pv-inbox-table__group {
   cursor: pointer;
 }
-.alm-inbox-table__group td {
-  background: var(--alm-surface);
-  border-bottom: 1px solid var(--alm-border);
+.pv-inbox-table__group td {
+  background: var(--pv-surface);
+  border-bottom: 1px solid var(--pv-border);
 }
-.alm-inbox-table__group:hover td {
-  background: var(--alm-hover-bg, var(--alm-surface));
+.pv-inbox-table__group:hover td {
+  background: var(--pv-hover-bg, var(--pv-surface));
 }
 /* The group cell is a real <button> — reset native chrome. */
-.alm-inbox-table__group-cell {
+.pv-inbox-table__group-cell {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   width: 100%;
   background: none;
   border: none;
   cursor: pointer;
   text-align: left;
 
-  font-size: var(--alm-text-xs);
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text-muted);
+  letter-spacing: var(--pv-tracking-normal);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
 }
 
 /* ── Metadata row needs-attention state (replaces inline warn-bg style) ───── */
-.alm-inbox-meta-row--warn {
-  background: var(--alm-warn-bg);
+.pv-inbox-meta-row--warn {
+  background: var(--pv-warn-bg);
 }
 
 /* === merged from .cssblocks/calibration-detail.css (refine wave 2, spec-043) === */
@@ -152,33 +167,33 @@
  * Context: the master detail (MasterDetail.tsx) now renders inside the shared
  * ListPageLayout BOTTOM panel, which is WIDE but SHORT and auto-sizes to content
  * (task #89, capped at ~50vh with internal scroll). The previous design used the
- * tall right-rail dashboard (`DetailGrid` + `alm-detail--fill`), which (1) made
+ * tall right-rail dashboard (`DetailGrid` + `pv-detail--fill`), which (1) made
  * the fingerprint rail independently scrollable and (2) let the matches table
  * grow unbounded and dominate the panel.
  *
  * This block lays the calibration detail out as a SIDE-BY-SIDE split for the
  * wide-short panel:
- *   - `.alm-calib-detail__facts`  — fingerprint + reuse KV, COMPACT on the left,
+ *   - `.pv-calib-detail__facts`  — fingerprint + reuse KV, COMPACT on the left,
  *      sizing to its content (NO inner scroll / maxHeight).
- *   - `.alm-calib-detail__matches` — the compatible-sessions match table beside
+ *   - `.pv-calib-detail__matches` — the compatible-sessions match table beside
  *      it as the hero; it CAPS its own height and scrolls internally so it never
  *      dominates the panel or pushes it tall.
  * ==========================================================================*/
 
-.alm-calib-detail {
+.pv-calib-detail {
   display: grid;
   /* Facts compact (fixed-ish), matches take the rest. */
-  grid-template-columns: var(--alm-rail-width) minmax(0, 1fr);
-  gap: var(--alm-sp-5);
+  grid-template-columns: var(--pv-rail-width) minmax(0, 1fr);
+  gap: var(--pv-sp-5);
   align-items: start;
-  margin-top: var(--alm-sp-3);
+  margin-top: var(--pv-sp-3);
 }
 
 /* Facts column: sizes to content, never scrolls on its own. */
-.alm-calib-detail__facts {
+.pv-calib-detail__facts {
   min-width: 0;
 }
-.alm-calib-detail__facts .alm-rail__panel {
+.pv-calib-detail__facts .pv-rail__panel {
   /* Override the fill-mode rail scroll: the fingerprint sizes to its content. */
   max-height: none;
   overflow: visible;
@@ -189,19 +204,19 @@
  * being dwarfed. We cap the COLUMN (not the raw <table>, which would break
  * table-layout) — the "Compatible sessions" header scrolls with its rows, which
  * is fine in a short panel. The table keeps its normal column widths. */
-.alm-calib-detail__matches {
+.pv-calib-detail__matches {
   min-width: 0;
   max-height: 40vh;
   overflow-y: auto;
 }
-.alm-calib-detail__matches > .alm-section {
+.pv-calib-detail__matches > .pv-section {
   margin-bottom: 0;
 }
 
 /* Single-column fallback for very narrow panels (defensive — the 1280px min
  * window makes this rare, but the panel can be narrowed by deep nav). */
 @media (max-width: 880px) {
-  .alm-calib-detail {
+  .pv-calib-detail {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -210,32 +225,32 @@
  * Compact the master fingerprint: flow the fingerprint + reuse KV pairs into a
  * 2-column grid and widen the facts column so the whole calibration detail fits
  * the wide-short bottom panel without inner scroll. Must follow the
- * calibration-detail.css block above so the .alm-calib-detail column override
+ * calibration-detail.css block above so the .pv-calib-detail column override
  * wins on source order. */
-.alm-calib-detail {
+.pv-calib-detail {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
-.alm-calib-kvgrid {
+.pv-calib-kvgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--alm-sp-5);
+  column-gap: var(--pv-sp-5);
   row-gap: 0;
   align-items: start;
 }
-.alm-calib-kvgrid .alm-kv {
+.pv-calib-kvgrid .pv-kv {
   min-width: 0;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
-.alm-calib-kvgrid .alm-kv__label {
+.pv-calib-kvgrid .pv-kv__label {
   width: auto;
   max-width: 6.5rem;
 }
-.alm-calib-kvgrid .alm-kv__value {
+.pv-calib-kvgrid .pv-kv__value {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 @media (max-width: 880px) {
-  .alm-calib-kvgrid {
+  .pv-calib-kvgrid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -245,7 +260,7 @@
  * targets-planner.css — Planner table virtualization + planning columns
  * (tasks #84 / #85, spec-043 redesign).
  *
- * NOT imported. Token-only (--alm-*) classes staged here for the components.css
+ * NOT imported. Token-only (--pv-*) classes staged here for the components.css
  * split (task #60); the parent merges this block into
  * src/styles/components.css when wiring. Do not add raw hex/rgb/ms values.
  *
@@ -262,115 +277,164 @@
 /* --- Virtualized scroll container (#84) ----------------------------------- */
 /* The page mounts this as the primary content of ListPageLayout, which gives it
  * a bounded height; the table scrolls inside it while the header stays pinned. */
-.alm-targets-table__wrap {
+.pv-targets-table__wrap {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
 }
-.alm-targets-table__scroll {
+.pv-targets-table__scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   /* Scroll horizontally instead of clipping the rightmost column: the table
-     carries a min-width floor (see .alm-targets-table) so columns never shrink
+     carries a min-width floor (see .pv-targets-table) so columns never shrink
      below their content; below that floor the table scrolls. */
   overflow-x: auto;
 }
 
 /* Sticky header so column labels/sort controls stay visible while scrolling. */
-.alm-targets-table__scroll .alm-targets-table thead th {
+.pv-targets-table__scroll .pv-targets-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
+/* === Pinned identity columns (spec 054 FR-006/FR-007, #1158) ==============
+ *
+ * The star + designation columns stay put while the rest scroll horizontally,
+ * so a row's identity is never lost. This is reachable in the DEFAULT side-dock
+ * configuration, not an edge case: the dock engages at a 1400px window, the
+ * sidebar takes 220px and the dock 420px, leaving the table ~760px against its
+ * own 1000px min-width floor — so it h-scrolls by ~240px and, with
+ * `table-layout: fixed`, the 20%-wide designation column is what scrolls away.
+ *
+ * Safe here specifically because TargetsTable windows rows with the
+ * PADDING-SPACER pattern and applies NO transforms (see its docstring): a
+ * transformed ancestor would create a containing block and silently break
+ * `position: sticky`. The axes are also orthogonal — virtualization is
+ * vertical, pinning is horizontal. Cost is bounded by the windowing: ~13 rows
+ * are in the DOM at a time, so this is ~26 sticky cells, not 22k.
+ *
+ * Scoped to `.pv-targets-table__row` on purpose. Group headers
+ * (`.pv-listgroup`) and the virtualizer's spacer rows render a single
+ * `<td colSpan>`; an unscoped `nth-child` would pin that full-width spanning
+ * cell and drag it across the viewport.
+ */
+.pv-targets-table {
+  /* 50px, and the value is exact rather than approximate — reasoning, since
+     two other candidates are wrong in ways that are invisible without measuring:
+       - The other columns are percentages totalling 95%, which fixed-layout
+         honours exactly, so the star column renders as whatever they leave.
+         Declaring 45px here produced a 50px column and left the offset below
+         5px short: the designation drifted 270px -> 265px while scrolling.
+       - A percentage is worse. Sticky offsets resolve against the CONTAINING
+         BLOCK, not the table, so `left: 5%` became 5% of the 760px scroll
+         container = 38px, drifting by 12px.
+     50px is exact because the offset is only ever consulted while scrolling,
+     and the table only scrolls at its 1000px min-width floor: its width is
+     max(container, 1000px), so h-overflow implies container < 1000px implies
+     table == 1000px exactly, making the star 5% == 50px. Above that floor the
+     table fits, nothing scrolls, and the offset is never used.
+     The width itself is applied in merges-3.css next to the star column's own
+     docs; this token inherits down to the <col> element. */
+  --pv-targets-star-w: 50px;
+}
+
+.pv-targets-table__scroll .pv-targets-table thead th:nth-child(-n + 2),
+.pv-targets-table__scroll
+  .pv-targets-table
+  .pv-targets-table__row
+  > td:nth-child(-n + 2) {
+  position: sticky;
+}
+.pv-targets-table__scroll .pv-targets-table thead th:nth-child(1),
+.pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(1) {
+  left: 0;
+}
+.pv-targets-table__scroll .pv-targets-table thead th:nth-child(2),
+.pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(2) {
+  left: var(--pv-targets-star-w);
+}
+
+/* Layering: pinned header corner > pinned body cells > sticky header > rest.
+   Without this the pinned body cells slide over the header while scrolling. */
+.pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(-n + 2) {
+  z-index: 2;
+  /* Cells are transparent by default and would let scrolled columns show
+     through. `th` already carries --pv-surface (primitives.css), which is why
+     the sticky header reads as opaque. */
+  background: var(--pv-bg);
+}
+.pv-targets-table__scroll .pv-targets-table thead th:nth-child(-n + 2) {
+  z-index: 3;
+}
+
+/* Re-assert row state on the pinned cells. The hover/selected rules set
+   `background` on `td` at lower specificity than the pinned-cell rule above,
+   so without these the pinned columns would stay --pv-bg while the rest of the
+   row highlights. */
+.pv-targets-table__scroll
+  .pv-targets-table
+  .pv-targets-table__row:hover
+  > td:nth-child(-n + 2) {
+  background: var(--pv-surface);
+}
+.pv-targets-table__scroll
+  .pv-targets-table
+  .pv-targets-table__row--selected
+  > td:nth-child(-n + 2) {
+  background: var(--pv-accent-bg);
+}
+
+/* Seam marking where the pinned region ends, drawn with box-shadow rather than
+   border-right: `.pv-table` is `border-collapse: collapse`, where borders
+   belong to the table rather than the cell and detach from sticky cells while
+   scrolling. A shadow is painted by the cell and tracks it exactly. */
+.pv-targets-table__scroll .pv-targets-table thead th:nth-child(2),
+.pv-targets-table__scroll .pv-targets-table .pv-targets-table__row > td:nth-child(2) {
+  box-shadow: 1px 0 0 var(--pv-border-subtle);
+}
+
 /* The windowed body's height is set inline (getTotalSize) so the scrollbar
  * reflects the full row count; rows position via the spacer + document flow. */
-.alm-targets-table__body {
+.pv-targets-table__body {
   position: relative;
 }
 
 /* Spacer row reserving the height of rows scrolled above the visible window. */
-.alm-targets-table__spacer td {
+.pv-targets-table__spacer td {
   padding: 0;
   border: none;
 }
 
 /* --- Planning columns (#85) ----------------------------------------------- */
-.alm-targets-cell--center { text-align: center; }
+.pv-targets-cell--center { text-align: center; }
 
-/* Sparkline column: fixed-ish narrow column, vertically centered. */
-.alm-targets-cell--spark {
-  width: 76px;
-  padding-top: var(--alm-sp-1);
-  padding-bottom: var(--alm-sp-1);
-}
+/* Altitude sparkline removed (iteration 2026-07-15, FR-007 hard removal):
+   the detail panel's altitude graph is the canonical altitude view. */
 
-/* Inline altitude sparkline. Size is fixed here; geometry is data-driven in the
- * SVG (the allowed dynamic case). preserveAspectRatio=none lets it stretch to
- * this box without distorting the unitless viewBox math. */
-.alm-targets-spark {
-  display: block;
-  width: 64px;
-  height: 18px;
-  overflow: visible;
-}
-.alm-targets-spark__guide {
-  stroke: var(--alm-border);
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-  vector-effect: non-scaling-stroke;
-}
-.alm-targets-spark__curve {
-  fill: none;
-  stroke: var(--alm-text-muted);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-/* Usable tonight → accent stroke; low → stays muted. */
-.alm-targets-spark--usable .alm-targets-spark__curve {
-  stroke: var(--alm-accent);
-}
-.alm-targets-spark--low .alm-targets-spark__curve {
-  stroke: var(--alm-text-muted);
-  opacity: 0.7;
-}
-
-/* Visible-tonight indicator: a dot + small label, colour-coded by usability. */
-.alm-targets-vis {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--alm-sp-1);
-  font-size: var(--alm-text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-.alm-targets-vis--yes { color: var(--alm-ok); }
-.alm-targets-vis--no { color: var(--alm-text-muted); }
-.alm-targets-vis__label { font-weight: var(--alm-weight-medium); }
+/* Visible-tonight indicator removed (iteration 2026-07-15, FR-007): the
+   visible column folded into the imaging-time why-glyph (FR-030/FR-031). */
 
 /* === merged from .cssblocks/inbox-swap.css (inbox swap+fold, spec-043) === */
 /* ==========================================================================
  * Inbox panel SWAP (task #59 / #75 / #83) — token-only CSS block.
  *
  * NOT imported directly. The parent merges this block into
- * `apps/desktop/src/styles/components.css` next to the existing `.alm-inbox-*`
+ * `apps/desktop/src/styles/components.css` next to the existing `.pv-inbox-*`
  * rules. Token-only: no literals beyond layout primitives already used by the
  * surrounding inbox block.
  *
  * Swap summary (CHANGE 1):
- *   - The RIGHT side panel (`.alm-inbox-side`) now hosts the PLAN
+ *   - The RIGHT side panel (`.pv-inbox-side`) now hosts the PLAN
  *     (`PlanPanel`) — a compact, fixed-width column shown only when an open
  *     plan / pending root pick exists.
- *   - The BOTTOM dock (`.alm-inbox-plandock`) now hosts the file DETAILS
+ *   - The BOTTOM dock (`.pv-inbox-plandock`) now hosts the file DETAILS
  *     (`InboxDetail`) — docked full width, auto-sized to its content, capped at
  *     ~40vh with its own scroll, shown only when a detection is selected.
  *
- * The base `.alm-inbox-side` / `.alm-inbox-plandock` rules already provide the
+ * The base `.pv-inbox-side` / `.pv-inbox-plandock` rules already provide the
  * column/dock scaffolding; these modifiers tune them for the swapped content:
  *   - `--plan`    : the side panel now carries the plan (compact width, no
  *                   forced inner padding so PlanPanel owns its own chrome).
@@ -383,25 +447,25 @@
  * type with its count (e.g. "10 bias · 21 dark · 12 light → (root)") sourced
  * from the ingestion's frame-type breakdown, instead of one line per file. The
  * type tokens read as inline, dot-separated counts. */
-.alm-plan-panel__summary-breakdown {
+.pv-plan-panel__summary-breakdown {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--alm-sp-1) var(--alm-sp-2);
+  gap: var(--pv-sp-1) var(--pv-sp-2);
   min-width: 0;
 }
-.alm-plan-panel__summary-type {
+.pv-plan-panel__summary-type {
   white-space: nowrap;
 }
-.alm-plan-panel__summary-type-count {
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+.pv-plan-panel__summary-type-count {
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
 }
-.alm-plan-panel__summary-type-name {
-  color: var(--alm-text-secondary);
+.pv-plan-panel__summary-type-name {
+  color: var(--pv-text-secondary);
 }
-.alm-plan-panel__summary-sep {
-  color: var(--alm-text-muted);
+.pv-plan-panel__summary-sep {
+  color: var(--pv-text-muted);
 }
 
 /* === merged from .cssblocks/projects-side.css (spec-043 task #94) === */
@@ -409,24 +473,24 @@
  * Switch the body from a vertical column (bottom dock) to a horizontal row so
  * the detail sits to the RIGHT of the full-width primary content as a fixed,
  * full-height column with its own scroll. */
-.alm-listpage__body--side {
+.pv-listpage__body--side {
   flex-direction: row;
 }
 
-.alm-listpage__detail--side {
+.pv-listpage__detail--side {
   /* Fixed-width, full-height right column (own scroll lives on the body). */
-  flex: 0 0 var(--alm-side-detail-w);
-  width: var(--alm-side-detail-w);
+  flex: 0 0 var(--pv-side-detail-w);
+  width: var(--pv-side-detail-w);
   height: auto;
   max-height: none;
   align-self: stretch;
   border-top: none;
-  border-left: 1px solid var(--alm-border);
+  border-left: 1px solid var(--pv-border);
 }
 
 /* Fixed side-panel width token (kept local to this block). */
-.alm-listpage__body--side {
-  --alm-side-detail-w: 420px;
+.pv-listpage__body--side {
+  --pv-side-detail-w: 420px;
 }
 
 /* ── Projects-detail structure for the side column ───────────────────────────
@@ -434,40 +498,80 @@
  * narrow side column we tighten section spacing, pin the close bar, and make
  * each region a compact, scannable block. */
 
-/* Tighter vertical rhythm between sections in the narrow column. */
-.alm-listpage__detail--side .alm-project-detail__sections {
+/* Tighter vertical rhythm between sections in the narrow column. #1068:
+   min-width:0 lets this column-flex item actually shrink to the fixed side
+   width instead of growing to its widest descendant's content size. */
+.pv-listpage__detail--side .pv-project-detail__sections {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
+  min-width: 0;
+}
+
+/* #1068: wide data tables (Projects sources ROLE/SOURCE/FILTER/SUBS/INTEG,
+   Calibration's compatible-sessions match table — both rendered via the
+   shared `Section` + `Table`) have no horizontal-scroll wrapper in the side
+   dock, so overflowing columns/buttons (e.g. Assign) are clipped and
+   unreachable. `overflow-x: auto` also zeroes this flex item's automatic
+   min-size (CSS Flexbox §4.5: non-visible overflow ⇒ no min-content floor),
+   which is what lets it shrink to the available width in the first place. */
+.pv-listpage__detail--side .pv-section {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* Calibration's match table sits one level up inside a row-flex row
+   (.pv-session-detail2), which — unlike the column above — needs its own
+   min-width:0 to stop the wide table forcing this flex item wider than the
+   panel before the wrap/scroll rules above ever get a chance to apply. */
+.pv-listpage__detail--side .pv-session-detail2__match {
+  min-width: 0;
+}
+
+/* #1068: ProjectBottomDetail's `.pv-project-bottom__grid` is shared between
+   the wide BOTTOM strip and this SIDE column (rendered via
+   .pv-project-detail-stack). Its `repeat(auto-fill, minmax(280px, 1fr))` plus
+   the notes cell's `grid-column: span 2` forces a second track that a ~390px
+   side panel can't actually give 280px to — Grid then crushes that column
+   (observed: 280px + 73px), stranding whatever section auto-placed into it
+   (e.g. "Scan for cleanup candidates") far narrower than its own content. The
+   component already collapses to 1 column via `@media (max-width: 700px)`,
+   but that's keyed to the WINDOW, not this panel, so it never fires here —
+   force the same collapse by panel width instead. */
+.pv-listpage__detail--side .pv-project-bottom__grid {
+  grid-template-columns: 1fr;
+}
+.pv-listpage__detail--side .pv-project-bottom__cell--notes {
+  grid-column: span 1;
 }
 
 /* Compact the lifecycle stepper so it doesn't dominate the top of the column. */
-.alm-listpage__detail--side .alm-stepper {
-  padding-top: var(--alm-sp-1);
-  padding-bottom: var(--alm-sp-1);
+.pv-listpage__detail--side .pv-stepper {
+  padding-top: var(--pv-sp-1);
+  padding-bottom: var(--pv-sp-1);
 }
 
 /* Sections read as tidy bordered cards with clear headers and no dead space. */
-.alm-project-detail-side__section {
-  border: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface);
-  padding: var(--alm-sp-2);
+.pv-project-detail-side__section {
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface);
+  padding: var(--pv-sp-2);
 }
 
 /* Reduce the gap the metric line leaves above the stepper in the column. */
-.alm-listpage__detail--side .alm-metricline {
-  margin-bottom: var(--alm-sp-1);
+.pv-listpage__detail--side .pv-metricline {
+  margin-bottom: var(--pv-sp-1);
 }
 
 /* Keep the action-bar cluster wrapping cleanly inside the narrow column. */
-.alm-listpage__detail--side .alm-project-detail__bar-actions {
+.pv-listpage__detail--side .pv-project-detail__bar-actions {
   flex-wrap: wrap;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
 /* The path breadcrumb must wrap, not push the panel wider. */
-.alm-listpage__detail--side .alm-project-detail__bar-path {
+.pv-listpage__detail--side .pv-project-detail__bar-path {
   overflow-wrap: anywhere;
   word-break: break-all;
 }
@@ -481,14 +585,14 @@
  *
  * Three refinements to the Inbox 3-zone layout:
  *   1. PLAN SIDE PANEL padding — the PlanPanel was rendered flush against the
- *      borders of the right side panel (`.alm-inbox-side--plan`). Give it real
+ *      borders of the right side panel (`.pv-inbox-side--plan`). Give it real
  *      internal padding and tidy the header / summary / action spacing.
  *   2. BOTTOM FILE-DETAILS PANEL side-by-side — the per-file inspector was
  *      stacked BELOW the metadata table and scrolled out of view. Lay the
  *      detail body out as two columns: primary detail (classification +
  *      breakdown + metadata table) on the LEFT, the inspector on the RIGHT.
  *   (Task #98's collapsed-summary accuracy is a data-flow fix in InboxPage /
- *    store; no CSS needed — the existing `.alm-plan-panel__summary*` rules
+ *    store; no CSS needed — the existing `.pv-plan-panel__summary*` rules
  *    already render the per-type breakdown line.)
  * ==========================================================================*/
 
@@ -496,20 +600,20 @@
  * Lay the detail body out as two columns: the primary detail (classification,
  * breakdown, per-file metadata table) on the LEFT and the inspector on the
  * RIGHT. Collapses to a single column when there is no metadata to inspect. */
-.alm-inbox-detail__cols {
+.pv-inbox-detail__cols {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.alm-inbox-detail__cols--split {
+.pv-inbox-detail__cols--split {
   flex-direction: row;
   align-items: flex-start;
-  gap: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
 }
 
 /* LEFT column: primary detail. Takes the remaining width and owns the long
  * tables; never shrinks below a usable minimum. */
-.alm-inbox-detail__main {
+.pv-inbox-detail__main {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -519,9 +623,9 @@
 /* RIGHT column: the inspector. Fixed, readable width using the wide bottom
  * panel's horizontal room so it is visible without scrolling under the table.
  * Sticks to the top of the column as the left content scrolls. */
-.alm-inbox-detail__cols--split .alm-inbox-detail__aside {
-  flex: 0 0 var(--alm-inbox-inspector-width, 320px);
-  width: var(--alm-inbox-inspector-width, 320px);
+.pv-inbox-detail__cols--split .pv-inbox-detail__aside {
+  flex: 0 0 var(--pv-inbox-inspector-width, 320px);
+  width: var(--pv-inbox-inspector-width, 320px);
   min-width: 0;
   position: sticky;
   top: 0;
@@ -530,25 +634,25 @@
 
 /* The inspector card fills its right column and reads as a distinct panel
  * (left border + raised surface) instead of a full-width bottom strip. */
-.alm-inbox-detail__cols--split .alm-inbox-detail__aside .alm-inbox-inspector {
+.pv-inbox-detail__cols--split .pv-inbox-detail__aside .pv-inbox-inspector {
   border-top: none;
-  border-left: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-md);
-  background: var(--alm-surface-raised);
+  border-left: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
   overflow: hidden;
 }
 
 /* In the two-column layout the metadata wrap no longer needs to host the
  * inspector below the table — it is just the (scrollable) table now. */
-.alm-inbox-detail__cols--split .alm-inbox-meta-wrap {
+.pv-inbox-detail__cols--split .pv-inbox-meta-wrap {
   min-height: 0;
 }
 
 /* The inspector's KV grid is too wide for the narrow right column: collapse it
  * from three columns to two so the labels/values stay readable. */
-.alm-inbox-detail__cols--split .alm-inbox-inspector__grid {
+.pv-inbox-detail__cols--split .pv-inbox-inspector__grid {
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--alm-sp-0) var(--alm-sp-3);
+  gap: var(--pv-sp-0) var(--pv-sp-3);
 }
 
 /* === merged from .cssblocks/detail-panel.css (spec-043 parallel coder) === */
@@ -558,25 +662,25 @@
  * and Calibration detail panels.
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css. Token-only (existing --alm-* tokens); no raw hex/rgb/ms.
+ * components.css. Token-only (existing --pv-* tokens); no raw hex/rgb/ms.
  *
  * Covers:
- *   - .alm-detail-panel          — wraps DetailPane + DetailHeader in one unit
- *   - .alm-detail-panel__title   — title + optional titleExtra inline
- *   - .alm-detail-panel__sub     — subtitle row (prose, not mono path)
- *   - .alm-detail-panel__actions — per-item action button cluster in header
+ *   - .pv-detail-panel          — wraps DetailPane + DetailHeader in one unit
+ *   - .pv-detail-panel__title   — title + optional titleExtra inline
+ *   - .pv-detail-panel__sub     — subtitle row (prose, not mono path)
+ *   - .pv-detail-panel__actions — per-item action button cluster in header
  *   - #99 density — tighter spacing for the Sessions detail header
  *   - 101 lock removal — no new lock classes needed (class removed at source)
  */
 
 /* === DETAIL PANEL (shared wrapper) === */
 
-/* The outer container simply inherits the existing .alm-detail foundation.
+/* The outer container simply inherits the existing .pv-detail foundation.
  * We add only what the shared component needs: a unified flex row for the
  * header so title, subtitle, and actions align correctly regardless of which
  * feature uses it. */
 
-.alm-detail-panel {
+.pv-detail-panel {
   /* Full height inside the bottom panel (auto-sizes with ListPageLayout). */
   display: flex;
   flex-direction: column;
@@ -584,179 +688,128 @@
 }
 
 /* Header bar: spans full width, keeps title on the left and actions on the right. */
-.alm-detail-panel__header {
+.pv-detail-panel__header {
   display: flex;
   align-items: flex-start;
-  gap: var(--alm-sp-3);
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  border-bottom: 1px solid var(--alm-border-subtle);
+  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
+  border-bottom: 1px solid var(--pv-border-subtle);
   flex-wrap: wrap;
 }
 
 /* Title block: identity heading + optional title-extra pills beside it. */
-.alm-detail-panel__title-block {
+.pv-detail-panel__title-block {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
 }
 
-.alm-detail-panel__title {
+.pv-detail-panel__title {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  font-size: var(--alm-text-md);
-  font-weight: var(--alm-weight-semibold);
-  line-height: var(--alm-leading-tight);
-  color: var(--alm-text);
+  gap: var(--pv-sp-2);
+  font-size: var(--pv-text-md);
+  font-weight: var(--pv-weight-semibold);
+  line-height: var(--pv-leading-tight);
+  color: var(--pv-text);
   min-width: 0;
 }
 
 /* Extra pills / badges sitting beside the title. */
-.alm-detail-panel__title-extra {
+.pv-detail-panel__title-extra {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex-wrap: wrap;
-  margin-top: var(--alm-sp-0);
+  margin-top: var(--pv-sp-0);
 }
 
 /* Subtitle: prose acquisition summary; NOT mono/break-all like a file path. */
-.alm-detail-panel__subtitle {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-detail-panel__subtitle {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: var(--alm-sp-0);
+  margin-top: var(--pv-sp-0);
 }
 
 /* Per-item action buttons — live in the header, right-aligned. */
-.alm-detail-panel__actions {
+.pv-detail-panel__actions {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
 
 /* Body: children fill remaining height; internal scroll on tall content. */
-.alm-detail-panel__body {
+.pv-detail-panel__body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--alm-sp-3) var(--alm-sp-4);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
 }
 
 /* === #99 Sessions detail density — tighter header in the bottom panel === */
 
-/* Override the default .alm-detail padding: the bottom panel is already short,
- * so the default var(--alm-sp-4) top/bottom padding wastes vertical room. */
-.alm-detail-panel--sessions .alm-detail-panel__header {
-  padding-top: var(--alm-sp-2);
-  padding-bottom: var(--alm-sp-2);
+/* Override the default .pv-detail padding: the bottom panel is already short,
+ * so the default var(--pv-sp-4) top/bottom padding wastes vertical room. */
+.pv-detail-panel--sessions .pv-detail-panel__header {
+  padding-top: var(--pv-sp-2);
+  padding-bottom: var(--pv-sp-2);
 }
 
-.alm-detail-panel--sessions .alm-detail-panel__body {
-  padding-top: var(--alm-sp-2);
+.pv-detail-panel--sessions .pv-detail-panel__body {
+  padding-top: var(--pv-sp-2);
 }
 
-/* === Canonical DetailPanel 3-zone body (spec 043 §4, redesign-ui-platevault) ===
+/* === Canonical DetailPanel body (spec 043 §4, redesign-ui-platevault) ========
  *
- * DetailPanel renders up to 3 balanced zones. Grid template is driven by
- * modifier classes set by the component:
+ * DetailPanel renders ONE body region, `.pv-detailpanel__content`, always.
+ * The facts/aux rails the 3-zone grid was built for were never adopted by any
+ * caller and are withdrawn (spec 054, #1107) — see DetailPanel.tsx.
  *
- *   facts + content + aux   (.alm-detailpanel--has-facts.alm-detailpanel--has-aux)
- *     → minmax(220px, 0.26fr)  minmax(0, 1fr)  minmax(240px, 0.30fr)
- *   facts + content         (.alm-detailpanel--has-facts)
- *     → minmax(220px, 0.26fr)  minmax(0, 1fr)
- *   content + aux           (.alm-detailpanel--has-aux)
- *     → minmax(0, 1fr)  minmax(240px, 0.30fr)
- *   content only            (no modifier)
- *     → no wrapper; children render directly
- *
- * Auto-expand: .alm-listpage__detail is height:fit-content with a max-height
- * cap. The .alm-listpage__detail-body must NOT also scroll — only the
- * .alm-detailpanel__content column scrolls (scrollbar-gutter:stable).
+ * Auto-expand: .pv-listpage__detail is height:fit-content with a max-height
+ * cap. The .pv-listpage__detail-body must NOT also scroll — only
+ * .pv-detailpanel__content scrolls (scrollbar-gutter:stable).
  *
  * Token-only — no raw hex/rgb/ms.
  * ============================================================================*/
 
-/* Base cols wrapper — content-only default (single col, no wrapper needed,
- * but --has-facts / --has-aux modifiers override grid-template-columns). */
-.alm-detailpanel__cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--alm-sp-5);
-  align-items: start;
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  min-height: 0;
-}
-
-/* 2-zone: facts + content */
-.alm-detailpanel__cols.alm-detailpanel--has-facts {
-  grid-template-columns: minmax(220px, 0.26fr) minmax(0, 1fr);
-}
-
-/* 2-zone: content + aux */
-.alm-detailpanel__cols.alm-detailpanel--has-aux {
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.30fr);
-}
-
-/* 3-zone: facts + content + aux */
-.alm-detailpanel__cols.alm-detailpanel--has-facts.alm-detailpanel--has-aux {
-  grid-template-columns: minmax(220px, 0.26fr) minmax(0, 1fr) minmax(240px, 0.30fr);
-}
-
-/* Facts rail (left): sizes to content, never scrolls on its own. */
-.alm-detailpanel__facts {
-  min-width: 0;
-}
-.alm-detailpanel__facts .alm-rail__panel {
-  /* Override fill-mode rail scroll so facts stay compact. */
-  max-height: none;
-  overflow: visible;
-}
-
-/* Content column (center): THE ONLY scroll region inside the body.
+/* Body region: THE ONLY scroll region inside the panel.
  * scrollbar-gutter:stable prevents dropdown-open layout shift. */
-.alm-detailpanel__content {
+.pv-detailpanel__content {
   min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
-/* Aux rail (right): secondary blocks, sizes to content, no own scroll. */
-.alm-detailpanel__aux {
-  min-width: 0;
-}
-.alm-detailpanel__aux .alm-rail__panel {
-  max-height: none;
-  overflow: visible;
-}
-
 /* FactsKV helper: a compact label/value row for use inside the facts column. */
-.alm-detailpanel__kv {
+.pv-detailpanel__kv {
   display: contents;
 }
-.alm-detailpanel__kv-label {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-faint);
-  font-weight: var(--alm-weight-medium);
+.pv-detailpanel__kv-label {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
+  font-weight: var(--pv-weight-medium);
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-0);
+  gap: var(--pv-sp-0);
 }
-.alm-detailpanel__kv-prov {
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-faint);
+.pv-detailpanel__kv-prov {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-faint);
   font-style: italic;
-  font-weight: var(--alm-weight-normal);
+  font-weight: var(--pv-weight-normal);
 }
-.alm-detailpanel__kv-value {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text);
+.pv-detailpanel__kv-value {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text);
   min-width: 0;
   overflow-wrap: anywhere;
   margin: 0;
@@ -764,10 +817,10 @@
 
 /* Single-column fallback for very narrow panels — collapse all zones. */
 @media (max-width: 820px) {
-  .alm-detailpanel__cols,
-  .alm-detailpanel__cols.alm-detailpanel--has-facts,
-  .alm-detailpanel__cols.alm-detailpanel--has-aux,
-  .alm-detailpanel__cols.alm-detailpanel--has-facts.alm-detailpanel--has-aux {
+  .pv-detailpanel__cols,
+  .pv-detailpanel__cols.pv-detailpanel--has-facts,
+  .pv-detailpanel__cols.pv-detailpanel--has-aux,
+  .pv-detailpanel__cols.pv-detailpanel--has-facts.pv-detailpanel--has-aux {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -776,10 +829,10 @@
 /* === detail-density.css — task #99, spec-043 §4 ===
  *
  * Sessions detail density improvements for the wide-short bottom panel.
- * Mirrors the calibration detail (alm-calib-detail) two-column layout:
+ * Mirrors the calibration detail (pv-calib-detail) two-column layout:
  * a compact KV facts column on the left, a state+linked column on the right.
  *
- * SCRATCH FILE: not imported. Token-only (--alm-*). No raw hex/rgb/ms.
+ * SCRATCH FILE: not imported. Token-only (--pv-*). No raw hex/rgb/ms.
  * The parent merges this into components.css when wiring.
  *
  * Context: the session detail now lives in the ListPageLayout BOTTOM panel
@@ -795,69 +848,69 @@
 
 /* === SESSION DETAIL — side-by-side layout (task #99) === */
 
-.alm-session-detail {
+.pv-session-detail {
   display: grid;
   /* Compact facts column + flexible state/linked column. */
-  grid-template-columns: var(--alm-rail-width) minmax(0, 1fr);
-  gap: var(--alm-sp-5);
+  grid-template-columns: var(--pv-rail-width) minmax(0, 1fr);
+  gap: var(--pv-sp-5);
   align-items: start;
-  padding: var(--alm-sp-3) var(--alm-sp-4);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
 }
 
 /* Facts column: rail panel with 2-column KV grid for density. */
-.alm-session-detail__facts {
+.pv-session-detail__facts {
   min-width: 0;
 }
-.alm-session-detail__facts .alm-rail__panel {
+.pv-session-detail__facts .pv-rail__panel {
   /* Size to content; no inner scroll in the short panel. */
   max-height: none;
   overflow: visible;
 }
 
-/* 2-column KV grid inside the facts rail card — mirrors alm-calib-kvgrid. */
-.alm-session-detail__kvgrid {
+/* 2-column KV grid inside the facts rail card — mirrors pv-calib-kvgrid. */
+.pv-session-detail__kvgrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--alm-sp-4);
+  column-gap: var(--pv-sp-4);
   row-gap: 0;
   align-items: start;
 }
-.alm-session-detail__kvgrid .alm-kv {
+.pv-session-detail__kvgrid .pv-kv {
   min-width: 0;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
-.alm-session-detail__kvgrid .alm-kv__label {
+.pv-session-detail__kvgrid .pv-kv__label {
   width: auto;
   max-width: 6rem;
 }
-.alm-session-detail__kvgrid .alm-kv__value {
+.pv-session-detail__kvgrid .pv-kv__value {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 /* State + linked column: stacked rail cards. */
-.alm-session-detail__state {
+.pv-session-detail__state {
   min-width: 0;
 }
-.alm-session-detail__state .alm-rail__panel {
+.pv-session-detail__state .pv-rail__panel {
   max-height: none;
   overflow: visible;
 }
 
 /* Content column (right): carries both __state and __content class names.
- * No inner scroll — the alm-detailpanel__content wrapper owns the scroll
+ * No inner scroll — the pv-detailpanel__content wrapper owns the scroll
  * region. Rail panels inside must not cap their own height. */
-.alm-session-detail__content {
+.pv-session-detail__content {
   min-width: 0;
 }
-.alm-session-detail__content .alm-rail__panel {
+.pv-session-detail__content .pv-rail__panel {
   max-height: none;
   overflow: visible;
 }
 
 /* Narrow fallback: stack columns vertically on very narrow panels. */
 @media (max-width: 820px) {
-  .alm-session-detail {
+  .pv-session-detail {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -869,88 +922,88 @@
  * ============================================================================*/
 
 /* Table shell: full width of the Frames RailCard, dense font. */
-.alm-session-frames__table {
+.pv-session-frames__table {
   width: 100%;
-  font-size: var(--alm-text-xs);
+  font-size: var(--pv-text-xs);
 }
-.alm-session-frames__table th {
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-semibold);
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  color: var(--alm-text-muted);
+.pv-session-frames__table th {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  color: var(--pv-text-muted);
   text-align: left;
-  border-bottom: 1px solid var(--alm-border-subtle);
+  border-bottom: 1px solid var(--pv-border-subtle);
   white-space: nowrap;
 }
-.alm-session-frames__table td {
-  padding: var(--alm-sp-1) var(--alm-sp-2);
+.pv-session-frames__table td {
+  padding: var(--pv-sp-1) var(--pv-sp-2);
   vertical-align: top;
 }
 
-.alm-session-frames__row {
+.pv-session-frames__row {
   cursor: pointer;
 }
-.alm-session-frames__row:hover {
-  background: var(--alm-hover-bg);
+.pv-session-frames__row:hover {
+  background: var(--pv-hover-bg);
 }
-.alm-session-frames__row--expanded {
-  background: var(--alm-selected-bg);
+.pv-session-frames__row--expanded {
+  background: var(--pv-selected-bg);
 }
 
 /* Fixed-width column for the expand toggle. */
-.alm-session-frames__th-toggle {
+.pv-session-frames__th-toggle {
   width: 20px;
 }
 
 /* The expand toggle: a small chevron in its own cell. */
-.alm-session-frames__toggle {
-  color: var(--alm-text-faint);
-  font-size: var(--alm-text-xs);
+.pv-session-frames__toggle {
+  color: var(--pv-text-faint);
+  font-size: var(--pv-text-xs);
   width: 16px;
   text-align: center;
   user-select: none;
 }
 
 /* Expanded detail row — full-width td spanning all columns. */
-.alm-session-frames__expanded-row td {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  background: var(--alm-surface);
-  border-top: 1px solid var(--alm-border-subtle);
+.pv-session-frames__expanded-row td {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  background: var(--pv-surface);
+  border-top: 1px solid var(--pv-border-subtle);
 }
 
-.alm-session-frames__expanded-body {
+.pv-session-frames__expanded-body {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
 /* Mono path placeholder when individual frame paths are not yet loaded. */
-.alm-session-frames__path-placeholder {
-
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-session-frames__path-placeholder {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
   word-break: break-all;
 }
 
 /* Additional KV pairs inside the expanded detail row. */
-.alm-session-frames__expanded-kvrow {
+.pv-session-frames__expanded-kvrow {
   display: flex;
-  gap: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
   flex-wrap: wrap;
 }
 
-.alm-session-frames__expanded-kv {
+.pv-session-frames__expanded-kv {
   display: flex;
-  gap: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
+  gap: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
 }
 
-.alm-session-frames__expanded-kv dt {
-  color: var(--alm-text-faint);
-  font-weight: var(--alm-weight-medium);
+.pv-session-frames__expanded-kv dt {
+  color: var(--pv-text-faint);
+  font-weight: var(--pv-weight-medium);
 }
 
-.alm-session-frames__expanded-kv dd {
-  color: var(--alm-text);
+.pv-session-frames__expanded-kv dd {
+  color: var(--pv-text);
   margin: 0;
 }

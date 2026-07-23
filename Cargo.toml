@@ -12,6 +12,7 @@ members = [
   "crates/app/settings",
   "crates/app/targets",
   "crates/audit",
+  "crates/audit-types",
   "crates/calibration/core",
   "crates/calibration/master-detect",
   "crates/contracts/core",
@@ -19,6 +20,7 @@ members = [
   "crates/domain/core",
   "crates/fs/executor",
   "crates/fs/inventory",
+  "crates/fs/pathsafe",
   "crates/metadata/core",
   "crates/metadata/fits",
   "crates/metadata/video",
@@ -26,6 +28,7 @@ members = [
   "crates/patterns",
   "crates/persistence/db",
   "crates/project/structure",
+  "crates/safe-filename",
   "crates/sessions",
   "crates/targeting",
   "crates/targeting/resolver",
@@ -37,7 +40,7 @@ members = [
 
 [workspace.package]
 edition = "2021"
-license = "Apache-2.0"
+license = "AGPL-3.0-only"
 repository = ""
 
 [workspace.dependencies]
@@ -45,7 +48,7 @@ async-trait = "0.1"
 hex = "0.4"
 minisign = { version = "0.7", default-features = false }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
-quick-xml = "0.39"
+quick-xml = "0.41"
 sha2 = "0.10"
 tempfile = "3"
 unicode-normalization = "0.1"
@@ -74,15 +77,29 @@ tauri-plugin-opener = "2"
 # @hypothesi/tauri-mcp-server MCP server. Requires the dev-only tauri.dev.conf.json
 # overlay (withGlobalTauri).
 tauri-plugin-mcp-bridge = "0.11"
+# Spec 051 shell integration plugins (versions confirmed against crates.io
+# 2026-07-05; same tauri-apps/plugins-workspace release train as tauri 2.11.2,
+# except tauri-plugin-prevent-default which is community-maintained).
+tauri-plugin-single-instance = "2.4.2"
+tauri-plugin-window-state = "2.4.1"
+tauri-plugin-log = "2.8.0"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-updater = "2.10.1"
+# Needed by the updater's relaunch-to-apply step (`process:default`
+# capability); matches the `@tauri-apps/plugin-process` npm version already
+# pinned in `apps/desktop/package.json`.
+tauri-plugin-process = "2.3.1"
+tauri-plugin-prevent-default = "5.0.2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "1", features = ["uuid1"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+time = { version = "0.3", features = ["formatting", "parsing", "serde", "serde-well-known"] }
 trash = "5.2"
 tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "fs"] }
 tracing = "0.1"
+tracing-appender = "0.2.5"
 uuid = { version = "1", features = ["serde", "v4"] }
 # Spec 042 stdlib adoption (not yet wired — pinned for staged per-story adoption):
 anyhow = "1"

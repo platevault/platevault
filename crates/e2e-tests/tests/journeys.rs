@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI E2E journeys.
 //!
 //! Every journey launches the real `desktop_shell` binary (built with
@@ -8,7 +11,10 @@
 //! commands); mutating steps that require a `tauri::ipc::Channel` argument
 //! (`plans.apply` a.k.a. `plans_apply_real`) are deliberately routed through
 //! the channel-free command variants that exist for exactly this purpose
-//! (`inbox.plan.apply`, `plans.approve`) rather than reaching into product
+//! (`inbox.plan.apply` for inbox plans; `plans.apply.direct` a.k.a.
+//! `plans_apply_direct`, spec 037, for archive/cleanup plans — `plans.approve`
+//! remains available separately for journeys that only need the reviewable
+//! `ready_for_review` -> `approved` step) rather than reaching into product
 //! frontend code to fabricate a Channel from a WebDriver script — see each
 //! journey's doc comment for the specific reasoning.
 //!
@@ -31,7 +37,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{write_minimal_fits, E2eApp};
+use common::{write_minimal_fits_with_exposure, E2eApp, DRAIN_BACKED_TIMEOUT};
 use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -156,13 +162,14 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     // 1. Register a disposable light-frames root with one real FITS file.
     let root_dir = tempfile::tempdir()?;
     let file_name = "light_001.fits";
-    let original_path = write_minimal_fits(
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         file_name,
         "Light Frame",
         Some("M 42"),
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
 
@@ -194,29 +201,15 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
 
     // 2. Scan + classify + confirm — this is the real reviewable plan (FR-009
     // requires the plan to exist and be reviewable before it applies).
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let items = scan["items"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
-    anyhow::ensure!(
-        !items.is_empty(),
-        "expected inbox.scan.folder to discover the fixture file: {scan}"
-    );
-    let inbox_item_id = items[0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("scanned item has no inboxItemId: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -316,13 +309,14 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     let root_dir = tempfile::tempdir()?;
-    let original_path = write_minimal_fits(
+    let original_path = write_minimal_fits_with_exposure(
         root_dir.path(),
         "light_m31_001.fits",
         "Light Frame",
         Some("M 31"),
         Some("Ha"),
         Some("2026-01-11T21:30:00"),
+        Some(300.0),
     )?;
     anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
 
@@ -347,22 +341,15 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
         )
         .await?;
 
-    let scan: serde_json::Value = app
-        .invoke(
-            "inbox_scan_folder",
-            json!({
-                "req": {
-                    "rootId": root_id,
-                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
-                    "followSymlinks": false,
-                }
-            }),
-        )
-        .await?;
-    let inbox_item_id = scan["items"][0]["inboxItemId"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
-        .to_owned();
+    // Spec 058 T012: scan records a source group and no placeholder item;
+    // classification materializes the real rows. See
+    // `common::scan_and_classify_one_item`.
+    let inbox_item_id = common::scan_and_classify_one_item(
+        &app,
+        &root_id,
+        root_dir.path().to_string_lossy().as_ref(),
+    )
+    .await?;
 
     let classify: serde_json::Value = app
         .invoke(
@@ -399,11 +386,18 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
     let _: serde_json::Value =
         app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
 
-    // Session grouping is event-driven (the plan-listener reacts to the
-    // plan-applied event asynchronously) — poll `sessions.list` for the real,
-    // grouped-and-resolved session instead of a blind sleep.
+    // Poll `sessions.list` for the real, grouped-and-resolved session instead
+    // of a blind sleep.
+    //
+    // NOTE: the previous comment here claimed this is event-driven — "the
+    // plan-listener reacts to the plan-applied event asynchronously". That is
+    // true of session GROUPING, but NOT of the `targetIds` this predicate
+    // waits on. `backfill_session_targets` has exactly one caller in the app,
+    // the 30 s-interval ingest-resolution drain, so this wait is bounded by
+    // that drain's cadence and needs [`DRAIN_BACKED_TIMEOUT`], not the plain
+    // 30 s one. Waiting 30 s on a 30 s-period task is what flaked (#1205).
     let sessions: serde_json::Value = app
-        .invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
+        .invoke_until("sessions_list", json!({}), DRAIN_BACKED_TIMEOUT, |v: &serde_json::Value| {
             v.as_array().is_some_and(|arr| {
                 arr.iter().any(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
             })
@@ -567,25 +561,29 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
 }
 
 /// Cleanup plan review: real artifact observation -> scan -> generate ->
-/// approve (spec 017/037 D22 — newly in scope now that the WP-A generator
-/// (#389) is merged).
+/// approve -> apply (spec 017/037 D22/Journey 6 — newly in scope now that the
+/// WP-A generator (#389) and the channel-free `plans.apply.direct` command
+/// exist).
 ///
-/// Backend REAL: `projects.create`, `artifact.watcher.attach` (spec 012,
-/// #400), `artifact.list`, `cleanup.policy.update`, `cleanup.scan`,
-/// `cleanup.plan.generate`, `plans.approve`.
+/// Backend REAL: `projects.create`, `source.protection.set`,
+/// `artifact.watcher.attach` (spec 012, #400), `artifact.list`,
+/// `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`,
+/// `plans.approve`, `plans.apply.direct`, `plans.apply.status`.
 ///
-/// KNOWN GAP (documented, not faked): applying the generated plan requires
-/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress argument.
-/// There is no channel-free apply command for archive/cleanup plans (unlike
-/// `inbox.plan.apply` for inbox plans), and the Cleanup/Archive UI does not
-/// yet wire an "Apply" affordance for generator-produced plans (`git grep
-/// cleanupPlanGenerate apps/desktop/src/features/projects
-/// apps/desktop/src/features/archive` finds no caller). Fabricating a
-/// `Channel` from a WebDriver script would mean reaching into product
-/// frontend code beyond a thin test hook (FR-018), so this journey stops at
-/// the reviewable, `ready_for_review` -> `approved` plan and documents the
-/// apply step as a follow-up once a channel-free apply path or a real UI
-/// Apply button exists.
+/// FORMERLY a documented gap: applying the generated plan needed
+/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress argument
+/// this harness declines to construct — see the module docs: it is buildable
+/// from a WebDriver script, but only by reaching into Tauri internals.
+/// `plans.apply.direct` (spec 037) is the channel-free equivalent — same
+/// executor, same durable audit trail, no `Channel` required — so this
+/// journey now drives the real filesystem mutation instead of stopping at
+/// `approved`.
+///
+/// `source.protection.set` marks this project `normal` before generating the
+/// plan: the app's safe-by-default protection level is `"protected"`
+/// (constitution II), and a project id has no protection override until a
+/// caller sets one — a real user would do the same via Settings before a
+/// first cleanup, exactly like this call.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn cleanup_plan_review() -> anyhow::Result<()> {
@@ -622,7 +620,29 @@ async fn cleanup_plan_review() -> anyhow::Result<()> {
     // convention (`crates/workflow/artifacts/src/default_rules.rs`), which
     // classifies as `ArtifactKind::Intermediate` — eligible for cleanup once
     // the policy allows it (below).
-    std::fs::write(project_dir.path().join("integration_M31_Ha.xisf"), b"not-a-real-xisf-file")?;
+    let original_path = project_dir.path().join("integration_M31_Ha.xisf");
+    std::fs::write(&original_path, b"not-a-real-xisf-file")?;
+
+    // Real per-project protection override (US2): without it, the item
+    // resolves to the app's safe-by-default "protected" level and the apply
+    // step below refuses every item with `protected.source` — not a bug,
+    // the documented constitution-II gate — so a real cleanup flow always
+    // sets this (or the global default) before a first-time cleanup.
+    // 2-level model (issue #506): "normal" is retired — "unprotected" is the
+    // non-gating override this test needs.
+    let _: serde_json::Value = app
+        .invoke(
+            "source_protection_set",
+            json!({
+                "request": {
+                    "sourceId": project_id,
+                    "level": "unprotected",
+                    "blockPermanentDelete": null,
+                    "categories": null,
+                }
+            }),
+        )
+        .await?;
 
     // Attaching the watcher runs a real, synchronous-enough reconciliation
     // pass over existing files (spec 012 T005) — poll `artifact.list` for it
@@ -684,6 +704,57 @@ async fn cleanup_plan_review() -> anyhow::Result<()> {
     anyhow::ensure!(
         approve["planId"] == json!(plan_id) && approve["newState"] == "approved",
         "expected plans.approve to move the generated plan to approved: {approve}"
+    );
+
+    // Apply — the real filesystem mutation (channel-free, spec 037). Tolerates
+    // the plan already being `approved` (reuses the stored token).
+    let apply: serde_json::Value =
+        app.invoke("plans_apply_direct", json!({ "planId": plan_id })).await?;
+    anyhow::ensure!(
+        apply["planId"] == json!(plan_id) && apply["newState"] == "applying",
+        "expected plans.apply.direct to start applying the approved plan: {apply}"
+    );
+
+    // Poll the real, durable apply status until the executor finishes —
+    // `plans.apply.status` reads `plan_apply_events` (the same durable proof
+    // `plan_review_apply_with_audit` uses for the inbox path).
+    let status: serde_json::Value = app
+        .invoke_until(
+            "plans_apply_status",
+            json!({ "planId": plan_id }),
+            INVOKE_TIMEOUT,
+            |v: &serde_json::Value| {
+                matches!(
+                    v["planState"].as_str(),
+                    Some("applied" | "partially_applied" | "failed" | "cancelled")
+                )
+            },
+        )
+        .await?;
+    anyhow::ensure!(
+        status["planState"] == "applied",
+        "expected the cleanup plan to apply cleanly, got: {status}"
+    );
+    anyhow::ensure!(
+        status["itemsApplied"].as_i64().unwrap_or(0) >= 1,
+        "expected at least 1 durably-recorded applied item: {status}"
+    );
+
+    // Real filesystem side effect: the original output file moved out of the
+    // project folder into the app-managed archive subtree.
+    anyhow::ensure!(
+        !original_path.exists(),
+        "expected the cleanup candidate to have moved away from {original_path:?}"
+    );
+    let archived_somewhere = std::fs::read_dir(project_dir.path())
+        .ok()
+        .and_then(|mut entries| {
+            entries.find(|e| e.as_ref().is_ok_and(|e| e.file_name() == ".astro-plan-archive"))
+        })
+        .is_some();
+    anyhow::ensure!(
+        archived_somewhere,
+        "expected a `.astro-plan-archive` subtree under the project folder after apply"
     );
 
     app.shutdown().await

@@ -1,100 +1,40 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
- * useFavourites — client-side favourite/starred targets (task #18, spec 043).
+ * useFavourites — database-backed favourite/starred targets (spec 051 US2).
  *
- * STUB: favourites are stored in localStorage only.  Real persistence requires
- * the FITS OBJECT → target_id linkage (task #54) so the backend knows which
- * canonical targets have linked sessions/projects.  When #54 lands, replace
- * this module with a backend-backed hook that reads the real "My Targets" set.
+ * Favourites are canonical, database-backed state (`target_favourite` table,
+ * migration `0061`) — see `targets.favourites.list` / `.add` / `.remove` in
+ * `apps/desktop/src-tauri/src/commands/target_favourites.rs`. Backed by
+ * TanStack Query (spec `tiny/targets-tanstack-query-migration`): the
+ * `queryKeys.targets.favourites()` cache entry IS the shared store, so every
+ * `useFavourites()` mount reads/writes the same set without a bespoke
+ * `useSyncExternalStore` subscriber list.
  *
- * localStorage key: 'alm:targets:favourites'
- * Format:           JSON array of canonical target id strings.
- *
- * API:
+ * API (unchanged shape from the pre-migration hook):
  *   useFavourites() → { favouriteIds: Set<string>, toggle, isFavourite }
- *   getFavouriteIds()         — non-hook read (for tests / outside React)
- *   FAVOURITES_STORAGE_KEY    — exported for tests
+ *   getFavouriteIds()         — non-hook read (for tests / outside React;
+ *                               returns the current cache, empty until the
+ *                               first backend fetch resolves)
  */
 
-import { useSyncExternalStore, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
+import { queryClient as sharedQueryClient } from '@/data/queryClient';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
-/** localStorage key under which favourited target ids are stored. */
-export const FAVOURITES_STORAGE_KEY = 'alm:targets:favourites';
+const FAVOURITES_KEY = queryKeys.targets.favourites();
 
-// ── Storage helpers ────────────────────────────────────────────────────────────
+// Stable empty-set reference (not a fresh `new Set()` per render) so
+// `isFavourite`'s useCallback dependency doesn't churn while data is loading.
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
-/** Read the raw stored set (empty set on any parse/storage error). */
-function readFromStorage(): ReadonlySet<string> {
-  try {
-    const raw = localStorage.getItem(FAVOURITES_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed: unknown = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((v): v is string => typeof v === 'string'));
-  } catch {
-    return new Set();
-  }
-}
-
-/** Persist a new id set and notify all subscribers. */
-function writeToStorage(ids: ReadonlySet<string>): void {
-  try {
-    localStorage.setItem(FAVOURITES_STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {
-    // localStorage unavailable (e.g. tests without shim) — skip persist.
-  }
-  // Notify useSyncExternalStore subscribers across all mounts.
-  try {
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key: FAVOURITES_STORAGE_KEY,
-        newValue: JSON.stringify([...ids]),
-      }),
-    );
-  } catch {
-    // Non-browser env; subscribers won't get the push notification but will
-    // re-read on the next render via useSyncExternalStore.
-  }
-  // Also call module-local listeners directly (same-tab updates).
-  for (const fn of listeners) fn();
-}
-
-// ── useSyncExternalStore wiring ────────────────────────────────────────────────
-
-type Listener = () => void;
-const listeners = new Set<Listener>();
-
-function subscribe(fn: Listener): () => void {
-  listeners.add(fn);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === FAVOURITES_STORAGE_KEY || e.key === null) fn();
-  };
-  window.addEventListener('storage', onStorage);
-  return () => {
-    listeners.delete(fn);
-    window.removeEventListener('storage', onStorage);
-  };
-}
-
-// Stable snapshot reference: useSyncExternalStore requires referential equality
-// between renders when the data hasn't changed.  We keep a module-level cache
-// so the same Set object is returned until a write actually occurs.
-let cachedSnapshot: ReadonlySet<string> = new Set();
-let cachedRaw: string | null = null;
-
-function getSnapshot(): ReadonlySet<string> {
-  try {
-    const raw = localStorage.getItem(FAVOURITES_STORAGE_KEY);
-    if (raw === cachedRaw) return cachedSnapshot;
-    cachedRaw = raw;
-    cachedSnapshot = readFromStorage();
-    return cachedSnapshot;
-  } catch {
-    return cachedSnapshot;
-  }
-}
-
-function getServerSnapshot(): ReadonlySet<string> {
-  return new Set();
+async function fetchFavouriteIds(): Promise<Set<string>> {
+  const { targetIds } = unwrap(await commands.targetFavouritesList());
+  return new Set(targetIds);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -109,27 +49,59 @@ export interface UseFavouritesResult {
 }
 
 /**
- * React hook: subscribe to the client-side favourite set.
+ * React hook: subscribe to the database-backed favourite set.
  *
  * Provides `toggle` (stable across renders) to star/unstar a target, and
- * `isFavourite` for conditional rendering.
- *
- * STUB — see module header.  Replace with a backend-backed hook when #54 lands.
+ * `isFavourite` for conditional rendering. Applies an optimistic update on
+ * `toggle` directly against the shared query cache, then reconciles with the
+ * backend call; a failed call reverts the optimistic change.
  */
 export function useFavourites(): UseFavouritesResult {
-  const favouriteIds = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: FAVOURITES_KEY,
+    queryFn: fetchFavouriteIds,
+  });
+  const favouriteIds = data ?? EMPTY_SET;
 
-  const toggle = useCallback((targetId: string) => {
-    // Re-read from storage immediately (not from the React snapshot) so rapid
-    // successive clicks on different rows don't race.
-    const current = new Set(readFromStorage());
-    if (current.has(targetId)) {
-      current.delete(targetId);
-    } else {
-      current.add(targetId);
-    }
-    writeToStorage(current);
-  }, []);
+  const toggle = useCallback(
+    (targetId: string) => {
+      const current =
+        queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ??
+        new Set<string>();
+      const wasFavourited = current.has(targetId);
+
+      // Optimistic update.
+      const next = new Set(current);
+      if (wasFavourited) {
+        next.delete(targetId);
+      } else {
+        next.add(targetId);
+      }
+      queryClient.setQueryData(FAVOURITES_KEY, next);
+
+      const call = wasFavourited
+        ? commands.targetFavouritesRemove({ targetId })
+        : commands.targetFavouritesAdd({ targetId });
+
+      Promise.resolve(call)
+        .then(unwrap)
+        .catch(() => {
+          // Revert the optimistic change on failure.
+          const reverted = new Set(
+            queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ??
+              new Set<string>(),
+          );
+          if (wasFavourited) {
+            reverted.add(targetId);
+          } else {
+            reverted.delete(targetId);
+          }
+          queryClient.setQueryData(FAVOURITES_KEY, reverted);
+        });
+    },
+    [queryClient],
+  );
 
   const isFavourite = useCallback(
     (targetId: string) => favouriteIds.has(targetId),
@@ -142,6 +114,22 @@ export function useFavourites(): UseFavouritesResult {
 /**
  * Non-hook read for use outside React (tests, initial render).
  *
- * STUB — see module header.
+ * Returns the current query-cache entry — empty until the first backend
+ * fetch (triggered by a `useFavourites()` mount) resolves. Reads the shared
+ * app-wide `queryClient` singleton (also mounted at the app root), matching
+ * the pattern in `data/queryClient.ts`'s module doc.
  */
-export { readFromStorage as getFavouriteIds };
+export function getFavouriteIds(): ReadonlySet<string> {
+  return (
+    sharedQueryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ?? new Set()
+  );
+}
+
+/**
+ * Test-only reset of the shared favourites cache entry. Not part of the
+ * public hook surface; exported so `useFavourites.test.ts` can isolate cases
+ * without process-per-test isolation.
+ */
+export function __resetFavouritesCacheForTests(): void {
+  sharedQueryClient.removeQueries({ queryKey: FAVOURITES_KEY });
+}

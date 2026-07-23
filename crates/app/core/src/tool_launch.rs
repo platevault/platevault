@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Processing tool launch use cases (spec 011 T007/T009/T012/T014/T015).
 //!
 //! Entry points:
@@ -27,6 +30,8 @@
 #![allow(clippy::too_many_lines)] // orchestration functions are multi-step by design
 #![allow(clippy::doc_markdown)] // spec/domain terminology
 
+use crate::caches::project_block_debounce;
+use crate::project_health::{emit_block_transition, BlockCondition};
 use audit::bus::EventBus;
 use audit::event_bus::{Source, ToolLaunchEvent, TOPIC_TOOL_LAUNCH};
 use contracts_core::tools::{
@@ -36,8 +41,8 @@ use contracts_core::tools::{
 };
 use domain_core::ids::{new_id, Timestamp};
 use persistence_db::repositories::{
-    first_run as first_run_repo, inventory as inv_repo, projects as proj_repo,
-    settings as settings_repo, tool_launches as tl_repo,
+    first_run as first_run_repo, inventory as inv_repo, prepared_source_views as psv_repo,
+    projects as proj_repo, settings as settings_repo, tool_launches as tl_repo,
 };
 use project_structure::resolve_working_folder;
 use sqlx::SqlitePool;
@@ -126,6 +131,72 @@ fn compute_args_hash(executable_path: &str, argv: &[String]) -> String {
     hex::encode(hasher.finalize())
 }
 
+// ── Active source-view folder resolution (#726, spec 011 FR-009) ──────────────
+
+/// Resolve the project's currently active generated source-view folder, if
+/// one exists (spec 049 restored real generation via `prepared_source_views`;
+/// this was hardcoded to `None` — every launch silently fell back to the
+/// project root even when a real generated view existed).
+///
+/// `prepared_source_view_items.view_relative_path` is, despite its name, an
+/// ABSOLUTE path (`source_view_generate.rs`'s `dest_abs`, forward-slash
+/// portable) — there is no separate stored "destination root" column, so the
+/// folder is recovered as the longest common path-prefix across the view's
+/// items. With a single-item view this returns that file's immediate parent
+/// rather than a possibly-shallower destination root; an acceptable best
+/// effort given the schema has no dedicated root column.
+async fn resolve_active_source_view_folder(pool: &SqlitePool, project_id: &str) -> Option<String> {
+    let views = psv_repo::list_views_for_project(pool, project_id).await.ok()?;
+    let view = views.into_iter().find(|v| v.state == "current")?;
+    let items = psv_repo::list_view_items(pool, &view.id).await.ok()?;
+    common_ancestor_dir(items.iter().map(|i| i.view_relative_path.as_str()))
+}
+
+/// Longest common directory prefix (forward-slash-segmented) across `paths`.
+/// Returns `None` for zero paths.
+fn common_ancestor_dir<'a>(paths: impl Iterator<Item = &'a str>) -> Option<String> {
+    let mut common: Option<Vec<&str>> = None;
+    for p in paths {
+        let segments: Vec<&str> = p.split('/').collect();
+        // Drop the file name — only directory segments participate in the prefix.
+        let dir_segments = &segments[..segments.len().saturating_sub(1)];
+        common = Some(match common {
+            None => dir_segments.to_vec(),
+            Some(prev) => prev
+                .iter()
+                .zip(dir_segments.iter())
+                .take_while(|(a, b)| a == b)
+                .map(|(a, _)| *a)
+                .collect(),
+        });
+    }
+    common.filter(|c| !c.is_empty()).map(|c| c.join("/"))
+}
+
+// ── US4-4: system-driven `tool_unconfigured` auto-block ─────────────────────────
+
+/// Fire the `tool_unconfigured` auto-block signal (spec 009 US4, P7 debounce)
+/// when a launch is attempted for a project whose tool has no usable
+/// configuration (disabled, or no executable path set). Best-effort: a
+/// failure here must never fail the launch response — the launch outcome
+/// (`ToolLaunchResponse`) is the primary durable record (Constitution II).
+async fn signal_tool_unconfigured_block(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+    tool_id: &str,
+) {
+    let condition = BlockCondition::ToolUnconfigured { tool: tool_id.to_owned() };
+    if let Err(e) =
+        emit_block_transition(pool, bus, project_block_debounce(), project_id, &condition).await
+    {
+        tracing::error!(
+            %project_id, %tool_id, error = %e,
+            "tool_unconfigured auto-block signal failed"
+        );
+    }
+}
+
 // ── launch ────────────────────────────────────────────────────────────────────
 
 /// Launch the configured processing tool for the given project.
@@ -174,6 +245,7 @@ pub async fn launch(
 
     let enabled = read_bool_setting(pool, &key_enabled(&req.tool_id), true).await;
     if !enabled {
+        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
         return Ok(ToolLaunchResponse {
             status: ToolLaunchStatus::Error,
             launch_id: None,
@@ -191,6 +263,7 @@ pub async fn launch(
 
     let executable_path = read_string_setting(pool, &key_executable_path(&req.tool_id)).await;
     let Some(executable_path) = executable_path.filter(|s| !s.trim().is_empty()) else {
+        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
         return Ok(ToolLaunchResponse {
             status: ToolLaunchStatus::Error,
             launch_id: None,
@@ -207,10 +280,12 @@ pub async fn launch(
     };
 
     // ── Step 3: resolve working directory ────────────────────────────────────
-    // `project.path` is the project root. Source-view folder is not stored on
-    // the project row in v1 (spec 026 owns that); pass `None` to fall back to root.
+    // `project.path` is the project root. Prefer the project's active
+    // generated source-view folder when one exists (spec 049 restored real
+    // generation, #726); fall back to the project root otherwise.
     let project_root = std::path::PathBuf::from(&project.path);
-    let working_dir_path = resolve_working_folder(&project_root, None);
+    let active_source_view = resolve_active_source_view_folder(pool, &req.project_id).await;
+    let working_dir_path = resolve_working_folder(&project_root, active_source_view.as_deref());
 
     // ── Step 4: canonicalize cwd + library-root containment check ────────────
     let canonical_cwd = working_dir_path.canonicalize().unwrap_or(working_dir_path.clone());
@@ -507,6 +582,10 @@ pub fn validate_path(path: &str) -> ToolPathValidation {
     let p = std::path::Path::new(path);
     let exists = p.exists();
     let valid = exists && p.is_absolute();
+    // Only meaningful once the path exists; `is_dir()` is false for a
+    // nonexistent path, which would be indistinguishable from "exists and is
+    // a file" without gating on `exists` first (issue #1056).
+    let is_dir = exists.then(|| p.is_dir());
     ToolPathValidation {
         path: path.to_owned(),
         valid,
@@ -517,6 +596,7 @@ pub fn validate_path(path: &str) -> ToolPathValidation {
         } else {
             Some("Path does not exist".to_owned())
         },
+        is_dir,
     }
 }
 
@@ -625,6 +705,41 @@ mod tests {
         assert_eq!(resp.error.unwrap().code, "tool.not_configured");
     }
 
+    /// astro-plan-akon: `launch` against an unconfigured tool must drive the
+    /// project into `blocked` via the real production path (not a direct
+    /// `emit_block_transition` call) — the auto-block wiring this test
+    /// guards against regressing to dead code.
+    #[tokio::test]
+    async fn launch_with_no_path_configured_auto_blocks_project() {
+        let db = setup_db().await;
+        let project_id = make_project(&db).await;
+        let bus = make_bus(db.pool().clone());
+        let spawner = FakeSpawner::ok();
+        // No executable path set for pixinsight.
+        let req = ToolLaunchRequest {
+            project_id: project_id.clone(),
+            tool_id: "pixinsight".to_owned(),
+            force: false,
+        };
+        let resp = launch(db.pool(), &bus, &spawner, req).await.unwrap();
+        assert_eq!(resp.status, ToolLaunchStatus::Error);
+
+        let project = proj_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(project.lifecycle, "blocked", "unconfigured-tool launch must auto-block");
+        assert_eq!(project.blocked_reason_kind.as_deref(), Some("tool_unconfigured"));
+
+        let audit_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM audit_log_entry \
+             WHERE entity_id = ? AND entity_type = 'project' AND to_state = 'blocked' \
+               AND actor = 'system' AND outcome = 'applied'",
+        )
+        .bind(&project_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(audit_count, 1, "auto-block from launch must write exactly one audit row");
+    }
+
     #[tokio::test]
     async fn launch_rejects_cwd_outside_library_root() {
         let db = setup_db().await;
@@ -662,6 +777,67 @@ mod tests {
         let calls = spawner.drain();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].executable, "/usr/bin/pixinsight");
+    }
+
+    /// #726 (spec 011 FR-009): launch must pass the project's active
+    /// generated source-view folder, not silently fall back to the project
+    /// root just because one exists.
+    #[tokio::test]
+    async fn launch_uses_active_source_view_folder_when_present() {
+        let db = setup_db().await;
+        let project_id = make_project(&db).await;
+        let bus = make_bus(db.pool().clone());
+        let spawner = FakeSpawner::ok();
+        insert_root(&db, "/mnt/library").await;
+        set_tool_path(&db, "siril", "/usr/bin/siril").await;
+
+        psv_repo::insert_view(
+            db.pool(),
+            &psv_repo::InsertPreparedSourceView {
+                id: "view-1",
+                project_id: &project_id,
+                kind: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+        let view_dir = "/mnt/library/test_project/source-views/plan-1/2026-01-01/L";
+        for (idx, name) in ["light1.fits", "light2.fits"].iter().enumerate() {
+            psv_repo::insert_view_item(
+                db.pool(),
+                &psv_repo::InsertPreparedSourceViewItem {
+                    id: &format!("item-{idx}"),
+                    view_id: "view-1",
+                    inventory_item_id: &format!("inv-{idx}"),
+                    view_relative_path: &format!("{view_dir}/{name}"),
+                    materialization: "symlink",
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let req = ToolLaunchRequest { project_id, tool_id: "siril".to_owned(), force: false };
+        let resp = launch(db.pool(), &bus, &spawner, req).await.unwrap();
+        assert_eq!(resp.status, ToolLaunchStatus::Success);
+        assert_eq!(resp.working_dir.as_deref(), Some(view_dir));
+    }
+
+    /// No generated view exists — must fall back to the project root exactly
+    /// as before (regression guard for the #726 fix).
+    #[tokio::test]
+    async fn launch_falls_back_to_project_root_without_a_view() {
+        let db = setup_db().await;
+        let project_id = make_project(&db).await;
+        let bus = make_bus(db.pool().clone());
+        let spawner = FakeSpawner::ok();
+        insert_root(&db, "/mnt/library").await;
+        set_tool_path(&db, "siril", "/usr/bin/siril").await;
+
+        let req = ToolLaunchRequest { project_id, tool_id: "siril".to_owned(), force: false };
+        let resp = launch(db.pool(), &bus, &spawner, req).await.unwrap();
+        assert_eq!(resp.status, ToolLaunchStatus::Success);
+        assert_eq!(resp.working_dir.as_deref(), Some("/mnt/library/test_project"));
     }
 
     /// Wizard-registered roots live in `registered_sources` only (they are
@@ -762,10 +938,12 @@ mod tests {
     async fn list_profiles_returns_all_seeds() {
         let db = setup_db().await;
         let resp = list_profiles(db.pool()).await.unwrap();
-        assert_eq!(resp.tools.len(), 2);
+        // #725: seed::all() now also includes Planetary Suite.
+        assert_eq!(resp.tools.len(), 3);
         let ids: Vec<&str> = resp.tools.iter().map(|t| t.id.as_str()).collect();
         assert!(ids.contains(&"pixinsight"));
         assert!(ids.contains(&"siril"));
+        assert!(ids.contains(&"planetary_suite"));
     }
 
     #[tokio::test]
@@ -821,6 +999,36 @@ mod tests {
         let v = validate_path(missing);
         assert!(!v.valid);
         assert!(v.reason.unwrap().contains("exist"));
+    }
+
+    #[tokio::test]
+    async fn validate_path_is_dir_true_for_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = validate_path(dir.path().to_str().unwrap());
+        assert!(v.valid);
+        assert_eq!(v.is_dir, Some(true));
+    }
+
+    #[tokio::test]
+    async fn validate_path_is_dir_false_for_file() {
+        // Issue #1056: a file path (not a directory) must be distinguishable
+        // so the manual source-path entry UI can reject it inline.
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("not-a-dir.txt");
+        std::fs::write(&file_path, b"x").unwrap();
+        let v = validate_path(file_path.to_str().unwrap());
+        assert!(v.valid);
+        assert_eq!(v.is_dir, Some(false));
+    }
+
+    #[tokio::test]
+    async fn validate_path_is_dir_none_for_nonexistent() {
+        #[cfg(windows)]
+        let missing = "C:\\no\\such\\binary";
+        #[cfg(not(windows))]
+        let missing = "/no/such/binary";
+        let v = validate_path(missing);
+        assert_eq!(v.is_dir, None);
     }
 
     #[test]

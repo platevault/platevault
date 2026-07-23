@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * useHotkeys — shared keyboard-shortcut hook built on `tinykeys` (spec 042 / T183).
  *
@@ -48,8 +51,11 @@ export function useHotkeys(
   deps: React.DependencyList,
   options: UseHotkeysOptions = {},
 ): void {
-  const { target = typeof window !== 'undefined' ? window : null, enabled = true, ignoreFormFields = true } =
-    options;
+  const {
+    target = typeof window !== 'undefined' ? window : null,
+    enabled = true,
+    ignoreFormFields = true,
+  } = options;
 
   useEffect(() => {
     if (!enabled || !target) return;

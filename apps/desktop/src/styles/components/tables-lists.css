@@ -3,36 +3,36 @@
 
 /* ── Controls bar ─────────────────────────────────────────────────────────── */
 
-.alm-sessions-list__controls {
+.pv-sessions-list__controls {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
-.alm-sessions-list__filter-row {
+.pv-sessions-list__filter-row {
   display: flex;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   flex-wrap: wrap;
 }
 
 /* ── Source group spacing ─────────────────────────────────────────────────── */
 
-.alm-sessions-list__group {
-  margin-bottom: var(--alm-sp-0);
+.pv-sessions-list__group {
+  margin-bottom: var(--pv-sp-0);
 }
 
-/* ── Session list row (shared alm-list-item pattern) ──────────────────────── */
+/* ── Session list row (shared pv-list-item pattern) ──────────────────────── */
 
 /* Target label: ellipsis when the narrow sidebar can't fit it. */
-.alm-session-row__target {
+.pv-session-row__target {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* Needs-review icon next to the target label. */
-.alm-session-row__needs-review-icon {
-  color: var(--alm-warn);
+.pv-session-row__needs-review-icon {
+  color: var(--pv-warn);
   flex-shrink: 0;
 }
 
@@ -41,11 +41,11 @@
  * Sessions — full-width dense sortable table (task #36, spec 043 §4).
  *
  * SCRATCH FILE: not imported anywhere. The parent merges this into
- * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
- * no raw hex/rgb/ms. The old `alm-sessions-list*` / `alm-session-row*` rules in
+ * components.css and runs check-tokens. Token-only (existing --pv-* tokens);
+ * no raw hex/rgb/ms. The old `pv-sessions-list*` / `pv-session-row*` rules in
  * components.css are now dead (parent removes on merge).
  *
- * Layout: the page bar (.alm-page__bar) holds the always-visible toolbar
+ * Layout: the page bar (.pv-page__bar) holds the always-visible toolbar
  * (search + filters + review actions). The body is a horizontal split — a
  * full-width scrolling table on the left and an optional detail drawer on the
  * right that appears only when a row is selected.
@@ -59,160 +59,161 @@
  * to single-character columns.
  * ======================================================================== */
 
-/* --- PageTopBar: pinned top band (carries .alm-page__bar; never scrolls) -- */
-.alm-topbar {
+/* --- PageTopBar: pinned top band (carries .pv-page__bar; never scrolls) -- */
+.pv-topbar {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
   flex-wrap: wrap;
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border);
-  background: var(--alm-surface);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  border-bottom: 1px solid var(--pv-border);
+  background: var(--pv-surface);
   /* Reserve scrollbar space so a page-level scrollbar appearing or disappearing
    * (e.g. when a native <select> opens its OS dropdown on Windows) does not
    * shift the bar height or reflow the content panel below it. */
   scrollbar-gutter: stable;
 }
-.alm-topbar__lead {
+.pv-topbar__lead {
   display: flex;
   align-items: baseline;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-shrink: 0;
 }
-.alm-topbar__title { display: flex; align-items: baseline; }
-.alm-topbar__heading {
+.pv-topbar__title { display: flex; align-items: baseline; }
+.pv-topbar__heading {
   margin: 0;
-  font-size: var(--alm-text-lg);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+  font-size: var(--pv-text-lg);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
 }
-.alm-topbar__summary {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-topbar__summary {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
-.alm-topbar__filters {
+.pv-topbar__filters {
   flex: 1 1 auto;
   min-width: 0;
 }
-.alm-topbar__actions {
+.pv-topbar__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   align-items: center;
   flex-shrink: 0;
 }
 
 /* --- FilterToolbar: search + labeled selects + group-by + sort + actions -- */
-.alm-filterbar {
+.pv-filterbar {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   flex-wrap: wrap;
 }
-.alm-filterbar__search {
+.pv-filterbar__search {
   flex: 1 1 200px;
   min-width: 160px;
   max-width: 320px;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
 }
-.alm-filterbar__search:focus {
+.pv-filterbar__search:focus {
   outline: none;
-  border-color: var(--alm-accent);
+  border-color: var(--pv-accent);
 }
-.alm-filterbar__field {
+.pv-filterbar__field {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+  gap: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
-.alm-filterbar__field-label { white-space: nowrap; }
-.alm-filterbar__select {
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
+.pv-filterbar__field-label { white-space: nowrap; }
+.pv-filterbar__select {
+  height: var(--pv-control-h);
+  padding: 0 var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
 }
 /* Multi-level grouping configurator (Group / then / then). */
-.alm-filterbar__group {
+.pv-filterbar__group {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
-.alm-filterbar__sort {
+.pv-filterbar__sort {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
-.alm-filterbar__sort-dir { line-height: 1; }
-.alm-filterbar__actions {
+.pv-filterbar__sort-dir { line-height: 1; }
+.pv-filterbar__actions {
   display: flex;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   align-items: center;
 }
 
 /* Multi-select popover field (task #82) — native <details> disclosure with a
  * checkbox menu. See .cssblocks/targets-refine.css for the staged copy. */
-.alm-filterbar__multi {
+.pv-filterbar__multi {
   position: relative;
   display: inline-block;
 }
-.alm-filterbar__multi-summary {
+.pv-filterbar__multi-summary {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
+  gap: var(--pv-sp-1);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
   cursor: pointer;
   list-style: none;
   user-select: none;
 }
-.alm-filterbar__multi-summary::-webkit-details-marker { display: none; }
-.alm-filterbar__multi-summary::marker { content: ''; }
-.alm-filterbar__multi-summary::after {
+.pv-filterbar__multi-summary::-webkit-details-marker { display: none; }
+.pv-filterbar__multi-summary::marker { content: ''; }
+.pv-filterbar__multi-summary::after {
   content: '\25BE';
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
-.alm-filterbar__multi[open] > .alm-filterbar__multi-summary {
-  border-color: var(--alm-accent);
+.pv-filterbar__multi[open] > .pv-filterbar__multi-summary {
+  border-color: var(--pv-accent);
 }
-.alm-filterbar__multi-menu {
+.pv-filterbar__multi-menu {
   position: absolute;
-  z-index: var(--alm-z-popover, 50);
-  top: calc(100% + var(--alm-sp-1));
+  z-index: var(--pv-z-popover, 50);
+  top: calc(100% + var(--pv-sp-1));
   left: 0;
   min-width: 11rem;
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
-  padding: var(--alm-sp-2);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
-  box-shadow: var(--alm-shadow-sm);
+  gap: var(--pv-sp-1);
+  padding: var(--pv-sp-2);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  box-shadow: var(--pv-shadow-sm);
 }
-.alm-filterbar__multi-option {
+.pv-filterbar__multi-option {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
+  gap: var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
   cursor: pointer;
   white-space: nowrap;
 }
-.alm-filterbar__multi-check {
-  accent-color: var(--alm-accent);
+.pv-filterbar__multi-check {
+  accent-color: var(--pv-accent);
   cursor: pointer;
 }
 
@@ -223,20 +224,20 @@
  * with a `max-height` cap, and scrolls WITHIN itself when its content is tall —
  * it never grows unbounded or pushes the table off-screen. No splitter, no drag,
  * no persisted height. */
-.alm-listpage__body {
+.pv-listpage__body {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-.alm-listpage__main {
+.pv-listpage__main {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: auto;
 }
-.alm-listpage__detail {
+.pv-listpage__detail {
   flex: 0 0 auto;
   /* Auto-expand: grows to fit content; only scrolls past the cap.
    * clamp(min, preferred, max) — never shorter than 220px, never taller than
@@ -247,70 +248,147 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--alm-border);
-  background: var(--alm-surface-raised);
+  border-top: 1px solid var(--pv-border);
+  background: var(--pv-surface-raised);
 }
-.alm-listpage__detail-bar {
+.pv-listpage__detail-bar {
   flex-shrink: 0;
   display: flex;
+  align-items: center;
+  gap: var(--pv-sp-1);
   justify-content: flex-end;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border-subtle);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border-bottom: 1px solid var(--pv-border-subtle);
 }
-.alm-listpage__detail-close {
+/* Icon-only Auto/Bottom/Right control (#1068): 3 text buttons ran ~175px,
+ * dominating a ~390px narrow-dock bar. 28px is the touch-target floor this
+ * app ships (WCAG 2.2's own minimum is 24x24 — we don't ship at that edge). */
+.pv-dock-placement-control .pv-seg__btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pv-dock-placement-control.pv-seg {
+  height: 28px;
+}
+.pv-listpage__detail-close {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
   line-height: 1;
-  padding: var(--alm-sp-1);
-  border-radius: var(--alm-radius-sm);
+  padding: var(--pv-sp-1);
+  border-radius: var(--pv-radius-sm);
 }
-.alm-listpage__detail-close:hover { color: var(--alm-text); }
-.alm-listpage__detail-body {
+.pv-listpage__detail-close:hover { color: var(--pv-text); }
+
+/* Adaptive dock (spec 054 / #936): drag handle on the side panel's left edge.
+ * The placement control in the detail bar is the shared `SegControl`
+ * (#1066) — it carries its own `.pv-seg` styling and must NOT be given the
+ * old `__detail-pin` bare-button rule, which would strip its background and
+ * border. */
+.pv-listpage__detail--side {
+  position: relative;
+}
+.pv-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+  touch-action: none;
+}
+.pv-resize-handle:hover,
+.pv-resize-handle:active {
+  background: var(--pv-accent);
+  opacity: 0.4;
+}
+.pv-listpage__detail-body {
   flex: 1;
   min-height: 0;
-  /* Do NOT add overflow-y:auto here — the .alm-detailpanel__content column
-   * is the sole scroll region. Double overflow-y causes nested scrollbars. */
+  /* Do NOT add overflow-y:auto here — .pv-detailpanel__content is the sole
+   * scroll region. Double overflow-y causes nested scrollbars. */
   overflow: hidden;
+}
+
+/* #1107: give the panel a real flex chain inside the dock, so the header pins
+ * and .pv-detailpanel__content gets a BOUNDED height to scroll within. Without
+ * it the panel sizes to its content, overflows this `overflow:hidden` body, and
+ * the excess is unreachable (measured at a 390px side dock: Calibration 191px,
+ * Sessions 522px, Projects 1216px). Scoped to the dock — .pv-detail is also
+ * used outside a docked panel, where sizing to content is correct.
+ * .pv-detail--fill declares the same chain itself (primitives.css). */
+.pv-listpage__detail-body > .pv-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.pv-listpage__detail-body .pv-detail__header {
+  flex-shrink: 0;
+}
+
+/* #1107: some pages dock a STACK rather than a single panel — Projects docks
+ * ProjectDetailContent (which owns the DetailPanel) above ProjectBottomDetail,
+ * so the panel's own scroll region covers only the first component and the
+ * sibling below it overflows unreachably (measured 1216px). Keyed on the
+ * composition SHAPE — "the dock's child is not a panel" — rather than on any
+ * one feature, so any future stacked detail is covered too. In that shape the
+ * body owns the scrolling, and the panel's inner region must stand down to
+ * avoid a second, nested scrollbar. */
+.pv-listpage__detail-body:not(:has(> .pv-detail)) {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.pv-listpage__detail-body:not(:has(> .pv-detail)) .pv-detail--fill {
+  height: auto;
+}
+.pv-listpage__detail-body:not(:has(> .pv-detail)) .pv-detailpanel__content {
+  flex: 0 0 auto;
+  overflow-y: visible;
 }
 /* The bottom panel has ample horizontal room, so its dashboard grid keeps its
  * natural multi-column rail layout (the old single-column collapse the narrow
  * right-side pane needed is relaxed). */
-.alm-listpage__detail-body .alm-detail--fill > .alm-dash {
+.pv-listpage__detail-body .pv-detail--fill > .pv-dash {
   grid-template-rows: auto;
 }
-.alm-listpage__detail-body .alm-detail--fill .alm-dash__primary {
+.pv-listpage__detail-body .pv-detail--fill .pv-dash__primary {
   overflow-y: visible;
 }
 
 /* --- Dense sortable table --------------------------------------------------
- * `.alm-densetable` is the FEATURE-AGNOSTIC name (used by Archive and any new
- * list table); `.alm-sessions-table` is the original Sessions alias kept for
+ * `.pv-densetable` is the FEATURE-AGNOSTIC name (used by Archive and any new
+ * list table); `.pv-sessions-table` is the original Sessions alias kept for
  * its e2e selectors. ONE rule body via selector lists — never clone these. */
-.alm-densetable,
-.alm-sessions-table {
-  /* Inherits .alm-table base; tighten cell padding for density. */
+.pv-densetable,
+.pv-sessions-table {
+  /* Inherits .pv-table base; tighten cell padding for density. */
   table-layout: auto;
 }
-.alm-densetable th,
-.alm-sessions-table th { user-select: none; }
-.alm-densetable td,
-.alm-densetable th,
-.alm-sessions-table td,
-.alm-sessions-table th {
-  padding: var(--alm-sp-1) var(--alm-sp-3);
+.pv-densetable th,
+.pv-sessions-table th { user-select: none; }
+.pv-densetable td,
+.pv-densetable th,
+.pv-sessions-table td,
+.pv-sessions-table th {
+  padding: var(--pv-sp-1) var(--pv-sp-3);
 }
 
 /* Sortable column header (button-in-th) — the SINGLE shared control used by
  * every list table (Sessions / Calibration / Projects / Targets / Inbox) via
  * the <SortHeader> component. Do not reintroduce per-feature `*-sorth` classes;
  * they drifted and left Inbox unstyled. */
-.alm-sorth {
+.pv-sorth {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   background: none;
   border: none;
   padding: 0;
@@ -321,11 +399,11 @@
   letter-spacing: inherit;
   cursor: pointer;
 }
-.alm-sorth:hover { color: var(--alm-text); }
-.alm-sorth--active { color: var(--alm-text); }
-.alm-sorth__arrow {
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
+.pv-sorth:hover { color: var(--pv-text); }
+.pv-sorth--active { color: var(--pv-text); }
+.pv-sorth__arrow {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* ── Shared spanning group-header row ──────────────────────────────────────
@@ -333,20 +411,20 @@
  * Targets · Projects) — no per-feature clones. A quiet banded row that
  * headlines each group with a count. The cell is a real <button> (collapsible
  * headers), so it resets native chrome and inherits the row typography. */
-.alm-listgroup td {
-  background: var(--alm-surface);
-  font-weight: var(--alm-weight-semibold);
-  font-size: var(--alm-text-xs);
+.pv-listgroup td {
+  background: var(--pv-surface);
+  font-weight: var(--pv-weight-semibold);
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--alm-text-muted);
-  border-bottom: 1px solid var(--alm-border-subtle);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
+  border-bottom: 1px solid var(--pv-border-subtle);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
 }
-.alm-listgroup__cell {
+.pv-listgroup__cell {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
   width: 100%;
   background: none;
   border: none;
@@ -357,61 +435,61 @@
   text-transform: inherit;
   letter-spacing: inherit;
 }
-.alm-listgroup__caret {
+.pv-listgroup__caret {
   width: 0.7em;
   display: inline-block;
   flex-shrink: 0;
-  color: var(--alm-text-muted);
+  color: var(--pv-text-muted);
 }
-.alm-listgroup__label {
+.pv-listgroup__label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.alm-listgroup__count {
-  margin-left: var(--alm-sp-2);
-  font-weight: var(--alm-weight-normal);
+.pv-listgroup__count {
+  margin-left: var(--pv-sp-2);
+  font-weight: var(--pv-weight-normal);
   text-transform: none;
   letter-spacing: normal;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
 }
 
 /* Selectable rows (generic + Sessions alias, one rule body). */
-.alm-densetable__row,
-.alm-sessions-table__row { cursor: pointer; }
-.alm-densetable__row:hover td,
-.alm-sessions-table__row:hover td { background: var(--alm-surface); }
-.alm-densetable__row--selected td,
-.alm-sessions-table__row--selected td {
-  background: var(--alm-accent-bg);
+.pv-densetable__row,
+.pv-sessions-table__row { cursor: pointer; }
+.pv-densetable__row:hover td,
+.pv-sessions-table__row:hover td { background: var(--pv-surface); }
+.pv-densetable__row--selected td,
+.pv-sessions-table__row--selected td {
+  background: var(--pv-accent-bg);
 }
 
 /* Generic table-cell helpers (token-only) — SHARED by every list table
  * (Sessions · Archive · …). Feature-agnostic on purpose: use these instead of
  * minting per-feature `*-cell--num/--mono/--muted` clones. */
-.alm-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
-.alm-cell--mono {
-
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-secondary);
+.pv-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
+.pv-cell--mono {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
 }
-.alm-cell--muted { color: var(--alm-text-muted); }
+.pv-cell--muted { color: var(--pv-text-muted); }
 
 /* Sessions-specific cell helpers. */
-.alm-sessions-cell--target { font-weight: var(--alm-weight-medium); color: var(--alm-text); }
+.pv-sessions-cell--target { font-weight: var(--pv-weight-medium); color: var(--pv-text); }
 
 /* Projects cell pills. */
-.alm-sessions-cell__projects {
+.pv-sessions-cell__projects {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
 /* Needs-review marker before a target/state. */
-.alm-sessions-cell__warn-icon {
-  color: var(--alm-text-muted);
-  margin-right: var(--alm-sp-1);
+.pv-sessions-cell__warn-icon {
+  color: var(--pv-text-muted);
+  margin-right: var(--pv-sp-1);
   vertical-align: middle;
 }
 
@@ -420,9 +498,9 @@
  * Sessions today. A flex column that fills the list-page main region: the
  * shared Table's scroll container takes the remaining height, an optional
  * grouping-hint footer pins under it, and the empty state renders in place of
- * the table. No per-feature clones (supersedes `.alm-inbox-list*` and
- * `.alm-sessions-table__empty/__footer`). */
-.alm-listtable {
+ * the table. No per-feature clones (supersedes `.pv-inbox-list*` and
+ * `.pv-sessions-table__empty/__footer`). */
+.pv-listtable {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -430,19 +508,19 @@
   height: 100%;
 }
 /* The shared Table's scroll wrapper fills the flex column. */
-.alm-listtable__scroll {
+.pv-listtable__scroll {
   flex: 1;
 }
 /* Grouping-state hint footer — NOT a duplicate count. */
-.alm-listtable__foot {
+.pv-listtable__foot {
   flex-shrink: 0;
-  padding: var(--alm-sp-1) var(--alm-sp-3);
-  border-top: 1px solid var(--alm-border);
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
+  padding: var(--pv-sp-1) var(--pv-sp-3);
+  border-top: 1px solid var(--pv-border);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
-.alm-listtable__empty {
-  padding: var(--alm-sp-4);
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+.pv-listtable__empty {
+  padding: var(--pv-sp-4);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }

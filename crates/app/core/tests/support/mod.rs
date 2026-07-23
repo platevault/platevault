@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared real-backend integration-test harness — feature 037 (T005).
 //!
 //! Real SQLite + real migrations + a wired `SqliteLifecycleRepository` and
@@ -12,7 +15,18 @@ use persistence_db::Database;
 
 /// Provision an isolated in-memory SQLite DB with all migrations applied and a
 /// repository/event-bus wired to it. Real backend, no mocks.
+///
+/// Review round 1 #5: `app_core_settings::caches::settings_bag()` is a
+/// process-global single-slot cache shared by every in-memory DB in this test
+/// binary (same caveat as `app_core_settings::lib.rs`'s own `setup()` and
+/// `app_core::protection::PROTECTION_DEFAULTS_TEST_LOCK`). Without a reset
+/// here, a settings test that runs after another test populated the bag can
+/// read that other test's stale snapshot instead of its own DB — the flake
+/// behind `settings_logs_integration.rs`'s `setting_update_persists_and_reads_back`.
+/// Invalidating at setup is a minimal fix for the shared-cache symptom, not
+/// the underlying single-process-cache architecture (out of scope here).
 pub async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {
+    app_core_settings::caches::invalidate_settings_bag();
     let db = Database::in_memory().await.expect("in-memory db");
     db.migrate().await.expect("migrations");
     let bus = EventBus::with_pool(db.pool().clone());

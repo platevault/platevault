@@ -76,7 +76,7 @@ respective foundational pieces below land.
       `crates/persistence/db/repositories/` (new `target_favourites.rs` or an
       addition to the existing targets repository file — match current file
       layout), per data-model.md §E1's repository shape.
-- [ ] T007 [Foundational] Add the `cleanupTypeOverrides` descriptor entry to
+- [x] T007 [Foundational] Add the `cleanupTypeOverrides` descriptor entry to
       `crates/app/settings/src/descriptors.rs`: a new `ValidationRule` variant
       (object map of known data-type id → `Keep|Archive|Delete`, mirroring the
       existing `PatternsByType` rule's validation style), registered as
@@ -111,23 +111,29 @@ duplicate process against the same database.
 **Independent Test**: Launch the app twice in a row; confirm one window, one
 process, no database contention.
 
-- [ ] T010 [US1] Register `tauri_plugin_single_instance::init(...)` as the
+- [x] T010 [US1] Register `tauri_plugin_single_instance::init(...)` as the
       **first** plugin in `build_app()` (`apps/desktop/src-tauri/src/lib.rs`)
       — single-instance must attach before other plugins/state so a
       redirected second launch never reaches database/migration code. The
       callback focuses/unminimizes the existing main window and logs the
       received argv/cwd (FR-002, FR-003).
-- [ ] T011 [US1] Confirm (add if missing) that the single-instance callback
+- [x] T011 [US1] Confirm (add if missing) that the single-instance callback
       runs before `Database::connect`/`db.migrate()` in `main.rs` on the
       redirected path — i.e. the second process's `main()` never reaches
       those calls at all once the plugin redirects it (FR-003 — "exit without
-      performing any database migration, seed, or write").
-- [ ] T012 [P] [US1] Add a capability entry if `tauri-plugin-single-instance`
+      performing any database migration, seed, or write"). Confirmed:
+      `main.rs` already calls `build_app()` (which registers and builds the
+      single-instance plugin first) before `Database::connect`/`db.migrate()`;
+      no reordering needed.
+- [x] T012 [P] [US1] Add a capability entry if `tauri-plugin-single-instance`
       requires one (most single-instance plugins need no webview-side
       permission since it is a setup-time-only Rust API — verify against the
       plugin's docs at implementation time and add to
       `apps/desktop/src-tauri/capabilities/default.json` only if actually
-      required).
+      required). Verified against the vendored `tauri-plugin-single-instance
+      2.4.2` crate: no `permissions/` schema directory and its README confirms
+      it is a Rust-only, setup-time API with no frontend/webview surface — no
+      capability entry added.
 - [ ] T013 [US1] Manual verification: launch the built app, launch it again
       from a shortcut/CLI while running, confirm single window + focus
       (SC-001); repeat with the window minimized (US1 AS2).
@@ -147,27 +153,27 @@ star persists and is visible in the database, not `localStorage`.
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] `cargo test` for the new repository functions
+- [x] T014 [P] [US2] `cargo test` for the new repository functions
       (`list_favourites`/`add_favourite`/`remove_favourite`): add → present in
       list; add twice → single row, idempotent; remove → absent; remove of a
       never-favourited id → no-op, no error.
-- [ ] T015 [P] [US2] `cargo test` (or an integration test in
+- [x] T015 [P] [US2] `cargo test` (or an integration test in
       `tests/contract`) exercising cascade delete: delete/retire a
       `canonical_target` row that has a favourite → `target_favourite` row is
       gone (FK `ON DELETE CASCADE`).
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Add `targets.favourites.list` / `targets.favourites.add` /
+- [x] T016 [US2] Add `targets.favourites.list` / `targets.favourites.add` /
       `targets.favourites.remove` use-cases in
       `crates/app/targets/src/target_favourites.rs` (new file), calling the
       T006 repository functions; wire `target.not_found` for `add` against an
       unknown id (contracts/operations.md).
-- [ ] T017 [US2] Register the three commands with `tauri-specta` in
+- [x] T017 [US2] Register the three commands with `tauri-specta` in
       `apps/desktop/src-tauri/src/lib.rs`'s command list; regenerate
       `apps/desktop/src/bindings/index.ts` (`cargo test -p desktop_shell`)
       and commit the regenerated bindings.
-- [ ] T018 [US2] Rewrite `apps/desktop/src/features/targets/useFavourites.ts`
+- [x] T018 [US2] Rewrite `apps/desktop/src/features/targets/useFavourites.ts`
       to call the new bindings instead of `localStorage`, **preserving the
       existing public hook shape** (`{ favouriteIds, toggle, isFavourite }`
       plus the non-hook `getFavouriteIds` export) so
@@ -175,7 +181,7 @@ star persists and is visible in the database, not `localStorage`.
       beyond removing the STUB comment. Handle the optimistic-update /
       re-fetch pattern consistent with other backend-backed hooks in this
       codebase.
-- [ ] T019 [P] [US2] Update `apps/desktop/src/features/targets/useFavourites.test.ts`
+- [x] T019 [P] [US2] Update `apps/desktop/src/features/targets/useFavourites.test.ts`
       for the new backend-backed behavior (mock the IPC bindings instead of
       `localStorage`/`StorageEvent`).
 - [ ] T020 [US2] Remove the module-header STUB note in `useFavourites.ts` and
@@ -202,31 +208,31 @@ and produced exactly one audit event.
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] `cargo test` for the new `ValidationRule` variant: valid
+- [x] T021 [P] [US3] `cargo test` for the new `ValidationRule` variant: valid
       map accepted; unknown data-type id rejected (`value.invalid`); invalid
       action string rejected; empty map accepted (all defaults apply).
-- [ ] T022 [P] [US3] `cargo test` confirming `update_setting` for
+- [x] T022 [P] [US3] `cargo test` confirming `update_setting` for
       `cleanupTypeOverrides` emits exactly one `SettingsChanged`
       (`TOPIC_SETTINGS_CHANGED`) event on a real change and zero events on a
       no-op re-save of the identical map (SC-003).
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Wire `apps/desktop/src/features/settings/Cleanup.tsx`'s
+- [x] T023 [US3] Wire `apps/desktop/src/features/settings/Cleanup.tsx`'s
       `handleTableChange` to call `save('cleanup', { cleanupTypeOverrides: next })`
       (the same `save` prop already used for `blockPermanentDelete`/
       `defaultProtection`) instead of `saveActionsToStorage`; load initial
       state from the existing `getSettings({ scope: 'cleanup' })` call
       already present in the component (extend `applyValues` to read
       `cleanupTypeOverrides`) instead of `loadActionsFromStorage`.
-- [ ] T024 [US3] Remove `ACTIONS_STORAGE_KEY`, `loadActionsFromStorage`,
+- [x] T024 [US3] Remove `ACTIONS_STORAGE_KEY`, `loadActionsFromStorage`,
       `saveActionsToStorage` from `Cleanup.tsx` once the backend path is
       wired and verified (FR-007).
-- [ ] T025 [P] [US3] Update/add a vitest for `Cleanup.tsx` confirming an
+- [x] T025 [P] [US3] Update/add a vitest for `Cleanup.tsx` confirming an
       override change calls `save('cleanup', ...)` with the expected shape
       and that a reload (re-mount with `getSettings` returning the saved map)
       shows the override, not the fixture default.
-- [ ] T026 [US3] Confirm the existing `warnedTypes` impact-warning banner
+- [x] T026 [US3] Confirm the existing `warnedTypes` impact-warning banner
       logic (protected type set destructive) still functions unchanged
       against the backend-sourced `actions` state (US3 AS3) — no logic change
       expected, verification only.
@@ -241,28 +247,28 @@ and produced exactly one audit event.
 
 **Independent Test**: Resize/move, quit, relaunch, confirm restoration.
 
-- [ ] T027 [US4] Register `tauri_plugin_window_state::Builder::default().build()`
+- [x] T027 [US4] Register `tauri_plugin_window_state::Builder::default().build()`
       in `build_app()`, after single-instance (US1) so a redirected second
       launch never touches window-state's own store file for a window it
       isn't actually creating.
-- [ ] T028 [US4] Add the plugin's required capability grant(s) (e.g.
+- [x] T028 [US4] Add the plugin's required capability grant(s) (e.g.
       `window-state:default`, if the plugin exposes any webview-invokable
       surface — verify at implementation time) to
       `apps/desktop/src-tauri/capabilities/default.json`.
-- [ ] T029 [US4] Confirm/enforce the minimum-size floor
+- [x] T029 [US4] Confirm/enforce the minimum-size floor
       (`minWidth`/`minHeight` = 1100x720, already in `tauri.conf.json`) is
       still respected after the plugin restores a persisted size — add an
       explicit clamp in `build_app()`/`setup()` if the plugin does not already
       guarantee this (mirrors the `astro-up` reference's own explicit
       min-size enforcement after window-state restore — see research.md's
       cited `lib.rs` excerpt).
-- [ ] T030 [US4] Add the off-screen-position fallback (US4 AS3, FR-013): on
+- [x] T030 [US4] Add the off-screen-position fallback (US4 AS3, FR-013): on
       restore, if the persisted position is fully outside all current
       display bounds, reset to a centered/default position rather than
       accepting the plugin's raw restore (verify whether the plugin already
       handles this natively before adding app-level logic — avoid duplicating
       built-in behavior).
-- [ ] T031 [US4] Manual verification across at least two of the three
+- [ ] T031 [US4] **Deferred to manual verification.** Manual verification across at least two of the three
       platforms: resize/move/maximize, restart, confirm restoration (SC-004);
       disconnect a second monitor the window was on, restart, confirm
       on-screen fallback.
@@ -279,14 +285,14 @@ menu.
 **Independent Test**: Open the native menu on each platform; confirm entries
 and Edit-menu copy/paste/select-all work.
 
-- [ ] T032 [US5] Build a `tauri::menu::Menu` in `build_app()`/`setup()` using
+- [x] T032 [US5] Build a `tauri::menu::Menu` in `build_app()`/`setup()` using
       `tauri::menu::{Menu, Submenu, PredefinedMenuItem, MenuItem}`: an
       App/PlateVault submenu (About, Settings, separator, Quit), a Window
       submenu (`PredefinedMenuItem::minimize`, `close_window`, etc., following
       the platform default set), and an Edit submenu
       (`PredefinedMenuItem::copy`, `paste`, `select_all`, `undo`/`redo` if
       appropriate for platform convention).
-- [ ] T033 [US5] Wire the About and Settings menu items to whatever
+- [x] T033 [US5] Wire the About and Settings menu items to whatever
       in-app navigation/dialog already exists for those surfaces (emit a
       frontend event the app shell already listens for, or open the existing
       Settings route) — reuse existing UI, do not build a new About dialog if
@@ -294,13 +300,16 @@ and Edit-menu copy/paste/select-all work.
       native `about` `PredefinedMenuItem` (OS-provided About panel) as the
       placeholder rather than inventing new in-app UI (out of this spec's
       scope to design an About screen).
-- [ ] T034 [US5] Wire Quit to the same shutdown path as the existing
+- [x] T034 [US5] Wire Quit to the same shutdown path as the existing
       window-close control (FR-016) — verify no bypass of any existing
       close-confirmation logic (check for one before assuming none exists).
-- [ ] T035 [US5] Explicitly verify (no code expected) that this task group
+      Verified: this crate has no `on_window_event`/`CloseRequested` handler
+      anywhere, so `PredefinedMenuItem::quit`'s default `app.exit(0)` has
+      nothing to bypass.
+- [x] T035 [US5] Explicitly verify (no code expected) that this task group
       does **not** touch any existing native/React context-menu code path
-      (FR-017, US5 AS4).
-- [ ] T036 [US5] Manual verification on macOS (global menu bar, Cmd+Q/Cmd+,
+      (FR-017, US5 AS4). Verified: no context-menu code exists in this crate.
+- [ ] T036 [US5] **Deferred to manual verification.** Manual verification on macOS (global menu bar, Cmd+Q/Cmd+,
       conventions), Windows, and Linux: menu presence, Edit-menu
       copy/paste/select-all in a focused text field, Quit behavior.
 
@@ -318,7 +327,7 @@ each theme's `mode`.
 **Depends on**: T008 (Foundational `isTauri()` cleanup) so this uses the same
 runtime check.
 
-- [ ] T037 [US6] In `apps/desktop/src/data/theme.ts`, extend `applyTheme()`
+- [x] T037 [US6] In `apps/desktop/src/data/theme.ts`, extend `applyTheme()`
       (or add a sibling called from the same call sites: `initAppearance()`,
       `setThemeChoice()`, and the `prefers-color-scheme` change listener) to
       call `getCurrentWindow().setTheme(mode === 'dark' ? 'dark' : 'light')`
@@ -328,15 +337,15 @@ runtime check.
       ambiguity; the existing `ThemeMeta.mode` field already resolves it
       exactly). Gate the call behind `core.isTauri()` (FR-020 — no-op outside
       Tauri / where unsupported).
-- [ ] T038 [US6] Wrap the `setTheme` call so a platform/webview that throws or
+- [x] T038 [US6] Wrap the `setTheme` call so a platform/webview that throws or
       no-ops (Linux desktop environments per plan.md's platform-differences
       table) degrades silently — no error surfaced to the user (FR-020, US6
       AS2).
-- [ ] T039 [P] [US6] Add/update a vitest confirming `applyTheme()`/theme-switch
+- [x] T039 [P] [US6] Add/update a vitest confirming `applyTheme()`/theme-switch
       calls the native `setTheme` with the correct mode for each of the four
       themes when running under a mocked Tauri environment, and does not call
       it (or calls it as a no-op) outside Tauri.
-- [ ] T040 [US6] Manual verification on Windows, macOS, and at least one
+- [ ] T040 [US6] **Deferred to manual verification.** Manual verification on Windows, macOS, and at least one
       Linux desktop environment: switch each of the four themes, confirm
       native chrome (where rendered) matches light/dark family (SC-005); on
       Linux, confirm the documented no-op is what actually happens (not a
@@ -353,7 +362,7 @@ runtime check.
 **Independent Test**: Run the app, locate the log file, confirm rotation and
 readability.
 
-- [ ] T041 [US7] Register `tauri_plugin_log::Builder::new()` in `build_app()`
+- [x] T041 [US7] Register `tauri_plugin_log::Builder::new()` in `build_app()`
       configured with **both** a stdout target and a rotating file target
       (`tauri_plugin_log::Target::new(TargetKind::LogDir { file_name: None })`
       or equivalent, with a size/age-based `RotationStrategy`), so existing
@@ -364,15 +373,32 @@ readability.
       messages are not duplicated or dropped — research the plugin's
       `tracing`-bridge feature flag at implementation time (research.md §c
       notes `2.8.0` "includes... tracing support").
-- [ ] T042 [US7] Confirm the rotation policy is enforced (max file size and/or
+      **Implementation deviation, documented**: the vendored `tauri-plugin-log
+      2.8.0` declares a `tracing` Cargo feature but does not actually wire it
+      into any code path (verified by reading the vendored crate source) —
+      enabling it would still install fern's own global `log::logger()`,
+      which directly conflicts with `tracing-subscriber`'s own `tracing-log`
+      bridge (both want the single process-wide `log` logger slot). Resolved
+      by registering `tauri_plugin_log::Builder::new().skip_logger().build()`
+      (so the plugin still exists as a registered plugin, and its `log` Tauri
+      command / `@tauri-apps/plugin-log` JS API still work against the
+      ambient logger) while the actual rotating file target is a
+      `tracing_appender::rolling::daily` layer composed directly into
+      `main.rs`'s `tracing_subscriber::registry()`, alongside the unchanged
+      stderr `fmt` layer — avoiding the dual-global-logger conflict entirely
+      while still satisfying the goal (stdout preserved, rotating file
+      exists, single source of truth for every `tracing::`/`log::` call).
+- [x] T042 [US7] Confirm the rotation policy is enforced (max file size and/or
       max file count) so the log directory never grows unbounded (FR-022,
-      SC-006).
-- [ ] T043 [P] [US7] Document the per-platform log location (already recorded
+      SC-006). Implemented as: `tracing_appender::rolling::daily` (one file
+      per day) plus an explicit age-based prune (`prune_old_logs`, 14-day
+      retention) run on every startup before the day's writer is created.
+- [ ] T043 [P] [US7] **Skipped (optional, not required by any FR)**. Document the per-platform log location (already recorded
       in plan.md's platform-differences table) in whatever in-app "About" or
       "Diagnostics" surface exists (or the native About panel from T033, if a
       "reveal log folder" affordance is added — optional nice-to-have, not
       required by any FR).
-- [ ] T044 [US7] Manual verification on all three platforms: run the app,
+- [ ] T044 [US7] **Deferred to manual verification.** Manual verification on all three platforms: run the app,
       locate the log file at the documented location, confirm readable
       recent entries and confirm the SQLite audit trail is unaffected/unchanged
       (FR-023).
@@ -467,22 +493,22 @@ tracked separately (research.md §a).
 **Independent Test**: Against a locally-published signed test artifact,
 confirm detect → verify → install; against a tampered one, confirm rejection.
 
-- [ ] T055 [US10] Add the `plugins.updater` block to
+- [x] T055 [US10] Add the `plugins.updater` block to
       `apps/desktop/src-tauri/tauri.conf.json` with a clearly-documented
       **placeholder** `pubkey` and the GitHub-Releases `latest.json` endpoint
       shape (research.md §a) — comment it as non-functional until the real
       keypair/pipeline exist.
-- [ ] T056 [US10] Register `tauri_plugin_updater::Builder::new().build()` in
+- [x] T056 [US10] Register `tauri_plugin_updater::Builder::new().build()` in
       `build_app()`; add `updater:default` and `process:default` (for the
       relaunch-to-apply step) to
       `apps/desktop/src-tauri/capabilities/default.json`.
-- [ ] T057 [US10] Add a `check_for_app_update` helper (mirroring the cited
+- [x] T057 [US10] Add a `check_for_app_update` helper (mirroring the cited
       `astro-up` `lib.rs` pattern in research.md §a): call
       `app.updater()?.check().await`, treat `Err` as "updater unavailable"
       (log at `debug`, non-fatal, FR-031), and on `Ok(Some(update))` emit a
       frontend-visible "update available" signal (event, matching the
       reference implementation's `update-available` event).
-- [ ] T058 [US10] Add a minimal frontend affordance (e.g. a Settings-page or
+- [x] T058 [US10] Add a minimal frontend affordance (e.g. a Settings-page or
       toast surface) that listens for the update-available signal and offers
       the user an explicit "install" action calling
       `update.downloadAndInstall()` from `@tauri-apps/plugin-updater` — no
@@ -494,6 +520,8 @@ confirm detect → verify → install; against a tampered one, confirm rejection
       rejection end-to-end once a real keypair exists (blocked on the
       follow-up infra — record as a deferred verification if the keypair is
       not yet available at implementation time).
+      **Deferred**: no real minisign keypair exists yet (T060 not built); this
+      cannot be exercised until that follow-up lands.
 - [ ] T060 [US10] **Follow-up, not implemented in this feature's commits**:
       generate a new PlateVault-specific minisign keypair; add
       `.github/workflows/release.yml` modeled on

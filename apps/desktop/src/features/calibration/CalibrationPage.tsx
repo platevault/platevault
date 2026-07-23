@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CalibrationPage — spec 007 wired; spec 043 §4 redesign + shared layout-system
  * adoption (tasks #62/#63/#73).
@@ -30,9 +33,13 @@ import { MasterDetail } from './MasterDetail';
 import {
   MastersTable,
   DEFAULT_MASTER_SORT,
+  isShownMasterKind,
 } from './MastersTable';
 import type { MasterSort, MasterSortCol } from './MastersTable';
-import { useCalibrationMasters, useCalibrationSettings } from './useCalibration';
+import {
+  useCalibrationMasters,
+  useCalibrationSettings,
+} from './useCalibration';
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
@@ -40,7 +47,8 @@ import { useCalibrationMasters, useCalibrationSettings } from './useCalibration'
 const CALIB_DIMENSIONS = (): FilterOption[] => [
   { value: 'kind', label: m.calibration_fp_kind() },
   { value: 'camera', label: m.settings_calmatch_camera() },
-  { value: 'instrument', label: m.calibration_dim_instrument() },
+  // #788: "instrument" dropped — byte-identical duplicate of "camera"
+  // (no separate instrument field exists on CalibrationFingerprint).
   { value: 'filter', label: m.common_filter() },
   { value: 'night', label: m.sessions_col_night() },
   { value: 'month', label: m.sessions_dim_month() },
@@ -64,7 +72,7 @@ export function CalibrationPage() {
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'calibration.grouping.dims.v1',
-    validIds: ['kind', 'camera', 'instrument', 'filter', 'night', 'month'],
+    validIds: ['kind', 'camera', 'filter', 'night', 'month'],
     defaultDims: [],
   });
 
@@ -75,10 +83,20 @@ export function CalibrationPage() {
   // useStatusSummary, not per-route counts.
 
   const clearSelection = useCallback(
-    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
-  useStaleSelectionCleanup(selected, master !== null, clearSelection);
+  // #735: gated on `loading` so a cold reload's empty cache isn't mistaken for
+  // a stale id — see ProjectsPage for the full rationale.
+  useStaleSelectionCleanup(
+    selected,
+    loading || master !== null,
+    clearSelection,
+  );
 
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
@@ -86,7 +104,9 @@ export function CalibrationPage() {
   // Sorting is header-driven: clicking a column toggles direction or switches column.
   const handleSort = useCallback((col: MasterSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 
@@ -113,6 +133,22 @@ export function CalibrationPage() {
   const visibleMasters = kindFilter
     ? searchedMasters.filter((m) => m.kind.toLowerCase() === kindFilter)
     : searchedMasters;
+
+  // #669: the table only receives the FILTERED list, so it cannot tell an empty
+  // library from a filter that hid everything. Naming the filter here — and only
+  // while showable masters actually exist — keeps the onboarding copy ("run a
+  // scan") off a search miss.
+  const activeFilterLabel = [q ? `“${search.trim()}”` : '', kindFilter]
+    .filter(Boolean)
+    .join(' · ');
+  const filterLabel =
+    activeFilterLabel && masters.some((mm) => isShownMasterKind(mm.kind))
+      ? activeFilterLabel
+      : undefined;
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setKindFilter('');
+  }, []);
 
   const topBar = (
     <PageTopBar
@@ -151,6 +187,7 @@ export function CalibrationPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockId="calibration"
       detail={
         master != null ? (
           <MasterDetail
@@ -173,6 +210,8 @@ export function CalibrationPage() {
         onSort={handleSort}
         agingThresholdDays={agingThresholdDays}
         dims={dims}
+        filterLabel={filterLabel}
+        onClearFilters={clearFilters}
       />
     </ListPageLayout>
   );

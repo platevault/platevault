@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Resolver settings get/update use case for spec 035 (US5, FR-015).
 //!
 //! Reads and writes the singleton `resolver_settings` row (id = 1, seeded by
@@ -65,24 +68,27 @@ fn validate_endpoint(endpoint: &str) -> Result<(), ContractError> {
 }
 
 /// Read the singleton `resolver_settings` row.
+///
+/// Read-through against the settings snapshot ([`crate::caches::resolver_settings`],
+/// in-memory caching layer F0): a cache hit skips the DB round-trip; a miss
+/// loads from SQLite and populates the snapshot.
 async fn read_row(pool: &SqlitePool) -> Result<ResolverSettings, ContractError> {
-    let row: Option<(i64, String, i64, i64)> = sqlx::query_as(
-        "SELECT online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs
-         FROM resolver_settings WHERE id = 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
+    if let Some(cached) = crate::caches::resolver_settings().load() {
+        return Ok((*cached).clone());
+    }
 
-    Ok(row.map_or_else(
-        defaults,
-        |(online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs)| ResolverSettings {
-            online_enabled: online_enabled != 0,
-            simbad_endpoint,
-            debounce_ms: u32::try_from(debounce_ms.max(0)).unwrap_or(300),
-            request_timeout_secs: u32::try_from(request_timeout_secs.max(0)).unwrap_or(10),
-        },
-    ))
+    let row = persistence_db::repositories::q_targets_mgmt::get_resolver_settings(pool)
+        .await
+        .map_err(db_err)?;
+
+    let settings = row.map_or_else(defaults, |r| ResolverSettings {
+        online_enabled: r.online_enabled != 0,
+        simbad_endpoint: r.simbad_endpoint,
+        debounce_ms: u32::try_from(r.debounce_ms.max(0)).unwrap_or(300),
+        request_timeout_secs: u32::try_from(r.request_timeout_secs.max(0)).unwrap_or(10),
+    });
+    crate::caches::store_resolver_settings(std::sync::Arc::new(settings.clone()));
+    Ok(settings)
 }
 
 /// `target.resolution.settings` (get) — return the current resolver settings.
@@ -125,23 +131,19 @@ pub async fn update(
     let debounce_ms = i64::from(s.debounce_ms.max(1));
     let timeout_secs = i64::from(s.request_timeout_secs.max(1));
 
-    sqlx::query(
-        "INSERT INTO resolver_settings
-            (id, online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs)
-         VALUES (1, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-            online_enabled       = excluded.online_enabled,
-            simbad_endpoint      = excluded.simbad_endpoint,
-            debounce_ms          = excluded.debounce_ms,
-            request_timeout_secs = excluded.request_timeout_secs",
+    persistence_db::repositories::q_targets_mgmt::upsert_resolver_settings(
+        pool,
+        i64::from(s.online_enabled),
+        &s.simbad_endpoint,
+        debounce_ms,
+        timeout_secs,
     )
-    .bind(i64::from(s.online_enabled))
-    .bind(&s.simbad_endpoint)
-    .bind(debounce_ms)
-    .bind(timeout_secs)
-    .execute(pool)
     .await
     .map_err(db_err)?;
+
+    // Invalidate after the write commits (never before) per the
+    // `SnapshotCache` usage contract.
+    crate::caches::invalidate_resolver_settings();
 
     // Read back so the response reflects exactly what was stored (clamps applied).
     let settings = read_row(pool).await?;
@@ -155,12 +157,13 @@ pub async fn update(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
 
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
+    // Serialized against `target_management`/`target_resolve`/
+    // `target_search` tests: `get`/`update` read/invalidate the shared
+    // resolver-settings `SnapshotCache` (F0), see
+    // `target_management::cache_test_lock` for the full rationale.
+    async fn setup() -> crate::target_management::cache_test_lock::LockedDb {
+        crate::target_management::cache_test_lock::locked_db().await
     }
 
     fn get_req() -> ResolverSettingsGetRequest {

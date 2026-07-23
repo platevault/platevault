@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tool launch store and helpers — spec 011 T010/T011/T012/T017/T021.
  *
@@ -11,6 +14,7 @@
  *   one-time-per-tool "cwd anchored" hint state (T021, US3 acceptance scenario 3).
  */
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type {
@@ -29,7 +33,9 @@ async function toolProfileList(): Promise<ToolProfileListResponse> {
   return unwrap(await commands.toolsList());
 }
 
-async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunchResponse> {
+async function toolLaunch(
+  request: ToolLaunchRequest,
+): Promise<ToolLaunchResponse> {
   return unwrap(await commands.toolsLaunch(request));
 }
 
@@ -64,7 +70,9 @@ export function toolLaunchDisabledReason(
   return null;
 }
 
-export function toolLaunchDisabledTooltip(reason: LaunchDisabledReason): string {
+export function toolLaunchDisabledTooltip(
+  reason: LaunchDisabledReason,
+): string {
   switch (reason) {
     case 'not_configured':
       return m.projects_toollaunch_not_configured();
@@ -93,7 +101,9 @@ function cwdAnchoredHintStorageKey(toolId: string): string {
 /** True when the one-time cwd-anchored hint has already been shown for `toolId`. */
 export function hasSeenCwdAnchoredHint(toolId: string): boolean {
   try {
-    return window.localStorage.getItem(cwdAnchoredHintStorageKey(toolId)) === '1';
+    return (
+      window.localStorage.getItem(cwdAnchoredHintStorageKey(toolId)) === '1'
+    );
   } catch {
     // localStorage unavailable — fail safe by treating the hint as already seen
     // so we never throw or spam the user in an environment without storage.
@@ -119,13 +129,28 @@ export function useToolProfiles() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // `cancelled` guard: this fetch outlives the component whenever a consumer
+    // unmounts while it is still in flight. Without it the late `setState`
+    // reaches a torn-down React root — harmless in the app, but under vitest it
+    // lands after jsdom has removed `window`, and React's own scheduler then
+    // throws `ReferenceError: window is not defined` into a promise nobody
+    // awaits. That surfaces as an unhandled rejection, which fails the entire
+    // unit-test job while every test still reports as passing (#1215).
+    let cancelled = false;
     setLoading(true);
     toolProfileList()
-      .then((resp) => setProfiles(resp.tools))
+      .then((resp) => {
+        if (!cancelled) setProfiles(resp.tools);
+      })
       .catch(() => {
         /* silently degrade — CTA will disable */
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return { profiles, loading };
@@ -165,6 +190,7 @@ export function useToolLaunch(
     working: false,
     priorInstanceAlive: false,
   });
+  const navigate = useNavigate();
 
   const launch = useCallback(
     async (force = false) => {
@@ -179,7 +205,10 @@ export function useToolLaunch(
         }
 
         if (resp.status === 'success') {
-          addToast({ message: m.projects_tool_launched({ tool: toolName }), variant: 'success' });
+          addToast({
+            message: m.projects_tool_launched({ tool: toolName }),
+            variant: 'success',
+          });
           if (
             supportsOpenFolder === false &&
             toolId &&
@@ -199,30 +228,42 @@ export function useToolLaunch(
         // status === 'error'
         const code = resp.error?.code ?? 'launch.failed';
         const isNotConfigured =
-          code === 'tool.not_configured' || code === 'tool.executable.not_found';
+          code === 'tool.not_configured' ||
+          code === 'tool.executable.not_found';
         addToast({
-          message: resp.error?.message ?? m.projects_tool_launch_failed({ tool: toolName, error: '' }),
+          message:
+            resp.error?.message ??
+            m.projects_tool_launch_failed({ tool: toolName, error: '' }),
           variant: 'error',
           action: isNotConfigured
             ? {
                 label: m.projects_tool_configure_path(),
                 onClick: () => {
-                  // Navigate to settings/tools pane — best-effort via location
-                  window.location.hash = '#/settings?pane=tools';
+                  // #735: was `window.location.hash = '#/settings?pane=tools'`,
+                  // which bypassed the router AND missed the pane entirely —
+                  // SettingsPage resolves its pane from the `/settings/$pane`
+                  // PATH param, so the `?pane=` search was simply ignored.
+                  void navigate({
+                    to: '/settings/$pane',
+                    params: { pane: 'tools' },
+                  });
                 },
               }
             : undefined,
         });
       } catch (e: unknown) {
         addToast({
-          message: m.projects_tool_launch_failed({ tool: toolName, error: String(e) }),
+          message: m.projects_tool_launch_failed({
+            tool: toolName,
+            error: String(e),
+          }),
           variant: 'error',
         });
       } finally {
         setState((s) => ({ ...s, working: false }));
       }
     },
-    [projectId, toolId, toolName, supportsOpenFolder],
+    [projectId, toolId, toolName, supportsOpenFolder, navigate],
   );
 
   const dismissPriorWarning = useCallback(() => {

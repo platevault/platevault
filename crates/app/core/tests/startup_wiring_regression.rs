@@ -1,4 +1,9 @@
-#![allow(clippy::doc_markdown)] // prose doc-comments reference code idents; pedantic noise in a test
+#![allow(clippy::doc_markdown)]
+// prose doc-comments reference code idents; pedantic noise in a test
+
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Regression R-3 — `run_app` startup wiring: plan listener + log forwarder.
 //!
 //! Before the 2026-06-17 fix, `start_inbox_plan_listener` (spec 005) and
@@ -71,13 +76,16 @@ async fn insert_root(pool: &sqlx::SqlitePool, root_id: &str) {
 ///   Columns: id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
 ///            content_signature, state, lane
 async fn insert_inbox_item(pool: &sqlx::SqlitePool, root_id: &str, item_id: &str, plan_id: &str) {
-    // Insert the inbox item in `classified` state.
+    // Insert the inbox item in `classified` state. `frame_type` is set because
+    // spec 058 SC-003 only lets a row carrying one report `classified`; without
+    // it this fixture modelled an illegal row that the listener now correctly
+    // returns to `pending_classification`.
     sqlx::query(
         "INSERT INTO inbox_items \
          (id, root_id, relative_path, file_count, discovered_at, last_scanned_at, \
-          content_signature, state, lane) \
+          content_signature, state, lane, frame_type) \
          VALUES (?, ?, 'test-folder', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', \
-                 'sig-r3', 'classified', 'fits')",
+                 'sig-r3', 'classified', 'fits', 'light')",
     )
     .bind(item_id)
     .bind(root_id)
@@ -137,7 +145,11 @@ async fn r3_1_start_inbox_plan_listener_callable() {
     let bus = EventBus::with_pool(db.pool().clone());
 
     // Must not panic.
-    start_inbox_plan_listener(db.pool().clone(), &bus);
+    start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
 
     // Pool is still usable after the call (pool.clone() was taken, not moved).
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM inbox_items")
@@ -158,7 +170,11 @@ async fn r3_2_listener_resolves_inbox_item_on_plan_applied() {
     let bus = EventBus::with_pool(db.pool().clone());
 
     // Start the listener (this is the fix we're pinning).
-    start_inbox_plan_listener(db.pool().clone(), &bus);
+    start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
 
     let root_id = format!("root-r3-{}", Uuid::new_v4());
     let item_id = format!("r3-item-{}", Uuid::new_v4());
@@ -207,7 +223,11 @@ async fn r3_3_listener_reclassifies_inbox_item_on_plan_failed() {
     let db = setup_db().await;
     let bus = EventBus::with_pool(db.pool().clone());
 
-    start_inbox_plan_listener(db.pool().clone(), &bus);
+    start_inbox_plan_listener(
+        db.pool().clone(),
+        &bus,
+        targeting_resolver::simbad::ResolveCache::in_memory().unwrap(),
+    );
 
     let root_id = format!("root-r3-fail-{}", Uuid::new_v4());
     let item_id = format!("r3-fail-{}", Uuid::new_v4());

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Lifecycle state types for all Data Asset families (spec 002).
 
 pub mod action_review_requirement;

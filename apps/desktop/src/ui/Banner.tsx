@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { forwardRef } from 'react';
 import type { ReactNode, HTMLAttributes } from 'react';
 
@@ -7,10 +10,32 @@ export interface BannerProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 
-export const Banner = forwardRef<HTMLDivElement, BannerProps>(
-  function Banner({ variant = 'warn', className, children, ...rest }, ref) {
-    const cls = ['alm-banner', `alm-banner--${variant}`, className].filter(Boolean).join(' ');
-    return <div ref={ref} className={cls} {...rest}>{children}</div>;
-  }
-);
+export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
+  {
+    variant = 'warn',
+    className,
+    children,
+    role,
+    'aria-live': ariaLive,
+    ...rest
+  },
+  ref,
+) {
+  const cls = ['pv-banner', `pv-banner--${variant}`, className]
+    .filter(Boolean)
+    .join(' ');
+  const defaultRole =
+    variant === 'danger' ? 'alert' : variant === 'warn' ? 'status' : undefined;
+  return (
+    <div
+      ref={ref}
+      className={cls}
+      role={role ?? defaultRole}
+      aria-live={ariaLive ?? (variant === 'warn' ? 'polite' : undefined)}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+});
 Banner.displayName = 'Banner';

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-catalog.ts — Allowed-catalog filter for the Target Planner (task #40, spec 043 §4).
  *
@@ -21,7 +24,15 @@ import type { TargetListItem } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 
 /** Stable id for each planner catalogue (persisted in Settings + used as group key). */
-export type CatalogueId = 'M' | 'NGC' | 'IC' | 'Sh2' | 'LBN' | 'LDN' | 'C' | 'B';
+export type CatalogueId =
+  | 'M'
+  | 'NGC'
+  | 'IC'
+  | 'Sh2'
+  | 'LBN'
+  | 'LDN'
+  | 'C'
+  | 'B';
 
 /**
  * Allowed planner catalogs, keyed by the designation prefix that identifies
@@ -35,7 +46,11 @@ export type CatalogueId = 'M' | 'NGC' | 'IC' | 'Sh2' | 'LBN' | 'LDN' | 'C' | 'B'
  * ("M", "C", "B") so "NGC 7000" classifies as NGC, not as a stray "N…".
  */
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
-export const PLANNER_CATALOGS: ReadonlyArray<{ id: CatalogueId; prefix: string; label: () => string }> = [
+export const PLANNER_CATALOGS: ReadonlyArray<{
+  id: CatalogueId;
+  prefix: string;
+  label: () => string;
+}> = [
   { id: 'NGC', prefix: 'NGC', label: () => m.targets_catalog_ngc() },
   { id: 'Sh2', prefix: 'Sh2', label: () => m.targets_catalog_sharpless() },
   { id: 'LBN', prefix: 'LBN', label: () => m.targets_catalog_lbn() },
@@ -58,9 +73,11 @@ export function catalogueLabel(id: CatalogueId): string {
  * prevents matching unrelated tokens that merely start with the same letters
  * (e.g. "Cygnus", "ICRS", "Barnard's Star" spelled out).
  */
-const CATALOG_MATCHERS: ReadonlyArray<{ id: CatalogueId; re: RegExp }> = PLANNER_CATALOGS.map(
-  (c) => ({ id: c.id, re: new RegExp(`^${c.prefix}[\\s-]?\\d`, 'i') }),
-);
+const CATALOG_MATCHERS: ReadonlyArray<{ id: CatalogueId; re: RegExp }> =
+  PLANNER_CATALOGS.map((c) => ({
+    id: c.id,
+    re: new RegExp(`^${c.prefix}[\\s-]?\\d`, 'i'),
+  }));
 
 /** Build a single regex that matches any allowed-catalog designation. */
 const PLANNER_DESIGNATION_RE = new RegExp(
@@ -91,7 +108,9 @@ export function isPlannerCatalogTarget(t: TargetListItem): boolean {
  * belongs to an allowed planner catalog. Replace with a backend catalog filter
  * (task #57) once the list endpoint can filter server-side.
  */
-export function filterPlannerCatalog(targets: TargetListItem[]): TargetListItem[] {
+export function filterPlannerCatalog(
+  targets: TargetListItem[],
+): TargetListItem[] {
   return targets.filter(isPlannerCatalogTarget);
 }
 

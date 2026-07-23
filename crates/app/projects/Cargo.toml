@@ -8,7 +8,13 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_cache = { path = "../cache" }
 app_core_errors = { path = "../errors" }
+# spec 052 P1 (scope expansion, ADVICE): project.create promotes the selected
+# canonical target from the shared redb resolve cache into `canonical_target`
+# instead of requiring the row to pre-exist (target.resolve no longer writes
+# it eagerly).
+app_core_targets = { path = "../targets" }
 audit = { path = "../../audit" }
 camino = { workspace = true }
 contracts_core = { path = "../../contracts/core" }
@@ -17,8 +23,11 @@ fs_inventory = { path = "../../fs/inventory" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
+# #1218: source snapshots read the session key, whose format this crate owns.
+sessions = { path = "../../sessions" }
+sha2.workspace = true
+simbad-resolver = "0.4.0"
 workflow_profiles = { path = "../../workflow/profiles" }
-moka = { workspace = true }
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true

@@ -11,7 +11,7 @@
  *   2. (104) ListPageLayout dual side+bottom variant — new
  *      `detailPlacement="side-and-bottom"` mode renders a side panel AND a
  *      bottom panel simultaneously. Adds three new modifier classes:
- *      .alm-listpage__body--dual, .alm-listpage__side, .alm-listpage__bottom.
+ *      .pv-listpage__body--dual, .pv-listpage__side, .pv-listpage__bottom.
  * ============================================================================ */
 
 /* ── 105 ProjectStatusTag ───────────────────────────────────────────────────
@@ -19,46 +19,46 @@
  * header. Layout: a small colored dot + plain text label, all inline.
  * The dot communicates semantic state without a full colored badge background. */
 
-.alm-status-tag {
+.pv-status-tag {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   /* No background, no border — just the dot + text */
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-secondary);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-secondary);
   white-space: nowrap;
 }
 
 /* The status dot — a 6px circle colored by variant. */
-.alm-status-tag__dot {
+.pv-status-tag__dot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
   /* Default (neutral/ghost): muted border-color dot */
-  background: var(--alm-text-faint);
+  background: var(--pv-text-faint);
 }
 
 /* Per-variant dot colors — map to semantic tokens. */
-.alm-status-tag--ok .alm-status-tag__dot     { background: var(--alm-ok); }
-.alm-status-tag--warn .alm-status-tag__dot   { background: var(--alm-warn); }
-.alm-status-tag--danger .alm-status-tag__dot { background: var(--alm-danger); }
-.alm-status-tag--info .alm-status-tag__dot   { background: var(--alm-info); }
-.alm-status-tag--accent .alm-status-tag__dot { background: var(--alm-accent); }
-.alm-status-tag--neutral .alm-status-tag__dot { background: var(--alm-text-muted); }
+.pv-status-tag--ok .pv-status-tag__dot     { background: var(--pv-ok); }
+.pv-status-tag--warn .pv-status-tag__dot   { background: var(--pv-warn); }
+.pv-status-tag--danger .pv-status-tag__dot { background: var(--pv-danger); }
+.pv-status-tag--info .pv-status-tag__dot   { background: var(--pv-info); }
+.pv-status-tag--accent .pv-status-tag__dot { background: var(--pv-accent); }
+.pv-status-tag--neutral .pv-status-tag__dot { background: var(--pv-text-muted); }
 /* ghost: keep the faint default — intentionally low-contrast for inactive states */
 
 /* In the detail header titleExtra slot, bump up the font slightly so it sits
  * well next to the project name title. */
-.alm-detail__header .alm-status-tag {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-detail__header .pv-status-tag {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
 }
 
 /* In the blocked state the label itself picks up a danger tint for emphasis. */
-.alm-status-tag--danger {
-  color: var(--alm-danger);
+.pv-status-tag--danger {
+  color: var(--pv-danger);
 }
 
 /* ── 104 ListPageLayout dual side+bottom variant ────────────────────────────
@@ -67,11 +67,11 @@
  *   ┌─────────────────────────────────────────────┐
  *   │ PageTopBar (pinned)                          │
  *   ├──────────────────────────────────────────────┤
- *   │ .alm-listpage__main  │ .alm-listpage__side   │
+ *   │ .pv-listpage__main  │ .pv-listpage__side   │
  *   │ (full-height,        │ (fixed 420px,         │
  *   │  scrolls)            │  own scroll)          │
  *   ├──────────────────────┴───────────────────────┤
- *   │ .alm-listpage__bottom (full-width, non-      │
+ *   │ .pv-listpage__bottom (full-width, non-      │
  *   │  resizable, fit-content, max-height cap)     │
  *   └──────────────────────────────────────────────┘
  *
@@ -86,13 +86,13 @@
 /* Dual body: row — main-col on the left, side panel on the right.
  * The bottom strip lives INSIDE the main-col so it only sits under the
  * content area and does not overlap the side panel. */
-.alm-listpage__body--dual {
+.pv-listpage__body--dual {
   flex-direction: row;
 }
 
 /* Left column: wraps the main content + bottom strip in a flex column.
  * Takes all remaining width after the fixed side panel. */
-.alm-listpage__main-col {
+.pv-listpage__main-col {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
@@ -103,21 +103,21 @@
 
 /* Side detail panel inside the dual layout — same width token as the existing
  * side-only variant to stay visually consistent. */
-.alm-listpage__side {
-  flex: 0 0 var(--alm-side-detail-w, 420px);
-  width: var(--alm-side-detail-w, 420px);
+.pv-listpage__side {
+  flex: 0 0 var(--pv-side-detail-w, 420px);
+  width: var(--pv-side-detail-w, 420px);
   height: auto;
   max-height: none;
   align-self: stretch;
-  border-left: 1px solid var(--alm-border);
-  background: var(--alm-surface-raised);
+  border-left: 1px solid var(--pv-border);
+  background: var(--pv-surface-raised);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 /* Bottom detail strip — same sizing strategy as the existing bottom dock. */
-.alm-listpage__bottom {
+.pv-listpage__bottom {
   flex: 0 0 auto;
   height: fit-content;
   max-height: 40vh;
@@ -125,33 +125,33 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--alm-border);
-  background: var(--alm-surface-raised);
+  border-top: 1px solid var(--pv-border);
+  background: var(--pv-surface-raised);
 }
 
 /* Close bar and close button for both new panels — reuse the same structure
- * as the existing .alm-listpage__detail-bar / __detail-close. */
-.alm-listpage__panel-bar {
+ * as the existing .pv-listpage__detail-bar / __detail-close. */
+.pv-listpage__panel-bar {
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border-subtle);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border-bottom: 1px solid var(--pv-border-subtle);
 }
 
-.alm-listpage__panel-close {
+.pv-listpage__panel-close {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
   line-height: 1;
-  padding: var(--alm-sp-1);
-  border-radius: var(--alm-radius-sm);
+  padding: var(--pv-sp-1);
+  border-radius: var(--pv-radius-sm);
 }
-.alm-listpage__panel-close:hover { color: var(--alm-text); }
+.pv-listpage__panel-close:hover { color: var(--pv-text); }
 
-.alm-listpage__panel-body {
+.pv-listpage__panel-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -159,27 +159,27 @@
 
 /* Apply same project-detail structural tweaks used in the side-only variant
  * to the new dual side panel too. */
-.alm-listpage__side .alm-project-detail__sections {
+.pv-listpage__side .pv-project-detail__sections {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-listpage__side .alm-stepper {
-  padding-top: var(--alm-sp-1);
-  padding-bottom: var(--alm-sp-1);
+.pv-listpage__side .pv-stepper {
+  padding-top: var(--pv-sp-1);
+  padding-bottom: var(--pv-sp-1);
 }
 
-.alm-listpage__side .alm-metricline {
-  margin-bottom: var(--alm-sp-1);
+.pv-listpage__side .pv-metricline {
+  margin-bottom: var(--pv-sp-1);
 }
 
-.alm-listpage__side .alm-project-detail__bar-actions {
+.pv-listpage__side .pv-project-detail__bar-actions {
   flex-wrap: wrap;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
 }
 
-.alm-listpage__side .alm-project-detail__bar-path {
+.pv-listpage__side .pv-project-detail__bar-path {
   overflow-wrap: anywhere;
   word-break: break-all;
 }
@@ -195,51 +195,51 @@
 
 /* Standardised bottom detail: project identity stacked above the operational
    sections in one full-width bottom panel (no right side panel). */
-.alm-project-detail-stack {
+.pv-project-detail-stack {
   display: flex;
   flex-direction: column;
 }
-.alm-project-detail-stack > * + * {
-  border-top: 1px solid var(--alm-border-subtle);
+.pv-project-detail-stack > * + * {
+  border-top: 1px solid var(--pv-border-subtle);
 }
 
-.alm-project-bottom {
-  padding: var(--alm-sp-3);
+.pv-project-bottom {
+  padding: var(--pv-sp-3);
 }
 
-.alm-project-bottom__grid {
+.pv-project-bottom__grid {
   display: grid;
   /* Each column is at least 280px; fills the available width. */
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
   align-items: start;
 }
 
 /* Notes get extra width — prose benefits from room to breathe. */
-.alm-project-bottom__cell--notes {
+.pv-project-bottom__cell--notes {
   grid-column: span 2;
 }
 
 /* Each cell is a self-contained block; sections handle their own borders/bg. */
-.alm-project-bottom__cell {
+.pv-project-bottom__cell {
   min-width: 0;
 }
 
 /* Loading / error states in the bottom panel. */
-.alm-project-bottom__loading {
-  padding: var(--alm-sp-4);
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+.pv-project-bottom__loading {
+  padding: var(--pv-sp-4);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }
 
-.alm-project-bottom__error {
-  padding: var(--alm-sp-3);
+.pv-project-bottom__error {
+  padding: var(--pv-sp-3);
 }
 
 /* On narrow viewports (e.g. if the app window is squeezed) collapse notes to
  * a single column so it doesn't overflow its container. */
 @media (max-width: 700px) {
-  .alm-project-bottom__cell--notes {
+  .pv-project-bottom__cell--notes {
     grid-column: span 1;
   }
 }
@@ -251,39 +251,39 @@
  * TargetsPage.tsx so it applies without a manual merge. The parent may merge
  * this into components.css in a future pass.
  *
- * Token-only (--alm-* only). No raw hex/rgb/px spacing/ms.
+ * Token-only (--pv-* only). No raw hex/rgb/px spacing/ms.
  *
  * 103a — virtualizer height fix
- *   The flex height chain from .alm-page → .alm-listpage__body →
- *   .alm-listpage__main is normally fine, but .alm-listpage__main uses
+ *   The flex height chain from .pv-page → .pv-listpage__body →
+ *   .pv-listpage__main is normally fine, but .pv-listpage__main uses
  *   overflow:auto which means its height is content-determined in some
  *   WebViews (Tauri/Windows). When the scroll container inside
- *   .alm-targets-table__wrap has zero measured height the virtualizer
+ *   .pv-targets-table__wrap has zero measured height the virtualizer
  *   returns zero virtual items. Even with the non-windowed fallback the
- *   table renders inside a zero-height .alm-targets-table__scroll, so rows
+ *   table renders inside a zero-height .pv-targets-table__scroll, so rows
  *   are invisible.
  *
- *   Fix: inside the .alm-targets-page wrapper, switch .alm-listpage__main
+ *   Fix: inside the .pv-targets-page wrapper, switch .pv-listpage__main
  *   to overflow:hidden (height stays flex-bounded) and make
- *   .alm-targets-table__wrap fill it absolutely (position:absolute;inset:0)
+ *   .pv-targets-table__wrap fill it absolutely (position:absolute;inset:0)
  *   so the scroll container always gets the full available height.
  * ========================================================================= */
 
 /* The wrapper exists only to scope the fix below — it must NOT participate in
- * layout, or it collapses to the top-bar height and starves .alm-listpage__main
+ * layout, or it collapses to the top-bar height and starves .pv-listpage__main
  * to height 0 (the bug this block fixes). `display: contents` makes it a pure
- * cascade hook so the flex height chain reaches .alm-listpage__main unchanged. */
-.alm-targets-page {
+ * cascade hook so the flex height chain reaches .pv-listpage__main unchanged. */
+.pv-targets-page {
   display: contents;
 }
 
 /* Scope the fix to the targets page so other list pages are unaffected. */
-.alm-targets-page .alm-listpage__main {
+.pv-targets-page .pv-listpage__main {
   overflow: hidden;
   position: relative;
 }
 
-.alm-targets-page .alm-targets-table__wrap {
+.pv-targets-page .pv-targets-table__wrap {
   position: absolute;
   inset: 0;
 }
@@ -307,128 +307,166 @@
  * ========================================================================= */
 
 /* Switch to fixed layout so <colgroup> widths are authoritative. */
-.alm-targets-table {
+.pv-targets-table {
   table-layout: fixed;
   width: 100%;
   /* Floor so every column stays at least as wide as its content. Below this the
-     scroll container (.alm-targets-table__scroll, overflow-x:auto) scrolls
+     scroll container (.pv-targets-table__scroll, overflow-x:auto) scrolls
      horizontally instead of squeezing/clipping the last columns. The column
-     percentages below are tuned so each fits its content at this width. */
-  min-width: 1180px;
+     percentages below are tuned so each fits its content at this width.
+     Iteration 2026-07-15 (FR-032/SC-016): with the sparkline and visible
+     columns removed the surviving set fits without horizontal scroll in a
+     1100×720 window. */
+  min-width: 1000px;
 }
 
 /* Designation: widest column, but not so wide it starves the Filters column
-   (which holds up to 7 band badges). Tuned down from 50% so filter badges fit
-   on a single line and rows stay one row tall. */
-.alm-targets-col--designation { width: 16%; }
+   (which holds up to 7 band badges). Widened after the sparkline/visible
+   column removal (iteration 2026-07-15). */
+.pv-targets-col--designation { width: 20%; }
 
 /* Type pill: "open cluster" is the longest label at ~10ch; header is "Type". */
-.alm-targets-col--type { width: 11.5%; }
+.pv-targets-col--type { width: 10.5%; }
 
 /* Max alt: "Max alt" header + "90°" value — short numeric. */
-.alm-targets-col--maxalt { width: 7%; }
+.pv-targets-col--maxalt { width: 7%; }
 
-/* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
-.alm-targets-col--spark { width: 7%; }
+/* Sparkline + Visible columns removed (iteration 2026-07-15, FR-007): the
+   detail panel's altitude graph is the canonical altitude view and the
+   visible-tonight state folded into the imaging-time why-glyph. */
 
-/* Visible: "●tonight" / "○low" indicator. */
-.alm-targets-col--visible { width: 8.5%; }
-
-/* Opposition: date stub "—" for now; leave room for "Jan 2026" once live. */
-.alm-targets-col--opposition { width: 9%; }
+/* Opposition: widest real value is "14 Apr · in 9 months" — sized to render
+   it unclipped (FR-032, fixes the stub-width clipping). */
+.pv-targets-col--opposition { width: 15%; }
 
 /* Sessions: numeric stub "—". */
-.alm-targets-col--sessions { width: 8%; }
+.pv-targets-col--sessions { width: 8%; }
 
 /* Opposition cell: right-aligned tabular numeric (mirrors max-alt style). */
-.alm-targets-cell--opposition {
+.pv-targets-cell--opposition {
   font-variant-numeric: tabular-nums;
   text-align: right;
-  color: var(--alm-text-muted);
+  color: var(--pv-text-muted);
 }
 
 /* === spec 044: Lunar dist, Filters, Imaging time columns + filter badges === */
 
-/* Column widths (task 044) — fixed layout prevents per-page shift. */
-.alm-targets-col--lunardist { width: 6%; }
-.alm-targets-col--filters   { width: 15%; }
-.alm-targets-col--imagingtime { width: 7.5%; }
+/* Column widths (task 044; re-sized iteration 2026-07-15 FR-032) — fixed
+   layout prevents per-page shift. Imaging time fits "2h10m" + why-glyph. */
+.pv-targets-col--lunardist { width: 6%; }
+.pv-targets-col--filters   { width: 18%; }
+.pv-targets-col--imagingtime { width: 10%; }
+
+/* Imaging-time why-glyph (iteration 2026-07-15): warning tint for the
+   zero-reason glyph (FR-030), faint tint for the actionable-Moon marker on
+   non-zero values (FR-031). */
+.pv-imgtime-glyph--warn { color: var(--pv-warn); }
+.pv-imgtime-glyph--muted { color: var(--pv-text-faint); }
+
+/* Computation-context label (iteration 2026-07-15, FR-033): one compact
+   always-visible line in the planner toolbar; must stay single-line even in
+   the crowded 1100×720 layout, so the site name is allowed to ellipsize. */
+.pv-planner-computed-for {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+.pv-planner-computed-for__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+.pv-planner-computed-for__change {
+  color: var(--pv-accent);
+}
+
+/* Detail altitude graph: Moon-excluded spans for the displayed band
+   (iteration 2026-07-15, FR-007 overlay) — a bottom-anchored exclusion band
+   so it reads as a time range without hiding the curve. */
+.pv-planner__graph-moon {
+  fill: var(--pv-warn);
+  opacity: 0.35;
+}
 
 /* Lunar dist cell: tabular numeric, muted (mock value). */
-.alm-targets-cell--lunardist {
+.pv-targets-cell--lunardist {
   font-variant-numeric: tabular-nums;
-  color: var(--alm-text-muted);
+  color: var(--pv-text-muted);
 }
 
 /* Filters cell: allow wrapping so badges don't overflow narrow column. */
-.alm-targets-cell--filters {
+.pv-targets-cell--filters {
   white-space: normal;
 }
 
 /* Filter badge strip: inline row of small pill badges. */
-.alm-filter-badges {
+.pv-filter-badges {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   align-items: center;
 }
 
 /* Individual filter badge — shared base. */
-.alm-filter-badge {
+.pv-filter-badge {
   display: inline-block;
-  padding: 0 var(--alm-sp-1);
-  border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-medium);
-  line-height: var(--alm-leading-tight);
-  letter-spacing: 0.03em;
+  padding: 0 var(--pv-sp-1);
+  border-radius: var(--pv-radius-sm);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+  line-height: var(--pv-leading-tight);
+  letter-spacing: var(--pv-tracking-tight);
   border: 1px solid transparent;
   white-space: nowrap;
 }
 
 /* Broadband (LRGB): subtle warm tint. */
-.alm-filter-badge--broadband {
-  background: color-mix(in srgb, var(--alm-accent) 12%, transparent);
-  color: var(--alm-accent);
-  border-color: color-mix(in srgb, var(--alm-accent) 30%, transparent);
+.pv-filter-badge--broadband {
+  background: color-mix(in srgb, var(--pv-accent) 12%, transparent);
+  color: var(--pv-accent);
+  border-color: color-mix(in srgb, var(--pv-accent) 30%, transparent);
 }
 
 /* Narrowband (Ha/OIII/SII): subtle cool tint. */
-.alm-filter-badge--narrowband {
-  background: color-mix(in srgb, var(--alm-accent-alt, var(--alm-text-muted)) 12%, transparent);
-  color: var(--alm-text-secondary, var(--alm-text-muted));
-  border-color: color-mix(in srgb, var(--alm-text-muted) 30%, transparent);
+.pv-filter-badge--narrowband {
+  background: color-mix(in srgb, var(--pv-accent-alt, var(--pv-text-muted)) 12%, transparent);
+  color: var(--pv-text-secondary, var(--pv-text-muted));
+  border-color: color-mix(in srgb, var(--pv-text-muted) 30%, transparent);
 }
 
 /* === spec 047 US3 — real per-band viability pills =========================
  * Overrides the tier tint above: a band that isn't viable tonight recedes to
  * a muted/ghost treatment regardless of broadband/narrowband tier, so the
  * strip reads at a glance (bright = shoot tonight, faded = not tonight).
- * Reuses the SAME semantic tokens as the rest of the app (--alm-ok, chip,
+ * Reuses the SAME semantic tokens as the rest of the app (--pv-ok, chip,
  * text-muted) — no one-off colors — so a future sparkline strip (spec 044)
  * can reuse them too. */
-.alm-filter-badge--not-viable {
+.pv-filter-badge--not-viable {
   background: transparent;
-  color: var(--alm-text-muted);
-  border-color: var(--alm-rule);
+  color: var(--pv-text-muted);
+  border-color: var(--pv-rule);
   opacity: 0.55;
 }
-.alm-filter-badge--viable {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alm-ok) 25%, transparent);
+.pv-filter-badge--viable {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pv-ok) 25%, transparent);
 }
 /* Unknown coordinates / no observing night: a single muted pill instead of
  * seven fabricated per-band states (FR-013). */
-.alm-filter-badge--unknown {
-  background: var(--alm-chip);
-  color: var(--alm-text-secondary);
-  border-color: var(--alm-rule);
-  padding: 0 var(--alm-sp-2);
+.pv-filter-badge--unknown {
+  background: var(--pv-chip);
+  color: var(--pv-text-secondary);
+  border-color: var(--pv-rule);
+  padding: 0 var(--pv-sp-2);
 }
 
 /* Guidance-cell trigger: an unstyled button wrapper around the pill strip so
  * clicking/hovering it opens the explanation popover without looking like a
  * separate control. */
-.alm-guidance-cell__trigger {
+.pv-guidance-cell__trigger {
   display: inline-flex;
   align-items: center;
   padding: 0;
@@ -438,167 +476,172 @@
   font: inherit;
   color: inherit;
 }
-.alm-guidance-cell__trigger:focus-visible {
-  outline: 2px solid var(--alm-focus-ring);
-  outline-offset: 2px;
-  border-radius: var(--alm-radius-sm);
+.pv-guidance-cell__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+  border-radius: var(--pv-radius-sm);
 }
 
 /* Guidance explanation popover — reuses the session-popover surface tokens. */
-.alm-guidance-popup {
+.pv-guidance-popup {
   min-width: 220px;
   max-width: 320px;
-  padding: var(--alm-sp-3);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
-  box-shadow: var(--alm-shadow-sm);
+  padding: var(--pv-sp-3);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  box-shadow: var(--pv-shadow-sm);
   outline: none;
   z-index: 200;
-  font-size: var(--alm-text-sm);
+  font-size: var(--pv-text-sm);
 }
-.alm-guidance-popup__title {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
-  margin-bottom: var(--alm-sp-2);
+.pv-guidance-popup__title {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
+  margin-bottom: var(--pv-sp-2);
 }
-.alm-guidance-popup__line {
-  color: var(--alm-text-secondary);
-  margin-bottom: var(--alm-sp-1);
+.pv-guidance-popup__line {
+  color: var(--pv-text-secondary);
+  margin-bottom: var(--pv-sp-1);
 }
-.alm-guidance-popup__unknown {
-  color: var(--alm-text-muted);
+.pv-guidance-popup__unknown {
+  color: var(--pv-text-muted);
 }
-.alm-guidance-popup__bands {
+.pv-guidance-popup__bands {
   list-style: none;
-  margin: var(--alm-sp-2) 0 0;
+  margin: var(--pv-sp-2) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.alm-guidance-popup__band-row {
+.pv-guidance-popup__band-row {
   display: flex;
   justify-content: space-between;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
-.alm-guidance-popup__band-name {
-  color: var(--alm-text-secondary);
+.pv-guidance-popup__band-name {
+  color: var(--pv-text-secondary);
 }
-.alm-guidance-popup__band-state--viable {
-  color: var(--alm-ok);
+.pv-guidance-popup__band-state--viable {
+  color: var(--pv-ok);
 }
-.alm-guidance-popup__band-state--not-viable {
-  color: var(--alm-text-muted);
+.pv-guidance-popup__band-state--not-viable {
+  color: var(--pv-text-muted);
+}
+/* spec 044 Track B, US5/T029: real per-band moon-free imaging hours. */
+.pv-guidance-popup__band-moonfree {
+  color: var(--pv-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Settings pane: narrow number input + unit label. */
-.alm-settings__num-input {
+.pv-settings__num-input {
   width: 72px;
   text-align: right;
 }
 
-.alm-settings__unit-label {
-  margin-left: var(--alm-sp-2);
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+.pv-settings__unit-label {
+  margin-left: var(--pv-sp-2);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
 }
 
 /* ── Moon summary (spec 047 US1) ──────────────────────────────────────────── */
 
 /* Nightly Moon summary widget in the planner bar. */
-.alm-moon-summary {
+.pv-moon-summary {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
 
-.alm-moon-summary__glyph {
+.pv-moon-summary__glyph {
   flex: none;
 }
 
 /* Dark limb / disk of the phase glyph. */
-.alm-moon-summary__disk {
-  fill: color-mix(in srgb, var(--alm-text-muted) 22%, transparent);
-  stroke: color-mix(in srgb, var(--alm-text-muted) 45%, transparent);
+.pv-moon-summary__disk {
+  fill: color-mix(in srgb, var(--pv-text-muted) 22%, transparent);
+  stroke: color-mix(in srgb, var(--pv-text-muted) 45%, transparent);
   stroke-width: 0.75;
 }
 
 /* Illuminated portion of the phase glyph. */
-.alm-moon-summary__lit {
-  fill: var(--alm-accent);
+.pv-moon-summary__lit {
+  fill: var(--pv-accent);
   stroke: none;
 }
 
-.alm-moon-summary__text {
+.pv-moon-summary__text {
   display: inline-flex;
   flex-direction: column;
-  line-height: var(--alm-leading-tight);
+  line-height: var(--pv-leading-tight);
 }
 
-.alm-moon-summary__title {
-  font-size: var(--alm-text-xs);
-  letter-spacing: 0.04em;
+.pv-moon-summary__title {
+  font-size: var(--pv-text-xs);
+  letter-spacing: var(--pv-tracking-normal);
   text-transform: uppercase;
-  color: var(--alm-text-muted);
+  color: var(--pv-text-muted);
 }
 
-.alm-moon-summary__phase {
-  font-size: var(--alm-text-sm);
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text-primary, var(--alm-text));
+.pv-moon-summary__phase {
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-primary, var(--pv-text));
 }
 
-.alm-moon-summary__meta {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-moon-summary__meta {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* ── Planner site-setup prompt (spec 047 D7 site gate) ────────────────────── */
 
-.alm-planner-site-prompt {
+.pv-planner-site-prompt {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-1);
+  gap: var(--pv-sp-1);
   max-width: 28rem;
 }
 
-.alm-planner-site-prompt__title {
-  font-size: var(--alm-text-sm);
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text-primary, var(--alm-text));
+.pv-planner-site-prompt__title {
+  font-size: var(--pv-text-sm);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text-primary, var(--pv-text));
 }
 
-.alm-planner-site-prompt__desc {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
+.pv-planner-site-prompt__desc {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
 }
 
 /* === merged from .cssblocks/inbox-detail.css (task D — inbox detail restructure) === */
 /* === inbox-detail.css — task D: breakdown-left / files-right layout =========
  *
  * Overrides the old inspector-column rules (which will be pruned from
- * components.css at merge). The old .alm-inbox-detail__aside was the
+ * components.css at merge). The old .pv-inbox-detail__aside was the
  * inspector column; it is now the scrollable files column.
  *
- * Token-only (--alm-* spacing/surface/border/radius/text). No raw hex/rgb/ms.
+ * Token-only (--pv-* spacing/surface/border/radius/text). No raw hex/rgb/ms.
  * No #NNN in comments (hex-color check). Appended to components.css on merge.
  * ============================================================================ */
 
 /* ── Two-column split: breakdown LEFT + files RIGHT ─────────────────────────
  *
- * .alm-inbox-detail__cols           — default: single column (no metadata)
- * .alm-inbox-detail__cols--split    — two-column row when metadata exists
- * .alm-inbox-detail__main           — LEFT: breakdown, compact fixed width
- * .alm-inbox-detail__aside          — RIGHT (was inspector, now files column)
- * .alm-inbox-detail__files          — modifier; marks the files variant
- * .alm-inbox-detail__files-scroll   — inner scroll container for the table
+ * .pv-inbox-detail__cols           — default: single column (no metadata)
+ * .pv-inbox-detail__cols--split    — two-column row when metadata exists
+ * .pv-inbox-detail__main           — LEFT: breakdown, compact fixed width
+ * .pv-inbox-detail__aside          — RIGHT (was inspector, now files column)
+ * .pv-inbox-detail__files          — modifier; marks the files variant
+ * .pv-inbox-detail__files-scroll   — inner scroll container for the table
  */
 
 /* Override the old inspector-width fixed column. The files column is wider
  * (flex 1) because the metadata table has more columns than the inspector KV
  * grid. The breakdown column takes a compact fixed share. */
-.alm-inbox-detail__cols--split .alm-inbox-detail__aside {
+.pv-inbox-detail__cols--split .pv-inbox-detail__aside {
   /* task D: files column flexes to fill remaining width */
   flex: 1 1 auto;
   width: auto;
@@ -609,22 +652,22 @@
 }
 
 /* The breakdown LEFT column is now the compact fixed-width side. */
-.alm-inbox-detail__cols--split .alm-inbox-detail__main {
-  flex: 0 0 var(--alm-inbox-breakdown-width, 340px);
+.pv-inbox-detail__cols--split .pv-inbox-detail__main {
+  flex: 0 0 var(--pv-inbox-breakdown-width, 340px);
   min-width: 0;
 }
 
 /* Separator between breakdown and files columns */
-.alm-inbox-detail__files {
-  border-left: 1px solid var(--alm-border-subtle);
-  padding-left: var(--alm-sp-3);
+.pv-inbox-detail__files {
+  border-left: 1px solid var(--pv-border-subtle);
+  padding-left: var(--pv-sp-3);
 }
 
 /* The files scroll container: caps height so a long list scrolls within the
  * column rather than growing the panel. Uses the bottom-dock cap (~40vh) as
  * the reference; the inner scroll lets all files be reached without resizing
  * the panel. overflow-x: auto handles wide tables gracefully. */
-.alm-inbox-detail__files-scroll {
+.pv-inbox-detail__files-scroll {
   overflow-y: auto;
   overflow-x: auto;
   /* Reserve gutter so a scrollbar never narrows the table and shifts columns */
@@ -644,7 +687,7 @@
  *   task 6  — ellipsis on breakdown destination column (left panel 340px)
  *
  * Conventions:
- *   - Token-only: --alm-* variables exclusively. No raw hex/rgb/ms values.
+ *   - Token-only: --pv-* variables exclusively. No raw hex/rgb/ms values.
  *   - No raw colour literals in comments (use "task NN" references).
  *   - No element-level inline styles; all layout via class.
  */
@@ -663,24 +706,30 @@
  */
 
 /* Classification colours reused by the inbox Table's Type cell (the row/path/
-   count/format rules were retired with the bespoke div-list → shared Table). */
-.alm-inbox-row__classification {
-  grid-column: classification;
-  font-size: var(--alm-text-xs, 0.75rem);
-  font-weight: 600;
-  color: var(--alm-info);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+   count/format grid rules were retired with the bespoke div-list → shared
+   Table, so `grid-column` no longer applies here — dropped). Bold uppercase
+   + the saturated info colour read as a loud "pill" that visually clashed
+   with the adjacent Format column, which repeats the same frame type for
+   master rows (e.g. Type "DARK" next to Format "dark master") — quieted to a
+   plain-weight, muted-ink label (#555). */
+.pv-inbox-row__classification {
+  font-size: var(--pv-text-xs, 0.75rem);
+  font-weight: 500;
+  color: var(--pv-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /* State variant colours (task 32). */
-.alm-inbox-row__classification--pending  { color: var(--alm-ink3); }
-.alm-inbox-row__classification--classified { color: var(--alm-info); }
-.alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
-.alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
+.pv-inbox-row__classification--pending  { color: var(--pv-text-muted); }
+.pv-inbox-row__classification--classified { color: var(--pv-text-secondary); }
+.pv-inbox-row__classification--plan_open { color: var(--pv-ok); }
+.pv-inbox-row__classification--resolved  { color: var(--pv-ink4); }
+/* T070/FR-047: a materialized sub-item with a missing mandatory attribute
+   (spec 041 needs-review sentinel bucket) — distinct from `classified` so it
+   never reads as fully resolved. */
+.pv-inbox-row__classification--needs_review { color: var(--pv-warn); }
 
 /* ── task 35: bulk-confirm button ───────────────────────────────────────────────
  *
@@ -694,7 +743,7 @@
  * extra wrapper styles needed. The top-bar actions gap handles spacing.
  * This rule documents the semantic intent for the data-testid. */
 [data-testid="inbox-bulk-confirm-btn"] {
-  /* intentionally empty — layout comes from alm-btn + PageTopBar actions gap */
+  /* intentionally empty — layout comes from pv-btn + PageTopBar actions gap */
 }
 
 /* ── task 6: breakdown destination ellipsis ─────────────────────────────────────
@@ -703,7 +752,7 @@
  * wraps on long paths. Force single-line + ellipsis tail instead.
  */
 
-.alm-inbox-detail__dest-cell {
+.pv-inbox-detail__dest-cell {
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -714,7 +763,7 @@
 /* === merged from .cssblocks/targets-wave2.css (spec-043 wave 3) === */
 /* targets-wave2.css — task 5, task 19, task 18
  *
- * Token-only (--alm-* everywhere; no raw hex/rgb/ms).
+ * Token-only (--pv-* everywhere; no raw hex/rgb/ms).
  * No #NNN colour values in comments — refer tasks by number.
  * Merged into components.css by the team lead; do NOT edit components.css directly.
  *
@@ -729,42 +778,12 @@
  * Filter badges run together — increase gap from sp-1 to sp-2.
  * These override the values set in the spec 044 block in components.css. */
 
-.alm-targets-col--lunardist  { width: 6.5%; }
+.pv-targets-col--lunardist  { width: 6.5%; }
 
-/* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
-.alm-filter-badges { gap: var(--alm-sp-2); }
+/* task 5: add readable spacing between filter badges (was pv-sp-1 = 4px). */
+.pv-filter-badges { gap: var(--pv-sp-2); }
 
-/* ── task 19: sparkline size + time-axis ───────────────────────────────────
- * Make the sparkline shorter vertically (from 18 px → 14 px) and a touch
- * wider (from 64 px → 72 px) so the bottom time-axis ticks have headroom.
- * The SVG viewBox is updated in AltitudeSparkline.tsx to match. */
-
-.alm-targets-spark {
-  width: 72px;
-  height: 22px; /* taller than before to fit axis ticks below the curve */
-}
-
-/* task 19: axis tick lines (bottom of sparkline viewBox). */
-.alm-targets-spark__axis-tick {
-  stroke: var(--alm-border);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-/* task 19: axis tick labels (hour marks below the curve). */
-.alm-targets-spark__axis-label {
-  font-size: var(--alm-text-2xs);
-  fill: var(--alm-text-faint);
-
-}
-
-/* task 19: hover tooltip title — pointer-events on the SVG so browser shows
- * the native <title> tooltip. The SVG itself was pointer-events:none before;
- * we enable it here so hovering works without JS. */
-.alm-targets-spark {
-  pointer-events: auto;
-  cursor: default;
-}
+/* task 19 sparkline CSS removed (iteration 2026-07-15, FR-007 hard removal). */
 
 /* ── task 18: favourite star button in Planner rows ───────────────────────
  * A 16×16 toggle button that appears in each Planner row.
@@ -773,11 +792,15 @@
  * STUB until task #54 (FITS OBJECT → target_id linkage) lands — stored
  * client-side in localStorage only. See useFavourites.ts. */
 
-/* Extra column for the star (sits leftmost, before Designation). */
-.alm-targets-col--star { width: 4.5%; }
+/* Extra column for the star (sits leftmost, before Designation).
+ * Fixed px rather than a percentage since #1158: this column is pinned, and the
+ * designation column's sticky `left` offset must equal this width EXACTLY (see
+ * --pv-targets-star-w in merges-2.css). A percentage would drift from that
+ * offset at any table width above the 1000px min-width floor. */
+.pv-targets-col--star { width: var(--pv-targets-star-w); }
 
 /* Star toggle button: tiny, borderless, centred in its cell. */
-.alm-targets-star {
+.pv-targets-star {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -786,42 +809,42 @@
   padding: 0;
   background: none;
   border: none;
-  border-radius: var(--alm-radius-sm);
+  border-radius: var(--pv-radius-sm);
   cursor: pointer;
-  font-size: var(--alm-text-base);
+  font-size: var(--pv-text-base);
   line-height: 1;
-  color: var(--alm-text-faint);
-  transition: color var(--alm-transition-fast);
+  color: var(--pv-text-faint);
+  transition: color var(--pv-transition-fast);
 }
 
-.alm-targets-star:hover,
-.alm-targets-star:focus-visible {
-  color: var(--alm-accent);
+.pv-targets-star:hover,
+.pv-targets-star:focus-visible {
+  color: var(--pv-accent);
   outline: none;
-  background: color-mix(in srgb, var(--alm-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--pv-accent) 12%, transparent);
 }
 
 /* Favourited state: filled star in accent colour. */
-.alm-targets-star--active {
-  color: var(--alm-accent);
+.pv-targets-star--active {
+  color: var(--pv-accent);
 }
 
 /* task 18: "My Targets" empty-state nudge when no favourites are starred. */
-.alm-targets-my-empty {
+.pv-targets-my-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-5) var(--alm-sp-4);
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-5) var(--pv-sp-4);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
   text-align: center;
 }
 
-.alm-targets-my-empty__icon {
-  font-size: var(--alm-text-2xl);
-  color: var(--alm-text-faint);
+.pv-targets-my-empty__icon {
+  font-size: var(--pv-text-2xl);
+  color: var(--pv-text-faint);
 }
 
 /* === Sessions detail — left-packed columns: [props A][props B][linked] ===
@@ -829,133 +852,149 @@
    on the right rather than spreading gaps between the data columns. Each
    column is content-bounded (not 1fr) so the tables and linked-projects stay
    grouped together at the left edge. */
-.alm-session-detail2 {
+.pv-session-detail2 {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: var(--alm-sp-6);
-  padding: var(--alm-sp-4);
+  gap: var(--pv-sp-6);
+  padding: var(--pv-sp-4);
 }
-.alm-session-detail2__col {
+.pv-session-detail2__col {
   flex: 0 1 400px;
   min-width: 340px;
 }
-.alm-session-detail2__linked {
+.pv-session-detail2__linked {
   flex: 0 0 auto;
   min-width: 160px;
 }
-.alm-session-detail2__head {
-  font-size: var(--alm-text-xs);
+.pv-session-detail2__head {
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text-muted);
-  margin-bottom: var(--alm-sp-2);
+  letter-spacing: var(--pv-tracking-normal);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
+  margin-bottom: var(--pv-sp-2);
 }
-.alm-session-detail2__linked-list { display: flex; flex-direction: column; gap: var(--alm-sp-2); }
-.alm-session-detail2__muted { color: var(--alm-text-muted); }
-/* Review actions inline with the title (left-grouped). */
-.alm-session-detail2__actions {
-  display: inline-flex;
+.pv-session-detail2__linked-list { display: flex; flex-direction: column; gap: var(--pv-sp-2); }
+.pv-session-detail2__muted { color: var(--pv-text-muted); }
+/* Calibration-linkage row (#772): pill + master id + score/mismatch, inline. */
+.pv-session-detail2__calib-row {
+  display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
-  margin-left: var(--alm-sp-3);
+  gap: var(--pv-sp-2);
+}
+.pv-session-detail2__calib-note { color: var(--pv-text-faint); }
+/* Review actions inline with the title (left-grouped). #1068: `nowrap` (the
+   inline-flex default) pushed "Show in file manager" etc. past a narrow
+   side-dock panel's clipped right edge — wrap keeps every action reachable. */
+.pv-session-detail2__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  margin-left: var(--pv-sp-3);
 }
 /* Linked-project link rendered as a button — reset native button chrome. */
-.alm-session-detail2__link {
+.pv-session-detail2__link {
   background: none;
   border: none;
   padding: 0;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  color: var(--alm-accent);
+  color: var(--pv-accent);
 }
-.alm-session-detail2__link:hover { text-decoration: underline; }
+.pv-session-detail2__link:hover { text-decoration: underline; }
 /* Stacked variant: two SessionListPopover blocks in one column. */
-.alm-session-detail2__linked--stack {
+.pv-session-detail2__linked--stack {
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-4);
+  gap: var(--pv-sp-4);
+}
+/* Matching hero (spec 043 §4): ranked candidate-masters table, below the
+   fingerprint/linked-sessions row. Shares the row's horizontal padding, no
+   duplicate top padding since it sits directly under it. */
+.pv-session-detail2__match {
+  padding: 0 var(--pv-sp-4) var(--pv-sp-4);
 }
 
 /* === Session list popover — anchored, portaled, searchable ===
    Reuses menu tokens (surface-raised, shadow-sm, border, radius-md).
    No grey cards, no side-stripe borders, radius ≤ 12px. */
-.alm-session-popover__trigger {
+.pv-session-popover__trigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
-  padding: 1px var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
+  gap: var(--pv-sp-1);
+  padding: 1px var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
 
-  color: var(--alm-text);
+  color: var(--pv-text);
   background: none;
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
   cursor: pointer;
   line-height: 1.5;
 }
-.alm-session-popover__trigger:hover {
-  background: var(--alm-hover-bg);
+.pv-session-popover__trigger:hover {
+  background: var(--pv-hover-bg);
 }
-.alm-session-popover__trigger:focus-visible {
-  outline: 2px solid var(--alm-focus-ring);
-  outline-offset: 1px;
+.pv-session-popover__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
 }
-.alm-session-popover__popup {
+.pv-session-popover__popup {
   min-width: 260px;
   max-width: 360px;
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
-  box-shadow: var(--alm-shadow-sm);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  box-shadow: var(--pv-shadow-sm);
   outline: none;
   z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
-.alm-session-popover__search {
+.pv-session-popover__search {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  font-size: var(--alm-text-sm);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  font-size: var(--pv-text-sm);
 
-  color: var(--alm-text);
+  color: var(--pv-text);
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--alm-border-subtle);
+  border-bottom: 1px solid var(--pv-border-subtle);
   outline: none;
 }
-.alm-session-popover__search:focus {
-  border-bottom-color: var(--alm-accent);
+.pv-session-popover__search:focus {
+  border-bottom-color: var(--pv-accent);
 }
-.alm-session-popover__list {
+.pv-session-popover__list {
   overflow-y: auto;
   max-height: 240px;
-  padding: var(--alm-sp-1);
+  padding: var(--pv-sp-1);
   margin: 0;
   list-style: none;
 }
-.alm-session-popover__item {
-  padding: 3px var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  border-radius: var(--alm-radius-sm);
-  color: var(--alm-text);
+.pv-session-popover__item {
+  padding: 3px var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  border-radius: var(--pv-radius-sm);
+  color: var(--pv-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alm-session-popover__empty {
-  padding: var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-session-popover__empty {
+  padding: var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
 }
 /* Visually-hidden utility for the label element. */
-.alm-visually-hidden {
+.pv-visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -970,84 +1009,84 @@
 /* === Inbox detail — "Files (N) ▾" popover (metadata table + inspector) ===
    Trigger reuses the session-popover trigger shape. Popup is wider to
    accommodate the metadata table; scrollable interior; no grey cards. */
-.alm-inbox-detail__files-trigger {
+.pv-inbox-detail__files-trigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--alm-sp-1);
-  margin-top: var(--alm-sp-3);
-  padding: 1px var(--alm-sp-2);
-  font-size: var(--alm-text-sm);
+  gap: var(--pv-sp-1);
+  margin-top: var(--pv-sp-3);
+  padding: 1px var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
 
-  color: var(--alm-text);
+  color: var(--pv-text);
   background: none;
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-sm);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
   cursor: pointer;
   line-height: 1.5;
 }
-.alm-inbox-detail__files-trigger:hover { background: var(--alm-hover-bg); }
-.alm-inbox-detail__files-trigger:focus-visible {
-  outline: 2px solid var(--alm-focus-ring);
-  outline-offset: 1px;
+.pv-inbox-detail__files-trigger:hover { background: var(--pv-hover-bg); }
+.pv-inbox-detail__files-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
 }
-.alm-inbox-detail__files-popup {
+.pv-inbox-detail__files-popup {
   min-width: 560px;
   max-width: 840px;
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
-  box-shadow: var(--alm-shadow-sm);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  box-shadow: var(--pv-shadow-sm);
   outline: none;
   z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
-.alm-inbox-detail__files-popup-table {
+.pv-inbox-detail__files-popup-table {
   overflow-y: auto;
   max-height: 280px;
 }
-.alm-inbox-detail__files-popup-inspector {
-  border-top: 1px solid var(--alm-border-subtle);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
+.pv-inbox-detail__files-popup-inspector {
+  border-top: 1px solid var(--pv-border-subtle);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
 }
 
 /* === Targets planner detail — left-packed: [facts A][facts B][tonight] ===
    Mirrors the Sessions detail: a flex row, left-justified, so growing the
    panel adds trailing whitespace rather than spreading the data apart. The
    tonight column holds a small transit graph + the planner stats. */
-.alm-planner__cols {
+.pv-planner__cols {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: var(--alm-sp-6);
-  padding: var(--alm-sp-4);
+  gap: var(--pv-sp-6);
+  padding: var(--pv-sp-4);
 }
-.alm-planner__col {
+.pv-planner__col {
   flex: 0 1 360px;
   min-width: 300px;
 }
-.alm-planner__tonight {
+.pv-planner__tonight {
   flex: 0 0 320px;
   min-width: 280px;
   display: flex;
   flex-direction: column;
-  gap: var(--alm-sp-3);
+  gap: var(--pv-sp-3);
 }
 /* Keep the transit graph compact in the third column. */
-.alm-planner__tonight .alm-planner__graph-wrap { max-width: 300px; }
-.alm-planner__tonight-filters {
+.pv-planner__tonight .pv-planner__graph-wrap { max-width: 300px; }
+.pv-planner__tonight-filters {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--pv-sp-2);
 }
-.alm-planner__tonight-filters-label {
-  font-size: var(--alm-text-xs);
+.pv-planner__tonight-filters-label {
+  font-size: var(--pv-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text-muted);
+  letter-spacing: var(--pv-tracking-normal);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
 }
 
 /* ==========================================================================
@@ -1056,20 +1095,20 @@
  * Centered card over a dimmed backdrop. ✕ top-right in the header; body
  * scrolls within a height cap; optional pinned footer. Width via size presets.
  * ==========================================================================*/
-.alm-modal__backdrop {
+.pv-modal__backdrop {
   position: fixed;
   inset: 0;
   z-index: 500;
-  background: color-mix(in srgb, var(--alm-ink) 45%, transparent);
+  background: color-mix(in srgb, var(--pv-ink) 45%, transparent);
   backdrop-filter: blur(2px);
 }
 @supports not (backdrop-filter: blur(2px)) {
-  .alm-modal__backdrop {
-    background: color-mix(in srgb, var(--alm-ink) 55%, transparent);
+  .pv-modal__backdrop {
+    background: color-mix(in srgb, var(--pv-ink) 55%, transparent);
   }
 }
 
-.alm-modal {
+.pv-modal {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -1077,272 +1116,116 @@
   z-index: 501;
   display: flex;
   flex-direction: column;
-  width: min(94vw, var(--alm-modal-w, 640px));
+  width: min(94vw, var(--pv-modal-w, 640px));
   max-height: 88vh;
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-lg);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--alm-ink) 16%, transparent);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-lg);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--pv-ink) 16%, transparent);
   overflow: hidden;
 }
 
 /* Width presets. `auto` hugs content up to a sane cap. */
-.alm-modal--sm {
-  --alm-modal-w: 420px;
+.pv-modal--sm {
+  --pv-modal-w: 420px;
 }
-.alm-modal--md {
-  --alm-modal-w: 640px;
+.pv-modal--md {
+  --pv-modal-w: 640px;
 }
-.alm-modal--lg {
-  --alm-modal-w: 920px;
+.pv-modal--lg {
+  --pv-modal-w: 920px;
 }
-.alm-modal--xl {
-  --alm-modal-w: 1200px;
+.pv-modal--xl {
+  --pv-modal-w: 1200px;
 }
-.alm-modal--auto {
+.pv-modal--auto {
   width: auto;
   max-width: 94vw;
 }
 
-.alm-modal__header {
+.pv-modal__header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-3);
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  border-bottom: 1px solid var(--alm-border-subtle);
+  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
+  border-bottom: 1px solid var(--pv-border-subtle);
 }
-.alm-modal__title {
-  font-size: var(--alm-text-md);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+.pv-modal__title {
+  font-size: var(--pv-text-md);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
   margin: 0;
 }
-.alm-modal__title-spacer {
+.pv-modal__title-spacer {
   flex: 1;
 }
-.alm-modal__subtitle {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
+.pv-modal__subtitle {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
 }
 /* ✕ pinned to the top-right of the header. */
-.alm-modal__close {
+.pv-modal__close {
   margin-left: auto;
   appearance: none;
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
   line-height: 1;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-radius: var(--alm-radius-sm);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border-radius: var(--pv-radius-sm);
 }
-.alm-modal__close:hover {
-  color: var(--alm-text);
-  background: var(--alm-hover-bg);
+.pv-modal__close:hover {
+  color: var(--pv-text);
+  background: var(--pv-hover-bg);
 }
 
-.alm-modal__body {
+.pv-modal__body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--alm-sp-4);
+  padding: var(--pv-sp-4);
 }
 
-.alm-modal__footer {
+/* Body variant for content that owns its own internal scroll region (e.g. a
+   virtualized list/table) instead of the whole body scrolling — matches the
+   `.pv-page/__bar/__scroll` convention (only content scrolls, chrome stays
+   pinned) applied inside a modal. `overflow: hidden` on the body itself
+   deliberately drops the default `overflow-y: auto` — the child managing its
+   own scroll (via `.pv-listtable`/`.pv-listtable__scroll`) requires the
+   body NOT to also scroll, or the list would double-scroll. */
+.pv-modal__body--fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Body prose (e.g. a ConfirmOverlay description). */
+.pv-modal__message {
+  margin: 0;
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-secondary);
+}
+
+.pv-modal__footer {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  border-top: 1px solid var(--alm-border-subtle);
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
+  border-top: 1px solid var(--pv-border-subtle);
 }
 
-/* ==========================================================================
- * Plan-approval overlay (spec 043 Stage B — PlanApprovalOverlay)
- *
- * Full-screen focused overlay for plan review. Opens from the top-bar
- * "Review plans (N)" trigger. Highest-stakes surface → blurred/dimmed
- * backdrop, Dialog focus trap, Escape-to-close.
- *
- * Layout inside the popup:
- *   - .alm-plan-overlay__header  — title + subtitle + close button
- *   - .alm-plan-overlay__body    — flex row: optional rail + main panel
- *   - .alm-plan-overlay__rail    — plan list (only when > 1 plan)
- *   - .alm-plan-overlay__main    — PlanPanel scroll container
- *
- * z-index sits above the app shell (z: 500) but below any toast/tooltip layer.
- * Token-only: no raw hex/rgb values beyond those already in tokens.css.
- * ========================================================================== */
-
-/* ── Backdrop: semi-transparent + blur ────────────────────────────────────── */
-.alm-plan-overlay__backdrop {
-  position: fixed;
-  inset: 0;
-  background: color-mix(in srgb, var(--alm-ink) 45%, transparent);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  z-index: 500;
-}
-
-/* Respect prefers-reduced-motion: drop the blur animation, use instant scrim */
-@media (prefers-reduced-motion: reduce) {
-  .alm-plan-overlay__backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-/* ── Popup: centred focused panel ─────────────────────────────────────────── */
-.alm-plan-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 501;
-  display: flex;
+/* ── Planner date picker (spec 044 Track B, US2/T024) ────────────────────── */
+.pv-planner-date-picker {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  pointer-events: none; /* let clicks pass to backdrop unless on panel */
+  gap: var(--pv-sp-2);
 }
-
-/* The actual panel card */
-.alm-plan-overlay[data-open] {
-  pointer-events: none;
-}
-
-/* Base UI Dialog.Popup renders the element directly — style the popup itself
- * as the card so we avoid an extra wrapper div. */
-.alm-plan-overlay {
-  /* Override: make the popup itself the card (not a full-screen wrapper). */
-  position: fixed;
-  inset: auto;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(96vw, 1280px);
-  max-height: min(92vh, 880px);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-lg);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--alm-ink) 16%, transparent);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  pointer-events: auto;
-  z-index: 501;
-}
-
-/* ── Header ───────────────────────────────────────────────────────────────── */
-.alm-plan-overlay__header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-3);
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  border-bottom: 1px solid var(--alm-border-subtle);
-}
-
-.alm-plan-overlay__title {
-  font-size: var(--alm-text-md);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
+.pv-planner-date-picker .pv-field-label {
   margin: 0;
-}
-
-.alm-plan-overlay__subtitle {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
-}
-
-.alm-plan-overlay__close {
-  margin-left: auto;
-  appearance: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
-  line-height: 1;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-radius: var(--alm-radius-sm);
-}
-.alm-plan-overlay__close:hover {
-  color: var(--alm-text);
-  background: var(--alm-hover-bg);
-}
-
-/* ── Body: rail + main ────────────────────────────────────────────────────── */
-.alm-plan-overlay__body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-}
-
-/* ── Left rail: plan list (only when > 1 plan) ────────────────────────────── */
-.alm-plan-overlay__rail {
-  flex: 0 0 200px;
-  width: 200px;
-  overflow-y: auto;
-  border-right: 1px solid var(--alm-border-subtle);
-  display: flex;
-  flex-direction: column;
-  padding: var(--alm-sp-2) 0;
-  gap: 1px;
-}
-
-.alm-plan-overlay__rail-item {
-  appearance: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  text-align: left;
-  color: var(--alm-text-secondary);
-  font-size: var(--alm-text-sm);
-  border-radius: 0;
-  transition: background var(--alm-transition-fast);
-}
-.alm-plan-overlay__rail-item:hover {
-  background: var(--alm-hover-bg);
-  color: var(--alm-text);
-}
-.alm-plan-overlay__rail-item--active {
-  background: var(--alm-accent-bg);
-  color: var(--alm-accent-text);
-  font-weight: var(--alm-weight-semibold);
-}
-.alm-plan-overlay__rail-item--active:hover {
-  background: var(--alm-accent-bg);
-}
-
-.alm-plan-overlay__rail-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.alm-plan-overlay__rail-count {
-  flex-shrink: 0;
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-.alm-plan-overlay__rail-item--active .alm-plan-overlay__rail-count {
-  color: var(--alm-accent-text);
-}
-
-/* ── Main: scrollable PlanPanel host ─────────────────────────────────────── */
-.alm-plan-overlay__main {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }

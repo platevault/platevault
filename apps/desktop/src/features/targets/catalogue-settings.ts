@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * catalogue-settings.ts — default-enabled planner catalogues (task #82).
  *
@@ -19,21 +22,32 @@ import { PLANNER_CATALOGS, type CatalogueId } from './planner-catalog';
 export const CATALOGUES_SCOPE = 'catalogues';
 
 /** Every selectable catalogue id, in display order. */
-export const ALL_CATALOGUE_IDS: readonly CatalogueId[] = PLANNER_CATALOGS.map((c) => c.id);
+export const ALL_CATALOGUE_IDS: readonly CatalogueId[] = PLANNER_CATALOGS.map(
+  (c) => c.id,
+);
 
 /** Sensible default ON subset when no setting is persisted yet. */
-export const DEFAULT_ENABLED_CATALOGUES: readonly CatalogueId[] = ['M', 'NGC', 'IC', 'Sh2'];
+export const DEFAULT_ENABLED_CATALOGUES: readonly CatalogueId[] = [
+  'M',
+  'NGC',
+  'IC',
+  'Sh2',
+];
 
 const VALID = new Set<string>(ALL_CATALOGUE_IDS);
 
 /** Coerce an unknown persisted value into a clean, ordered catalogue id list. */
 function coerce(value: unknown): CatalogueId[] {
   const raw =
-    value && typeof value === 'object' && Array.isArray((value as { enabled?: unknown }).enabled)
-      ? ((value as { enabled: unknown[] }).enabled)
+    value &&
+    typeof value === 'object' &&
+    Array.isArray((value as { enabled?: unknown }).enabled)
+      ? (value as { enabled: unknown[] }).enabled
       : null;
   if (!raw) return [...DEFAULT_ENABLED_CATALOGUES];
-  const set = new Set(raw.filter((v): v is string => typeof v === 'string' && VALID.has(v)));
+  const set = new Set(
+    raw.filter((v): v is string => typeof v === 'string' && VALID.has(v)),
+  );
   // Preserve canonical display order regardless of stored order.
   return ALL_CATALOGUE_IDS.filter((id) => set.has(id));
 }
@@ -52,6 +66,10 @@ export async function loadDefaultCatalogues(): Promise<CatalogueId[]> {
 }
 
 /** Persist the default-enabled catalogues. */
-export async function saveDefaultCatalogues(enabled: readonly CatalogueId[]): Promise<void> {
-  unwrap(await commands.settingsUpdate(CATALOGUES_SCOPE, { enabled: [...enabled] }));
+export async function saveDefaultCatalogues(
+  enabled: readonly CatalogueId[],
+): Promise<void> {
+  unwrap(
+    await commands.settingsUpdate(CATALOGUES_SCOPE, { enabled: [...enabled] }),
+  );
 }

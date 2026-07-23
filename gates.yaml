@@ -1,0 +1,929 @@
+# speckit-gate configuration
+# See https://github.com/srobroek/speckit-gate for docs
+
+# speckit-gate project overlay — agentic-packages / speckit orchestration policy
+#
+# This file encodes the A2 policy gap identified during speckit-gate integration
+# testing. It is merged into the project's gates.yaml by setup-speckit.sh after
+# `speckit-gate init --defaults` runs, then recompiled and installed.
+#
+# Policy summary (A2):
+#   - /speckit.implement is deprecated; route through agent-assign-execute instead.
+#   - agent-assign-assign -> validate -> execute form a required chain.
+#   - agent-assign-execute and speckit-verify run as sub-agents (spawn_agent: true).
+#   - speckit-verify and speckit-verify-tasks require implementation-phase artifacts.
+#
+# YAML shape matches speckit-gate presets (presets/core.gates.yaml,
+# presets/extensions.example.gates.yaml). Only the `gates:` block is merged
+# (the top-level `config:` block is set by `init --defaults`).
+#
+# NOTE: this file contains only the gates that are NOT already in the core preset
+# or the extension examples. The setup script appends these entries after init so
+# keys do not collide with the defaults written by `speckit-gate init`.
+config:
+  prefix: speckit.
+  feature_root: specs
+  resolve: [git-branch, newest-dir]
+  messages:
+    no_feature: >-
+      No active spec-kit feature resolved. Run /speckit.specify first or switch to the feature branch.
+gates:
+  accessibility-compliance:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  # --- agent-assign chain (A2 policy) ---
+  agent-assign-assign:
+    requires: [tasks]
+    produces: [specs/<feat>/agent-assignments.md]
+    context: >-
+      Scan available Claude Code agents and assign them to tasks in tasks.md. Must run before validate and execute.
+  agent-assign-execute:
+    spawn_agent: true
+    requires: [agent-assign-assign, agent-assign-validate]
+    produces: [specs/<feat>/task-<n>.report.md]
+    context: >-
+      Execute tasks by spawning the assigned agent for each task in its own context. Replaces the deprecated /speckit.implement. Requires agent-assignments.md (assign) and a passing validate run.
+  agent-assign-validate:
+    requires: [agent-assign-assign]
+    produces: []
+    context: >-
+      Validate that all agent assignments in agent-assignments.md are correct and that the assigned agents exist. Must run before execute.
+  analyze:
+    requires: [tasks]
+    produces: [specs/<feat>/analysis.md]
+    context: >-
+      Surfaces risks, missing tasks, and over-broad tasks.
+  archive:
+    requires: [verify-report, review-report]
+    produces: [specs/archived/<feat>/]
+    context: >-
+      Terminal step; moves specs/<feat>/ to archived/.
+  archive-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  audit-steering:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  bash-defensive-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  bats-testing-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  brand-landingpage:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  brownfield-bootstrap:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  brownfield-migrate:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  brownfield-scan:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  brownfield-validate:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  bugfix:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  bugfix-patch:
+    requires: [bugfix-verify]
+    produces: []
+    context: >-
+      Applies the fix; reruns the failing test to confirm.
+  bugfix-report:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  bugfix-verify:
+    requires: [bugfix-report]
+    produces: []
+    context: >-
+      Reproduces the bug with a failing test before patching.
+  catchup:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  checklist:
+    requires: [specify, plan, tasks]
+    produces: [specs/<feat>/checklist.md]
+    context: >-
+      Requirements-quality gate before implementation.
+  checkpoint-commit:
+    requires: [specify]
+    produces: [git commit]
+    context: >-
+      Locks in spec/plan/tasks before or after execution.
+  clarify:
+    requires: [specify]
+    produces: [specs/<feat>/clarifications.md]
+    context: >-
+      Resolves ambiguities left open in spec.md.
+  cleanup:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  cleanup-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  code-review:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  codebase-index:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  codebase-memory:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  commit-push-merge:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  commit-push-pr:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  conduct:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  conduct-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  constitution:
+    requires: []
+    produces: [specs/<feat>/constitution.md]
+    context: >-
+      Create or update the project constitution.
+  converge:
+    requires: [specify, plan, tasks]
+    produces: [specs/<feat>/tasks.md]
+    context: >-
+      Closes gap between spec intent and actual implementation.
+  critique-run:
+    requires: [plan, tasks]
+    produces: [specs/<feat>/critique-report.md]
+    context: >-
+      Dual-lens review (product strategy + engineering risk).
+  dag:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  design-md:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  design-system-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  diagnose:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  diagram-dependencies:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  diagram-status:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  diagram-workflow:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  doctor:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  doctor-check:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  enhance-prompt:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  evaluation-methodology:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  explore:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  fix-findings:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  fix-findings-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  fleet:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  fleet-review:
+    requires: [fleet-state]
+    produces: []
+    context: >-
+      Cross-model evaluation of plan.md and tasks.md.
+  fleet-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  git-commit:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  git-feature:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  git-initialize:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  git-remote:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  git-validate:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  github-issues-import:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  github-issues-link:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  github-issues-sync:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  go-concurrency-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  go-quality:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  grill-with-docs:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  grilling:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  hads:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  handover:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  impeccable:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  # --- deprecated implement gate (A2 policy) ---
+  # /speckit.implement is routed through agent-assign-execute. Mark it deprecated
+  # so speckit-gate emits an upgrade hint pointing users at the correct path.
+  implement:
+    requires: [tasks]
+    produces: []
+    context: >-
+      Deprecated. Route implementation through /speckit.agent-assign-assign then /speckit.agent-assign-validate then /speckit.agent-assign-execute instead.
+    deprecated: true
+  interaction-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  interface-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  iterate-apply:
+    requires: [iterate-define]
+    produces: [spec/plan/tasks updated]
+    context: >-
+      Applies iteration intent to spec + plan + tasks.
+  iterate-define:
+    requires: [specify]
+    produces: [specs/<feat>/pending-iteration.md]
+    context: >-
+      Scope/intent pivots distinct from incremental refine.
+  javascript-testing-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-audit:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-capture:
+    requires: []
+    produces: [docs/memory/]
+    context: >-
+      Captures durable lessons from completed work.
+  memory-md-capture-from-diff:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-init:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-log-finding:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-plan-with-memory:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-prepare-context:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-md-token-report:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  memory-safety-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  mobile-android-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  mobile-ios-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  modern-javascript-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  nextjs-app-router-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  nodejs-backend-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-badge:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-explain:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-mentor:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-quiz:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-start:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-team:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  onboard-trail:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  optimize-learn:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  optimize-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  optimize-steering:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  optimize-tokens:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  orchestrate:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  plan:
+    requires: [specify]
+    produces: [specs/<feat>/plan.md]
+    context: >-
+      Decomposes spec into design and implementation plan.
+  playwright:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  postgresql-table-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  python-quality:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  qa-run:
+    requires: [review-run]
+    produces: [specs/<feat>/qa-report.md]
+    context: >-
+      Systematic QA: browser-driven or CLI-based acceptance.
+  quick-commit:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  react-native-architecture:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  react-native-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  react-state-management:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  react:components:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  reconcile:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  reconcile-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  refine-diff:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  refine-propagate:
+    requires: [refine-diff]
+    produces: [downstream artefact updates]
+    context: >-
+      Pushes spec diff into plan, tasks, and issues.
+  refine-status:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  refine-update:
+    requires: [specify]
+    produces: [artefact updates]
+    context: >-
+      Incremental edits to existing artefacts.
+  release-please:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  remotion:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  research:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  responsive-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  resume-session:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  retro-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  review-code:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  review-comments:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  review-errors:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  review-run:
+    requires: [verify]
+    produces: [specs/<feat>/review-report.md]
+    context: >-
+      Orchestrates granular review sub-agents.
+  review-simplify:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  review-tests:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  review-types:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  rust-async-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  rust-quality:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  screen-reader-testing:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  security-review-apply:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  security-review-audit:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  security-review-branch:
+    requires: [tasks]
+    produces: [specs/<feat>/security-review.md]
+    context: >-
+      Security risks introduced by the current branch.
+  security-review-followup:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  security-review-plan:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  security-review-staged:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  security-review-tasks:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  setup:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  shadcn-ui:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  shellcheck-configuration:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  specify:
+    requires: []
+    produces: [specs/<feat>/spec.md]
+    context: >-
+      Initial spec authoring; must precede all other phases.
+  status:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  status-show:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  steering-audit:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch-loop:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch::code-to-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch::extract-design-md:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch::extract-static-html:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch::generate-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch::manage-design-system:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  stitch::upload-to-stitch:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  tailwind-design-system:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  tasks:
+    requires: [plan]
+    produces: [specs/<feat>/tasks.md]
+    context: >-
+      Decomposes plan into discrete, testable tasks.
+  taskstoissues:
+    requires: [tasks]
+    produces: [gh issues, specs/<feat>/issue-map.md]
+    context: >-
+      Turns tasks into trackable GitHub issues.
+  taste-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  tinyspec-classify:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  tinyspec-implement:
+    requires: [tinyspec-tinyspec]
+    produces: []
+    context: >-
+      Implements a small change directly from its tinyspec.
+  tinyspec-tinyspec:
+    requires: []
+    produces: [specs/<feat>/tinyspec.md]
+    context: >-
+      Lightweight spec for small, self-contained changes.
+  typescript-advanced-types:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  typescript-quality:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  unstuck:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  # --- verify gates (A2 policy: local agent, spawn_agent: true) ---
+  verify:
+    spawn_agent: true
+    requires: [tasks]
+    produces: [specs/<feat>/verify-report.md]
+    context: >-
+      Non-destructive post-implementation verification gate. Validates the implementation against spec.md, plan.md, tasks.md, and constitution.md. Runs as a local speckit-verify agent (spawned as a sub-agent).
+  verify-on-windows:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  verify-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  verify-tasks:
+    spawn_agent: true
+    requires: [tasks]
+    produces: [specs/<feat>/verify-tasks-report.md]
+    context: >-
+      Detects phantom completions in a fresh context to avoid confirmation bias. Verifies that tasks marked [X] in tasks.md are backed by real implementation. Runs as a local speckit-verify-tasks agent.
+  verify-tasks-run:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  verify-tasks-verify-tasks:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  visual-design-foundations:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  wcag-audit-patterns:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  web-component-design:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  web-fetch:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  worktree-clean:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  worktree-create:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  worktree-list:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  write-a-skill:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites
+  write-agentic:
+    requires: []
+    produces: []
+    context: >-
+      TODO: define prerequisites

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * RemapRootDialog tests (P6a — Data Sources "Remap" flow).
@@ -42,7 +45,12 @@ vi.mock('@/bindings/index', () => ({
 const { mockPick } = vi.hoisted(() => ({ mockPick: vi.fn() }));
 
 vi.mock('@/shared/native/picker', () => ({
-  useDirectoryPicker: () => ({ pick: mockPick, loading: false, error: null, clearError: vi.fn() }),
+  useDirectoryPicker: () => ({
+    pick: mockPick,
+    loading: false,
+    error: null,
+    clearError: vi.fn(),
+  }),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -63,7 +71,9 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
 async function choosePath(path: string) {
   mockPick.mockResolvedValueOnce({ path, cancelled: false });
   fireEvent.click(screen.getByRole('button', { name: /Choose folder/i }));
-  await waitFor(() => screen.getByText(path));
+  // DirPicker's path affordance is a manual-entry input now (#662), not a
+  // read-only text node — assert on its value instead of text content.
+  await waitFor(() => screen.getByDisplayValue(path));
 }
 
 beforeEach(() => {
@@ -74,12 +84,20 @@ beforeEach(() => {
 
 describe('RemapRootDialog', () => {
   it('renders nothing when root is null', () => {
-    render(<RemapRootDialog root={null} onClose={vi.fn()} onApplied={vi.fn()} />);
+    render(
+      <RemapRootDialog root={null} onClose={vi.fn()} onApplied={vi.fn()} />,
+    );
     expect(screen.queryByText('Remap root')).toBeNull();
   });
 
   it('shows the current path and a disabled Verify button before a new path is chosen', () => {
-    render(<RemapRootDialog root={makeRoot()} onClose={vi.fn()} onApplied={vi.fn()} />);
+    render(
+      <RemapRootDialog
+        root={makeRoot()}
+        onClose={vi.fn()}
+        onApplied={vi.fn()}
+      />,
+    );
     expect(screen.getByText('Remap root')).toBeInTheDocument();
     expect(screen.getAllByText('/astro/raw').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /^Verify$/i })).toBeDisabled();
@@ -100,7 +118,13 @@ describe('RemapRootDialog', () => {
       },
     });
 
-    render(<RemapRootDialog root={makeRoot()} onClose={vi.fn()} onApplied={vi.fn()} />);
+    render(
+      <RemapRootDialog
+        root={makeRoot()}
+        onClose={vi.fn()}
+        onApplied={vi.fn()}
+      />,
+    );
     await choosePath('/mnt/new/raw');
 
     const verifyBtn = screen.getByRole('button', { name: /^Verify$/i });
@@ -111,7 +135,9 @@ describe('RemapRootDialog', () => {
       expect(screen.getByText('M31/light_001.fits')).toBeInTheDocument();
     });
     expect(mockRemap).toHaveBeenCalledWith('root-1', '/mnt/new/raw');
-    expect(screen.getByText(/All sample files were found/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/All 2 recorded items were found/i),
+    ).toBeInTheDocument();
   });
 
   it('shows a warning (not an error) when allVerified is false', async () => {
@@ -126,12 +152,20 @@ describe('RemapRootDialog', () => {
       },
     });
 
-    render(<RemapRootDialog root={makeRoot()} onClose={vi.fn()} onApplied={vi.fn()} />);
+    render(
+      <RemapRootDialog
+        root={makeRoot()}
+        onClose={vi.fn()}
+        onApplied={vi.fn()}
+      />,
+    );
     await choosePath('/mnt/new/raw');
     fireEvent.click(screen.getByRole('button', { name: /^Verify$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Some sample files were not found/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/0 of 1 recorded items were found/i),
+      ).toBeInTheDocument();
     });
     expect(screen.getByText('Not found')).toBeInTheDocument();
   });
@@ -151,14 +185,24 @@ describe('RemapRootDialog', () => {
 
     const onApplied = vi.fn();
     const onClose = vi.fn();
-    render(<RemapRootDialog root={makeRoot()} onClose={onClose} onApplied={onApplied} />);
+    render(
+      <RemapRootDialog
+        root={makeRoot()}
+        onClose={onClose}
+        onApplied={onApplied}
+      />,
+    );
 
     // Apply disabled before any preview exists.
     expect(screen.getByRole('button', { name: /Apply remap/i })).toBeDisabled();
 
     await choosePath('/mnt/new/raw');
     fireEvent.click(screen.getByRole('button', { name: /^Verify$/i }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /Apply remap/i })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Apply remap/i }),
+      ).not.toBeDisabled(),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /Apply remap/i }));
 
@@ -179,10 +223,20 @@ describe('RemapRootDialog', () => {
       },
     });
 
-    render(<RemapRootDialog root={makeRoot()} onClose={vi.fn()} onApplied={vi.fn()} />);
+    render(
+      <RemapRootDialog
+        root={makeRoot()}
+        onClose={vi.fn()}
+        onApplied={vi.fn()}
+      />,
+    );
     await choosePath('/mnt/new/raw');
     fireEvent.click(screen.getByRole('button', { name: /^Verify$/i }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /Apply remap/i })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Apply remap/i }),
+      ).not.toBeDisabled(),
+    );
 
     await choosePath('/mnt/other/raw');
 
@@ -192,12 +246,20 @@ describe('RemapRootDialog', () => {
   it('surfaces the error message when roots.remap rejects', async () => {
     mockRemap.mockRejectedValue(new Error('disk unavailable'));
 
-    render(<RemapRootDialog root={makeRoot()} onClose={vi.fn()} onApplied={vi.fn()} />);
+    render(
+      <RemapRootDialog
+        root={makeRoot()}
+        onClose={vi.fn()}
+        onApplied={vi.fn()}
+      />,
+    );
     await choosePath('/mnt/new/raw');
     fireEvent.click(screen.getByRole('button', { name: /^Verify$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Remap failed: disk unavailable/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Could not remap: disk unavailable/i),
+      ).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /Apply remap/i })).toBeDisabled();
   });

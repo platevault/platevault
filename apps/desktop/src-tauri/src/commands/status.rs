@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 status summary command (T023).
 //!
 //! Returns a `StatusSummary` DTO populated from the database.
@@ -9,6 +12,11 @@ use tauri::State;
 
 use crate::commands::lifecycle::AppState;
 use contracts_core::ContractError;
+use persistence_db::repositories::q_desktop::{
+    count_acquisition_sessions, count_calibration_masters, count_projects,
+    count_unacknowledged_inbox_items,
+};
+use persistence_db::repositories::target_favourites::count_favourites;
 
 /// `status.summary` — returns current library status overview.
 ///
@@ -44,38 +52,30 @@ pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary,
         .collect();
 
     // Count unacknowledged inbox items (states that need user attention).
-    let inbox_count: u32 = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM inbox_items i
-         JOIN registered_sources r ON r.id = i.root_id
-         WHERE i.state IN ('pending_classification', 'classified')",
-    )
-    .fetch_one(pool)
-    .await
-    .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
-    .map_err(|e| ContractError::internal(e.to_string()))?;
+    let inbox_count: u32 = count_unacknowledged_inbox_items(pool)
+        .await
+        .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     // Count real library totals from their authoritative tables.
-    let sessions: u32 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM acquisition_session")
-        .fetch_one(pool)
+    let sessions: u32 = count_acquisition_sessions(pool)
         .await
         .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
-    let calibration_sets: u32 =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM calibration_master_view")
-            .fetch_one(pool)
-            .await
-            .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
-            .map_err(|e| ContractError::internal(e.to_string()))?;
-
-    let targets: u32 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM canonical_target")
-        .fetch_one(pool)
+    let calibration_sets: u32 = count_calibration_masters(pool)
         .await
         .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
-    let projects: u32 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM projects")
-        .fetch_one(pool)
+    // "My targets" (issue #574): the count of favourited targets, matching
+    // the Targets page's "My Targets" filter — not the bundled seed catalog.
+    let targets: u32 = count_favourites(pool)
+        .await
+        .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    let projects: u32 = count_projects(pool)
         .await
         .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
         .map_err(|e| ContractError::internal(e.to_string()))?;

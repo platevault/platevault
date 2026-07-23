@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for settings storage (spec 018, T003).
 //!
 //! Operates on the `settings` and `source_overrides` tables from migration 0013.
@@ -9,6 +12,7 @@ use domain_core::ids::Timestamp;
 use domain_core::settings::{SettingsState, SourceOverride};
 use patterns::{default_pattern, validate_pattern_str, FrameTypeClass};
 use serde_json::Value;
+use sqlx::types::Json;
 use sqlx::SqlitePool;
 
 use crate::{DbError, DbResult};
@@ -29,18 +33,12 @@ pub const PATTERNS_BY_TYPE_KEY: &str = "patternsByType";
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn get_raw(pool: &SqlitePool, key: &str) -> DbResult<Option<Value>> {
-    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = ?")
+    let row: Option<(Json<Value>,)> = sqlx::query_as("SELECT value FROM settings WHERE key = ?")
         .bind(key)
         .fetch_optional(pool)
         .await?;
 
-    match row {
-        None => Ok(None),
-        Some((json,)) => {
-            let v = serde_json::from_str(&json)?;
-            Ok(Some(v))
-        }
-    }
+    Ok(row.map(|(Json(v),)| v))
 }
 
 /// Write (upsert) a raw JSON value for a single key.
@@ -50,7 +48,6 @@ pub async fn get_raw(pool: &SqlitePool, key: &str) -> DbResult<Option<Value>> {
 /// Returns [`DbError::Database`] on query failure.
 /// Returns [`DbError::Serialise`] if the value cannot be serialised.
 pub async fn set_raw(pool: &SqlitePool, key: &str, value: &Value) -> DbResult<()> {
-    let json = serde_json::to_string(value)?;
     let now = Timestamp::now_iso();
 
     sqlx::query(
@@ -58,7 +55,7 @@ pub async fn set_raw(pool: &SqlitePool, key: &str, value: &Value) -> DbResult<()
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
     )
     .bind(key)
-    .bind(&json)
+    .bind(Json(value))
     .bind(&now)
     .execute(pool)
     .await?;
@@ -84,15 +81,10 @@ pub async fn delete_key(pool: &SqlitePool, key: &str) -> DbResult<()> {
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn get_all_raw(pool: &SqlitePool) -> DbResult<Vec<(String, Value)>> {
-    let rows: Vec<(String, String)> =
+    let rows: Vec<(String, Json<Value>)> =
         sqlx::query_as("SELECT key, value FROM settings ORDER BY key ASC").fetch_all(pool).await?;
 
-    rows.into_iter()
-        .map(|(key, json)| {
-            let v = serde_json::from_str(&json)?;
-            Ok((key, v))
-        })
-        .collect()
+    Ok(rows.into_iter().map(|(key, Json(v))| (key, v)).collect())
 }
 
 // ── High-level settings bag ───────────────────────────────────────────────
@@ -176,10 +168,6 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
         "devMode" => {
             state.dev_mode = serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "plansListDefaultAgeCutoffDays" => {
-            state.plans_list_default_age_cutoff_days =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
         "calibrationDarkTempTolerance" => {
             state.calibration_dark_temp_tolerance =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
@@ -229,6 +217,22 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
         }
         "sourceViewLinkKindCrossDrive" => {
             state.source_view_link_kind_cross_drive =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingPointingFractionOfFov" => {
+            state.framing_pointing_fraction_of_fov =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingPointingFallbackDeg" => {
+            state.framing_pointing_fallback_deg =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingRotationToleranceDeg" => {
+            state.framing_rotation_tolerance_deg =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingMosaicEnvelopeFractionOfFov" => {
+            state.framing_mosaic_envelope_fraction_of_fov =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
         _ => {
@@ -345,7 +349,6 @@ pub async fn set_source_override(
     key: &str,
     value: &Value,
 ) -> DbResult<()> {
-    let json = serde_json::to_string(value)?;
     let now = Timestamp::now_iso();
 
     sqlx::query(
@@ -354,7 +357,7 @@ pub async fn set_source_override(
     )
     .bind(source_id)
     .bind(key)
-    .bind(&json)
+    .bind(Json(value))
     .bind(&now)
     .execute(pool)
     .await?;
@@ -372,20 +375,14 @@ pub async fn get_source_override_raw(
     source_id: &str,
     key: &str,
 ) -> DbResult<Option<Value>> {
-    let row: Option<(String,)> =
+    let row: Option<(Json<Value>,)> =
         sqlx::query_as("SELECT value FROM source_overrides WHERE source_id = ? AND key = ?")
             .bind(source_id)
             .bind(key)
             .fetch_optional(pool)
             .await?;
 
-    match row {
-        None => Ok(None),
-        Some((json,)) => {
-            let v = serde_json::from_str(&json)?;
-            Ok(Some(v))
-        }
-    }
+    Ok(row.map(|(Json(v),)| v))
 }
 
 /// List all source overrides for a given source.
@@ -397,24 +394,22 @@ pub async fn list_source_overrides(
     pool: &SqlitePool,
     source_id: &str,
 ) -> DbResult<Vec<SourceOverride>> {
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
+    let rows: Vec<(String, Json<Value>, String)> = sqlx::query_as(
         "SELECT key, value, updated_at FROM source_overrides WHERE source_id = ? ORDER BY key ASC",
     )
     .bind(source_id)
     .fetch_all(pool)
     .await?;
 
-    rows.into_iter()
-        .map(|(key, json, updated_at)| {
-            let v: Value = serde_json::from_str(&json)?;
-            Ok(SourceOverride {
-                source_id: source_id.to_owned(),
-                key,
-                value: domain_core::JsonAny::from(v),
-                updated_at,
-            })
+    Ok(rows
+        .into_iter()
+        .map(|(key, Json(v), updated_at)| SourceOverride {
+            source_id: source_id.to_owned(),
+            key,
+            value: domain_core::JsonAny::from(v),
+            updated_at,
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -442,6 +437,40 @@ mod tests {
         set_raw(db.pool(), "logLevel", &value).await.unwrap();
         let loaded = get_raw(db.pool(), "logLevel").await.unwrap();
         assert_eq!(loaded, Some(value));
+    }
+
+    /// Round-trips a nested object/array shape through the `sqlx::types::Json`
+    /// column codec (spec `n4_jsoncodec`) — not just a JSON scalar.
+    #[tokio::test]
+    async fn set_and_get_raw_roundtrip_nested_value() {
+        let db = setup().await;
+        let value = serde_json::json!({
+            "patterns": ["a/{target}/", "b/{filter}/"],
+            "nested": { "enabled": true, "count": 3 },
+        });
+        set_raw(db.pool(), "patternsByType", &value).await.unwrap();
+        let loaded = get_raw(db.pool(), "patternsByType").await.unwrap();
+        assert_eq!(loaded, Some(value));
+    }
+
+    /// A cell that predates or bypasses `set_raw` (hand-edited DB, corrupted
+    /// disk) with syntactically invalid JSON must fail the read, not silently
+    /// substitute a default — `get_raw` is a strict-propagate site (spec
+    /// `n4_jsoncodec`: distinct from the two named lenient sites in
+    /// `equipment.rs`/`artifacts.rs`).
+    #[tokio::test]
+    async fn get_raw_propagates_on_corrupt_cell() {
+        let db = setup().await;
+        sqlx::query("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+            .bind("corrupt")
+            .bind("not valid json")
+            .bind(Timestamp::now_iso())
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        let result = get_raw(db.pool(), "corrupt").await;
+        assert!(result.is_err(), "corrupt JSON cell must error, not degrade");
     }
 
     #[tokio::test]
@@ -501,6 +530,35 @@ mod tests {
         let state = load_settings(db.pool()).await.unwrap();
         assert_eq!(state.log_level, "debug");
         assert!(state.follow_symlinks);
+    }
+
+    /// F-Framing-11 (R11a): `load_settings` (the path `attribution.rs`'s
+    /// `tolerance_params` reads through directly) must honour a stored
+    /// override for the clustering tunables, not silently drop it via the
+    /// `apply_key_to_state` catch-all.
+    #[tokio::test]
+    async fn load_settings_applies_stored_framing_tolerance_overrides() {
+        let db = setup().await;
+        let defaults = SettingsState::default();
+        let state = load_settings(db.pool()).await.unwrap();
+        assert!(
+            (state.framing_pointing_fraction_of_fov - defaults.framing_pointing_fraction_of_fov)
+                .abs()
+                < f64::EPSILON
+        );
+
+        set_raw(db.pool(), "framingPointingFractionOfFov", &serde_json::json!(0.33)).await.unwrap();
+        set_raw(db.pool(), "framingPointingFallbackDeg", &serde_json::json!(0.4)).await.unwrap();
+        set_raw(db.pool(), "framingRotationToleranceDeg", &serde_json::json!(6.0)).await.unwrap();
+        set_raw(db.pool(), "framingMosaicEnvelopeFractionOfFov", &serde_json::json!(1.25))
+            .await
+            .unwrap();
+
+        let state = load_settings(db.pool()).await.unwrap();
+        assert!((state.framing_pointing_fraction_of_fov - 0.33).abs() < f64::EPSILON);
+        assert!((state.framing_pointing_fallback_deg - 0.4).abs() < f64::EPSILON);
+        assert!((state.framing_rotation_tolerance_deg - 6.0).abs() < f64::EPSILON);
+        assert!((state.framing_mosaic_envelope_fraction_of_fov - 1.25).abs() < f64::EPSILON);
     }
 
     // ── Per-frame-type patterns ───────────────────────────────────────────
@@ -626,67 +684,60 @@ mod tests {
     }
 }
 
-// ── DB byte-identity guard (spec 042 T254) ───────────────────────────────
+// ── SettingsState / SourceOverride wire-shape tests (spec 042 T254) ─────
 //
 // T254 moved the stored settings types (`SettingsState`, `SourceOverride`,
 // `PatternPart`, `ImageTypMapping`) from `contracts_core` into `domain_core`
-// to fix the `persistence/db → contracts/core` layering inversion. The
-// constitution (Local-First custody) requires the on-disk representation to
-// stay byte-identical across that move.
+// to fix the `persistence/db → contracts/core` layering inversion.
 //
-// These tests freeze the persisted JSON as exact byte snapshots and round-trip
-// real values through the actual `settings` / `source_overrides` SQL tables.
-// If any serde `rename_all`, field order, `skip_serializing_if`, or numeric
-// formatting changes, the frozen-snapshot assertions fail loudly.
+// These tests assert *behavior* (round-trip fidelity, specific field wire
+// names/defaults that other code depends on) rather than pinning a frozen
+// byte-for-byte JSON snapshot of the whole struct — a full-struct frozen
+// literal must be hand-retyped on every new settings field, which is exactly
+// the kind of busywork this module intentionally avoids (product decision,
+// spec 051 T007 follow-up: the byte-identity guard previously here was
+// removed for this reason).
 #[cfg(test)]
-mod byte_identity_guard {
+mod settings_state_shape {
     use domain_core::settings::{SettingsState, SourceOverride};
     use domain_core::JsonAny;
 
     use super::*;
     use crate::Database;
 
-    /// Frozen snapshot of `SettingsState::default()` exactly as persisted /
-    /// emitted on the wire prior to the T254 move. Captured from the
-    /// pre-move `contracts_core::settings::SettingsState` serialization.
-    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0,"observingSites":[],"observingDefaultSiteId":null,"observingActiveSiteId":null,"usableAltitudeDeg":30.0,"plannerMoonAvoidance":{"B":{"distanceDeg":120.0,"widthDays":14.0},"G":{"distanceDeg":120.0,"widthDays":14.0},"Ha":{"distanceDeg":60.0,"widthDays":7.0},"L":{"distanceDeg":120.0,"widthDays":14.0},"OIII":{"distanceDeg":110.0,"widthDays":10.0},"R":{"distanceDeg":120.0,"widthDays":14.0},"SII":{"distanceDeg":60.0,"widthDays":7.0}},"sourceViewLinkKindIntraDrive":"hardlink","sourceViewLinkKindCrossDrive":"symlink"}"#;
-
-    /// Frozen snapshot of a `SourceOverride` as persisted prior to the move.
-    const SOURCE_OVERRIDE_JSON: &str = r#"{"sourceId":"src-1","key":"hashOnScan","value":"eager","updatedAt":"2026-01-01T00:00:00Z"}"#;
-
-    /// The moved `SettingsState` must serialize to the exact byte snapshot.
+    /// `SettingsState::default()` round-trips through JSON with no loss —
+    /// proves serde field names/shapes are self-consistent without needing a
+    /// frozen snapshot of the exact bytes.
     #[test]
-    fn settings_state_default_bytes_unchanged() {
-        let actual = serde_json::to_string(&SettingsState::default()).unwrap();
-        assert_eq!(
-            actual, SETTINGS_STATE_DEFAULT_JSON,
-            "SettingsState on-disk/wire JSON changed after the T254 domain move"
-        );
+    fn settings_state_default_round_trips_through_json() {
+        let state = SettingsState::default();
+        let value = serde_json::to_value(&state).unwrap();
+        let parsed: SettingsState = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed, state);
     }
 
-    /// The frozen snapshot must deserialize back into the default value
-    /// (proves the field names / shapes accept the persisted bytes).
+    /// Targeted wire-contract assertion for the field added by spec 051 T007:
+    /// `cleanup_type_overrides` must serialize under the camelCase key
+    /// `cleanupTypeOverrides` and default to an empty object (data-model.md
+    /// §E2 — absent id ⇒ that type's built-in default action applies).
     #[test]
-    fn settings_state_default_roundtrips_from_snapshot() {
-        let parsed: SettingsState = serde_json::from_str(SETTINGS_STATE_DEFAULT_JSON).unwrap();
-        assert_eq!(parsed, SettingsState::default());
+    fn cleanup_type_overrides_wire_key_and_default() {
+        let value = serde_json::to_value(SettingsState::default()).unwrap();
+        assert_eq!(value["cleanupTypeOverrides"], serde_json::json!({}));
     }
 
-    /// The moved `SourceOverride` must serialize to the exact byte snapshot
-    /// (including the `JsonAny` `value` field, serde-transparent over Value).
+    /// `SourceOverride` round-trips through JSON with no loss.
     #[test]
-    fn source_override_bytes_unchanged() {
+    fn source_override_round_trips_through_json() {
         let ov = SourceOverride {
             source_id: "src-1".to_owned(),
             key: "hashOnScan".to_owned(),
             value: JsonAny::from(serde_json::json!("eager")),
             updated_at: "2026-01-01T00:00:00Z".to_owned(),
         };
-        let actual = serde_json::to_string(&ov).unwrap();
-        assert_eq!(
-            actual, SOURCE_OVERRIDE_JSON,
-            "SourceOverride on-disk/wire JSON changed after the T254 domain move"
-        );
+        let value = serde_json::to_value(&ov).unwrap();
+        let parsed: SourceOverride = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed, ov);
     }
 
     /// Round-trip through the real `settings` SQL table: write each known key,

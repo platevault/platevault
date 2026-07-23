@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared in-process caching primitives for `app_core_*` crates (spec 051).
 //!
 //! This crate is a **thin wrapper around `moka`**
@@ -23,11 +26,12 @@
 //!
 //! ## Migrating existing hand-rolled caches
 //!
-//! `crates/app/projects/src/project_health.rs`'s `DebounceTable` is a valid,
-//! working, hand-rolled equivalent of [`DebounceCache`] here. Spec 051 does
-//! **not** require migrating it — that is a pure refactor with no
-//! user-facing effect, tracked as a non-blocking follow-up (see
-//! `specs/051-tauri-shell-integration/research.md` §(d), "Consumers").
+//! `crates/app/projects/src/project_health.rs` previously hand-rolled its own
+//! `DebounceTable` (a `moka::sync::Cache` wrapper); it now uses
+//! [`DebounceCache`] here directly. Spec 051 did not require that migration —
+//! it was a pure refactor with no user-facing effect — but the duplication
+//! audit (`docs/development/duplication-and-abstraction-audit.md`, Phase 5)
+//! folded it in.
 //!
 //! ## What this crate provides
 //!
@@ -36,8 +40,14 @@
 //! - [`DebounceCache`]: a presence-only cache (mirrors
 //!   `project_health::DebounceTable`) for suppressing repeated signals within
 //!   a time window, generic over the debounce key.
+//! - [`SnapshotCache`]: a single-slot whole-value cache (spec: in-memory
+//!   caching layer, F0) for values loaded via **async** SQL, where
+//!   `TtlCache::get_or_insert_with`'s sync-only closure doesn't fit. Bounded by
+//!   construction (exactly one `Arc<T>` slot) — no capacity/TTL knobs needed.
 
 use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
 use moka::sync::Cache;
@@ -170,8 +180,8 @@ where
 }
 
 /// A presence-only cache for suppressing repeated signals within a time
-/// window — the generic form of
-/// `crates/app/projects/src/project_health.rs`'s `DebounceTable`.
+/// window — the generic form of the hand-rolled debounce table
+/// `crates/app/projects/src/project_health.rs` previously carried.
 ///
 /// Presence of a (non-expired) entry for a key means a signal for that key
 /// was already emitted within the debounce window and must be suppressed.
@@ -213,27 +223,207 @@ where
     /// last call that returned `false` for this key). Otherwise records the
     /// emission (starting a fresh window) and returns `false`.
     pub fn should_suppress(&self, key: &K) -> bool {
-        if self.last_emitted.get(key).is_some() {
+        if self.is_suppressed(key) {
             return true;
         }
-        self.last_emitted.insert(key.clone(), ());
+        self.record(key);
         false
     }
 
-    /// Force-expire the entry for `key` (test-only escape hatch for
-    /// simulating elapsed time without sleeping).
-    #[cfg(test)]
-    pub fn expire(&self, key: &K) {
+    /// Return whether `key` is still inside its suppression window without
+    /// starting a new window.
+    #[must_use]
+    pub fn is_suppressed(&self, key: &K) -> bool {
+        self.last_emitted.get(key).is_some()
+    }
+
+    /// Start a suppression window after the caller successfully emits its
+    /// durable signal.
+    pub fn record(&self, key: &K) {
+        self.last_emitted.insert(key.clone(), ());
+    }
+
+    /// Force-expire the entry for `key`, so the next `should_suppress` for it
+    /// starts a fresh window. Useful for resetting a debounce early, and for
+    /// tests that simulate elapsed time without sleeping.
+    pub fn invalidate(&self, key: &K) {
         self.last_emitted.invalidate(key);
     }
 }
 
+/// A single-slot whole-value cache: `RwLock<Option<Arc<T>>>`.
+///
+/// For state loaded wholesale (e.g. a settings bag, a config row, a small
+/// list snapshot) rather than keyed per-entry. Bounded by construction — it
+/// only ever holds zero or one `Arc<T>` — so no capacity/TTL configuration is
+/// needed the way [`TtlCache`] requires it.
+///
+/// Explicit invalidation is the whole contract: [`invalidate`](Self::invalidate)
+/// clears the slot so the next [`load`](Self::load) observes a miss and the
+/// caller re-derives + [`store`](Self::store)s a fresh value. There is no
+/// TTL/TTI — owning modules call `invalidate` at their write sites (see the
+/// in-memory caching layer plan's invalidation-point map).
+///
+/// **Usage contract for read-through call sites:** callers MUST call
+/// [`invalidate`](Self::invalidate) only *after* the underlying DB write has
+/// committed, never before or concurrently with it. A [`store`](Self::store)
+/// that races a concurrent [`invalidate`](Self::invalidate) — i.e. a reader
+/// re-derives from the pre-commit state and calls `store` after the writer's
+/// `invalidate` has already run — repopulates the slot with a stale value.
+/// Because there is no TTL, that staleness is permanent until the next
+/// explicit invalidation. Sequencing invalidation strictly after commit is
+/// what closes this window; do not replicate a store-then-invalidate (or
+/// invalidate-before-commit) ordering in downstream read-through workers.
+///
+/// # Examples
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use app_core_cache::SnapshotCache;
+///
+/// let cache: SnapshotCache<u32> = SnapshotCache::new();
+/// assert_eq!(cache.load(), None, "empty cache is a miss");
+///
+/// cache.store(Arc::new(42));
+/// assert_eq!(cache.load(), Some(Arc::new(42)));
+///
+/// cache.invalidate();
+/// assert_eq!(cache.load(), None, "invalidated cache is a miss again");
+/// ```
+pub struct SnapshotCache<T>
+where
+    T: Send + Sync + 'static,
+{
+    slot: RwLock<Option<Arc<T>>>,
+}
+
+impl<T> SnapshotCache<T>
+where
+    T: Send + Sync + 'static,
+{
+    /// Build an empty cache (starts as a miss).
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { slot: RwLock::new(None) }
+    }
+
+    /// Return the currently cached value, or `None` on a miss.
+    ///
+    /// A poisoned lock (a prior panic while holding the write lock) is treated
+    /// as recoverable: the cache is a best-effort in-memory optimization, not
+    /// a durable record, so a poisoned lock degrades to a miss rather than
+    /// propagating a panic to every subsequent reader.
+    #[must_use]
+    pub fn load(&self) -> Option<Arc<T>> {
+        self.slot.read().map_or(None, |guard| guard.clone())
+    }
+
+    /// Replace the cached value.
+    ///
+    /// Not itself hazardous, but see the type-level doc for the lost-update
+    /// window this creates when a `store` races a concurrent
+    /// [`invalidate`](Self::invalidate): callers must invalidate strictly
+    /// after their DB write commits, never before/concurrently with it.
+    pub fn store(&self, value: Arc<T>) {
+        if let Ok(mut guard) = self.slot.write() {
+            *guard = Some(value);
+        }
+    }
+
+    /// Clear the slot so the next [`load`](Self::load) is a miss. Call this
+    /// at every write site that changes the underlying data (see the
+    /// invalidation-point map in the caching layer plan) — this cache has no
+    /// TTL, so a missed invalidation call means permanently stale data.
+    pub fn invalidate(&self) {
+        if let Ok(mut guard) = self.slot.write() {
+            *guard = None;
+        }
+    }
+}
+
+impl<T> Default for SnapshotCache<T>
+where
+    T: Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── protection_defaults: global protection-default settings snapshot ───────
+//
+// Relocated here (not `app_core`) so both `app_core` (`protection.rs` reads
+// it) and `app_core_settings` (the generic settings-bag write path also
+// changes these three keys) can invalidate it without a dependency cycle —
+// `app_core` depends on `app_core_settings`, so the cache can't live in
+// `app_core` if `app_core_settings` needs to invalidate it too.
+
+/// Snapshot of the three global protection-default settings (`protection_defaults`
+/// table, scope `"global"`): default level, block-permanent-delete flag, and
+/// protected categories. Plain data so this leaf crate doesn't need to depend
+/// on `app_core`'s `GlobalProtection` (which stays where it is; callers convert
+/// at the boundary).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProtectionDefaultsSnapshot {
+    pub level: String,
+    pub block_permanent_delete: bool,
+    pub categories: Vec<String>,
+}
+
+static PROTECTION_DEFAULTS: OnceLock<SnapshotCache<ProtectionDefaultsSnapshot>> = OnceLock::new();
+
+/// Monotonic generation counter for the protection defaults, bumped by every
+/// [`invalidate_protection_defaults`] call.
+///
+/// Downstream caches that embed values *derived from* the defaults (e.g.
+/// `app_core`'s per-source resolved-protection cache, whose entries inherit
+/// level/`block_permanent_delete`/categories from the globals — issue #563)
+/// cannot be invalidated from here without a dependency cycle
+/// (`app_core_settings` writes the defaults but must not depend on
+/// `app_core`). Instead they tag entries with the epoch they were resolved
+/// under and treat an epoch mismatch as a miss.
+static PROTECTION_DEFAULTS_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Return the current protection-defaults epoch. Capture this *before*
+/// reading the defaults a derived value will embed, so a concurrent defaults
+/// change marks the derived entry stale rather than fresh.
+#[must_use]
+pub fn protection_defaults_epoch() -> u64 {
+    PROTECTION_DEFAULTS_EPOCH.load(Ordering::Acquire)
+}
+
+/// Return the process-global protection-defaults snapshot cache.
+pub fn protection_defaults() -> &'static SnapshotCache<ProtectionDefaultsSnapshot> {
+    PROTECTION_DEFAULTS.get_or_init(SnapshotCache::new)
+}
+
+/// Store a freshly loaded [`ProtectionDefaultsSnapshot`].
+pub fn store_protection_defaults(value: Arc<ProtectionDefaultsSnapshot>) {
+    protection_defaults().store(value);
+}
+
+/// Clear the protection-defaults snapshot so the next read reloads from the DB.
+///
+/// Call after `protection::set_global_protection_default` commits (`app_core`)
+/// and after the generic settings-bag write path commits a change to
+/// `defaultProtection` / `blockPermanentDelete` / `protectedCategories`
+/// (`app_core_settings::update_setting` / `restore_defaults`).
+pub fn invalidate_protection_defaults() {
+    protection_defaults().invalidate();
+    PROTECTION_DEFAULTS_EPOCH.fetch_add(1, Ordering::AcqRel);
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
-    use super::{CacheConfig, DebounceCache, TtlCache};
+    use super::{
+        invalidate_protection_defaults, protection_defaults, store_protection_defaults,
+        CacheConfig, DebounceCache, ProtectionDefaultsSnapshot, SnapshotCache, TtlCache,
+    };
 
     #[test]
     fn ttl_cache_miss_then_hit() {
@@ -330,7 +520,7 @@ mod tests {
         let debounce: DebounceCache<String> = DebounceCache::new(Duration::from_mins(1));
 
         assert!(!debounce.should_suppress(&"a".to_owned()));
-        debounce.expire(&"a".to_owned());
+        debounce.invalidate(&"a".to_owned());
         assert!(
             !debounce.should_suppress(&"a".to_owned()),
             "after expiry, signal is emitted again"
@@ -347,5 +537,70 @@ mod tests {
             !debounce.should_suppress(&"a".to_owned()),
             "after TTL elapses, signal is emitted again"
         );
+    }
+
+    #[test]
+    fn snapshot_cache_starts_empty() {
+        let cache: SnapshotCache<u32> = SnapshotCache::new();
+        assert_eq!(cache.load(), None, "fresh cache is a miss");
+    }
+
+    #[test]
+    fn snapshot_cache_store_then_load_hits() {
+        let cache: SnapshotCache<u32> = SnapshotCache::new();
+        cache.store(std::sync::Arc::new(42));
+        assert_eq!(cache.load(), Some(std::sync::Arc::new(42)));
+    }
+
+    #[test]
+    fn snapshot_cache_invalidate_clears_the_slot() {
+        let cache: SnapshotCache<u32> = SnapshotCache::new();
+        cache.store(std::sync::Arc::new(42));
+        cache.invalidate();
+        assert_eq!(cache.load(), None, "invalidated cache is a miss");
+    }
+
+    #[test]
+    fn snapshot_cache_store_overwrites_previous_value() {
+        let cache: SnapshotCache<u32> = SnapshotCache::new();
+        cache.store(std::sync::Arc::new(1));
+        cache.store(std::sync::Arc::new(2));
+        assert_eq!(cache.load(), Some(std::sync::Arc::new(2)), "store replaces the slot");
+    }
+
+    #[test]
+    fn snapshot_cache_default_is_empty() {
+        let cache: SnapshotCache<u32> = SnapshotCache::default();
+        assert_eq!(cache.load(), None);
+    }
+
+    #[test]
+    fn protection_defaults_invalidate_bumps_epoch() {
+        let before = super::protection_defaults_epoch();
+        invalidate_protection_defaults();
+        assert!(
+            super::protection_defaults_epoch() > before,
+            "every invalidation must advance the epoch so derived caches see a miss"
+        );
+    }
+
+    #[test]
+    fn protection_defaults_store_load_invalidate_round_trips() {
+        // Reuses the process-global static, so scope this test to values it
+        // fully owns (invalidate at start and end) to stay independent of
+        // other tests' ordering.
+        invalidate_protection_defaults();
+        assert!(protection_defaults().load().is_none());
+
+        store_protection_defaults(Arc::new(ProtectionDefaultsSnapshot {
+            level: "protected".to_owned(),
+            block_permanent_delete: true,
+            categories: vec!["lights".to_owned()],
+        }));
+        let loaded = protection_defaults().load().expect("stored value must load");
+        assert_eq!(loaded.level, "protected");
+
+        invalidate_protection_defaults();
+        assert!(protection_defaults().load().is_none());
     }
 }

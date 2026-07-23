@@ -43,7 +43,13 @@ in GRILL amendment 2026-05-22 (R-NoDup).
 - **III. PixInsight Boundary**: The tool selector records *which* external
   tool the project targets; the app does not invoke processing, only writes
   tool-shaped scaffolding (e.g. an empty `.pi-project` marker) under the
-  filesystem plan. "Open in {tool}" remains a launch action (spec 011).
+  filesystem plan. "Open in {tool}" remains a launch action (spec 011). The
+  **framing layer (Q27)** groups and prepares light sessions into
+  co-registerable units and builds a per-framing source view (Q20) + manifest
+  (Q10), but **never stitches, registers, or integrates** framings — that is
+  PixInsight/WBPP's job. Framing clustering is a **suggestion** (§II); every
+  merge/split/reassign is user-driven and reviewable, and attribution never
+  auto-merges.
 - **IV. Research-Led Domain Modeling**: Wizard vs single-form, inventory-only
   source picking, channel inference, naming conventions, and onboarding
   marker reconciliation are each covered in `research.md`.
@@ -114,6 +120,49 @@ apps/desktop (Tauri + React)
     time.
   - Recompute channel inference and persist; emit audit event.
 
+### Framing Layer (Q27)
+
+The framing layer sits between the `Project` aggregate and spec-006 sessions
+(`project → framing → session → frames`):
+
+- **Clustering** (`crates/sessions/`): group a project's light sessions by
+  target + optic-train + pointing + rotation within a **tunable tolerance**
+  (never an exact key), reading the session-level geometry persisted at confirm
+  (F-Framing-1; the Q12 strict-gate iterate — not yet applied — will guarantee
+  presence on new ingests; NULL-geometry legacy sessions are excluded until
+  backfilled via rescan, Q28). Semantics are pinned in research **R11a**
+  (linkage rule, representative pointing, FOV source, concrete tolerance
+  defaults). Triggers: **incremental at confirm** + **explicit bulk derive**
+  (onboarding/rescan). Output is a **suggested** clustering the user can
+  adjust; re-derivation never modifies `user_adjusted` framings; the app never
+  treats its clustering as authoritative.
+- **Adjustment use cases** (`crates/app/core/`): `framing.merge`,
+  `framing.split`, `framing.reassign` — flip `Framing.clustering` to
+  `user_adjusted`, mutate membership only (no filesystem, no image bytes), emit
+  audit events.
+- **Mosaic flag** (`project_setup.rs`): a minimal `is_mosaic` project flag; when
+  set, framings inherit the project's declared target and per-frame
+  OBJECT/coordinate resolution is suppressed. No panel entity, no OBJECT/panel-
+  name string parsing anywhere.
+- **Inbox-confirm attribution** (`crates/app/inbox/src/confirm.rs`): attribution
+  is the **first** pre-ingest pass at the confirm gate; the **Q22
+  duplicate-detection sweep does not exist yet** (no spec or code) and **joins
+  this same pass when its iterate lands** — a documented composition point, not
+  a prerequisite. The pass matches each new light session against existing
+  framings/projects and returns ranked `IngestionAttributionCandidate`s
+  (add-to-framing / new-framing / flag-optic-difference / new-project), with the
+  FR-019 mosaic relaxation for `isMosaic` candidates. **Prefilter** candidates
+  by optic-train key + a coarse sky bin before the tolerance math, so bulk Q28
+  onboarding does not run O(sessions×framings) spherical trigonometry.
+  Suggest-never-auto-merge; the user's pick is **persisted at confirm time via
+  the `chosenAttribution` confirm-request extension** (FR-022 — membership is DB
+  metadata, no §II plan); a completed-project match uses the spec-009
+  `completed → processing` reopen edge (Q25 revoke/warn).
+- **Per-framing projections**: a Q20 source view and a Q10 manifest per framing,
+  both reproducible projections — never a stitch/integrate step (§III). These
+  are **consumers** of the framing model, delivered when the Q20 (spec-026/049)
+  and Q10 (spec-024) iterations land; Phase F does not block on them.
+
 ### Contracts
 
 Seven JSON Schemas under `contracts/`:
@@ -128,6 +177,23 @@ Seven JSON Schemas under `contracts/`:
 - `project.list.json` — project list (in `009/contracts/`). Extended with cursor-based pagination: optional `cursor`, `limit` (default 50, max 200); response adds `nextCursor` (R-Pagination).
 
 New contracts (`project.source.remove`, `project.channels.reinfer`, `project.channels.dismiss_drift`) use camelCase convention per A7 exception. Existing contracts stay snake_case pending the deferred envelope sweep.
+
+**Framing contracts (Q27, Phase F — authored during implementation, camelCase):**
+
+- `framing.list.json` — a project's `Framing[]`.
+- `framing.merge.json` / `framing.split.json` / `framing.reassign.json` —
+  user-driven adjustments; set `clustering = "user_adjusted"`, emit audit.
+- `project.create` / `project.update` gain an `isMosaic` boolean (default
+  false).
+- The **Inbox confirm** contract (spec-041/006 surface) is extended
+  additively in both directions: the **response** gains a ranked
+  `IngestionAttributionCandidate[]`, and the **request** gains the per-item
+  `chosenAttribution` field that persists the user's pick at confirm time
+  (FR-022; see data-model.md §Apply-path). Neither is a new standalone
+  contract. A cross-spec amendment note is recorded in spec-041, whose pending
+  Q7 iteration reworks the same confirm/queue surface. The framing/mosaic
+  JSON Schemas are authored in Phase F (gated implementation), consistent with
+  how the seven project contracts above were authored during Phase 2.
 
 All contracts reuse the spec 002 `ErrorEnvelope` shape and contribute their own project-scoped error codes (see each schema's `ErrorCode` enum).
 
@@ -193,6 +259,35 @@ back-button work (consistent with spec 020).
 7. Build the onboard wizard last (no current mockup surface).
 8. Playwright smoke per US.
 
+### Phase F — Framing layer (Q27, additive)
+
+1. Add the `framing` table + `framing_session` join + `project.is_mosaic`
+   column + session-level nullable geometry columns (pointing/rotation/
+   optic-train, populated at confirm; legacy rows NULL). Backward-compatible;
+   claim the next free migration version at merge (dup-check, PR #317
+   precedent).
+2. Add tolerance-based clustering in `crates/sessions/` per research R11a
+   (linkage, representative, FOV source, defaults); triggers = incremental at
+   confirm + explicit bulk derive; never modify `user_adjusted` framings;
+   NULL-geometry sessions excluded.
+3. Add `framing.list` + `framing.merge` / `framing.split` / `framing.reassign`
+   use cases + contracts; flip `clustering` to `user_adjusted`; audit each.
+4. Add the `is_mosaic` flag to `project.create` / `project.update`; suppress
+   per-frame OBJECT/coordinate resolution when set. No panel entity, no OBJECT
+   parsing.
+5. Add the Inbox-confirm attribution pass (first pass; Q22 joins later): ranked
+   `IngestionAttributionCandidate`s with the mosaic relaxation + optic-train/
+   sky-bin prefilter; persist the user's pick via the `chosenAttribution`
+   confirm-request extension (FR-022); completed-project match → add + reopen
+   (Q25 revoke/warn).
+6. Wire the per-framing source view (Q20) + per-framing manifest (Q10) once
+   those iterations land (consumers, not prerequisites); assert §III (no
+   stitch/integrate).
+7. Add settings storage + surface for the clustering tunables (FR-014; R11a
+   defaults).
+8. Layer-1 + vitest tests per Phase F tasks; quickstart + Windows-E2E scenario;
+   update the spec-037 coverage matrix.
+
 ## Cross-Spec Links
 
 - **Spec 002 (Data Lifecycle State Model)** owns the shared `ErrorEnvelope`
@@ -209,6 +304,25 @@ back-button work (consistent with spec 020).
   the launcher.
 - **Spec 025 (Filesystem Plan Application)** owns the folder/marker write
   plan referenced from this feature's use cases.
+- **Spec 006 (Inventory Lifecycle)** owns the light sessions that become framing
+  members; the framing layer references session ids. Session-level geometry is
+  persisted at confirm (F-Framing-1); the Q12 strict-gate iterate (spec-006/033/
+  041 — **not yet applied**) will guarantee those attributes on new ingests.
+  Cross-spec delta recorded in spec-006's iteration log.
+- **Spec 009 (Project Lifecycle Model)** owns the `completed → processing`
+  reopen edge used by the attribution add + reopen path (Q25). Framing is
+  orthogonal to lifecycle. Cross-spec delta recorded in spec-009's iteration
+  log.
+- **Spec 041 (Inbox Plan Surface)** owns the Inbox confirm gate the attribution
+  pass runs in. Q27 extends its confirm contract additively (candidates in the
+  response, `chosenAttribution` in the request); the Q22 duplicate sweep joins
+  the same pass when its iterate lands. A cross-spec amendment note is recorded
+  in spec-041; its **pending Q7 iteration** reworks the same confirm/queue
+  surface and must preserve the confirm-time membership write.
+- **Spec 026/049 (Source Views)** and **Spec 024 (Manifests)** own the
+  per-framing source view (Q20) and manifest (Q10) projections — consumers of
+  the framing model delivered by their own iterations, not Phase F
+  prerequisites.
 
 ## Risks
 

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Stored settings domain types (spec 042 T254).
 //!
 //! These types are the durable, on-disk representation of the v1 settings bag
@@ -132,7 +135,7 @@ pub struct SettingsState {
     pub remember_follow_logs: bool,
 
     // ── Source Protection ────────────────────────────────────────────────
-    /// Default protection level: `"protected"` | `"normal"` | `"unprotected"`.
+    /// Default protection level: `"protected"` | `"unprotected"`.
     pub default_protection: String,
     /// Routes destructive operations to archive/trash workflows.
     pub block_permanent_delete: bool,
@@ -146,9 +149,6 @@ pub struct SettingsState {
 
     /// Runtime developer-mode toggle. Always `false` in release builds.
     pub dev_mode: bool,
-
-    /// UI hides terminal plans older than this many days. Noisy.
-    pub plans_list_default_age_cutoff_days: f64,
 
     /// Dark frame temperature matching tolerance in °C (spec 007 A5).
     pub calibration_dark_temp_tolerance: f64,
@@ -232,6 +232,38 @@ pub struct SettingsState {
     /// FR-004a — `"hardlink"` is never a valid cross-drive value because
     /// hardlinks cannot cross volumes).
     pub source_view_link_kind_cross_drive: String,
+
+    // ── Cleanup overrides (spec 051 US3) ─────────────────────────────────
+    /// Per-data-type cleanup action overrides, keyed by the stable numeric
+    /// data-type id (stringified, JSON object keys are always strings) from
+    /// the frontend `CLEANUP_TYPES` fixture, valued `"Keep"` | `"Archive"` |
+    /// `"Delete"` (data-model.md §E2). Absent id ⇒ that type's built-in
+    /// default action applies. Empty by default (no overrides).
+    pub cleanup_type_overrides: std::collections::BTreeMap<String, String>,
+
+    // ── Appearance ─────────────────────────────────────────────────────
+    /// UI theme choice: one of the four fixed theme ids (`warm-clay`,
+    /// `warm-slate`, `observatory-dark`, `espresso-dark`) or `"system"` to
+    /// follow the OS light/dark preference (`apps/desktop/src/data/theme.ts`
+    /// `ThemeChoice`). This is the durable source of truth; the frontend
+    /// mirrors it into a synchronous localStorage boot cache to avoid a
+    /// flash of the wrong theme, since WebView2 only flushes localStorage on
+    /// graceful shutdown and loses it on a forced kill.
+    pub theme: String,
+
+    // ── Framing clustering tunables (spec 008 Q27 F-Framing-11, R11a) ────
+    /// Fraction of the optic-train FOV diagonal used as the pointing
+    /// tolerance when grouping sessions into a framing. R11a default 0.10.
+    pub framing_pointing_fraction_of_fov: f64,
+    /// Absolute pointing tolerance in degrees used when the optic-train has
+    /// no FOV data (R11a no-equipment fallback). Default 0.2.
+    pub framing_pointing_fallback_deg: f64,
+    /// Rotation tolerance in degrees for framing membership. Default 3.0.
+    pub framing_rotation_tolerance_deg: f64,
+    /// Mosaic candidate envelope (FR-019 relaxation): fraction of the FOV
+    /// diagonal used as the pointing envelope around an existing framing's
+    /// representative for `isMosaic` projects. Default 1.0.
+    pub framing_mosaic_envelope_fraction_of_fov: f64,
 }
 
 impl Default for SettingsState {
@@ -256,7 +288,6 @@ impl Default for SettingsState {
             ],
             current_library_id: None,
             dev_mode: false,
-            plans_list_default_age_cutoff_days: 90.0,
             calibration_dark_temp_tolerance: 2.0,
             calibration_prefill_suggestion: true,
             calibration_dark_override_penalty: 0.3,
@@ -284,6 +315,14 @@ impl Default for SettingsState {
             planner_moon_avoidance: default_planner_moon_avoidance(),
             source_view_link_kind_intra_drive: "hardlink".to_owned(),
             source_view_link_kind_cross_drive: "symlink".to_owned(),
+            cleanup_type_overrides: std::collections::BTreeMap::new(),
+            theme: "system".to_owned(),
+            // R11a shipped defaults — must stay bit-identical to
+            // `sessions::ToleranceParams::defaults()`.
+            framing_pointing_fraction_of_fov: 0.10,
+            framing_pointing_fallback_deg: 0.2,
+            framing_rotation_tolerance_deg: 3.0,
+            framing_mosaic_envelope_fraction_of_fov: 1.0,
         }
     }
 }

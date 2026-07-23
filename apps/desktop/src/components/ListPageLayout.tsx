@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ListPageLayout — standard list-page scaffold (spec 043, tasks #62/#73/#86/#89/#104).
  *
@@ -29,13 +32,20 @@
  * detail and returns the table to full height. The panel mounts only when
  * `detail` is non-null (so we never show an empty centered dashboard).
  *
- * `detailPlacement` (DEFAULT `'bottom'`) chooses the dock. `'bottom'` is the
- * Sessions/Calibration/Targets reference above. `'side'` instead docks the
- * detail as a full-height RIGHT side panel (fixed ~420px width, own scroll,
- * keeps the close ✕) BESIDE the full-width primary content — suited to detail
- * that reads as a tall narrow column (Projects). The side variant simply
- * switches `.alm-listpage__body` from a column to a row and pins the detail
- * width; the primary content stays full-width to the left of it.
+ * `detailPlacement` (DEFAULT `'adaptive'`, spec 054 / #936) chooses the dock.
+ * `'adaptive'` docks to the SIDE when the window is wide enough and falls
+ * back to the BOTTOM strip when narrow — see `useAdaptiveDock` (src/ui). The
+ * threshold, per-page pin, and side width are keyed by `dockId` (defaults to
+ * `detailLabel`) and persisted across restarts; drag the `ResizeHandle` on
+ * the side panel's left edge to resize (bounded, see `useAdaptiveDock`).
+ * `'bottom'` pins the STATIC bottom dock (the original Sessions/Calibration
+ * reference: a horizontal split BELOW the full-width primary content — NOT a
+ * right side-panel; rationale in task #86 below). `'side'` pins a STATIC
+ * full-height RIGHT side panel (fixed ~420px width, own scroll, keeps the
+ * close ✕) BESIDE the full-width primary content — suited to detail that
+ * reads as a tall narrow column (Projects). The side variant simply switches
+ * `.pv-listpage__body` from a column to a row and pins the detail width; the
+ * primary content stays full-width to the left of it.
  *
  * `'side-and-bottom'` (task #104) — dual variant: renders BOTH a right side
  * panel AND a bottom strip simultaneously. Uses the additive `sideDetail` and
@@ -45,13 +55,15 @@
  *
  * Pass the top bar either as a ready `topBar` node (e.g. `<PageTopBar .../>`)
  * or via the convenience `topBarProps` slots, which this component forwards to
- * an internal `PageTopBar`. ListPageLayout is itself the `.alm-page` root, so
+ * an internal `PageTopBar`. ListPageLayout is itself the `.pv-page` root, so
  * it must be the page's outermost element (do not nest it inside PageShell).
  */
 
-import { type ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
+import { DetailDockPlacementControl } from './DetailDockPlacementControl';
 import { m } from '@/lib/i18n';
+import { useAdaptiveDock, ResizeHandle } from '@/ui';
 
 export interface ListPageLayoutProps {
   /** A ready top-bar node. Mutually exclusive with `topBarProps`. */
@@ -72,15 +84,22 @@ export interface ListPageLayoutProps {
   /** Accessible label for the detail panel region. Default "Details". */
   detailLabel?: string;
   /**
-   * Where the detail panel docks. DEFAULT `'bottom'` (the Sessions/Calibration/
-   * Targets reference: a horizontal split BELOW the full-width primary content;
-   * see the module header). `'side'` docks the detail as a full-height RIGHT
-   * side panel (fixed width, own scroll) BESIDE the full-width primary content
-   * instead — suited to detail that reads as a tall narrow column (Projects).
-   * `'side-and-bottom'` (task #104) renders BOTH a right side panel (from
-   * `detail`) AND a bottom strip (from `bottomDetail`) simultaneously.
+   * Where the detail panel docks. DEFAULT `'adaptive'` (spec 054 / #936): side
+   * when the window is wide enough, bottom when narrow — see the module
+   * header. `'bottom'` / `'side'` pin the STATIC legacy placements. `'side-
+   * and-bottom'` (task #104) renders BOTH a right side panel (from `detail`)
+   * AND a bottom strip (from `bottomDetail`) simultaneously.
    */
-  detailPlacement?: 'bottom' | 'side' | 'side-and-bottom';
+  detailPlacement?: 'adaptive' | 'bottom' | 'side' | 'side-and-bottom';
+  /**
+   * Persistence scope for the adaptive dock's pinned placement + side width
+   * (`'adaptive'` only). Defaults to `detailLabel`. Pass a stable per-page id
+   * when `detailLabel` is localized/dynamic.
+   */
+  dockId?: string;
+  /** Window width (px) at/above which the adaptive dock engages the side
+   * placement. `'adaptive'` only. Default 1400 — see `useAdaptiveDock`. */
+  adaptiveThreshold?: number;
   /**
    * Bottom strip content for the `'side-and-bottom'` dual layout (task #104).
    * Rendered only when `detailPlacement="side-and-bottom"`. Ignored for other
@@ -93,6 +112,28 @@ export interface ListPageLayoutProps {
   bottomDetailLabel?: string;
 }
 
+/**
+ * True when a Base UI overlay (Dialog, Select, Combobox, Menu, …) is open
+ * anywhere in the document. Base UI stamps the OPEN popup's outer node
+ * (Positioner/Popup) with `data-open` (its documented styling-state hook),
+ * but the ARIA overlay role doesn't always land on that same node: Dialog and
+ * Menu put `role` and `data-open` together on Popup, while Select/Combobox
+ * split them — `role="listbox"`/`"grid"` sits on an inner List that has no
+ * `data-open` of its own, only a `data-open` ANCESTOR (Positioner/Popup).
+ * Walking up from every overlay-role element to the nearest `data-open`
+ * ancestor (`closest`, which also matches the element itself) covers both
+ * shapes without hardcoding which library variant is in use (#906).
+ */
+function hasOpenOverlay(): boolean {
+  const overlayRoles = document.querySelectorAll(
+    '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="grid"], [role="menu"]',
+  );
+  for (const el of overlayRoles) {
+    if (el.closest('[data-open]')) return true;
+  }
+  return false;
+}
+
 export function ListPageLayout({
   topBar,
   topBarProps,
@@ -100,7 +141,9 @@ export function ListPageLayout({
   detail,
   onCloseDetail,
   detailLabel = m.common_details(),
-  detailPlacement = 'bottom',
+  detailPlacement = 'adaptive',
+  dockId,
+  adaptiveThreshold,
   bottomDetail,
   onCloseBottomDetail,
   bottomDetailLabel = m.list_page_layout_bottom_detail_label(),
@@ -108,40 +151,82 @@ export function ListPageLayout({
   const hasDetail = detail != null;
   const hasBottom = bottomDetail != null;
 
+  // Always called (rules-of-hooks) — a no-op width/localStorage cost when the
+  // page isn't in adaptive mode. dockId falls back to detailLabel so pages
+  // that don't pass one still get a stable-enough persistence key.
+  const adaptiveDock = useAdaptiveDock({
+    dockId: dockId ?? detailLabel,
+    threshold: adaptiveThreshold,
+  });
+  const resolvedPlacement =
+    detailPlacement === 'adaptive' ? adaptiveDock.placement : detailPlacement;
+
+  // Escape closes the open detail panel(s), matching the ✕ affordance (#771).
+  // A `document`-level listener also catches the common case where nothing
+  // inside the panel has focus (e.g. focus stayed on the row that opened it,
+  // or on <body>). `stopPropagation()` does NOT stop a sibling listener
+  // registered on the SAME target — Base UI's own Escape dismissal
+  // (`useDismiss`) is also a `document`-level `keydown` listener, and by
+  // default (`escapeKeyBubbles: false`) it calls `stopPropagation()` but
+  // never `preventDefault()`, so neither mechanism reaches across to block
+  // this listener. We therefore check explicitly for an open Base UI overlay
+  // (Dialog/Select/Combobox/Menu — anything carrying Base UI's `data-open`
+  // styling-hook attribute plus an overlay ARIA role) and skip closing the
+  // panel while one is open, deferring to its own dismissal.
+  useEffect(() => {
+    if (!hasDetail && !hasBottom) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (hasOpenOverlay()) return;
+      if (hasDetail) onCloseDetail?.();
+      if (detailPlacement === 'side-and-bottom' && hasBottom) {
+        onCloseBottomDetail?.();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    hasDetail,
+    hasBottom,
+    detailPlacement,
+    onCloseDetail,
+    onCloseBottomDetail,
+  ]);
+
   // ── Dual side-and-bottom layout (task #104) ──────────────────────────────
   //
   // Structure: the bottom strip sits ONLY under the main content column, NOT
-  // under the side panel. A wrapper column (.alm-listpage__main-col) groups
+  // under the side panel. A wrapper column (.pv-listpage__main-col) groups
   // main + bottom so the side panel is flush to full height on the right.
   //
-  //   .alm-listpage__body--dual (row)
-  //     .alm-listpage__main-col (column, flex:1)
-  //       .alm-listpage__main   (flex:1, scrolls)
-  //       .alm-listpage__bottom (fit-content, max-height cap)
-  //     .alm-listpage__side     (fixed 420px, own scroll)
+  //   .pv-listpage__body--dual (row)
+  //     .pv-listpage__main-col (column, flex:1)
+  //       .pv-listpage__main   (flex:1, scrolls)
+  //       .pv-listpage__bottom (fit-content, max-height cap)
+  //     .pv-listpage__side     (fixed 420px, own scroll)
   //
   if (detailPlacement === 'side-and-bottom') {
     return (
-      <div className="alm-page">
+      <div className="pv-page">
         {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
-        <div className="alm-listpage__body alm-listpage__body--dual">
+        <div className="pv-listpage__body pv-listpage__body--dual">
           {/* Left column: main table + bottom strip stacked */}
-          <div className="alm-listpage__main-col">
-            <div className="alm-listpage__main">{children}</div>
+          <div className="pv-listpage__main-col">
+            <div className="pv-listpage__main">{children}</div>
 
             {/* Bottom strip constrained to the content column */}
             {hasBottom && (
               <section
-                className="alm-listpage__bottom"
+                className="pv-listpage__bottom"
                 role="complementary"
                 aria-label={bottomDetailLabel}
               >
                 {onCloseBottomDetail && (
-                  <div className="alm-listpage__panel-bar">
+                  <div className="pv-listpage__panel-bar">
                     <button
                       type="button"
-                      className="alm-listpage__panel-close"
+                      className="pv-listpage__panel-close"
                       onClick={onCloseBottomDetail}
                       aria-label={m.cmp_listpage_close_session_details_aria()}
                     >
@@ -149,7 +234,7 @@ export function ListPageLayout({
                     </button>
                   </div>
                 )}
-                <div className="alm-listpage__panel-body">{bottomDetail}</div>
+                <div className="pv-listpage__panel-body">{bottomDetail}</div>
               </section>
             )}
           </div>
@@ -157,15 +242,15 @@ export function ListPageLayout({
           {/* Right: side detail panel, full height of the body */}
           {hasDetail && (
             <section
-              className="alm-listpage__side"
+              className="pv-listpage__side"
               role="complementary"
               aria-label={detailLabel}
             >
               {onCloseDetail && (
-                <div className="alm-listpage__panel-bar">
+                <div className="pv-listpage__panel-bar">
                   <button
                     type="button"
-                    className="alm-listpage__panel-close"
+                    className="pv-listpage__panel-close"
                     onClick={onCloseDetail}
                     aria-label={m.inbox_close_details_aria()}
                   >
@@ -173,7 +258,7 @@ export function ListPageLayout({
                   </button>
                 </div>
               )}
-              <div className="alm-listpage__panel-body">{detail}</div>
+              <div className="pv-listpage__panel-body">{detail}</div>
             </section>
           )}
         </div>
@@ -181,37 +266,68 @@ export function ListPageLayout({
     );
   }
 
-  // ── Original bottom / side layouts (unchanged) ───────────────────────────
-  const isSide = detailPlacement === 'side';
+  // ── Bottom / side / adaptive layouts ─────────────────────────────────────
+  const isAdaptive = detailPlacement === 'adaptive';
+  const isSide = resolvedPlacement === 'side';
   const bodyClass = isSide
-    ? 'alm-listpage__body alm-listpage__body--side'
-    : 'alm-listpage__body';
+    ? 'pv-listpage__body pv-listpage__body--side'
+    : 'pv-listpage__body';
   const detailClass = isSide
-    ? 'alm-listpage__detail alm-listpage__detail--side'
-    : 'alm-listpage__detail';
+    ? 'pv-listpage__detail pv-listpage__detail--side'
+    : 'pv-listpage__detail';
+  // Adaptive side width is drag-resized (useAdaptiveDock); static 'side'
+  // keeps the fixed --pv-side-detail-w CSS default (undefined = no override).
+  const detailStyle =
+    isAdaptive && isSide
+      ? ({ '--pv-side-detail-w': `${adaptiveDock.width}px` } as CSSProperties)
+      : undefined;
 
   return (
-    <div className="alm-page">
+    <div className="pv-page">
       {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
       <div className={bodyClass}>
-        <div className="alm-listpage__main">{children}</div>
+        <div className="pv-listpage__main">{children}</div>
 
         {hasDetail && (
-          <section className={detailClass} role="complementary" aria-label={detailLabel}>
-            {onCloseDetail && (
-              <div className="alm-listpage__detail-bar">
-                <button
-                  type="button"
-                  className="alm-listpage__detail-close"
-                  onClick={onCloseDetail}
-                  aria-label={m.inbox_close_details_aria()}
-                >
-                  ✕
-                </button>
+          <section
+            className={detailClass}
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: user-resizable side-panel width persisted per dockId, not a static design token
+            style={detailStyle}
+            role="complementary"
+            aria-label={detailLabel}
+          >
+            {isAdaptive && isSide && (
+              <ResizeHandle
+                onPointerDown={adaptiveDock.onResizeStart}
+                label={m.list_page_layout_dock_resize_aria()}
+              />
+            )}
+            {(onCloseDetail || isAdaptive) && (
+              <div className="pv-listpage__detail-bar">
+                {isAdaptive && (
+                  // #1066: a three-state Auto/Bottom/Right control, not the
+                  // old two-state pin button — `override === null` ("Auto") is
+                  // a reachable choice again, so pinning is no longer a
+                  // one-way door out of adaptive placement.
+                  <DetailDockPlacementControl
+                    override={adaptiveDock.override}
+                    onChange={adaptiveDock.setOverride}
+                  />
+                )}
+                {onCloseDetail && (
+                  <button
+                    type="button"
+                    className="pv-listpage__detail-close"
+                    onClick={onCloseDetail}
+                    aria-label={m.inbox_close_details_aria()}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             )}
-            <div className="alm-listpage__detail-body">{detail}</div>
+            <div className="pv-listpage__detail-body">{detail}</div>
           </section>
         )}
       </div>

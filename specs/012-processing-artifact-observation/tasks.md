@@ -76,10 +76,22 @@ and `size_bytes`.
         `persistence_db::repositories::artifacts::{list_all_artifact_identities, set_project_id}`;
         startup spawn in `apps/desktop/src-tauri/src/lib.rs`;
         5 integration tests in `crates/app/core/tests/tools_artifacts_integration.rs`
-- [ ] **T009** Integration test: drop a known-good file into a fixture
-      output folder. DEFERRED — requires notify-rs watcher runtime (GUI).
-- [ ] **T010** Integration test: delete file → rescan → expect `missing`.
-      DEFERRED — same reason as T009.
+- [x] **T009** Integration test: drop a known-good file into a fixture
+      output folder. RECONCILED — the "requires GUI" premise was stale: T008
+      shipped a live `notify`-based watcher (`fs_inventory::artifact_watcher`)
+      that needs only a real directory, not a Tauri window. Already closed by
+      spec 033 T025's `apps/desktop/src-tauri/tests/artifact_watcher_live_drop.rs::live_file_drop_after_attach_emits_detected_and_classified`
+      (real SQLite + real EventBus + real OS watcher; asserts `artifact.detected`
+      and `artifact.classified` fire with contract-valid payloads) — this task
+      just wasn't ticked when that test landed.
+- [x] **T010** Integration test: delete file → rescan → expect `missing`.
+      GAP FILLED: no test previously exercised the real reconciliation pass
+      end-to-end (only the pure decision logic in `reconciler.rs` and a
+      direct `mark_missing` DB call were covered). Added
+      `apps/desktop/src-tauri/tests/artifact_watcher_missing_reconciliation.rs::deleted_file_is_marked_missing_on_reattach_reconciliation`:
+      attach (file present, detected) → detach → delete file → re-attach
+      (only public entry point that re-runs the on-attach reconciliation
+      pass) → asserts `artifact.missing` fires and the DB row is `state = missing`.
 
 ---
 
@@ -107,11 +119,23 @@ re-run the classifier and confirm the override survives.
       — implemented in `classify_override` (A6 clear path only re-classifies)
 - [x] **T016** Generate TypeScript types from `contracts/artifact.classify.json`.
       — `packages/contracts/src/generated/artifact.classify.d.ts`; added to index.ts
-- [ ] **T017** Contract tests for `artifact.classify`. PARTIAL —
-      error paths tested via Rust unit tests in `artifact.rs`; dedicated
-      contract test suite (jsdom mock-invoke) deferred.
-- [ ] **T018** Integration test: classify → override → rescan → override
-      preserved. PARTIAL — covered in `app_core::artifact::tests::classify_override_applies_and_clears`.
+- [x] **T017** Contract tests for `artifact.classify`. RECONCILED —
+      the JSON-Schema conformance runner (`packages/contracts/tests/conformance-harness.mjs`,
+      wired into `pnpm --filter @astro-plan/contracts test`) now covers the
+      request and response shapes: success (T063-D, pre-existing), missing
+      `status` drift (T063-D), `artifact.not_found` error, `kind: null`
+      clear-override request, and an invalid-`kind` drift case (all labeled
+      `T017 ...`). This supersedes the originally-scoped jsdom mock-invoke
+      suite — schema-fixture validation is the pattern this repo's other
+      contract tests use (T063), and error paths remain additionally covered
+      by Rust unit tests in `artifact.rs`.
+- [x] **T018** Integration test: classify → override → rescan → override
+      preserved. GAP FILLED: the cited test only covered apply+clear, not a
+      rescan in between. Added `classify_override_survives_rescan` in
+      `crates/app/lifecycle/src/artifact.rs` — detect → override → `detect()`
+      again on the same path (the A8 in-place-update rescan path) → asserts
+      `kind`/`classification_source` are unchanged (that code path never
+      touches classification fields, by construction).
 - [x] **T019** Unknown filename → `kind = intermediate`, confidence < 0.2.
       — `app_core::artifact::tests::detect_unknown_file_falls_back_to_intermediate`
 
@@ -147,8 +171,17 @@ group. Missing artifacts visibly distinguish their state and offer a
 - [x] **T025** Visual distinction for `missing` rows (strikethrough +
       "Missing" badge) and `manual_override` rows ("(manual)" indicator).
       — `ArtifactRow` in `ToolLaunchesAccordion.tsx`
-- [ ] **T026** Playwright MCP scenario. DEFERRED — WSL environment
-      has no display; visual smoke test deferred to GUI runtime.
+- [ ] **T026** Playwright MCP scenario. RE-ADJUDICATED (prior rationale was
+      stale/wrong): headless mock-mode Playwright does NOT need a display —
+      16 other `tests/e2e/*.spec.ts` specs already run headless against the
+      mock UI in this repo's normal test flow. The real blocker is that no
+      artifact/tool-launch-accordion mock fixture or spec exists yet at all
+      (`grep -rl missing|manual_override tests/e2e` = no hits) and this
+      sandbox has no provisioned Playwright browser binaries — authoring a
+      new spec + mock fixture from scratch is net-new scope, not a
+      reconciliation of existing coverage. Genuinely deferred; the underlying
+      behavior (grouping, visual distinction, mark-resolved) is covered by
+      `artifacts.test.ts` vitest unit tests (T023/T025).
 - [x] **T027** Grouping test: artifact with tool_launch_id grouped under
       that launch. — `artifacts.test.ts::single attributed group with no unattributed`
 - [x] **T028** Grouping test: artifact with null tool_launch_id goes to
@@ -163,10 +196,27 @@ group. Missing artifacts visibly distinguish their state and offer a
       — `apps/desktop/src-tauri/src/commands/artifacts.rs`; registered in `lib.rs`
 - [ ] **TX02** Documentation: `docs/research/artifact-observation.md`. DEFERRED.
 - [x] **TX03** Constitution recheck. PASS — see plan.md §Constitution Check.
-- [ ] **TX04** Cross-spec dependency check with spec 011 + 024. PARTIAL
-      — `workflow.run_completed` event defined and emitted; spec 024
-      consumption deferred to spec 024 implementation.
-- [ ] **TX05** Cross-spec dependency check with spec 017. DEFERRED.
+- [x] **TX04** Cross-spec dependency check with spec 011 + 024. RE-ADJUDICATED
+      (spec 024 has since shipped): `workflow.run_completed` now has a real
+      subscriber — `app_core_projects::project_manifests::spawn_workflow_run_subscriber`
+      (`crates/app/projects/src/project_manifests.rs:412`; *(reconciliation
+      note, 2026-07-19, issue #764: fn name/line corrected — was cited as
+      `spawn_workflow_run_completed_subscriber` at `:275`)*) persists a
+      `WorkflowRunManifest` row on every event. Proven end-to-end (real tool
+      launch → real `workflow.run_completed` publish → real manifest row) by
+      `crates/app/core/tests/workflow_run_manifest_e2e.rs::real_tool_launch_completion_persists_a_workflow_run_manifest`
+      (spec 011's tool-launch completion is what triggers `complete_run`).
+      All three specs' handshake is exercised by a passing test, not just
+      "event defined."
+- [x] **TX05** Cross-spec dependency check with spec 017. RE-ADJUDICATED:
+      `crates/app/core/src/cleanup_generator.rs` (spec 017's cleanup-plan
+      generator) documents `processing_artifacts` as "the ONLY per-project
+      file store" it reads from and classifies every candidate via
+      `DataType::from_artifact_kind` against spec 012's `kind` vocabulary
+      (`intermediate | master | final`) — 14 passing tests in that module
+      exercise the dependency directly (e.g. `scan_actioned_type_becomes_candidate_and_sums_bytes`,
+      `scan_excludes_unclassified`). This has been true for a while; just
+      never ticked here.
 
 ---
 

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useSyncExternalStore, useCallback } from 'react';
 import type { AppPreferences } from '@/bindings/types';
 
@@ -15,8 +18,8 @@ const defaults: AppPreferences = {
   defaultProjectView: 'combined',
   sessionsGroupBy: 'none',
   sessionsView: 'list',
-  tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
+  detailDock: {},
 };
 
 function notify(): void {
@@ -83,6 +86,16 @@ export function resetPreferences(): void {
     // the in-memory cache was already cleared above, so this is best-effort.
   }
   notify();
+}
+
+/**
+ * Subscribes to preference changes outside React (components use the hooks
+ * below). Lets the appearance runtime (data/theme.ts) re-apply density when
+ * ANY caller writes it — Settings, the Setup wizard's usePreference — so the
+ * app-wide token rescale never depends on a per-call-site applyDensity (#587).
+ */
+export function subscribePreferences(listener: Listener): () => void {
+  return subscribe(listener);
 }
 
 // --- Hooks ---

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * site-store.ts — settings-backed observing-site store (spec 044 Track B, US1/US3).
  *
@@ -63,7 +66,9 @@ function coerceIdRef(value: unknown, sites: ObserverSite[]): string | null {
 }
 
 /** Coerce a raw `observing`-scope values bag into a clean {@link ObservingState}. */
-export function coerceObservingState(values: Record<string, unknown>): ObservingState {
+export function coerceObservingState(
+  values: Record<string, unknown>,
+): ObservingState {
   const sites = coerceSites(values[SITES_KEY]);
   return {
     sites,
@@ -84,6 +89,13 @@ export function resolveActiveSite(state: ObservingState): ObserverSite | null {
 let current: ObservingState = EMPTY_STATE;
 const listeners = new Set<() => void>();
 
+// Mirrors the `writeGen` guard in ../guidance-settings.ts (#836). `Shell.tsx`
+// kicks off `loadObservingState()` at boot; on a slow backend that read can
+// still be in flight once the user reaches Targets and saves a site, and a read
+// that started before the write is stale by the time it resolves. A load only
+// applies if no save has committed since the load started.
+let writeGen = 0;
+
 function emit(): void {
   for (const fn of listeners) fn();
 }
@@ -103,11 +115,16 @@ function snapshot(): ObservingState {
  * unavailable.
  */
 export async function loadObservingState(): Promise<ObservingState> {
+  const genAtStart = writeGen;
   try {
     const data = unwrap(await commands.settingsGet(OBSERVING_SCOPE));
-    current = coerceObservingState(data.values as Record<string, unknown>);
+    if (writeGen === genAtStart) {
+      current = coerceObservingState(data.values as Record<string, unknown>);
+    }
   } catch {
-    current = EMPTY_STATE;
+    if (writeGen === genAtStart) {
+      current = EMPTY_STATE;
+    }
   }
   emit();
   return current;
@@ -124,14 +141,17 @@ export async function saveSites(
 ): Promise<void> {
   const next: ObservingState = {
     sites,
-    defaultSiteId: defaultSiteId !== null && sites.some((s) => s.id === defaultSiteId)
-      ? defaultSiteId
-      : null,
-    activeSiteId: activeSiteId !== null && sites.some((s) => s.id === activeSiteId)
-      ? activeSiteId
-      : null,
+    defaultSiteId:
+      defaultSiteId !== null && sites.some((s) => s.id === defaultSiteId)
+        ? defaultSiteId
+        : null,
+    activeSiteId:
+      activeSiteId !== null && sites.some((s) => s.id === activeSiteId)
+        ? activeSiteId
+        : null,
     usableAltitudeDeg: current.usableAltitudeDeg,
   };
+  writeGen += 1;
   unwrap(
     await commands.settingsUpdate(OBSERVING_SCOPE, {
       [SITES_KEY]: next.sites,
@@ -144,7 +164,9 @@ export async function saveSites(
 }
 
 /** Persist just the active-site pointer (US3 active switch). */
-export async function saveActiveSiteId(activeSiteId: string | null): Promise<void> {
+export async function saveActiveSiteId(
+  activeSiteId: string | null,
+): Promise<void> {
   await saveSites(current.sites, current.defaultSiteId, activeSiteId);
 }
 
@@ -158,9 +180,14 @@ export async function saveActiveSiteId(activeSiteId: string | null): Promise<voi
  */
 export async function saveUsableAltitude(degrees: number): Promise<void> {
   const clamped = clampThreshold(degrees);
+  writeGen += 1;
   current = { ...current, usableAltitudeDeg: clamped };
   emit();
-  unwrap(await commands.settingsUpdate(OBSERVING_SCOPE, { [USABLE_ALTITUDE_KEY]: clamped }));
+  unwrap(
+    await commands.settingsUpdate(OBSERVING_SCOPE, {
+      [USABLE_ALTITUDE_KEY]: clamped,
+    }),
+  );
 }
 
 /** Non-hook read of the current cached state (comparators, tests). */
@@ -179,7 +206,9 @@ export function getUsableAltitude(): number {
 }
 
 /** Test-only: set the cache directly. */
-export function __setObservingStateForTest(state: Partial<ObservingState>): void {
+export function __setObservingStateForTest(
+  state: Partial<ObservingState>,
+): void {
   current = { ...EMPTY_STATE, ...state };
   emit();
 }

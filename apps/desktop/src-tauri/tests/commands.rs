@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for all 31 Tauri stub commands.
 //!
 //! **Stub commands (28)** are tested by calling the command functions directly
@@ -38,12 +41,27 @@ use desktop_shell::commands::search::search_global;
 use desktop_shell::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
 };
+use desktop_shell::commands::settings::{settings_get, settings_update};
 
 use contracts_core::error_code::ErrorCode;
 use desktop_shell::commands::targets::{targets_get, targets_list};
-use desktop_shell::commands::tour::tour_complete_step;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/// An ephemeral resolve cache, a throwaway path, and a fresh (never-warming)
+/// flag for `AppState::new` in tests — nothing here ever gets promoted, so an
+/// in-memory cache is fine.
+fn test_resolve_cache() -> (
+    targeting_resolver::simbad::ResolveCache,
+    std::path::PathBuf,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    (
+        targeting_resolver::simbad::ResolveCache::in_memory().expect("in-memory resolve cache"),
+        std::path::PathBuf::from("test-resolve-cache.redb"),
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    )
+}
 
 /// Build a mock Tauri app with the lifecycle commands and managed `AppState`
 /// backed by an in-memory `SQLite` database.
@@ -53,7 +71,8 @@ async fn mock_lifecycle_app() -> tauri::App<tauri::test::MockRuntime> {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
+    let (resolve_cache, resolve_cache_path, cache_warming) = test_resolve_cache();
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming);
 
     let app = tauri::test::mock_builder()
         .invoke_handler(tauri::generate_handler![
@@ -96,7 +115,16 @@ async fn stub_sessions_split() {
     let res = sessions_split("ses-001".to_owned(), 10).await;
     assert!(res.is_ok(), "sessions_split failed: {res:?}");
     let split = res.unwrap();
-    assert_eq!(split.original.frame_count, 10);
+    // `original.frame_count` merely echoes `split_at_index` (the input) —
+    // assert fields the command actually derives instead, so this test can
+    // fail if the stub's split/id wiring breaks.
+    assert_eq!(split.new.frame_count, 8, "new.frame_count must be 18 - split_at_index");
+    assert_eq!(split.new.id, "550e8400-e29b-41d4-a716-446655440099");
+    assert_eq!(
+        split.original.session_key.target, "NGC 7000",
+        "original must come from stub_sessions()[0]"
+    );
+    assert_eq!(split.new.session_key.target, "IC 1396", "new must come from stub_sessions()[1]");
 }
 
 #[tokio::test]
@@ -162,7 +190,14 @@ async fn stub_targets_list() {
 async fn stub_targets_get() {
     let res = targets_get("target-001".to_owned()).await;
     assert!(res.is_ok(), "targets_get failed: {res:?}");
-    assert_eq!(res.unwrap().id, "target-001");
+    let detail = res.unwrap();
+    // `id` is echoed straight from the argument — assert fields the command
+    // derives from stub_targets()[0] so this test can fail if that wiring breaks.
+    assert_eq!(detail.id, "target-001");
+    assert_eq!(detail.name, "NGC 7000");
+    assert_eq!(detail.session_count, 5);
+    assert_eq!(detail.projects.len(), 2);
+    assert_eq!(detail.projects[0].name, "NGC 7000 Narrowband");
 }
 
 // ─── Projects (spec 008 — real implementation with in-memory DB) ────────────
@@ -174,7 +209,8 @@ async fn make_projects_state() -> AppState {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    AppState::new(repo, bus)
+    let (resolve_cache, resolve_cache_path, cache_warming) = test_resolve_cache();
+    AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming)
 }
 
 #[tokio::test]
@@ -211,8 +247,11 @@ async fn projects_create_and_list() {
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     };
-    let result = app_core::project_setup::create(state.repo.pool(), &state.bus, &req).await;
+    let cache = state.resolve_cache.read().await.clone();
+    let result =
+        app_core::project_setup::create(state.repo.pool(), &state.bus, &cache.cache(), &req).await;
     assert!(result.is_ok(), "create failed: {result:?}");
     assert_eq!(result.unwrap().lifecycle, "setup_incomplete");
 
@@ -237,7 +276,8 @@ async fn make_plans_state() -> AppState {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    AppState::new(repo, bus)
+    let (resolve_cache, resolve_cache_path, cache_warming) = test_resolve_cache();
+    AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming)
 }
 
 #[tokio::test]
@@ -431,6 +471,7 @@ fn _roots_list_compiles_check() {
 async fn roots_register_via_use_case() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
 
     // Path must be absolute on the host OS (validate_path rejects POSIX-style
     // paths on Windows).
@@ -447,7 +488,7 @@ async fn roots_register_via_use_case() {
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
 
-    let resp = app_core::first_run::register_source(db.pool(), &req).await;
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req).await;
     assert!(resp.is_ok(), "register_source failed: {resp:?}");
     let resp = resp.unwrap();
     assert_eq!(resp.kind, contracts_core::first_run::SourceKind::LightFrames);
@@ -467,6 +508,7 @@ fn _roots_remap_compiles_check() {
 async fn roots_remap_via_use_case() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
 
     // Paths must be absolute on the host OS (validate_path rejects POSIX-style
     // paths on Windows).
@@ -482,7 +524,7 @@ async fn roots_remap_via_use_case() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -512,7 +554,7 @@ async fn roots_remap_apply_via_use_case() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -559,7 +601,7 @@ async fn sources_set_active_via_use_case() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -593,7 +635,7 @@ async fn roots_delete_via_use_case_blocks_on_dependents() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Unorganized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -641,7 +683,7 @@ async fn roots_delete_via_use_case_succeeds_without_dependents() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -745,6 +787,42 @@ async fn settings_scope_roundtrip_via_usecase() {
     assert_eq!(after_restore, serde_json::json!("info"), "logLevel must be back to default");
 }
 
+#[tokio::test]
+async fn settings_general_scope_roundtrips_locale_via_commands() {
+    let app = mock_lifecycle_app().await;
+
+    let defaults = settings_get(app.state::<AppState>(), "general".to_owned())
+        .await
+        .expect("read general defaults");
+    assert_eq!(defaults.values.0, serde_json::json!({"locale": "en-GB", "theme": "system"}));
+
+    settings_update(
+        app.state::<AppState>(),
+        "general".to_owned(),
+        contracts_core::JsonAny::from(serde_json::json!({"locale": "pt-BR"})),
+    )
+    .await
+    .expect("persist locale");
+
+    let persisted = settings_get(app.state::<AppState>(), "general".to_owned())
+        .await
+        .expect("read persisted locale");
+    assert_eq!(persisted.values.0, serde_json::json!({"locale": "pt-BR", "theme": "system"}));
+
+    settings_update(
+        app.state::<AppState>(),
+        "general".to_owned(),
+        contracts_core::JsonAny::from(serde_json::json!({"locale": "fr-FR"})),
+    )
+    .await
+    .expect("invalid locale is safely ignored");
+
+    let after_invalid = settings_get(app.state::<AppState>(), "general".to_owned())
+        .await
+        .expect("read locale after invalid update");
+    assert_eq!(after_invalid.values.0["locale"], serde_json::json!("pt-BR"));
+}
+
 // ─── Preferences (2 commands) ───────────────────────────────────────────────
 
 #[tokio::test]
@@ -785,14 +863,6 @@ async fn search_global_queries_real_db() {
         res.unwrap().is_empty(),
         "search_global must return empty on fresh DB (no fixture data injected)"
     );
-}
-
-// ─── Tour (1 command) ───────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn stub_tour_complete_step() {
-    let res = tour_complete_step("step1".to_owned()).await;
-    assert!(res.is_ok(), "tour_complete_step failed: {res:?}");
 }
 
 // ─── Lifecycle commands (4 commands) ─────────────────────────────────────────
@@ -850,7 +920,8 @@ async fn lifecycle_transition_apply() {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
+    let (resolve_cache, resolve_cache_path, cache_warming) = test_resolve_cache();
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming);
 
     let request = TransitionRequest::Project(ProjectTransitionRequest::new(
         uuid::Uuid::new_v4(),
@@ -860,16 +931,63 @@ async fn lifecycle_transition_apply() {
         TransitionActor::User,
     ));
 
-    let response = app_core::transition_use_case::apply_transition(
-        state.repo.as_ref(),
-        &state.bus,
-        request,
-        &state.edge_table,
-    )
-    .await;
+    let response =
+        app_core::transition_use_case::apply_transition(state.repo.as_ref(), &state.bus, request)
+            .await;
     // The entity doesn't exist so the transition will be refused, but the
     // command infrastructure should not panic.
     assert!(!response.contract_version.is_empty());
+}
+
+/// #665: a successful Project transition through the real Tauri command
+/// (not just the bare use case above) must fire the `LifecycleTransition`
+/// manifest trigger — one of the 3 manifest emitters that never existed at
+/// all before this fix.
+#[tokio::test]
+async fn lifecycle_transition_apply_writes_lifecycle_transition_manifest() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+
+    let project_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
+         VALUES (?, 'M31 LRGB', 'PixInsight', 'ready', ?, NULL, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .bind(project_id.to_string())
+    .bind(dir.path().to_str().unwrap())
+    .execute(state.repo.pool())
+    .await
+    .expect("insert project row");
+
+    let request = TransitionRequest::Project(ProjectTransitionRequest::new(
+        uuid::Uuid::new_v4(),
+        project_id,
+        ProjectState::Ready,
+        ProjectState::Processing,
+        TransitionActor::User,
+    ));
+
+    let response =
+        desktop_shell::commands::lifecycle::lifecycle_transition_apply(state.clone(), request)
+            .await
+            .expect("command must not error");
+    assert_eq!(response.status, contracts_core::lifecycle::TransitionStatus::Success);
+
+    let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+        state.repo.pool(),
+        &project_id.to_string(),
+        None,
+        10,
+    )
+    .await
+    .expect("list_manifests_for_project");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].reason, "lifecycle_transition");
+    let manifest = app_core::project_manifests::get(state.repo.pool(), &rows[0].id)
+        .await
+        .expect("project_manifests::get");
+    assert_eq!(manifest.manifest.body.lifecycle_state, "processing");
 }
 
 #[tokio::test]

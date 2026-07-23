@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Archive store — spec 017 WP-B P3 frontend wiring.
  *
@@ -17,6 +20,7 @@ import type {
   ArchiveSendToTrashResponse,
   ArchivePermanentlyDeleteResponse,
   GenerateArchivePlanResult,
+  GenerateRestorePlanResult,
 } from '@/bindings/index';
 
 // Local IPC helpers — mirror the `unwrap()` pattern used by projects/store.ts.
@@ -33,16 +37,44 @@ async function listArchiveAudit(entityId: string): Promise<AuditEntry[]> {
   return res.entries;
 }
 
-async function sendToTrash(planId: string): Promise<ArchiveSendToTrashResponse> {
+async function sendToTrash(
+  planId: string,
+): Promise<ArchiveSendToTrashResponse> {
   return unwrap(await commands.archiveSendToTrash(planId));
 }
 
-async function permanentlyDelete(planId: string): Promise<ArchivePermanentlyDeleteResponse> {
+async function permanentlyDelete(
+  planId: string,
+): Promise<ArchivePermanentlyDeleteResponse> {
   return unwrap(await commands.archivePermanentlyDelete(planId, 'DELETE'));
 }
 
-async function generateArchivePlan(projectId: string): Promise<GenerateArchivePlanResult> {
+async function generateArchivePlan(
+  projectId: string,
+): Promise<GenerateArchivePlanResult> {
   return unwrap(await commands.archivePlanGenerate(projectId, null));
+}
+
+/**
+ * Materialise a reviewable restore (un-archive) plan (#885 project, #886
+ * master). `entityType` picks the backend command: a master-archive plan
+ * (`origin = calibration_master_archive`) is only valid input to the
+ * calibration-scoped restore generator, not the project one (and vice
+ * versa) — `archive_generator::generate_restore_generic`'s origin check
+ * would otherwise reject a cross-called request with `plan.invalid_state`.
+ */
+async function generateRestorePlan(args: {
+  archivedViaPlanId: string;
+  entityType: string;
+}): Promise<GenerateRestorePlanResult> {
+  return unwrap(
+    args.entityType === 'master'
+      ? await commands.calibrationMastersArchivePlanGenerateRestore(
+          args.archivedViaPlanId,
+          null,
+        )
+      : await commands.archivePlanGenerateRestore(args.archivedViaPlanId, null),
+  );
 }
 
 // Query state shape (matches the projects/store.ts QueryState<T> surface).
@@ -53,7 +85,7 @@ export interface QueryState<T> {
   error: Error | undefined;
 }
 
-/** Subscribe to the archived-projects list (C5: projects only). */
+/** Subscribe to the archived-entries list (projects, C5; masters, #886). */
 export function useArchiveList(): QueryState<ArchiveEntry[]> {
   const { data, isFetching, error } = useQuery({
     queryKey: queryKeys.archive.list(),
@@ -67,7 +99,9 @@ export function useArchiveList(): QueryState<ArchiveEntry[]> {
 }
 
 /** Subscribe to the audit history for one archived project. */
-export function useArchiveAudit(entityId: string | undefined): QueryState<AuditEntry[]> {
+export function useArchiveAudit(
+  entityId: string | undefined,
+): QueryState<AuditEntry[]> {
   const { data, isFetching, error } = useQuery({
     queryKey: queryKeys.archive.audit(entityId ?? ''),
     queryFn: () => listArchiveAudit(entityId as string),
@@ -86,7 +120,9 @@ export function useSendToTrash() {
   return useMutation<ArchiveSendToTrashResponse, Error, string>({
     mutationFn: sendToTrash,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.archive.list() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.archive.list(),
+      });
     },
   });
 }
@@ -97,7 +133,9 @@ export function usePermanentlyDelete() {
   return useMutation<ArchivePermanentlyDeleteResponse, Error, string>({
     mutationFn: permanentlyDelete,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.archive.list() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.archive.list(),
+      });
     },
   });
 }
@@ -111,5 +149,21 @@ export function usePermanentlyDelete() {
 export function useGenerateArchivePlan() {
   return useMutation<GenerateArchivePlanResult, Error, string>({
     mutationFn: generateArchivePlan,
+  });
+}
+
+/**
+ * Materialise a reviewable restore (un-archive) plan for an archived entry
+ * (#885). The ONLY UI entry point that calls `archive.plan.generate_restore`
+ * — mirrors {@link useGenerateArchivePlan}'s shape so the Archive page can
+ * open the same {@link PlanReviewOverlay} on the result.
+ */
+export function useGenerateRestorePlan() {
+  return useMutation<
+    GenerateRestorePlanResult,
+    Error,
+    { archivedViaPlanId: string; entityType: string }
+  >({
+    mutationFn: generateRestorePlan,
   });
 }

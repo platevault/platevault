@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 026 use cases: remove and regenerate a generated project source view.
 //!
 //! Entry points:
@@ -16,8 +19,11 @@
 //!   `destructiveDestination` field is accepted.
 //! - R-026-Strategies: only `symlink`, `junction`, `copy` are supported in v1.
 //!   `hardlink` is refused with `view.unsupported_kind`.
-//! - FR-008 / A2: `view.mixed_kind` is returned when `PreparedSourceView.kind`
-//!   disagrees with any item's `materialization`.
+//! - FR-008 (amended by spec 049 CL-2, 2026-07-04): a view whose items carry
+//!   more than one recorded kind is VALID — per-item kind is authoritative.
+//!   `view.mixed_kind` is reserved for the `kind_diverged` STATE only (a
+//!   distinct, explicit terminal state requiring manual resolution via the
+//!   UI), never for a plain per-item/view kind mismatch (#745).
 //! - A4: removed views are never hard-deleted; regeneration always available.
 //! - R-026-Pipeline: the plan enters the standard spec 017/025 review pipeline.
 //! - T004 invariant: plan actions are restricted to recorded view paths only.
@@ -45,6 +51,29 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         }
         other => app_core_errors::db_err(other),
     }
+}
+
+/// Compute an absolute, collision-free archive destination for a
+/// `prepared_view_removal` plan item.
+///
+/// Parallel copy of `app_core::protection::compute_archive_destination`
+/// (spec 037 Journey 6/7 bugfix — that fix covers `archive_generator`/
+/// `cleanup_generator`, which live in `app_core`; this crate is a dependency
+/// of `app_core`, so the reverse direction isn't available, and the pure
+/// 2-line convention isn't worth promoting to a shared leaf crate for this
+/// lane). Without a real destination, `to_relative_path` fell back to an
+/// empty string and every apply failed `source.missing` on `rename(src, "")`
+/// (found writing the spec 026 T008 end-to-end apply test — this path had
+/// never been exercised by a real filesystem apply before).
+///
+/// Destination convention: `<parent-dir-of-source>/.astro-plan-archive/
+/// <planId>/<itemId>-<fileName>`, matching the sibling copy exactly so
+/// archived-view paths look the same as archived-cleanup paths.
+fn compute_archive_destination(plan_id: &str, item_id: &str, from_relative_path: &str) -> String {
+    let src = camino::Utf8Path::new(from_relative_path);
+    let file_name = src.file_name().unwrap_or(from_relative_path);
+    let parent = src.parent().map_or(".", camino::Utf8Path::as_str);
+    format!("{parent}/.astro-plan-archive/{plan_id}/{item_id}-{file_name}")
 }
 
 pub(crate) fn project_db_err(e: persistence_db::DbError) -> ContractError {
@@ -92,6 +121,12 @@ pub(crate) async fn check_project_lifecycle(
 
 /// List all prepared source views for a project.
 ///
+/// Refreshes each non-terminal view's staleness (T014/T015 sweep) before
+/// reporting it, so the returned `state`/`last_observed_state` reflect the
+/// live filesystem rather than whatever was last observed — this is the
+/// list's own load path (`SourceViewsSection` calls it on mount), so no
+/// separate "check staleness" action is needed for the badge to be honest.
+///
 /// # Errors
 ///
 /// Returns `ContractError` on database failure.
@@ -103,6 +138,8 @@ pub async fn list_views(
 
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
+        crate::source_view_verify::sweep_view_staleness(pool, &row.id).await?;
+        let row = views_repo::get_view(pool, &row.id).await.map_err(db_err)?;
         let raw_items = views_repo::list_view_items(pool, &row.id).await.map_err(db_err)?;
         let item_count = i64::try_from(raw_items.len()).unwrap_or(i64::MAX);
         let items: Vec<PreparedViewItemDetail> = raw_items
@@ -138,7 +175,9 @@ pub async fn list_views(
 /// 1. Project lifecycle is in the allowed set (not `archived`).
 /// 2. View exists and is not in `kind_diverged` state.
 /// 3. All items use a v1-supported kind (not `hardlink`).
-/// 4. `view.kind` matches every item's `materialization` (A2 / FR-008).
+///
+/// A view whose items carry more than one recorded kind is NOT refused here
+/// (spec 049 CL-2 amended FR-008 — per-item kind is authoritative; #745).
 ///
 /// The produced plan has:
 /// - `origin = "prepared_view_removal"`
@@ -186,19 +225,9 @@ pub async fn remove_prepared_view(
         ));
     }
 
-    // 6. Refuse mixed-kind views (A2 / FR-008).
-    let kind_mismatch = items.iter().any(|i| i.materialization != view_row.kind);
-    if kind_mismatch {
-        return Err(ContractError::new(
-            ErrorCode::ViewMixedKind,
-            "The view contains items whose materialization kind does not match the \
-             view's recorded kind. Resolve the mismatch before removing.",
-            ErrorSeverity::Blocking,
-            false,
-        ));
-    }
-
-    // 7. Build the removal plan.
+    // 6. Build the removal plan. (A per-item/view kind mismatch is a VALID
+    //    state since spec 049 CL-2 amended FR-008 — it is intentionally NOT
+    //    refused here; see the module doc and #745.)
     let plan_id = new_id();
     let title = format!("Remove source view {view_id}");
 
@@ -218,10 +247,15 @@ pub async fn remove_prepared_view(
     .await
     .map_err(|e| db_internal_ctx(e, "insert prepared view plan"))?;
 
-    // 8. One archive action per item, targeting only the view's recorded paths
+    // 7. One archive action per item, targeting only the view's recorded paths
     //    (T004: actions restricted to view membership — no inventory paths).
+    //    T005/T008: archive_path is pre-computed (see compute_archive_destination)
+    //    — without it the executor's `to_relative_path` fallback is empty and
+    //    every item fails `source.missing` on apply.
     for (idx, item) in items.iter().enumerate() {
         let item_plan_id = new_id();
+        let archive_path =
+            compute_archive_destination(&plan_id, &item_plan_id, &item.view_relative_path);
         plans_repo::insert_plan_item(
             pool,
             &plans_repo::InsertPlanItem {
@@ -238,7 +272,7 @@ pub async fn remove_prepared_view(
                 protection: "normal",
                 linked_entity: Some(view_id),
                 provenance_json: None,
-                archive_path: None,
+                archive_path: Some(&archive_path),
                 // View removal items target app-generated view paths, not user data
                 // sources, so source protection does not apply here.
                 source_id: None,
@@ -249,7 +283,7 @@ pub async fn remove_prepared_view(
         .map_err(|e| db_internal_ctx(e, "insert prepared view plan item"))?;
     }
 
-    // 9. Advance plan to ready_for_review so it appears in the review UI.
+    // 8. Advance plan to ready_for_review so it appears in the review UI.
     plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
         .await
         .map_err(|e| db_internal_ctx(e, "advance prepared view plan to ready_for_review"))?;
@@ -311,23 +345,21 @@ pub async fn regenerate_prepared_view(
         ));
     }
 
-    // 6. Resolve each inventory item against the current inventory.
-    //    Items whose inventory_item_id cannot be found are counted as unresolved.
+    // 6. Resolve each inventory item's real absolute source path against the
+    //    current inventory (T013: reuses `source_view_verify::resolve_source`
+    //    — same file_record → library_root lookup `verify`/the sweep use, so
+    //    regeneration and verification never disagree on what "resolved"
+    //    means). Items whose source is gone are counted as unresolved rather
+    //    than targeted by a `link` action with no real source path.
     let mut unresolved_count: u32 = 0;
-    let mut resolved_items: Vec<&views_repo::PreparedSourceViewItemRow> = Vec::new();
+    let mut resolved_items: Vec<(&views_repo::PreparedSourceViewItemRow, camino::Utf8PathBuf)> =
+        Vec::new();
 
     for item in &items {
-        // Check inventory resolution against the file_record table.
-        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM file_record WHERE id = ?")
-            .bind(&item.inventory_item_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
-
-        if exists {
-            resolved_items.push(item);
-        } else {
-            unresolved_count += 1;
+        let source = crate::source_view_verify::resolve_source(pool, &item.inventory_item_id).await;
+        match source.abs_path {
+            Some(abs_path) if !source.source_gone => resolved_items.push((item, abs_path)),
+            _ => unresolved_count += 1,
         }
     }
 
@@ -351,9 +383,17 @@ pub async fn regenerate_prepared_view(
     .await
     .map_err(|e| db_internal_ctx(e, "insert prepared view plan"))?;
 
-    // 8. One link action per resolved item.
-    for (idx, item) in resolved_items.iter().enumerate() {
+    // 8. One link action per resolved item, targeting its real absolute
+    //    source path (T013). `provenance_json` carries the item's own
+    //    recorded materialization (FR-008: kind is per-item) so the executor
+    //    (`materialization_from_provenance`) recreates the same link kind
+    //    instead of silently falling back to symlink.
+    for (idx, (item, source_abs_path)) in resolved_items.iter().enumerate() {
         let item_plan_id = new_id();
+        let provenance = serde_json::to_string(&serde_json::json!([
+            {"label": "materialization", "value": item.materialization}
+        ]))
+        .ok();
         plans_repo::insert_plan_item(
             pool,
             &plans_repo::InsertPlanItem {
@@ -363,13 +403,13 @@ pub async fn regenerate_prepared_view(
                 name: &item.view_relative_path,
                 action: "link",
                 from_root_id: None,
-                from_relative_path: &item.inventory_item_id,
+                from_relative_path: source_abs_path.as_str(),
                 to_root_id: None,
                 to_relative_path: &item.view_relative_path,
                 reason: "view_regeneration",
                 protection: "normal",
                 linked_entity: Some(view_id),
-                provenance_json: None,
+                provenance_json: provenance.as_deref(),
                 archive_path: None,
                 // View regeneration items target app-generated view paths.
                 source_id: None,
@@ -516,6 +556,43 @@ mod tests {
         assert_eq!(items[0].action, "archive");
         // linked_entity must point to the view, not to inventory.
         assert_eq!(items[0].linked_entity.as_deref(), Some("view-inv"));
+    }
+
+    /// #745 (spec 049 CL-2 amending FR-008): a per-item materialization that
+    /// differs from the view's own recorded `kind` is a VALID state — this
+    /// is exactly what `finalize_view_generation`'s drive-scope resolution
+    /// produces for a cross-drive project. Removal must NOT refuse it.
+    #[tokio::test]
+    async fn remove_allows_view_with_per_item_kind_mismatch() {
+        let db = setup().await;
+        insert_project(&db, "p-mixed", "ready").await;
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView {
+                id: "view-mixed",
+                project_id: "p-mixed",
+                kind: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+        // Item's own materialization ("copy") disagrees with the view's
+        // dominant recorded kind ("symlink") — the per-49 CL-2 valid case.
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "view-mixed-item-1",
+                view_id: "view-mixed",
+                inventory_item_id: "inv-1",
+                view_relative_path: "Sources/cross_drive.fit",
+                materialization: "copy",
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = remove_prepared_view(db.pool(), "view-mixed").await.unwrap();
+        assert!(!resp.plan_id.is_empty());
     }
 
     #[tokio::test]

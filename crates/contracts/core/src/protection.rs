@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract DTOs for spec 016 source protection (US2–US4).
 //!
 //! Covers three operations:
@@ -11,12 +14,15 @@ use specta::Type;
 
 // ── Shared enum ───────────────────────────────────────────────────────────
 
-/// Protection level enum (spec 016 data-model.md).
+/// Protection level enum (spec 016 data-model.md; simplified to 2 levels per
+/// issue #506 — the third "inherit-global via an explicit `normal` row" tier
+/// added confusion without adding capability, since absence of an override
+/// row already means inherit-global. Existing `normal` rows are remapped to
+/// `unprotected` by migration 0070, non-destructively).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtectionLevel {
     Protected,
-    Normal,
     Unprotected,
 }
 
@@ -26,8 +32,7 @@ impl ProtectionLevel {
     pub fn parse_level(s: &str) -> Self {
         match s {
             "protected" => Self::Protected,
-            "unprotected" => Self::Unprotected,
-            _ => Self::Normal,
+            _ => Self::Unprotected,
         }
     }
 
@@ -36,7 +41,6 @@ impl ProtectionLevel {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Protected => "protected",
-            Self::Normal => "normal",
             Self::Unprotected => "unprotected",
         }
     }
@@ -169,15 +173,22 @@ mod tests {
 
     #[test]
     fn protection_level_round_trips() {
-        for s in &["protected", "normal", "unprotected"] {
+        for s in &["protected", "unprotected"] {
             let level = ProtectionLevel::parse_level(s);
             assert_eq!(level.as_str(), *s);
         }
     }
 
     #[test]
-    fn protection_level_unknown_defaults_to_normal() {
-        assert_eq!(ProtectionLevel::parse_level("other"), ProtectionLevel::Normal);
+    fn protection_level_unknown_defaults_to_unprotected() {
+        assert_eq!(ProtectionLevel::parse_level("other"), ProtectionLevel::Unprotected);
+    }
+
+    #[test]
+    fn protection_level_legacy_normal_maps_to_unprotected() {
+        // Migration 0070 remaps stored 'normal' rows to 'unprotected'; the
+        // parser must agree for any value that slips through unmigrated.
+        assert_eq!(ProtectionLevel::parse_level("normal"), ProtectionLevel::Unprotected);
     }
 
     #[test]

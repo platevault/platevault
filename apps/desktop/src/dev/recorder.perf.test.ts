@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Performance guard: zero added frames in the dispatch path when devMode = false
  * (spec 021 T029).

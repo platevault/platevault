@@ -242,7 +242,9 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - **FR-031**: Each inbox session MUST show OBJECT (or TYPE for calibration),
   DATE, FILTER, and optionally total integration time in the list.
 - **FR-032**: Session detail MUST show a unified property table with per-field
-  source indicator (auto-detected / manual / missing) and confirm checkbox.
+  source indicator (FITS / User / Inferred / Default — the FR-137 pill set;
+  a missing value is a value state per FR-135, not a source) and confirm
+  checkbox.
 - **FR-033**: Auto-detected properties MUST be visually highlighted.
 - **FR-034**: Conflicting properties within a session MUST show an inline
   conflict indicator and a banner stating the session should be split.
@@ -382,6 +384,64 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - **FR-123**: Status bar MUST NOT show directory paths, "Idle" text, or "Last
   scan" timestamps.
 
+**Durable Audit Coverage** *(iteration 2026-07-14, grilling Q15 / #647)*
+
+- **FR-130**: Every attempted mutation of durable state or user data MUST
+  write a durable audit row — including settings changes, protection
+  overrides, equipment CRUD, source enable/disable/register/delete, and
+  rescans/root operations — recording the outcome including refused/failed
+  with a reason/code. Value-unchanged no-op writes are not mutations and
+  emit no audit row; refused and failed attempts do. Debounced/noisy
+  durable-data settings keys (e.g. the `pattern` naming key) are audited
+  once at the committed value with before→after — never per keystroke
+  (T122).
+- **FR-131**: The durable `audit_log_entry` store MUST be the single source
+  of truth for audit history. Audit-worthy actions MUST write the durable
+  row AND emit a live event to the bus; emitting to the bus only is
+  prohibited for mutations. Any `auditId` returned to the UI MUST resolve to
+  a durable `audit_log_entry` row.
+- **FR-132**: The Activity/log panel MUST read user-meaningful events from
+  the durable audit store, and transient/internal noise from the live event
+  bus.
+- **FR-133**: The audit entry shape MUST generalize from a
+  lifecycle-transition record to a generic mutation record: timestamp,
+  actor, action, entity (type + id), outcome + reason, plus an optional
+  before→after value pair for settings/protection changes.
+- **FR-134**: Reads, navigation, UI state changes, and transient
+  internal/periodic events MUST NOT be durably audited. UI-state settings
+  keys (e.g. `rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) fall
+  under this exemption.
+
+**Missing-Value Semantics & Detail Panels** *(iteration 2026-07-14, grilling Q16 / #620, #619)*
+
+- **FR-135**: Every displayed metadata field MUST be distinguishable in one
+  of three states everywhere it renders: a real value (including a real 0),
+  unresolved/missing (no data), or not-applicable (the field does not apply
+  to the entity). The three states MUST be modeled, not inferred at render
+  time.
+- **FR-136**: Missing values MUST be represented as null/None end-to-end —
+  extraction → persistence → application layer → contract → UI. Numeric
+  fields MUST NEVER default to 0 (or any other sentinel) to stand in for
+  absence; contract DTO fields whose values can be absent MUST be nullable.
+- **FR-137**: One shared value renderer MUST be used everywhere metadata
+  field values are displayed — `renderValue(value, {source, applicability})`,
+  where applicability comes from the field-applicability matrix
+  (data-model.md), never inferred from data absence: real value → the value
+  plus its source pill; unresolved → a distinct muted "unresolved" chip,
+  never 0; not-applicable → blank/"—" without any chip. Composed
+  identifying strings (list meta lines, titles) MUST omit missing tokens
+  entirely — no chip, no sentinel.
+- **FR-138**: Source/provenance indicators MUST only appear for present
+  values. Absence MUST NOT be attributed to a source (no "FITS" pill on a
+  missing value).
+- **FR-139**: Detail panels MUST add information beyond the selected row's
+  list columns — full metadata, provenance/source, related entities,
+  history, and actions — and MUST lead with what is new. A small
+  identifying summary of the row is permitted but MUST NOT dominate the
+  panel.
+- **FR-140**: Detail panels MUST stay minimal and curated — only relevant
+  data for the entity, not a raw dump of every available field.
+
 ### Key Entities
 
 - **Inbox Session**: Auto-detected grouping of FITS frames awaiting user
@@ -421,6 +481,18 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
   hiding frequently used workflows.
 - **SC-008**: Storage health warnings are visible at a glance without
   navigating to any specific screen.
+- **SC-009**: 100% of mutation commands that return an `auditId` return one
+  that resolves to a durable `audit_log_entry` row; zero mutation paths emit
+  to the bus without a durable `audit_log_entry` write.
+- **SC-010**: An entity with missing numeric metadata never displays a
+  defaulted 0 (e.g., "Gain 0", "Exposure 0s", "Size 0 KB"); 100% of
+  field-value renderings (table cells, property rows, meta lines) across
+  Inbox, Sessions, Calibration, Targets, Projects, and Archive go through
+  the shared renderer and are distinguishable as real / unresolved /
+  not-applicable; composed identifying strings omit missing tokens.
+- **SC-011**: Every detail panel presents at least one information class
+  (full metadata, provenance, related entities, history, or actions) that
+  is not present in its list row.
 
 ## Assumptions
 
@@ -435,6 +507,41 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - NINA is the only observing plan format needed for v1.
 - DeepSkyStacker support is deferred to a future spec.
 - Planetary/lunar tools are deferred to a future spec.
+
+## Iterations
+
+### Iteration 2026-07-14: Durable audit coverage & unification (Q15 / #647)
+
+**Change**: Every attempted mutation of durable state writes a durable
+`audit_log_entry` row (outcome incl. refused/failed + reason/code); the
+durable table becomes the authoritative audit record over the live event
+bus;
+the entry shape generalizes from a lifecycle-transition record to a generic
+mutation record. Decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q15.
+**Scope**: Feature-wide (new requirement block)
+**Artifacts updated**: spec.md (FR-130–FR-134, SC-009, §8.3), plan.md
+(phase G, technical context), tasks.md (Phase 10, T120–T127),
+data-model.md (generalized audit entry), contracts/commands.md (audit
+semantics)
+**Tasks added**: T120–T127
+**Iteration record**: `iteration-2026-07-14-applied.md`
+
+### Iteration 2026-07-14: Missing-value semantics & detail-as-delta (Q16 / #620, #619)
+
+**Change**: Three distinguishable value states (real / unresolved /
+not-applicable) modeled as null/None end-to-end with no numeric
+zero-defaulting, rendered through one shared renderer with source pills
+only on present values; detail panels reframed to add information over
+their list rows. Decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q16.
+**Scope**: Feature-wide (new requirement block)
+**Artifacts updated**: spec.md (FR-135–FR-140, SC-010–SC-011, §12),
+plan.md (phase H, technical context), tasks.md (Phase 11, T128–T134),
+data-model.md (metadata value states), contracts/commands.md
+(missing-value semantics)
+**Tasks added**: T128–T134
+**Iteration record**: `iteration-2026-07-14-q16-applied.md`
 
 ---
 
@@ -563,7 +670,7 @@ A single unified table (not split across columns). Each row shows:
 |--------|---------|
 | Field name | Property label |
 | Value | Current value (editable inline) |
-| Source | Badge: auto-detected / manual / missing |
+| Source | Badge: FITS / User / Inferred / Default (FR-137 pill set; a missing value renders as the unresolved chip per FR-137 — "missing" is not a source state) |
 | Confirmed | Checkbox — user marks field as verified |
 
 **Fields:**
@@ -1281,6 +1388,51 @@ Selecting an event shows:
 - Right panel (entity context merged into main content)
 - Plan detail links (plan summary shown inline)
 
+### 8.3 Durable Coverage & Unification (Q15 / #647)
+
+*(Added by iteration 2026-07-14; decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q15.)*
+
+Issue #647 is architectural, not a coverage gap. Two disjoint audit stores
+exist: the live event bus (hybrid: in-process broadcast for live UI plus a
+durable `events` topic stream — a topic+payload log with no
+outcome/refused semantics, not an audit record; settings changes,
+protection sets, equipment CRUD, `sources.set_active`, and rescans emit
+here only) and the durable `audit_log_entry` table (written only by
+lifecycle transitions, plan-apply, and project-health). A protection-set
+therefore returns an `auditId` that points at a bus event no audit read
+can resolve, not an `audit_log_entry` row — violating constitution §II
+("audit record for each attempted action and outcome").
+
+**Store roles:** `audit_log_entry` is the authoritative audit record; the
+`events` table is non-authoritative transient diagnostics and may be
+pruned. Audit-worthy mutations therefore produce two durable rows (an
+`audit_log_entry` row plus an `events` row via the bus) — accepted in v1;
+any change to `events`-table persistence is deferred to the Q9 log-panel
+iteration.
+
+**Unification (FR-130–FR-134):**
+
+1. **Coverage** — every attempted mutation of durable state or user data
+   writes a durable audit row: settings changes, protection overrides,
+   equipment CRUD, source enable/disable/register/delete (the Q5 delete
+   cascade), rescans/root operations. Each row records the outcome,
+   including refused/failed with a reason/code.
+2. **Single source of truth** — the durable `audit_log_entry` table.
+   Audit-worthy actions write the durable row *and* emit to the bus for
+   live UI; the emit-to-bus-only pattern for mutations is eliminated. The
+   Activity/log panel (Q9) reads durable audit for user-meaningful events
+   plus the live event bus for transient/internal noise — making "activity
+   is a view over the audit" literally true, and the Q10 manifest-history
+   reframe viable.
+3. **Generalized entry shape** — from a lifecycle-transition record to a
+   generic mutation record: timestamp, actor, action, entity (type + id),
+   outcome + reason, plus an optional before→after pair for
+   settings/protection changes.
+
+**The line (NOT durably audited):** reads, navigation, UI state, transient
+internal/periodic events.
+
 ---
 
 ## 9. Settings
@@ -1637,5 +1789,89 @@ Below the main navigation list.
   - Some offline: amber dot, "NAS-Astro offline" (names the specific offline root)
   - All offline: red dot, "All roots offline"
 - Clickable → navigates to Data Sources settings
+
+---
+
+## 12. Missing-Value Semantics & Detail-as-Delta (Q16 / #620, #619)
+
+*(Added by iteration 2026-07-14; decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q16.)*
+
+### 12.1 Three Value States, Fixed at the Model
+
+Issue #620 is a data-model problem wearing a rendering costume. The shared
+property renderer displays missing values as an em-dash, but by then the
+model has already lost information: the em-dash still receives a "FITS"
+source pill (absence rendered as attributed data), and a metadata-less
+calibration master shows "Gain 0 · Exposure 0s · Size 0 KB" — default
+zeros indistinguishable from a real Gain 0. Missing ≠ zero, and the render
+layer cannot recover the distinction once 0 overwrote it.
+
+Three states MUST be distinguishable everywhere a metadata value appears
+(FR-135):
+
+| State | Meaning | Example |
+|-------|---------|---------|
+| Real value | Data exists — including a real `0` | Gain 0 measured from the FITS header |
+| Unresolved / missing | The field applies but no data exists | Master without gain metadata |
+| Not-applicable | The field does not apply to this entity | Filter on a dark; set-temp on flats/bias (§2.2) |
+
+Not-applicable is determined by the entity/frame-type model (which fields
+apply to which entity kind), never inferred from data absence. The
+authoritative per-entity × per-field applicability matrix lives in
+data-model.md ("Metadata Value States").
+
+A "Default" source pill denotes a modeled/configured fallback recorded
+with its provenance in the data model (e.g., the configured default filter
+"L" for OSC frames, §9.4). Values synthesized during DTO mapping (e.g., a
+fabricated "1x1" binning) are never Default — they are prohibited
+sentinels under FR-136.
+
+**End-to-end null rule (FR-136)**: missing is represented as null/None at
+every hop — extraction → persistence → application layer → contract → UI.
+Defaulting a numeric to 0 (or any sentinel) at any hop is prohibited.
+Contract DTO fields whose values can be absent at extraction are nullable.
+The failure chain this repairs, concretely: the extraction model is
+`Option`-typed and the persistence row keeps nullable fingerprint fields,
+but the application layer collapses them (`unwrap_or(0.0)` on
+exposure/gain in calibration matching) and the contract cannot carry
+absence (`CalibrationFingerprint.exposure_s`/`gain` are non-optional), so
+UI null-checks are dead code.
+
+### 12.2 One Shared Renderer
+
+One shared `renderValue(value, {source, applicability})` is the single
+rendering path for metadata field values (FR-137), across Inbox, Sessions,
+Calibration, Targets, Projects, Archive — everywhere. The `applicability`
+input comes from the field-applicability matrix (data-model.md); the
+renderer cannot derive not-applicable from `value` + `source` alone:
+
+| State | Rendering |
+|-------|-----------|
+| Real value | The value, plus its source pill (FITS / User / Inferred / Default) |
+| Unresolved | A distinct muted "unresolved" chip — no source pill, never 0 |
+| Not-applicable | Blank / "—" without any chip |
+
+Source/provenance pills couple to value presence (FR-138): absence is
+never attributed to a source.
+
+Composed identifying strings (list meta lines, card titles, header
+subtitles) cannot host a chip; they omit missing tokens entirely — no
+sentinel, no placeholder — as the calibration list meta line already does
+(`CalibrationPage.tsx:114-115` filters absent tokens before joining).
+SC-010's 100% scope covers field-value renderings: table cells, property
+rows, and meta lines.
+
+### 12.3 Detail-as-Delta (#619)
+
+A detail panel adds information; it does not echo the row's columns back
+(FR-139, FR-140):
+
+- **Lead with what's new**: full metadata, provenance/source, related
+  entities, history, actions.
+- **Stay minimal and curated** — only relevant data for the entity, not a
+  dump of every available field.
+- A small identifying summary of the selected row is fine, but it must not
+  dominate the panel.
 
 ---

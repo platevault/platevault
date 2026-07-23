@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! FilesystemPlan lifecycle state model (spec 002 data-model.md §FilesystemPlan).
 
 use schemars::JsonSchema;

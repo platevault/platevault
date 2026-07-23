@@ -1,8 +1,3 @@
----
-paths:
-  - "**/*"
----
-
 # Astro Library Manager
 
 Astro Library Manager is a local-first desktop application for astrophotography

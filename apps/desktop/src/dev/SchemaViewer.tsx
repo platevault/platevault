@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SchemaViewer — pretty-prints a JSON Schema file and allows copy to clipboard
  * (spec 021 US3).
@@ -71,20 +74,18 @@ export function SchemaViewer({
     <div
       role="dialog"
       aria-label={`Schema viewer: ${contractName} v${contractVersion}`}
-      className="alm-dev-schema__overlay"
+      className="pv-dev-schema__overlay"
     >
-      <div className="alm-dev-schema__panel">
-        <div className="alm-dev-schema__header">
+      <div className="pv-dev-schema__panel">
+        <div className="pv-dev-schema__header">
           <div>
-            <span className="alm-dev-schema__name">{contractName}</span>
-            <span className="alm-dev-schema__version">
-              v{contractVersion}
-            </span>
+            <span className="pv-dev-schema__name">{contractName}</span>
+            <span className="pv-dev-schema__version">v{contractVersion}</span>
           </div>
-          <div className="alm-dev-schema__actions">
+          <div className="pv-dev-schema__actions">
             <button
               type="button"
-              className="alm-btn alm-btn--sm"
+              className="pv-btn pv-btn--sm"
               onClick={handleCopy}
               disabled={!content}
               aria-label="Copy schema to clipboard"
@@ -93,7 +94,7 @@ export function SchemaViewer({
             </button>
             <button
               type="button"
-              className="alm-btn alm-btn--sm"
+              className="pv-btn pv-btn--sm"
               onClick={onClose}
               aria-label="Close schema viewer"
             >
@@ -102,30 +103,25 @@ export function SchemaViewer({
           </div>
         </div>
 
-        <div className="alm-dev-schema__body">
+        <div className="pv-dev-schema__body">
           {missing ? (
             <div
               role="alert"
               data-testid="schema-missing"
-              className="alm-dev-schema__missing"
+              className="pv-dev-schema__missing"
             >
               <strong>schema.missing</strong>
-              <p className="alm-dev-schema__missing-path">
+              <p className="pv-dev-schema__missing-path">
                 Schema file not found at:{' '}
-                <code className="alm-dev-schema__missing-code">
+                <code className="pv-dev-schema__missing-code">
                   {schemaPath || '(no path)'}
                 </code>
               </p>
             </div>
           ) : content === null ? (
-            <div className="alm-dev-schema__loading">
-              Loading schema…
-            </div>
+            <div className="pv-dev-schema__loading">Loading schema…</div>
           ) : (
-            <pre
-              data-testid="schema-content"
-              className="alm-dev-schema__pre"
-            >
+            <pre data-testid="schema-content" className="pv-dev-schema__pre">
               {content}
             </pre>
           )}

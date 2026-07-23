@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CalibrationMatchPanel — spec 007 T034.
  *
@@ -12,17 +15,21 @@
  * Respects `prefill_suggestion` setting for the Assign link, but defers the
  * actual assign action to the Calibration feature page — no assign call here.
  *
- * Note: until `acquisition_fingerprint` rows are populated by the metadata
- * extraction pipeline, all sessions will return `observer_location_missing`
- * status. The panel handles this gracefully.
+ * Note: sessions missing `acquisition_fingerprint` data return the
+ * `match.observer_location_missing` status. The panel handles this
+ * gracefully (issue #664 — status codes here are backend-prefixed, e.g.
+ * `match.*` / `session.*`, and must be matched as such, not bare).
  */
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { Section, Pill, EmptyState } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from './calibrationMatch';
 import type { CalibrationMatchType } from './calibrationMatch';
 import type { BatchSessionResultDto } from '@/bindings/index';
+import { useEntityNames, entityNameKey } from '@/hooks/useEntityNames';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 
@@ -30,23 +37,35 @@ import { m } from '@/lib/i18n';
 
 function statusVariant(status: string): PillVariant {
   switch (status) {
-    case 'match': return 'ok';
-    case 'ambiguous': return 'warn';
-    case 'no_match': return 'neutral';
-    case 'observer_location_missing': return 'neutral';
-    case 'session.mixed_state': return 'warn';
-    default: return 'neutral';
+    case 'match':
+      return 'ok';
+    case 'ambiguous':
+      return 'warn';
+    case 'no_match':
+      return 'neutral';
+    case 'match.observer_location_missing':
+      return 'neutral';
+    case 'session.mixed_state':
+      return 'warn';
+    default:
+      return 'neutral';
   }
 }
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'match': return m.projects_calib_status_match();
-    case 'ambiguous': return m.projects_calib_status_ambiguous();
-    case 'no_match': return m.projects_calib_status_no_match();
-    case 'observer_location_missing': return m.projects_calib_status_needs_location();
-    case 'session.mixed_state': return m.projects_calib_status_mixed_session();
-    default: return status;
+    case 'match':
+      return m.projects_calib_status_match();
+    case 'ambiguous':
+      return m.projects_calib_status_ambiguous();
+    case 'no_match':
+      return m.projects_calib_status_no_match();
+    case 'match.observer_location_missing':
+      return m.projects_calib_status_needs_location();
+    case 'session.mixed_state':
+      return m.projects_calib_status_mixed_session();
+    default:
+      return m.projects_calib_status_unknown();
   }
 }
 
@@ -60,43 +79,44 @@ interface Props {
   defaultOpen?: boolean;
 }
 
-export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props) {
-  const [results, setResults] = useState<BatchSessionResultDto[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | undefined>(undefined);
+export function CalibrationMatchPanel({
+  sessionIds,
+  defaultOpen = true,
+}: Props) {
+  // Batch key is the joined session-id list — matches the `matches(sid)` key
+  // shape while distinguishing one panel's session set from another's.
+  const {
+    data,
+    isFetching: loading,
+    error,
+  } = useQuery({
+    queryKey: queryKeys.calibration.matches(sessionIds.join(',')),
+    queryFn: () =>
+      calibrationMatchSuggestBatch({
+        requestId: `batch-${Date.now()}`,
+        sessionIds,
+        calibrationTypes: CAL_TYPES,
+      }),
+    enabled: sessionIds.length > 0,
+  });
 
-  useEffect(() => {
-    if (sessionIds.length === 0) {
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setFetchError(undefined);
+  // Session id → human-readable name (#663, #809 — resolved via the shared
+  // entity-name hook instead of a prop-drilled ad hoc map, so this panel and
+  // Audit Log/Projects Sources use one resolver).
+  const sessionRefs = useMemo(
+    () => sessionIds.map((id) => ({ entityType: 'session', entityId: id })),
+    [sessionIds],
+  );
+  const sessionNames = useEntityNames(sessionRefs);
 
-    calibrationMatchSuggestBatch({
-      requestId: `batch-${Date.now()}`,
-      sessionIds,
-      calibrationTypes: CAL_TYPES,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setLoading(false);
-        if (res.status === 'error') {
-          setFetchError(res.errors?.[0]?.message ?? m.calibration_batch_suggest_failed());
-          return;
-        }
-        setResults(res.results ?? []);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setLoading(false);
-          setFetchError(errMessage(err));
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, [sessionIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fetchError =
+    data?.status === 'error'
+      ? (data.errors?.[0]?.message ?? m.calibration_batch_suggest_failed())
+      : error
+        ? errMessage(error)
+        : undefined;
+  const results: BatchSessionResultDto[] =
+    data && data.status !== 'error' ? (data.results ?? []) : [];
 
   if (sessionIds.length === 0) {
     return null;
@@ -104,9 +124,12 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (loading) {
     return (
-      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_calib_readiness_title()}
+        defaultOpen={defaultOpen}
+      >
         <div
-          className="alm-calib-match-panel__loading"
+          className="pv-calib-match-panel__loading"
           data-testid="cal-panel-loading"
         >
           {m.projects_calib_checking()}
@@ -117,9 +140,12 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (fetchError) {
     return (
-      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_calib_readiness_title()}
+        defaultOpen={defaultOpen}
+      >
         <div
-          className="alm-calib-match-panel__error"
+          className="pv-calib-match-panel__error"
           data-testid="cal-panel-error"
         >
           {fetchError}
@@ -130,7 +156,10 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (results.length === 0) {
     return (
-      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_calib_readiness_title()}
+        defaultOpen={defaultOpen}
+      >
         <EmptyState
           title={m.projects_calib_no_data_title()}
           desc={m.projects_calib_no_data_title()}
@@ -149,27 +178,42 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
   }
 
   return (
-    <Section title={m.projects_calib_readiness_title()} count={sessionIds.length} defaultOpen={defaultOpen} data-testid="cal-panel">
-      <div className="alm-calib-match-panel__list">
+    <Section
+      title={m.projects_calib_readiness_title()}
+      count={sessionIds.length}
+      defaultOpen={defaultOpen}
+      data-testid="cal-panel"
+    >
+      <div className="pv-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
             key={sid}
-            className="alm-calib-match-panel__session"
+            className="pv-calib-match-panel__session"
             data-testid={`cal-session-${sid}`}
           >
-            <div className="alm-calib-match-panel__session-id">
-              {sid.slice(0, 12)}…
+            <div className="pv-calib-match-panel__session-id">
+              {sessionNames.get(
+                entityNameKey({ entityType: 'session', entityId: sid }),
+              ) ?? `${sid.slice(0, 12)}…`}
             </div>
-            <div className="alm-calib-match-panel__type-row">
+            <div className="pv-calib-match-panel__type-row">
               {typeResults.map((r) => {
                 const topConfidence = r.candidates?.[0]?.confidence;
                 return (
                   <div
                     key={r.calibrationType}
-                    className="alm-calib-match-panel__type-item"
+                    className="pv-calib-match-panel__type-item"
                     data-testid={`cal-type-${r.calibrationType}-${sid}`}
                   >
-                    <Pill variant={r.calibrationType === 'dark' ? 'info' : r.calibrationType === 'flat' ? 'accent' : 'neutral'}>
+                    <Pill
+                      variant={
+                        r.calibrationType === 'dark'
+                          ? 'info'
+                          : r.calibrationType === 'flat'
+                            ? 'accent'
+                            : 'neutral'
+                      }
+                    >
                       {r.calibrationType}
                     </Pill>
                     <Pill variant={statusVariant(r.status)}>
@@ -177,7 +221,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
                     </Pill>
                     {topConfidence != null && (
                       <span
-                        className="alm-mono alm-calib-match-panel__confidence"
+                        className="pv-mono pv-calib-match-panel__confidence"
                         data-testid={`cal-confidence-${r.calibrationType}-${sid}`}
                       >
                         {Math.round(topConfidence * 100)}%
@@ -190,7 +234,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
           </div>
         ))}
       </div>
-      <div className="alm-calib-match-panel__hint">
+      <div className="pv-calib-match-panel__hint">
         {m.projects_calib_assign_hint()}
       </div>
     </Section>
