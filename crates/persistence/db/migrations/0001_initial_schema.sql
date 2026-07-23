@@ -1,8 +1,8 @@
--- Candidate one-file baseline derived from exact base 81d370e9ce78eebfe4707f93dbe373e36b9ff5ff.
+-- Candidate one-file baseline derived from exact base 4cfd2198a81702c1ddb910ceef4e1d5a27d6b357.
 -- sqlite_* objects and _sqlx_migrations are intentionally excluded.
 -- onboarding_state and onboarding_flags intentionally start empty.
--- frame_footprint_rtree virtual table and shadow tables are excluded from this dump
--- (rtree creates its own shadow tables on creation; they must not be pre-created).
+-- frame_footprint_rtree virtual table is included; shadow tables are
+-- created automatically by rtree on first use.
 
 CREATE TABLE acquisition_fingerprint (
     id                    TEXT PRIMARY KEY NOT NULL REFERENCES acquisition_session(id),
@@ -2951,6 +2951,13 @@ CREATE TABLE tool_launches (
     outcome      TEXT    NOT NULL DEFAULT 'spawned',
     completed_at TEXT,                          -- reserved for spec 012; always NULL in v1
     audit_id     TEXT    NOT NULL               -- back-reference to events/audit table
+);
+
+CREATE VIRTUAL TABLE frame_footprint_rtree USING rtree_i32(
+    evidence_row_id,
+    min_x_ppb, max_x_ppb,
+    min_y_ppb, max_y_ppb,
+    min_z_ppb, max_z_ppb
 );
 
 CREATE INDEX idx_acq_fp_gain_binning
