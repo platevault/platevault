@@ -41,9 +41,15 @@ interface ArtifactRowProps {
   artifact: ArtifactSummary;
   projectId: string;
   onResolved: () => void;
+  guideAnchor?: string;
 }
 
-function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
+function ArtifactRow({
+  artifact,
+  projectId,
+  onResolved,
+  guideAnchor,
+}: ArtifactRowProps) {
   const { working, markResolved } = useArtifactMarkResolved(onResolved);
   const isMissing = artifact.state === 'missing';
   const isManualOverride = artifact.classificationSource === 'manual_override';
@@ -63,6 +69,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       className="artifact-row pv-tool-launches__artifact-row"
       data-state={artifact.state}
       data-kind={artifact.kind}
+      data-guide-anchor={guideAnchor}
     >
       {/* Kind badge */}
       <span
@@ -128,12 +135,14 @@ interface GroupSectionProps {
   group: ArtifactGroup;
   projectId: string;
   onAction: () => void;
+  anchorFirstArtifact?: boolean;
 }
 
 function ArtifactGroupSection({
   group,
   projectId,
   onAction,
+  anchorFirstArtifact = false,
 }: GroupSectionProps) {
   const label = group.toolLaunchId
     ? m.projects_toollaunch_label({ id: group.toolLaunchId.slice(0, 8) })
@@ -162,12 +171,17 @@ function ArtifactGroupSection({
         </span>
       </div>
 
-      {group.artifacts.map((artifact) => (
+      {group.artifacts.map((artifact, index) => (
         <ArtifactRow
           key={artifact.id}
           artifact={artifact}
           projectId={projectId}
           onResolved={onAction}
+          guideAnchor={
+            anchorFirstArtifact && index === 0
+              ? 'projects.artifacts-row'
+              : undefined
+          }
         />
       ))}
     </div>
@@ -238,6 +252,7 @@ export function ToolLaunchesAccordion({
             group={group}
             projectId={projectId}
             onAction={reload}
+            anchorFirstArtifact={idx === 0}
           />
         ))}
       </div>

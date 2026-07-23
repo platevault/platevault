@@ -346,6 +346,7 @@ export function PlanPanel({
         <div className="pv-plan-panel__bar-actions">
           <Btn
             variant="primary"
+            data-guide-anchor="inbox.apply-plan-cta"
             onClick={() => onApplySelected(selectedArray)}
             disabled={applySelectedDisabled}
             data-testid="plan-apply-selected"

@@ -1,4 +1,4 @@
--- Migration 0075: onboarding redesign persistence (spec 056, T001).
+-- Migration 0080: onboarding redesign persistence (spec 056, T001).
 --
 -- Replaces the legacy spec-010 guided-coach state machine (single-row
 -- current_step_id/completed_step_ids/dismissed) with a per-item projection:
@@ -14,7 +14,7 @@
 -- (`crates/persistence/db/src/repositories/guided_flow.rs`,
 -- `crates/app/core/src/guided_flow.rs`), leaving main's workspace tests red
 -- between the two merges. The `DROP TABLE IF EXISTS guided_flow_state`
--- instead ships as migration 0070 inside T010, atomically with the code
+-- instead ships as migration 0081 inside T010, atomically with the code
 -- deletion (FR-027 greenfield removal, no data migrated). Migration 0030
 -- itself stays shipped and untouched either way (append-only history).
 

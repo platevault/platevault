@@ -5,6 +5,17 @@
       "hooks": [
         {
           "type": "command",
+          "statusMessage": "Checking gh issue command against beads policy...",
+          "command": ".claude/hooks/beads/scripts/beads-gh-issue-guard.sh"
+        }
+      ],
+      "_apm_source": "beads"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
           "command": ".claude/hooks/hooks-quality/scripts/quality-before-commit.sh",
           "timeout": 10
         }
@@ -60,17 +71,41 @@
         }
       ],
       "_apm_source": "agent-coder"
-    },
+    }
+  ],
+  "SubagentStart": [
     {
-      "matcher": "Bash",
+      "matcher": "*",
       "hooks": [
         {
           "type": "command",
-          "statusMessage": "Checking gh issue command against beads policy...",
-          "command": ".claude/hooks/beads/scripts/beads-gh-issue-guard.sh"
+          "statusMessage": "Injecting beads work contract...",
+          "command": ".claude/hooks/beads/scripts/beads-subagent-reminder.sh"
         }
       ],
       "_apm_source": "beads"
+    },
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/steering-pragmatic/scripts/inject-working-style.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "steering-pragmatic"
+    },
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "code-intelligence"
     }
   ],
   "PostToolUse": [
@@ -130,41 +165,6 @@
         }
       ],
       "_apm_source": "speckit"
-    }
-  ],
-  "SubagentStart": [
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/steering-pragmatic/scripts/inject-working-style.sh",
-          "timeout": 5
-        }
-      ],
-      "_apm_source": "steering-pragmatic"
-    },
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
-          "timeout": 5
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    },
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "command",
-          "statusMessage": "Injecting beads work contract...",
-          "command": ".claude/hooks/beads/scripts/beads-subagent-reminder.sh"
-        }
-      ],
-      "_apm_source": "beads"
     }
   ]
 }

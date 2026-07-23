@@ -19,7 +19,7 @@
   width: 100%;
   height: var(--pv-control-h);
   padding: 0 var(--pv-sp-3);
-  border: 1px solid var(--pv-border);
+  border: 1px solid var(--pv-control-border);
   border-radius: var(--pv-radius-sm);
   font-size: var(--pv-text-sm);
 
@@ -306,18 +306,57 @@
 /* === APPEARANCE: theme swatch picker ===
    Each swatch preview re-scopes tokens via data-theme, so the bars render that
    theme's own palette with no element-level color injection. */
-.pv-theme-swatches { display: flex; flex-wrap: wrap; gap: var(--pv-sp-2); }
+.pv-theme-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-3);
+}
+.pv-theme-picker__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+}
+.pv-theme-picker__group .pv-settings__group-title { margin: 0; }
+.pv-theme-swatches {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(var(--pv-control-h) * 4)), 1fr)
+  );
+  gap: var(--pv-sp-2);
+}
 .pv-theme-swatch {
+  position: relative;
   border: 1px solid var(--pv-border); border-radius: var(--pv-radius-lg);
   background: var(--pv-surface-raised); padding: var(--pv-sp-2);
-  cursor: pointer; width: 150px; text-align: left;
-  display: flex; flex-direction: column; gap: 6px;
+  color: var(--pv-text); cursor: pointer; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: var(--pv-sp-1);
   transition: border-color var(--pv-transition-fast), box-shadow var(--pv-transition-fast);
 }
 .pv-theme-swatch:hover { border-color: var(--pv-accent); }
 .pv-theme-swatch--active { border-color: var(--pv-accent); box-shadow: 0 0 0 1px var(--pv-accent); }
+.pv-theme-swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}
+.pv-theme-swatch__selected {
+  position: absolute;
+  inset-block-start: var(--pv-sp-2);
+  inset-inline-end: var(--pv-sp-2);
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--pv-control-h) / 2);
+  block-size: calc(var(--pv-control-h) / 2);
+  border-radius: var(--pv-radius-lg);
+  background: var(--pv-accent);
+  color: var(--pv-on-accent);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+}
 .pv-theme-swatch__prev {
-  display: flex; height: 44px; border-radius: var(--pv-radius-md); overflow: hidden;
+  display: flex;
+  height: calc(var(--pv-control-h) + var(--pv-sp-3));
+  border-radius: var(--pv-radius-md); overflow: hidden;
   border: 1px solid var(--pv-border-subtle);
 }
 .pv-theme-swatch__prev i { flex: 1; display: block; }
