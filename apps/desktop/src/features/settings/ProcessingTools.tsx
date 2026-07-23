@@ -112,6 +112,13 @@ export function ProcessingTools() {
     async (toolId: string, enabled: boolean) => {
       const current = tools.find((t) => t.id === toolId);
       if (!current) return;
+      // Clear any stale error from a prior failed toggle before optimistic update.
+      setSaveError((e) => {
+        if (!(toolId in e)) return e;
+        const next = { ...e };
+        delete next[toolId];
+        return next;
+      });
       // Optimistic update so the toggle feels instant.
       setTools((prev) =>
         prev.map((t) => (t.id === toolId ? { ...t, enabled } : t)),

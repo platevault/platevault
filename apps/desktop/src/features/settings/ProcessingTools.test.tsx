@@ -3,7 +3,8 @@
 
 /// <reference types="@testing-library/jest-dom" />
 /**
- * ProcessingTools pane — path-edit side effects (#656, #825).
+ * ProcessingTools pane — path-edit side effects (#656, #825) and toggle
+ * rejection handling.
  *
  * Covers:
  *   1. Editing a disabled tool's path preserves `enabled: false` instead of
@@ -11,6 +12,9 @@
  *   2. A rejected path save (e.g. non-absolute path) surfaces inline instead
  *      of being lost as an unhandled promise rejection, and does not leave a
  *      stale Available/Missing pill implying the save succeeded.
+ *   3. A rejected toggle reverts `enabled` to its original value and renders
+ *      the inline error banner.
+ *   4. A successful retry after a failed toggle clears the stale error banner.
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -82,5 +86,44 @@ describe('ProcessingTools — path-edit side effects', () => {
     // The stale "Available" pill from the last successful load must not be
     // left standing as if the rejected save had succeeded.
     expect(mockValidate).not.toHaveBeenCalled();
+  });
+
+  it('reverts enabled state and shows error banner when toggle update is rejected', async () => {
+    mockUpdate.mockRejectedValue(new Error('toggle failed'));
+    render(<ProcessingTools />);
+
+    const toggle = await screen.findByRole('checkbox', {
+      name: 'Enable Siril',
+    });
+    // SIRIL starts disabled (enabled: false); clicking should attempt to enable.
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+
+    // Error banner must appear with the rejection message.
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('toggle failed'),
+    );
+    // Toggle must revert to its original unchecked state.
+    expect(toggle).not.toBeChecked();
+  });
+
+  it('clears a stale toggle error banner when the retry succeeds', async () => {
+    mockUpdate
+      .mockRejectedValueOnce(new Error('toggle failed'))
+      .mockResolvedValueOnce({ ...SIRIL, enabled: true });
+    render(<ProcessingTools />);
+
+    const toggle = await screen.findByRole('checkbox', {
+      name: 'Enable Siril',
+    });
+    // First click — rejected, banner appears.
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    // Second click — succeeds; banner must clear.
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument(),
+    );
+    expect(toggle).toBeChecked();
   });
 });
