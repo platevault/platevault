@@ -105,7 +105,9 @@ printf '%s\n' \
   '   note: STUCK = a required context is absent or ambiguous.' \
   '   note: HELD = release or draft. Never rank or merge these.'
 
-mapfile -t ready_numbers < <(jq -r '.[] | select(.ready) | .number' "$classified_json" | sort -n)
+ready_numbers=()
+while IFS= read -r _num; do ready_numbers+=("$_num"); done \
+  < <(jq -r '.[] | select(.ready) | .number' "$classified_json" | sort -n)
 ranked_numbers=()
 if [[ -f "$ORDER_FILE" ]]; then
   while IFS= read -r line; do
@@ -212,7 +214,13 @@ jq -r '
 
 oldest_queued=$(jq -r '[.[] | select(.status == "queued")] | sort_by(.createdAt) | .[0].createdAt // empty' "$e2e_runs_json")
 if [[ -n "$oldest_queued" ]]; then
-  queued_epoch=$(date -u -d "$oldest_queued" +%s)
+  # GNU date uses -d; BSD/macOS date uses -j -f
+  if date --version >/dev/null 2>&1; then
+    queued_epoch=$(date -u -d "$oldest_queued" +%s)
+  else
+    queued_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$oldest_queued" +%s 2>/dev/null \
+      || date -u -j -f "%Y-%m-%dT%H:%M:%S+00:00" "$oldest_queued" +%s)
+  fi
   printf '   oldest queued: %sm\n' "$((( $(date -u +%s) - queued_epoch ) / 60))"
 fi
 printf '%s\n' \
