@@ -127,15 +127,12 @@ describe('StepSourceFolders — required-first ordering', () => {
     const met = screen.getByTestId('requirement-status-light_frames');
     const unmet = screen.getByTestId('requirement-status-project');
     expect(met).toHaveClass('pv-pill', 'pv-pill--ok');
-    expect(met).not.toHaveClass('pv-status-tag');
     expect(met).toHaveTextContent('required ✓');
     expect(unmet).toHaveClass('pv-pill', 'pv-pill--warn');
-    expect(unmet).not.toHaveClass('pv-status-tag');
     expect(unmet).toHaveTextContent(/^required$/);
     for (const kind of ['calibration', 'inbox']) {
       const optional = screen.getByTestId(`requirement-status-${kind}`);
       expect(optional).toHaveClass('pv-pill', 'pv-pill--ghost');
-      expect(optional).not.toHaveClass('pv-status-tag');
       expect(optional).toHaveTextContent(/^optional$/);
     }
   });

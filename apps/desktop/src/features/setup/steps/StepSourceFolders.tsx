@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { Btn } from '@/ui/Btn';
+import { Pill } from '@/ui/Pill';
 import { InfoTip } from '@/ui/InfoTip';
 import { m } from '@/lib/i18n';
 import { useDirectoryPicker } from '@/shared/native';
@@ -19,7 +20,6 @@ import {
   SOURCE_KIND_LABELS,
   REQUIRED_KINDS,
 } from '../sources-store';
-import { RequirementStatus } from '../RequirementStatus';
 
 export interface StepSourceFoldersProps {
   entries: SourceEntry[];
@@ -260,11 +260,20 @@ function SourceGroup({
               {rows.length}
             </span>
           )}
-          <RequirementStatus
-            required={isRequired}
-            met={isMet}
-            data-testid={`requirement-status-${kind}`}
-          />
+          {isRequired ? (
+            <Pill
+              variant={isMet ? 'ok' : 'warn'}
+              data-testid={`requirement-status-${kind}`}
+            >
+              {isMet
+                ? `${m.setup_sources_required()} ✓`
+                : m.setup_sources_required()}
+            </Pill>
+          ) : (
+            <Pill variant="ghost" data-testid={`requirement-status-${kind}`}>
+              {m.setup_sources_optional()}
+            </Pill>
+          )}
         </div>
         <AddFolderButton
           kind={kind}
