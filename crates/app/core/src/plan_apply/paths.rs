@@ -103,7 +103,7 @@ pub(super) fn check_overlap_and_register(
     }
 
     registry.insert(plan_id.to_owned(), run);
-    Ok(ActiveRunGuard { registry: registry.clone(), plan_id: plan_id.to_owned() })
+    Ok(ActiveRunGuard { registry, plan_id: plan_id.to_owned() })
 }
 
 // ── Approval token verification (A1) ─────────────────────────────────────────

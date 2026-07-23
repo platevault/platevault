@@ -563,24 +563,18 @@ pub async fn get_file_record_lookup(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Database;
-
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
-    }
+    use crate::test_support::setup_db;
 
     #[tokio::test]
     async fn list_roots_with_sessions_returns_empty_initially() {
-        let db = setup().await;
+        let db = setup_db().await;
         let roots = list_roots_with_sessions(db.pool()).await.unwrap();
         assert!(roots.is_empty(), "expected no roots with sessions on a fresh db");
     }
 
     #[tokio::test]
     async fn list_sessions_for_root_returns_empty_on_unknown_root() {
-        let db = setup().await;
+        let db = setup_db().await;
         let filters = InventoryFilters::default();
         let sessions =
             list_sessions_for_root(db.pool(), "00000000-0000-0000-0000-000000000000", &filters)
@@ -591,14 +585,14 @@ mod tests {
 
     #[tokio::test]
     async fn project_links_empty_for_empty_session_ids() {
-        let db = setup().await;
+        let db = setup_db().await;
         let links = list_project_links_for_sessions(db.pool(), &[]).await.unwrap();
         assert!(links.is_empty());
     }
 
     #[tokio::test]
     async fn project_links_for_sessions_returns_matching_rows_filtered_by_id_set() {
-        let db = setup().await;
+        let db = setup_db().await;
 
         sqlx::query(
             "INSERT INTO projects (id, name, tool, path, created_at, updated_at) VALUES \
@@ -640,7 +634,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_library_root_state_returns_none_for_unknown() {
-        let db = setup().await;
+        let db = setup_db().await;
         let result = get_library_root_state(db.pool(), "00000000-0000-0000-0000-000000000000")
             .await
             .unwrap();
@@ -651,14 +645,14 @@ mod tests {
 
     #[tokio::test]
     async fn session_context_empty_ids_returns_empty_without_querying() {
-        let db = setup().await;
+        let db = setup_db().await;
         let rows = get_session_context_by_ids(db.pool(), &[]).await.unwrap();
         assert!(rows.is_empty());
     }
 
     #[tokio::test]
     async fn session_context_batches_multiple_ids_in_one_call() {
-        let db = setup().await;
+        let db = setup_db().await;
 
         sqlx::query(
             "INSERT INTO canonical_target
@@ -716,7 +710,7 @@ mod tests {
 
     #[tokio::test]
     async fn session_context_falls_back_to_primary_designation_without_display_alias() {
-        let db = setup().await;
+        let db = setup_db().await;
 
         sqlx::query(
             "INSERT INTO canonical_target
@@ -744,7 +738,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_session_notes_updates_acquisition_session() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
              VALUES ('acq-notes', 'k', '[]', '2026-01-01T00:00:00Z')",
@@ -767,7 +761,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_session_notes_updates_calibration_session() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO calibration_session (id, session_key, frame_ids, kind, created_at) \
              VALUES ('cal-notes', 'k', '[]', 'dark', '2026-01-01T00:00:00Z')",
@@ -790,7 +784,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_session_notes_clears_with_none() {
-        let db = setup().await;
+        let db = setup_db().await;
         sqlx::query(
             "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, notes) \
              VALUES ('acq-clear', 'k', '[]', '2026-01-01T00:00:00Z', 'old note')",
@@ -811,7 +805,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_session_notes_unknown_id_updates_nothing() {
-        let db = setup().await;
+        let db = setup_db().await;
         let updated = set_session_notes(db.pool(), "no-such-session", Some("x")).await.unwrap();
         assert!(!updated);
     }
@@ -820,14 +814,14 @@ mod tests {
 
     #[tokio::test]
     async fn calibration_matches_empty_for_empty_ids() {
-        let db = setup().await;
+        let db = setup_db().await;
         let rows = list_calibration_matches_for_sessions(db.pool(), &[]).await.unwrap();
         assert!(rows.is_empty());
     }
 
     #[tokio::test]
     async fn calibration_matches_batches_multiple_sessions() {
-        let db = setup().await;
+        let db = setup_db().await;
 
         sqlx::query(
             "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \

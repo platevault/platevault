@@ -112,24 +112,7 @@ mod tests {
         pool
     }
 
-    async fn insert_project(pool: &SqlitePool, id: &str) {
-        sqlx::query(
-            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
-             VALUES (?,?,?,?,?,?,?,?,?)",
-        )
-        .bind(id)
-        .bind("Test")
-        .bind("PixInsight")
-        .bind("ready")
-        .bind("projects/test")
-        .bind::<Option<String>>(None)
-        .bind(false)
-        .bind("2026-01-01T00:00:00Z")
-        .bind("2026-01-01T00:00:00Z")
-        .execute(pool)
-        .await
-        .unwrap();
-    }
+    use crate::test_support::insert_project;
 
     #[tokio::test]
     async fn upsert_note_creates_new_row() {
