@@ -1,6 +1,5 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
-// PR #1443: announce statuses and localize scan result labels.
 
 // First-run wizard: "Scan" step (spec 038).
 //

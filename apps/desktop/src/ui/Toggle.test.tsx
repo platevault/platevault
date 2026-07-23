@@ -1,6 +1,5 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
-// PR #1438: keyboard focus visibility on toggle controls.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
