@@ -1,0 +1,6 @@
+# PlateVault merge order, best-first. One PR number per line.
+# Re-rank whenever an unranked READY PR appears.
+# Releases and drafts are held, not ranked.
+#
+# No PR is ranked as of 2026-07-21. #1408 is merged. #1416 is intentionally
+# excluded pending a fresh owner ranking.
