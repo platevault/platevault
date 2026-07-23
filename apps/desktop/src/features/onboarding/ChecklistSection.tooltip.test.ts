@@ -70,16 +70,19 @@ describe('checklist tooltip — WCAG 1.4.13 conformance contract', () => {
    * an element no keyboard user can reach. Delegation is necessary but not
    * sufficient, and the original guard could not see the difference.
    *
-   * The reveal is now owned by the row's checkbox: it drives the controlled
-   * `open`, and carries `aria-describedby` so the text reaches assistive tech
-   * even with the popup shut.
+   * The reveal is owned by the manual row's checkbox or the automatic row's
+   * Find action. The focusable owner drives controlled `open` and carries
+   * `aria-describedby`, so the text reaches assistive tech even when shut.
    */
   it('gives keyboard users a reveal, not just pointer users', () => {
-    // The checkbox owns the open state.
+    // A focusable row action owns the open state.
     expect(code).toMatch(/onFocus=\{\(\) => setTipOpen\(true\)\}/);
     expect(code).toMatch(/onBlur=\{\(\) => setTipOpen\(false\)\}/);
     // …and is programmatically associated with the popup.
     expect(code).toMatch(/aria-describedby=\{tooltipId\}/);
+    expect(code).toMatch(
+      /aria-describedby=\{item\.hasAutoTick \? tooltipId : undefined\}/,
+    );
     expect(code).toMatch(/popupId=\{tooltipId\}/);
     // Fully controlled: `open={x || undefined}` silently flips base-ui back to
     // its own internal state and broke Escape.
