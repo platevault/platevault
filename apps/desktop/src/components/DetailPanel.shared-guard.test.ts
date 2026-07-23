@@ -38,11 +38,12 @@ const MIGRATED_DETAIL_FILES = [
 ];
 
 describe('shared DetailPanel guard (spec 054 T012a)', () => {
-  it.each(
-    MIGRATED_DETAIL_FILES,
-  )('%s renders through DetailPanel, not a raw DetailHeader', (relPath) => {
-    const source = readFileSync(resolve(process.cwd(), relPath), 'utf8');
-    expect(source).toMatch(/<DetailPanel\b/);
-    expect(source).not.toMatch(/<DetailHeader\b/);
-  });
+  it.each(MIGRATED_DETAIL_FILES)(
+    '%s renders through DetailPanel, not a raw DetailHeader',
+    (relPath) => {
+      const source = readFileSync(resolve(process.cwd(), relPath), 'utf8');
+      expect(source).toMatch(/<DetailPanel\b/);
+      expect(source).not.toMatch(/<DetailHeader\b/);
+    },
+  );
 });
