@@ -16,7 +16,7 @@ use contracts_core::cleanup::{
 use contracts_core::protection::{
     PlanProtectionCheckRequest, ProtectionLevel, SourceProtectionSetRequest,
 };
-use persistence_db::repositories::artifacts::{insert_artifact, InsertArtifact};
+use persistence_db::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects::{insert_project, InsertProject};
 use persistence_db::Database;
@@ -77,7 +77,7 @@ async fn seed_artifact(
     kind: &str,
     size: i64,
 ) {
-    insert_artifact(
+    insert_artifact_if_absent(
         db.pool(),
         InsertArtifact {
             id,

@@ -80,12 +80,15 @@ pub async fn detect(
     let tool_launch_id =
         arrival_dt.and_then(|dt| attribute(tool, dt, &launches, DEFAULT_ATTRIBUTION_WINDOW));
 
-    // Step 3c: insert.
+    // Step 3c: insert — races a concurrent reconcile for the same (project_id,
+    // path). INSERT OR IGNORE returns None when the UNIQUE constraint fires
+    // (the racer won); skip event emission in that case so the bus sees exactly
+    // one artifact.detected + artifact.classified pair per path.
     let id = new_id();
     let kind_str = classification.kind.as_str();
     let source_str = classification.source.as_str();
 
-    repo::insert_artifact(
+    let inserted_id = repo::insert_artifact_if_absent(
         pool,
         InsertArtifact {
             id: &id,
@@ -105,6 +108,16 @@ pub async fn detect(
     )
     .await
     .map_err(|e| format!("DB insert failed: {e}"))?;
+
+    let Some(id) = inserted_id else {
+        // Concurrent reconcile already inserted this path; return the winner's
+        // id so the contract is honest — our candidate UUID was never persisted.
+        let winner = repo::get_artifact_by_path(pool, project_id, path)
+            .await
+            .map_err(|e| format!("DB lookup failed after conflict: {e}"))?
+            .ok_or_else(|| format!("artifact row missing after conflict insert for {path}"))?;
+        return Ok(winner.id);
+    };
 
     let _ = bus
         .publish(
