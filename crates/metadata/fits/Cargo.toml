@@ -9,7 +9,6 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-thiserror = { workspace = true }
 fits-header = "0.4.2"
 
 [lints]

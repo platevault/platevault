@@ -15,11 +15,8 @@ fs_pathsafe = { path = "../pathsafe" }
 project_structure = { path = "../../project/structure" }
 camino = { workspace = true }
 serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
 tokio = { workspace = true }
 tracing.workspace = true
-uuid.workspace = true
 time.workspace = true
 trash.workspace = true
 # spec 042 (T206): purely-lexical `.`/`..` collapse for the path-resolution

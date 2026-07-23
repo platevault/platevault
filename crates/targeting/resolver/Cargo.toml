@@ -36,14 +36,10 @@ serde = { workspace = true }
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-tracing = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
 # spec 035 (SIMBAD resolver): async trait seam for the `Resolver` trait,
 # mirroring the retired `download::CatalogFetcher` pattern.
 async-trait.workspace = true
-# spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
-# `persistence_db` repositories' time convention.
-time.workspace = true
 # db-boundary-zero: production dependency (not dev-only) so cache.rs's raw
 # sqlx sites can move into `persistence_db::repositories::q_resolver`.
 persistence_db = { path = "../../persistence/db" }

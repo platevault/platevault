@@ -9,7 +9,6 @@ path = "src/lib.rs"
 
 [dependencies]
 app_core_cache = { path = "../cache" }
-app_core_errors = { path = "../errors" }
 audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
