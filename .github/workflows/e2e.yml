@@ -14,7 +14,23 @@
 # - WebdriverIO has been retired; the Rust thirtyfour+nextest stack is the
 #   sole real-UI runner.
 #
-# Run conditions:
+# Two-tier L3 strategy (see issue #1203 and the original full-matrix motivation):
+#
+#   Tier 1 — L3 smoke (per-PR): a small, fast subset runs on every pull_request
+#     on ubuntu-latest only (the stable lane). Covers app boot + all top-level
+#     routes, one inbox flow, and one targets flow — three journeys, serial,
+#     targeting <8 min wall-clock. Required branch-protection check:
+#     "Real-UI smoke (L3) — ubuntu-latest". PRs get a real-UI signal without
+#     the ~25-min Windows full-suite cost or Windows L3 flake exposure.
+#
+#   Tier 2 — Full L3 matrix (main pushes + workflow_dispatch): the complete
+#     ubuntu (4 shards) + windows (2 shards) suite runs on every push to main
+#     and on manual dispatch. This is the gate that matters post-merge.
+#     Windows L3 is off PRs because it is the slow and historically flaky leg
+#     (runs 30013328940, 30008614669) that blocked merge trains without adding
+#     PR signal proportional to its cost. All full-matrix regressions surface
+#     before the next merge via the main-push run.
+#
 # - Journeys are real (spec 037 WP-C, 2026-07-04): first-run resolve+create,
 #   filesystem plan review->apply+durable-record, ingest->session->calibration
 #   ->search, lifecycle transition+ledger, cleanup plan review, and the
@@ -46,7 +62,11 @@
 # Layer-1 `cargo test --workspace` (ci.yml) stays required on macOS; only this
 # real-UI WebDriver leg is affected.
 #
-# Job DAG (build-once, test-sharded, one independent chain per OS):
+# Job DAG — smoke (per-PR ubuntu only):
+#
+#   changes ── build-frontend ── build-app-ubuntu ── smoke-ubuntu ── smoke-gate-ubuntu
+#
+# Job DAG — full matrix (main push / workflow_dispatch, build-once, test-sharded):
 #
 #   changes ── build-frontend (ubuntu, once) ──┐          (per OS:)
 #          └── build-app-<os> ─────────────────┴─ shard 1/2 ┐
@@ -85,8 +105,8 @@
 #   isolation. YAML anchors are unsupported by Actions, hence the
 #   duplication; keep the three chains textually in sync when editing.
 # - The per-OS gate jobs preserve the pre-DAG check names
-#   ("Real-UI E2E — <os>") and each gate depends only on its own OS's
-#   shards, so the names behave exactly like the old per-OS jobs.
+#   ("Real-UI journeys (L3) — <os>") and each gate depends only on its own
+#   OS's shards, so the names behave exactly like the old per-OS jobs.
 
 name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
@@ -432,7 +452,9 @@ jobs:
   build-app-windows:
     name: Build app — windows-latest
     needs: changes
-    if: needs.changes.outputs.run == 'true'
+    # Windows build only needed on main pushes and dispatch; the windows shards
+    # are skipped on pull_request, so no consumer would use this artifact on PRs.
+    if: needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -643,6 +665,122 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
+  # Tier-1 smoke (per-PR, ubuntu-latest only): a focused subset of real-UI
+  # journeys that boots the app and exercises the core surfaces. Runs on
+  # pull_request ONLY — the full matrix (both OSes, all shards) runs on push
+  # to main and workflow_dispatch instead (see the two-tier strategy in the
+  # header). No sharding: the filter selects 3 journeys, each serial, which
+  # completes in < 8 min on ubuntu-latest.
+  #
+  # Smoke subset (--filter-expr):
+  #   all_top_level_screens_load           — boots app + every top-level route
+  #   inbox_ui_mixed_folder_splits_into_single_type_items — scan + classify
+  #   targets_ui_add_target_no_duplicate_on_reconfirm     — add + dedup target
+  #
+  # The filter expression is an OR (`|`) over exact test names. Adding a new
+  # journey to the smoke set means extending this expression in both the job
+  # step and the comment above — there is no hidden implicit selection.
+  # ---------------------------------------------------------------------------
+  smoke-ubuntu:
+    name: Real-UI smoke (L3) — ubuntu-latest
+    needs: [changes, build-frontend, build-app-ubuntu]
+    # Smoke subset runs ONLY on pull_request. Main pushes and dispatch run the
+    # full matrix (real-ui-e2e-ubuntu shards) instead.
+    if: needs.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev \
+            xvfb
+
+      - uses: taiki-e/install-action@nextest
+
+      - uses: taiki-e/install-action@cargo-binstall
+
+      - name: Install tauri-webdriver CLI
+        run: cargo binstall tauri-webdriver --locked --no-confirm
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-build-ubuntu-latest
+
+      - name: Make app binary executable
+        shell: bash
+        run: chmod +x "$APP_BIN"
+
+      - name: Serve frontend dist on :5173
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      - name: Run L3 smoke (3 journeys via filter-expr)
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        # --filter-expr selects exactly the smoke subset by test name. The
+        # expression is an OR of exact name matches — no glob, no substring —
+        # so a new journey with a similar name does not silently join the smoke
+        # run. `--no-tests=warn` is a defensive fallback (the filter should
+        # always match at least one test).
+        run: >-
+          xvfb-run -s "-screen 0 1600x1200x24" -a
+          cargo nextest run
+          --archive-file e2e-archive.tar.zst
+          --workspace-remap .
+          --profile e2e
+          --run-ignored all
+          --no-tests=warn
+          --filter-expr 'test(all_top_level_screens_load) | test(inbox_ui_mixed_folder_splits_into_single_type_items) | test(targets_ui_add_target_no_duplicate_on_reconfirm)'
+
+  # Gate for the smoke job. Published as "Real-UI smoke (L3) — ubuntu-latest"
+  # — the context required by branch protection for PRs (replaces the old
+  # full-matrix "Real-UI journeys (L3) — ubuntu-latest" and "— windows-latest"
+  # required contexts). Only runs on pull_request; skipped on main push/dispatch
+  # because the full e2e-gate-ubuntu/-windows gates cover those events.
+  e2e-smoke-gate-ubuntu:
+    name: Real-UI smoke (L3) — ubuntu-latest
+    needs: [changes, smoke-ubuntu]
+    # `always()` keeps this gate reporting red instead of skipping when smoke-ubuntu
+    # or its upstream builders fail. The run=='true' guard prevents a false green
+    # on a docs-only PR where the whole chain (builders included) was skipped.
+    if: always() && needs.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check smoke result
+        env:
+          RESULT: ${{ needs.smoke-ubuntu.result }}
+        run: |
+          echo "smoke-ubuntu result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1
+
+  # ---------------------------------------------------------------------------
   # Per-OS test shards: download the prebuilt frontend + app/test-archive
   # artifacts and run each shard's fraction of the journeys
   # (`--partition count:N/M`, M per-OS — see header) — no Rust compilation in
@@ -655,7 +793,9 @@ jobs:
   real-ui-e2e-ubuntu:
     name: Real-UI journeys (L3) shard — ubuntu-latest ${{ matrix.shard }}/4
     needs: [changes, build-frontend, build-app-ubuntu]
-    if: needs.changes.outputs.run == 'true'
+    # Full ubuntu matrix only on main pushes and manual dispatch (not PRs).
+    # PRs run the lighter smoke-ubuntu job instead (see two-tier strategy above).
+    if: needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -758,7 +898,11 @@ jobs:
   real-ui-e2e-windows:
     name: Real-UI journeys (L3) shard — windows-latest ${{ matrix.shard }}/2
     needs: [changes, build-frontend, build-app-windows]
-    if: needs.changes.outputs.run == 'true'
+    # Full windows matrix only on main pushes and manual dispatch (not PRs).
+    # Windows L3 is the slow/historically flaky leg (~25 min + flake, runs
+    # 30013328940, 30008614669); keeping it off PRs avoids blocking merge
+    # trains while preserving full coverage on every main push.
+    if: needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -900,7 +1044,9 @@ jobs:
   e2e-gate-ubuntu:
     name: Real-UI journeys (L3) — ubuntu-latest
     needs: [changes, real-ui-e2e-ubuntu]
-    if: always() && needs.changes.outputs.run == 'true'
+    # Full gate only on main pushes and manual dispatch; skipped on PRs.
+    # PRs satisfy their real-UI requirement via e2e-smoke-gate-ubuntu instead.
+    if: always() && needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -914,7 +1060,8 @@ jobs:
   e2e-gate-windows:
     name: Real-UI journeys (L3) — windows-latest
     needs: [changes, real-ui-e2e-windows]
-    if: always() && needs.changes.outputs.run == 'true'
+    # Full gate only on main pushes and manual dispatch; skipped on PRs.
+    if: always() && needs.changes.outputs.run == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
