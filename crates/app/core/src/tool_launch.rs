@@ -288,7 +288,8 @@ pub async fn launch(
     let working_dir_path = resolve_working_folder(&project_root, active_source_view.as_deref());
 
     // ── Step 4: canonicalize cwd + library-root containment check ────────────
-    let canonical_cwd = working_dir_path.canonicalize().unwrap_or_else(|_| working_dir_path.clone());
+    let canonical_cwd =
+        working_dir_path.canonicalize().unwrap_or_else(|_| working_dir_path.clone());
     let all_roots = inv_repo::list_all_roots(pool).await.map_err(|e| format!("{e}"))?;
     // Roots added through the setup wizard live in `registered_sources` (the
     // gen-3 source model) and are only mirrored into the legacy `library_root`
