@@ -133,137 +133,71 @@ fn merge_with_defaults(stored: Vec<(String, Value)>) -> DbResult<SettingsState> 
     Ok(state)
 }
 
-/// Apply a single stored key/value pair to a `SettingsState`.
-///
-/// Returns `Err(DbError::Serialise)` if the stored JSON cannot be
-/// deserialised into the expected Rust type for that key.
-#[allow(clippy::too_many_lines)]
-fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbResult<()> {
-    match key {
-        "pattern" => {
-            state.pattern = serde_json::from_value(value).map_err(DbError::Serialise)?;
+/// Generates `apply_key_to_state` from a flat (json_key, field) table.
+macro_rules! settings_key_table {
+    ( $( $json_key:expr => $field:ident ),+ $(,)? ) => {
+        /// Apply a single stored key/value pair to a `SettingsState`.
+        ///
+        /// Returns `Err(DbError::Serialise)` if the stored JSON cannot be
+        /// deserialised into the expected Rust type for that key.
+        fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbResult<()> {
+            match key {
+                $( $json_key => {
+                    state.$field = serde_json::from_value(value).map_err(DbError::Serialise)?;
+                } )+
+                _ => {
+                    // Structured-path keys (tools.*, workflow_profile.*) are not in the
+                    // static SettingsState bag; they are readable via resolve_setting.
+                }
+            }
+            Ok(())
         }
-        "autoApplyPattern" => {
-            state.auto_apply_pattern = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "alwaysPreviewBeforePlan" => {
-            state.always_preview_before_plan =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "followSymlinks" => {
-            state.follow_symlinks = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "hashOnScan" => {
-            state.hash_on_scan = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "darkMatchTolerance" => {
-            state.dark_match_tolerance =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "flatMatching" => {
-            state.flat_matching = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "suggestCalibration" => {
-            state.suggest_calibration =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "logLevel" => {
-            state.log_level = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "rememberFollowLogs" => {
-            state.remember_follow_logs =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "defaultProtection" => {
-            state.default_protection = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "blockPermanentDelete" => {
-            state.block_permanent_delete =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "protectedCategories" => {
-            state.protected_categories =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "currentLibraryId" => {
-            state.current_library_id = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "devMode" => {
-            state.dev_mode = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "calibrationDarkTempTolerance" => {
-            state.calibration_dark_temp_tolerance =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "calibrationPrefillSuggestion" => {
-            state.calibration_prefill_suggestion =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "calibrationDarkOverridePenalty" => {
-            state.calibration_dark_override_penalty =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "calibrationFlatOverridePenalty" => {
-            state.calibration_flat_override_penalty =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "calibrationBiasOverridePenalty" => {
-            state.calibration_bias_override_penalty =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "imagetypNormalizationUserMappings" => {
-            state.imagetyp_normalization_user_mappings =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        PATTERNS_BY_TYPE_KEY => {
-            state.patterns_by_type = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "toolWatchExtensions" => {
-            state.tool_watch_extensions =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "toolAttributionWindowHours" => {
-            state.tool_attribution_window_hours =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        // Spec 049 T006: these two keys were wired into `crates/app/settings`
-        // (the `settings.update` command path) but missed here — `load_settings`
-        // (which `sourceview.generate` calls directly, not through the Tauri
-        // command layer) silently ignored a stored override and always
-        // returned the in-code default. Found while writing the spec 049 US3
-        // regeneration integration test, which needs a non-default link kind
-        // to exercise the "hardlink unsupported" refusal path in
-        // `preparedview.regenerate`.
-        "sourceViewLinkKindIntraDrive" => {
-            state.source_view_link_kind_intra_drive =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "sourceViewLinkKindCrossDrive" => {
-            state.source_view_link_kind_cross_drive =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "framingPointingFractionOfFov" => {
-            state.framing_pointing_fraction_of_fov =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "framingPointingFallbackDeg" => {
-            state.framing_pointing_fallback_deg =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "framingRotationToleranceDeg" => {
-            state.framing_rotation_tolerance_deg =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        "framingMosaicEnvelopeFractionOfFov" => {
-            state.framing_mosaic_envelope_fraction_of_fov =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
-        _ => {
-            // Structured-path keys (tools.*, workflow_profile.*) are not in the
-            // static SettingsState bag; they are readable via resolve_setting.
-        }
-    }
-    Ok(())
+
+        /// All JSON key strings handled by `apply_key_to_state` (for parity tests).
+        #[cfg(test)]
+        const APPLY_KEYS: &[&str] = &[ $( $json_key ),+ ];
+    };
+}
+
+settings_key_table! {
+    "pattern" => pattern,
+    "autoApplyPattern" => auto_apply_pattern,
+    "alwaysPreviewBeforePlan" => always_preview_before_plan,
+    "followSymlinks" => follow_symlinks,
+    "hashOnScan" => hash_on_scan,
+    "darkMatchTolerance" => dark_match_tolerance,
+    "flatMatching" => flat_matching,
+    "suggestCalibration" => suggest_calibration,
+    "logLevel" => log_level,
+    "rememberFollowLogs" => remember_follow_logs,
+    "defaultProtection" => default_protection,
+    "blockPermanentDelete" => block_permanent_delete,
+    "protectedCategories" => protected_categories,
+    "currentLibraryId" => current_library_id,
+    "devMode" => dev_mode,
+    "calibrationDarkTempTolerance" => calibration_dark_temp_tolerance,
+    "calibrationPrefillSuggestion" => calibration_prefill_suggestion,
+    "calibrationDarkOverridePenalty" => calibration_dark_override_penalty,
+    "calibrationFlatOverridePenalty" => calibration_flat_override_penalty,
+    "calibrationBiasOverridePenalty" => calibration_bias_override_penalty,
+    "calibrationAgingThresholdDays" => calibration_aging_threshold_days,
+    "imagetypNormalizationUserMappings" => imagetyp_normalization_user_mappings,
+    "patternsByType" => patterns_by_type,
+    "toolWatchExtensions" => tool_watch_extensions,
+    "toolAttributionWindowHours" => tool_attribution_window_hours,
+    "observingSites" => observing_sites,
+    "observingDefaultSiteId" => observing_default_site_id,
+    "observingActiveSiteId" => observing_active_site_id,
+    "usableAltitudeDeg" => usable_altitude_deg,
+    "plannerMoonAvoidance" => planner_moon_avoidance,
+    "sourceViewLinkKindIntraDrive" => source_view_link_kind_intra_drive,
+    "sourceViewLinkKindCrossDrive" => source_view_link_kind_cross_drive,
+    "cleanupTypeOverrides" => cleanup_type_overrides,
+    "theme" => theme,
+    "framingPointingFractionOfFov" => framing_pointing_fraction_of_fov,
+    "framingPointingFallbackDeg" => framing_pointing_fallback_deg,
+    "framingRotationToleranceDeg" => framing_rotation_tolerance_deg,
+    "framingMosaicEnvelopeFractionOfFov" => framing_mosaic_envelope_fraction_of_fov,
 }
 
 // ── Per-frame-type destination patterns (spec 041 FR-026b) ────────────────
@@ -698,6 +632,35 @@ mod tests {
             .unwrap();
         let loaded = get_source_override_raw(db.pool(), "src-1", "followSymlinks").await.unwrap();
         assert_eq!(loaded, Some(serde_json::json!(true)));
+    }
+
+    /// C-12 parity guard: `APPLY_KEYS` (the persistence hydration table) must
+    /// match the SettingsState wire field names.
+    #[test]
+    fn apply_keys_cover_all_settings_state_wire_fields() {
+        let state = SettingsState {
+            current_library_id: Some("__probe__".to_owned()),
+            observing_default_site_id: Some("__probe__".to_owned()),
+            observing_active_site_id: Some("__probe__".to_owned()),
+            ..SettingsState::default()
+        };
+        let state_json = serde_json::to_value(&state).expect("SettingsState serialises");
+        let wire_fields: std::collections::BTreeSet<&str> =
+            state_json.as_object().unwrap().keys().map(String::as_str).collect();
+        let apply_set: std::collections::BTreeSet<&str> = APPLY_KEYS.iter().copied().collect();
+
+        for field in &wire_fields {
+            assert!(
+                apply_set.contains(field),
+                "SettingsState wire field '{field}' missing from apply_key_to_state table;                  add it to the settings_key_table! macro in this file"
+            );
+        }
+        for key in &apply_set {
+            assert!(
+                wire_fields.contains(key),
+                "apply_key_to_state handles '{key}' but it is not a SettingsState wire field;                  remove it from the settings_key_table! macro"
+            );
+        }
     }
 }
 
