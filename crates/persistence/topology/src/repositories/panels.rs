@@ -741,14 +741,14 @@ pub async fn lineage_cycle_exists(
 
 /// List panel groups by target scope with cursor pagination.
 ///
-/// Returns active groups with accepted heads, ordered by
-/// `accepted_at DESC, panel_group_id ASC` (using `created_sequence` as proxy
-/// for accepted_at from head history).
+/// Returns groups ordered by `created_at DESC, public_id ASC`. Supply both
+/// `after_created_at` and `after_public_id` from the last row of the previous
+/// page to advance the cursor; either both `Some` or both `None`.
 pub async fn list_panel_groups_by_target(
     conn: &mut SqliteConnection,
     canonical_target_row_id: Option<i64>,
     active_only: bool,
-    after_sequence: Option<i64>,
+    after_created_at: Option<&str>,
     after_public_id: Option<&str>,
     limit: u32,
 ) -> DbResult<Vec<PanelGroupRow>> {
@@ -779,9 +779,9 @@ pub async fn list_panel_groups_by_target(
     .bind(canonical_target_row_id)
     .bind(canonical_target_row_id)
     .bind(active_only as i64)
-    .bind(after_sequence)
-    .bind(after_public_id)
-    .bind(after_public_id)
+    .bind(after_created_at)
+    .bind(after_created_at)
+    .bind(after_created_at)
     .bind(after_public_id)
     .bind(limit as i64)
     .fetch_all(&mut *conn)

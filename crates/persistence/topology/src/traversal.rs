@@ -91,6 +91,8 @@ pub enum TraversalError {
     NodeCeiling { max_nodes: u64 },
     EdgeCeiling { max_edges: u64 },
     DepthCeiling { max_depth: u32 },
+    /// Operation was cancelled by the caller; no partial result is available.
+    Cancelled,
     DbError(String),
 }
 
@@ -264,6 +266,10 @@ async fn run_bfs(
             s.edges = edges;
             s.phase = TraversalPhase::Completed;
         }
+        Err(TraversalError::Cancelled) => {
+            // Phase was already set to Cancelled inside bfs_inner; preserve it.
+            let _ = operation_id;
+        }
         Err(TraversalError::DbError(msg)) => {
             let _ = operation_id;
             let mut s = state.write().await;
@@ -271,9 +277,10 @@ async fn run_bfs(
             s.phase = TraversalPhase::Failed;
         }
         Err(e) => {
+            // Ceiling errors: surface via Failed with the typed error attached.
             let mut s = state.write().await;
             s.terminal_error = Some(e);
-            s.phase = TraversalPhase::Cancelled; // ceiling exceeded = cancelled in response
+            s.phase = TraversalPhase::Failed;
         }
     }
 }
@@ -320,7 +327,7 @@ async fn bfs_inner(
         if cancel.load(Ordering::Relaxed) {
             let mut s = state.write().await;
             s.phase = TraversalPhase::Cancelled;
-            return Err(TraversalError::DbError("cancelled".into()));
+            return Err(TraversalError::Cancelled);
         }
 
         // Fetch neighbours from DB.

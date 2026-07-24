@@ -119,11 +119,15 @@ pub async fn fetch_proposal_by_public_id(
 }
 
 /// List proposals with optional filters, newest first.
+///
+/// Cursor: supply `after_created_at` (the last row's `created_at` timestamp)
+/// and `after_public_id` (the last row's `public_id`) together. Both must be
+/// `Some` or both `None`; a partial cursor is treated as no cursor.
 pub async fn list_proposals(
     conn: &mut SqliteConnection,
     state: Option<&str>,
     kind: Option<&str>,
-    after_sequence: Option<i64>,
+    after_created_at: Option<&str>,
     after_public_id: Option<&str>,
     limit: u32,
 ) -> DbResult<Vec<RelationProposalRow>> {
@@ -159,9 +163,9 @@ pub async fn list_proposals(
     .bind(state)
     .bind(kind)
     .bind(kind)
-    .bind(after_sequence)
-    .bind(after_public_id)
-    .bind(after_public_id)
+    .bind(after_created_at)
+    .bind(after_created_at)
+    .bind(after_created_at)
     .bind(after_public_id)
     .bind(limit as i64)
     .fetch_all(&mut *conn)

@@ -27,7 +27,7 @@ use persistence_core::DbError;
 use persistence_topology::repositories::panels::{
     self, AppendPanelRevision, InsertSingletonPanel, RetirePanelGroup,
 };
-use persistence_topology::repositories::proposals::{self, AcceptProposal, InsertProposal};
+use persistence_topology::repositories::proposals::{self, AcceptProposal};
 use persistence_topology::test_support as support;
 use persistence_topology::traversal::{
     new_registry, start_traversal, TraversalDirection, TraversalGraph, TraversalLimits,
@@ -746,8 +746,8 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
             .await
             .unwrap();
         use persistence_topology::traversal::TraversalPhase;
-        if state.phase == TraversalPhase::Cancelled || state.phase == TraversalPhase::Failed {
-            // Ceiling hit returns terminal_error NodeCeiling.
+        if state.phase == TraversalPhase::Failed {
+            // Ceiling hit sets phase=Failed with NodeCeiling terminal error.
             assert!(
                 matches!(
                     state.terminal_error,
@@ -757,6 +757,9 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
                 state.terminal_error
             );
             break;
+        }
+        if state.phase == TraversalPhase::Cancelled {
+            panic!("traversal was cancelled instead of hitting the ceiling");
         }
         if state.phase == TraversalPhase::Completed {
             panic!("traversal completed without ceiling error (visited {} nodes)", state.visited_node_count);
@@ -825,11 +828,17 @@ async fn traversal_cancel_reaches_terminal_within_one_second() {
             .await
             .unwrap();
         use persistence_topology::traversal::TraversalPhase;
-        if matches!(
-            state.phase,
-            TraversalPhase::Cancelled | TraversalPhase::Completed | TraversalPhase::Failed
-        ) {
-            // Any terminal state satisfies the deadline.
+        if state.phase == TraversalPhase::Cancelled {
+            // Cancel sets Cancelled phase with no terminal_error.
+            assert!(
+                state.terminal_error.is_none(),
+                "cancelled traversal must not set a terminal_error"
+            );
+            break;
+        }
+        if matches!(state.phase, TraversalPhase::Completed | TraversalPhase::Failed) {
+            // Completed before cancel was observed by the BFS loop is also acceptable
+            // (empty graph may complete before cancel is processed).
             break;
         }
         if std::time::Instant::now() > cancel_deadline {
@@ -837,4 +846,234 @@ async fn traversal_cancel_reaches_terminal_within_one_second() {
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+}
+
+// ── 9. Proposal list cursor pagination ───────────────────────────────────────
+
+#[tokio::test]
+async fn list_proposals_cursor_pages_past_non_null_cursor() {
+    use persistence_topology::repositories::proposals::list_proposals;
+
+    let db = support::setup_db().await;
+    let pool = db.pool();
+    let (_actor_id, cfg_id, _op_id, _target_id) = seed_basics(pool).await;
+    let seq = support::insert_sequence(pool).await;
+
+    // Insert 3 proposals with distinct timestamps so ordering is deterministic.
+    let timestamps = [
+        "2026-07-22T00:00:03.000000Z",
+        "2026-07-22T00:00:02.000000Z",
+        "2026-07-22T00:00:01.000000Z",
+    ];
+    let mut proposal_pubs = Vec::new();
+    for ts in &timestamps {
+        let pub_id = uuid();
+        let basis = format!("basis-{pub_id}");
+        let evidence = format!("evidence-{pub_id}");
+        sqlx::query(
+            "INSERT INTO relation_proposal
+                 (public_id, proposal_revision, kind, basis_digest, evidence_digest,
+                  config_revision_row_id, state, created_sequence, created_at)
+             VALUES (?, 1, 'panel_add', ?, ?, ?, 'pending', ?, ?)",
+        )
+        .bind(&pub_id)
+        .bind(&basis)
+        .bind(&evidence)
+        .bind(cfg_id)
+        .bind(seq)
+        .bind(ts)
+        .execute(pool)
+        .await
+        .unwrap();
+        proposal_pubs.push(pub_id);
+    }
+
+    let mut conn = pool.acquire().await.unwrap();
+
+    // Page 1: limit=2, no cursor — should return the two newest.
+    let page1 = list_proposals(&mut *conn, None, None, None, None, 2)
+        .await
+        .unwrap();
+    assert_eq!(page1.len(), 2, "page 1 should have 2 rows");
+    assert_eq!(page1[0].created_at, "2026-07-22T00:00:03.000000Z");
+    assert_eq!(page1[1].created_at, "2026-07-22T00:00:02.000000Z");
+
+    // Page 2: cursor from last row of page 1.
+    let after_created_at = page1[1].created_at.clone();
+    let after_public_id = page1[1].public_id.clone();
+    let page2 = list_proposals(
+        &mut *conn,
+        None,
+        None,
+        Some(&after_created_at),
+        Some(&after_public_id),
+        2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(page2.len(), 1, "page 2 should have 1 row");
+    assert_eq!(page2[0].created_at, "2026-07-22T00:00:01.000000Z");
+
+    // No overlap between pages.
+    let page1_ids: std::collections::HashSet<_> =
+        page1.iter().map(|r| r.public_id.clone()).collect();
+    assert!(
+        !page1_ids.contains(&page2[0].public_id),
+        "pages must not overlap"
+    );
+}
+
+// ── 10. Panel group list cursor pagination ────────────────────────────────────
+
+#[tokio::test]
+async fn list_panel_groups_cursor_pages_past_non_null_cursor() {
+    use persistence_topology::repositories::panels::list_panel_groups_by_target;
+
+    let db = support::setup_db().await;
+    let pool = db.pool();
+    let (actor_id, cfg_id, op_id, target_id) = seed_basics(pool).await;
+
+    // Insert 3 groups with distinct creation timestamps.
+    let timestamps = [
+        "2026-07-22T00:00:03.000000Z",
+        "2026-07-22T00:00:02.000000Z",
+        "2026-07-22T00:00:01.000000Z",
+    ];
+    for (i, ts) in timestamps.iter().enumerate() {
+        let seq = support::insert_sequence(pool).await;
+        let (session_row_id, _) = support::insert_light_session(
+            pool,
+            &uuid(),
+            &uuid(),
+            op_id,
+            target_id,
+            seq,
+            i as i64,
+        )
+        .await;
+
+        let g_pub = uuid();
+        let r_pub = uuid();
+        let mut conn = pool.acquire().await.unwrap();
+        let mut tx = conn.begin().await.unwrap();
+
+        // Insert group directly with the desired timestamp instead of
+        // insert_singleton_panel_group (which uses a fixed timestamp).
+        sqlx::query(
+            "INSERT INTO panel_group
+                 (public_id, canonical_target_row_id, cross_target_association_row_id,
+                  status, head_revision_row_id, head_generation,
+                  created_sequence, created_at)
+             VALUES (?, ?, NULL, 'active', NULL, 0, ?, ?)",
+        )
+        .bind(&g_pub)
+        .bind(target_id)
+        .bind(seq)
+        .bind(ts)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+        let (group_row_id,): (i64,) =
+            sqlx::query_as("SELECT row_id FROM panel_group WHERE public_id = ?")
+                .bind(&g_pub)
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap();
+
+        sqlx::query(
+            "INSERT INTO panel_group_revision
+                 (public_id, panel_group_row_id, revision_number, parent_revision_row_id,
+                  representative_session_row_id, representative_session_kind,
+                  proposal_row_id, config_revision_row_id, actor_row_id,
+                  reason_code, created_sequence, created_at)
+             VALUES (?, ?, 1, NULL, ?, 'light', NULL, ?, ?, 'singleton_created', ?, ?)",
+        )
+        .bind(&r_pub)
+        .bind(group_row_id)
+        .bind(session_row_id)
+        .bind(cfg_id)
+        .bind(actor_id)
+        .bind(seq)
+        .bind(ts)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+        let (rev_row_id,): (i64,) =
+            sqlx::query_as("SELECT row_id FROM panel_group_revision WHERE public_id = ?")
+                .bind(&r_pub)
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap();
+
+        sqlx::query(
+            "INSERT INTO panel_revision_session
+                 (panel_revision_row_id, session_row_id, session_kind, ordinal)
+             VALUES (?, ?, 'light', 0)",
+        )
+        .bind(rev_row_id)
+        .bind(session_row_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "UPDATE panel_group SET head_revision_row_id = ?
+             WHERE row_id = ? AND head_revision_row_id IS NULL",
+        )
+        .bind(rev_row_id)
+        .bind(group_row_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO panel_group_head_history
+                 (panel_group_row_id, generation, head_revision_row_id, accepted_sequence)
+             VALUES (?, 0, ?, ?)",
+        )
+        .bind(group_row_id)
+        .bind(rev_row_id)
+        .bind(seq)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+        tx.commit().await.unwrap();
+    }
+
+    let mut conn = pool.acquire().await.unwrap();
+
+    // Page 1: limit=2, no cursor.
+    let page1 = list_panel_groups_by_target(&mut *conn, Some(target_id), true, None, None, 2)
+        .await
+        .unwrap();
+    assert_eq!(page1.len(), 2, "page 1 should have 2 rows");
+    assert_eq!(page1[0].created_at, "2026-07-22T00:00:03.000000Z");
+    assert_eq!(page1[1].created_at, "2026-07-22T00:00:02.000000Z");
+
+    // Page 2: cursor from last row of page 1.
+    let after_created_at = page1[1].created_at.clone();
+    let after_public_id = page1[1].public_id.clone();
+    let page2 = list_panel_groups_by_target(
+        &mut *conn,
+        Some(target_id),
+        true,
+        Some(&after_created_at),
+        Some(&after_public_id),
+        2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(page2.len(), 1, "page 2 should have 1 row");
+    assert_eq!(page2[0].created_at, "2026-07-22T00:00:01.000000Z");
+
+    // No overlap.
+    let page1_ids: std::collections::HashSet<_> =
+        page1.iter().map(|r| r.public_id.clone()).collect();
+    assert!(
+        !page1_ids.contains(&page2[0].public_id),
+        "pages must not overlap"
+    );
 }
