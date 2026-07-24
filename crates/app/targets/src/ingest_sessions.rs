@@ -62,6 +62,7 @@
 
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::Arc;
 
 use audit::EventBus;
 use metadata_core::RawFileMetadata;
@@ -630,7 +631,7 @@ pub async fn backfill_session_targets(pool: &SqlitePool) -> Result<usize, Contra
 /// Served through [`crate::metadata_cache::cached_extract`] (in-memory caching
 /// layer F0), memoized by `(path, mtime, size)` — a burst of reads for the
 /// same file during a scan does not re-parse the header once per caller.
-fn read_metadata(abs_path: &Path) -> Option<RawFileMetadata> {
+fn read_metadata(abs_path: &Path) -> Option<Arc<RawFileMetadata>> {
     crate::metadata_cache::cached_extract(abs_path).ok()
 }
 

@@ -9,7 +9,7 @@
  * - `dropped` counter increments correctly.
  * - Deduplication by `id` prevents double-appending.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   appendLog,
   getLogSnapshot,
@@ -106,18 +106,24 @@ describe('logStore ring buffer', () => {
     expect(entries.length).toBe(1);
   });
 
-  it('notifies listeners on append', () => {
+  it('notifies listeners on append (async via rAF batch)', async () => {
+    vi.useFakeTimers();
+
     let callCount = 0;
     const unsub = subscribeLog(() => {
       callCount++;
     });
 
     appendLog([makeEntry(1)]);
+    // notify() schedules a requestAnimationFrame — flush it.
+    await vi.runAllTimersAsync();
     expect(callCount).toBe(1);
 
     appendLog([makeEntry(2)]);
+    await vi.runAllTimersAsync();
     expect(callCount).toBe(2);
 
     unsub();
+    vi.useRealTimers();
   });
 });

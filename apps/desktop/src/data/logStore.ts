@@ -13,6 +13,14 @@
  * - `useLog()` hook returns the current buffer snapshot.
  * - `dropped` counts total evicted entries since session start (diagnostics only).
  * - Ring buffer ordering is newest-first for render (reverse of wire order).
+ *
+ * Notification contract:
+ * `notify()` coalesces rapid `appendLog` calls via `requestAnimationFrame`.
+ * Listeners fire asynchronously (next paint frame), not synchronously on
+ * `appendLog`. `useSyncExternalStore` in LogPanel handles this correctly —
+ * React re-renders on the next frame rather than within the same microtask.
+ * Tests that assert listener call counts must advance fake timers to flush
+ * the pending rAF (see logStore.ringBuffer.test.ts).
  */
 
 type Listener = () => void;
@@ -71,10 +79,16 @@ const listeners = new Set<Listener>();
 // Fast dedup set on entry ids.
 const seenIds = new Set<string>();
 
+let notifyScheduled = false;
 function notify() {
-  for (const listener of listeners) {
-    listener();
-  }
+  if (notifyScheduled) return;
+  notifyScheduled = true;
+  requestAnimationFrame(() => {
+    notifyScheduled = false;
+    for (const listener of listeners) {
+      listener();
+    }
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -140,4 +154,5 @@ export function resetLogStore(): void {
   state = { entries: [], dropped: 0, truncated: false };
   seenIds.clear();
   listeners.clear();
+  notifyScheduled = false;
 }
