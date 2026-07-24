@@ -481,6 +481,7 @@ export function MastersTable({
     const kindStr = master.kind.toLowerCase();
     return {
       _testid: `master-row-${master.id}`,
+      _rowKind: 'calib-table-row',
       _guideAnchor: guideAnchor ? 'calibration.review-row' : undefined,
       _rowClassName:
         'pv-calib-table__row' +
@@ -565,6 +566,7 @@ export function MastersTable({
     <div className="pv-listtable" data-testid="masters-list">
       <Table
         className="pv-calib-table"
+        data-testid="calib-table"
         columns={columns}
         rows={rows}
         virtualized

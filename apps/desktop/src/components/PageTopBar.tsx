@@ -44,7 +44,7 @@ export function PageTopBar({
   actions,
 }: PageTopBarProps) {
   return (
-    <div className="pv-page__bar pv-topbar">
+    <div className="pv-page__bar pv-topbar" data-testid="topbar">
       {(title != null || summary != null) && (
         <div className="pv-topbar__lead">
           {title != null && <div className="pv-topbar__title">{title}</div>}

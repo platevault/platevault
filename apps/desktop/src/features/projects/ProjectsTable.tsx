@@ -221,6 +221,7 @@ export function ProjectsTable({
       _onClick: () => onSelect(project.id),
       _selected: project.id === selectedId,
       _indent: indentPx || undefined,
+      _rowKind: 'projects-table-row',
       _testid: `project-row-${project.id}`,
       name: (
         <span className="pv-projects-table__name">

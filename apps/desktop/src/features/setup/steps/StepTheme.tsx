@@ -15,11 +15,12 @@ import { RequirementStatus } from '../RequirementStatus';
  */
 export function StepTheme() {
   return (
-    <div className="pv-step-theme">
+    <div className="pv-step-theme" data-testid="step-theme">
       <ThemePicker includeVariants />
 
       <section
         className="pv-theme-specimen"
+        data-testid="theme-specimen"
         aria-labelledby="setup-theme-preview-heading"
       >
         <div className="pv-theme-specimen__heading-row">
@@ -58,7 +59,9 @@ export function StepTheme() {
               {m.setup_theme_preview_input()}
             </span>
             <span className="pv-btn">{m.common_cancel()}</span>
-            <span className="pv-btn pv-btn--primary">{m.common_save()}</span>
+            <span className="pv-btn pv-btn--primary" data-testid="btn-primary">
+              {m.common_save()}
+            </span>
           </div>
 
           <div className="pv-theme-specimen__feedback">

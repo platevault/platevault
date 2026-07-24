@@ -18,7 +18,8 @@
  * Unlike that guard (sealed at zero), this baseline intentionally starts
  * non-empty (the alm/* hardening's own gap-audit findings) and shrinks as
  * the i18n refactor sweep drains it — do NOT add entries for rules other
- * than alm/no-user-string / alm/no-js-plural; those must be fixed for real.
+ * than alm/no-user-string / alm/no-js-plural / alm/require-root-testid;
+ * those must be fixed for real.
  *
  * Usage:
  *   node scripts/check-eslint-baseline.mjs             # enforce (CI mode)
@@ -43,7 +44,11 @@ const { ESLint } = await import(
   pathToFileURL(desktopRequire.resolve('eslint')).href
 );
 
-const BASELINED_RULES = new Set(['alm/no-user-string', 'alm/no-js-plural']);
+const BASELINED_RULES = new Set([
+  'alm/no-user-string',
+  'alm/no-js-plural',
+  'alm/require-root-testid',
+]);
 
 // Key = file (repo-relative to apps/desktop) + line + rule. Line-based, so a
 // baseline entry goes stale (and the check fails loudly, prompting a

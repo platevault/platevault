@@ -15,7 +15,10 @@ export interface DetailPaneProps {
 
 export function DetailPane({ children, fill }: DetailPaneProps) {
   return (
-    <div className={`pv-detail${fill ? ' pv-detail--fill' : ''}`}>
+    <div
+      className={`pv-detail${fill ? ' pv-detail--fill' : ''}`}
+      data-testid="detail"
+    >
       {children}
     </div>
   );

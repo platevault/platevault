@@ -149,7 +149,7 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
     // The projects group is a one-line header off its own page — expand it so
     // its rows (and their find affordances) render.
     await page
-      .locator('.pv-onb-checklist__group-header')
+      .locator('[data-testid="onb-checklist-group-header"]')
       .filter({ hasText: 'Projects' })
       .click();
 
@@ -175,7 +175,7 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
     await openChecklist(page);
     await findBtn(page, 'sessions.add_note').click();
 
-    const callout = page.locator('.pv-onb-spotlight-unavailable');
+    const callout = page.locator('[data-testid="onb-spotlight-unavailable"]');
     await expect(callout).toBeVisible({ timeout: 8_000 });
     await expect(callout).toContainText('Nothing to point at');
     // No joyride spotlight was drawn.
@@ -216,11 +216,11 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
     await expect(page.locator(RESOLVE_CTA)).toBeVisible();
     // The tooltip names the upstream item as the thing to do first, while its
     // title still names the row the user actually asked about.
-    const tooltip = page.locator('.pv-onboarding-tooltip');
+    const tooltip = page.locator('[data-testid="onboarding-tooltip"]');
     await expect(tooltip).toContainText('is required first');
-    await expect(tooltip.locator('.pv-onboarding-tooltip__title')).toHaveText(
-      'Add a favourite target',
-    );
+    await expect(
+      tooltip.locator('[data-testid="onboarding-tooltip-title"]'),
+    ).toHaveText('Add a favourite target');
   });
 
   test('every registry item offers find; review masters spotlights its first row', async ({

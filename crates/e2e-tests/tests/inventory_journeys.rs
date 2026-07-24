@@ -289,7 +289,7 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     app.goto_route("/settings/sources").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.driver
-        .find(By::Css(".pv-data-sources__kebab-btn"))
+        .find(By::Css("[data-testid='data-sources-kebab-btn']"))
         .await
         .map_err(|e| anyhow::anyhow!("failed to find the root's kebab (⋯) menu trigger: {e}"))?
         .click()

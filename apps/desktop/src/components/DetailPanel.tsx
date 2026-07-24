@@ -138,7 +138,9 @@ export function DetailPanel({
         subtitle={subtitle}
         actions={actions}
       />
-      <div className={contentClass}>{children}</div>
+      <div className={contentClass} data-testid="detailpanel-content">
+        {children}
+      </div>
     </DetailPane>
   );
 }

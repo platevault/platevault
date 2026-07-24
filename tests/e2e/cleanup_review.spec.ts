@@ -80,7 +80,7 @@ test.describe('cleanup review (spec 017 WP-E / Journey 6)', () => {
 
     // ── 2. Select the fixture project → bottom detail panel mounts ───────────
     const projectRow = page
-      .locator('.pv-projects-table__row')
+      .locator('[data-kind="projects-table-row"]')
       .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });

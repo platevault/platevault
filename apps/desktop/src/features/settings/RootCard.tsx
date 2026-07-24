@@ -117,7 +117,10 @@ export function RootCard({
           Row 2: humanized meta line. */}
       <div className="pv-data-sources__root-info">
         <div className="pv-data-sources__root-path-row">
-          <code className="pv-mono pv-data-sources__root-path">
+          <code
+            className="pv-mono pv-data-sources__root-path"
+            data-testid="data-sources-root-path"
+          >
             {root.path}
           </code>
           <SourceProtectionOverride
@@ -151,6 +154,7 @@ export function RootCard({
           size="sm"
           variant="ghost"
           className="pv-data-sources__kebab-btn"
+          data-testid="data-sources-kebab-btn"
           aria-label={m.settings_datasources_actions_aria()}
           aria-haspopup="menu"
           aria-expanded={menuOpen}

@@ -64,6 +64,11 @@ lifecycle-strings:
 hot-read:
     bash scripts/check-hot-read-ratchet.sh
 
+# .pv-* CSS selector ratchet — sealed at zero. e2e test files must use
+# [data-testid="..."] or [data-kind="..."] selectors, not class selectors.
+pv-selector-ratchet:
+    bash scripts/check-pv-selector-ratchet.sh
+
 # Periodic hygiene sweeps. NOT CI gates and deliberately so: these surface debt
 # to triage, not per-PR correctness, and a noisy blocking gate gets suppressed.
 # Run them when you want a health read, not on every push.

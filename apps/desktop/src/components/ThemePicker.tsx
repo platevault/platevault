@@ -106,6 +106,7 @@ export function ThemePicker({
           'pv-theme-swatch',
           isActive && 'pv-theme-swatch--active',
         )}
+        data-testid="theme-swatch"
         onClick={() => setChoice(theme.id)}
         aria-pressed={isActive}
         aria-label={themeAccessibleLabel(theme, modeLabel)}
@@ -129,6 +130,7 @@ export function ThemePicker({
   return (
     <div
       className={clsx('pv-theme-picker', className)}
+      data-testid="theme-picker"
       role="group"
       aria-label={m.settings_general_theme()}
     >
@@ -141,6 +143,7 @@ export function ThemePicker({
         <div
           id="theme-picker-warm-heading"
           className="pv-settings__group-title"
+          data-testid="settings-group-title"
         >
           {m.settings_general_theme_group_warm()}
         </div>
@@ -154,6 +157,7 @@ export function ThemePicker({
         <div
           id="theme-picker-cool-heading"
           className="pv-settings__group-title"
+          data-testid="settings-group-title"
         >
           {m.settings_general_theme_group_cool()}
         </div>

@@ -187,7 +187,7 @@ export function TargetSearch({
   const virtualItems = virtualizer.getVirtualItems();
 
   return (
-    <div className="pv-target-search">
+    <div className="pv-target-search" data-testid="target-search">
       <Combobox.Root<TargetSuggestion>
         items={suggestions}
         // Selection stays uncontrolled: we react via `onValueChange` and keep
@@ -226,6 +226,7 @@ export function TargetSearch({
           ref={inputRef}
           id={id}
           className="pv-input pv-target-search__input"
+          data-testid="target-search-input"
           autoComplete="off"
           spellCheck={false}
           aria-label={label}
@@ -310,7 +311,12 @@ export function TargetSearch({
         )}
 
         {error && (
-          <span id={`${id}-error`} role="alert" className="pv-field-error">
+          <span
+            id={`${id}-error`}
+            role="alert"
+            className="pv-field-error"
+            data-testid="field-error"
+          >
             {error}
           </span>
         )}
@@ -353,7 +359,10 @@ export function TargetSearch({
                 aria-label={m.cmp_target_search_suggestions_aria()}
               >
                 {loading && suggestions.length === 0 && (
-                  <Combobox.Status className="pv-target-search__status">
+                  <Combobox.Status
+                    className="pv-target-search__status"
+                    data-testid="target-search-status"
+                  >
                     {m.cmp_target_search_searching()}
                   </Combobox.Status>
                 )}
@@ -367,7 +376,10 @@ export function TargetSearch({
                   !resolving &&
                   suggestions.length === 0 &&
                   query.trim().length < MIN_RESOLVE_LEN && (
-                    <Combobox.Status className="pv-target-search__status">
+                    <Combobox.Status
+                      className="pv-target-search__status"
+                      data-testid="target-search-status"
+                    >
                       {m.cmp_target_search_type_more()}
                     </Combobox.Status>
                   )}
@@ -410,17 +422,26 @@ export function TargetSearch({
                  * say so instead of rendering nothing.
                  */}
                 {offlineNoticeOffered && (
-                  <Combobox.Status className="pv-target-search__status">
+                  <Combobox.Status
+                    className="pv-target-search__status"
+                    data-testid="target-search-status"
+                  >
                     {m.settings_resolver_online_off_info()}
                   </Combobox.Status>
                 )}
                 {harderState === 'searching' && (
-                  <Combobox.Status className="pv-target-search__status pv-target-search__status--resolving">
+                  <Combobox.Status
+                    className="pv-target-search__status pv-target-search__status--resolving"
+                    data-testid="target-search-status-resolving"
+                  >
                     {m.cmp_target_search_search_harder_searching()}
                   </Combobox.Status>
                 )}
                 {harderState === 'no-results' && (
-                  <Combobox.Status className="pv-target-search__status">
+                  <Combobox.Status
+                    className="pv-target-search__status"
+                    data-testid="target-search-status"
+                  >
                     {m.cmp_target_search_search_harder_no_results()}
                   </Combobox.Status>
                 )}
@@ -442,6 +463,7 @@ export function TargetSearch({
                           ref={virtualizer.measureElement}
                           data-index={i}
                           className="pv-target-search__option"
+                          data-testid="target-search-option"
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per suggestion row
                           style={{
                             position: 'absolute',
@@ -509,7 +531,10 @@ export function TargetSearch({
                   </div>
                 )}
                 {resolving && (
-                  <Combobox.Status className="pv-target-search__status pv-target-search__status--resolving">
+                  <Combobox.Status
+                    className="pv-target-search__status pv-target-search__status--resolving"
+                    data-testid="target-search-status-resolving"
+                  >
                     {m.cmp_target_search_searching_simbad()}
                   </Combobox.Status>
                 )}

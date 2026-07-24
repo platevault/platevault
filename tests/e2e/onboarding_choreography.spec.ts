@@ -139,7 +139,7 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
     // Then it settles into the greyed, checked completed area of its group.
     await expect(
       page.locator(
-        `.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+        `[data-testid="onb-checklist-completed"] [data-item-id="sessions.review_first"]`,
       ),
     ).toBeVisible();
   });
@@ -151,7 +151,7 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
     await openChecklist(page);
 
     const done = page.locator(
-      `.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+      `[data-testid="onb-checklist-completed"] [data-item-id="sessions.review_first"]`,
     );
 
     await page.getByRole('checkbox', { name: 'Review a session' }).click();
@@ -202,7 +202,7 @@ test.describe('onboarding completion choreography (spec 056 US3)', () => {
       // … the item is in its final completed-area state immediately.
       await expect(
         page.locator(
-          `.pv-onb-checklist__completed [data-item-id="sessions.review_first"]`,
+          `[data-testid="onb-checklist-completed"] [data-item-id="sessions.review_first"]`,
         ),
       ).toBeVisible();
     });

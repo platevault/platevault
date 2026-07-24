@@ -39,7 +39,7 @@ async function selectProject(
   name: string,
 ): Promise<void> {
   const row = page
-    .locator('.pv-projects-table__row')
+    .locator('[data-kind="projects-table-row"]')
     .filter({ hasText: name })
     .first();
   await expect(row).toBeVisible({ timeout: 8_000 });

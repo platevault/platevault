@@ -96,7 +96,7 @@ test.describe('archive lifecycle (spec 017 US6 / Journey 7)', () => {
         .getByTestId('archive-row-arch-proj-001')
         .getByText('Superseded by reprocess'),
     ).toBeVisible();
-    const detail = page.locator('.pv-detail');
+    const detail = page.locator('[data-testid="detail"]');
     await expect(detail).toBeVisible({ timeout: 5_000 });
     await expect(detail.getByText('Audit history')).toBeVisible();
     // The original path renders as the header subtitle.
@@ -106,7 +106,7 @@ test.describe('archive lifecycle (spec 017 US6 / Journey 7)', () => {
     // Status pill from the shared archive vocabulary (scoped + case-sensitive
     // regex — "Archived" also appears as a PropertyTable field label).
     await expect(
-      detail.locator('.pv-pill').filter({ hasText: /^archived$/ }),
+      detail.locator('[data-testid="pill"]').filter({ hasText: /^archived$/ }),
     ).toBeVisible();
 
     // ── 3. Management actions use the canonical archive|trash vocabulary,

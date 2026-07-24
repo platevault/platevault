@@ -49,7 +49,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
           />
         }
       >
-        <div className="pv-settings__row">
+        <div className="pv-settings__row" data-testid="settings-row">
           <div className="pv-settings__row-content">
             <PatternChipsEditor
               pattern={pattern}
@@ -68,7 +68,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
       <PerTypeDestinationPatterns />
 
       <div className="pv-settings__group">
-        <div className="pv-settings__row">
+        <div className="pv-settings__row" data-testid="settings-row">
           <label className="pv-settings__row-label" htmlFor="naming-auto-apply">
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
             <input

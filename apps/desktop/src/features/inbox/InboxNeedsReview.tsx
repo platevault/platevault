@@ -267,7 +267,11 @@ export function InboxNeedsReview({
       )}
 
       {bulkError && (
-        <Banner variant="danger" className="pv-inbox-detail__banner-mt2">
+        <Banner
+          variant="danger"
+          className="pv-inbox-detail__banner-mt2"
+          data-testid="inbox-detail-banner-mt2"
+        >
           {bulkError}
         </Banner>
       )}
@@ -302,7 +306,11 @@ export function InboxNeedsReview({
       )}
 
       {undoError && (
-        <Banner variant="danger" className="pv-inbox-detail__banner-mt2">
+        <Banner
+          variant="danger"
+          className="pv-inbox-detail__banner-mt2"
+          data-testid="inbox-detail-banner-mt2"
+        >
           {undoError}
         </Banner>
       )}
@@ -328,7 +336,11 @@ export function InboxNeedsReview({
       )}
 
       {applyError && (
-        <Banner variant="danger" className="pv-inbox-detail__banner-mt2">
+        <Banner
+          variant="danger"
+          className="pv-inbox-detail__banner-mt2"
+          data-testid="inbox-detail-banner-mt2"
+        >
           {applyError}
         </Banner>
       )}

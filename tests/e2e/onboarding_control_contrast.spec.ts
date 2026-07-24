@@ -22,7 +22,7 @@ test('shared form controls use the dedicated boundary token in every theme', asy
     host.innerHTML = `
       <input data-control="input" class="pv-input" />
       <select data-control="select" class="pv-select"><option>Test</option></select>
-      <label class="pv-toggle pv-toggle--disabled">
+      <label class="pv-toggle pv-toggle--disabled" data-testid="toggle">
         <input type="checkbox" disabled />
         <span data-control="toggle" class="pv-toggle__track"></span>
         <span class="pv-toggle__thumb"></span>
@@ -65,7 +65,7 @@ test('shared form controls use the dedicated boundary token in every theme', asy
           '[data-control="toggle"]',
         );
         const disabledToggle = host.querySelector<HTMLElement>(
-          '.pv-toggle--disabled',
+          '[data-testid="toggle"]',
         );
         if (!input || !select || !toggle || !disabledToggle) {
           throw new Error('missing control probe');

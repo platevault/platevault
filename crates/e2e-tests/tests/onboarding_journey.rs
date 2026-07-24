@@ -87,10 +87,10 @@ async fn walk_gate_diagnostics(app: &E2eApp) -> String {
             out.setupCompleted = raw ? JSON.parse(raw).setupCompleted === true : false;
         } catch (e) { out.setupCompleted = 'read-failed: ' + e; }
         out.suppressedFlag = localStorage.getItem('alm-onboarding-suppressed');
-        out.shellMounted = !!document.querySelector('.pv-frame');
-        out.pageAnchorPresent = !!document.querySelector('.pv-frame__main');
+        out.shellMounted = !!document.querySelector("[data-testid='frame']");
+        out.pageAnchorPresent = !!document.querySelector("[data-testid='frame-main']");
         out.joyrideOverlay = !!document.querySelector('.react-joyride__overlay');
-        out.checklistPresent = !!document.querySelector('.pv-onb-checklist');
+        out.checklistPresent = !!document.querySelector("[data-testid='onb-checklist']");
         out.route = location.hash;
         out.uncaughtErrors = (window.__e2eErrors || []).slice(0, 5);
         return JSON.stringify(out);
@@ -126,17 +126,17 @@ async fn open_checklist(app: &E2eApp) -> anyhow::Result<()> {
     let opened = wait_dom_true(
         app,
         r#"
-        var ring = document.querySelector('.pv-onb-ring');
+        var ring = document.querySelector("[data-testid='onb-ring']");
         if (!ring) return false;
         if (ring.getAttribute('aria-expanded') !== 'true') { ring.click(); }
-        return !!document.querySelector('.pv-onb-checklist');
+        return !!document.querySelector("[data-testid='onb-checklist']");
         "#,
         UI_TIMEOUT,
     )
     .await?;
     anyhow::ensure!(
         opened,
-        "Getting-started flyout did not open (trigger `.pv-onb-ring` missing or click ignored); {}",
+        "Getting-started flyout did not open (trigger [data-testid='onb-ring'] missing or click ignored); {}",
         walk_gate_diagnostics(app).await
     );
     Ok(())
@@ -149,7 +149,7 @@ async fn read_progress_done(app: &E2eApp) -> anyhow::Result<i64> {
         .driver
         .execute(
             r#"
-            var pb = document.querySelector('.pv-onb-checklist__progress[role="progressbar"]');
+            var pb = document.querySelector("[data-testid='onb-checklist-progress'][role='progressbar']");
             return pb ? Number(pb.getAttribute('aria-valuenow')) : -1;
             "#,
             vec![],
@@ -217,7 +217,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     // !orientationDone && not suppressed).
     let walk_present = wait_dom_true(
         &app,
-        r#"return !!document.querySelector('.pv-onboarding-tooltip');"#,
+        r#"return !!document.querySelector("[data-testid='onboarding-tooltip']");"#,
         UI_TIMEOUT,
     )
     .await?;
@@ -243,7 +243,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
     app.driver
         .execute(
             r#"
-            var btn = document.querySelector('.pv-onboarding-tooltip__skip');
+            var btn = document.querySelector("[data-testid='onboarding-tooltip-skip']");
             if (btn) { btn.click(); }
             return !!btn;
             "#,
@@ -252,7 +252,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
         .await?;
     let walk_gone = wait_dom_true(
         &app,
-        r#"return !document.querySelector('.pv-onboarding-tooltip');"#,
+        r#"return !document.querySelector("[data-testid='onboarding-tooltip']");"#,
         UI_TIMEOUT,
     )
     .await?;
@@ -337,7 +337,7 @@ async fn orientation_walk_then_real_confirm_renders_live_auto_tick() -> anyhow::
         &app,
         &format!(
             r#"
-            var pb = document.querySelector('.pv-onb-checklist__progress[role="progressbar"]');
+            var pb = document.querySelector("[data-testid='onb-checklist-progress'][role='progressbar']");
             return !!pb && Number(pb.getAttribute('aria-valuenow')) > {done_before};
             "#
         ),

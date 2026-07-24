@@ -102,6 +102,8 @@ export type TableRow = {
   _indent?: number;
   /** Optional `data-testid` applied to the <tr> element. Not rendered as a cell. */
   _testid?: string;
+  /** Optional `data-kind` applied to the <tr> element for row-type-based queries. Not rendered as a cell. */
+  _rowKind?: string;
   /** Optional onboarding spotlight anchor applied to the interactive row. */
   _guideAnchor?: string;
 };
@@ -211,6 +213,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
         aria-selected={row._selected}
         data-row-clickable={clickable ? 'true' : undefined}
         data-testid={row._testid}
+        data-kind={row._rowKind}
         data-guide-anchor={row._guideAnchor}
       >
         {columns.map((c, ci) => (

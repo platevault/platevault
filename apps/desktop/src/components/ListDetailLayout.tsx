@@ -19,7 +19,11 @@ export function ListDetailLayout({
   if (sidebar) {
     return (
       <>
-        {topBar && <div className="pv-page__bar">{topBar}</div>}
+        {topBar && (
+          <div className="pv-page__bar" data-testid="page-bar">
+            {topBar}
+          </div>
+        )}
         <div className="pv-three-pane">
           {list}
           <div className="pv-three-pane__content">{detail}</div>
@@ -30,10 +34,16 @@ export function ListDetailLayout({
   }
   return (
     <>
-      {topBar && <div className="pv-page__bar">{topBar}</div>}
+      {topBar && (
+        <div className="pv-page__bar" data-testid="page-bar">
+          {topBar}
+        </div>
+      )}
       <div className="pv-two-pane">
         {list}
-        <div className="pv-two-pane__detail">{detail}</div>
+        <div className="pv-two-pane__detail" data-testid="two-pane-detail">
+          {detail}
+        </div>
       </div>
     </>
   );

@@ -143,6 +143,7 @@ export function PropertyTable({
   return (
     <div
       className="pv-property-table"
+      data-testid="property-table"
       role="table"
       aria-label={m.cmp_property_table_aria()}
     >
@@ -156,6 +157,7 @@ export function PropertyTable({
         </span>
         <span
           className="pv-property-table__cell pv-property-table__cell--value"
+          data-testid="property-table-cell-value"
           role="columnheader"
         >
           {m.cmp_property_table_col_value()}
@@ -198,6 +200,7 @@ export function PropertyTable({
                 'pv-property-table__cell pv-property-table__cell--value' +
                 (prop.mono ? ' pv-mono' : '')
               }
+              data-testid="property-table-cell-value"
               role="cell"
             >
               {isEditing ? (

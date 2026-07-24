@@ -56,7 +56,7 @@ async function selectProject(
   name: string,
 ): Promise<void> {
   const row = page
-    .locator('.pv-projects-table__row')
+    .locator('[data-kind="projects-table-row"]')
     .filter({ hasText: name })
     .first();
   await expect(row).toBeVisible({ timeout: 8_000 });
@@ -75,7 +75,7 @@ test.describe('project lifecycle · detail surfaces (Journey 5)', () => {
     await selectProject(page, 'NGC 7000 Narrowband');
 
     // Persisted note body (project.note.get) renders.
-    const notesRoot = page.locator('.pv-project-notes__root');
+    const notesRoot = page.locator('[data-testid="project-notes-root"]');
     await expect(page.getByTestId('notes-body')).toBeVisible({
       timeout: 8_000,
     });
@@ -110,7 +110,9 @@ test.describe('project lifecycle · detail surfaces (Journey 5)', () => {
     await expect(outputs.getByText('No accepted outputs yet')).toBeVisible();
 
     // ── Per-channel integration time (Ha 1h 48m, OIII 1h 16m) ────────────────
-    const channels = page.locator('.pv-project-detail__channels-section');
+    const channels = page.locator(
+      '[data-testid="project-detail-channels-section"]',
+    );
     await expect(channels).toBeVisible();
     await expect(channels.getByText('1h 48m')).toBeVisible();
     await expect(channels.getByText('1h 16m')).toBeVisible();
@@ -142,9 +144,11 @@ test.describe('project lifecycle · detail surfaces (Journey 5)', () => {
     // The Add-sources toggle reveals the shared SessionSourcePicker (filtered to
     // sessions not already linked to this project).
     await editPane.getByRole('button', { name: 'Add sources' }).click();
-    await expect(editPane.locator('.pv-source-picker')).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(editPane.locator('[data-testid="source-picker"]')).toBeVisible(
+      {
+        timeout: 5_000,
+      },
+    );
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
     ).not.toBeVisible();
@@ -203,7 +207,7 @@ test.describe('project detail · source click-through (#720 FR-006/SC-002/SC-001
     seedSetupComplete(page);
     await page.goto('/#/projects');
     const blockedRow = page
-      .locator('.pv-projects-table__row')
+      .locator('[data-kind="projects-table-row"]')
       .filter({ hasText: 'Cave Nebula attempt' });
     await expect(blockedRow).toBeVisible({ timeout: 8_000 });
     // Mock fixture: proj-007 is blocked with blockedReasonKind=calibration_unmatched.
@@ -221,7 +225,7 @@ test.describe('projects list · multiselect state filter (#721 009 SC-004 / 033 
     await page.goto('/#/projects');
     await expect(
       page
-        .locator('.pv-projects-table__row')
+        .locator('[data-kind="projects-table-row"]')
         .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).toBeVisible({ timeout: 8_000 });
 
@@ -239,16 +243,18 @@ test.describe('projects list · multiselect state filter (#721 009 SC-004 / 033 
     // Table now shows only the processing + blocked projects.
     await expect(
       page
-        .locator('.pv-projects-table__row')
+        .locator('[data-kind="projects-table-row"]')
         .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).toBeVisible();
     await expect(
       page
-        .locator('.pv-projects-table__row')
+        .locator('[data-kind="projects-table-row"]')
         .filter({ hasText: 'Cave Nebula attempt' }),
     ).toBeVisible();
     await expect(
-      page.locator('.pv-projects-table__row').filter({ hasText: 'M31 LRGB' }),
+      page
+        .locator('[data-kind="projects-table-row"]')
+        .filter({ hasText: 'M31 LRGB' }),
     ).not.toBeVisible();
   });
 
@@ -259,11 +265,13 @@ test.describe('projects list · multiselect state filter (#721 009 SC-004 / 033 
     await page.goto('/#/projects?lifecycle=ready,prepared');
 
     await expect(
-      page.locator('.pv-projects-table__row').filter({ hasText: 'M31 LRGB' }),
+      page
+        .locator('[data-kind="projects-table-row"]')
+        .filter({ hasText: 'M31 LRGB' }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
       page
-        .locator('.pv-projects-table__row')
+        .locator('[data-kind="projects-table-row"]')
         .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).not.toBeVisible();
 

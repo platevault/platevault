@@ -122,6 +122,7 @@ export function AltitudeGraph({
               width={PLOT_W}
               height={PLOT_H}
               className="pv-planner__graph-twilight"
+              data-testid="planner-graph-twilight"
             />
           )}
           {darkWindowHours && darkWindowHours.startHour > 0 && (
@@ -131,6 +132,7 @@ export function AltitudeGraph({
               width={Math.max(0, xScale(darkWindowHours.startHour))}
               height={PLOT_H}
               className="pv-planner__graph-twilight"
+              data-testid="planner-graph-twilight"
             />
           )}
           {darkWindowHours && darkWindowHours.endHour < 12 && (
@@ -140,6 +142,7 @@ export function AltitudeGraph({
               width={Math.max(0, PLOT_W - xScale(darkWindowHours.endHour))}
               height={PLOT_H}
               className="pv-planner__graph-twilight"
+              data-testid="planner-graph-twilight"
             />
           )}
 

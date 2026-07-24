@@ -22,6 +22,7 @@ export function ListItem({
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- interactivity is conditional; role becomes button and a keydown handler is attached only when onClick is provided
     <div
       className={`pv-list-item ${selected ? 'pv-list-item--selected' : ''}`}
+      data-testid="list-item"
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- only focusable when onClick is provided, where role becomes button

@@ -251,6 +251,7 @@ function SettingsPageBody() {
                       key={pane.id}
                       type="button"
                       className={`pv-settings__nav-item${activePane === pane.id ? ' pv-settings__nav-item--active' : ''}`}
+                      data-testid="settings-nav-item"
                       onClick={() => selectPane(pane.id)}
                       aria-current={activePane === pane.id ? 'page' : undefined}
                     >

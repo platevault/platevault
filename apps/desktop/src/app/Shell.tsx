@@ -150,10 +150,10 @@ function ShellInner() {
   }, [navigate]);
 
   return (
-    <div className={`pv-frame density-${prefs.density}`}>
+    <div className={`pv-frame density-${prefs.density}`} data-testid="frame">
       <div className="pv-frame__body">
         <Sidebar />
-        <main className="pv-frame__main">
+        <main className="pv-frame__main" data-testid="frame-main">
           <Outlet />
         </main>
       </div>

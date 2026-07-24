@@ -34,15 +34,15 @@ test.describe('adaptive detail-panel dock (spec 054 / #936)', () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/#/calibration');
     await disableOnboarding(page);
-    await expect(page.locator('.pv-calib-table')).toBeVisible({
+    await expect(page.locator('[data-testid="calib-table"]')).toBeVisible({
       timeout: 8_000,
     });
 
     const darkRow = page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Dark · 120s' });
     await darkRow.click();
-    const detail = page.locator('.pv-listpage__detail');
+    const detail = page.locator('[data-testid="listpage-detail"]');
     await expect(detail).toBeVisible({ timeout: 5_000 });
     await expect(detail).toHaveClass(/pv-listpage__detail--side/);
     await expect(page.getByTestId('dock-resize-handle')).toBeVisible();
@@ -63,15 +63,15 @@ test.describe('adaptive detail-panel dock (spec 054 / #936)', () => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('/#/calibration');
     await disableOnboarding(page);
-    await expect(page.locator('.pv-calib-table')).toBeVisible({
+    await expect(page.locator('[data-testid="calib-table"]')).toBeVisible({
       timeout: 8_000,
     });
 
     await page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Dark · 120s' })
       .click();
-    const detail = page.locator('.pv-listpage__detail');
+    const detail = page.locator('[data-testid="listpage-detail"]');
     await expect(detail).toBeVisible({ timeout: 5_000 });
     await expect(detail).not.toHaveClass(/pv-listpage__detail--side/);
 
@@ -81,10 +81,10 @@ test.describe('adaptive detail-panel dock (spec 054 / #936)', () => {
     await page.reload();
     await disableOnboarding(page);
     await page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Dark · 120s' })
       .click();
-    const detailAfterReload = page.locator('.pv-listpage__detail');
+    const detailAfterReload = page.locator('[data-testid="listpage-detail"]');
     await expect(detailAfterReload).toBeVisible({ timeout: 5_000 });
     // The pin survives the reload even though 1024 is below the auto threshold.
     await expect(detailAfterReload).toHaveClass(/pv-listpage__detail--side/);

@@ -54,7 +54,7 @@ function seedWizardAtSources(page: Page, locale: string): void {
 async function expectSourceControlsContained(root: Locator): Promise<void> {
   const overflowing = await root
     .locator(
-      '.pv-step-sources, .pv-step-sources__group, .pv-step-sources__group-header, .pv-step-sources__add-actions, .pv-step-sources__manual-add, .pv-step-sources__row-main',
+      '[data-testid="step-sources"], [data-testid^="source-group-"], [data-testid="step-sources-group-header"], [data-testid="step-sources-add-actions"], [data-testid^="manual-add-by-path-"], [data-testid="step-sources-row-main"]',
     )
     .evaluateAll((elements) =>
       elements
@@ -63,7 +63,9 @@ async function expectSourceControlsContained(root: Locator): Promise<void> {
     );
   expect(overflowing).toEqual([]);
 
-  for (const group of await root.locator('.pv-step-sources__group').all()) {
+  for (const group of await root
+    .locator('[data-testid^="source-group-"]')
+    .all()) {
     const groupBox = assertDefined(
       await group.boundingBox(),
       'source group bounding box',
@@ -146,8 +148,8 @@ test.describe('setup wizard · source-folder primitives at 320 CSS px', () => {
       await expect(organization).toHaveClass(/pv-select/);
       await expect(manualPath).toHaveClass(/pv-input/);
 
-      const info = lightFrames.locator('.pv-info-tip').first();
-      const choose = lightFrames.locator('.pv-btn--primary');
+      const info = lightFrames.locator('[data-testid="info-tip"]').first();
+      const choose = lightFrames.locator('[data-testid="btn-primary"]');
       const addByPath = lightFrames.getByTestId(
         'manual-add-path-btn-light_frames',
       );
@@ -161,7 +163,9 @@ test.describe('setup wizard · source-folder primitives at 320 CSS px', () => {
       await page.keyboard.press('Tab');
       await expect(addByPath).toBeFocused();
 
-      await expectSourceControlsContained(page.locator('.pv-step-sources'));
+      await expectSourceControlsContained(
+        page.locator('[data-testid="step-sources"]'),
+      );
     });
   }
 });
@@ -188,6 +192,8 @@ test.describe('setup wizard · source-folder primitives at 200% zoom', () => {
         }),
     );
 
-    await expectSourceControlsContained(page.locator('.pv-step-sources'));
+    await expectSourceControlsContained(
+      page.locator('[data-testid="step-sources"]'),
+    );
   });
 });

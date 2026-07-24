@@ -45,6 +45,7 @@ export function InfoTip({
     <Tooltip
       content={tip}
       className={cls}
+      data-testid="info-tip"
       role="note"
       tabIndex={0}
       aria-label={`${label}: ${tip}`}

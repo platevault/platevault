@@ -181,12 +181,14 @@ export function ChecklistSection({
         'pv-onb-checklist',
         spotlightActive && 'pv-onb-checklist--spotlighting',
       )}
+      data-testid="onb-checklist"
       aria-label={m.onboarding_section_title()}
     >
       <div className="pv-onb-checklist__head">
         <button
           type="button"
           className="pv-onb-checklist__section-toggle"
+          data-testid="onb-checklist-section-toggle"
           aria-expanded={sectionExpanded}
           onClick={toggleSection}
         >
@@ -204,6 +206,7 @@ export function ChecklistSection({
             'pv-onb-checklist__progress',
             choreo.pulseActive && 'pv-onb-checklist__progress--pulse',
           )}
+          data-testid="onb-checklist-progress"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={total}
@@ -242,13 +245,17 @@ export function ChecklistSection({
             <div className="pv-onb-checklist__menu" role="menu">
               {removeConfirming ? (
                 <div className="pv-onb-checklist__menu-confirm">
-                  <p className="pv-onb-checklist__menu-confirm-text">
+                  <p
+                    className="pv-onb-checklist__menu-confirm-text"
+                    data-testid="onb-checklist-menu-confirm-text"
+                  >
                     {m.onboarding_section_remove_confirm()}
                   </p>
                   <div className="pv-onb-checklist__menu-confirm-actions">
                     <button
                       type="button"
                       className="pv-onb-checklist__menu-confirm-yes"
+                      data-testid="onb-checklist-menu-confirm-yes"
                       onClick={handleRemove}
                     >
                       {m.common_remove()}
@@ -256,6 +263,7 @@ export function ChecklistSection({
                     <button
                       type="button"
                       className="pv-onb-checklist__menu-confirm-no"
+                      data-testid="onb-checklist-menu-confirm-no"
                       onClick={() => {
                         setRemoveConfirming(false);
                         setMenuOpen(false);
@@ -292,7 +300,10 @@ export function ChecklistSection({
       </div>
 
       {sectionExpanded && (
-        <div className="pv-onb-checklist__groups">
+        <div
+          className="pv-onb-checklist__groups"
+          data-testid="onb-checklist-groups"
+        >
           {PAGE_ORDER.filter((page) => itemsByPage.has(page)).map((page) => {
             const items = itemsByPage.get(page) ?? [];
             const completingHere = items.some((i) =>
@@ -319,10 +330,12 @@ export function ChecklistSection({
                   'pv-onb-checklist__group',
                   complete && 'pv-onb-checklist__group--complete',
                 )}
+                data-testid="onb-checklist-group"
               >
                 <button
                   type="button"
                   className="pv-onb-checklist__group-header"
+                  data-testid="onb-checklist-group-header"
                   aria-expanded={expanded}
                   onClick={() => toggleGroup(page)}
                 >
@@ -339,6 +352,7 @@ export function ChecklistSection({
                       size={13}
                       aria-hidden
                       className="pv-onb-checklist__group-done"
+                      data-testid="onb-checklist-group-done"
                     />
                   )}
                   <span className="pv-onb-checklist__group-count">
@@ -360,7 +374,10 @@ export function ChecklistSection({
                       />
                     ))}
                     {completed.length > 0 && (
-                      <li className="pv-onb-checklist__completed">
+                      <li
+                        className="pv-onb-checklist__completed"
+                        data-testid="onb-checklist-completed"
+                      >
                         <ul className="pv-onb-checklist__items">
                           {completed.map((item) => {
                             const doneLabelId = `${idPrefix}-done-${item.itemId.replaceAll('.', '_')}`;
@@ -393,6 +410,7 @@ export function ChecklistSection({
                                 <span
                                   id={doneLabelId}
                                   className="pv-onb-checklist__item-label"
+                                  data-testid="onb-checklist-item-label"
                                 >
                                   {itemLabel(item.itemId)}
                                 </span>
@@ -484,7 +502,12 @@ export function ChecklistItemRow({
       >
         <Check size={14} aria-hidden className="pv-onb-checklist__check-icon" />
         <span className="pv-onb-checklist__item-main">
-          <span className="pv-onb-checklist__item-label">{label}</span>
+          <span
+            className="pv-onb-checklist__item-label"
+            data-testid="onb-checklist-item-label"
+          >
+            {label}
+          </span>
         </span>
       </li>
     );
@@ -555,7 +578,11 @@ export function ChecklistItemRow({
           open={tipOpen}
           onOpenChange={setTipOpen}
         >
-          <span id={labelId} className="pv-onb-checklist__item-label">
+          <span
+            id={labelId}
+            className="pv-onb-checklist__item-label"
+            data-testid="onb-checklist-item-label"
+          >
             {label}
           </span>
         </Tooltip>

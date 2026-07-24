@@ -101,6 +101,7 @@ export function AddTargetDialog({
       subtitle={m.targets_add_target_desc()}
       size="md"
       className="pv-add-target__popup"
+      data-testid="add-target-popup"
       ariaLabel={m.targets_add_target()}
       initialFocus={searchInputRef}
       footer={
@@ -150,7 +151,11 @@ export function AddTargetDialog({
         )}
 
         {error && (
-          <span role="alert" className="pv-field-error">
+          <span
+            role="alert"
+            className="pv-field-error"
+            data-testid="field-error"
+          >
             {error}
           </span>
         )}

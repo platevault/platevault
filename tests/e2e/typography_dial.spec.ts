@@ -111,7 +111,9 @@ test.describe('Spec 055 Phase 2 · font-size dial (T014, SC-003/SC-004)', () => 
     await page.goto('/#/sessions');
     await page.waitForLoadState('networkidle');
 
-    const groupLabel = page.locator('.pv-sidebar__group-label').first();
+    const groupLabel = page
+      .locator('[data-testid="sidebar-group-label"]')
+      .first();
     await expect(groupLabel).toBeVisible();
 
     const defaultPx = await groupLabel.evaluate(
@@ -125,7 +127,7 @@ test.describe('Spec 055 Phase 2 · font-size dial (T014, SC-003/SC-004)', () => 
     await page.waitForLoadState('networkidle');
 
     const largePx = await page
-      .locator('.pv-sidebar__group-label')
+      .locator('[data-testid="sidebar-group-label"]')
       .first()
       .evaluate((el) => getComputedStyle(el).fontSize);
     expect(largePx).toBe('13px'); // --pv-text-xs @ large (16px root)

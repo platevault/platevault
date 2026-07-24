@@ -86,7 +86,12 @@ function OnboardingTooltip({
 }: TooltipRenderProps): ReactNode {
   const title = typeof step.title === 'string' ? step.title : undefined;
   return (
-    <div className="pv-onboarding-tooltip" role="region" aria-label={title}>
+    <div
+      className="pv-onboarding-tooltip"
+      data-testid="onboarding-tooltip"
+      role="region"
+      aria-label={title}
+    >
       <div className="pv-visually-hidden" role="status" aria-live="polite">
         {m.onboarding_announcer_progress({
           current: index + 1,
@@ -97,7 +102,12 @@ function OnboardingTooltip({
 
       <div className="pv-onboarding-tooltip__header">
         {step.title ? (
-          <h2 className="pv-onboarding-tooltip__title">{step.title}</h2>
+          <h2
+            className="pv-onboarding-tooltip__title"
+            data-testid="onboarding-tooltip-title"
+          >
+            {step.title}
+          </h2>
         ) : null}
         <Btn
           variant="ghost"
@@ -117,6 +127,7 @@ function OnboardingTooltip({
           variant="ghost"
           size="sm"
           className="pv-onboarding-tooltip__skip"
+          data-testid="onboarding-tooltip-skip"
           onClick={skipProps.onClick}
         >
           {m.onboarding_walk_skip()}
@@ -127,6 +138,7 @@ function OnboardingTooltip({
               variant="ghost"
               size="sm"
               className="pv-onboarding-tooltip__back"
+              data-testid="onboarding-tooltip-back"
               onClick={backProps.onClick}
             >
               {m.onboarding_walk_back()}
@@ -137,6 +149,7 @@ function OnboardingTooltip({
             size="sm"
             data-action="primary"
             className="pv-onboarding-tooltip__primary"
+            data-testid="onboarding-tooltip-primary"
             onClick={primaryProps.onClick}
           >
             {isLastStep ? m.onboarding_walk_finish() : m.onboarding_walk_next()}

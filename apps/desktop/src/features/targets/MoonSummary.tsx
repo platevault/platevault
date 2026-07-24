@@ -102,8 +102,13 @@ export function MoonSummary({ night }: Props) {
         <span className="pv-moon-summary__title">
           {m.targets_moon_summary_title()}
         </span>
-        <span className="pv-moon-summary__phase">{label}</span>
-        <span className="pv-moon-summary__meta">
+        <span
+          className="pv-moon-summary__phase"
+          data-testid="moon-summary-phase"
+        >
+          {label}
+        </span>
+        <span className="pv-moon-summary__meta" data-testid="moon-summary-meta">
           {m.targets_moon_illumination({ pct })} · {direction}
         </span>
       </span>

@@ -115,6 +115,7 @@ export function ChecklistPopover({
           labelled && 'pv-onb-ring--labelled',
           choreo.pulseActive && 'pv-onb-ring--pulse',
         )}
+        data-testid="onb-ring"
         aria-label={progressText}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
@@ -187,6 +188,7 @@ export function ChecklistPopover({
           <div
             ref={panelRef}
             className="pv-onb-popover"
+            data-testid="onb-popover"
             role="region"
             aria-label={progressText}
             // eslint-disable-next-line no-restricted-syntax -- dynamic: the panel is portalled out of the clipping sidebar, so its position must be computed from the trigger's measured rect at open time; no static class can express it.

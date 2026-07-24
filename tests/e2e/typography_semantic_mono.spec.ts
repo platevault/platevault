@@ -57,7 +57,9 @@ function seedObservingSite(page: Page): void {
 
 /** Locate a target row by its designation text (mirrors targets_planner.spec.ts). */
 function targetRow(page: Page, designation: string) {
-  return page.locator('.pv-targets-table__row', { hasText: designation });
+  return page.locator('[data-testid="targets-table-row"]', {
+    hasText: designation,
+  });
 }
 
 test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', () => {
@@ -125,7 +127,7 @@ test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', ()
     // A registered data-source root's path (real, mock-fixture-backed data —
     // apps/desktop/src/api/mocks.ts `mockRoots`) — not the fabricated Advanced
     // pane db-path #601/#602 removed. Same `<code class="pv-mono">` mechanism.
-    const rootPath = page.locator('.pv-data-sources__root-path', {
+    const rootPath = page.locator('[data-testid="data-sources-root-path"]', {
       hasText: '/astro/raw',
     });
     await expect(rootPath).toBeVisible();
@@ -155,7 +157,9 @@ test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', ()
     await expect(m31).toBeVisible({ timeout: 8_000 });
     await m31.click();
 
-    const radecValue = page.locator('.pv-property-table__cell--value.pv-mono');
+    const radecValue = page.locator(
+      '[data-testid="property-table-cell-value"].pv-mono',
+    );
     await expect(radecValue.first()).toBeVisible({ timeout: 8_000 });
 
     const family = await radecValue
