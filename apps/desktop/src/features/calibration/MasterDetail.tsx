@@ -83,6 +83,11 @@ import {
   useInvalidateCalibrationMaster,
 } from './useCalibration';
 import { masterFieldApplicability } from './master-applicability';
+import {
+  actions as mdActionsCls,
+  linkedStack,
+  match,
+} from '@/components/two-col-detail-layout.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -429,7 +434,7 @@ export function MasterDetail({
 
   // Actions inline-left in the title, same pattern as SessionDetail's actionButtons.
   const actionButtons = (
-    <span className="pv-session-detail2__actions">
+    <span className={mdActionsCls}>
       {/* spec 048 US5 (FR-024/025): distinct wording per trigger path; the
 			    match itself is never auto-invalidated or removed, so this is a
 			    warning badge, not a blocking state. */}
@@ -518,7 +523,7 @@ export function MasterDetail({
         <TwoColDetailLayout
           colA={<PropertyTable mode="view" properties={colA} />}
           colB={<PropertyTable mode="view" properties={colB} />}
-          linkedClassName="pv-session-detail2__linked--stack"
+          linkedClassName={linkedStack}
           linked={
             <>
               <SessionListPopover
@@ -535,7 +540,7 @@ export function MasterDetail({
 
         {/* Detail hero (spec 043 §4): ranked candidate-masters match table for
 			    the master's matching-context session, with assign/cancel. */}
-        <div className="pv-session-detail2__match">
+        <div className={match}>
           <MatchCandidatesPanel
             sessionId={matchSessionId ?? ''}
             response={suggestResponse}
