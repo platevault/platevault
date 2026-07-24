@@ -23,6 +23,8 @@ trash.workspace = true
 # gate (replaces the hand-rolled component walk; symlink-safety is unchanged).
 path-clean.workspace = true
 fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
+# Preserve source mtime after cross-volume copy (constitution §II archival fidelity).
+filetime = "0.2"
 
 [dev-dependencies]
 tempfile.workspace = true

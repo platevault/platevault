@@ -23,6 +23,7 @@
 
 use camino::Utf8Path;
 use domain_core::source_view::Materialization;
+use filetime::FileTime;
 
 use crate::failure::{FailureCode, PlanItemFailure};
 
@@ -64,9 +65,32 @@ pub fn create_link(
         }
         Materialization::Hardlink => std::fs::hard_link(source, destination)
             .map_err(|e| PlanItemFailure::from_io(&e, "create hardlink")),
-        Materialization::Copy => std::fs::copy(source, destination)
-            .map(|_| ())
-            .map_err(|e| PlanItemFailure::from_io(&e, "copy file")),
+        Materialization::Copy => {
+            // Read source mtime before copying so it survives even if the source
+            // later becomes inaccessible.
+            let source_mtime =
+                std::fs::metadata(source).map(|m| FileTime::from_last_modification_time(&m)).ok();
+
+            std::fs::copy(source, destination)
+                .map_err(|e| PlanItemFailure::from_io(&e, "copy file"))?;
+
+            // Restore mtime: std::fs::copy resets it to "now".  mtime feeds the
+            // per-file signature in crates/app/inbox, so without this a Copy
+            // materialization would look like a new file to any watcher.
+            // Failure is non-fatal — bytes are correct; warn and continue.
+            if let Some(mtime) = source_mtime {
+                if let Err(e) = filetime::set_file_mtime(destination, mtime) {
+                    tracing::warn!(
+                        %destination,
+                        error = %e,
+                        "link Copy: could not restore mtime on destination; \
+                         file data is intact but timestamp reflects copy time"
+                    );
+                }
+            }
+
+            Ok(())
+        }
         Materialization::Junction => Err(PlanItemFailure::with_code(
             FailureCode::MaterializationUnsupported,
             "junction materialization is not yet implemented by this executor",
@@ -157,5 +181,48 @@ mod tests {
         let err = create_link(&source, &dest, Materialization::Junction).unwrap_err();
         assert_eq!(err.code, FailureCode::MaterializationUnsupported);
         assert!(!dest.exists());
+    }
+
+    #[test]
+    fn copy_materialization_preserves_source_mtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = utf8(dir.path().join("source.fits"));
+        let dest = utf8(dir.path().join("dest.fits"));
+        std::fs::write(&source, b"data").unwrap();
+
+        // Pin source mtime to a known value in the past.
+        let known_mtime = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+        filetime::set_file_mtime(&source, known_mtime).unwrap();
+
+        create_link(&source, &dest, Materialization::Copy).unwrap();
+
+        let dest_mtime =
+            filetime::FileTime::from_last_modification_time(&std::fs::metadata(&dest).unwrap());
+        assert_eq!(
+            dest_mtime.unix_seconds(),
+            known_mtime.unix_seconds(),
+            "Copy materialization must restore source mtime on destination"
+        );
+    }
+
+    #[test]
+    fn symlink_and_hardlink_do_not_use_mtime_restore_path() {
+        // Symlinks and hardlinks share the underlying inode or target mtime by
+        // OS contract; no filetime call is made by the executor for these kinds.
+        // This test confirms they succeed and the destination is accessible.
+        let dir = tempfile::tempdir().unwrap();
+        let source = utf8(dir.path().join("source.fits"));
+        std::fs::write(&source, b"data").unwrap();
+
+        let known_mtime = filetime::FileTime::from_unix_time(1_600_000_000, 0);
+        filetime::set_file_mtime(&source, known_mtime).unwrap();
+
+        let dest_sym = utf8(dir.path().join("sym.fits"));
+        create_link(&source, &dest_sym, Materialization::Symlink).unwrap();
+        assert_eq!(std::fs::read(&dest_sym).unwrap(), b"data");
+
+        let dest_hard = utf8(dir.path().join("hard.fits"));
+        create_link(&source, &dest_hard, Materialization::Hardlink).unwrap();
+        assert_eq!(std::fs::read(&dest_hard).unwrap(), b"data");
     }
 }
