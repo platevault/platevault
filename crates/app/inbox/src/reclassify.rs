@@ -342,59 +342,12 @@ pub async fn reclassify_v2(
 
     // ── 1. Resolve source group ───────────────────────────────────────────────
 
-    let source_group_id = match (req.source_group_id, req.inbox_item_id) {
-        (Some(sg), _) => {
-            // Verify the source group exists.
-            let exists = q_inbox::get_source_group_by_id(pool, &sg)
-                .await
-                .map_err(|e| db_internal_ctx(e, "look up source group"))?;
-            if exists.is_none() {
-                return Err(ContractError::new(
-                    ErrorCode::InboxItemNotFound,
-                    format!("Source group not found: {sg}"),
-                    ErrorSeverity::Blocking,
-                    false,
-                ));
-            }
-            sg
-        }
-        (None, Some(item_id)) => inbox_repo::get_source_group_id_for_item(pool, &item_id)
-            .await
-            .map_err(|e| db_internal_ctx(e, "look up source_group_id for item"))?
-            .ok_or_else(|| {
-                ContractError::new(
-                    ErrorCode::InboxItemNotFound,
-                    format!("InboxItem not found or has no source group: {item_id}"),
-                    ErrorSeverity::Blocking,
-                    false,
-                )
-            })?,
-        (None, None) => {
-            return Err(ContractError::new(
-                ErrorCode::InboxItemNotFound,
-                "Either sourceGroupId or inboxItemId must be provided",
-                ErrorSeverity::Blocking,
-                false,
-            ));
-        }
-    };
+    let source_group_id =
+        resolve_source_group_id(pool, req.source_group_id, req.inbox_item_id).await?;
 
     // ── 2. Block if any sub-item in the group has an open plan ────────────────
 
-    let sub_item_ids = inbox_repo::list_item_ids_for_source_group(pool, &source_group_id)
-        .await
-        .map_err(|e| db_internal_ctx(e, "list sub-items for source group"))?;
-
-    for item_id in &sub_item_ids {
-        if inbox_repo::get_plan_link(pool, item_id).await.unwrap_or(None).is_some() {
-            return Err(ContractError::new(
-                ErrorCode::InboxHasOpenPlan,
-                "Reclassification is not permitted while a plan is open for any sub-item in this group.",
-                ErrorSeverity::Blocking,
-                false,
-            ));
-        }
-    }
+    let sub_item_ids = guard_no_open_plans(pool, &source_group_id).await?;
 
     // Evidence now lives on whichever items are CURRENTLY authoritative for
     // this group's files. Once classify has split the group, each
@@ -563,77 +516,8 @@ pub async fn reclassify_v2(
     // MISSING/unreadable properties — values present in the header are read-only"
     // (R-13 editing semantics). Index-only — never writes to user files.
 
-    for (file_path, property_key, json_val) in &effective_overrides {
-        let inbox_item_id = path_to_item.get(file_path.as_str()).ok_or_else(|| {
-            ContractError::new(
-                ErrorCode::FileNotFound,
-                format!("File path '{file_path}' not found in group during write phase"),
-                ErrorSeverity::Blocking,
-                false,
-            )
-        })?;
-
-        // Identity recorded at the last classify for this file, if any (spec
-        // 041 FR-046) — `None` for files never classified yet, which leaves
-        // the override with no comparison baseline until the next classify.
-        let (id_size, id_mtime) =
-            file_identity.get(file_path.as_str()).cloned().unwrap_or((None, None));
-
-        if property_key == "frameType" {
-            // Frame-type correction: write manual_override on the evidence row.
-            let frame_type_str = match json_val {
-                serde_json::Value::String(s) if !s.is_empty() => s.as_str(),
-                _ => {
-                    // Non-string or empty — skip (treat as "no change").
-                    continue;
-                }
-            };
-            q_inbox::set_manual_override_reset_stale(
-                pool,
-                inbox_item_id,
-                file_path,
-                frame_type_str,
-            )
-            .await
-            .map_err(|e| db_internal_ctx(e, "write frameType manual_override"))?;
-            // ALSO persist to the group-keyed overrides table: the evidence
-            // row above is wiped and re-inserted by every classify run, and a
-            // classify racing this write loses the manual_override entirely
-            // (observed as the #854 CI red — the group-keyed exposureS
-            // survived while frameType vanished). The group-keyed row
-            // survives every evidence rebuild; classify/materialize layer it
-            // back on (priority: manual_override → frameType override →
-            // extracted header).
-            inbox_repo::set_file_override(
-                pool,
-                &source_group_id,
-                file_path,
-                "frameType",
-                frame_type_str,
-                id_size,
-                id_mtime.as_deref(),
-            )
-            .await
-            .map_err(|e| db_internal_ctx(e, "write durable frameType override"))?;
-        } else {
-            // Generic property: write to inbox_file_overrides (index-only).
-            let value_str = match json_val {
-                serde_json::Value::String(s) => s.clone(),
-                other => other.to_string(),
-            };
-            inbox_repo::set_file_override(
-                pool,
-                &source_group_id,
-                file_path,
-                property_key,
-                &value_str,
-                id_size,
-                id_mtime.as_deref(),
-            )
-            .await
-            .map_err(|e| db_internal_ctx(e, "write generic file override"))?;
-        }
-    }
+    persist_overrides(pool, &source_group_id, &effective_overrides, &path_to_item, &file_identity)
+        .await?;
 
     // ── 8. Re-run classification + grouping via materialize_sub_items ─────────
     //
@@ -984,6 +868,143 @@ fn parse_binning_x(s: &str) -> Option<i64> {
 /// Parse the Y component from a binning string like "2x2".
 fn parse_binning_y(s: &str) -> Option<i64> {
     s.split('x').nth(1).and_then(|p| p.trim().parse::<i64>().ok())
+}
+
+/// Resolve a `source_group_id` from either the direct field or an
+/// `inbox_item_id` (spec 041 T068 / R-13, section 1).
+async fn resolve_source_group_id(
+    pool: &SqlitePool,
+    source_group_id: Option<String>,
+    inbox_item_id: Option<String>,
+) -> Result<String, ContractError> {
+    match (source_group_id, inbox_item_id) {
+        (Some(sg), _) => {
+            let exists = q_inbox::get_source_group_by_id(pool, &sg)
+                .await
+                .map_err(|e| db_internal_ctx(e, "look up source group"))?;
+            if exists.is_none() {
+                return Err(ContractError::new(
+                    ErrorCode::InboxItemNotFound,
+                    format!("Source group not found: {sg}"),
+                    ErrorSeverity::Blocking,
+                    false,
+                ));
+            }
+            Ok(sg)
+        }
+        (None, Some(item_id)) => inbox_repo::get_source_group_id_for_item(pool, &item_id)
+            .await
+            .map_err(|e| db_internal_ctx(e, "look up source_group_id for item"))?
+            .ok_or_else(|| {
+                ContractError::new(
+                    ErrorCode::InboxItemNotFound,
+                    format!("InboxItem not found or has no source group: {item_id}"),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            }),
+        (None, None) => Err(ContractError::new(
+            ErrorCode::InboxItemNotFound,
+            "Either sourceGroupId or inboxItemId must be provided",
+            ErrorSeverity::Blocking,
+            false,
+        )),
+    }
+}
+
+/// List sub-item ids for a source group and return `InboxHasOpenPlan` if any
+/// has an open plan (spec 041 T068 / R-13, section 2).
+async fn guard_no_open_plans(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> Result<Vec<String>, ContractError> {
+    let sub_item_ids = inbox_repo::list_item_ids_for_source_group(pool, source_group_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "list sub-items for source group"))?;
+
+    for item_id in &sub_item_ids {
+        if inbox_repo::get_plan_link(pool, item_id).await.unwrap_or(None).is_some() {
+            return Err(ContractError::new(
+                ErrorCode::InboxHasOpenPlan,
+                "Reclassification is not permitted while a plan is open for any sub-item in this group.",
+                ErrorSeverity::Blocking,
+                false,
+            ));
+        }
+    }
+    Ok(sub_item_ids)
+}
+
+/// Persist a flat list of `(file_path, property_key, json_value)` overrides
+/// for a source group (spec 041 T068, section 7).
+///
+/// `frameType` writes through the evidence row (`set_manual_override_reset_stale`)
+/// AND the durable group-keyed table (`set_file_override`) so it survives
+/// evidence rebuilds (#854).  All other keys write only to `inbox_file_overrides`
+/// (index-only, fill-missing semantics, R-13).
+async fn persist_overrides(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    effective_overrides: &[(String, String, serde_json::Value)],
+    path_to_item: &HashMap<String, String>,
+    file_identity: &HashMap<String, (Option<i64>, Option<String>)>,
+) -> Result<(), ContractError> {
+    for (file_path, property_key, json_val) in effective_overrides {
+        let inbox_item_id = path_to_item.get(file_path.as_str()).ok_or_else(|| {
+            ContractError::new(
+                ErrorCode::FileNotFound,
+                format!("File path '{file_path}' not found in group during write phase"),
+                ErrorSeverity::Blocking,
+                false,
+            )
+        })?;
+
+        let (id_size, id_mtime) =
+            file_identity.get(file_path.as_str()).cloned().unwrap_or((None, None));
+
+        if property_key == "frameType" {
+            let frame_type_str = match json_val {
+                serde_json::Value::String(s) if !s.is_empty() => s.as_str(),
+                _ => continue,
+            };
+            q_inbox::set_manual_override_reset_stale(
+                pool,
+                inbox_item_id,
+                file_path,
+                frame_type_str,
+            )
+            .await
+            .map_err(|e| db_internal_ctx(e, "write frameType manual_override"))?;
+            inbox_repo::set_file_override(
+                pool,
+                source_group_id,
+                file_path,
+                "frameType",
+                frame_type_str,
+                id_size,
+                id_mtime.as_deref(),
+            )
+            .await
+            .map_err(|e| db_internal_ctx(e, "write durable frameType override"))?;
+        } else {
+            let value_str = match json_val {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            inbox_repo::set_file_override(
+                pool,
+                source_group_id,
+                file_path,
+                property_key,
+                &value_str,
+                id_size,
+                id_mtime.as_deref(),
+            )
+            .await
+            .map_err(|e| db_internal_ctx(e, "write generic file override"))?;
+        }
+    }
+    Ok(())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
