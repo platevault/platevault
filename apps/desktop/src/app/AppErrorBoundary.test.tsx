@@ -13,8 +13,11 @@
  *  5. Non-throwing children render normally.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// Convention: use userEvent for user-driven interactions; fireEvent for synthetic/edge cases.
+// See src/test/userEvent.ts for the project setup helper.
+import { setupUser } from '../test/userEvent';
 import { AppErrorBoundary } from './AppErrorBoundary';
 
 // Suppress console.error for expected errors in these tests.
@@ -64,7 +67,8 @@ describe('AppErrorBoundary', () => {
     expect(screen.getByText('Boom!')).toBeInTheDocument();
   });
 
-  it('3. "Try again" button resets the boundary', () => {
+  it('3. "Try again" button resets the boundary', async () => {
+    const user = setupUser();
     let shouldThrow = true;
 
     function MaybeThrow() {
@@ -87,7 +91,7 @@ describe('AppErrorBoundary', () => {
     shouldThrow = false;
 
     // Click reset
-    fireEvent.click(screen.getByTestId('app-error-boundary-reset'));
+    await user.click(screen.getByTestId('app-error-boundary-reset'));
 
     // Re-render to trigger the non-throwing path
     rerender(
