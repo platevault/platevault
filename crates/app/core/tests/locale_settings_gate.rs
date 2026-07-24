@@ -19,9 +19,11 @@
 //! is the one that was written.
 
 use app_core::settings;
+use app_core_cache::SnapshotCache;
 use audit::bus::EventBus;
 use contracts_core::settings::{SettingsUpdateRequest, SettingsUpdateStatus};
 use contracts_core::JsonAny;
+use domain_core::settings::SettingsState;
 use persistence_core::Database;
 
 #[tokio::test]
@@ -31,23 +33,22 @@ async fn locale_survives_close_and_reopen() {
 
     // Session 1: write `locale`, then drop every handle (simulates app exit).
     {
-        app_core_settings::caches::invalidate_settings_bag();
         let db = Database::connect(&url).await.expect("connect");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
+        let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
         let req = SettingsUpdateRequest {
             key: "locale".to_owned(),
             value: JsonAny::from(serde_json::json!("pt-BR")),
         };
-        let resp = settings::update_setting(db.pool(), &bus, &req)
+        let resp = settings::update_setting(db.pool(), &bus, &cache, &req)
             .await
             .expect("update_setting should succeed");
         assert_eq!(resp.status, SettingsUpdateStatus::Success);
     } // `db` (and its connection pool) dropped here.
 
     // Session 2: a fresh `Database` over the SAME file — simulates restart.
-    app_core_settings::caches::invalidate_settings_bag();
     let db2 = Database::connect(&url).await.expect("reconnect");
     db2.migrate().await.expect("migrations idempotent on reopen");
 
@@ -72,13 +73,11 @@ async fn locale_defaults_to_base_locale_across_reopen_when_never_written() {
     let url = format!("sqlite://{}/locale-gate-default.db?mode=rwc", dir.path().display());
 
     {
-        app_core_settings::caches::invalidate_settings_bag();
         let db = Database::connect(&url).await.expect("connect");
         db.migrate().await.expect("migrations");
         // No write — the store starts empty.
     }
 
-    app_core_settings::caches::invalidate_settings_bag();
     let db2 = Database::connect(&url).await.expect("reconnect");
     db2.migrate().await.expect("migrations idempotent on reopen");
 

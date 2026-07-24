@@ -62,10 +62,9 @@ pub mod root_config;
 
 // ── In-memory settings-bag snapshot cache (F0 foundation) ────────────────────
 //
-// Defines the cache handle + `pub invalidate_settings_bag`/`store_settings_bag`
-// only. Wiring `get_settings` to read through the cache and calling
-// `invalidate_settings_bag` from `update_setting`/`restore_defaults`/
-// `set_source_override` is downstream (W-SETTINGS) work.
+// Defines the per-instance `SettingsCaches` struct and the process-global
+// `settings_bag()`/`invalidate_settings_bag()` shims used by call sites not
+// yet migrated to per-instance caches.
 pub mod caches;
 
 // ── Error mapping ──────────────────────────────────────────────────────────

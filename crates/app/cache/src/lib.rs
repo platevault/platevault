@@ -371,23 +371,69 @@ pub struct ProtectionDefaultsSnapshot {
     pub categories: Vec<String>,
 }
 
+/// Per-instance protection-defaults cache state.
+///
+/// Replaces the former process-global `OnceLock` statics (`PROTECTION_DEFAULTS`,
+/// `PROTECTION_DEFAULTS_EPOCH`). Wrap in `Arc` and thread alongside
+/// `SqlitePool`/`EventBus`; tests construct a fresh instance per test to
+/// eliminate cross-contamination.
+pub struct ProtectionDefaultsCaches {
+    defaults: SnapshotCache<ProtectionDefaultsSnapshot>,
+    /// Monotonic generation counter bumped by every [`Self::invalidate`] call.
+    /// Downstream caches tag entries with the epoch they were resolved under
+    /// and treat a mismatch as a miss (issue #563).
+    epoch: AtomicU64,
+}
+
+impl ProtectionDefaultsCaches {
+    /// Construct a fresh, empty instance.
+    #[must_use]
+    pub fn new() -> Self {
+        Self { defaults: SnapshotCache::new(), epoch: AtomicU64::new(0) }
+    }
+
+    /// Return the current epoch. Capture *before* reading defaults a derived
+    /// value will embed.
+    #[must_use]
+    pub fn epoch(&self) -> u64 {
+        self.epoch.load(Ordering::Acquire)
+    }
+
+    /// Return the cached snapshot, or `None` on a miss.
+    #[must_use]
+    pub fn load(&self) -> Option<Arc<ProtectionDefaultsSnapshot>> {
+        self.defaults.load()
+    }
+
+    /// Store a freshly loaded snapshot.
+    pub fn store(&self, value: Arc<ProtectionDefaultsSnapshot>) {
+        self.defaults.store(value);
+    }
+
+    /// Clear the snapshot and bump the epoch so derived caches see a miss.
+    pub fn invalidate(&self) {
+        self.defaults.invalidate();
+        self.epoch.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+impl Default for ProtectionDefaultsCaches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Deprecated process-global accessors (migration shim) ─────────────────────
+//
+// These delegate to a process-global instance so existing call sites compile
+// unchanged during incremental migration. New code MUST use
+// `ProtectionDefaultsCaches` directly.
+
 static PROTECTION_DEFAULTS: OnceLock<SnapshotCache<ProtectionDefaultsSnapshot>> = OnceLock::new();
 
-/// Monotonic generation counter for the protection defaults, bumped by every
-/// [`invalidate_protection_defaults`] call.
-///
-/// Downstream caches that embed values *derived from* the defaults (e.g.
-/// `app_core`'s per-source resolved-protection cache, whose entries inherit
-/// level/`block_permanent_delete`/categories from the globals — issue #563)
-/// cannot be invalidated from here without a dependency cycle
-/// (`app_core_settings` writes the defaults but must not depend on
-/// `app_core`). Instead they tag entries with the epoch they were resolved
-/// under and treat an epoch mismatch as a miss.
 static PROTECTION_DEFAULTS_EPOCH: AtomicU64 = AtomicU64::new(0);
 
-/// Return the current protection-defaults epoch. Capture this *before*
-/// reading the defaults a derived value will embed, so a concurrent defaults
-/// change marks the derived entry stale rather than fresh.
+/// Return the current protection-defaults epoch (process-global).
 #[must_use]
 pub fn protection_defaults_epoch() -> u64 {
     PROTECTION_DEFAULTS_EPOCH.load(Ordering::Acquire)
@@ -398,17 +444,12 @@ pub fn protection_defaults() -> &'static SnapshotCache<ProtectionDefaultsSnapsho
     PROTECTION_DEFAULTS.get_or_init(SnapshotCache::new)
 }
 
-/// Store a freshly loaded [`ProtectionDefaultsSnapshot`].
+/// Store a freshly loaded [`ProtectionDefaultsSnapshot`] (process-global).
 pub fn store_protection_defaults(value: Arc<ProtectionDefaultsSnapshot>) {
     protection_defaults().store(value);
 }
 
-/// Clear the protection-defaults snapshot so the next read reloads from the DB.
-///
-/// Call after `protection::set_global_protection_default` commits (`app_core`)
-/// and after the generic settings-bag write path commits a change to
-/// `defaultProtection` / `blockPermanentDelete` / `protectedCategories`
-/// (`app_core_settings::update_setting` / `restore_defaults`).
+/// Clear the protection-defaults snapshot (process-global).
 pub fn invalidate_protection_defaults() {
     protection_defaults().invalidate();
     PROTECTION_DEFAULTS_EPOCH.fetch_add(1, Ordering::AcqRel);
@@ -602,5 +643,29 @@ mod tests {
 
         invalidate_protection_defaults();
         assert!(protection_defaults().load().is_none());
+    }
+
+    // ── Per-instance isolation tests ─────────────────────────────────────
+
+    #[test]
+    fn protection_defaults_caches_instances_are_isolated() {
+        use super::ProtectionDefaultsCaches;
+
+        let a = ProtectionDefaultsCaches::new();
+        let b = ProtectionDefaultsCaches::new();
+
+        a.store(Arc::new(ProtectionDefaultsSnapshot {
+            level: "protected".to_owned(),
+            block_permanent_delete: true,
+            categories: vec!["lights".to_owned()],
+        }));
+
+        assert!(b.load().is_none(), "instance B must not see A's store");
+        assert_eq!(a.epoch(), 0, "A epoch starts at 0");
+        assert_eq!(b.epoch(), 0, "B epoch starts at 0");
+
+        a.invalidate();
+        assert_eq!(a.epoch(), 1);
+        assert_eq!(b.epoch(), 0, "B epoch must be independent of A");
     }
 }
