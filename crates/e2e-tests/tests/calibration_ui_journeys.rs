@@ -56,7 +56,7 @@ async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
 /// root: `firstrun.complete` (which [`E2eApp::complete_first_run_gate`]
 /// issues) specifically requires one of EACH of those two categories — a
 /// `calibration` root (this file's actual test subject) does not satisfy
-/// either precondition (`crates/persistence/db/src/repositories/first_run.rs`).
+/// either precondition (`crates/persistence/lifecycle/src/repositories/first_run`).
 /// Every journey below registers this pair alongside its calibration root so
 /// `goto_route` to a Shell-wrapped page (`/inbox`, `/calibration`) doesn't get
 /// bounced back to `/setup` by `Shell.tsx`'s client-side `setupCompleted` gate.

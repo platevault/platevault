@@ -61,7 +61,7 @@ async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
 /// Registers a disposable `project`-category root purely to satisfy
 /// `firstrun.complete`'s precondition (one `light_frames` root — this
 /// journey's own ingest root satisfies that half — AND one `project` root,
-/// `crates/persistence/db/src/repositories/first_run.rs`), then routes
+/// `crates/persistence/lifecycle/src/repositories/first_run`), then routes
 /// through the real gate. A `projects.create` Project entity (this journey
 /// creates one below) is a DIFFERENT concept from a registered `project`
 /// source root and does not satisfy this precondition on its own. Without

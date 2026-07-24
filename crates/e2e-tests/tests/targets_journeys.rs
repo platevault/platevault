@@ -1133,13 +1133,11 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
 
     #[cfg(target_os = "windows")]
     {
+        // Wait for the WebView2 LevelDB store to both appear AND stabilise
+        // (size unchanged across 3 × 200 ms polls). The stability check
+        // lives inside wait_for_webview_storage_flush so this single call
+        // replaces the previous pattern of flush-wait + fixed 2 s sleep.
         E2eApp::wait_for_webview_storage_flush().await?;
-        // WebView2's LevelDB commit is asynchronous: the directory and
-        // structural files appear before the actual localStorage key/value
-        // data is committed. On a loaded Windows runner this lag is
-        // non-trivial — the TRY-1-only "no persisted detailDock entry"
-        // failure (bead astro-plan-msdw) is this race.
-        tokio::time::sleep(Duration::from_secs(2)).await;
     }
 
     // Cold start: new process, empty module cache, storage read from disk.
