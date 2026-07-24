@@ -195,7 +195,8 @@ mod tests {
         let cache_path = dir.path().join("resolve-cache.redb");
         let cache = open_or_in_memory(&cache_path);
         let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        (AppState::new(repo, bus, cache, cache_path, cache_warming), dir)
+        let app_caches = app_core::AppCaches::shared();
+        (AppState::new(repo, bus, app_caches, cache, cache_path, cache_warming), dir)
     }
 
     /// Regression test for #695: `clear_and_rewarm` must return as soon as

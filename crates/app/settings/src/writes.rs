@@ -1,13 +1,15 @@
+use app_core_cache::SnapshotCache;
+
 use super::{
     bus_err, caches, db_err, default_value_for_key, descriptors, is_global_protection_default_key,
     is_noisy_audited_key, is_valid_key, protection_repo, repo, settings_entity_id,
     settings_value_eq, validate_value, AuditLogEntry, ContractError, EntityId, EntityType,
     ErrorCode, ErrorSeverity, EventBus, Outcome, ProtectionDefaultChanged, RestoreDefaultsRequest,
     RestoreDefaultsResponse, RestoreDefaultsStatus, SetSourceOverrideRequest,
-    SetSourceOverrideResponse, SettingsChanged, SettingsSnapshot, SettingsUpdateRequest,
-    SettingsUpdateResponse, SettingsUpdateStatus, Severity, Source, SqlitePool, Timestamp, Value,
-    GLOBAL_PROTECTION_DEFAULT_SCOPE, TOPIC_PROTECTION_DEFAULT_CHANGED, TOPIC_SETTINGS_CHANGED,
-    TOPIC_SETTINGS_SNAPSHOT,
+    SetSourceOverrideResponse, SettingsChanged, SettingsSnapshot, SettingsState,
+    SettingsUpdateRequest, SettingsUpdateResponse, SettingsUpdateStatus, Severity, Source,
+    SqlitePool, Timestamp, Value, GLOBAL_PROTECTION_DEFAULT_SCOPE,
+    TOPIC_PROTECTION_DEFAULT_CHANGED, TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_SNAPSHOT,
 };
 
 // ── update_setting ────────────────────────────────────────────────────────
@@ -31,6 +33,7 @@ use super::{
 pub async fn update_setting(
     pool: &SqlitePool,
     bus: &EventBus,
+    cache: &SnapshotCache<SettingsState>,
     req: &SettingsUpdateRequest,
 ) -> Result<SettingsUpdateResponse, ContractError> {
     let key = &req.key;
@@ -91,10 +94,11 @@ pub async fn update_setting(
     }
 
     // Cache invalidation fan-out (F0 in-memory caching layer): fires only
-    // after the write above has committed, never before. `protection_defaults`
-    // was relocated to the `app_core_cache` leaf (crates/app/cache/src/lib.rs:337-343)
-    // precisely so this crate can invalidate it without depending on `app_core`
-    // (which itself depends on `app_core_settings`).
+    // after the write above has committed, never before.
+    // `cache` is the per-instance slot passed by the caller; also invalidate
+    // the process-global shim so legacy callers that read through it stay
+    // consistent during incremental migration.
+    cache.invalidate();
     caches::invalidate_settings_bag();
     app_core_calibration::caches::invalidate_calibration_config();
     if is_protection_default {
@@ -260,6 +264,7 @@ pub(super) async fn write_settings_refusal(
 pub async fn restore_defaults(
     pool: &SqlitePool,
     bus: &EventBus,
+    cache: &SnapshotCache<SettingsState>,
     req: &RestoreDefaultsRequest,
 ) -> Result<RestoreDefaultsResponse, ContractError> {
     let keys_to_restore: Vec<String> = if req.keys.is_empty() {
@@ -333,8 +338,10 @@ pub async fn restore_defaults(
     }
 
     // Cache invalidation fan-out: one shot after the loop (not per-key) since
-    // both snapshots are single-slot whole-bag caches.
+    // both snapshots are single-slot whole-bag caches. Invalidate both the
+    // per-instance slot and the process-global shim for incremental migration.
     if !restored.is_empty() {
+        cache.invalidate();
         caches::invalidate_settings_bag();
         app_core_calibration::caches::invalidate_calibration_config();
         if restored_protection_default {
@@ -370,6 +377,7 @@ pub async fn restore_defaults(
 pub async fn set_source_override(
     pool: &SqlitePool,
     bus: &EventBus,
+    cache: &SnapshotCache<SettingsState>,
     req: &SetSourceOverrideRequest,
 ) -> Result<SetSourceOverrideResponse, ContractError> {
     let key = &req.key;
@@ -401,8 +409,8 @@ pub async fn set_source_override(
     // `get_settings`'s bag is global-only (no source_id), so a per-source
     // override never actually changes it; invalidating anyway is a cheap,
     // safe no-op that keeps this write site consistent with the other two.
-    // Unlike `update_setting`/`restore_defaults`, no calibration/protection
-    // global key is ever written on this path, so no further fan-out applies.
+    // Invalidate both per-instance slot and process-global shim.
+    cache.invalidate();
     caches::invalidate_settings_bag();
 
     let entry = AuditLogEntry::new(

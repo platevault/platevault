@@ -25,7 +25,7 @@ use domain_core::settings::SettingsState;
 /// instance per test to eliminate cross-contamination without needing
 /// `invalidate_settings_bag()` or serialization mutexes.
 pub struct SettingsCaches {
-    bag: SnapshotCache<SettingsState>,
+    pub bag: SnapshotCache<SettingsState>,
 }
 
 impl SettingsCaches {

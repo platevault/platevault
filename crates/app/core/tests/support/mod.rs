@@ -18,34 +18,12 @@ use persistence_db::Database;
 
 /// Provision an isolated in-memory SQLite DB with all migrations applied and a
 /// repository/event-bus wired to it. Real backend, no mocks.
-///
-/// Returns a fresh `AppCaches` per call so tests never share mutable cache
-/// state (the root cause of the previously-serialized flakes). The deprecated
-/// `invalidate_settings_bag()` call is retained only as a belt-and-suspenders
-/// reset for code paths that still read the process-global shim during this
-/// incremental migration.
 pub async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {
-    app_core_settings::caches::invalidate_settings_bag();
     let db = Database::in_memory().await.expect("in-memory db");
     db.migrate().await.expect("migrations");
     let bus = EventBus::with_pool(db.pool().clone());
     let repo = SqliteLifecycleRepository::new(db.pool().clone(), bus.clone());
     (db, repo, bus)
-}
-
-/// Same as [`setup`] but also returns a fresh per-instance `AppCaches`.
-///
-/// Prefer this over [`setup`] for new tests — the returned caches struct
-/// eliminates cross-contamination without needing `invalidate_*` calls or
-/// serialization mutexes.
-pub async fn setup_with_caches(
-) -> (Database, SqliteLifecycleRepository, EventBus, std::sync::Arc<app_core::AppCaches>) {
-    let db = Database::in_memory().await.expect("in-memory db");
-    db.migrate().await.expect("migrations");
-    let bus = EventBus::with_pool(db.pool().clone());
-    let repo = SqliteLifecycleRepository::new(db.pool().clone(), bus.clone());
-    let caches = app_core::AppCaches::shared();
-    (db, repo, bus, caches)
 }
 
 /// Platform-absolute path of the project folder registered by
