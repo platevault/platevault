@@ -3,10 +3,10 @@
 
 //! Shared `notify`-event classification + UTF-8-safe path conversion, used by
 //! both [`crate::watcher`] and [`crate::artifact_watcher`] (duplication-and-
-//! abstraction audit Tier 3).
+//! abstraction audit Tier 3, DS-2 extraction).
 
 use camino::{Utf8Path, Utf8PathBuf};
-use notify::EventKind;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 /// The three event kinds both watcher event enums distinguish. `notify`
 /// event kinds outside these three (Access, Other, ...) are not forwarded.
@@ -19,6 +19,7 @@ pub enum SimpleEventKind {
 
 /// Classify a raw `notify::EventKind` into the shared 3-way kind, or `None`
 /// for event kinds neither watcher forwards (e.g. `Access`).
+#[must_use]
 pub fn classify(kind: EventKind) -> Option<SimpleEventKind> {
     match kind {
         EventKind::Create(_) => Some(SimpleEventKind::Created),
@@ -36,6 +37,7 @@ pub fn classify(kind: EventKind) -> Option<SimpleEventKind> {
 /// crosses the IPC boundary as a wire string) — a non-UTF-8 path is skipped
 /// with a `diagnostic_source`-tagged stderr diagnostic instead. Constitution
 /// §I (Local-First custody): never silently mangle a user path.
+#[must_use]
 pub fn utf8_path_or_skip(path: &std::path::Path, diagnostic_source: &str) -> Option<Utf8PathBuf> {
     if let Some(utf8) = Utf8Path::from_path(path) {
         Some(utf8.to_owned())
@@ -46,6 +48,74 @@ pub fn utf8_path_or_skip(path: &std::path::Path, diagnostic_source: &str) -> Opt
         );
         None
     }
+}
+
+/// Outcome of registering watch paths — reports which paths were skipped due
+/// to OS-level errors so callers can log per-path failures without aborting the
+/// entire watcher start (bead kyo7.74 item d).
+#[derive(Debug, Default)]
+pub struct WatchRegistrationReport {
+    /// Paths successfully registered with the OS watcher.
+    pub watched: Vec<std::path::PathBuf>,
+    /// `(path, error_message)` pairs for directories that could not be watched.
+    pub skipped: Vec<(std::path::PathBuf, String)>,
+}
+
+/// Register `paths` with `watcher`, using the symlink-safe two-mode strategy
+/// shared by both `WatcherService::start` and `start_artifact_watcher`.
+///
+/// When `follow_symlinks` is `false`, each path is walked via
+/// [`fs_pathsafe::real_dirs_under`] and every real (non-link) subdirectory is
+/// watched individually with `RecursiveMode::NonRecursive`.
+///
+/// When `fail_fast` is `true`, the first per-directory error aborts the entire
+/// registration (backwards-compatible with root-path failures). When `false`,
+/// per-subdirectory failures are collected in `WatchRegistrationReport::skipped`
+/// and do not abort (item d: partial start tolerance).
+///
+/// # Errors
+///
+/// Returns an error string if a root path cannot be watched (always fatal) or
+/// if any subdirectory fails when `fail_fast` is `true`.
+pub fn register_watch_paths(
+    watcher: &mut RecommendedWatcher,
+    paths: &[Utf8PathBuf],
+    follow_symlinks: bool,
+    fail_fast: bool,
+) -> Result<WatchRegistrationReport, String> {
+    let mut report = WatchRegistrationReport::default();
+
+    for path in paths {
+        if follow_symlinks {
+            watcher
+                .watch(path.as_std_path(), RecursiveMode::Recursive)
+                .map_err(|e| format!("failed to watch {path}: {e}"))?;
+            report.watched.push(path.as_std_path().to_path_buf());
+            continue;
+        }
+
+        let dirs = fs_pathsafe::real_dirs_under(path.as_std_path(), false);
+        // Root path (dirs[0]) failure is always fatal — if we cannot watch the
+        // root itself, there is nothing useful the watcher can do.
+        let mut is_root = true;
+        for dir in dirs {
+            match watcher.watch(&dir, RecursiveMode::NonRecursive) {
+                Ok(()) => {
+                    report.watched.push(dir);
+                }
+                Err(e) if is_root || fail_fast => {
+                    return Err(format!("failed to watch {}: {e}", dir.display()));
+                }
+                Err(e) => {
+                    tracing::warn!("skipping unwatchable subdirectory {}: {e}", dir.display());
+                    report.skipped.push((dir, e.to_string()));
+                }
+            }
+            is_root = false;
+        }
+    }
+
+    Ok(report)
 }
 
 #[cfg(test)]
@@ -77,5 +147,25 @@ mod tests {
     fn utf8_path_or_skip_converts_valid_utf8() {
         let p = std::path::Path::new("/tmp/valid.fits");
         assert_eq!(utf8_path_or_skip(p, "test"), Some(Utf8PathBuf::from("/tmp/valid.fits")));
+    }
+
+    #[test]
+    fn register_watch_paths_succeeds_on_tempdir() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let mut watcher =
+            notify::recommended_watcher(|_: Result<notify::Event, notify::Error>| {}).unwrap();
+        let report = register_watch_paths(&mut watcher, &[path], false, false).unwrap();
+        assert!(!report.watched.is_empty());
+        assert!(report.skipped.is_empty());
+    }
+
+    #[test]
+    fn register_watch_paths_root_failure_is_fatal() {
+        let path = Utf8PathBuf::from("/nonexistent/path/that/should/not/exist");
+        let mut watcher =
+            notify::recommended_watcher(|_: Result<notify::Event, notify::Error>| {}).unwrap();
+        let result = register_watch_paths(&mut watcher, &[path], false, false);
+        assert!(result.is_err());
     }
 }

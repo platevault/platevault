@@ -581,7 +581,14 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     // via the `artifact.watcher.attach`/`artifact.watcher.detach` commands as the
     // project drawer opens/closes. No watcher runs until a project is attached.
     let artifact_watcher_registry = crate::watcher::new_artifact_watcher_registry();
-    app.manage(artifact_watcher_registry);
+    app.manage(artifact_watcher_registry.clone());
+    // Item (f): periodic sweep re-attaches watchers when a previously
+    // unavailable drive becomes reachable (e.g. external USB mount).
+    drop(crate::watcher::spawn_volume_availability_sweep(
+        pool.clone(),
+        bus.clone(),
+        artifact_watcher_registry,
+    ));
     // spec 012 (WP-012-A): one-time, idempotent fix-up for `processing_artifacts`
     // rows the retired global root watcher (pre-#400) keyed by a library-root id
     // instead of the owning project's id. Runs once per app start, before any

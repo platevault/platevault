@@ -2870,6 +2870,10 @@ const mockHandlers = {
     return null;
   },
 
+  artifact_watcher_refresh: async () => {
+    return [] as string[];
+  },
+
   // ── Equipment CRUD (spec 030) ───────────────────────────────────────────
 
   equipment_cameras_create: async (_args) => {

@@ -71,26 +71,32 @@ async fn detach_during_attach_leaves_no_zombie() {
     // Step 2: detach removes the live entry.
     detach_project_watcher(&registry, &project_id).await;
 
-    // Step 3: simulate the detach-during-attach race by calling detach once
-    // more (no live entry) to plant a tombstone, then attaching.
-    detach_project_watcher(&registry, &project_id).await;
-    {
-        let reg = registry.lock().await;
-        assert!(
-            reg.detach_requested.contains(&project_id),
-            "tombstone must be present after detach with no live entry"
-        );
-    }
+    // Step 3: simulate the detach-during-attach race by spawning an attach
+    // and racing a detach against it. The attach clears any stale tombstone
+    // at start (item e fix), but a detach arriving DURING reconciliation
+    // replants it, causing the finishing attach to discard its watcher.
+    let attach_registry = registry.clone();
+    let attach_pool = pool.clone();
+    let attach_bus = bus.clone();
+    let pid = project_id.clone();
+    let attach_handle = tokio::spawn(async move {
+        attach_project_watcher(&attach_pool, &attach_bus, &attach_registry, &pid).await
+    });
 
-    // attach() sees the tombstone at final-insert time and discards the watcher.
-    attach_project_watcher(&pool, &bus, &registry, &project_id)
-        .await
-        .expect("attach after tombstone must return Ok");
+    // Yield briefly to let attach start (pass idempotency, release lock,
+    // begin reconciliation). Then detach — no live entry yet because attach
+    // is still reconciling, so detach plants a tombstone.
+    tokio::task::yield_now().await;
+    detach_project_watcher(&registry, &project_id).await;
+
+    // attach finishes: it re-acquires the lock, sees the freshly-planted
+    // tombstone from the concurrent detach, and discards its watcher.
+    attach_handle.await.unwrap().expect("attach must return Ok");
 
     let reg = registry.lock().await;
     assert!(
         !reg.entries.contains_key(&project_id),
-        "attach must not insert a zombie entry when a detach tombstone was present"
+        "attach must not insert a zombie entry when a detach tombstone was planted during reconciliation"
     );
     assert!(
         !reg.detach_requested.contains(&project_id),
