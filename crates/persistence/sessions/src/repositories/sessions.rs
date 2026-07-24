@@ -109,8 +109,9 @@ pub struct SessionListFilter<'a> {
     pub observing_night_to: Option<&'a str>,
     pub camera_row_id: Option<i64>,
     pub optical_profile_row_id: Option<i64>,
-    /// `None` → exclude superseded; `Some(true)` → only superseded;
-    /// `Some(false)` → include all.
+    /// `None` → exclude superseded (default, matching the contract's omitted value);
+    /// `Some(false)` → include all (superseded and non-superseded);
+    /// `Some(true)` → only superseded.
     pub superseded_only: Option<bool>,
 }
 
@@ -348,7 +349,13 @@ pub async fn list_sessions_at_watermark(
     .bind(filter.observing_night_to)
     .bind(filter.camera_row_id)
     .bind(filter.optical_profile_row_id)
-    .bind(filter.superseded_only.map(|v| if v { 1i64 } else { 0i64 }))
+    // None → exclude (SQL 0); Some(false) → include all (SQL NULL bypasses the CASE);
+    // Some(true) → only superseded (SQL 1).
+    .bind(match filter.superseded_only {
+        None => Some(0i64),
+        Some(false) => None,
+        Some(true) => Some(1i64),
+    })
     .bind(cursor_created_at)
     .bind(cursor_public_id)
     .bind(page_size)

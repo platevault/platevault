@@ -291,6 +291,232 @@ async fn watermarked_list_excludes_sessions_created_after_watermark() {
     assert_eq!(results[0].public_id, "00000000-0000-7000-b002-000000000001");
 }
 
+// ── Default filter excludes superseded ───────────────────────────────────────
+
+#[tokio::test]
+async fn default_filter_excludes_superseded_sessions() {
+    let db = setup_db().await;
+    seed_operation_fixtures(db.pool()).await;
+    seed_frame(db.pool(), 1).await;
+    seed_frame(db.pool(), 2).await;
+
+    // Insert two sessions and make s1 visible at watermark=1.
+    let mut conn = db.pool().acquire().await.unwrap();
+    let mut tx = conn.begin().await.unwrap();
+
+    let s1 = insert_session(
+        &mut tx,
+        &InsertSession {
+            public_id: "00000000-0000-7000-b003-000000000001",
+            materialization_operation_row_id: 1,
+            kind: "dark",
+            ordinal_in_operation: 0,
+            identity_digest: "digest-sup-s1",
+            observing_night_date: "2026-07-21",
+            site_row_id: None,
+            timezone_name_snapshot: None,
+            night_derivation: "reviewed_local_fallback",
+            canonical_target_row_id: None,
+            created_sequence: 1,
+            created_at: "2026-07-22T00:00:00.000000Z",
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_session_frame(
+        &mut tx,
+        &InsertSessionFrame {
+            session_row_id: s1,
+            frame_row_id: 1,
+            materialization_operation_row_id: 1,
+            ordinal: 0,
+            is_representative: true,
+            created_sequence: 1,
+            _phantom: std::marker::PhantomData,
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_session_visibility(&mut tx, s1, 1, "created").await.unwrap();
+
+    let s2 = insert_session(
+        &mut tx,
+        &InsertSession {
+            public_id: "00000000-0000-7000-b003-000000000002",
+            materialization_operation_row_id: 1,
+            kind: "dark",
+            ordinal_in_operation: 1,
+            identity_digest: "digest-sup-s2",
+            observing_night_date: "2026-07-21",
+            site_row_id: None,
+            timezone_name_snapshot: None,
+            night_derivation: "reviewed_local_fallback",
+            canonical_target_row_id: None,
+            created_sequence: 1,
+            created_at: "2026-07-22T00:00:00.000000Z",
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_session_frame(
+        &mut tx,
+        &InsertSessionFrame {
+            session_row_id: s2,
+            frame_row_id: 2,
+            materialization_operation_row_id: 1,
+            ordinal: 0,
+            is_representative: true,
+            created_sequence: 1,
+            _phantom: std::marker::PhantomData,
+        },
+    )
+    .await
+    .unwrap();
+
+    insert_session_visibility(&mut tx, s2, 1, "created").await.unwrap();
+
+    // Seed resolution rows needed for plan revision FK.
+    let mr = insert_metadata_resolution(
+        &mut tx,
+        &InsertMetadataResolution {
+            public_id: "00000000-0000-7000-b003-000000000010",
+            session_row_id: s1,
+            revision_number: 1,
+            predecessor_resolution_row_id: None,
+            state: "accepted",
+            actor_row_id: 1,
+            command_row_id: 1,
+            created_sequence: 1,
+            created_at: "2026-07-22T00:00:00.000000Z",
+        },
+    )
+    .await
+    .unwrap();
+    insert_metadata_resolution_head(&mut tx, s1, mr).await.unwrap();
+
+    let er = insert_equipment_resolution(
+        &mut tx,
+        &InsertEquipmentResolution {
+            public_id: "00000000-0000-7000-b003-000000000011",
+            session_row_id: s1,
+            revision_number: 1,
+            predecessor_resolution_row_id: None,
+            camera_row_id: None,
+            optical_profile_row_id: None,
+            camera_alias_evidence_row_id: None,
+            optical_alias_evidence_row_id: None,
+            focal_length_reported_um: None,
+            focal_length_calculated_um: None,
+            comparison_severity: "unknown",
+            assignment_mode: "automatic",
+            accepted_proposal_row_id: None,
+            config_revision_row_id: 1,
+            actor_row_id: 1,
+            created_sequence: 1,
+            created_at: "2026-07-22T00:00:00.000000Z",
+        },
+    )
+    .await
+    .unwrap();
+    insert_equipment_resolution_head(&mut tx, s1, er).await.unwrap();
+
+    tx.commit().await.unwrap();
+
+    // Seed reclassification plan + revision for the supersession FK.
+    sqlx::query(
+        "INSERT INTO reclassification_plan
+         (row_id, public_id, head_generation, created_at)
+         VALUES (1, '00000000-0000-7000-b003-000000000020', 0, '2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO reclassification_plan_revision
+         (row_id, public_id, plan_row_id, revision_number, state,
+          source_session_row_id, metadata_resolution_row_id, equipment_resolution_row_id,
+          basis_digest, actor_row_id, command_row_id, created_sequence, created_at)
+         VALUES (1, '00000000-0000-7000-b003-000000000021', 1, 1, 'applied',
+                 ?, ?, ?, 'basis', 1, 1, 1, '2026-07-22T00:00:00.000000Z')",
+    )
+    .bind(s1)
+    .bind(mr)
+    .bind(er)
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    // Mark s1 as superseded by s2.
+    let mut conn2 = db.pool().acquire().await.unwrap();
+    let mut tx2 = conn2.begin().await.unwrap();
+    insert_supersession(
+        &mut tx2,
+        &InsertSupersession {
+            predecessor_session_row_id: s1,
+            replacement_session_row_id: s2,
+            kind: "dark",
+            applied_plan_revision_row_id: 1,
+            ordinal: 0,
+            created_sequence: 1,
+            created_at: "2026-07-22T00:00:00.000000Z",
+        },
+    )
+    .await
+    .unwrap();
+    tx2.commit().await.unwrap();
+
+    let watermark = current_change_sequence(db.pool()).await.unwrap();
+
+    // Default filter (None) must exclude the superseded session s1.
+    let default_results = list_sessions_at_watermark(
+        db.pool(),
+        watermark,
+        &SessionListFilter::default(),
+        None,
+        None,
+        10,
+    )
+    .await
+    .unwrap();
+    let default_ids: Vec<_> = default_results.iter().map(|r| r.row_id).collect();
+    assert!(!default_ids.contains(&s1), "default filter must exclude superseded session s1");
+    assert!(default_ids.contains(&s2), "default filter must include current session s2");
+
+    // Some(false) must include all (both s1 and s2).
+    let include_all = list_sessions_at_watermark(
+        db.pool(),
+        watermark,
+        &SessionListFilter { superseded_only: Some(false), ..Default::default() },
+        None,
+        None,
+        10,
+    )
+    .await
+    .unwrap();
+    let include_ids: Vec<_> = include_all.iter().map(|r| r.row_id).collect();
+    assert!(include_ids.contains(&s1), "Some(false) must include superseded s1");
+    assert!(include_ids.contains(&s2), "Some(false) must include current s2");
+
+    // Some(true) must return only superseded sessions.
+    let only_superseded = list_sessions_at_watermark(
+        db.pool(),
+        watermark,
+        &SessionListFilter { superseded_only: Some(true), ..Default::default() },
+        None,
+        None,
+        10,
+    )
+    .await
+    .unwrap();
+    let only_ids: Vec<_> = only_superseded.iter().map(|r| r.row_id).collect();
+    assert!(only_ids.contains(&s1), "Some(true) must include superseded s1");
+    assert!(!only_ids.contains(&s2), "Some(true) must exclude current s2");
+}
+
 // ── Supersession ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
