@@ -111,11 +111,25 @@ impl Database {
 
     /// Convenience constructor for in-memory SQLite (test and CI use).
     ///
+    /// Each call generates a unique named in-memory URI
+    /// (`file:{uuid}?mode=memory&cache=shared`). The `cache=shared` flag means
+    /// every pool connection that opens the same URI sees the same database, so
+    /// `migrate()` and subsequent queries all operate on one shared schema.
+    /// The unique name isolates each `Database::in_memory()` instance from
+    /// every other — tests that run concurrently do not cross-contaminate.
+    ///
+    /// Using `sqlite::memory:` (no name) instead would give each pool
+    /// connection its own private blank database, so queries after `migrate()`
+    /// could land on an unmigrated connection and fail with "no such table"
+    /// under parallel test load.
+    ///
     /// # Errors
     ///
     /// Returns [`DbError::Database`] if the in-memory pool cannot be created.
     pub async fn in_memory() -> DbResult<Self> {
-        Self::connect("sqlite::memory:").await
+        let db_name = uuid::Uuid::new_v4().simple();
+        let url = format!("sqlite:file:{db_name}?mode=memory&cache=shared");
+        Self::connect(&url).await
     }
 
     /// Return `true` when at least one migration in the embedded set has not yet
