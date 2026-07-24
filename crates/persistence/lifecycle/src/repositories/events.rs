@@ -203,7 +203,7 @@ pub async fn min_event_id(pool: &SqlitePool) -> DbResult<Option<i64>> {
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
-pub async fn count_events(pool: &SqlitePool) -> DbResult<i64> {
+pub(crate) async fn count_events(pool: &SqlitePool) -> DbResult<i64> {
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events").fetch_one(pool).await?;
     Ok(count)
 }
