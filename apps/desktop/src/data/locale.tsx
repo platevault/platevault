@@ -9,7 +9,7 @@
 // `"custom-almSettings"` link via `defineCustomClientStrategy` and everything
 // that sits on top of it:
 //
-//   - `getLocale()`  → localStorage mirror (`alm.locale`), SYNCHRONOUS — the
+//   - `getLocale()`  → localStorage mirror (`pv.locale`), SYNCHRONOUS — the
 //     Paraglide runtime requires a synchronous `getLocale` from client
 //     strategies (research D3).
 //   - `setLocale()`  → settings DB (`general` scope, `locale` key, spec 018)
@@ -57,7 +57,7 @@ import {
 export type { Locale };
 export { BASE_LOCALE, SHIPPED_LOCALES };
 
-const LOCALE_KEY = 'alm.locale';
+const LOCALE_KEY = 'pv.locale';
 const SETTINGS_SCOPE = 'general';
 const SETTINGS_KEY = 'locale';
 const STRATEGY_NAME = 'custom-almSettings';

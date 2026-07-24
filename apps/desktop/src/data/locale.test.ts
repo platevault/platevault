@@ -33,7 +33,7 @@ describe('strategy precedence — custom-almSettings > preferredLanguage > baseL
 
   it('a saved choice in the mirror wins over the OS/webview language', async () => {
     setNavigatorLanguages(['pt-BR']);
-    localStorage.setItem('alm.locale', 'en-GB');
+    localStorage.setItem('pv.locale', 'en-GB');
 
     const { registerLocaleStrategy, getCurrentLocale } = await import(
       './locale'
@@ -67,7 +67,7 @@ describe('strategy precedence — custom-almSettings > preferredLanguage > baseL
 
   it('ignores a malformed mirror value and falls through the chain', async () => {
     setNavigatorLanguages(['pt-BR']);
-    localStorage.setItem('alm.locale', 'not-a-real-locale');
+    localStorage.setItem('pv.locale', 'not-a-real-locale');
 
     const { registerLocaleStrategy, getCurrentLocale } = await import(
       './locale'
