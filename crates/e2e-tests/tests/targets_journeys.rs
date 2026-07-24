@@ -862,6 +862,13 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // read, so seeding localStorage into a booted page would be inert.
     app.seed_preference("detailDock", r#"{"targets":{"placement":"side","width":420}}"#).await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    // Re-establish the target viewport after the preference-seed page reload.
+    // `seed_preference` calls `driver.refresh()` which keeps the OS window
+    // size, but on some CI runs the WebView's reported `innerWidth` drifts back
+    // to the screen default (1600 on the xvfb screen). Calling `set_viewport`
+    // again here ensures the layout that mounts on the next navigation sees the
+    // correct 1400 px width when `useAdaptiveDock` initialises from storage.
+    let _ = app.set_viewport(1400, 900).await;
 
     // Return to the SELECTED target, not bare `/targets`. The side dock only
     // takes width when there is a detail to show — `ListPageLayout` mounts the
@@ -881,18 +888,23 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     )
     .await?;
 
-    // Poll until the side dock has fully settled at its pinned width so the
-    // table overflows enough for the sticky-column assertion to be meaningful.
+    // Poll until the table overflows by >= MIN_SCROLL, retrying set_viewport
+    // if the geometry is still wrong. Two failure modes are observed on CI:
     //
-    // The side-dock `useAdaptiveDock` reads its width from localStorage on
-    // first render, but the flex layout can transiently report a narrower
-    // `clientWidth` while the CSS variable and resize observer settle after a
-    // SPA navigation + WebKit relayout. Observed on Ubuntu CI: consistently
-    // producing clientWidth=880 (dock at ~300px) for up to a few seconds
-    // before the correct 420px-dock geometry stabilises (clientWidth≈760).
-    // Polling rather than sleeping caps wait time on fast runners.
+    // (a) Dock-width transient: `useAdaptiveDock` initialises correctly from
+    //     storage (width=420), but the flex layout reports a narrower
+    //     clientWidth (~880 = dock ~300px) for a few seconds while WebKit
+    //     settles the CSS variable after a SPA navigation. Retrying set_viewport
+    //     nudges the layout engine to recompute.
+    //
+    // (b) Viewport didn't converge: set_viewport returned (1400, 900) but the
+    //     webview snapped back to the xvfb screen default (1600x1200) after the
+    //     seed_preference refresh(). At 1600px the dock IS 420px but the table
+    //     is ~960px wide and overflows by only 40px — below MIN_SCROLL. A
+    //     second set_viewport call inside this loop corrects the window size and
+    //     causes the layout to remount at 1400px with the expected ~760px table.
     let before = {
-        const DOCK_SETTLE_TIMEOUT: Duration = Duration::from_secs(10);
+        const DOCK_SETTLE_TIMEOUT: Duration = Duration::from_secs(15);
         let deadline = tokio::time::Instant::now() + DOCK_SETTLE_TIMEOUT;
         let mut last = measure_pinned_columns(&app).await?;
         loop {
@@ -903,7 +915,10 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
             if tokio::time::Instant::now() >= deadline {
                 break last; // let the assertion below produce the diagnostic
             }
-            tokio::time::sleep(Duration::from_millis(250)).await;
+            // Re-assert the viewport on every other poll: covers both the
+            // dock-settle transient and the viewport-didn't-converge case.
+            let _ = app.set_viewport(1400, 900).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
             last = measure_pinned_columns(&app).await?;
         }
     };
