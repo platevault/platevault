@@ -72,6 +72,9 @@ pub async fn start_watcher(
                         InboxFileEvent::Modified { path } => {
                             serde_json::json!({ "kind": "modified", "path": path })
                         }
+                        InboxFileEvent::NeedsRescan { reason } => {
+                            serde_json::json!({ "kind": "needsRescan", "reason": reason })
+                        }
                     };
                     // Best-effort emit — the webview may not be listening.
                     let _ = app_handle.emit("inbox:file-change", payload);
@@ -373,6 +376,71 @@ async fn run_attach_reconciliation(
     Ok(())
 }
 
+/// Spawn the per-project event forward task that debounces raw watcher events,
+/// triggers reconciliation on error/overflow signals, and sweeps stale launches.
+fn spawn_artifact_forward_task(
+    mut rx: tokio::sync::mpsc::Receiver<ArtifactFileEvent>,
+    pool: SqlitePool,
+    bus: EventBus,
+    project_id: String,
+    tool_id: String,
+    extensions: Vec<String>,
+    project_root: PathBuf,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut pending: HashMap<PathBuf, FileSnapshot> = HashMap::new();
+        let mut debounce_tick = tokio::time::interval(DEFAULT_STABILITY_DEBOUNCE / 2);
+        debounce_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut launch_sweep_tick = tokio::time::interval(STALE_LAUNCH_SWEEP_INTERVAL);
+        launch_sweep_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            tokio::select! {
+                maybe_evt = rx.recv() => {
+                    let Some(evt) = maybe_evt else {
+                        tracing::debug!(
+                            "artifact watcher: channel closed for project {project_id}"
+                        );
+                        break;
+                    };
+                    // Items (a)/(c): NeedsRescan or Overflow signals mean
+                    // events were lost — run a full reconciliation pass.
+                    if matches!(evt.kind, ArtifactEventKind::NeedsRescan | ArtifactEventKind::Overflow) {
+                        tracing::warn!(
+                            "artifact watcher: {:?} for project {project_id}, triggering reconciliation",
+                            evt.kind
+                        );
+                        pending.clear();
+                        let ext_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+                        if let Err(e) = run_attach_reconciliation(
+                            &pool, &bus, &project_id, &project_root, &tool_id, &ext_refs,
+                        ).await {
+                            tracing::warn!(
+                                "artifact watcher: reconciliation after {:?} failed for {project_id}: {e}",
+                                evt.kind
+                            );
+                        }
+                        continue;
+                    }
+                    record_raw_event(&evt, &extensions, &mut pending);
+                }
+                _ = debounce_tick.tick() => {
+                    sweep_pending_artifacts(&pool, &bus, &project_id, &tool_id, &mut pending).await;
+                }
+                _ = launch_sweep_tick.tick() => {
+                    if let Err(e) =
+                        app_core::artifact::sweep_stale_launches(&pool, &bus, &project_id).await
+                    {
+                        tracing::debug!(
+                            "artifact watcher: stale-launch sweep failed for project {project_id}: {e}"
+                        );
+                    }
+                }
+            }
+        }
+    })
+}
+
 /// Attach a live filesystem watcher for `project_id`'s output folder
 /// (currently `Project.path`; source-view folders are out of scope, see
 /// `tool_launch::launch`'s identical v1 simplification).
@@ -407,10 +475,17 @@ pub async fn attach_project_watcher(
 ) -> Result<(), String> {
     // ── Fast idempotency check — drop the lock before the slow path ────────
     {
-        let reg = registry.lock().await;
+        let mut reg = registry.lock().await;
         if reg.entries.contains_key(project_id) {
             return Ok(());
         }
+        // Item (e): clear any stale tombstone from a prior detach that arrived
+        // when no attach was in flight. Without this, a detach/attach cycle
+        // where detach lands first leaves a tombstone that kills the next
+        // legitimate attach. The tombstone is only meaningful when an attach IS
+        // currently in flight (between this check and the final insert below);
+        // clearing it here ensures we start clean.
+        reg.detach_requested.remove(project_id);
     }
 
     // ── All slow work runs without holding the registry lock ───────────────
@@ -435,70 +510,25 @@ pub async fn attach_project_watcher(
     run_attach_reconciliation(pool, bus, project_id, &project_root, &tool_id, &ext_refs).await?;
 
     // ── Start the live per-project watcher ─────────────────────────────────
-    let root_utf8 = Utf8PathBuf::from_path_buf(project_root)
+    let root_utf8 = Utf8PathBuf::from_path_buf(project_root.clone())
         .map_err(|_| format!("project path is not valid UTF-8: {}", project.path))?;
 
     // Constitution §II: never follow symlinks/junctions unless explicitly
     // enabled per root; project output folders have no per-root override
     // surface yet, so they default to the safe gate (matches
     // `start_watcher`'s inbox gating above).
-    let (mut rx, guard) = start_artifact_watcher(std::slice::from_ref(&root_utf8), 256, false)
+    let (rx, guard) = start_artifact_watcher(std::slice::from_ref(&root_utf8), 256, false)
         .map_err(|e| format!("failed to start artifact watcher: {e}"))?;
 
-    let task_pool = pool.clone();
-    let task_bus = bus.clone();
-    let task_project_id = project_id.to_owned();
-    let task_tool_id = tool_id.clone();
-    let task_extensions = extensions.clone();
-    let forward_task = tokio::spawn(async move {
-        // Per-path debounce state for the stable-size check (spec 012
-        // T003/T004, #729): the raw watcher fires on every write; a file is
-        // only `detect()`-ed once its size has been unchanged for
-        // `DEFAULT_STABILITY_DEBOUNCE`, so the recorded `size_bytes` is real
-        // instead of the previously-hardcoded 0.
-        let mut pending: HashMap<PathBuf, FileSnapshot> = HashMap::new();
-        let mut debounce_tick = tokio::time::interval(DEFAULT_STABILITY_DEBOUNCE / 2);
-        debounce_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // #727: periodically complete tool launches whose attribution window
-        // has closed — the real production trigger for `complete_run` /
-        // `workflow.run_completed`, previously exercised only by tests.
-        let mut launch_sweep_tick = tokio::time::interval(STALE_LAUNCH_SWEEP_INTERVAL);
-        launch_sweep_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-
-        loop {
-            tokio::select! {
-                maybe_evt = rx.recv() => {
-                    let Some(evt) = maybe_evt else {
-                        tracing::debug!(
-                            "artifact watcher: channel closed for project {task_project_id}"
-                        );
-                        break;
-                    };
-                    record_raw_event(&evt, &task_extensions, &mut pending);
-                }
-                _ = debounce_tick.tick() => {
-                    sweep_pending_artifacts(
-                        &task_pool,
-                        &task_bus,
-                        &task_project_id,
-                        &task_tool_id,
-                        &mut pending,
-                    )
-                    .await;
-                }
-                _ = launch_sweep_tick.tick() => {
-                    if let Err(e) =
-                        app_core::artifact::sweep_stale_launches(&task_pool, &task_bus, &task_project_id)
-                            .await
-                    {
-                        tracing::debug!(
-                            "artifact watcher: stale-launch sweep failed for project {task_project_id}: {e}"
-                        );
-                    }
-                }
-            }
-        }
-    });
+    let forward_task = spawn_artifact_forward_task(
+        rx,
+        pool.clone(),
+        bus.clone(),
+        project_id.to_owned(),
+        tool_id,
+        extensions,
+        project_root,
+    );
 
     // ── Re-acquire lock briefly to insert; handle racer and zombie guard ───
     let mut reg = registry.lock().await;
@@ -529,6 +559,76 @@ pub async fn attach_project_watcher(
     reg.entries.insert(project_id.to_owned(), ArtifactWatcherEntry { _guard: guard, forward_task });
     drop(reg);
     Ok(())
+}
+
+/// Re-attempt attaching watchers for projects whose output folder has become
+/// available (item f: unavailable-drive auto-reattach). Called by the periodic
+/// volume-availability sweep and the manual `artifact.watcher.refresh` command.
+///
+/// Returns the list of project IDs that were successfully (re-)attached.
+pub async fn reattach_unavailable_projects(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    registry: &ArtifactWatcherRegistry,
+) -> Vec<String> {
+    let projects = match persistence_plans::repositories::projects::list_projects(pool).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("reattach sweep: failed to list projects: {e}");
+            return Vec::new();
+        }
+    };
+
+    let mut reattached = Vec::new();
+    for project in projects {
+        // Skip projects already attached.
+        {
+            let reg = registry.lock().await;
+            if reg.entries.contains_key(&project.id) {
+                continue;
+            }
+        }
+        // Only attempt attach for paths that now exist (drive just mounted).
+        if !std::path::Path::new(&project.path).is_dir() {
+            continue;
+        }
+        match attach_project_watcher(pool, bus, registry, &project.id).await {
+            Ok(()) => {
+                tracing::info!(
+                    "reattach sweep: successfully attached watcher for project {} ({})",
+                    project.id,
+                    project.path
+                );
+                reattached.push(project.id);
+            }
+            Err(e) => {
+                tracing::debug!("reattach sweep: attach failed for project {}: {e}", project.id);
+            }
+        }
+    }
+    reattached
+}
+
+/// Start a background task that periodically checks whether previously
+/// unavailable project output folders have become reachable (e.g. external
+/// drive mounted). Interval is deliberately coarse (30s) — volume mounts are
+/// rare events, and the manual refresh command provides immediate feedback.
+pub fn spawn_volume_availability_sweep(
+    pool: SqlitePool,
+    bus: EventBus,
+    registry: ArtifactWatcherRegistry,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            let reattached = reattach_unavailable_projects(&pool, &bus, &registry).await;
+            if !reattached.is_empty() {
+                tracing::info!("volume sweep: reattached {} project watcher(s)", reattached.len());
+            }
+        }
+    })
 }
 
 /// Detach the live filesystem watcher for `project_id`, if attached.

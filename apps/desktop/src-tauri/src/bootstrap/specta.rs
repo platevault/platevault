@@ -30,7 +30,7 @@ use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::artifacts::{
     artifact_classify, artifact_list, artifact_mark_resolved, artifact_watcher_attach,
-    artifact_watcher_detach,
+    artifact_watcher_detach, artifact_watcher_refresh,
 };
 use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
@@ -417,6 +417,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         artifact_mark_resolved,
         artifact_watcher_attach,
         artifact_watcher_detach,
+        artifact_watcher_refresh,
         // manifests + notes (spec 024)
         manifest_list,
         manifest_get,
@@ -668,6 +669,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         artifact_mark_resolved,
         artifact_watcher_attach,
         artifact_watcher_detach,
+        artifact_watcher_refresh,
         // manifests + notes (spec 024)
         manifest_list,
         manifest_get,

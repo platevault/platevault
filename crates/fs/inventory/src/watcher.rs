@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event, RecommendedWatcher};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
@@ -29,6 +29,10 @@ pub enum InboxFileEvent {
     Removed { path: String },
     /// A file was modified in-place.
     Modified { path: String },
+    /// The OS watcher encountered an error — consumers should trigger a rescan
+    /// of the affected paths (item a: error-callback deafness fix).
+    #[serde(rename = "needsRescan")]
+    NeedsRescan { reason: String },
 }
 
 /// Internal selector for which [`InboxFileEvent`] variant to build from a path.
@@ -111,41 +115,65 @@ impl WatcherService {
 
         let tx = self.tx.clone();
 
+        let follow = follow_symlinks;
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            let Ok(event) = res else {
-                return;
-            };
+            match res {
+                Err(e) => {
+                    // Item (a): forward OS watcher errors as NeedsRescan events
+                    // so consumers know to reconcile, rather than silently
+                    // dropping them.
+                    tracing::error!("filesystem watcher error: {e}");
+                    let _ = tx.send(InboxFileEvent::NeedsRescan { reason: e.to_string() });
+                }
+                Ok(event) => {
+                    let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
+                        return;
+                    };
 
-            let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
-                return;
-            };
-            let kind = PathEventKind::from(simple_kind);
+                    // Item (b): when not following symlinks, directory creates
+                    // mean the new dir is unwatched. Signal a rescan so the
+                    // consumer can restart with the updated dir set.
+                    if !follow && matches!(simple_kind, SimpleEventKind::Created) {
+                        for path in &event.paths {
+                            if path.is_dir() && !fs_pathsafe::is_link_or_junction(path) {
+                                let _ = tx.send(InboxFileEvent::NeedsRescan {
+                                    reason: format!("new directory created: {}", path.display()),
+                                });
+                                return;
+                            }
+                        }
+                    }
 
-            for path in &event.paths {
-                let Some(utf8) =
-                    crate::notify_bridge::utf8_path_or_skip(path, "fs_inventory::watcher")
-                else {
-                    continue;
-                };
-                // Ignore send errors — they mean no subscribers are active.
-                let _ = tx.send(kind.into_event(utf8.into_string()));
+                    let kind = PathEventKind::from(simple_kind);
+
+                    for path in &event.paths {
+                        let Some(utf8) =
+                            crate::notify_bridge::utf8_path_or_skip(path, "fs_inventory::watcher")
+                        else {
+                            continue;
+                        };
+                        // Ignore send errors — they mean no subscribers are active.
+                        let _ = tx.send(kind.into_event(utf8.into_string()));
+                    }
+                }
             }
         })
         .map_err(|e| format!("failed to create filesystem watcher: {e}"))?;
 
-        for path in paths {
-            if follow_symlinks {
-                watcher
-                    .watch(path.as_std_path(), RecursiveMode::Recursive)
-                    .map_err(|e| format!("failed to watch {path}: {e}"))?;
-                continue;
-            }
-
-            for dir in fs_pathsafe::real_dirs_under(path.as_std_path(), false) {
-                watcher
-                    .watch(&dir, RecursiveMode::NonRecursive)
-                    .map_err(|e| format!("failed to watch {}: {e}", dir.display()))?;
-            }
+        // Item (d): per-subdirectory failures are tolerated (fail_fast: false)
+        // so one inaccessible nested dir does not prevent watching the rest.
+        // Root-path failures remain fatal (handled inside register_watch_paths).
+        let report = crate::notify_bridge::register_watch_paths(
+            &mut watcher,
+            paths,
+            follow_symlinks,
+            false,
+        )?;
+        if !report.skipped.is_empty() {
+            tracing::warn!(
+                "watcher: {} subdirectories could not be watched (partial start)",
+                report.skipped.len()
+            );
         }
 
         self.watcher = Some(watcher);
@@ -247,5 +275,13 @@ mod tests {
         let json = serde_json::to_value(&evt).unwrap();
         assert_eq!(json["kind"], "added");
         assert_eq!(json["path"], "/inbox/test.fits");
+    }
+
+    #[test]
+    fn needs_rescan_event_serializes_correctly() {
+        let evt = InboxFileEvent::NeedsRescan { reason: "OS error".to_owned() };
+        let json = serde_json::to_value(&evt).unwrap();
+        assert_eq!(json["kind"], "needsRescan");
+        assert_eq!(json["reason"], "OS error");
     }
 }

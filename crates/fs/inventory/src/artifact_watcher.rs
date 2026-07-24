@@ -24,7 +24,7 @@
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event, RecommendedWatcher};
 use tokio::sync::mpsc;
 
 use crate::notify_bridge::SimpleEventKind;
@@ -34,7 +34,7 @@ use crate::notify_bridge::SimpleEventKind;
 pub struct ArtifactFileEvent {
     /// Absolute path of the file that changed (guaranteed UTF-8).
     pub path: Utf8PathBuf,
-    /// The underlying event kind (Create / Modify / Remove).
+    /// The underlying event kind (Create / Modify / Remove / error signals).
     pub kind: ArtifactEventKind,
 }
 
@@ -44,6 +44,12 @@ pub enum ArtifactEventKind {
     Created,
     Modified,
     Removed,
+    /// The OS watcher encountered an error — consumer should trigger a reconcile
+    /// pass to recover any missed events (item a: error-callback deafness fix).
+    NeedsRescan,
+    /// The event channel overflowed — at least one event was dropped. Consumer
+    /// must trigger a full reconciliation pass (item c: 256-channel overflow).
+    Overflow,
 }
 
 impl From<SimpleEventKind> for ArtifactEventKind {
@@ -91,40 +97,62 @@ pub fn start_artifact_watcher(
     let handler_tx = Arc::clone(&tx);
 
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-        let Ok(event) = res else { return };
-
-        let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
-            return;
-        };
-        let kind = ArtifactEventKind::from(simple_kind);
-
-        for path in &event.paths {
-            let Some(utf8) =
-                crate::notify_bridge::utf8_path_or_skip(path, "fs_inventory::artifact_watcher")
-            else {
-                continue;
-            };
-            if utf8.is_dir() {
-                continue;
+        match res {
+            Err(e) => {
+                // Item (a): forward OS watcher errors as NeedsRescan so the
+                // consumer triggers a reconciliation pass.
+                tracing::error!("artifact watcher error: {e}");
+                let _ = handler_tx.try_send(ArtifactFileEvent {
+                    path: Utf8PathBuf::new(),
+                    kind: ArtifactEventKind::NeedsRescan,
+                });
             }
-            let _ = handler_tx.try_send(ArtifactFileEvent { path: utf8, kind });
+            Ok(event) => {
+                let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
+                    return;
+                };
+                let kind = ArtifactEventKind::from(simple_kind);
+
+                for path in &event.paths {
+                    let Some(utf8) = crate::notify_bridge::utf8_path_or_skip(
+                        path,
+                        "fs_inventory::artifact_watcher",
+                    ) else {
+                        continue;
+                    };
+                    if utf8.is_dir() {
+                        continue;
+                    }
+                    // Item (c): on channel overflow (Full), send an Overflow
+                    // sentinel so the consumer knows events were lost and must
+                    // reconcile. The sentinel itself may also fail if the channel
+                    // is truly saturated — the consumer's periodic sweep will
+                    // eventually catch up regardless.
+                    if let Err(mpsc::error::TrySendError::Full(_)) =
+                        handler_tx.try_send(ArtifactFileEvent { path: utf8, kind })
+                    {
+                        tracing::warn!("artifact watcher: channel full, events dropped");
+                        let _ = handler_tx.try_send(ArtifactFileEvent {
+                            path: Utf8PathBuf::new(),
+                            kind: ArtifactEventKind::Overflow,
+                        });
+                        return;
+                    }
+                }
+            }
         }
     })
     .map_err(|e| format!("failed to create artifact watcher: {e}"))?;
 
-    for path in paths {
-        if follow_symlinks {
-            watcher
-                .watch(path.as_std_path(), RecursiveMode::Recursive)
-                .map_err(|e| format!("failed to watch {path}: {e}"))?;
-            continue;
-        }
-
-        for dir in fs_pathsafe::real_dirs_under(path.as_std_path(), false) {
-            watcher
-                .watch(&dir, RecursiveMode::NonRecursive)
-                .map_err(|e| format!("failed to watch {}: {e}", dir.display()))?;
-        }
+    // Item (d): partial start tolerance — per-subdirectory failures are
+    // collected rather than aborting the entire watcher start.
+    let report =
+        crate::notify_bridge::register_watch_paths(&mut watcher, paths, follow_symlinks, false)?;
+    if !report.skipped.is_empty() {
+        tracing::warn!(
+            "artifact watcher: {} subdirectories could not be watched (partial start)",
+            report.skipped.len()
+        );
     }
 
     let guard = WatcherGuard { _watcher: watcher, _tx: tx };

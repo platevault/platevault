@@ -150,3 +150,23 @@ pub async fn artifact_watcher_detach(
     crate::watcher::detach_project_watcher(&registry, &request.project_id).await;
     Ok(())
 }
+
+// ── artifact.watcher.refresh ─────────────────────────────────────────────────
+
+/// `artifact.watcher.refresh` — manually trigger reattach for projects whose
+/// output folder was previously unavailable (item f: manual refresh option).
+///
+/// Returns the list of project IDs that were successfully reattached.
+///
+/// # Errors
+/// Returns `Err(String)` on catastrophic DB failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn artifact_watcher_refresh(
+    pool: State<'_, SqlitePool>,
+    state: State<'_, AppState>,
+    registry: State<'_, ArtifactWatcherRegistry>,
+) -> Result<Vec<String>, ContractError> {
+    tracing::debug!("artifact.watcher.refresh");
+    Ok(crate::watcher::reattach_unavailable_projects(&pool, &state.bus, &registry).await)
+}

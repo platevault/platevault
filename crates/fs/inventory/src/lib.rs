@@ -6,7 +6,7 @@
 pub mod artifact_watcher;
 pub mod capability;
 pub mod drive_scope;
-mod notify_bridge;
+pub mod notify_bridge;
 pub mod reconcile;
 pub mod watcher;
 
